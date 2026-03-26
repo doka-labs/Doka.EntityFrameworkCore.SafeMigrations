@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>Doka.EntityFrameworkCore.SafeMigrations.MariaDb</AssemblyName>
+    <RootNamespace>Doka.EntityFrameworkCore.SafeMigrations.MariaDb</RootNamespace>
+
+    <!-- NuGet packaging -->
+    <IsPackable>true</IsPackable>
+    <PackageId>Doka.EntityFrameworkCore.SafeMigrations.MariaDb</PackageId>
+    <Description>
+      MariaDB provider for Doka.EntityFrameworkCore.SafeMigrations — safe, idempotent,
+      provider-aware EF Core migration operations with live MariaDB 11.8 integration coverage.
+    </Description>
+    <PackageTags>efcore;entityframeworkcore;migrations;safe-migrations;idempotent;mariadb;pomelo</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <ProjectReference Include="..\Doka.EntityFrameworkCore.SafeMigrations\Doka.EntityFrameworkCore.SafeMigrations.csproj" />
+  </ItemGroup>
+</Project>
