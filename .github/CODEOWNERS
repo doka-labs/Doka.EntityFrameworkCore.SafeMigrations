@@ -1,0 +1,4 @@
+* @doka-org/core-maintainers
+/.github/ @doka-org/repo-admins
+/src/ @doka-org/core-maintainers
+/tests/ @doka-org/core-maintainers

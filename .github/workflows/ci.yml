@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-unit-tests:
+    name: Build and unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9  # v4.3.1
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore
+        run: dotnet restore Doka.EntityFrameworkCore.SafeMigrations.slnx
+
+      - name: Build
+        run: dotnet build Doka.EntityFrameworkCore.SafeMigrations.slnx --no-restore --configuration Release
+
+      - name: Unit tests
+        run: >
+          dotnet test
+          tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Doka.EntityFrameworkCore.SafeMigrations.Tests.csproj
+          --no-build --configuration Release
+          --logger "trx;LogFileName=unit-tests.trx"
+
+      - name: Pack (CI)
+        run: >
+          dotnet pack Doka.EntityFrameworkCore.SafeMigrations.slnx
+          --no-build --configuration Release
+          --output ./artifacts
+          -p:PackageVersion=0.0.0-ci.${{ github.run_number }}
+
+      - name: Upload unit test results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: unit-test-results
+          path: '**/TestResults/*.trx'
+
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: nuget-packages
+          path: ./artifacts/*
+
+  integration-tests-mariadb:
+    name: MariaDB integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9  # v4.3.1
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore
+        run: dotnet restore Doka.EntityFrameworkCore.SafeMigrations.slnx
+
+      - name: Build
+        run: dotnet build Doka.EntityFrameworkCore.SafeMigrations.slnx --no-restore --configuration Release
+
+      - name: MariaDB integration tests
+        run: >
+          dotnet test
+          tests/Doka.EntityFrameworkCore.SafeMigrations.MariaDb.Tests/Doka.EntityFrameworkCore.SafeMigrations.MariaDb.Tests.csproj
+          --no-build --configuration Release
+          --logger "trx;LogFileName=mariadb-integration-tests.trx"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: mariadb-integration-test-results
+          path: '**/TestResults/*.trx'
+
+  integration-tests-postgresql:
+    name: PostgreSQL integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9  # v4.3.1
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore
+        run: dotnet restore Doka.EntityFrameworkCore.SafeMigrations.slnx
+
+      - name: Build
+        run: dotnet build Doka.EntityFrameworkCore.SafeMigrations.slnx --no-restore --configuration Release
+
+      - name: PostgreSQL integration tests
+        run: >
+          dotnet test
+          tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.csproj
+          --no-build --configuration Release
+          --logger "trx;LogFileName=postgresql-integration-tests.trx"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: postgresql-integration-test-results
+          path: '**/TestResults/*.trx'
