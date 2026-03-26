@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <AssemblyName>Doka.EntityFrameworkCore.SafeMigrations.Sample</AssemblyName>
+    <RootNamespace>Doka.EntityFrameworkCore.SafeMigrations.Sample</RootNamespace>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Doka.EntityFrameworkCore.SafeMigrations\Doka.EntityFrameworkCore.SafeMigrations.csproj" />
+    <ProjectReference Include="..\..\src\Doka.EntityFrameworkCore.SafeMigrations.MariaDb\Doka.EntityFrameworkCore.SafeMigrations.MariaDb.csproj" />
+    <ProjectReference Include="..\..\src\Doka.EntityFrameworkCore.SafeMigrations.PostgreSql\Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.csproj" />
+  </ItemGroup>
+</Project>
