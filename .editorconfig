@@ -1,0 +1,89 @@
+root = true
+
+# ------------------------------------------------------------------------------
+# All files
+# ------------------------------------------------------------------------------
+[*]
+charset                  = utf-8
+end_of_line              = lf
+indent_style             = space
+insert_final_newline     = true
+trim_trailing_whitespace = true
+
+# ------------------------------------------------------------------------------
+# C# source files
+# ------------------------------------------------------------------------------
+[*.cs]
+indent_size = 4
+
+# --- Namespace & using directives -------------------------------------------
+
+# Folders are organisational only; namespace does not follow directory structure.
+dotnet_style_namespace_match_folder            = false:none
+resharper_check_namespace_highlighting         = none
+
+# Enforce file-scoped namespace declarations (namespace X;).
+csharp_style_namespace_declarations            = file_scoped:warning
+
+# Sort System.* usings first; separate from other groups.
+dotnet_sort_system_directives_first            = true
+dotnet_separate_import_directive_groups        = true
+
+# --- var usage --------------------------------------------------------------
+csharp_style_var_for_built_in_types            = true:suggestion
+csharp_style_var_when_type_is_apparent         = true:suggestion
+csharp_style_var_elsewhere                     = true:suggestion
+
+# --- Braces -----------------------------------------------------------------
+csharp_prefer_braces                           = true:warning
+
+# --- Modifiers --------------------------------------------------------------
+csharp_preferred_modifier_order                = public, private, protected, internal, file, static, extern, new, virtual, abstract, sealed, override, readonly, unsafe, required, volatile, async:suggestion
+dotnet_style_require_accessibility_modifiers   = always:warning
+
+# --- Expression-level preferences -------------------------------------------
+dotnet_style_prefer_auto_properties            = true:suggestion
+dotnet_style_object_initializer                = true:suggestion
+dotnet_style_collection_initializer            = true:suggestion
+dotnet_style_prefer_simplified_boolean_expressions = true:suggestion
+dotnet_style_null_propagation                  = true:suggestion
+dotnet_style_coalesce_expression               = true:suggestion
+
+csharp_style_expression_bodied_methods         = when_on_single_line:suggestion
+csharp_style_expression_bodied_properties      = when_on_single_line:suggestion
+csharp_style_expression_bodied_constructors    = false:suggestion
+csharp_prefer_simple_default_expression        = true:suggestion
+csharp_style_pattern_matching_over_as_with_null_check = true:suggestion
+csharp_style_pattern_matching_over_is_with_cast_check = true:suggestion
+csharp_style_prefer_switch_expression          = true:suggestion
+
+# --- Nullability ------------------------------------------------------------
+dotnet_style_prefer_is_null_check_over_reference_equality_method = true:warning
+
+# --- Naming -----------------------------------------------------------------
+dotnet_naming_rule.private_fields_underscore.symbols              = private_fields
+dotnet_naming_rule.private_fields_underscore.style                = underscore_camel_case
+dotnet_naming_rule.private_fields_underscore.severity             = suggestion
+
+dotnet_naming_symbols.private_fields.applicable_kinds             = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities   = private
+
+dotnet_naming_style.underscore_camel_case.required_prefix         = _
+dotnet_naming_style.underscore_camel_case.capitalization          = camel_case
+
+# --- Primary constructor options ----------------------------------------------
+# https://learn.microsoft.com/en-us/dotnet/fundamentals/code-analysis/style-rules/ide0290
+csharp_style_prefer_primary_constructors = false
+dotnet_diagnostic.IDE0290.severity = none
+
+# ------------------------------------------------------------------------------
+# XML project files
+# ------------------------------------------------------------------------------
+[*.{csproj,props,targets}]
+indent_size = 2
+
+# ------------------------------------------------------------------------------
+# JSON & YAML
+# ------------------------------------------------------------------------------
+[*.{json,yaml,yml}]
+indent_size = 2

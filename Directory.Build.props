@@ -1,0 +1,47 @@
+<Project>
+  <PropertyGroup>
+    <LangVersion>13</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+  <!-- NuGet packaging - shared across all three publishable packages -->
+  <PropertyGroup>
+    <!--
+      PackageVersion is the fallback for local development.
+      On CI releases the version is derived from the Git tag by release.yml
+      and passed via -p:PackageVersion=<tag>.
+    -->
+    <PackageVersion Condition="'$(PackageVersion)' == ''">0.1.0-dev</PackageVersion>
+    <Authors>Doka</Authors>
+    <Company>Doka</Company>
+    <Copyright>Copyright © Doka 2026</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <RepositoryUrl>https://github.com/doka-org/Doka.EntityFrameworkCore.SafeMigrations</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>$(RepositoryUrl)</PackageProjectUrl>
+    <PackageReleaseNotes>See the full changelog at https://github.com/doka-org/Doka.EntityFrameworkCore.SafeMigrations/blob/main/CHANGELOG.md</PackageReleaseNotes>
+    <!-- Default: do not pack unless the project opts in via <IsPackable>true</IsPackable> -->
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!-- Source Link, reproducible-build, and symbol-package settings (all projects) -->
+  <PropertyGroup>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <DebugType>portable</DebugType>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <!--
+      GenerateDocumentationFile must be set here (props, not targets) so the SDK can
+      derive DocumentationFile before the compiler task runs.
+      Non-packable projects (tests, sample) suppress CS1591 locally so that
+      undocumented public test members do not fail the build.
+    -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+</Project>
