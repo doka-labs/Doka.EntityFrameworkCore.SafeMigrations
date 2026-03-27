@@ -1,6 +1,6 @@
 # Doka.EntityFrameworkCore.SafeMigrations
 
-[![CI](https://github.com/doka-org/Doka.EntityFrameworkCore.SafeMigrations/actions/workflows/ci.yml/badge.svg)](https://github.com/doka-org/Doka.EntityFrameworkCore.SafeMigrations/actions/workflows/ci.yml)
+[![CI](https://github.com/kdominic89/Doka.EntityFrameworkCore.SafeMigrations/actions/workflows/ci.yml/badge.svg)](https://github.com/kdominic89/Doka.EntityFrameworkCore.SafeMigrations/actions/workflows/ci.yml)
 [![NuGet](https://img.shields.io/nuget/v/Doka.EntityFrameworkCore.SafeMigrations.svg)](https://www.nuget.org/packages/Doka.EntityFrameworkCore.SafeMigrations)
 [![NuGet MariaDB](https://img.shields.io/nuget/v/Doka.EntityFrameworkCore.SafeMigrations.MariaDb.svg)](https://www.nuget.org/packages/Doka.EntityFrameworkCore.SafeMigrations.MariaDb)
 [![NuGet PostgreSQL](https://img.shields.io/nuget/v/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.svg)](https://www.nuget.org/packages/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql)

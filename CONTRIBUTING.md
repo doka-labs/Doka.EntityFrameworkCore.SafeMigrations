@@ -60,5 +60,5 @@ The integration test projects spin up database containers automatically via Test
 
 ## Reporting Issues
 
-Use [GitHub Issues](https://github.com/doka-org/Doka.EntityFrameworkCore.SafeMigrations/issues) for bug reports and feature requests.
+Use [GitHub Issues](https://github.com/kdominic89/Doka.EntityFrameworkCore.SafeMigrations/issues) for bug reports and feature requests.
 For security vulnerabilities, see [SECURITY.md](.github/SECURITY.md).

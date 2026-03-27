@@ -15,15 +15,15 @@
       and passed via -p:PackageVersion=<tag>.
     -->
     <PackageVersion Condition="'$(PackageVersion)' == ''">0.1.0-dev</PackageVersion>
-    <Authors>Doka</Authors>
-    <Company>Doka</Company>
-    <Copyright>Copyright © Doka 2026</Copyright>
+    <Authors>Dominic Kalkbrenner</Authors>
+    <Company>Dominic Kalkbrenner</Company>
+    <Copyright>Copyright © Dominic Kalkbrenner 2026</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
-    <RepositoryUrl>https://github.com/doka-org/Doka.EntityFrameworkCore.SafeMigrations</RepositoryUrl>
+    <RepositoryUrl>https://github.com/kdominic89/Doka.EntityFrameworkCore.SafeMigrations</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageProjectUrl>$(RepositoryUrl)</PackageProjectUrl>
-    <PackageReleaseNotes>See the full changelog at https://github.com/doka-org/Doka.EntityFrameworkCore.SafeMigrations/blob/main/CHANGELOG.md</PackageReleaseNotes>
+    <PackageReleaseNotes>See the full changelog at https://github.com/kdominic89/Doka.EntityFrameworkCore.SafeMigrations/blob/main/CHANGELOG.md</PackageReleaseNotes>
     <!-- Default: do not pack unless the project opts in via <IsPackable>true</IsPackable> -->
     <IsPackable>false</IsPackable>
   </PropertyGroup>

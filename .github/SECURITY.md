@@ -10,7 +10,7 @@
 
 **Please do not report security vulnerabilities through public GitHub issues.**
 
-Report vulnerabilities privately using [GitHub Security Advisories](https://github.com/doka-org/Doka.EntityFrameworkCore.SafeMigrations/security/advisories/new).
+Report vulnerabilities privately using [GitHub Security Advisories](https://github.com/kdominic89/Doka.EntityFrameworkCore.SafeMigrations/security/advisories/new).
 
 Include as much of the following as possible:
 

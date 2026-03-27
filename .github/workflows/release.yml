@@ -4,7 +4,7 @@ name: Release
 # The package version is derived automatically from the Git tag — no manual edits needed.
 # Requires the NUGET_USER repository secret to be set (your nuget.org profile name).
 # Configure a Trusted Publishing policy on nuget.org for each package:
-#   Repository Owner: doka-org  |  Repository: Doka.EntityFrameworkCore.SafeMigrations
+#   Repository Owner: kdominic89  |  Repository: Doka.EntityFrameworkCore.SafeMigrations
 #   Workflow File: release.yml  |  Environment: (leave empty)
 on:
   push:
