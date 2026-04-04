@@ -45,7 +45,8 @@ The integration test projects spin up database containers automatically via Test
 
 - Follow the existing naming and formatting conventions in the codebase.
 - All code comments must be in English.
-- `<Nullable>enable</Nullable>` and `TreatWarningsAsErrors` are enforced solution-wide - the build must remain warning-free.
+- `<Nullable>enable</Nullable>`, `TreatWarningsAsErrors`, and build-enforced code-style analyzers are configured solution-wide.
+- The build must remain warning-free, including analyzer and formatting-related diagnostics surfaced through `.editorconfig`.
 - Do not add third-party library dependencies without first opening an issue to discuss the rationale.
 
 ## Pull Requests

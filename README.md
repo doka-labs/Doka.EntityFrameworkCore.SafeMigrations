@@ -22,10 +22,20 @@ This library is designed for scenarios such as:
 
 ## Requirements
 
-- .NET 9.0
+### Package Usage
+
+- .NET 8.0 or later
 - EF Core 9.x (`Microsoft.EntityFrameworkCore.Relational`)
 - For MariaDB: Pomelo.EntityFrameworkCore.MySql 9.x and MariaDB 11.x
 - For PostgreSQL: Npgsql.EntityFrameworkCore.PostgreSQL 9.x and PostgreSQL 13 or later
+
+### Building From Source
+
+- .NET 9 SDK
+
+The publishable packages target `net8.0`. The repository itself currently requires the
+.NET 9 SDK because the sample and test projects target `net9.0`, and the codebase uses
+C# 13 language features during source builds.
 
 ## Installation
 
@@ -227,6 +237,9 @@ This workflow is why the project focuses so heavily on:
 dotnet build Doka.EntityFrameworkCore.SafeMigrations.slnx
 dotnet test Doka.EntityFrameworkCore.SafeMigrations.slnx
 ```
+
+Building the repository requires the .NET 9 SDK. The packaged libraries themselves
+target `net8.0`.
 
 The integration test projects spin up Docker containers automatically. Docker must be running locally for those suites to execute.
 
