@@ -66,14 +66,11 @@ public sealed class SafeMigrationDecisionPlannerTests
     public void PreflightCreate_DoesNotExecuteDdl()
     {
         var decision = SafeMigrationDecisionPlanner.Plan(
-            new SafeMigrationExecutionOptions(
-                SafeMigrationConflictMode.ThrowIfDifferent,
-                PreflightOnly: true),
+            new SafeMigrationExecutionOptions(SafeMigrationConflictMode.ThrowIfDifferent, PreflightOnly: true),
             SafeMigrationComparisonState.Missing);
 
         Assert.Equal(SafeMigrationExecutionOutcome.Created, decision.Outcome);
         Assert.Equal(SafeMigrationPlannedAction.CreateMissingObject, decision.PlannedAction);
         Assert.False(decision.ShouldExecute);
     }
-
 }

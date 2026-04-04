@@ -29,12 +29,7 @@ public sealed class PostgreSqlSafeMigrationPlannerTests
         var decision = PostgreSqlSafeMigrationPlanner.PlanIndex(
             new SafeMigrationExecutionOptions(SafeMigrationConflictMode.RepairIfPossible),
             SafeMigrationComparisonState.Different,
-            new ExpectedIndexDefinition(
-                "IX_users_email",
-                "users",
-                "public",
-                ["email"],
-                Unique: false));
+            new ExpectedIndexDefinition("IX_users_email", "users", "public", ["email"], Unique: false));
 
         Assert.Equal(SafeMigrationExecutionOutcome.Rejected, decision.Outcome);
         Assert.Equal(SafeMigrationPlannedAction.Reject, decision.PlannedAction);
@@ -45,16 +40,9 @@ public sealed class PostgreSqlSafeMigrationPlannerTests
     public void PreflightCreate_DoesNotExecute()
     {
         var decision = PostgreSqlSafeMigrationPlanner.PlanIndex(
-            new SafeMigrationExecutionOptions(
-                SafeMigrationConflictMode.RepairIfPossible,
-                PreflightOnly: true),
+            new SafeMigrationExecutionOptions(SafeMigrationConflictMode.RepairIfPossible, PreflightOnly: true),
             SafeMigrationComparisonState.Missing,
-            new ExpectedIndexDefinition(
-                "IX_users_email",
-                "users",
-                "public",
-                ["email"],
-                Unique: true));
+            new ExpectedIndexDefinition("IX_users_email", "users", "public", ["email"], Unique: true));
 
         Assert.Equal(SafeMigrationExecutionOutcome.Created, decision.Outcome);
         Assert.Equal(SafeMigrationPlannedAction.CreateMissingObject, decision.PlannedAction);
@@ -67,11 +55,7 @@ public sealed class PostgreSqlSafeMigrationPlannerTests
         var decision = SafeMigrationDecisionPlanner.PlanUniqueConstraint(
             new SafeMigrationExecutionOptions(SafeMigrationConflictMode.RepairIfPossible),
             SafeMigrationComparisonState.Missing,
-            new ExpectedUniqueConstraintDefinition(
-                "AK_users_email",
-                "users",
-                "public",
-                ["email"]));
+            new ExpectedUniqueConstraintDefinition("AK_users_email", "users", "public", ["email"]));
 
         Assert.Equal(SafeMigrationExecutionOutcome.Created, decision.Outcome);
         Assert.Equal(SafeMigrationPlannedAction.CreateMissingObject, decision.PlannedAction);
@@ -83,11 +67,7 @@ public sealed class PostgreSqlSafeMigrationPlannerTests
         var decision = SafeMigrationDecisionPlanner.PlanCheckConstraint(
             new SafeMigrationExecutionOptions(SafeMigrationConflictMode.RepairIfPossible),
             SafeMigrationComparisonState.Different,
-            new ExpectedCheckConstraintDefinition(
-                "CK_users_age",
-                "users",
-                "public",
-                "\"age\" >= 18"));
+            new ExpectedCheckConstraintDefinition("CK_users_age", "users", "public", "\"age\" >= 18"));
 
         Assert.Equal(SafeMigrationExecutionOutcome.Rejected, decision.Outcome);
         Assert.Equal(SafeMigrationPlannedAction.Reject, decision.PlannedAction);
@@ -98,9 +78,7 @@ public sealed class PostgreSqlSafeMigrationPlannerTests
     public void MissingForeignKey_Preflight_DoesNotExecute()
     {
         var decision = SafeMigrationDecisionPlanner.PlanForeignKey(
-            new SafeMigrationExecutionOptions(
-                SafeMigrationConflictMode.RepairIfPossible,
-                PreflightOnly: true),
+            new SafeMigrationExecutionOptions(SafeMigrationConflictMode.RepairIfPossible, PreflightOnly: true),
             SafeMigrationComparisonState.Missing,
             new ExpectedForeignKeyDefinition(
                 "FK_users_departments_department_id",

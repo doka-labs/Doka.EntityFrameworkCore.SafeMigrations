@@ -4,12 +4,16 @@ internal sealed class SafeMigrationDbContext : DbContext
 {
     private readonly string _connectionString;
 
-    public SafeMigrationDbContext(string connectionString)
+    public SafeMigrationDbContext(
+        string connectionString
+    )
     {
         _connectionString = connectionString;
     }
 
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    protected override void OnConfiguring(
+        DbContextOptionsBuilder optionsBuilder
+    )
     {
         optionsBuilder
             .UseNpgsql(_connectionString)

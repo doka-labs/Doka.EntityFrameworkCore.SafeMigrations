@@ -2,20 +2,24 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.Integration;
 
 public sealed class PostgreSqlIndexIntegrationTests : PostgreSqlIntegrationTestBase
 {
-    public PostgreSqlIndexIntegrationTests(PostgreSqlContainerFixture fixture) : base(fixture) { }
+    public PostgreSqlIndexIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
 
     [Fact]
     public async Task RenameIndexIfExists_IsIdempotentAgainstRealPostgreSql()
     {
-        var connectionString = await _fixture.CreateDatabaseAsync();
-        await ExecuteNonQueryAsync(connectionString, """
-CREATE TABLE "Employees" (
-    "Id" integer NOT NULL,
-    "DisplayName" text NULL,
-    CONSTRAINT "PK_Employees" PRIMARY KEY ("Id")
-);
-CREATE INDEX "IX_Employees_DisplayName" ON "Employees" ("DisplayName");
-""");
+        var connectionString = await Fixture.CreateDatabaseAsync();
+        await ExecuteNonQueryAsync(
+            connectionString,
+            """
+            CREATE TABLE "Employees" (
+                "Id" integer NOT NULL,
+                "DisplayName" text NULL,
+                CONSTRAINT "PK_Employees" PRIMARY KEY ("Id")
+            );
+            CREATE INDEX "IX_Employees_DisplayName" ON "Employees" ("DisplayName");
+            """);
 
         await using var context = new SafeMigrationDbContext(connectionString);
         var migrationBuilder = new MigrationBuilder(context.Database.ProviderName!);
@@ -31,28 +35,30 @@ CREATE INDEX "IX_Employees_DisplayName" ON "Employees" ("DisplayName");
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = """
-SELECT COUNT(*)
-FROM pg_class idx
-JOIN pg_namespace n ON n.oid = idx.relnamespace
-WHERE n.nspname = 'public'
-  AND idx.relname = 'IX_Employees_FullName';
-""";
+                              SELECT COUNT(*)
+                              FROM pg_class idx
+                              JOIN pg_namespace n ON n.oid = idx.relnamespace
+                              WHERE n.nspname = 'public'
+                                AND idx.relname = 'IX_Employees_FullName';
+                              """;
 
-        var count = Convert.ToInt32(await command.ExecuteScalarAsync());
+        var count = await ExecuteScalarAsInt32Async(command);
         Assert.Equal(1, count);
     }
 
     [Fact]
     public async Task CreateIndexIfNotExists_IsIdempotentAgainstRealPostgreSql()
     {
-        var connectionString = await _fixture.CreateDatabaseAsync();
-        await ExecuteNonQueryAsync(connectionString, """
-CREATE TABLE "Employees" (
-    "Id" integer NOT NULL,
-    "DisplayName" text NULL,
-    CONSTRAINT "PK_Employees" PRIMARY KEY ("Id")
-);
-""");
+        var connectionString = await Fixture.CreateDatabaseAsync();
+        await ExecuteNonQueryAsync(
+            connectionString,
+            """
+            CREATE TABLE "Employees" (
+                "Id" integer NOT NULL,
+                "DisplayName" text NULL,
+                CONSTRAINT "PK_Employees" PRIMARY KEY ("Id")
+            );
+            """);
 
         await using var context = new SafeMigrationDbContext(connectionString);
         var migrationBuilder = new MigrationBuilder(context.Database.ProviderName!);
@@ -68,33 +74,35 @@ CREATE TABLE "Employees" (
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = """
-SELECT COUNT(*)
-FROM pg_class idx
-JOIN pg_namespace n ON n.oid = idx.relnamespace
-JOIN pg_index i ON i.indexrelid = idx.oid
-JOIN pg_class t ON t.oid = i.indrelid
-WHERE n.nspname = 'public'
-  AND t.relname = 'Employees'
-  AND idx.relname = 'IX_Employees_DisplayName';
-""";
+                              SELECT COUNT(*)
+                              FROM pg_class idx
+                              JOIN pg_namespace n ON n.oid = idx.relnamespace
+                              JOIN pg_index i ON i.indexrelid = idx.oid
+                              JOIN pg_class t ON t.oid = i.indrelid
+                              WHERE n.nspname = 'public'
+                                AND t.relname = 'Employees'
+                                AND idx.relname = 'IX_Employees_DisplayName';
+                              """;
 
-        var count = Convert.ToInt32(await command.ExecuteScalarAsync());
+        var count = await ExecuteScalarAsInt32Async(command);
         Assert.Equal(1, count);
     }
 
     [Fact]
     public async Task CreateIndexIfNotExists_StrictMode_ThrowsOnDefinitionMismatch()
     {
-        var connectionString = await _fixture.CreateDatabaseAsync();
-        await ExecuteNonQueryAsync(connectionString, """
-CREATE TABLE "Employees" (
-    "Id" integer NOT NULL,
-    "DisplayName" text NULL,
-    "CreatedAtUtc" timestamp without time zone NULL,
-    CONSTRAINT "PK_Employees" PRIMARY KEY ("Id")
-);
-CREATE INDEX "IX_Employees_DisplayName" ON "Employees" ("DisplayName", "CreatedAtUtc");
-""");
+        var connectionString = await Fixture.CreateDatabaseAsync();
+        await ExecuteNonQueryAsync(
+            connectionString,
+            """
+            CREATE TABLE "Employees" (
+                "Id" integer NOT NULL,
+                "DisplayName" text NULL,
+                "CreatedAtUtc" timestamp without time zone NULL,
+                CONSTRAINT "PK_Employees" PRIMARY KEY ("Id")
+            );
+            CREATE INDEX "IX_Employees_DisplayName" ON "Employees" ("DisplayName", "CreatedAtUtc");
+            """);
 
         await using var context = new SafeMigrationDbContext(connectionString);
         var migrationBuilder = new MigrationBuilder(context.Database.ProviderName!);
@@ -104,7 +112,8 @@ CREATE INDEX "IX_Employees_DisplayName" ON "Employees" ("DisplayName", "CreatedA
             columns: ["DisplayName"],
             strictMode: SafeMigrationStrictMode.ThrowIfDifferent);
 
-        var exception = await Assert.ThrowsAnyAsync<Exception>(() => ExecuteOperationsAsync(context, migrationBuilder.Operations));
+        var exception =
+            await Assert.ThrowsAnyAsync<Exception>(() => ExecuteOperationsAsync(context, migrationBuilder.Operations));
         Assert.Contains("Safe migration strict-mode mismatch for index", exception.Message, StringComparison.Ordinal);
         Assert.Contains("Provider: PostgreSQL.", exception.Message, StringComparison.Ordinal);
     }
@@ -112,14 +121,16 @@ CREATE INDEX "IX_Employees_DisplayName" ON "Employees" ("DisplayName", "CreatedA
     [Fact]
     public async Task CreateIndexIfNotExists_RepairMode_CreatesMissingIndex()
     {
-        var connectionString = await _fixture.CreateDatabaseAsync();
-        await ExecuteNonQueryAsync(connectionString, """
-CREATE TABLE "Employees" (
-    "Id" integer NOT NULL,
-    "DisplayName" text NULL,
-    CONSTRAINT "PK_Employees" PRIMARY KEY ("Id")
-);
-""");
+        var connectionString = await Fixture.CreateDatabaseAsync();
+        await ExecuteNonQueryAsync(
+            connectionString,
+            """
+            CREATE TABLE "Employees" (
+                "Id" integer NOT NULL,
+                "DisplayName" text NULL,
+                CONSTRAINT "PK_Employees" PRIMARY KEY ("Id")
+            );
+            """);
 
         await using var context = new SafeMigrationDbContext(connectionString);
         var migrationBuilder = new MigrationBuilder(context.Database.ProviderName!);
@@ -136,32 +147,34 @@ CREATE TABLE "Employees" (
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = """
-SELECT COUNT(*)
-FROM pg_class idx
-JOIN pg_namespace n ON n.oid = idx.relnamespace
-JOIN pg_index i ON i.indexrelid = idx.oid
-JOIN pg_class t ON t.oid = i.indrelid
-WHERE n.nspname = 'public'
-  AND t.relname = 'Employees'
-  AND idx.relname = 'IX_Employees_DisplayName';
-""";
+                              SELECT COUNT(*)
+                              FROM pg_class idx
+                              JOIN pg_namespace n ON n.oid = idx.relnamespace
+                              JOIN pg_index i ON i.indexrelid = idx.oid
+                              JOIN pg_class t ON t.oid = i.indrelid
+                              WHERE n.nspname = 'public'
+                                AND t.relname = 'Employees'
+                                AND idx.relname = 'IX_Employees_DisplayName';
+                              """;
 
-        var count = Convert.ToInt32(await command.ExecuteScalarAsync());
+        var count = await ExecuteScalarAsInt32Async(command);
         Assert.Equal(1, count);
     }
 
     [Fact]
     public async Task CreateIndexIfNotExists_RepairMode_MatchingExistingIndex_IsNoOp()
     {
-        var connectionString = await _fixture.CreateDatabaseAsync();
-        await ExecuteNonQueryAsync(connectionString, """
-CREATE TABLE "Employees" (
-    "Id" integer NOT NULL,
-    "DisplayName" text NULL,
-    CONSTRAINT "PK_Employees" PRIMARY KEY ("Id")
-);
-CREATE INDEX "IX_Employees_DisplayName" ON "Employees" ("DisplayName");
-""");
+        var connectionString = await Fixture.CreateDatabaseAsync();
+        await ExecuteNonQueryAsync(
+            connectionString,
+            """
+            CREATE TABLE "Employees" (
+                "Id" integer NOT NULL,
+                "DisplayName" text NULL,
+                CONSTRAINT "PK_Employees" PRIMARY KEY ("Id")
+            );
+            CREATE INDEX "IX_Employees_DisplayName" ON "Employees" ("DisplayName");
+            """);
 
         await using var context = new SafeMigrationDbContext(connectionString);
         var migrationBuilder = new MigrationBuilder(context.Database.ProviderName!);
@@ -178,33 +191,35 @@ CREATE INDEX "IX_Employees_DisplayName" ON "Employees" ("DisplayName");
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = """
-SELECT COUNT(*)
-FROM pg_class idx
-JOIN pg_namespace n ON n.oid = idx.relnamespace
-JOIN pg_index i ON i.indexrelid = idx.oid
-JOIN pg_class t ON t.oid = i.indrelid
-WHERE n.nspname = 'public'
-  AND t.relname = 'Employees'
-  AND idx.relname = 'IX_Employees_DisplayName';
-""";
+                              SELECT COUNT(*)
+                              FROM pg_class idx
+                              JOIN pg_namespace n ON n.oid = idx.relnamespace
+                              JOIN pg_index i ON i.indexrelid = idx.oid
+                              JOIN pg_class t ON t.oid = i.indrelid
+                              WHERE n.nspname = 'public'
+                                AND t.relname = 'Employees'
+                                AND idx.relname = 'IX_Employees_DisplayName';
+                              """;
 
-        var count = Convert.ToInt32(await command.ExecuteScalarAsync());
+        var count = await ExecuteScalarAsInt32Async(command);
         Assert.Equal(1, count);
     }
 
     [Fact]
     public async Task CreateIndexIfNotExists_RepairMode_RejectsConflictingExistingIndex()
     {
-        var connectionString = await _fixture.CreateDatabaseAsync();
-        await ExecuteNonQueryAsync(connectionString, """
-CREATE TABLE "Employees" (
-    "Id" integer NOT NULL,
-    "DisplayName" text NULL,
-    "CreatedAtUtc" timestamp without time zone NULL,
-    CONSTRAINT "PK_Employees" PRIMARY KEY ("Id")
-);
-CREATE INDEX "IX_Employees_DisplayName" ON "Employees" ("DisplayName", "CreatedAtUtc");
-""");
+        var connectionString = await Fixture.CreateDatabaseAsync();
+        await ExecuteNonQueryAsync(
+            connectionString,
+            """
+            CREATE TABLE "Employees" (
+                "Id" integer NOT NULL,
+                "DisplayName" text NULL,
+                "CreatedAtUtc" timestamp without time zone NULL,
+                CONSTRAINT "PK_Employees" PRIMARY KEY ("Id")
+            );
+            CREATE INDEX "IX_Employees_DisplayName" ON "Employees" ("DisplayName", "CreatedAtUtc");
+            """);
 
         await using var context = new SafeMigrationDbContext(connectionString);
         var migrationBuilder = new MigrationBuilder(context.Database.ProviderName!);
@@ -214,7 +229,8 @@ CREATE INDEX "IX_Employees_DisplayName" ON "Employees" ("DisplayName", "CreatedA
             columns: ["DisplayName"],
             execution: new SafeMigrationExecutionOptions(SafeMigrationConflictMode.RepairIfPossible));
 
-        var exception = await Assert.ThrowsAnyAsync<Exception>(() => ExecuteOperationsAsync(context, migrationBuilder.Operations));
+        var exception =
+            await Assert.ThrowsAnyAsync<Exception>(() => ExecuteOperationsAsync(context, migrationBuilder.Operations));
         Assert.Contains("Safe migration strict-mode mismatch for index", exception.Message, StringComparison.Ordinal);
         Assert.Contains("Provider: PostgreSQL.", exception.Message, StringComparison.Ordinal);
     }
@@ -222,14 +238,16 @@ CREATE INDEX "IX_Employees_DisplayName" ON "Employees" ("DisplayName", "CreatedA
     [Fact]
     public async Task CreateIndexIfNotExists_PreflightOnly_DoesNotCreateMissingIndex()
     {
-        var connectionString = await _fixture.CreateDatabaseAsync();
-        await ExecuteNonQueryAsync(connectionString, """
-CREATE TABLE "Employees" (
-    "Id" integer NOT NULL,
-    "DisplayName" text NULL,
-    CONSTRAINT "PK_Employees" PRIMARY KEY ("Id")
-);
-""");
+        var connectionString = await Fixture.CreateDatabaseAsync();
+        await ExecuteNonQueryAsync(
+            connectionString,
+            """
+            CREATE TABLE "Employees" (
+                "Id" integer NOT NULL,
+                "DisplayName" text NULL,
+                CONSTRAINT "PK_Employees" PRIMARY KEY ("Id")
+            );
+            """);
 
         await using var context = new SafeMigrationDbContext(connectionString);
         var migrationBuilder = new MigrationBuilder(context.Database.ProviderName!);
@@ -247,38 +265,38 @@ CREATE TABLE "Employees" (
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = """
-SELECT COUNT(*)
-FROM pg_class idx
-JOIN pg_namespace n ON n.oid = idx.relnamespace
-JOIN pg_index i ON i.indexrelid = idx.oid
-JOIN pg_class t ON t.oid = i.indrelid
-WHERE n.nspname = 'public'
-  AND t.relname = 'Employees'
-  AND idx.relname = 'IX_Employees_DisplayName';
-""";
+                              SELECT COUNT(*)
+                              FROM pg_class idx
+                              JOIN pg_namespace n ON n.oid = idx.relnamespace
+                              JOIN pg_index i ON i.indexrelid = idx.oid
+                              JOIN pg_class t ON t.oid = i.indrelid
+                              WHERE n.nspname = 'public'
+                                AND t.relname = 'Employees'
+                                AND idx.relname = 'IX_Employees_DisplayName';
+                              """;
 
-        var count = Convert.ToInt32(await command.ExecuteScalarAsync());
+        var count = await ExecuteScalarAsInt32Async(command);
         Assert.Equal(0, count);
     }
 
     [Fact]
     public async Task DropIndexIfExists_IsIdempotentAgainstRealPostgreSql()
     {
-        var connectionString = await _fixture.CreateDatabaseAsync();
-        await ExecuteNonQueryAsync(connectionString, """
-CREATE TABLE "Employees" (
-    "Id" integer NOT NULL,
-    "DisplayName" text NULL,
-    CONSTRAINT "PK_Employees" PRIMARY KEY ("Id")
-);
-CREATE INDEX "IX_Employees_DisplayName" ON "Employees" ("DisplayName");
-""");
+        var connectionString = await Fixture.CreateDatabaseAsync();
+        await ExecuteNonQueryAsync(
+            connectionString,
+            """
+            CREATE TABLE "Employees" (
+                "Id" integer NOT NULL,
+                "DisplayName" text NULL,
+                CONSTRAINT "PK_Employees" PRIMARY KEY ("Id")
+            );
+            CREATE INDEX "IX_Employees_DisplayName" ON "Employees" ("DisplayName");
+            """);
 
         await using var context = new SafeMigrationDbContext(connectionString);
         var migrationBuilder = new MigrationBuilder(context.Database.ProviderName!);
-        migrationBuilder.DropIndexIfExists(
-            name: "IX_Employees_DisplayName",
-            table: "Employees");
+        migrationBuilder.DropIndexIfExists(name: "IX_Employees_DisplayName", table: "Employees");
 
         await ExecuteOperationsAsync(context, migrationBuilder.Operations);
         await ExecuteOperationsAsync(context, migrationBuilder.Operations);
@@ -287,14 +305,14 @@ CREATE INDEX "IX_Employees_DisplayName" ON "Employees" ("DisplayName");
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = """
-SELECT COUNT(*)
-FROM pg_class idx
-JOIN pg_namespace n ON n.oid = idx.relnamespace
-WHERE n.nspname = 'public'
-  AND idx.relname = 'IX_Employees_DisplayName';
-""";
+                              SELECT COUNT(*)
+                              FROM pg_class idx
+                              JOIN pg_namespace n ON n.oid = idx.relnamespace
+                              WHERE n.nspname = 'public'
+                                AND idx.relname = 'IX_Employees_DisplayName';
+                              """;
 
-        var count = Convert.ToInt32(await command.ExecuteScalarAsync());
+        var count = await ExecuteScalarAsInt32Async(command);
         Assert.Equal(0, count);
     }
 }

@@ -17,7 +17,11 @@ public sealed class PostgreSqlSafeMigrationsSqlGeneratorTests
             type: "text",
             nullable: true);
 
-        var sql = string.Join("\n", generator.Generate(migrationBuilder.Operations, context.Model).Select(command => command.CommandText));
+        var sql = string.Join(
+            "\n",
+            generator
+                .Generate(migrationBuilder.Operations, context.Model)
+                .Select(command => command.CommandText));
 
         Assert.Contains("ADD COLUMN IF NOT EXISTS", sql, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE employees", sql, StringComparison.OrdinalIgnoreCase);
@@ -37,7 +41,11 @@ public sealed class PostgreSqlSafeMigrationsSqlGeneratorTests
             principalTable: "departments",
             principalColumns: ["id"]);
 
-        var sql = string.Join("\n", generator.Generate(migrationBuilder.Operations, context.Model).Select(command => command.CommandText));
+        var sql = string.Join(
+            "\n",
+            generator
+                .Generate(migrationBuilder.Operations, context.Model)
+                .Select(command => command.CommandText));
 
         Assert.Contains("DO $SAFE$", sql, StringComparison.Ordinal);
         Assert.Contains("IF NOT EXISTS", sql, StringComparison.Ordinal);
@@ -59,7 +67,11 @@ public sealed class PostgreSqlSafeMigrationsSqlGeneratorTests
             nullable: true,
             strictMode: SafeMigrationStrictMode.ThrowIfDifferent);
 
-        var sql = string.Join("\n", generator.Generate(migrationBuilder.Operations, context.Model).Select(command => command.CommandText));
+        var sql = string.Join(
+            "\n",
+            generator
+                .Generate(migrationBuilder.Operations, context.Model)
+                .Select(command => command.CommandText));
 
         Assert.Contains("DO $SAFE$", sql, StringComparison.Ordinal);
         Assert.Contains("ELSIF EXISTS", sql, StringComparison.Ordinal);
@@ -82,7 +94,11 @@ public sealed class PostgreSqlSafeMigrationsSqlGeneratorTests
             defaultValue: "active",
             strictMode: SafeMigrationStrictMode.ThrowIfDifferent);
 
-        var sql = string.Join("\n", generator.Generate(migrationBuilder.Operations, context.Model).Select(command => command.CommandText));
+        var sql = string.Join(
+            "\n",
+            generator
+                .Generate(migrationBuilder.Operations, context.Model)
+                .Select(command => command.CommandText));
 
         Assert.Contains("regexp_replace", sql, StringComparison.Ordinal);
         Assert.Contains("::[A-Za-z0-9_", sql, StringComparison.Ordinal);
@@ -105,7 +121,11 @@ public sealed class PostgreSqlSafeMigrationsSqlGeneratorTests
             type: "text",
             nullable: true);
 
-        var sql = string.Join("\n", generator.Generate(migrationBuilder.Operations, context.Model).Select(command => command.CommandText));
+        var sql = string.Join(
+            "\n",
+            generator
+                .Generate(migrationBuilder.Operations, context.Model)
+                .Select(command => command.CommandText));
 
         Assert.Contains("DO $SAFE$", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("ADD COLUMN IF NOT EXISTS", sql, StringComparison.Ordinal);
@@ -126,7 +146,11 @@ public sealed class PostgreSqlSafeMigrationsSqlGeneratorTests
             filter: "\"email\" IS NOT NULL",
             strictMode: SafeMigrationStrictMode.ThrowIfDifferent);
 
-        var sql = string.Join("\n", generator.Generate(migrationBuilder.Operations, context.Model).Select(command => command.CommandText));
+        var sql = string.Join(
+            "\n",
+            generator
+                .Generate(migrationBuilder.Operations, context.Model)
+                .Select(command => command.CommandText));
 
         Assert.Contains("pg_index", sql, StringComparison.Ordinal);
         Assert.Contains("pg_get_expr(i.indpred, i.indrelid)", sql, StringComparison.Ordinal);
@@ -148,7 +172,11 @@ public sealed class PostgreSqlSafeMigrationsSqlGeneratorTests
             unique: true,
             filter: "\"email\" IS NOT NULL");
 
-        var sql = string.Join("\n", generator.Generate(migrationBuilder.Operations, context.Model).Select(command => command.CommandText));
+        var sql = string.Join(
+            "\n",
+            generator
+                .Generate(migrationBuilder.Operations, context.Model)
+                .Select(command => command.CommandText));
 
         Assert.Contains("pg_index", sql, StringComparison.Ordinal);
         Assert.Contains("pg_get_expr(i.indpred, i.indrelid)", sql, StringComparison.Ordinal);
@@ -170,7 +198,11 @@ public sealed class PostgreSqlSafeMigrationsSqlGeneratorTests
                 SafeMigrationConflictMode.ThrowIfDifferent,
                 PreflightOnly: true));
 
-        var sql = string.Join("\n", generator.Generate(migrationBuilder.Operations, context.Model).Select(command => command.CommandText));
+        var sql = string.Join(
+            "\n",
+            generator
+                .Generate(migrationBuilder.Operations, context.Model)
+                .Select(command => command.CommandText));
 
         Assert.Contains("DO $SAFE$", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("CREATE INDEX IF NOT EXISTS", sql, StringComparison.Ordinal);
@@ -193,10 +225,17 @@ public sealed class PostgreSqlSafeMigrationsSqlGeneratorTests
             oldType: "character varying(50)",
             oldNullable: true);
 
-        var sql = string.Join("\n", generator.Generate(migrationBuilder.Operations, context.Model).Select(command => command.CommandText));
+        var sql = string.Join(
+            "\n",
+            generator
+                .Generate(migrationBuilder.Operations, context.Model)
+                .Select(command => command.CommandText));
 
         Assert.Contains("DO $SAFE$", sql, StringComparison.Ordinal);
-        Assert.Contains("Safe migration alter-if-different target column ''display_name''", sql, StringComparison.Ordinal);
+        Assert.Contains(
+            "Safe migration alter-if-different target column ''display_name''",
+            sql,
+            StringComparison.Ordinal);
         Assert.Contains("RAISE EXCEPTION USING MESSAGE", sql, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE", sql, StringComparison.Ordinal);
     }
@@ -208,11 +247,13 @@ public sealed class PostgreSqlSafeMigrationsSqlGeneratorTests
         var generator = context.GetService<IMigrationsSqlGenerator>();
         var migrationBuilder = new MigrationBuilder(context.Database.ProviderName!);
 
-        migrationBuilder.RenameTableIfExists(
-            name: "employees",
-            newName: "team_members");
+        migrationBuilder.RenameTableIfExists(name: "employees", newName: "team_members");
 
-        var sql = string.Join("\n", generator.Generate(migrationBuilder.Operations, context.Model).Select(command => command.CommandText));
+        var sql = string.Join(
+            "\n",
+            generator
+                .Generate(migrationBuilder.Operations, context.Model)
+                .Select(command => command.CommandText));
 
         Assert.Contains("DO $SAFE$", sql, StringComparison.Ordinal);
         Assert.Contains("information_schema.tables", sql, StringComparison.OrdinalIgnoreCase);
@@ -235,7 +276,11 @@ public sealed class PostgreSqlSafeMigrationsSqlGeneratorTests
                 SafeMigrationConflictMode.RepairIfPossible,
                 PreflightOnly: true));
 
-        var sql = string.Join("\n", generator.Generate(migrationBuilder.Operations, context.Model).Select(command => command.CommandText));
+        var sql = string.Join(
+            "\n",
+            generator
+                .Generate(migrationBuilder.Operations, context.Model)
+                .Select(command => command.CommandText));
 
         Assert.Contains("DO $SAFE$", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("ADD CONSTRAINT \"AK_Employees_Email\" UNIQUE", sql, StringComparison.Ordinal);
@@ -256,7 +301,11 @@ public sealed class PostgreSqlSafeMigrationsSqlGeneratorTests
                 SafeMigrationConflictMode.RepairIfPossible,
                 PreflightOnly: true));
 
-        var sql = string.Join("\n", generator.Generate(migrationBuilder.Operations, context.Model).Select(command => command.CommandText));
+        var sql = string.Join(
+            "\n",
+            generator
+                .Generate(migrationBuilder.Operations, context.Model)
+                .Select(command => command.CommandText));
 
         Assert.Contains("DO $SAFE$", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("ADD CONSTRAINT \"PK_Employees\" PRIMARY KEY", sql, StringComparison.Ordinal);
@@ -279,10 +328,17 @@ public sealed class PostgreSqlSafeMigrationsSqlGeneratorTests
                 SafeMigrationConflictMode.RepairIfPossible,
                 PreflightOnly: true));
 
-        var sql = string.Join("\n", generator.Generate(migrationBuilder.Operations, context.Model).Select(command => command.CommandText));
+        var sql = string.Join(
+            "\n",
+            generator
+                .Generate(migrationBuilder.Operations, context.Model)
+                .Select(command => command.CommandText));
 
         Assert.Contains("DO $SAFE$", sql, StringComparison.Ordinal);
-        Assert.DoesNotContain("ADD CONSTRAINT \"FK_Employees_Departments_DepartmentId\" FOREIGN KEY", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "ADD CONSTRAINT \"FK_Employees_Departments_DepartmentId\" FOREIGN KEY",
+            sql,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -300,7 +356,11 @@ public sealed class PostgreSqlSafeMigrationsSqlGeneratorTests
                 SafeMigrationConflictMode.RepairIfPossible,
                 PreflightOnly: true));
 
-        var sql = string.Join("\n", generator.Generate(migrationBuilder.Operations, context.Model).Select(command => command.CommandText));
+        var sql = string.Join(
+            "\n",
+            generator
+                .Generate(migrationBuilder.Operations, context.Model)
+                .Select(command => command.CommandText));
 
         Assert.Contains("DO $SAFE$", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("ADD CONSTRAINT \"CK_Employees_Age\" CHECK", sql, StringComparison.Ordinal);
@@ -318,7 +378,11 @@ public sealed class PostgreSqlSafeMigrationsSqlGeneratorTests
             newName: "IX_Employees_FullName",
             table: "Employees");
 
-        var sql = string.Join("\n", generator.Generate(migrationBuilder.Operations, context.Model).Select(command => command.CommandText));
+        var sql = string.Join(
+            "\n",
+            generator
+                .Generate(migrationBuilder.Operations, context.Model)
+                .Select(command => command.CommandText));
 
         Assert.Contains("DO $SAFE$", sql, StringComparison.Ordinal);
         Assert.Contains("pg_index", sql, StringComparison.Ordinal);
@@ -335,7 +399,11 @@ public sealed class PostgreSqlSafeMigrationsSqlGeneratorTests
 
         migrationBuilder.DropSchemaIfExists("tenant_one");
 
-        var sql = string.Join("\n", generator.Generate(migrationBuilder.Operations, context.Model).Select(command => command.CommandText));
+        var sql = string.Join(
+            "\n",
+            generator
+                .Generate(migrationBuilder.Operations, context.Model)
+                .Select(command => command.CommandText));
 
         Assert.Contains("DROP SCHEMA IF EXISTS", sql, StringComparison.Ordinal);
         Assert.Contains("tenant_one", sql, StringComparison.Ordinal);
@@ -344,12 +412,14 @@ public sealed class PostgreSqlSafeMigrationsSqlGeneratorTests
     private sealed class PostgreSqlTestContext : DbContext
     {
         // No real connection is made — this context exists solely to configure the provider for IMigrationsSqlGenerator resolution.
-        private const string _testConnectionStringPlaceholder = "Host=localhost;Database=test;Username=test;Password=;";
+        private const string TestConnectionStringPlaceholder = "Host=localhost;Database=test;Username=test;Password=;";
 
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        protected override void OnConfiguring(
+            DbContextOptionsBuilder optionsBuilder
+        )
         {
             optionsBuilder
-                .UseNpgsql(_testConnectionStringPlaceholder)
+                .UseNpgsql(TestConnectionStringPlaceholder)
                 .UsePostgreSqlSafeMigrations();
         }
     }

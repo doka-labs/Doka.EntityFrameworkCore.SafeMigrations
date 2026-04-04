@@ -21,12 +21,7 @@ public sealed class MariaDbSafeMigrationPlannerTests
         var decision = MariaDbSafeMigrationPlanner.PlanIndex(
             new SafeMigrationExecutionOptions(SafeMigrationConflictMode.RepairIfPossible),
             SafeMigrationComparisonState.Missing,
-            new ExpectedIndexDefinition(
-                "IX_users_email",
-                "users",
-                null,
-                ["email"],
-                Unique: true));
+            new ExpectedIndexDefinition("IX_users_email", "users", null, ["email"], Unique: true));
 
         Assert.Equal(SafeMigrationExecutionOutcome.Created, decision.Outcome);
         Assert.Equal(SafeMigrationPlannedAction.CreateMissingObject, decision.PlannedAction);
@@ -39,12 +34,7 @@ public sealed class MariaDbSafeMigrationPlannerTests
         var decision = MariaDbSafeMigrationPlanner.PlanIndex(
             new SafeMigrationExecutionOptions(SafeMigrationConflictMode.RepairIfPossible),
             SafeMigrationComparisonState.Different,
-            new ExpectedIndexDefinition(
-                "IX_users_email",
-                "users",
-                null,
-                ["email"],
-                Unique: false));
+            new ExpectedIndexDefinition("IX_users_email", "users", null, ["email"], Unique: false));
 
         Assert.Equal(SafeMigrationExecutionOutcome.Rejected, decision.Outcome);
         Assert.Equal(SafeMigrationPlannedAction.Reject, decision.PlannedAction);
@@ -75,16 +65,9 @@ public sealed class MariaDbSafeMigrationPlannerTests
     public void PreflightCreate_DoesNotExecute()
     {
         var decision = MariaDbSafeMigrationPlanner.PlanIndex(
-            new SafeMigrationExecutionOptions(
-                SafeMigrationConflictMode.ThrowIfDifferent,
-                PreflightOnly: true),
+            new SafeMigrationExecutionOptions(SafeMigrationConflictMode.ThrowIfDifferent, PreflightOnly: true),
             SafeMigrationComparisonState.Missing,
-            new ExpectedIndexDefinition(
-                "IX_users_email",
-                "users",
-                null,
-                ["email"],
-                Unique: false));
+            new ExpectedIndexDefinition("IX_users_email", "users", null, ["email"], Unique: false));
 
         Assert.Equal(SafeMigrationExecutionOutcome.Created, decision.Outcome);
         Assert.False(decision.ShouldExecute);
@@ -96,11 +79,7 @@ public sealed class MariaDbSafeMigrationPlannerTests
         var decision = SafeMigrationDecisionPlanner.PlanUniqueConstraint(
             new SafeMigrationExecutionOptions(SafeMigrationConflictMode.RepairIfPossible),
             SafeMigrationComparisonState.Missing,
-            new ExpectedUniqueConstraintDefinition(
-                "AK_users_email",
-                "users",
-                null,
-                ["email"]));
+            new ExpectedUniqueConstraintDefinition("AK_users_email", "users", null, ["email"]));
 
         Assert.Equal(SafeMigrationExecutionOutcome.Created, decision.Outcome);
         Assert.Equal(SafeMigrationPlannedAction.CreateMissingObject, decision.PlannedAction);
@@ -132,15 +111,9 @@ public sealed class MariaDbSafeMigrationPlannerTests
     public void MissingCheckConstraint_Preflight_DoesNotExecute()
     {
         var decision = SafeMigrationDecisionPlanner.PlanCheckConstraint(
-            new SafeMigrationExecutionOptions(
-                SafeMigrationConflictMode.RepairIfPossible,
-                PreflightOnly: true),
+            new SafeMigrationExecutionOptions(SafeMigrationConflictMode.RepairIfPossible, PreflightOnly: true),
             SafeMigrationComparisonState.Missing,
-            new ExpectedCheckConstraintDefinition(
-                "CK_users_age",
-                "users",
-                null,
-                "`age` >= 18"));
+            new ExpectedCheckConstraintDefinition("CK_users_age", "users", null, "`age` >= 18"));
 
         Assert.Equal(SafeMigrationExecutionOutcome.Created, decision.Outcome);
         Assert.False(decision.ShouldExecute);

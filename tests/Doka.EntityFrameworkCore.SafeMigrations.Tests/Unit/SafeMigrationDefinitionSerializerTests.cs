@@ -125,11 +125,7 @@ public sealed class SafeMigrationDefinitionSerializerTests
     [Fact]
     public void SerializeAndDeserialize_RoundTripsExpectedCheckConstraintDefinition()
     {
-        var definition = new ExpectedCheckConstraintDefinition(
-            "CK_Products_Price",
-            "Products",
-            null,
-            "\"price\" > 0");
+        var definition = new ExpectedCheckConstraintDefinition("CK_Products_Price", "Products", null, "\"price\" > 0");
 
         var json = SafeMigrationDefinitionSerializer.Serialize(definition);
         var restored = SafeMigrationDefinitionSerializer.Deserialize<ExpectedCheckConstraintDefinition>(json);
@@ -148,7 +144,10 @@ public sealed class SafeMigrationDefinitionSerializerTests
             "PK_Users",
             "Users",
             "auth",
-            ["tenant_id", "user_id"]);
+            [
+                "tenant_id",
+                "user_id"
+            ]);
 
         var json = SafeMigrationDefinitionSerializer.Serialize(definition);
         var restored = SafeMigrationDefinitionSerializer.Deserialize<ExpectedPrimaryKeyDefinition>(json);
@@ -163,11 +162,7 @@ public sealed class SafeMigrationDefinitionSerializerTests
     [Fact]
     public void SerializeAndDeserialize_RoundTripsExpectedUniqueConstraintDefinition()
     {
-        var definition = new ExpectedUniqueConstraintDefinition(
-            "AK_Users_Email",
-            "Users",
-            null,
-            ["email"]);
+        var definition = new ExpectedUniqueConstraintDefinition("AK_Users_Email", "Users", null, ["email"]);
 
         var json = SafeMigrationDefinitionSerializer.Serialize(definition);
         var restored = SafeMigrationDefinitionSerializer.Deserialize<ExpectedUniqueConstraintDefinition>(json);

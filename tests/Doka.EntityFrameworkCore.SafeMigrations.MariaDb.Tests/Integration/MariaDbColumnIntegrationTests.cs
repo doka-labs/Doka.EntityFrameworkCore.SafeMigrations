@@ -2,23 +2,25 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MariaDb.Tests.Integration;
 
 public sealed class MariaDbColumnIntegrationTests : MariaDbIntegrationTestBase
 {
-    public MariaDbColumnIntegrationTests(MariaDbContainerFixture fixture) : base(fixture) { }
+    public MariaDbColumnIntegrationTests(
+        MariaDbContainerFixture fixture
+    ) : base(fixture) { }
 
     [Fact]
     public async Task AddColumnIfNotExists_StrictMode_ThrowsOnDefinitionMismatch()
     {
-        var connectionString = await _fixture.CreateDatabaseAsync();
+        var connectionString = await Fixture.CreateDatabaseAsync();
         await using (var setupConnection = new MySqlConnection(connectionString))
         {
             await setupConnection.OpenAsync();
             await using var setupCommand = setupConnection.CreateCommand();
             setupCommand.CommandText = """
-CREATE TABLE `Employees` (
-    `Id` int NOT NULL,
-    `DisplayName` varchar(50) NULL,
-    PRIMARY KEY (`Id`)
-);
-""";
+                                       CREATE TABLE `Employees` (
+                                           `Id` int NOT NULL,
+                                           `DisplayName` varchar(50) NULL,
+                                           PRIMARY KEY (`Id`)
+                                       );
+                                       """;
             await setupCommand.ExecuteNonQueryAsync();
         }
 
@@ -31,20 +33,23 @@ CREATE TABLE `Employees` (
             nullable: true,
             strictMode: SafeMigrationStrictMode.ThrowIfDifferent);
 
-        var exception = await Assert.ThrowsAnyAsync<Exception>(() => ExecuteOperationsAsync(context, migrationBuilder.Operations));
+        var exception =
+            await Assert.ThrowsAnyAsync<Exception>(() => ExecuteOperationsAsync(context, migrationBuilder.Operations));
         Assert.Contains("Safe migration strict-mode mismatch for column", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
     public async Task AddColumnIfNotExists_RepairMode_CreatesMissingNullableColumn()
     {
-        var connectionString = await _fixture.CreateDatabaseAsync();
-        await ExecuteNonQueryAsync(connectionString, """
-CREATE TABLE `Employees` (
-    `Id` int NOT NULL,
-    PRIMARY KEY (`Id`)
-);
-""");
+        var connectionString = await Fixture.CreateDatabaseAsync();
+        await ExecuteNonQueryAsync(
+            connectionString,
+            """
+            CREATE TABLE `Employees` (
+                `Id` int NOT NULL,
+                PRIMARY KEY (`Id`)
+            );
+            """);
 
         await using var context = new SafeMigrationDbContext(connectionString);
         var migrationBuilder = new MigrationBuilder(context.Database.ProviderName!);
@@ -62,28 +67,30 @@ CREATE TABLE `Employees` (
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = """
-SELECT COUNT(*)
-FROM information_schema.COLUMNS
-WHERE TABLE_SCHEMA = DATABASE()
-  AND TABLE_NAME = 'Employees'
-  AND COLUMN_NAME = 'DisplayName';
-""";
+                              SELECT COUNT(*)
+                              FROM information_schema.COLUMNS
+                              WHERE TABLE_SCHEMA = DATABASE()
+                                AND TABLE_NAME = 'Employees'
+                                AND COLUMN_NAME = 'DisplayName';
+                              """;
 
-        var count = Convert.ToInt32(await command.ExecuteScalarAsync());
+        var count = await ExecuteScalarAsInt32Async(command);
         Assert.Equal(1, count);
     }
 
     [Fact]
     public async Task AddColumnIfNotExists_RepairMode_MatchingExistingColumn_IsNoOp()
     {
-        var connectionString = await _fixture.CreateDatabaseAsync();
-        await ExecuteNonQueryAsync(connectionString, """
-CREATE TABLE `Employees` (
-    `Id` int NOT NULL,
-    `DisplayName` varchar(200) NULL,
-    PRIMARY KEY (`Id`)
-);
-""");
+        var connectionString = await Fixture.CreateDatabaseAsync();
+        await ExecuteNonQueryAsync(
+            connectionString,
+            """
+            CREATE TABLE `Employees` (
+                `Id` int NOT NULL,
+                `DisplayName` varchar(200) NULL,
+                PRIMARY KEY (`Id`)
+            );
+            """);
 
         await using var context = new SafeMigrationDbContext(connectionString);
         var migrationBuilder = new MigrationBuilder(context.Database.ProviderName!);
@@ -101,28 +108,30 @@ CREATE TABLE `Employees` (
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = """
-SELECT COUNT(*)
-FROM information_schema.COLUMNS
-WHERE TABLE_SCHEMA = DATABASE()
-  AND TABLE_NAME = 'Employees'
-  AND COLUMN_NAME = 'DisplayName';
-""";
+                              SELECT COUNT(*)
+                              FROM information_schema.COLUMNS
+                              WHERE TABLE_SCHEMA = DATABASE()
+                                AND TABLE_NAME = 'Employees'
+                                AND COLUMN_NAME = 'DisplayName';
+                              """;
 
-        var count = Convert.ToInt32(await command.ExecuteScalarAsync());
+        var count = await ExecuteScalarAsInt32Async(command);
         Assert.Equal(1, count);
     }
 
     [Fact]
     public async Task AddColumnIfNotExists_StrictMode_AcceptsMatchingStringDefaultLiteral()
     {
-        var connectionString = await _fixture.CreateDatabaseAsync();
-        await ExecuteNonQueryAsync(connectionString, """
-CREATE TABLE `Employees` (
-    `Id` int NOT NULL,
-    `Status` varchar(20) NOT NULL DEFAULT 'active',
-    PRIMARY KEY (`Id`)
-);
-""");
+        var connectionString = await Fixture.CreateDatabaseAsync();
+        await ExecuteNonQueryAsync(
+            connectionString,
+            """
+            CREATE TABLE `Employees` (
+                `Id` int NOT NULL,
+                `Status` varchar(20) NOT NULL DEFAULT 'active',
+                PRIMARY KEY (`Id`)
+            );
+            """);
 
         await using var context = new SafeMigrationDbContext(connectionString);
         var migrationBuilder = new MigrationBuilder(context.Database.ProviderName!);
@@ -141,13 +150,15 @@ CREATE TABLE `Employees` (
     [Fact]
     public async Task AddColumnIfNotExists_PreflightOnly_DoesNotCreateMissingColumn()
     {
-        var connectionString = await _fixture.CreateDatabaseAsync();
-        await ExecuteNonQueryAsync(connectionString, """
-CREATE TABLE `Employees` (
-    `Id` int NOT NULL,
-    PRIMARY KEY (`Id`)
-);
-""");
+        var connectionString = await Fixture.CreateDatabaseAsync();
+        await ExecuteNonQueryAsync(
+            connectionString,
+            """
+            CREATE TABLE `Employees` (
+                `Id` int NOT NULL,
+                PRIMARY KEY (`Id`)
+            );
+            """);
 
         await using var context = new SafeMigrationDbContext(connectionString);
         var migrationBuilder = new MigrationBuilder(context.Database.ProviderName!);
@@ -166,28 +177,30 @@ CREATE TABLE `Employees` (
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = """
-SELECT COUNT(*)
-FROM information_schema.COLUMNS
-WHERE TABLE_SCHEMA = DATABASE()
-  AND TABLE_NAME = 'Employees'
-  AND COLUMN_NAME = 'DisplayName';
-""";
+                              SELECT COUNT(*)
+                              FROM information_schema.COLUMNS
+                              WHERE TABLE_SCHEMA = DATABASE()
+                                AND TABLE_NAME = 'Employees'
+                                AND COLUMN_NAME = 'DisplayName';
+                              """;
 
-        var count = Convert.ToInt32(await command.ExecuteScalarAsync());
+        var count = await ExecuteScalarAsInt32Async(command);
         Assert.Equal(0, count);
     }
 
     [Fact]
     public async Task AddColumnIfNotExists_RepairMode_RejectsUnsafeMissingColumn()
     {
-        var connectionString = await _fixture.CreateDatabaseAsync();
-        await ExecuteNonQueryAsync(connectionString, """
-CREATE TABLE `Employees` (
-    `Id` int NOT NULL,
-    PRIMARY KEY (`Id`)
-);
-INSERT INTO `Employees` (`Id`) VALUES (1);
-""");
+        var connectionString = await Fixture.CreateDatabaseAsync();
+        await ExecuteNonQueryAsync(
+            connectionString,
+            """
+            CREATE TABLE `Employees` (
+                `Id` int NOT NULL,
+                PRIMARY KEY (`Id`)
+            );
+            INSERT INTO `Employees` (`Id`) VALUES (1);
+            """);
 
         await using var context = new SafeMigrationDbContext(connectionString);
         var migrationBuilder = new MigrationBuilder(context.Database.ProviderName!);
@@ -198,21 +211,24 @@ INSERT INTO `Employees` (`Id`) VALUES (1);
             type: "int",
             nullable: false);
 
-        var exception = await Assert.ThrowsAnyAsync<Exception>(() => ExecuteOperationsAsync(context, migrationBuilder.Operations));
+        var exception =
+            await Assert.ThrowsAnyAsync<Exception>(() => ExecuteOperationsAsync(context, migrationBuilder.Operations));
         Assert.Contains("Safe additive-column repair is not allowed", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
     public async Task AlterColumnIfDifferent_AltersExistingColumnAndIsIdempotent()
     {
-        var connectionString = await _fixture.CreateDatabaseAsync();
-        await ExecuteNonQueryAsync(connectionString, """
-CREATE TABLE `Employees` (
-    `Id` int NOT NULL,
-    `DisplayName` varchar(50) NULL,
-    PRIMARY KEY (`Id`)
-);
-""");
+        var connectionString = await Fixture.CreateDatabaseAsync();
+        await ExecuteNonQueryAsync(
+            connectionString,
+            """
+            CREATE TABLE `Employees` (
+                `Id` int NOT NULL,
+                `DisplayName` varchar(50) NULL,
+                PRIMARY KEY (`Id`)
+            );
+            """);
 
         await using var context = new SafeMigrationDbContext(connectionString);
         var migrationBuilder = new MigrationBuilder(context.Database.ProviderName!);
@@ -232,35 +248,34 @@ CREATE TABLE `Employees` (
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = """
-SELECT COLUMN_TYPE
-FROM information_schema.COLUMNS
-WHERE TABLE_SCHEMA = DATABASE()
-  AND TABLE_NAME = 'Employees'
-  AND COLUMN_NAME = 'DisplayName';
-""";
+                              SELECT COLUMN_TYPE
+                              FROM information_schema.COLUMNS
+                              WHERE TABLE_SCHEMA = DATABASE()
+                                AND TABLE_NAME = 'Employees'
+                                AND COLUMN_NAME = 'DisplayName';
+                              """;
 
-        var columnType = Convert.ToString(await command.ExecuteScalarAsync());
+        var columnType = await ExecuteScalarAsStringAsync(command);
         Assert.Equal("varchar(200)", columnType);
     }
 
     [Fact]
     public async Task RenameColumnIfExists_IsIdempotentAgainstRealMariaDb()
     {
-        var connectionString = await _fixture.CreateDatabaseAsync();
-        await ExecuteNonQueryAsync(connectionString, """
-CREATE TABLE `Employees` (
-    `Id` int NOT NULL,
-    `DisplayName` varchar(50) NULL,
-    PRIMARY KEY (`Id`)
-);
-""");
+        var connectionString = await Fixture.CreateDatabaseAsync();
+        await ExecuteNonQueryAsync(
+            connectionString,
+            """
+            CREATE TABLE `Employees` (
+                `Id` int NOT NULL,
+                `DisplayName` varchar(50) NULL,
+                PRIMARY KEY (`Id`)
+            );
+            """);
 
         await using var context = new SafeMigrationDbContext(connectionString);
         var migrationBuilder = new MigrationBuilder(context.Database.ProviderName!);
-        migrationBuilder.RenameColumnIfExists(
-            name: "DisplayName",
-            table: "Employees",
-            newName: "FullName");
+        migrationBuilder.RenameColumnIfExists(name: "DisplayName", table: "Employees", newName: "FullName");
 
         await ExecuteOperationsAsync(context, migrationBuilder.Operations);
         await ExecuteOperationsAsync(context, migrationBuilder.Operations);
@@ -269,34 +284,34 @@ CREATE TABLE `Employees` (
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = """
-SELECT COUNT(*)
-FROM information_schema.COLUMNS
-WHERE TABLE_SCHEMA = DATABASE()
-  AND TABLE_NAME = 'Employees'
-  AND COLUMN_NAME = 'FullName';
-""";
+                              SELECT COUNT(*)
+                              FROM information_schema.COLUMNS
+                              WHERE TABLE_SCHEMA = DATABASE()
+                                AND TABLE_NAME = 'Employees'
+                                AND COLUMN_NAME = 'FullName';
+                              """;
 
-        var count = Convert.ToInt32(await command.ExecuteScalarAsync());
+        var count = await ExecuteScalarAsInt32Async(command);
         Assert.Equal(1, count);
     }
 
     [Fact]
     public async Task DropColumnIfExists_IsIdempotentAgainstRealMariaDb()
     {
-        var connectionString = await _fixture.CreateDatabaseAsync();
-        await ExecuteNonQueryAsync(connectionString, """
-CREATE TABLE `Employees` (
-    `Id` int NOT NULL,
-    `DisplayName` varchar(200) NULL,
-    PRIMARY KEY (`Id`)
-);
-""");
+        var connectionString = await Fixture.CreateDatabaseAsync();
+        await ExecuteNonQueryAsync(
+            connectionString,
+            """
+            CREATE TABLE `Employees` (
+                `Id` int NOT NULL,
+                `DisplayName` varchar(200) NULL,
+                PRIMARY KEY (`Id`)
+            );
+            """);
 
         await using var context = new SafeMigrationDbContext(connectionString);
         var migrationBuilder = new MigrationBuilder(context.Database.ProviderName!);
-        migrationBuilder.DropColumnIfExists(
-            name: "DisplayName",
-            table: "Employees");
+        migrationBuilder.DropColumnIfExists(name: "DisplayName", table: "Employees");
 
         await ExecuteOperationsAsync(context, migrationBuilder.Operations);
         await ExecuteOperationsAsync(context, migrationBuilder.Operations);
@@ -305,14 +320,14 @@ CREATE TABLE `Employees` (
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = """
-SELECT COUNT(*)
-FROM information_schema.COLUMNS
-WHERE TABLE_SCHEMA = DATABASE()
-  AND TABLE_NAME = 'Employees'
-  AND COLUMN_NAME = 'DisplayName';
-""";
+                              SELECT COUNT(*)
+                              FROM information_schema.COLUMNS
+                              WHERE TABLE_SCHEMA = DATABASE()
+                                AND TABLE_NAME = 'Employees'
+                                AND COLUMN_NAME = 'DisplayName';
+                              """;
 
-        var count = Convert.ToInt32(await command.ExecuteScalarAsync());
+        var count = await ExecuteScalarAsInt32Async(command);
         Assert.Equal(0, count);
     }
 }

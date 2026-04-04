@@ -2,12 +2,14 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.Integration;
 
 public sealed class PostgreSqlTableSchemaIntegrationTests : PostgreSqlIntegrationTestBase
 {
-    public PostgreSqlTableSchemaIntegrationTests(PostgreSqlContainerFixture fixture) : base(fixture) { }
+    public PostgreSqlTableSchemaIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
 
     [Fact]
     public async Task CreateTableIfNotExists_IsIdempotentAgainstRealPostgreSql()
     {
-        var connectionString = await _fixture.CreateDatabaseAsync();
+        var connectionString = await Fixture.CreateDatabaseAsync();
         await using var context = new SafeMigrationDbContext(connectionString);
 
         var migrationBuilder = new MigrationBuilder(context.Database.ProviderName!);
@@ -27,37 +29,39 @@ public sealed class PostgreSqlTableSchemaIntegrationTests : PostgreSqlIntegratio
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = """
-SELECT COUNT(*)
-FROM information_schema.tables
-WHERE table_schema = 'public'
-  AND table_name = 'Employees';
-""";
+                              SELECT COUNT(*)
+                              FROM information_schema.tables
+                              WHERE table_schema = 'public'
+                                AND table_name = 'Employees';
+                              """;
 
-        var count = Convert.ToInt32(await command.ExecuteScalarAsync());
+        var count = await ExecuteScalarAsInt32Async(command);
         Assert.Equal(1, count);
     }
 
     [Fact]
     public async Task ConsolidatedInitialMigration_CanSynchronizeExistingPopulatedPostgreSql()
     {
-        var connectionString = await _fixture.CreateDatabaseAsync();
-        await ExecuteNonQueryAsync(connectionString, """
-CREATE TABLE "Departments" (
-    "Id" integer NOT NULL,
-    "Name" text NOT NULL,
-    CONSTRAINT "PK_Departments" PRIMARY KEY ("Id")
-);
+        var connectionString = await Fixture.CreateDatabaseAsync();
+        await ExecuteNonQueryAsync(
+            connectionString,
+            """
+            CREATE TABLE "Departments" (
+                "Id" integer NOT NULL,
+                "Name" text NOT NULL,
+                CONSTRAINT "PK_Departments" PRIMARY KEY ("Id")
+            );
 
-CREATE TABLE "Employees" (
-    "Id" integer NOT NULL,
-    "Email" text NOT NULL,
-    "DepartmentId" integer NOT NULL,
-    CONSTRAINT "PK_Employees" PRIMARY KEY ("Id")
-);
+            CREATE TABLE "Employees" (
+                "Id" integer NOT NULL,
+                "Email" text NOT NULL,
+                "DepartmentId" integer NOT NULL,
+                CONSTRAINT "PK_Employees" PRIMARY KEY ("Id")
+            );
 
-INSERT INTO "Departments" ("Id", "Name") VALUES (10, 'Engineering');
-INSERT INTO "Employees" ("Id", "Email", "DepartmentId") VALUES (1, 'dominic@example.com', 10);
-""");
+            INSERT INTO "Departments" ("Id", "Name") VALUES (10, 'Engineering');
+            INSERT INTO "Employees" ("Id", "Email", "DepartmentId") VALUES (1, 'dominic@example.com', 10);
+            """);
 
         await using var context = new SafeMigrationDbContext(connectionString);
         var migrationBuilder = new MigrationBuilder(context.Database.ProviderName!);
@@ -129,92 +133,92 @@ INSERT INTO "Employees" ("Id", "Email", "DepartmentId") VALUES (1, 'dominic@exam
         await using (var command = connection.CreateCommand())
         {
             command.CommandText = """
-SELECT COUNT(*)
-FROM "Employees"
-WHERE "Id" = 1
-  AND "Email" = 'dominic@example.com'
-  AND "DepartmentId" = 10;
-""";
+                                  SELECT COUNT(*)
+                                  FROM "Employees"
+                                  WHERE "Id" = 1
+                                    AND "Email" = 'dominic@example.com'
+                                    AND "DepartmentId" = 10;
+                                  """;
 
-            var employeeCount = Convert.ToInt32(await command.ExecuteScalarAsync());
+            var employeeCount = await ExecuteScalarAsInt32Async(command);
             Assert.Equal(1, employeeCount);
         }
 
         await using (var command = connection.CreateCommand())
         {
             command.CommandText = """
-SELECT COUNT(*)
-FROM information_schema.columns
-WHERE table_schema = 'public'
-  AND table_name = 'Employees'
-  AND column_name = 'DisplayName';
-""";
+                                  SELECT COUNT(*)
+                                  FROM information_schema.columns
+                                  WHERE table_schema = 'public'
+                                    AND table_name = 'Employees'
+                                    AND column_name = 'DisplayName';
+                                  """;
 
-            var columnCount = Convert.ToInt32(await command.ExecuteScalarAsync());
+            var columnCount = await ExecuteScalarAsInt32Async(command);
             Assert.Equal(1, columnCount);
         }
 
         await using (var command = connection.CreateCommand())
         {
             command.CommandText = """
-SELECT COUNT(*)
-FROM information_schema.tables
-WHERE table_schema = 'public'
-  AND table_name = 'AuditEntries';
-""";
+                                  SELECT COUNT(*)
+                                  FROM information_schema.tables
+                                  WHERE table_schema = 'public'
+                                    AND table_name = 'AuditEntries';
+                                  """;
 
-            var tableCount = Convert.ToInt32(await command.ExecuteScalarAsync());
+            var tableCount = await ExecuteScalarAsInt32Async(command);
             Assert.Equal(1, tableCount);
         }
 
         await using (var command = connection.CreateCommand())
         {
             command.CommandText = """
-SELECT COUNT(*)
-FROM pg_class idx
-JOIN pg_namespace n ON n.oid = idx.relnamespace
-JOIN pg_index i ON i.indexrelid = idx.oid
-JOIN pg_class t ON t.oid = i.indrelid
-WHERE n.nspname = 'public'
-  AND t.relname = 'Employees'
-  AND idx.relname = 'IX_Employees_DepartmentId';
-""";
+                                  SELECT COUNT(*)
+                                  FROM pg_class idx
+                                  JOIN pg_namespace n ON n.oid = idx.relnamespace
+                                  JOIN pg_index i ON i.indexrelid = idx.oid
+                                  JOIN pg_class t ON t.oid = i.indrelid
+                                  WHERE n.nspname = 'public'
+                                    AND t.relname = 'Employees'
+                                    AND idx.relname = 'IX_Employees_DepartmentId';
+                                  """;
 
-            var indexCount = Convert.ToInt32(await command.ExecuteScalarAsync());
+            var indexCount = await ExecuteScalarAsInt32Async(command);
             Assert.Equal(1, indexCount);
         }
 
         await using (var command = connection.CreateCommand())
         {
             command.CommandText = """
-SELECT COUNT(*)
-FROM pg_constraint c
-JOIN pg_class t ON t.oid = c.conrelid
-JOIN pg_namespace n ON n.oid = t.relnamespace
-WHERE n.nspname = 'public'
-  AND t.relname = 'Employees'
-  AND c.conname = 'AK_Employees_Email'
-  AND c.contype = 'u';
-""";
+                                  SELECT COUNT(*)
+                                  FROM pg_constraint c
+                                  JOIN pg_class t ON t.oid = c.conrelid
+                                  JOIN pg_namespace n ON n.oid = t.relnamespace
+                                  WHERE n.nspname = 'public'
+                                    AND t.relname = 'Employees'
+                                    AND c.conname = 'AK_Employees_Email'
+                                    AND c.contype = 'u';
+                                  """;
 
-            var uniqueCount = Convert.ToInt32(await command.ExecuteScalarAsync());
+            var uniqueCount = await ExecuteScalarAsInt32Async(command);
             Assert.Equal(1, uniqueCount);
         }
 
         await using (var command = connection.CreateCommand())
         {
             command.CommandText = """
-SELECT COUNT(*)
-FROM pg_constraint c
-JOIN pg_class t ON t.oid = c.conrelid
-JOIN pg_namespace n ON n.oid = t.relnamespace
-WHERE n.nspname = 'public'
-  AND t.relname = 'Employees'
-  AND c.conname = 'FK_Employees_Departments_DepartmentId'
-  AND c.contype = 'f';
-""";
+                                  SELECT COUNT(*)
+                                  FROM pg_constraint c
+                                  JOIN pg_class t ON t.oid = c.conrelid
+                                  JOIN pg_namespace n ON n.oid = t.relnamespace
+                                  WHERE n.nspname = 'public'
+                                    AND t.relname = 'Employees'
+                                    AND c.conname = 'FK_Employees_Departments_DepartmentId'
+                                    AND c.contype = 'f';
+                                  """;
 
-            var foreignKeyCount = Convert.ToInt32(await command.ExecuteScalarAsync());
+            var foreignKeyCount = await ExecuteScalarAsInt32Async(command);
             Assert.Equal(1, foreignKeyCount);
         }
     }
@@ -222,19 +226,19 @@ WHERE n.nspname = 'public'
     [Fact]
     public async Task RenameTableIfExists_IsIdempotentAgainstRealPostgreSql()
     {
-        var connectionString = await _fixture.CreateDatabaseAsync();
-        await ExecuteNonQueryAsync(connectionString, """
-CREATE TABLE "Employees" (
-    "Id" integer NOT NULL,
-    CONSTRAINT "PK_Employees" PRIMARY KEY ("Id")
-);
-""");
+        var connectionString = await Fixture.CreateDatabaseAsync();
+        await ExecuteNonQueryAsync(
+            connectionString,
+            """
+            CREATE TABLE "Employees" (
+                "Id" integer NOT NULL,
+                CONSTRAINT "PK_Employees" PRIMARY KEY ("Id")
+            );
+            """);
 
         await using var context = new SafeMigrationDbContext(connectionString);
         var migrationBuilder = new MigrationBuilder(context.Database.ProviderName!);
-        migrationBuilder.RenameTableIfExists(
-            name: "Employees",
-            newName: "TeamMembers");
+        migrationBuilder.RenameTableIfExists(name: "Employees", newName: "TeamMembers");
 
         await ExecuteOperationsAsync(context, migrationBuilder.Operations);
         await ExecuteOperationsAsync(context, migrationBuilder.Operations);
@@ -243,20 +247,20 @@ CREATE TABLE "Employees" (
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = """
-SELECT COUNT(*)
-FROM information_schema.tables
-WHERE table_schema = 'public'
-  AND table_name = 'TeamMembers';
-""";
+                              SELECT COUNT(*)
+                              FROM information_schema.tables
+                              WHERE table_schema = 'public'
+                                AND table_name = 'TeamMembers';
+                              """;
 
-        var count = Convert.ToInt32(await command.ExecuteScalarAsync());
+        var count = await ExecuteScalarAsInt32Async(command);
         Assert.Equal(1, count);
     }
 
     [Fact]
     public async Task EnsureSchemaExists_IsIdempotentAgainstRealPostgreSql()
     {
-        var connectionString = await _fixture.CreateDatabaseAsync();
+        var connectionString = await Fixture.CreateDatabaseAsync();
         var schemaName = $"tenant_{Guid.NewGuid():N}";
 
         await using var context = new SafeMigrationDbContext(connectionString);
@@ -270,19 +274,19 @@ WHERE table_schema = 'public'
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-SELECT COUNT(*)
-FROM information_schema.schemata
-WHERE schema_name = '{schemaName}';
-""";
+                               SELECT COUNT(*)
+                               FROM information_schema.schemata
+                               WHERE schema_name = '{schemaName}';
+                               """;
 
-        var count = Convert.ToInt32(await command.ExecuteScalarAsync());
+        var count = await ExecuteScalarAsInt32Async(command);
         Assert.Equal(1, count);
     }
 
     [Fact]
     public async Task DropSchemaIfExists_IsIdempotentAgainstRealPostgreSql()
     {
-        var connectionString = await _fixture.CreateDatabaseAsync();
+        var connectionString = await Fixture.CreateDatabaseAsync();
         var schemaName = $"tenant_{Guid.NewGuid():N}";
         await ExecuteNonQueryAsync(connectionString, $"""CREATE SCHEMA "{schemaName}";""");
 
@@ -297,25 +301,27 @@ WHERE schema_name = '{schemaName}';
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-SELECT COUNT(*)
-FROM information_schema.schemata
-WHERE schema_name = '{schemaName}';
-""";
+                               SELECT COUNT(*)
+                               FROM information_schema.schemata
+                               WHERE schema_name = '{schemaName}';
+                               """;
 
-        var count = Convert.ToInt32(await command.ExecuteScalarAsync());
+        var count = await ExecuteScalarAsInt32Async(command);
         Assert.Equal(0, count);
     }
 
     [Fact]
     public async Task DropTableIfExists_IsIdempotentAgainstRealPostgreSql()
     {
-        var connectionString = await _fixture.CreateDatabaseAsync();
-        await ExecuteNonQueryAsync(connectionString, """
-CREATE TABLE "Employees" (
-    "Id" integer NOT NULL,
-    CONSTRAINT "PK_Employees" PRIMARY KEY ("Id")
-);
-""");
+        var connectionString = await Fixture.CreateDatabaseAsync();
+        await ExecuteNonQueryAsync(
+            connectionString,
+            """
+            CREATE TABLE "Employees" (
+                "Id" integer NOT NULL,
+                CONSTRAINT "PK_Employees" PRIMARY KEY ("Id")
+            );
+            """);
 
         await using var context = new SafeMigrationDbContext(connectionString);
         var migrationBuilder = new MigrationBuilder(context.Database.ProviderName!);
@@ -328,13 +334,13 @@ CREATE TABLE "Employees" (
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = """
-SELECT COUNT(*)
-FROM information_schema.tables
-WHERE table_schema = 'public'
-  AND table_name = 'Employees';
-""";
+                              SELECT COUNT(*)
+                              FROM information_schema.tables
+                              WHERE table_schema = 'public'
+                                AND table_name = 'Employees';
+                              """;
 
-        var count = Convert.ToInt32(await command.ExecuteScalarAsync());
+        var count = await ExecuteScalarAsInt32Async(command);
         Assert.Equal(0, count);
     }
 }

@@ -47,7 +47,9 @@ public sealed class SafeMigrationExecutionOptionsTests
     [Fact]
     public void ExecutionOptions_WithExpression_ProducesNonDestructiveCopy()
     {
-        var original = new SafeMigrationExecutionOptions(SafeMigrationConflictMode.RepairIfPossible, PreflightOnly: false);
+        var original = new SafeMigrationExecutionOptions(
+            SafeMigrationConflictMode.RepairIfPossible,
+            PreflightOnly: false);
         var modified = original with { PreflightOnly = true };
 
         Assert.False(original.PreflightOnly);

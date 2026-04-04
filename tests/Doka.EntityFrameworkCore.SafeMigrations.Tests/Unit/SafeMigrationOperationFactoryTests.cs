@@ -49,9 +49,7 @@ public sealed class SafeMigrationOperationFactoryTests
     {
         var migrationBuilder = new MigrationBuilder("Microsoft.EntityFrameworkCore.Sqlite");
 
-        migrationBuilder.DropPrimaryKeyIfExists(
-            table: "Employees",
-            name: "PK_Employees");
+        migrationBuilder.DropPrimaryKeyIfExists(table: "Employees", name: "PK_Employees");
 
         var operation = Assert.IsType<DropPrimaryKeyOperation>(Assert.Single(migrationBuilder.Operations));
 

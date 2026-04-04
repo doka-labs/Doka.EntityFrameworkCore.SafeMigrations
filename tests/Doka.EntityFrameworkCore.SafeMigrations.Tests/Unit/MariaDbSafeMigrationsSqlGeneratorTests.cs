@@ -17,7 +17,11 @@ public sealed class MariaDbSafeMigrationsSqlGeneratorTests
             type: "varchar(200)",
             nullable: true);
 
-        var sql = string.Join("\n", generator.Generate(migrationBuilder.Operations, context.Model).Select(command => command.CommandText));
+        var sql = string.Join(
+            "\n",
+            generator
+                .Generate(migrationBuilder.Operations, context.Model)
+                .Select(command => command.CommandText));
 
         Assert.Contains("ADD COLUMN IF NOT EXISTS", sql, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE `Employees`", sql, StringComparison.Ordinal);
@@ -30,10 +34,13 @@ public sealed class MariaDbSafeMigrationsSqlGeneratorTests
         var generator = context.GetService<IMigrationsSqlGenerator>();
         var migrationBuilder = new MigrationBuilder(context.Database.ProviderName!);
 
-        migrationBuilder.DropPrimaryKeyIfExists(
-            table: "Employees");
+        migrationBuilder.DropPrimaryKeyIfExists(table: "Employees");
 
-        var sql = string.Join("\n", generator.Generate(migrationBuilder.Operations, context.Model).Select(command => command.CommandText));
+        var sql = string.Join(
+            "\n",
+            generator
+                .Generate(migrationBuilder.Operations, context.Model)
+                .Select(command => command.CommandText));
 
         Assert.Contains("information_schema.TABLE_CONSTRAINTS", sql, StringComparison.Ordinal);
         Assert.Contains("DROP PRIMARY KEY", sql, StringComparison.Ordinal);
@@ -54,12 +61,19 @@ public sealed class MariaDbSafeMigrationsSqlGeneratorTests
             nullable: true,
             strictMode: SafeMigrationStrictMode.ThrowIfDifferent);
 
-        var sql = string.Join("\n", generator.Generate(migrationBuilder.Operations, context.Model).Select(command => command.CommandText));
+        var sql = string.Join(
+            "\n",
+            generator
+                .Generate(migrationBuilder.Operations, context.Model)
+                .Select(command => command.CommandText));
 
         Assert.Contains("CREATE PROCEDURE `safe_migrations_guard`()", sql, StringComparison.Ordinal);
         Assert.Contains("information_schema.COLUMNS", sql, StringComparison.Ordinal);
         Assert.Contains("SIGNAL SQLSTATE '45000'", sql, StringComparison.Ordinal);
-        Assert.Contains("Safe migration strict-mode mismatch for column ''DisplayName''", sql, StringComparison.Ordinal);
+        Assert.Contains(
+            "Safe migration strict-mode mismatch for column ''DisplayName''",
+            sql,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -77,7 +91,11 @@ public sealed class MariaDbSafeMigrationsSqlGeneratorTests
             defaultValue: "active",
             strictMode: SafeMigrationStrictMode.ThrowIfDifferent);
 
-        var sql = string.Join("\n", generator.Generate(migrationBuilder.Operations, context.Model).Select(command => command.CommandText));
+        var sql = string.Join(
+            "\n",
+            generator
+                .Generate(migrationBuilder.Operations, context.Model)
+                .Select(command => command.CommandText));
 
         Assert.Contains("COLUMN_DEFAULT", sql, StringComparison.Ordinal);
         Assert.Contains(" IN (", sql, StringComparison.Ordinal);
@@ -100,7 +118,11 @@ public sealed class MariaDbSafeMigrationsSqlGeneratorTests
             type: "varchar(200)",
             nullable: true);
 
-        var sql = string.Join("\n", generator.Generate(migrationBuilder.Operations, context.Model).Select(command => command.CommandText));
+        var sql = string.Join(
+            "\n",
+            generator
+                .Generate(migrationBuilder.Operations, context.Model)
+                .Select(command => command.CommandText));
 
         Assert.Contains("CREATE PROCEDURE `safe_migrations_guard`()", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("ADD COLUMN IF NOT EXISTS", sql, StringComparison.Ordinal);
@@ -119,7 +141,11 @@ public sealed class MariaDbSafeMigrationsSqlGeneratorTests
             columns: ["DisplayName"],
             strictMode: SafeMigrationStrictMode.ThrowIfDifferent);
 
-        var sql = string.Join("\n", generator.Generate(migrationBuilder.Operations, context.Model).Select(command => command.CommandText));
+        var sql = string.Join(
+            "\n",
+            generator
+                .Generate(migrationBuilder.Operations, context.Model)
+                .Select(command => command.CommandText));
 
         Assert.Contains("information_schema.STATISTICS", sql, StringComparison.Ordinal);
         Assert.Contains("COLUMN_LIST", sql, StringComparison.Ordinal);
@@ -141,7 +167,8 @@ public sealed class MariaDbSafeMigrationsSqlGeneratorTests
             filter: "`DisplayName` IS NOT NULL",
             strictMode: SafeMigrationStrictMode.ThrowIfDifferent);
 
-        var exception = Assert.Throws<NotSupportedException>(() => generator.Generate(migrationBuilder.Operations, context.Model));
+        var exception =
+            Assert.Throws<NotSupportedException>(() => generator.Generate(migrationBuilder.Operations, context.Model));
 
         Assert.Contains("does not support filtered indexes", exception.Message, StringComparison.Ordinal);
         Assert.Contains("IX_Employees_DisplayName", exception.Message, StringComparison.Ordinal);
@@ -181,7 +208,11 @@ public sealed class MariaDbSafeMigrationsSqlGeneratorTests
             columns: ["DisplayName"],
             execution: new SafeMigrationExecutionOptions(SafeMigrationConflictMode.RepairIfPossible));
 
-        var sql = string.Join("\n", generator.Generate(migrationBuilder.Operations, context.Model).Select(command => command.CommandText));
+        var sql = string.Join(
+            "\n",
+            generator
+                .Generate(migrationBuilder.Operations, context.Model)
+                .Select(command => command.CommandText));
 
         Assert.Contains("information_schema.STATISTICS", sql, StringComparison.Ordinal);
         Assert.Contains("CREATE PROCEDURE `safe_migrations_guard`()", sql, StringComparison.Ordinal);
@@ -203,7 +234,11 @@ public sealed class MariaDbSafeMigrationsSqlGeneratorTests
                 SafeMigrationConflictMode.ThrowIfDifferent,
                 PreflightOnly: true));
 
-        var sql = string.Join("\n", generator.Generate(migrationBuilder.Operations, context.Model).Select(command => command.CommandText));
+        var sql = string.Join(
+            "\n",
+            generator
+                .Generate(migrationBuilder.Operations, context.Model)
+                .Select(command => command.CommandText));
 
         Assert.Contains("CREATE PROCEDURE `safe_migrations_guard`()", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("CREATE INDEX IF NOT EXISTS", sql, StringComparison.Ordinal);
@@ -226,11 +261,18 @@ public sealed class MariaDbSafeMigrationsSqlGeneratorTests
             oldType: "varchar(50)",
             oldNullable: true);
 
-        var sql = string.Join("\n", generator.Generate(migrationBuilder.Operations, context.Model).Select(command => command.CommandText));
+        var sql = string.Join(
+            "\n",
+            generator
+                .Generate(migrationBuilder.Operations, context.Model)
+                .Select(command => command.CommandText));
 
         Assert.Contains("CREATE PROCEDURE `safe_migrations_guard`()", sql, StringComparison.Ordinal);
         Assert.Contains("information_schema.COLUMNS", sql, StringComparison.Ordinal);
-        Assert.Contains("Safe migration alter-if-different target column ''DisplayName''", sql, StringComparison.Ordinal);
+        Assert.Contains(
+            "Safe migration alter-if-different target column ''DisplayName''",
+            sql,
+            StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE `Employees`", sql, StringComparison.Ordinal);
     }
 
@@ -249,7 +291,11 @@ public sealed class MariaDbSafeMigrationsSqlGeneratorTests
                 SafeMigrationConflictMode.RepairIfPossible,
                 PreflightOnly: true));
 
-        var sql = string.Join("\n", generator.Generate(migrationBuilder.Operations, context.Model).Select(command => command.CommandText));
+        var sql = string.Join(
+            "\n",
+            generator
+                .Generate(migrationBuilder.Operations, context.Model)
+                .Select(command => command.CommandText));
 
         Assert.Contains("CREATE PROCEDURE `safe_migrations_guard`()", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("ADD CONSTRAINT `AK_Employees_Email` UNIQUE", sql, StringComparison.Ordinal);
@@ -270,7 +316,11 @@ public sealed class MariaDbSafeMigrationsSqlGeneratorTests
                 SafeMigrationConflictMode.RepairIfPossible,
                 PreflightOnly: true));
 
-        var sql = string.Join("\n", generator.Generate(migrationBuilder.Operations, context.Model).Select(command => command.CommandText));
+        var sql = string.Join(
+            "\n",
+            generator
+                .Generate(migrationBuilder.Operations, context.Model)
+                .Select(command => command.CommandText));
 
         Assert.Contains("CREATE PROCEDURE `safe_migrations_guard`()", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("ADD PRIMARY KEY", sql, StringComparison.Ordinal);
@@ -289,7 +339,11 @@ public sealed class MariaDbSafeMigrationsSqlGeneratorTests
             columns: ["Id"],
             execution: new SafeMigrationExecutionOptions(SafeMigrationConflictMode.RepairIfPossible));
 
-        var sql = string.Join("\n", generator.Generate(migrationBuilder.Operations, context.Model).Select(command => command.CommandText));
+        var sql = string.Join(
+            "\n",
+            generator
+                .Generate(migrationBuilder.Operations, context.Model)
+                .Select(command => command.CommandText));
 
         Assert.Contains("ADD PRIMARY KEY (`Id`)", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("ADD CONSTRAINT `PRIMARY` PRIMARY KEY", sql, StringComparison.Ordinal);
@@ -312,10 +366,17 @@ public sealed class MariaDbSafeMigrationsSqlGeneratorTests
                 SafeMigrationConflictMode.RepairIfPossible,
                 PreflightOnly: true));
 
-        var sql = string.Join("\n", generator.Generate(migrationBuilder.Operations, context.Model).Select(command => command.CommandText));
+        var sql = string.Join(
+            "\n",
+            generator
+                .Generate(migrationBuilder.Operations, context.Model)
+                .Select(command => command.CommandText));
 
         Assert.Contains("CREATE PROCEDURE `safe_migrations_guard`()", sql, StringComparison.Ordinal);
-        Assert.DoesNotContain("ADD CONSTRAINT `FK_Employees_Departments_DepartmentId` FOREIGN KEY", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "ADD CONSTRAINT `FK_Employees_Departments_DepartmentId` FOREIGN KEY",
+            sql,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -333,7 +394,11 @@ public sealed class MariaDbSafeMigrationsSqlGeneratorTests
                 SafeMigrationConflictMode.RepairIfPossible,
                 PreflightOnly: true));
 
-        var sql = string.Join("\n", generator.Generate(migrationBuilder.Operations, context.Model).Select(command => command.CommandText));
+        var sql = string.Join(
+            "\n",
+            generator
+                .Generate(migrationBuilder.Operations, context.Model)
+                .Select(command => command.CommandText));
 
         Assert.Contains("CREATE PROCEDURE `safe_migrations_guard`()", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("ADD CONSTRAINT `CK_Employees_Age` CHECK", sql, StringComparison.Ordinal);
@@ -346,12 +411,13 @@ public sealed class MariaDbSafeMigrationsSqlGeneratorTests
         var generator = context.GetService<IMigrationsSqlGenerator>();
         var migrationBuilder = new MigrationBuilder(context.Database.ProviderName!);
 
-        migrationBuilder.RenameColumnIfExists(
-            name: "DisplayName",
-            table: "Employees",
-            newName: "FullName");
+        migrationBuilder.RenameColumnIfExists(name: "DisplayName", table: "Employees", newName: "FullName");
 
-        var sql = string.Join("\n", generator.Generate(migrationBuilder.Operations, context.Model).Select(command => command.CommandText));
+        var sql = string.Join(
+            "\n",
+            generator
+                .Generate(migrationBuilder.Operations, context.Model)
+                .Select(command => command.CommandText));
 
         Assert.Contains("information_schema.COLUMNS", sql, StringComparison.Ordinal);
         Assert.Contains("FullName", sql, StringComparison.Ordinal);
@@ -371,7 +437,11 @@ public sealed class MariaDbSafeMigrationsSqlGeneratorTests
             newName: "IX_Employees_FullName",
             table: "Employees");
 
-        var sql = string.Join("\n", generator.Generate(migrationBuilder.Operations, context.Model).Select(command => command.CommandText));
+        var sql = string.Join(
+            "\n",
+            generator
+                .Generate(migrationBuilder.Operations, context.Model)
+                .Select(command => command.CommandText));
 
         Assert.Contains("information_schema.STATISTICS", sql, StringComparison.Ordinal);
         Assert.Contains("IX_Employees_DisplayName", sql, StringComparison.Ordinal);
@@ -388,7 +458,11 @@ public sealed class MariaDbSafeMigrationsSqlGeneratorTests
 
         migrationBuilder.DropSchemaIfExists("tenant_one");
 
-        var sql = string.Join("\n", generator.Generate(migrationBuilder.Operations, context.Model).Select(command => command.CommandText));
+        var sql = string.Join(
+            "\n",
+            generator
+                .Generate(migrationBuilder.Operations, context.Model)
+                .Select(command => command.CommandText));
 
         Assert.Contains("DROP SCHEMA IF EXISTS", sql, StringComparison.Ordinal);
         Assert.Contains("tenant_one", sql, StringComparison.Ordinal);
@@ -403,10 +477,13 @@ public sealed class MariaDbSafeMigrationsSqlGeneratorTests
 
         migrationBuilder.EnsureSchemaExists("tenant_one");
 
-        var sql = string.Join("\n", generator.Generate(migrationBuilder.Operations, context.Model).Select(command => command.CommandText));
+        var sql = string.Join(
+            "\n",
+            generator
+                .Generate(migrationBuilder.Operations, context.Model)
+                .Select(command => command.CommandText));
 
         Assert.Contains("CREATE SCHEMA IF NOT EXISTS", sql, StringComparison.Ordinal);
         Assert.Contains("tenant_one", sql, StringComparison.Ordinal);
     }
-
 }

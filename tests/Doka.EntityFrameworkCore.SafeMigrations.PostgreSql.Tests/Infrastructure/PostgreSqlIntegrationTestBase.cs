@@ -2,16 +2,19 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.Integration;
 
 public abstract class PostgreSqlIntegrationTestBase : IClassFixture<PostgreSqlContainerFixture>
 {
-    protected readonly PostgreSqlContainerFixture _fixture;
+    protected PostgreSqlContainerFixture Fixture { get; }
 
-    protected PostgreSqlIntegrationTestBase(PostgreSqlContainerFixture fixture)
+    protected PostgreSqlIntegrationTestBase(
+        PostgreSqlContainerFixture fixture
+    )
     {
-        _fixture = fixture;
+        Fixture = fixture;
     }
 
     protected static async Task ExecuteOperationsAsync(
         DbContext context,
-        IReadOnlyList<MigrationOperation> operations)
+        IReadOnlyList<MigrationOperation> operations
+    )
     {
         var generator = context.GetService<IMigrationsSqlGenerator>();
         var commands = generator.Generate(operations, context.Model);
@@ -27,7 +30,10 @@ public abstract class PostgreSqlIntegrationTestBase : IClassFixture<PostgreSqlCo
         }
     }
 
-    protected static async Task ExecuteNonQueryAsync(string connectionString, string sql)
+    protected static async Task ExecuteNonQueryAsync(
+        string connectionString,
+        string sql
+    )
     {
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
@@ -35,4 +41,12 @@ public abstract class PostgreSqlIntegrationTestBase : IClassFixture<PostgreSqlCo
         command.CommandText = sql;
         await command.ExecuteNonQueryAsync();
     }
+
+    protected static async Task<int> ExecuteScalarAsInt32Async(
+        System.Data.Common.DbCommand command
+    ) => Convert.ToInt32(await command.ExecuteScalarAsync(), System.Globalization.CultureInfo.InvariantCulture);
+
+    protected static async Task<string?> ExecuteScalarAsStringAsync(
+        System.Data.Common.DbCommand command
+    ) => Convert.ToString(await command.ExecuteScalarAsync(), System.Globalization.CultureInfo.InvariantCulture);
 }

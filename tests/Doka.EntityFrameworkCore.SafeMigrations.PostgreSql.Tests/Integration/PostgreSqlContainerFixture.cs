@@ -1,10 +1,11 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.Integration;
 
-public sealed class PostgreSqlContainerFixture : IAsyncLifetime
+public sealed class PostgreSqlContainerFixture : IAsyncLifetime, IDisposable
 {
     private readonly string _containerName = $"safe-migrations-postgres-{Guid.NewGuid():N}";
     private readonly SemaphoreSlim _databaseLifecycleLock = new(1, 1);
     private readonly List<string> _createdDatabases = [];
+    private bool _disposed;
     private int _port;
 
     public string RootConnectionString
@@ -31,7 +32,11 @@ public sealed class PostgreSqlContainerFixture : IAsyncLifetime
             $"run -d --name {_containerName} -e POSTGRES_PASSWORD=postgrespw -e POSTGRES_DB=bootstrap -p 0:5432 postgres:17");
 
         var portOutput = await RunDockerCommandAsync($"port {_containerName} 5432/tcp");
-        _port = int.Parse(portOutput.Split(':').Last(), System.Globalization.CultureInfo.InvariantCulture);
+        _port = int.Parse(
+            portOutput
+                .Split(':')
+                .Last(),
+            System.Globalization.CultureInfo.InvariantCulture);
 
         await WaitUntilAvailableAsync();
     }
@@ -56,6 +61,22 @@ public sealed class PostgreSqlContainerFixture : IAsyncLifetime
         {
             // Ignore cleanup failures in test teardown.
         }
+        finally
+        {
+            Dispose();
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _databaseLifecycleLock.Dispose();
+        _disposed = true;
+        GC.SuppressFinalize(this);
     }
 
     public async Task<string> CreateDatabaseAsync()
@@ -75,10 +96,7 @@ public sealed class PostgreSqlContainerFixture : IAsyncLifetime
 
             _createdDatabases.Add(databaseName);
 
-            var builder = new NpgsqlConnectionStringBuilder(RootConnectionString)
-            {
-                Database = databaseName
-            };
+            var builder = new NpgsqlConnectionStringBuilder(RootConnectionString) { Database = databaseName };
 
             return builder.ConnectionString;
         }
@@ -95,10 +113,8 @@ public sealed class PostgreSqlContainerFixture : IAsyncLifetime
         // Use a short connection timeout so each probe fails fast on a slow-starting or
         // resource-constrained host, giving ~38 retries within the 2-minute budget instead
         // of the ~7 retries allowed by the default 15-second driver timeout.
-        var probeConnectionString = new NpgsqlConnectionStringBuilder(RootConnectionString)
-        {
-            Timeout = 3
-        }.ConnectionString;
+        var probeConnectionString =
+            new NpgsqlConnectionStringBuilder(RootConnectionString) { Timeout = 3 }.ConnectionString;
 
         Exception? lastException = null;
 
@@ -128,14 +144,16 @@ public sealed class PostgreSqlContainerFixture : IAsyncLifetime
             // Ignore — this is a diagnostic aid only.
         }
 
-        var message = $"PostgreSQL container '{_containerName}' did not become ready within the timeout." +
-            (lastException is not null ? $"\nLast connection error: {lastException.Message}" : string.Empty) +
-            (containerLogs is not null ? $"\nContainer logs (last 30 lines):\n{containerLogs}" : string.Empty);
+        var message = $"PostgreSQL container '{_containerName}' did not become ready within the timeout."
+            + (lastException is not null ? $"\nLast connection error: {lastException.Message}" : string.Empty)
+            + (containerLogs is not null ? $"\nContainer logs (last 30 lines):\n{containerLogs}" : string.Empty);
 
         throw new TimeoutException(message, lastException);
     }
 
-    private static async Task<string> RunDockerCommandAsync(string arguments)
+    private static async Task<string> RunDockerCommandAsync(
+        string arguments
+    )
     {
         var startInfo = new ProcessStartInfo("docker", arguments)
         {
@@ -178,11 +196,11 @@ public sealed class PostgreSqlContainerFixture : IAsyncLifetime
         {
             await using var terminateCommand = connection.CreateCommand();
             terminateCommand.CommandText = $"""
-SELECT pg_terminate_backend(pid)
-FROM pg_stat_activity
-WHERE datname = {SqlLiteral(databaseName)}
-  AND pid <> pg_backend_pid();
-""";
+                                            SELECT pg_terminate_backend(pid)
+                                            FROM pg_stat_activity
+                                            WHERE datname = {SqlLiteral(databaseName)}
+                                              AND pid <> pg_backend_pid();
+                                            """;
             await terminateCommand.ExecuteNonQueryAsync();
 
             await using var dropCommand = connection.CreateCommand();
@@ -193,9 +211,11 @@ WHERE datname = {SqlLiteral(databaseName)}
         _createdDatabases.Clear();
     }
 
-    private static string QuoteIdentifier(string identifier)
-        => $"\"{identifier.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
+    private static string QuoteIdentifier(
+        string identifier
+    ) => $"\"{identifier.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
 
-    private static string SqlLiteral(string value)
-        => $"'{value.Replace("'", "''", StringComparison.Ordinal)}'";
+    private static string SqlLiteral(
+        string value
+    ) => $"'{value.Replace("'", "''", StringComparison.Ordinal)}'";
 }

@@ -21,11 +21,13 @@ public sealed class MariaDbSafeMigrationsSqlGeneratorEscapingTests
         var generator = context.GetService<IMigrationsSqlGenerator>();
         var migrationBuilder = new MigrationBuilder(context.Database.ProviderName!);
 
-        migrationBuilder.RenameTableIfExists(
-            name: "table'name",
-            newName: "new_table");
+        migrationBuilder.RenameTableIfExists(name: "table'name", newName: "new_table");
 
-        var sql = string.Join("\n", generator.Generate(migrationBuilder.Operations, context.Model).Select(c => c.CommandText));
+        var sql = string.Join(
+            "\n",
+            generator
+                .Generate(migrationBuilder.Operations, context.Model)
+                .Select(c => c.CommandText));
 
         Assert.Contains("'table''name'", sql, StringComparison.Ordinal);
     }
@@ -37,11 +39,13 @@ public sealed class MariaDbSafeMigrationsSqlGeneratorEscapingTests
         var generator = context.GetService<IMigrationsSqlGenerator>();
         var migrationBuilder = new MigrationBuilder(context.Database.ProviderName!);
 
-        migrationBuilder.RenameTableIfExists(
-            name: @"table\name",
-            newName: "new_table");
+        migrationBuilder.RenameTableIfExists(name: @"table\name", newName: "new_table");
 
-        var sql = string.Join("\n", generator.Generate(migrationBuilder.Operations, context.Model).Select(c => c.CommandText));
+        var sql = string.Join(
+            "\n",
+            generator
+                .Generate(migrationBuilder.Operations, context.Model)
+                .Select(c => c.CommandText));
 
         // EscapeSqlLiteral doubles backslashes: table\name → table\\name → SQL literal 'table\\name'
         Assert.Contains(@"'table\\name'", sql, StringComparison.Ordinal);
@@ -54,14 +58,15 @@ public sealed class MariaDbSafeMigrationsSqlGeneratorEscapingTests
         var generator = context.GetService<IMigrationsSqlGenerator>();
         var migrationBuilder = new MigrationBuilder(context.Database.ProviderName!);
 
-        migrationBuilder.RenameTableIfExists(
-            name: @"tab\le'name",
-            newName: "new_table");
+        migrationBuilder.RenameTableIfExists(name: @"tab\le'name", newName: "new_table");
 
-        var sql = string.Join("\n", generator.Generate(migrationBuilder.Operations, context.Model).Select(c => c.CommandText));
+        var sql = string.Join(
+            "\n",
+            generator
+                .Generate(migrationBuilder.Operations, context.Model)
+                .Select(c => c.CommandText));
 
         // tab\le'name → tab\\le''name → SQL literal 'tab\\le''name'
         Assert.Contains(@"'tab\\le''name'", sql, StringComparison.Ordinal);
     }
-
 }

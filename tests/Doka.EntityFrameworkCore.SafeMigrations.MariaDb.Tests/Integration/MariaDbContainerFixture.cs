@@ -1,10 +1,11 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MariaDb.Tests.Integration;
 
-public sealed class MariaDbContainerFixture : IAsyncLifetime
+public sealed class MariaDbContainerFixture : IAsyncLifetime, IDisposable
 {
     private readonly string _containerName = $"safe-migrations-mariadb-{Guid.NewGuid():N}";
     private readonly SemaphoreSlim _databaseLifecycleLock = new(1, 1);
     private readonly List<string> _createdDatabases = [];
+    private bool _disposed;
     private int _port;
 
     public string RootConnectionString
@@ -31,7 +32,11 @@ public sealed class MariaDbContainerFixture : IAsyncLifetime
             $"run -d --name {_containerName} -e MARIADB_ROOT_PASSWORD=rootpw -e MARIADB_DATABASE=bootstrap -p 0:3306 mariadb:11.8");
 
         var portOutput = await RunDockerCommandAsync($"port {_containerName} 3306/tcp");
-        _port = int.Parse(portOutput.Split(':').Last(), System.Globalization.CultureInfo.InvariantCulture);
+        _port = int.Parse(
+            portOutput
+                .Split(':')
+                .Last(),
+            System.Globalization.CultureInfo.InvariantCulture);
 
         await WaitUntilAvailableAsync();
     }
@@ -56,6 +61,22 @@ public sealed class MariaDbContainerFixture : IAsyncLifetime
         {
             // Ignore cleanup failures in test teardown.
         }
+        finally
+        {
+            Dispose();
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _databaseLifecycleLock.Dispose();
+        _disposed = true;
+        GC.SuppressFinalize(this);
     }
 
     public async Task<string> CreateDatabaseAsync()
@@ -75,10 +96,7 @@ public sealed class MariaDbContainerFixture : IAsyncLifetime
 
             _createdDatabases.Add(databaseName);
 
-            var builder = new MySqlConnectionStringBuilder(RootConnectionString)
-            {
-                Database = databaseName
-            };
+            var builder = new MySqlConnectionStringBuilder(RootConnectionString) { Database = databaseName };
 
             return builder.ConnectionString;
         }
@@ -95,10 +113,8 @@ public sealed class MariaDbContainerFixture : IAsyncLifetime
         // Use a short connection timeout so each probe fails fast on a slow-starting or
         // resource-constrained host, giving ~38 retries within the 2-minute budget instead
         // of the ~7 retries allowed by the default 15-second driver timeout.
-        var probeConnectionString = new MySqlConnectionStringBuilder(RootConnectionString)
-        {
-            ConnectionTimeout = 3
-        }.ConnectionString;
+        var probeConnectionString = new MySqlConnectionStringBuilder(RootConnectionString) { ConnectionTimeout = 3 }
+            .ConnectionString;
 
         Exception? lastException = null;
 
@@ -128,14 +144,16 @@ public sealed class MariaDbContainerFixture : IAsyncLifetime
             // Ignore — this is a diagnostic aid only.
         }
 
-        var message = $"MariaDB container '{_containerName}' did not become ready within the timeout." +
-            (lastException is not null ? $"\nLast connection error: {lastException.Message}" : string.Empty) +
-            (containerLogs is not null ? $"\nContainer logs (last 30 lines):\n{containerLogs}" : string.Empty);
+        var message = $"MariaDB container '{_containerName}' did not become ready within the timeout."
+            + (lastException is not null ? $"\nLast connection error: {lastException.Message}" : string.Empty)
+            + (containerLogs is not null ? $"\nContainer logs (last 30 lines):\n{containerLogs}" : string.Empty);
 
         throw new TimeoutException(message, lastException);
     }
 
-    private static async Task<string> RunDockerCommandAsync(string arguments)
+    private static async Task<string> RunDockerCommandAsync(
+        string arguments
+    )
     {
         var startInfo = new ProcessStartInfo("docker", arguments)
         {
