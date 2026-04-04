@@ -25,16 +25,25 @@ public static class SafeMigrationBuilderExtensions
         SafeMigrationStrictMode strictMode = SafeMigrationStrictMode.None
     )
     {
-        var builder = migrationBuilder.CreateTable(table, columns, schema, constraints, comment);
-        Debug.Assert(migrationBuilder.Operations[^1] is CreateTableOperation,
-            "EF Core did not append CreateTableOperation as the last operation. " +
-            "Review this assumption against the current EF Core version.");
+        var builder = migrationBuilder.CreateTable(
+            table,
+            columns,
+            schema,
+            constraints,
+            comment);
+
+        Debug.Assert(
+            migrationBuilder.Operations[^1] is CreateTableOperation,
+            "EF Core did not append CreateTableOperation as the last operation. "
+            + "Review this assumption against the current EF Core version.");
+
         var operation = (CreateTableOperation)migrationBuilder.Operations[^1];
 
         operation[SafeMigrationAnnotationNames.IfNotExists] = true;
         operation[SafeMigrationAnnotationNames.StrictMode] = strictMode;
         operation[SafeMigrationAnnotationNames.ExpectedDefinition] = SafeMigrationDefinitionSerializer.Serialize(
             BuildExpectedTableDefinition(operation));
+
         return builder;
     }
 
@@ -55,8 +64,7 @@ public static class SafeMigrationBuilderExtensions
     public static OperationBuilder<EnsureSchemaOperation> EnsureSchemaExists(
         this MigrationBuilder migrationBuilder,
         string name
-    )
-        => migrationBuilder.EnsureSchema(name);
+    ) => migrationBuilder.EnsureSchema(name);
 
     /// <summary>
     /// Drops a table only when it already exists.
@@ -68,8 +76,9 @@ public static class SafeMigrationBuilderExtensions
         this MigrationBuilder migrationBuilder,
         string table,
         string? schema = null
-    )
-        => new(migrationBuilder.Operations.AddAndReturn(SafeMigrationOperationFactory.CreateDropTableOperation(table, schema)));
+    ) => new(
+        migrationBuilder.Operations.AddAndReturn(
+            SafeMigrationOperationFactory.CreateDropTableOperation(table, schema)));
 
     /// <summary>
     /// Drops a schema only when it already exists.
@@ -82,11 +91,15 @@ public static class SafeMigrationBuilderExtensions
     )
     {
         var builder = migrationBuilder.DropSchema(name);
-        Debug.Assert(migrationBuilder.Operations[^1] is DropSchemaOperation,
-            "EF Core did not append DropSchemaOperation as the last operation. " +
-            "Review this assumption against the current EF Core version.");
+
+        Debug.Assert(
+            migrationBuilder.Operations[^1] is DropSchemaOperation,
+            "EF Core did not append DropSchemaOperation as the last operation. "
+            + "Review this assumption against the current EF Core version.");
+
         var operation = (DropSchemaOperation)migrationBuilder.Operations[^1];
         operation[SafeMigrationAnnotationNames.IfExists] = true;
+
         return builder;
     }
 
@@ -106,12 +119,20 @@ public static class SafeMigrationBuilderExtensions
         string? newSchema = null
     )
     {
-        var builder = migrationBuilder.RenameTable(name, schema, newName, newSchema);
-        Debug.Assert(migrationBuilder.Operations[^1] is RenameTableOperation,
-            "EF Core did not append RenameTableOperation as the last operation. " +
-            "Review this assumption against the current EF Core version.");
+        var builder = migrationBuilder.RenameTable(
+            name,
+            schema,
+            newName,
+            newSchema);
+
+        Debug.Assert(
+            migrationBuilder.Operations[^1] is RenameTableOperation,
+            "EF Core did not append RenameTableOperation as the last operation. "
+            + "Review this assumption against the current EF Core version.");
+
         var operation = (RenameTableOperation)migrationBuilder.Operations[^1];
         operation[SafeMigrationAnnotationNames.IfExists] = true;
+
         return builder;
     }
 
@@ -265,8 +286,9 @@ public static class SafeMigrationBuilderExtensions
         string name,
         string table,
         string? schema = null
-    )
-        => new(migrationBuilder.Operations.AddAndReturn(SafeMigrationOperationFactory.CreateDropColumnOperation(name, table, schema)));
+    ) => new(
+        migrationBuilder.Operations.AddAndReturn(
+            SafeMigrationOperationFactory.CreateDropColumnOperation(name, table, schema)));
 
     /// <summary>
     /// Renames a column only when the source column already exists.
@@ -284,12 +306,20 @@ public static class SafeMigrationBuilderExtensions
         string? schema = null
     )
     {
-        var builder = migrationBuilder.RenameColumn(name, table, newName, schema);
-        Debug.Assert(migrationBuilder.Operations[^1] is RenameColumnOperation,
-            "EF Core did not append RenameColumnOperation as the last operation. " +
-            "Review this assumption against the current EF Core version.");
+        var builder = migrationBuilder.RenameColumn(
+            name,
+            table,
+            newName,
+            schema);
+
+        Debug.Assert(
+            migrationBuilder.Operations[^1] is RenameColumnOperation,
+            "EF Core did not append RenameColumnOperation as the last operation. "
+            + "Review this assumption against the current EF Core version.");
+
         var operation = (RenameColumnOperation)migrationBuilder.Operations[^1];
         operation[SafeMigrationAnnotationNames.IfExists] = true;
+
         return builder;
     }
 
@@ -309,12 +339,20 @@ public static class SafeMigrationBuilderExtensions
         string? schema = null
     )
     {
-        var builder = migrationBuilder.RenameIndex(name, newName, table, schema);
-        Debug.Assert(migrationBuilder.Operations[^1] is RenameIndexOperation,
-            "EF Core did not append RenameIndexOperation as the last operation. " +
-            "Review this assumption against the current EF Core version.");
+        var builder = migrationBuilder.RenameIndex(
+            name,
+            newName,
+            table,
+            schema);
+
+        Debug.Assert(
+            migrationBuilder.Operations[^1] is RenameIndexOperation,
+            "EF Core did not append RenameIndexOperation as the last operation. "
+            + "Review this assumption against the current EF Core version.");
+
         var operation = (RenameIndexOperation)migrationBuilder.Operations[^1];
         operation[SafeMigrationAnnotationNames.IfExists] = true;
+
         return builder;
     }
 
@@ -425,9 +463,11 @@ public static class SafeMigrationBuilderExtensions
             stored: stored,
             oldStored: oldStored);
 
-        Debug.Assert(migrationBuilder.Operations[^1] is AlterColumnOperation,
-            "EF Core did not append AlterColumnOperation as the last operation. " +
-            "Review this assumption against the current EF Core version.");
+        Debug.Assert(
+            migrationBuilder.Operations[^1] is AlterColumnOperation,
+            "EF Core did not append AlterColumnOperation as the last operation. "
+            + "Review this assumption against the current EF Core version.");
+
         var operation = (AlterColumnOperation)migrationBuilder.Operations[^1];
         operation[SafeMigrationAnnotationNames.AlterIfDifferent] = true;
         operation[SafeMigrationAnnotationNames.ExpectedDefinition] = SafeMigrationDefinitionSerializer.Serialize(
@@ -458,9 +498,17 @@ public static class SafeMigrationBuilderExtensions
         string? filter = null,
         bool[]? descending = null,
         SafeMigrationStrictMode strictMode = SafeMigrationStrictMode.None
-    )
-        => new(migrationBuilder.Operations.AddAndReturn(
-            SafeMigrationOperationFactory.CreateIndexOperation(name, table, columns, schema, unique, filter, descending, strictMode)));
+    ) => new(
+        migrationBuilder.Operations.AddAndReturn(
+            SafeMigrationOperationFactory.CreateIndexOperation(
+                name,
+                table,
+                columns,
+                schema,
+                unique,
+                filter,
+                descending,
+                strictMode)));
 
     /// <summary>
     /// Creates an index only when it does not already exist, using the extended execution pipeline.
@@ -484,8 +532,8 @@ public static class SafeMigrationBuilderExtensions
         bool unique = false,
         string? filter = null,
         bool[]? descending = null
-    )
-        => new(migrationBuilder.Operations.AddAndReturn(
+    ) => new(
+        migrationBuilder.Operations.AddAndReturn(
             SafeMigrationOperationFactory.CreateIndexOperation(
                 name,
                 table,
@@ -508,8 +556,9 @@ public static class SafeMigrationBuilderExtensions
         string name,
         string table,
         string? schema = null
-    )
-        => new(migrationBuilder.Operations.AddAndReturn(SafeMigrationOperationFactory.CreateDropIndexOperation(name, table, schema)));
+    ) => new(
+        migrationBuilder.Operations.AddAndReturn(
+            SafeMigrationOperationFactory.CreateDropIndexOperation(name, table, schema)));
 
     /// <summary>
     /// Adds a primary key only when it does not already exist.
@@ -527,9 +576,14 @@ public static class SafeMigrationBuilderExtensions
         string[] columns,
         string? schema = null,
         SafeMigrationStrictMode strictMode = SafeMigrationStrictMode.None
-    )
-        => new(migrationBuilder.Operations.AddAndReturn(
-            SafeMigrationOperationFactory.CreatePrimaryKeyOperation(name, table, columns, schema, strictMode)));
+    ) => new(
+        migrationBuilder.Operations.AddAndReturn(
+            SafeMigrationOperationFactory.CreatePrimaryKeyOperation(
+                name,
+                table,
+                columns,
+                schema,
+                strictMode)));
 
     /// <summary>
     /// Adds a primary key only when it does not already exist, using the extended execution pipeline.
@@ -547,8 +601,8 @@ public static class SafeMigrationBuilderExtensions
         string[] columns,
         SafeMigrationExecutionOptions execution,
         string? schema = null
-    )
-        => new(migrationBuilder.Operations.AddAndReturn(
+    ) => new(
+        migrationBuilder.Operations.AddAndReturn(
             SafeMigrationOperationFactory.CreatePrimaryKeyOperation(
                 name,
                 table,
@@ -568,8 +622,9 @@ public static class SafeMigrationBuilderExtensions
         string table,
         string? name = null,
         string? schema = null
-    )
-        => new(migrationBuilder.Operations.AddAndReturn(SafeMigrationOperationFactory.CreateDropPrimaryKeyOperation(table, name, schema)));
+    ) => new(
+        migrationBuilder.Operations.AddAndReturn(
+            SafeMigrationOperationFactory.CreateDropPrimaryKeyOperation(table, name, schema)));
 
     /// <summary>
     /// Adds a unique constraint only when it does not already exist.
@@ -587,9 +642,14 @@ public static class SafeMigrationBuilderExtensions
         string[] columns,
         string? schema = null,
         SafeMigrationStrictMode strictMode = SafeMigrationStrictMode.None
-    )
-        => new(migrationBuilder.Operations.AddAndReturn(
-            SafeMigrationOperationFactory.CreateUniqueConstraintOperation(name, table, columns, schema, strictMode)));
+    ) => new(
+        migrationBuilder.Operations.AddAndReturn(
+            SafeMigrationOperationFactory.CreateUniqueConstraintOperation(
+                name,
+                table,
+                columns,
+                schema,
+                strictMode)));
 
     /// <summary>
     /// Adds a unique constraint only when it does not already exist, using the extended execution pipeline.
@@ -607,8 +667,8 @@ public static class SafeMigrationBuilderExtensions
         string[] columns,
         SafeMigrationExecutionOptions execution,
         string? schema = null
-    )
-        => new(migrationBuilder.Operations.AddAndReturn(
+    ) => new(
+        migrationBuilder.Operations.AddAndReturn(
             SafeMigrationOperationFactory.CreateUniqueConstraintOperation(
                 name,
                 table,
@@ -628,8 +688,9 @@ public static class SafeMigrationBuilderExtensions
         string name,
         string table,
         string? schema = null
-    )
-        => new(migrationBuilder.Operations.AddAndReturn(SafeMigrationOperationFactory.CreateDropUniqueConstraintOperation(name, table, schema)));
+    ) => new(
+        migrationBuilder.Operations.AddAndReturn(
+            SafeMigrationOperationFactory.CreateDropUniqueConstraintOperation(name, table, schema)));
 
     /// <summary>
     /// Adds a foreign key only when it does not already exist.
@@ -657,8 +718,8 @@ public static class SafeMigrationBuilderExtensions
         ReferentialAction onUpdate = ReferentialAction.NoAction,
         ReferentialAction onDelete = ReferentialAction.NoAction,
         SafeMigrationStrictMode strictMode = SafeMigrationStrictMode.None
-    )
-        => new(migrationBuilder.Operations.AddAndReturn(
+    ) => new(
+        migrationBuilder.Operations.AddAndReturn(
             SafeMigrationOperationFactory.CreateForeignKeyOperation(
                 name,
                 table,
@@ -697,8 +758,8 @@ public static class SafeMigrationBuilderExtensions
         string? principalSchema = null,
         ReferentialAction onUpdate = ReferentialAction.NoAction,
         ReferentialAction onDelete = ReferentialAction.NoAction
-    )
-        => new(migrationBuilder.Operations.AddAndReturn(
+    ) => new(
+        migrationBuilder.Operations.AddAndReturn(
             SafeMigrationOperationFactory.CreateForeignKeyOperation(
                 name,
                 table,
@@ -723,8 +784,9 @@ public static class SafeMigrationBuilderExtensions
         string name,
         string table,
         string? schema = null
-    )
-        => new(migrationBuilder.Operations.AddAndReturn(SafeMigrationOperationFactory.CreateDropForeignKeyOperation(name, table, schema)));
+    ) => new(
+        migrationBuilder.Operations.AddAndReturn(
+            SafeMigrationOperationFactory.CreateDropForeignKeyOperation(name, table, schema)));
 
     /// <summary>
     /// Adds a check constraint only when it does not already exist.
@@ -742,9 +804,14 @@ public static class SafeMigrationBuilderExtensions
         string sql,
         string? schema = null,
         SafeMigrationStrictMode strictMode = SafeMigrationStrictMode.None
-    )
-        => new(migrationBuilder.Operations.AddAndReturn(
-            SafeMigrationOperationFactory.CreateCheckConstraintOperation(name, table, sql, schema, strictMode)));
+    ) => new(
+        migrationBuilder.Operations.AddAndReturn(
+            SafeMigrationOperationFactory.CreateCheckConstraintOperation(
+                name,
+                table,
+                sql,
+                schema,
+                strictMode)));
 
     /// <summary>
     /// Adds a check constraint only when it does not already exist, using the extended execution pipeline.
@@ -762,8 +829,8 @@ public static class SafeMigrationBuilderExtensions
         string sql,
         SafeMigrationExecutionOptions execution,
         string? schema = null
-    )
-        => new(migrationBuilder.Operations.AddAndReturn(
+    ) => new(
+        migrationBuilder.Operations.AddAndReturn(
             SafeMigrationOperationFactory.CreateCheckConstraintOperation(
                 name,
                 table,
@@ -783,22 +850,26 @@ public static class SafeMigrationBuilderExtensions
         string name,
         string table,
         string? schema = null
-    )
-        => new(migrationBuilder.Operations.AddAndReturn(SafeMigrationOperationFactory.CreateDropCheckConstraintOperation(name, table, schema)));
+    ) => new(
+        migrationBuilder.Operations.AddAndReturn(
+            SafeMigrationOperationFactory.CreateDropCheckConstraintOperation(name, table, schema)));
 
     private static TOperation AddAndReturn<TOperation>(
-        this IList<MigrationOperation> operations,
+        this List<MigrationOperation> operations,
         TOperation operation
-    ) where TOperation : MigrationOperation
+    )
+        where TOperation : MigrationOperation
     {
         operations.Add(operation);
         return operation;
     }
 
-    private static ExpectedTableDefinition BuildExpectedTableDefinition(CreateTableOperation operation)
+    private static ExpectedTableDefinition BuildExpectedTableDefinition(
+        CreateTableOperation operation
+    )
     {
-        var columns = operation.Columns
-            .Select(BuildExpectedColumnDefinition)
+        var columns = operation
+            .Columns.Select(BuildExpectedColumnDefinition)
             .ToArray();
 
         var primaryKey = operation.PrimaryKey is null
@@ -809,12 +880,19 @@ public static class SafeMigrationBuilderExtensions
                 operation.Schema,
                 operation.PrimaryKey.Columns);
 
-        return new ExpectedTableDefinition(operation.Name, operation.Schema, columns, primaryKey);
+        return new ExpectedTableDefinition(
+            operation.Name,
+            operation.Schema,
+            columns,
+            primaryKey);
     }
 
-    private static ExpectedColumnDefinition BuildExpectedColumnDefinition(ColumnOperation operation)
+    private static ExpectedColumnDefinition BuildExpectedColumnDefinition(
+        ColumnOperation operation
+    )
     {
-        var (defaultValueTypeName, defaultValueJson) = SafeMigrationDefaultValueSerializer.Capture(operation.DefaultValue);
+        var (defaultValueTypeName, defaultValueJson) =
+            SafeMigrationDefaultValueSerializer.Capture(operation.DefaultValue);
 
         return new ExpectedColumnDefinition(
             operation.Name,

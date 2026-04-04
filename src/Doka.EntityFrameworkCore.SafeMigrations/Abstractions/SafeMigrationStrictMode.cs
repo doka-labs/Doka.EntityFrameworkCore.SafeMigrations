@@ -13,5 +13,5 @@ public enum SafeMigrationStrictMode
     /// <summary>
     /// Verifies the existing object definition and throws when it differs from the expected definition.
     /// </summary>
-    ThrowIfDifferent = 1
+    ThrowIfDifferent = 1,
 }

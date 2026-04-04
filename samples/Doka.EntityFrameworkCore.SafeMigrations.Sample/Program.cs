@@ -22,7 +22,7 @@ internal static class Program
         Console.WriteLine($"Maintenance example operation count: {maintenanceMigrationBuilder.Operations.Count}");
         Console.WriteLine($"Legacy strict-mode example operation count: {legacyStrictModeBuilder.Operations.Count}");
         Console.WriteLine(
-            "See SampleMigrationUsage, InitialSafeMigrationExample, and MaintenanceSafeMigrationExample " +
-            "for the recommended migration patterns.");
+            "See SampleMigrationUsage, InitialSafeMigrationExample, and MaintenanceSafeMigrationExample "
+            + "for the recommended migration patterns.");
     }
 }

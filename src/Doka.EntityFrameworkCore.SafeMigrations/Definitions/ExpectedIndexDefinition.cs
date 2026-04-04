@@ -10,8 +10,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// <param name="Unique">Whether the index is expected to be unique.</param>
 /// <param name="Filter">The expected filter expression, if any.</param>
 /// <param name="Descending">The expected per-column descending flags, if any.</param>
-public sealed record ExpectedIndexDefinition
-(
+public sealed record ExpectedIndexDefinition(
     string Name,
     string Table,
     string? Schema,

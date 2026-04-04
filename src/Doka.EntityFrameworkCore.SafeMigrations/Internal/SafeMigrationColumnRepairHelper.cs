@@ -2,7 +2,9 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 internal static class SafeMigrationColumnRepairHelper
 {
-    public static bool CanSafelyAddMissingColumn(ExpectedColumnDefinition expected)
+    public static bool CanSafelyAddMissingColumn(
+        ExpectedColumnDefinition expected
+    )
     {
         ArgumentNullException.ThrowIfNull(expected);
 

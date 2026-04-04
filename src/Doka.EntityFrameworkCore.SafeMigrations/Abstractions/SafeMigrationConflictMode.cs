@@ -18,5 +18,5 @@ public enum SafeMigrationConflictMode
     /// <summary>
     /// Repairs approved, non-destructive drift cases when possible and rejects unsupported or unsafe differences.
     /// </summary>
-    RepairIfPossible = 2
+    RepairIfPossible = 2,
 }

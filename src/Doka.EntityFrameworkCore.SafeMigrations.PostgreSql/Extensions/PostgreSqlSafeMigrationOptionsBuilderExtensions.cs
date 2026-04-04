@@ -8,7 +8,9 @@ public static class PostgreSqlSafeMigrationOptionsBuilderExtensions
     /// <summary>
     /// Replaces the active migrations SQL generator with the PostgreSQL safe-migrations generator.
     /// </summary>
-    public static DbContextOptionsBuilder UsePostgreSqlSafeMigrations(this DbContextOptionsBuilder optionsBuilder)
+    public static DbContextOptionsBuilder UsePostgreSqlSafeMigrations(
+        this DbContextOptionsBuilder optionsBuilder
+    )
     {
         optionsBuilder.ReplaceService<IMigrationsSqlGenerator, PostgreSqlSafeMigrationsSqlGenerator>();
         return optionsBuilder;

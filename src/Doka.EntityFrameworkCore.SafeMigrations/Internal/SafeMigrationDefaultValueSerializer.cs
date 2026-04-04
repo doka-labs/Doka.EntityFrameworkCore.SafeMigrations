@@ -2,7 +2,9 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 internal static class SafeMigrationDefaultValueSerializer
 {
-    public static (string? TypeName, string? Json) Capture(object? value)
+    public static (string? TypeName, string? Json) Capture(
+        object? value
+    )
     {
         if (value is null)
         {
@@ -13,15 +15,16 @@ internal static class SafeMigrationDefaultValueSerializer
         return (type.AssemblyQualifiedName, JsonSerializer.Serialize(value, type));
     }
 
-    public static string? ToLegacyLiteral(object? value)
-        => value switch
-        {
-            null => null,
-            string text => text,
-            char character => character.ToString(),
-            IFormattable formattable => formattable.ToString(format: null, CultureInfo.InvariantCulture),
-            _ => Convert.ToString(value, CultureInfo.InvariantCulture)
-        };
+    public static string? ToLegacyLiteral(
+        object? value
+    ) => value switch
+    {
+        null => null,
+        string text => text,
+        char character => character.ToString(),
+        IFormattable formattable => formattable.ToString(format: null, CultureInfo.InvariantCulture),
+        _ => Convert.ToString(value, CultureInfo.InvariantCulture),
+    };
 
     public static bool TryDeserialize(
         string? typeName,
@@ -33,7 +36,8 @@ internal static class SafeMigrationDefaultValueSerializer
         value = null;
         type = null;
 
-        if (string.IsNullOrWhiteSpace(typeName) || string.IsNullOrWhiteSpace(json))
+        if (string.IsNullOrWhiteSpace(typeName)
+            || string.IsNullOrWhiteSpace(json))
         {
             return false;
         }

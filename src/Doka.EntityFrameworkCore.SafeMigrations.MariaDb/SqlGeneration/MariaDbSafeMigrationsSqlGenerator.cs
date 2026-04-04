@@ -15,10 +15,8 @@ public sealed class MariaDbSafeMigrationsSqlGenerator : MySqlMigrationsSqlGenera
     public MariaDbSafeMigrationsSqlGenerator(
         MigrationsSqlGeneratorDependencies dependencies,
         ICommandBatchPreparer commandBatchPreparer,
-        IMySqlOptions options)
-        : base(dependencies, commandBatchPreparer, options)
-    {
-    }
+        IMySqlOptions options
+    ) : base(dependencies, commandBatchPreparer, options) { }
 
     /// <inheritdoc />
     protected override void Generate(
@@ -43,7 +41,11 @@ public sealed class MariaDbSafeMigrationsSqlGenerator : MySqlMigrationsSqlGenera
                     "PRIMARY KEY",
                     "primary key",
                     BuildPrimaryKeyMatchesSql,
-                    (innerOperation, _, innerBuilder) => AppendPrimaryKeyConstraint(innerOperation, innerBuilder));
+                    (
+                        innerOperation,
+                        _,
+                        innerBuilder
+                    ) => AppendPrimaryKeyConstraint(innerOperation, innerBuilder));
                 return;
 
             case SafeAddUniqueConstraintOperation addUniqueConstraintOperation:
@@ -116,6 +118,7 @@ public sealed class MariaDbSafeMigrationsSqlGenerator : MySqlMigrationsSqlGenera
             base.Generate(operation, model, builder, terminate);
             return;
         }
+
         CheckSchema(operation);
 
         var createTableSql = BuildCreateTableSql(operation, model);
@@ -151,6 +154,7 @@ public sealed class MariaDbSafeMigrationsSqlGenerator : MySqlMigrationsSqlGenera
             base.Generate(operation, model, builder, terminate);
             return;
         }
+
         CheckSchema(operation);
 
         var addColumnSql = BuildAddColumnSql(operation, model);
@@ -554,7 +558,8 @@ public sealed class MariaDbSafeMigrationsSqlGenerator : MySqlMigrationsSqlGenera
         }
 
         CheckSchema(operation);
-        var table = operation.Table ?? throw new InvalidOperationException("Safe rename-index requires a table name for MariaDB.");
+        var table = operation.Table
+            ?? throw new InvalidOperationException("Safe rename-index requires a table name for MariaDB.");
         GeneratePreparedStatementGuard(
             builder,
             ExistsIndexSql(operation.Schema, table, operation.Name),
@@ -579,17 +584,17 @@ public sealed class MariaDbSafeMigrationsSqlGenerator : MySqlMigrationsSqlGenera
         var innerBuilder = new MigrationCommandListBuilder(Dependencies);
         buildAlterStatement(innerBuilder);
         EndStatement(innerBuilder);
-        var sql = SingleLine(innerBuilder.GetCommandList().Single().CommandText).TrimEnd(';');
+        var sql = SingleLine(
+                innerBuilder
+                    .GetCommandList()
+                    .Single()
+                    .CommandText)
+            .TrimEnd(';');
         var existsSql = ExistsConstraintSql(schema, table, name, constraintType);
 
         if (strictMode == SafeMigrationStrictMode.None)
         {
-            GeneratePreparedStatementGuard(
-                builder,
-                existsSql,
-                sql,
-                terminate: true,
-                runWhenExists: false);
+            GeneratePreparedStatementGuard(builder, existsSql, sql, terminate: true, runWhenExists: false);
             return;
         }
 
@@ -610,18 +615,21 @@ public sealed class MariaDbSafeMigrationsSqlGenerator : MySqlMigrationsSqlGenera
         string mismatchObjectType,
         Func<TDefinition, string> buildMatchesSql,
         Action<TOperation, IModel?, MigrationCommandListBuilder> appendConstraint
-    ) where TOperation : MigrationOperation
-      where TDefinition : class
+    )
+        where TOperation : MigrationOperation
+        where TDefinition : class
     {
         var schema = getSchema(operation);
         var table = getTable(operation);
         var name = getName(operation);
-        var execution = getExecution(operation) ?? new SafeMigrationExecutionOptions(
-            getStrictMode(operation) == SafeMigrationStrictMode.ThrowIfDifferent
-                ? SafeMigrationConflictMode.ThrowIfDifferent
-                : SafeMigrationConflictMode.None);
+        var execution = getExecution(operation)
+            ?? new SafeMigrationExecutionOptions(
+                getStrictMode(operation) == SafeMigrationStrictMode.ThrowIfDifferent
+                    ? SafeMigrationConflictMode.ThrowIfDifferent
+                    : SafeMigrationConflictMode.None);
         var definition = getExpectedDefinition(operation)
-            ?? throw new InvalidOperationException($"Expected {mismatchObjectType} definition is missing. This is required for all safe constraint operations.");
+            ?? throw new InvalidOperationException(
+                $"Expected {mismatchObjectType} definition is missing. This is required for all safe constraint operations.");
 
         var matchesSql = buildMatchesSql(definition);
         var mismatchMessage = BuildMismatchMessage(mismatchObjectType, name, table, definition);
@@ -649,7 +657,8 @@ public sealed class MariaDbSafeMigrationsSqlGenerator : MySqlMigrationsSqlGenera
             mismatchMessage,
             innerBuilder =>
             {
-                innerBuilder.Append("ALTER TABLE ")
+                innerBuilder
+                    .Append("ALTER TABLE ")
                     .Append(Dependencies.SqlGenerationHelper.DelimitIdentifier(table, schema))
                     .Append(" ADD ");
                 appendConstraint(operation, model, innerBuilder);
@@ -665,7 +674,8 @@ public sealed class MariaDbSafeMigrationsSqlGenerator : MySqlMigrationsSqlGenera
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(operation.Columns);
 
-        builder.Append("PRIMARY KEY (")
+        builder
+            .Append("PRIMARY KEY (")
             .Append(string.Join(", ", operation.Columns.Select(Dependencies.SqlGenerationHelper.DelimitIdentifier)))
             .Append(")");
     }
@@ -687,13 +697,7 @@ public sealed class MariaDbSafeMigrationsSqlGenerator : MySqlMigrationsSqlGenera
             return;
         }
 
-        GenerateConditionalDdl(
-            builder,
-            existsSql,
-            buildMatchesSql(),
-            ddlSql,
-            buildMismatchMessage(),
-            terminate);
+        GenerateConditionalDdl(builder, existsSql, buildMatchesSql(), ddlSql, buildMismatchMessage(), terminate);
     }
 
     private void GenerateConditionalDdl(
@@ -707,23 +711,22 @@ public sealed class MariaDbSafeMigrationsSqlGenerator : MySqlMigrationsSqlGenera
     {
         const string procedureName = "`safe_migrations_guard`";
         var createProcedureSql = $"""
-CREATE PROCEDURE {procedureName}()
-BEGIN
-    IF NOT EXISTS({SingleLine(existsSql)}) THEN
-        {SingleLine(ddlSql).TrimEnd(';')};
-    ELSEIF EXISTS({SingleLine(matchesSql)}) THEN
-        SELECT 1;
-    ELSE
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{EscapeSqlLiteral(mismatchMessage)}';
-    END IF;
-END
-""";
+                                  CREATE PROCEDURE {procedureName}()
+                                  BEGIN
+                                      IF NOT EXISTS({SingleLine(existsSql)}) THEN
+                                          {SingleLine(ddlSql).TrimEnd(';')};
+                                      ELSEIF EXISTS({SingleLine(matchesSql)}) THEN
+                                          SELECT 1;
+                                      ELSE
+                                          SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{EscapeSqlLiteral(mismatchMessage)}';
+                                      END IF;
+                                  END
+                                  """;
 
         builder.Append($"DROP PROCEDURE IF EXISTS {procedureName}");
         EndStatement(builder, true);
 
-        builder
-            .Append(createProcedureSql);
+        builder.Append(createProcedureSql);
         EndStatement(builder, true);
 
         builder.Append($"CALL {procedureName}()");
@@ -751,17 +754,17 @@ END
 
         const string procedureName = "`safe_migrations_guard`";
         var createProcedureSql = $"""
-CREATE PROCEDURE {procedureName}()
-BEGIN
-    IF NOT EXISTS({SingleLine(existsSql)}) THEN
-        SELECT 1;
-    ELSEIF EXISTS({SingleLine(matchesSql)}) THEN
-        SELECT 1;
-    ELSE
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{EscapeSqlLiteral(mismatchMessage)}';
-    END IF;
-END
-""";
+                                  CREATE PROCEDURE {procedureName}()
+                                  BEGIN
+                                      IF NOT EXISTS({SingleLine(existsSql)}) THEN
+                                          SELECT 1;
+                                      ELSEIF EXISTS({SingleLine(matchesSql)}) THEN
+                                          SELECT 1;
+                                      ELSE
+                                          SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{EscapeSqlLiteral(mismatchMessage)}';
+                                      END IF;
+                                  END
+                                  """;
 
         builder.Append($"DROP PROCEDURE IF EXISTS {procedureName}");
         EndStatement(builder, true);
@@ -818,17 +821,17 @@ END
     {
         const string procedureName = "`safe_migrations_guard`";
         var createProcedureSql = $"""
-CREATE PROCEDURE {procedureName}()
-BEGIN
-    IF NOT EXISTS({SingleLine(existsSql)}) THEN
-        {(allowMissing ? $"{SingleLine(ddlSql).TrimEnd(';')};" : $"SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{EscapeSqlLiteral(missingMessage)}';")}
-    ELSEIF EXISTS({SingleLine(matchesSql)}) THEN
-        SELECT 1;
-    ELSE
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{EscapeSqlLiteral(mismatchMessage)}';
-    END IF;
-END
-""";
+                                  CREATE PROCEDURE {procedureName}()
+                                  BEGIN
+                                      IF NOT EXISTS({SingleLine(existsSql)}) THEN
+                                          {(allowMissing ? $"{SingleLine(ddlSql).TrimEnd(';')};" : $"SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{EscapeSqlLiteral(missingMessage)}';")}
+                                      ELSEIF EXISTS({SingleLine(matchesSql)}) THEN
+                                          SELECT 1;
+                                      ELSE
+                                          SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{EscapeSqlLiteral(mismatchMessage)}';
+                                      END IF;
+                                  END
+                                  """;
 
         builder.Append($"DROP PROCEDURE IF EXISTS {procedureName}");
         EndStatement(builder, true);
@@ -854,17 +857,17 @@ END
     {
         const string procedureName = "`safe_migrations_guard`";
         var createProcedureSql = $"""
-CREATE PROCEDURE {procedureName}()
-BEGIN
-    IF NOT EXISTS({SingleLine(existsSql)}) THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{EscapeSqlLiteral(missingMessage)}';
-    ELSEIF EXISTS({SingleLine(matchesSql)}) THEN
-        SELECT 1;
-    ELSE
-        {SingleLine(ddlSql).TrimEnd(';')};
-    END IF;
-END
-""";
+                                  CREATE PROCEDURE {procedureName}()
+                                  BEGIN
+                                      IF NOT EXISTS({SingleLine(existsSql)}) THEN
+                                          SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{EscapeSqlLiteral(missingMessage)}';
+                                      ELSEIF EXISTS({SingleLine(matchesSql)}) THEN
+                                          SELECT 1;
+                                      ELSE
+                                          {SingleLine(ddlSql).TrimEnd(';')};
+                                      END IF;
+                                  END
+                                  """;
 
         builder.Append($"DROP PROCEDURE IF EXISTS {procedureName}");
         EndStatement(builder, true);
@@ -911,42 +914,62 @@ END
         EndStatement(builder, terminate);
     }
 
-    private static bool IsIfExists(MigrationOperation operation)
-        => operation[SafeMigrationAnnotationNames.IfExists] as bool? == true;
+    private static bool IsIfExists(
+        MigrationOperation operation
+    ) => (operation[SafeMigrationAnnotationNames.IfExists] as bool?) == true;
 
-    private static bool IsIfNotExists(MigrationOperation operation)
-        => operation[SafeMigrationAnnotationNames.IfNotExists] as bool? == true;
+    private static bool IsIfNotExists(
+        MigrationOperation operation
+    ) => (operation[SafeMigrationAnnotationNames.IfNotExists] as bool?) == true;
 
-    private static bool IsAlterIfDifferent(MigrationOperation operation)
-        => operation[SafeMigrationAnnotationNames.AlterIfDifferent] as bool? == true;
+    private static bool IsAlterIfDifferent(
+        MigrationOperation operation
+    ) => (operation[SafeMigrationAnnotationNames.AlterIfDifferent] as bool?) == true;
 
     private void CheckSchema(
         string? schema,
         string table
+    ) => CheckSchema(
+        new CreateTableOperation
+        {
+            Schema = schema,
+            Name = table
+        });
+
+    private static SafeMigrationStrictMode GetStrictMode(
+        MigrationOperation operation
+    ) => operation[SafeMigrationAnnotationNames.StrictMode] is SafeMigrationStrictMode strictMode
+        ? strictMode
+        : SafeMigrationStrictMode.None;
+
+    private static TDefinition GetExpectedDefinition<TDefinition>(
+        MigrationOperation operation
     )
-        => CheckSchema(new CreateTableOperation { Schema = schema, Name = table });
+        where TDefinition : class =>
+        SafeMigrationDefinitionSerializer.Deserialize<TDefinition>(
+            operation[SafeMigrationAnnotationNames.ExpectedDefinition] as string)
+        ?? throw new InvalidOperationException(
+            $"Expected definition annotation missing for operation '{operation.GetType().Name}'.");
 
-    private static SafeMigrationStrictMode GetStrictMode(MigrationOperation operation)
-        => operation[SafeMigrationAnnotationNames.StrictMode] is SafeMigrationStrictMode strictMode
-            ? strictMode
-            : SafeMigrationStrictMode.None;
+    private static string SingleLine(
+        string sql
+    ) => string.Join(
+        " ",
+        sql.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
 
-    private static TDefinition GetExpectedDefinition<TDefinition>(MigrationOperation operation)
-        where TDefinition : class
-        => SafeMigrationDefinitionSerializer.Deserialize<TDefinition>(operation[SafeMigrationAnnotationNames.ExpectedDefinition] as string)
-           ?? throw new InvalidOperationException($"Expected definition annotation missing for operation '{operation.GetType().Name}'.");
+    private static string EscapeSqlLiteral(
+        string value
+    ) => value
+        .Replace("\\", @"\\", StringComparison.Ordinal)
+        .Replace("'", "''", StringComparison.Ordinal);
 
-    private static string SingleLine(string sql)
-        => string.Join(" ", sql.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+    private static string SqlLiteral(
+        string? value
+    ) => $"'{EscapeSqlLiteral(value ?? string.Empty)}'";
 
-    private static string EscapeSqlLiteral(string value)
-        => value.Replace("\\", @"\\", StringComparison.Ordinal).Replace("'", "''", StringComparison.Ordinal);
-
-    private static string SqlLiteral(string? value)
-        => $"'{EscapeSqlLiteral(value ?? string.Empty)}'";
-
-    private static string ConstraintSchema(string? schema)
-        => schema is null ? "DATABASE()" : SqlLiteral(schema);
+    private static string ConstraintSchema(
+        string? schema
+    ) => schema is null ? "DATABASE()" : SqlLiteral(schema);
 
     private string BuildCreateTableSql(
         CreateTableOperation operation,
@@ -968,7 +991,12 @@ END
 
         innerBuilder.Append(")");
         EndStatement(innerBuilder);
-        return SingleLine(innerBuilder.GetCommandList().Single().CommandText).TrimEnd(';');
+        return SingleLine(
+                innerBuilder
+                    .GetCommandList()
+                    .Single()
+                    .CommandText)
+            .TrimEnd(';');
     }
 
     private string BuildAddColumnSql(
@@ -984,7 +1012,12 @@ END
 
         ColumnDefinition(operation, model, innerBuilder);
         EndStatement(innerBuilder);
-        return SingleLine(innerBuilder.GetCommandList().Single().CommandText).TrimEnd(';');
+        return SingleLine(
+                innerBuilder
+                    .GetCommandList()
+                    .Single()
+                    .CommandText)
+            .TrimEnd(';');
     }
 
     private string BuildAlterColumnSql(
@@ -997,8 +1030,10 @@ END
 
         var commands = innerBuilder.GetCommandList();
         return commands.Count == 1
-            ? SingleLine(commands[0].CommandText).TrimEnd(';')
-            : throw new NotSupportedException("Safe alter-column currently supports only single-statement MariaDB alterations.");
+            ? SingleLine(commands[0].CommandText)
+                .TrimEnd(';')
+            : throw new NotSupportedException(
+                "Safe alter-column currently supports only single-statement MariaDB alterations.");
     }
 
     private string BuildCreateIndexSql(
@@ -1028,7 +1063,12 @@ END
         IndexOptions(operation, model, innerBuilder);
 
         EndStatement(innerBuilder);
-        return SingleLine(innerBuilder.GetCommandList().Single().CommandText).TrimEnd(';');
+        return SingleLine(
+                innerBuilder
+                    .GetCommandList()
+                    .Single()
+                    .CommandText)
+            .TrimEnd(';');
     }
 
     private string BuildRenameColumnSql(
@@ -1041,8 +1081,10 @@ END
         var commands = innerBuilder.GetCommandList();
 
         return commands.Count == 1
-            ? SingleLine(commands[0].CommandText).TrimEnd(';')
-            : throw new NotSupportedException("Safe rename-column currently supports only single-statement MariaDB renames.");
+            ? SingleLine(commands[0].CommandText)
+                .TrimEnd(';')
+            : throw new NotSupportedException(
+                "Safe rename-column currently supports only single-statement MariaDB renames.");
     }
 
     private string BuildRenameTableSql(
@@ -1055,8 +1097,10 @@ END
         var commands = innerBuilder.GetCommandList();
 
         return commands.Count == 1
-            ? SingleLine(commands[0].CommandText).TrimEnd(';')
-            : throw new NotSupportedException("Safe rename-table currently supports only single-statement MariaDB renames.");
+            ? SingleLine(commands[0].CommandText)
+                .TrimEnd(';')
+            : throw new NotSupportedException(
+                "Safe rename-table currently supports only single-statement MariaDB renames.");
     }
 
     private string BuildRenameIndexSql(
@@ -1069,8 +1113,10 @@ END
         var commands = innerBuilder.GetCommandList();
 
         return commands.Count == 1
-            ? SingleLine(commands[0].CommandText).TrimEnd(';')
-            : throw new NotSupportedException("Safe rename-index currently supports only single-statement MariaDB renames.");
+            ? SingleLine(commands[0].CommandText)
+                .TrimEnd(';')
+            : throw new NotSupportedException(
+                "Safe rename-index currently supports only single-statement MariaDB renames.");
     }
 
     private static string BuildMismatchMessage(
@@ -1078,88 +1124,87 @@ END
         string objectName,
         string table,
         object expectedDefinition
-    )
-        => $"Safe migration strict-mode mismatch for {objectType} '{objectName}' on table '{table}'. Expected: {SafeMigrationDefinitionSerializer.Serialize(expectedDefinition)}. Provider: MariaDB.";
+    ) =>
+        $"Safe migration strict-mode mismatch for {objectType} '{objectName}' on table '{table}'. Expected: {SafeMigrationDefinitionSerializer.Serialize(expectedDefinition)}. Provider: MariaDB.";
 
     private static string BuildMissingMessage(
         string objectType,
         string objectName,
         string table
-    )
-        => $"Safe migration alter-if-different target {objectType} '{objectName}' on table '{table}' was not found. Provider: MariaDB.";
+    ) =>
+        $"Safe migration alter-if-different target {objectType} '{objectName}' on table '{table}' was not found. Provider: MariaDB.";
 
     private static string ExistsTableSql(
         string? schema,
         string table
-    )
-        => $"""
-SELECT 1
-FROM information_schema.TABLES
-WHERE TABLE_SCHEMA = {ConstraintSchema(schema)}
-  AND TABLE_NAME = {SqlLiteral(table)}
-""";
+    ) => $"""
+          SELECT 1
+          FROM information_schema.TABLES
+          WHERE TABLE_SCHEMA = {ConstraintSchema(schema)}
+            AND TABLE_NAME = {SqlLiteral(table)}
+          """;
 
     private static string ExistsColumnSql(
         string? schema,
         string table,
         string column
-    )
-        => $"""
-SELECT 1
-FROM information_schema.COLUMNS
-WHERE TABLE_SCHEMA = {ConstraintSchema(schema)}
-  AND TABLE_NAME = {SqlLiteral(table)}
-  AND COLUMN_NAME = {SqlLiteral(column)}
-""";
+    ) => $"""
+          SELECT 1
+          FROM information_schema.COLUMNS
+          WHERE TABLE_SCHEMA = {ConstraintSchema(schema)}
+            AND TABLE_NAME = {SqlLiteral(table)}
+            AND COLUMN_NAME = {SqlLiteral(column)}
+          """;
 
     private static string ExistsIndexSql(
         string? schema,
         string table,
         string name
-    )
-        => $"""
-SELECT 1
-FROM information_schema.STATISTICS
-WHERE TABLE_SCHEMA = {ConstraintSchema(schema)}
-  AND TABLE_NAME = {SqlLiteral(table)}
-  AND INDEX_NAME = {SqlLiteral(name)}
-""";
+    ) => $"""
+          SELECT 1
+          FROM information_schema.STATISTICS
+          WHERE TABLE_SCHEMA = {ConstraintSchema(schema)}
+            AND TABLE_NAME = {SqlLiteral(table)}
+            AND INDEX_NAME = {SqlLiteral(name)}
+          """;
 
     private static string ExistsConstraintSql(
         string? schema,
         string table,
         string name,
         string constraintType
-    )
-        => $"""
-SELECT 1
-FROM information_schema.TABLE_CONSTRAINTS
-WHERE CONSTRAINT_SCHEMA = {ConstraintSchema(schema)}
-  AND TABLE_NAME = {SqlLiteral(table)}
-  AND CONSTRAINT_NAME = {SqlLiteral(name)}
-  AND CONSTRAINT_TYPE = {SqlLiteral(constraintType)}
-""";
+    ) => $"""
+          SELECT 1
+          FROM information_schema.TABLE_CONSTRAINTS
+          WHERE CONSTRAINT_SCHEMA = {ConstraintSchema(schema)}
+            AND TABLE_NAME = {SqlLiteral(table)}
+            AND CONSTRAINT_NAME = {SqlLiteral(name)}
+            AND CONSTRAINT_TYPE = {SqlLiteral(constraintType)}
+          """;
 
     private static string ExistsPrimaryKeySql(
         string? schema,
         string table
-    )
-        => $"""
-SELECT 1
-FROM information_schema.TABLE_CONSTRAINTS
-WHERE CONSTRAINT_SCHEMA = {ConstraintSchema(schema)}
-  AND TABLE_NAME = {SqlLiteral(table)}
-  AND CONSTRAINT_TYPE = 'PRIMARY KEY'
-""";
+    ) => $"""
+          SELECT 1
+          FROM information_schema.TABLE_CONSTRAINTS
+          WHERE CONSTRAINT_SCHEMA = {ConstraintSchema(schema)}
+            AND TABLE_NAME = {SqlLiteral(table)}
+            AND CONSTRAINT_TYPE = 'PRIMARY KEY'
+          """;
 
-    private string BuildTableMatchesSql(ExpectedTableDefinition expected)
+    private string BuildTableMatchesSql(
+        ExpectedTableDefinition expected
+    )
     {
         var parts = new List<string>
         {
             $"(SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = {ConstraintSchema(expected.Schema)} AND TABLE_NAME = {SqlLiteral(expected.Table)}) = {expected.Columns.Count}"
         };
 
-        parts.AddRange(expected.Columns.Select(column => $"EXISTS({SingleLine(BuildColumnMatchesSql(expected.Schema, expected.Table, column))})"));
+        parts.AddRange(
+            expected.Columns.Select(column =>
+                $"EXISTS({SingleLine(BuildColumnMatchesSql(expected.Schema, expected.Table, column))})"));
 
         if (expected.PrimaryKey is not null)
         {
@@ -1167,12 +1212,12 @@ WHERE CONSTRAINT_SCHEMA = {ConstraintSchema(schema)}
         }
 
         return $"""
-SELECT 1
-FROM information_schema.TABLES
-WHERE TABLE_SCHEMA = {ConstraintSchema(expected.Schema)}
-  AND TABLE_NAME = {SqlLiteral(expected.Table)}
-  AND {string.Join(" AND ", parts)}
-""";
+                SELECT 1
+                FROM information_schema.TABLES
+                WHERE TABLE_SCHEMA = {ConstraintSchema(expected.Schema)}
+                  AND TABLE_NAME = {SqlLiteral(expected.Table)}
+                  AND {string.Join(" AND ", parts)}
+                """;
     }
 
     private string BuildColumnMatchesSql(
@@ -1201,12 +1246,14 @@ WHERE TABLE_SCHEMA = {ConstraintSchema(expected.Schema)}
 
         if (expected.DefaultValueSql is not null)
         {
-            predicates.Add($"LOWER({NormalizeSqlExpression("COALESCE(COLUMN_DEFAULT, '')")}) = LOWER({SqlLiteral(NormalizeLiteralSql(expected.DefaultValueSql))})");
+            predicates.Add(
+                $"LOWER({NormalizeSqlExpression("COALESCE(COLUMN_DEFAULT, '')")}) = LOWER({SqlLiteral(NormalizeLiteralSql(expected.DefaultValueSql))})");
         }
 
         if (expected.ComputedColumnSql is not null)
         {
-            predicates.Add($"LOWER({NormalizeSqlExpression("COALESCE(GENERATION_EXPRESSION, '')")}) = LOWER({SqlLiteral(NormalizeLiteralSql(expected.ComputedColumnSql))})");
+            predicates.Add(
+                $"LOWER({NormalizeSqlExpression("COALESCE(GENERATION_EXPRESSION, '')")}) = LOWER({SqlLiteral(NormalizeLiteralSql(expected.ComputedColumnSql))})");
         }
         else
         {
@@ -1229,43 +1276,47 @@ WHERE TABLE_SCHEMA = {ConstraintSchema(expected.Schema)}
         }
 
         return $"""
-SELECT 1
-FROM information_schema.COLUMNS
-WHERE {string.Join(" AND ", predicates)}
-""";
+                SELECT 1
+                FROM information_schema.COLUMNS
+                WHERE {string.Join(" AND ", predicates)}
+                """;
     }
 
-    private static string BuildIndexMatchesSql(ExpectedIndexDefinition expected)
+    private static string BuildIndexMatchesSql(
+        ExpectedIndexDefinition expected
+    )
     {
         var descending = expected.Descending is null
             ? null
             : string.Join(",", expected.Descending.Select(value => value ? "D" : "A"));
 
         return $"""
-SELECT 1
-FROM (
-    SELECT
-        INDEX_NAME,
-        MAX(NON_UNIQUE) AS NON_UNIQUE,
-        GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX SEPARATOR ',') AS COLUMN_LIST,
-        GROUP_CONCAT(COALESCE(COLLATION, 'A') ORDER BY SEQ_IN_INDEX SEPARATOR ',') AS SORT_LIST
-    FROM information_schema.STATISTICS
-    WHERE TABLE_SCHEMA = {ConstraintSchema(expected.Schema)}
-      AND TABLE_NAME = {SqlLiteral(expected.Table)}
-      AND INDEX_NAME = {SqlLiteral(expected.Name)}
-    GROUP BY INDEX_NAME
-) AS IDX
-WHERE IDX.NON_UNIQUE = {(expected.Unique ? 0 : 1)}
-  AND IDX.COLUMN_LIST = {SqlLiteral(string.Join(",", expected.Columns))}
-  {(descending is null ? string.Empty : $"AND IDX.SORT_LIST = {SqlLiteral(descending)}")}
-""";
+                SELECT 1
+                FROM (
+                    SELECT
+                        INDEX_NAME,
+                        MAX(NON_UNIQUE) AS NON_UNIQUE,
+                        GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX SEPARATOR ',') AS COLUMN_LIST,
+                        GROUP_CONCAT(COALESCE(COLLATION, 'A') ORDER BY SEQ_IN_INDEX SEPARATOR ',') AS SORT_LIST
+                    FROM information_schema.STATISTICS
+                    WHERE TABLE_SCHEMA = {ConstraintSchema(expected.Schema)}
+                      AND TABLE_NAME = {SqlLiteral(expected.Table)}
+                      AND INDEX_NAME = {SqlLiteral(expected.Name)}
+                    GROUP BY INDEX_NAME
+                ) AS IDX
+                WHERE IDX.NON_UNIQUE = {(expected.Unique ? 0 : 1)}
+                  AND IDX.COLUMN_LIST = {SqlLiteral(string.Join(",", expected.Columns))}
+                  {(descending is null ? string.Empty : $"AND IDX.SORT_LIST = {SqlLiteral(descending)}")}
+                """;
     }
 
-    private static string BuildPrimaryKeyMatchesSql(ExpectedPrimaryKeyDefinition expected)
-        => BuildKeyConstraintMatchesSql(expected.Schema, expected.Table, expected.Name, expected.Columns, "PRIMARY KEY");
+    private static string BuildPrimaryKeyMatchesSql(
+        ExpectedPrimaryKeyDefinition expected
+    ) => BuildKeyConstraintMatchesSql(expected.Schema, expected.Table, expected.Name, expected.Columns, "PRIMARY KEY");
 
-    private static string BuildUniqueConstraintMatchesSql(ExpectedUniqueConstraintDefinition expected)
-        => BuildKeyConstraintMatchesSql(expected.Schema, expected.Table, expected.Name, expected.Columns, "UNIQUE");
+    private static string BuildUniqueConstraintMatchesSql(
+        ExpectedUniqueConstraintDefinition expected
+    ) => BuildKeyConstraintMatchesSql(expected.Schema, expected.Table, expected.Name, expected.Columns, "UNIQUE");
 
     private static string BuildKeyConstraintMatchesSql(
         string? schema,
@@ -1273,78 +1324,84 @@ WHERE IDX.NON_UNIQUE = {(expected.Unique ? 0 : 1)}
         string name,
         IReadOnlyList<string> columns,
         string constraintType
+    ) => $"""
+          SELECT 1
+          FROM (
+              SELECT
+                  TC.CONSTRAINT_NAME,
+                  GROUP_CONCAT(KCU.COLUMN_NAME ORDER BY KCU.ORDINAL_POSITION SEPARATOR ',') AS COLUMN_LIST
+              FROM information_schema.TABLE_CONSTRAINTS TC
+              JOIN information_schema.KEY_COLUMN_USAGE KCU
+                ON KCU.CONSTRAINT_SCHEMA = TC.CONSTRAINT_SCHEMA
+               AND KCU.TABLE_NAME = TC.TABLE_NAME
+               AND KCU.CONSTRAINT_NAME = TC.CONSTRAINT_NAME
+              WHERE TC.CONSTRAINT_SCHEMA = {ConstraintSchema(schema)}
+                AND TC.TABLE_NAME = {SqlLiteral(table)}
+                AND TC.CONSTRAINT_NAME = {SqlLiteral(name)}
+                AND TC.CONSTRAINT_TYPE = {SqlLiteral(constraintType)}
+              GROUP BY TC.CONSTRAINT_NAME
+          ) AS C
+          WHERE C.COLUMN_LIST = {SqlLiteral(string.Join(",", columns))}
+          """;
+
+    private static string BuildForeignKeyMatchesSql(
+        ExpectedForeignKeyDefinition expected
+    ) => $"""
+          SELECT 1
+          FROM (
+              SELECT
+                  RC.CONSTRAINT_NAME,
+                  RC.UPDATE_RULE,
+                  RC.DELETE_RULE,
+                  MAX(KCU.REFERENCED_TABLE_NAME) AS REFERENCED_TABLE_NAME,
+                  GROUP_CONCAT(KCU.COLUMN_NAME ORDER BY KCU.ORDINAL_POSITION SEPARATOR ',') AS COLUMN_LIST,
+                  GROUP_CONCAT(KCU.REFERENCED_COLUMN_NAME ORDER BY KCU.ORDINAL_POSITION SEPARATOR ',') AS REFERENCED_COLUMN_LIST
+              FROM information_schema.REFERENTIAL_CONSTRAINTS RC
+              JOIN information_schema.KEY_COLUMN_USAGE KCU
+                ON KCU.CONSTRAINT_SCHEMA = RC.CONSTRAINT_SCHEMA
+               AND KCU.TABLE_NAME = RC.TABLE_NAME
+               AND KCU.CONSTRAINT_NAME = RC.CONSTRAINT_NAME
+              WHERE RC.CONSTRAINT_SCHEMA = {ConstraintSchema(expected.Schema)}
+                AND RC.TABLE_NAME = {SqlLiteral(expected.Table)}
+                AND RC.CONSTRAINT_NAME = {SqlLiteral(expected.Name)}
+              GROUP BY RC.CONSTRAINT_NAME, RC.UPDATE_RULE, RC.DELETE_RULE
+          ) AS FK
+          WHERE FK.REFERENCED_TABLE_NAME = {SqlLiteral(expected.PrincipalTable)}
+            AND FK.COLUMN_LIST = {SqlLiteral(string.Join(",", expected.Columns))}
+            AND FK.REFERENCED_COLUMN_LIST = {SqlLiteral(string.Join(",", expected.PrincipalColumns))}
+            AND {BuildMariaDbReferentialRulePredicate("FK.UPDATE_RULE", expected.OnUpdate)}
+            AND {BuildMariaDbReferentialRulePredicate("FK.DELETE_RULE", expected.OnDelete)}
+          """;
+
+    private static string BuildCheckConstraintMatchesSql(
+        ExpectedCheckConstraintDefinition expected
+    ) => $"""
+          SELECT 1
+          FROM information_schema.CHECK_CONSTRAINTS CC
+          JOIN information_schema.TABLE_CONSTRAINTS TC
+            ON TC.CONSTRAINT_SCHEMA = CC.CONSTRAINT_SCHEMA
+           AND TC.CONSTRAINT_NAME = CC.CONSTRAINT_NAME
+          WHERE TC.CONSTRAINT_SCHEMA = {ConstraintSchema(expected.Schema)}
+            AND TC.TABLE_NAME = {SqlLiteral(expected.Table)}
+            AND TC.CONSTRAINT_NAME = {SqlLiteral(expected.Name)}
+            AND LOWER({NormalizeSqlExpression("CC.CHECK_CLAUSE")}) = LOWER({SqlLiteral(NormalizeLiteralSql(expected.Sql))})
+          """;
+
+    private static string NormalizeSqlExpression(
+        string sqlExpression
+    ) => $"REPLACE(REPLACE(REPLACE(REPLACE({sqlExpression}, ' ', ''), CHAR(10), ''), CHAR(13), ''), CHAR(9), '')";
+
+    private static string NormalizeLiteralSql(
+        string sql
+    ) => string.Concat(sql.Where(ch => !char.IsWhiteSpace(ch)));
+
+    private string BuildMariaDbDefaultValueLiteralPredicate(
+        ExpectedColumnDefinition expected
     )
-        => $"""
-SELECT 1
-FROM (
-    SELECT
-        TC.CONSTRAINT_NAME,
-        GROUP_CONCAT(KCU.COLUMN_NAME ORDER BY KCU.ORDINAL_POSITION SEPARATOR ',') AS COLUMN_LIST
-    FROM information_schema.TABLE_CONSTRAINTS TC
-    JOIN information_schema.KEY_COLUMN_USAGE KCU
-      ON KCU.CONSTRAINT_SCHEMA = TC.CONSTRAINT_SCHEMA
-     AND KCU.TABLE_NAME = TC.TABLE_NAME
-     AND KCU.CONSTRAINT_NAME = TC.CONSTRAINT_NAME
-    WHERE TC.CONSTRAINT_SCHEMA = {ConstraintSchema(schema)}
-      AND TC.TABLE_NAME = {SqlLiteral(table)}
-      AND TC.CONSTRAINT_NAME = {SqlLiteral(name)}
-      AND TC.CONSTRAINT_TYPE = {SqlLiteral(constraintType)}
-    GROUP BY TC.CONSTRAINT_NAME
-) AS C
-WHERE C.COLUMN_LIST = {SqlLiteral(string.Join(",", columns))}
-""";
-
-    private static string BuildForeignKeyMatchesSql(ExpectedForeignKeyDefinition expected)
-        => $"""
-SELECT 1
-FROM (
-    SELECT
-        RC.CONSTRAINT_NAME,
-        RC.UPDATE_RULE,
-        RC.DELETE_RULE,
-        MAX(KCU.REFERENCED_TABLE_NAME) AS REFERENCED_TABLE_NAME,
-        GROUP_CONCAT(KCU.COLUMN_NAME ORDER BY KCU.ORDINAL_POSITION SEPARATOR ',') AS COLUMN_LIST,
-        GROUP_CONCAT(KCU.REFERENCED_COLUMN_NAME ORDER BY KCU.ORDINAL_POSITION SEPARATOR ',') AS REFERENCED_COLUMN_LIST
-    FROM information_schema.REFERENTIAL_CONSTRAINTS RC
-    JOIN information_schema.KEY_COLUMN_USAGE KCU
-      ON KCU.CONSTRAINT_SCHEMA = RC.CONSTRAINT_SCHEMA
-     AND KCU.TABLE_NAME = RC.TABLE_NAME
-     AND KCU.CONSTRAINT_NAME = RC.CONSTRAINT_NAME
-    WHERE RC.CONSTRAINT_SCHEMA = {ConstraintSchema(expected.Schema)}
-      AND RC.TABLE_NAME = {SqlLiteral(expected.Table)}
-      AND RC.CONSTRAINT_NAME = {SqlLiteral(expected.Name)}
-    GROUP BY RC.CONSTRAINT_NAME, RC.UPDATE_RULE, RC.DELETE_RULE
-) AS FK
-WHERE FK.REFERENCED_TABLE_NAME = {SqlLiteral(expected.PrincipalTable)}
-  AND FK.COLUMN_LIST = {SqlLiteral(string.Join(",", expected.Columns))}
-  AND FK.REFERENCED_COLUMN_LIST = {SqlLiteral(string.Join(",", expected.PrincipalColumns))}
-  AND {BuildMariaDbReferentialRulePredicate("FK.UPDATE_RULE", expected.OnUpdate)}
-  AND {BuildMariaDbReferentialRulePredicate("FK.DELETE_RULE", expected.OnDelete)}
-""";
-
-    private static string BuildCheckConstraintMatchesSql(ExpectedCheckConstraintDefinition expected)
-        => $"""
-SELECT 1
-FROM information_schema.CHECK_CONSTRAINTS CC
-JOIN information_schema.TABLE_CONSTRAINTS TC
-  ON TC.CONSTRAINT_SCHEMA = CC.CONSTRAINT_SCHEMA
- AND TC.CONSTRAINT_NAME = CC.CONSTRAINT_NAME
-WHERE TC.CONSTRAINT_SCHEMA = {ConstraintSchema(expected.Schema)}
-  AND TC.TABLE_NAME = {SqlLiteral(expected.Table)}
-  AND TC.CONSTRAINT_NAME = {SqlLiteral(expected.Name)}
-  AND LOWER({NormalizeSqlExpression("CC.CHECK_CLAUSE")}) = LOWER({SqlLiteral(NormalizeLiteralSql(expected.Sql))})
-""";
-
-    private static string NormalizeSqlExpression(string sqlExpression)
-        => $"REPLACE(REPLACE(REPLACE(REPLACE({sqlExpression}, ' ', ''), CHAR(10), ''), CHAR(13), ''), CHAR(9), '')";
-
-    private static string NormalizeLiteralSql(string sql)
-        => string.Concat(sql.Where(ch => !char.IsWhiteSpace(ch)));
-
-    private string BuildMariaDbDefaultValueLiteralPredicate(ExpectedColumnDefinition expected)
     {
         var candidates = BuildTypedDefaultValueCandidates(expected);
-        if (candidates.Count == 0 && expected.DefaultValueLiteral is not null)
+        if (candidates.Count == 0
+            && expected.DefaultValueLiteral is not null)
         {
             candidates.Add(NormalizeLiteralSql(expected.DefaultValueLiteral));
         }
@@ -1359,7 +1416,9 @@ WHERE TC.CONSTRAINT_SCHEMA = {ConstraintSchema(expected.Schema)}
         return $"{normalizedColumnDefault} IN ({candidateSql})";
     }
 
-    private List<string> BuildTypedDefaultValueCandidates(ExpectedColumnDefinition expected)
+    private List<string> BuildTypedDefaultValueCandidates(
+        ExpectedColumnDefinition expected
+    )
     {
         var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -1371,7 +1430,7 @@ WHERE TC.CONSTRAINT_SCHEMA = {ConstraintSchema(expected.Schema)}
 
         AddDefaultValueCandidate(candidates, expected.DefaultValueLiteral);
 
-        return candidates.ToList();
+        return [.. candidates];
     }
 
     private bool TryGenerateSqlLiteral(
@@ -1406,7 +1465,8 @@ WHERE TC.CONSTRAINT_SCHEMA = {ConstraintSchema(expected.Schema)}
         }
 
         mapping ??= Dependencies.TypeMappingSource.FindMapping(clrType!);
-        if (mapping is null || value is null)
+        if (mapping is null
+            || value is null)
         {
             return false;
         }
@@ -1416,7 +1476,7 @@ WHERE TC.CONSTRAINT_SCHEMA = {ConstraintSchema(expected.Schema)}
     }
 
     private static void AddDefaultValueCandidate(
-        ISet<string> candidates,
+        HashSet<string> candidates,
         string? value
     )
     {
@@ -1428,10 +1488,13 @@ WHERE TC.CONSTRAINT_SCHEMA = {ConstraintSchema(expected.Schema)}
         candidates.Add(NormalizeLiteralSql(value));
     }
 
-    private static string? ExtractQuotedSqlLiteral(string sqlLiteral)
+    private static string? ExtractQuotedSqlLiteral(
+        string sqlLiteral
+    )
     {
         var firstQuote = sqlLiteral.IndexOf('\'');
-        if (firstQuote < 0 || sqlLiteral[^1] != '\'')
+        if (firstQuote < 0
+            || sqlLiteral[^1] != '\'')
         {
             return null;
         }
@@ -1439,22 +1502,22 @@ WHERE TC.CONSTRAINT_SCHEMA = {ConstraintSchema(expected.Schema)}
         return sqlLiteral[firstQuote..];
     }
 
-    private static string ToReferentialRule(ReferentialAction action)
-        => action switch
-        {
-            ReferentialAction.Cascade => "CASCADE",
-            ReferentialAction.SetNull => "SET NULL",
-            ReferentialAction.SetDefault => "SET DEFAULT",
-            ReferentialAction.Restrict => "RESTRICT",
-            _ => "NO ACTION"
-        };
+    private static string ToReferentialRule(
+        ReferentialAction action
+    ) => action switch
+    {
+        ReferentialAction.Cascade => "CASCADE",
+        ReferentialAction.SetNull => "SET NULL",
+        ReferentialAction.SetDefault => "SET DEFAULT",
+        ReferentialAction.Restrict => "RESTRICT",
+        _ => "NO ACTION"
+    };
 
     private static string BuildMariaDbReferentialRulePredicate(
         string columnSql,
         ReferentialAction action
-    )
-        => action is ReferentialAction.NoAction or ReferentialAction.Restrict
-            ? $"({columnSql} IN ('NO ACTION', 'RESTRICT'))"
-            : $"{columnSql} = {SqlLiteral(ToReferentialRule(action))}";
+    ) => action is ReferentialAction.NoAction or ReferentialAction.Restrict
+        ? $"({columnSql} IN ('NO ACTION', 'RESTRICT'))"
+        : $"{columnSql} = {SqlLiteral(ToReferentialRule(action))}";
 }
 #pragma warning restore EF1001

@@ -14,7 +14,9 @@ internal static class SafeMigrationExecutionAnnotationHelper
         operation[SafeMigrationAnnotationNames.PreflightOnly] = execution.PreflightOnly;
     }
 
-    public static SafeMigrationExecutionOptions GetExecutionOptions(MigrationOperation operation)
+    public static SafeMigrationExecutionOptions GetExecutionOptions(
+        MigrationOperation operation
+    )
     {
         ArgumentNullException.ThrowIfNull(operation);
 
@@ -28,22 +30,24 @@ internal static class SafeMigrationExecutionAnnotationHelper
         return new SafeMigrationExecutionOptions(GetFallbackConflictMode(operation));
     }
 
-    public static SafeMigrationStrictMode GetCompatibleStrictMode(SafeMigrationExecutionOptions execution)
-        => execution.ConflictMode switch
-        {
-            SafeMigrationConflictMode.None => SafeMigrationStrictMode.None,
-            SafeMigrationConflictMode.ThrowIfDifferent => SafeMigrationStrictMode.ThrowIfDifferent,
-            SafeMigrationConflictMode.RepairIfPossible => SafeMigrationStrictMode.ThrowIfDifferent,
-            _ => throw new ArgumentOutOfRangeException(nameof(execution))
-        };
+    public static SafeMigrationStrictMode GetCompatibleStrictMode(
+        SafeMigrationExecutionOptions execution
+    ) => execution.ConflictMode switch
+    {
+        SafeMigrationConflictMode.None => SafeMigrationStrictMode.None,
+        SafeMigrationConflictMode.ThrowIfDifferent => SafeMigrationStrictMode.ThrowIfDifferent,
+        SafeMigrationConflictMode.RepairIfPossible => SafeMigrationStrictMode.ThrowIfDifferent,
+        _ => throw new ArgumentOutOfRangeException(nameof(execution)),
+    };
 
-    private static SafeMigrationConflictMode GetFallbackConflictMode(MigrationOperation operation)
-        => operation[SafeMigrationAnnotationNames.StrictMode] is SafeMigrationStrictMode strictMode
-            ? strictMode switch
-            {
-                SafeMigrationStrictMode.None => SafeMigrationConflictMode.None,
-                SafeMigrationStrictMode.ThrowIfDifferent => SafeMigrationConflictMode.ThrowIfDifferent,
-                _ => throw new ArgumentOutOfRangeException(nameof(operation))
-            }
-            : SafeMigrationConflictMode.None;
+    private static SafeMigrationConflictMode GetFallbackConflictMode(
+        MigrationOperation operation
+    ) => operation[SafeMigrationAnnotationNames.StrictMode] is SafeMigrationStrictMode strictMode
+        ? strictMode switch
+        {
+            SafeMigrationStrictMode.None => SafeMigrationConflictMode.None,
+            SafeMigrationStrictMode.ThrowIfDifferent => SafeMigrationConflictMode.ThrowIfDifferent,
+            _ => throw new ArgumentOutOfRangeException(nameof(operation)),
+        }
+        : SafeMigrationConflictMode.None;
 }

@@ -12,8 +12,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// <param name="PrincipalColumns">The principal column names.</param>
 /// <param name="OnUpdate">The expected update action.</param>
 /// <param name="OnDelete">The expected delete action.</param>
-public sealed record ExpectedForeignKeyDefinition
-(
+public sealed record ExpectedForeignKeyDefinition(
     string Name,
     string Table,
     string? Schema,

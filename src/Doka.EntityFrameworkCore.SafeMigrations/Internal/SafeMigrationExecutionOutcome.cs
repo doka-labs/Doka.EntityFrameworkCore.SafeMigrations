@@ -5,5 +5,5 @@ internal enum SafeMigrationExecutionOutcome
     NoOp = 0,
     Created = 1,
     Matched = 2,
-    Rejected = 3
+    Rejected = 3,
 }

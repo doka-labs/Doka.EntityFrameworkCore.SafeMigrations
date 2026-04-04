@@ -13,10 +13,8 @@ public sealed class PostgreSqlSafeMigrationsSqlGenerator : NpgsqlMigrationsSqlGe
     /// <param name="npgsqlSingletonOptions">The active PostgreSQL provider singleton options.</param>
     public PostgreSqlSafeMigrationsSqlGenerator(
         MigrationsSqlGeneratorDependencies dependencies,
-        INpgsqlSingletonOptions npgsqlSingletonOptions)
-        : base(dependencies, npgsqlSingletonOptions)
-    {
-    }
+        INpgsqlSingletonOptions npgsqlSingletonOptions
+    ) : base(dependencies, npgsqlSingletonOptions) { }
 
     /// <inheritdoc />
     protected override void Generate(
@@ -309,7 +307,8 @@ public sealed class PostgreSqlSafeMigrationsSqlGenerator : NpgsqlMigrationsSqlGe
             return;
         }
 
-        builder.Append("DROP TABLE IF EXISTS ")
+        builder
+            .Append("DROP TABLE IF EXISTS ")
             .Append(Dependencies.SqlGenerationHelper.DelimitIdentifier(operation.Name, operation.Schema));
         EndStatement(builder, terminate);
     }
@@ -372,7 +371,8 @@ public sealed class PostgreSqlSafeMigrationsSqlGenerator : NpgsqlMigrationsSqlGe
         builder.Append("DROP INDEX IF EXISTS ");
         if (operation.Schema is not null)
         {
-            builder.Append(Dependencies.SqlGenerationHelper.DelimitIdentifier(operation.Schema))
+            builder
+                .Append(Dependencies.SqlGenerationHelper.DelimitIdentifier(operation.Schema))
                 .Append(".");
         }
 
@@ -417,7 +417,8 @@ public sealed class PostgreSqlSafeMigrationsSqlGenerator : NpgsqlMigrationsSqlGe
         }
 
         var schema = operation.Schema ?? "public";
-        var table = operation.Table ?? throw new InvalidOperationException("DropPrimaryKeyOperation requires a table name.");
+        var table = operation.Table
+            ?? throw new InvalidOperationException("DropPrimaryKeyOperation requires a table name.");
         var qualifiedTable = Dependencies.SqlGenerationHelper.DelimitIdentifier(table, operation.Schema);
 
         builder
@@ -537,7 +538,8 @@ public sealed class PostgreSqlSafeMigrationsSqlGenerator : NpgsqlMigrationsSqlGe
             return;
         }
 
-        var table = operation.Table ?? throw new InvalidOperationException("Safe rename-index requires a table name for PostgreSQL.");
+        var table = operation.Table
+            ?? throw new InvalidOperationException("Safe rename-index requires a table name for PostgreSQL.");
         GenerateDoBlockGuard(
             builder,
             ExistsIndexSql(operation.Schema, table, operation.Name),
@@ -560,7 +562,12 @@ public sealed class PostgreSqlSafeMigrationsSqlGenerator : NpgsqlMigrationsSqlGe
         var innerBuilder = new MigrationCommandListBuilder(Dependencies);
         buildStatement(innerBuilder);
         EndStatement(innerBuilder);
-        var ddlSql = SingleLine(innerBuilder.GetCommandList().Single().CommandText).TrimEnd(';');
+        var ddlSql = SingleLine(
+                innerBuilder
+                    .GetCommandList()
+                    .Single()
+                    .CommandText)
+            .TrimEnd(';');
         var existsSql = ConstraintExistsSql(schema, table, name, constraintType);
 
         if (strictMode == SafeMigrationStrictMode.None)
@@ -586,18 +593,21 @@ public sealed class PostgreSqlSafeMigrationsSqlGenerator : NpgsqlMigrationsSqlGe
         string mismatchObjectType,
         Func<TDefinition, string> buildMatchesSql,
         Action<TOperation, IModel?, MigrationCommandListBuilder> appendConstraint
-    ) where TOperation : MigrationOperation
-      where TDefinition : class
+    )
+        where TOperation : MigrationOperation
+        where TDefinition : class
     {
         var schema = getSchema(operation);
         var table = getTable(operation);
         var name = getName(operation);
-        var execution = getExecution(operation) ?? new SafeMigrationExecutionOptions(
-            getStrictMode(operation) == SafeMigrationStrictMode.ThrowIfDifferent
-                ? SafeMigrationConflictMode.ThrowIfDifferent
-                : SafeMigrationConflictMode.None);
+        var execution = getExecution(operation)
+            ?? new SafeMigrationExecutionOptions(
+                getStrictMode(operation) == SafeMigrationStrictMode.ThrowIfDifferent
+                    ? SafeMigrationConflictMode.ThrowIfDifferent
+                    : SafeMigrationConflictMode.None);
         var definition = getExpectedDefinition(operation)
-            ?? throw new InvalidOperationException($"Expected {mismatchObjectType} definition is missing. This is required for all safe constraint operations.");
+            ?? throw new InvalidOperationException(
+                $"Expected {mismatchObjectType} definition is missing. This is required for all safe constraint operations.");
 
         var matchesSql = buildMatchesSql(definition);
         var mismatchMessage = BuildMismatchMessage(mismatchObjectType, name, table, definition);
@@ -625,7 +635,8 @@ public sealed class PostgreSqlSafeMigrationsSqlGenerator : NpgsqlMigrationsSqlGe
             mismatchMessage,
             innerBuilder =>
             {
-                innerBuilder.Append("ALTER TABLE ")
+                innerBuilder
+                    .Append("ALTER TABLE ")
                     .Append(Dependencies.SqlGenerationHelper.DelimitIdentifier(table, schema))
                     .Append(" ADD ");
                 appendConstraint(operation, model, innerBuilder);
@@ -649,13 +660,7 @@ public sealed class PostgreSqlSafeMigrationsSqlGenerator : NpgsqlMigrationsSqlGe
             return;
         }
 
-        GenerateConditionalDdl(
-            builder,
-            existsSql,
-            buildMatchesSql(),
-            ddlSql,
-            buildMismatchMessage(),
-            terminate);
+        GenerateConditionalDdl(builder, existsSql, buildMatchesSql(), ddlSql, buildMismatchMessage(), terminate);
     }
 
     private string BuildCreateTableSql(
@@ -665,8 +670,7 @@ public sealed class PostgreSqlSafeMigrationsSqlGenerator : NpgsqlMigrationsSqlGe
     )
     {
         var innerBuilder = new MigrationCommandListBuilder(Dependencies);
-        innerBuilder
-            .Append("CREATE TABLE ");
+        innerBuilder.Append("CREATE TABLE ");
 
         if (ifNotExists)
         {
@@ -686,7 +690,12 @@ public sealed class PostgreSqlSafeMigrationsSqlGenerator : NpgsqlMigrationsSqlGe
 
         innerBuilder.Append(")");
         EndStatement(innerBuilder);
-        return SingleLine(innerBuilder.GetCommandList().Single().CommandText).TrimEnd(';');
+        return SingleLine(
+                innerBuilder
+                    .GetCommandList()
+                    .Single()
+                    .CommandText)
+            .TrimEnd(';');
     }
 
     private string BuildAddColumnSql(
@@ -701,7 +710,12 @@ public sealed class PostgreSqlSafeMigrationsSqlGenerator : NpgsqlMigrationsSqlGe
             .Append(" ADD COLUMN IF NOT EXISTS ");
         ColumnDefinition(operation.Schema, operation.Table, operation.Name, operation, model, innerBuilder);
         EndStatement(innerBuilder);
-        return SingleLine(innerBuilder.GetCommandList().Single().CommandText).TrimEnd(';');
+        return SingleLine(
+                innerBuilder
+                    .GetCommandList()
+                    .Single()
+                    .CommandText)
+            .TrimEnd(';');
     }
 
     private string BuildAlterColumnSql(
@@ -715,10 +729,12 @@ public sealed class PostgreSqlSafeMigrationsSqlGenerator : NpgsqlMigrationsSqlGe
         var commands = innerBuilder.GetCommandList();
         if (commands.Count != 1)
         {
-            throw new NotSupportedException("Safe alter-column currently supports only single-statement PostgreSQL alterations.");
+            throw new NotSupportedException(
+                "Safe alter-column currently supports only single-statement PostgreSQL alterations.");
         }
 
-        return SingleLine(commands[0].CommandText).TrimEnd(';');
+        return SingleLine(commands[0].CommandText)
+            .TrimEnd(';');
     }
 
     private string BuildCreateIndexSql(
@@ -744,7 +760,12 @@ public sealed class PostgreSqlSafeMigrationsSqlGenerator : NpgsqlMigrationsSqlGe
         innerBuilder.Append(")");
         IndexOptions(operation, model, innerBuilder);
         EndStatement(innerBuilder);
-        return SingleLine(innerBuilder.GetCommandList().Single().CommandText).TrimEnd(';');
+        return SingleLine(
+                innerBuilder
+                    .GetCommandList()
+                    .Single()
+                    .CommandText)
+            .TrimEnd(';');
     }
 
     private string BuildRenameColumnSql(
@@ -757,8 +778,10 @@ public sealed class PostgreSqlSafeMigrationsSqlGenerator : NpgsqlMigrationsSqlGe
         var commands = innerBuilder.GetCommandList();
 
         return commands.Count == 1
-            ? SingleLine(commands[0].CommandText).TrimEnd(';')
-            : throw new NotSupportedException("Safe rename-column currently supports only single-statement PostgreSQL renames.");
+            ? SingleLine(commands[0].CommandText)
+                .TrimEnd(';')
+            : throw new NotSupportedException(
+                "Safe rename-column currently supports only single-statement PostgreSQL renames.");
     }
 
     private string BuildRenameTableSql(
@@ -771,8 +794,10 @@ public sealed class PostgreSqlSafeMigrationsSqlGenerator : NpgsqlMigrationsSqlGe
         var commands = innerBuilder.GetCommandList();
 
         return commands.Count == 1
-            ? SingleLine(commands[0].CommandText).TrimEnd(';')
-            : throw new NotSupportedException("Safe rename-table currently supports only single-statement PostgreSQL renames.");
+            ? SingleLine(commands[0].CommandText)
+                .TrimEnd(';')
+            : throw new NotSupportedException(
+                "Safe rename-table currently supports only single-statement PostgreSQL renames.");
     }
 
     private string BuildRenameIndexSql(
@@ -785,8 +810,10 @@ public sealed class PostgreSqlSafeMigrationsSqlGenerator : NpgsqlMigrationsSqlGe
         var commands = innerBuilder.GetCommandList();
 
         return commands.Count == 1
-            ? SingleLine(commands[0].CommandText).TrimEnd(';')
-            : throw new NotSupportedException("Safe rename-index currently supports only single-statement PostgreSQL renames.");
+            ? SingleLine(commands[0].CommandText)
+                .TrimEnd(';')
+            : throw new NotSupportedException(
+                "Safe rename-index currently supports only single-statement PostgreSQL renames.");
     }
 
     private void GenerateConditionalDdl(
@@ -935,9 +962,10 @@ public sealed class PostgreSqlSafeMigrationsSqlGenerator : NpgsqlMigrationsSqlGe
             .AppendLine("DO $SAFE$")
             .AppendLine("BEGIN")
             .AppendLine($"    IF NOT EXISTS ({SingleLine(existsSql)}) THEN")
-            .AppendLine(allowMissing
-                ? $"        EXECUTE {SqlLiteral(SingleLine(ddlSql).TrimEnd(';'))};"
-                : $"        RAISE EXCEPTION USING MESSAGE = {SqlLiteral(missingMessage)};")
+            .AppendLine(
+                allowMissing
+                    ? $"        EXECUTE {SqlLiteral(SingleLine(ddlSql).TrimEnd(';'))};"
+                    : $"        RAISE EXCEPTION USING MESSAGE = {SqlLiteral(missingMessage)};")
             .AppendLine($"    ELSIF EXISTS ({SingleLine(matchesSql)}) THEN")
             .AppendLine("        PERFORM 1;")
             .AppendLine("    ELSE")
@@ -953,66 +981,66 @@ public sealed class PostgreSqlSafeMigrationsSqlGenerator : NpgsqlMigrationsSqlGe
         string table,
         string name,
         string constraintType
-    )
-        => string.Join(
-            Environment.NewLine,
-            "SELECT 1",
-            "FROM pg_constraint c",
-            "JOIN pg_class t ON t.oid = c.conrelid",
-            "JOIN pg_namespace n ON n.oid = t.relnamespace",
-            $"WHERE n.nspname = {SqlLiteral(schema ?? "public")}",
-            $"  AND t.relname = {SqlLiteral(table)}",
-            $"  AND c.conname = {SqlLiteral(name)}",
-            $"  AND c.contype = {SqlLiteral(constraintType)}");
+    ) => string.Join(
+        Environment.NewLine,
+        "SELECT 1",
+        "FROM pg_constraint c",
+        "JOIN pg_class t ON t.oid = c.conrelid",
+        "JOIN pg_namespace n ON n.oid = t.relnamespace",
+        $"WHERE n.nspname = {SqlLiteral(schema ?? "public")}",
+        $"  AND t.relname = {SqlLiteral(table)}",
+        $"  AND c.conname = {SqlLiteral(name)}",
+        $"  AND c.contype = {SqlLiteral(constraintType)}");
 
     private static string ExistsTableSql(
         string? schema,
         string table
-    )
-        => string.Join(
-            Environment.NewLine,
-            "SELECT 1",
-            "FROM information_schema.tables",
-            $"WHERE table_schema = {SqlLiteral(schema ?? "public")}",
-            $"  AND table_name = {SqlLiteral(table)}");
+    ) => string.Join(
+        Environment.NewLine,
+        "SELECT 1",
+        "FROM information_schema.tables",
+        $"WHERE table_schema = {SqlLiteral(schema ?? "public")}",
+        $"  AND table_name = {SqlLiteral(table)}");
 
     private static string ExistsColumnSql(
         string? schema,
         string table,
         string column
-    )
-        => string.Join(
-            Environment.NewLine,
-            "SELECT 1",
-            "FROM information_schema.columns",
-            $"WHERE table_schema = {SqlLiteral(schema ?? "public")}",
-            $"  AND table_name = {SqlLiteral(table)}",
-            $"  AND column_name = {SqlLiteral(column)}");
+    ) => string.Join(
+        Environment.NewLine,
+        "SELECT 1",
+        "FROM information_schema.columns",
+        $"WHERE table_schema = {SqlLiteral(schema ?? "public")}",
+        $"  AND table_name = {SqlLiteral(table)}",
+        $"  AND column_name = {SqlLiteral(column)}");
 
     private static string ExistsIndexSql(
         string? schema,
         string table,
         string name
-    )
-        => string.Join(
-            Environment.NewLine,
-            "SELECT 1",
-            "FROM pg_class idx",
-            "JOIN pg_namespace n ON n.oid = idx.relnamespace",
-            "JOIN pg_index i ON i.indexrelid = idx.oid",
-            "JOIN pg_class t ON t.oid = i.indrelid",
-            $"WHERE n.nspname = {SqlLiteral(schema ?? "public")}",
-            $"  AND t.relname = {SqlLiteral(table)}",
-            $"  AND idx.relname = {SqlLiteral(name)}");
+    ) => string.Join(
+        Environment.NewLine,
+        "SELECT 1",
+        "FROM pg_class idx",
+        "JOIN pg_namespace n ON n.oid = idx.relnamespace",
+        "JOIN pg_index i ON i.indexrelid = idx.oid",
+        "JOIN pg_class t ON t.oid = i.indrelid",
+        $"WHERE n.nspname = {SqlLiteral(schema ?? "public")}",
+        $"  AND t.relname = {SqlLiteral(table)}",
+        $"  AND idx.relname = {SqlLiteral(name)}");
 
-    private string BuildTableMatchesSql(ExpectedTableDefinition expected)
+    private string BuildTableMatchesSql(
+        ExpectedTableDefinition expected
+    )
     {
         var parts = new List<string>
         {
             $"(SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = {SqlLiteral(expected.Schema ?? "public")} AND table_name = {SqlLiteral(expected.Table)}) = {expected.Columns.Count}"
         };
 
-        parts.AddRange(expected.Columns.Select(column => $"EXISTS ({SingleLine(BuildColumnMatchesSql(expected.Schema, expected.Table, column))})"));
+        parts.AddRange(
+            expected.Columns.Select(column =>
+                $"EXISTS ({SingleLine(BuildColumnMatchesSql(expected.Schema, expected.Table, column))})"));
 
         if (expected.PrimaryKey is not null)
         {
@@ -1054,7 +1082,8 @@ public sealed class PostgreSqlSafeMigrationsSqlGenerator : NpgsqlMigrationsSqlGe
 
         if (expected.DefaultValueSql is not null)
         {
-            predicates.Add($"LOWER({NormalizeSqlExpression("COALESCE(pg_get_expr(d.adbin, d.adrelid), '')")}) = LOWER({SqlLiteral(NormalizeLiteralSql(expected.DefaultValueSql))})");
+            predicates.Add(
+                $"LOWER({NormalizeSqlExpression("COALESCE(pg_get_expr(d.adbin, d.adrelid), '')")}) = LOWER({SqlLiteral(NormalizeLiteralSql(expected.DefaultValueSql))})");
         }
         else if (expected.DefaultValueLiteral is null)
         {
@@ -1064,7 +1093,8 @@ public sealed class PostgreSqlSafeMigrationsSqlGenerator : NpgsqlMigrationsSqlGe
         if (expected.ComputedColumnSql is not null)
         {
             predicates.Add("a.attgenerated = 's'");
-            predicates.Add($"LOWER({NormalizeSqlExpression("COALESCE(pg_get_expr(d.adbin, d.adrelid), '')")}) = LOWER({SqlLiteral(NormalizeLiteralSql(expected.ComputedColumnSql))})");
+            predicates.Add(
+                $"LOWER({NormalizeSqlExpression("COALESCE(pg_get_expr(d.adbin, d.adrelid), '')")}) = LOWER({SqlLiteral(NormalizeLiteralSql(expected.ComputedColumnSql))})");
         }
         else
         {
@@ -1094,7 +1124,9 @@ public sealed class PostgreSqlSafeMigrationsSqlGenerator : NpgsqlMigrationsSqlGe
             $"  AND {string.Join(" AND ", predicates)}");
     }
 
-    private static string BuildIndexMatchesSql(ExpectedIndexDefinition expected)
+    private static string BuildIndexMatchesSql(
+        ExpectedIndexDefinition expected
+    )
     {
         var clauses = new List<string>
         {
@@ -1104,7 +1136,8 @@ public sealed class PostgreSqlSafeMigrationsSqlGenerator : NpgsqlMigrationsSqlGe
 
         if (expected.Filter is not null)
         {
-            clauses.Add($"LOWER({NormalizeSqlExpression("COALESCE(idx.filter_definition, '')")}) = LOWER({SqlLiteral(NormalizeLiteralSql(expected.Filter))})");
+            clauses.Add(
+                $"LOWER({NormalizeSqlExpression("COALESCE(idx.filter_definition, '')")}) = LOWER({SqlLiteral(NormalizeLiteralSql(expected.Filter))})");
         }
         else
         {
@@ -1113,7 +1146,8 @@ public sealed class PostgreSqlSafeMigrationsSqlGenerator : NpgsqlMigrationsSqlGe
 
         if (expected.Descending is not null)
         {
-            clauses.Add($"idx.sort_list = {SqlLiteral(string.Join(",", expected.Descending.Select(value => value ? "D" : "A")))}");
+            clauses.Add(
+                $"idx.sort_list = {SqlLiteral(string.Join(",", expected.Descending.Select(value => value ? "D" : "A")))}");
         }
 
         return string.Join(
@@ -1141,11 +1175,13 @@ public sealed class PostgreSqlSafeMigrationsSqlGenerator : NpgsqlMigrationsSqlGe
             $"WHERE {string.Join(" AND ", clauses)}");
     }
 
-    private static string BuildPrimaryKeyMatchesSql(ExpectedPrimaryKeyDefinition expected)
-        => BuildKeyConstraintMatchesSql(expected.Schema, expected.Table, expected.Name, expected.Columns, "p");
+    private static string BuildPrimaryKeyMatchesSql(
+        ExpectedPrimaryKeyDefinition expected
+    ) => BuildKeyConstraintMatchesSql(expected.Schema, expected.Table, expected.Name, expected.Columns, "p");
 
-    private static string BuildUniqueConstraintMatchesSql(ExpectedUniqueConstraintDefinition expected)
-        => BuildKeyConstraintMatchesSql(expected.Schema, expected.Table, expected.Name, expected.Columns, "u");
+    private static string BuildUniqueConstraintMatchesSql(
+        ExpectedUniqueConstraintDefinition expected
+    ) => BuildKeyConstraintMatchesSql(expected.Schema, expected.Table, expected.Name, expected.Columns, "u");
 
     private static string BuildKeyConstraintMatchesSql(
         string? schema,
@@ -1153,131 +1189,150 @@ public sealed class PostgreSqlSafeMigrationsSqlGenerator : NpgsqlMigrationsSqlGe
         string name,
         IReadOnlyList<string> columns,
         string constraintType
+    ) => string.Join(
+        Environment.NewLine,
+        "SELECT 1",
+        "FROM (",
+        "    SELECT",
+        "        c.conname,",
+        "        string_agg(att.attname, ',' ORDER BY cols.ordinality) AS column_list",
+        "    FROM pg_constraint c",
+        "    JOIN pg_class t ON t.oid = c.conrelid",
+        "    JOIN pg_namespace n ON n.oid = t.relnamespace",
+        "    JOIN LATERAL unnest(c.conkey) WITH ORDINALITY AS cols(attnum, ordinality) ON TRUE",
+        "    JOIN pg_attribute att ON att.attrelid = t.oid AND att.attnum = cols.attnum",
+        $"    WHERE n.nspname = {SqlLiteral(schema ?? "public")}",
+        $"      AND t.relname = {SqlLiteral(table)}",
+        $"      AND c.conname = {SqlLiteral(name)}",
+        $"      AND c.contype = {SqlLiteral(constraintType)}",
+        "    GROUP BY c.conname",
+        ") AS c",
+        $"WHERE c.column_list = {SqlLiteral(string.Join(",", columns))}");
+
+    private static string BuildForeignKeyMatchesSql(
+        ExpectedForeignKeyDefinition expected
+    ) => string.Join(
+        Environment.NewLine,
+        "SELECT 1",
+        "FROM (",
+        "    SELECT",
+        "        c.conname,",
+        "        tn.nspname AS table_schema,",
+        "        t.relname AS table_name,",
+        "        pn.nspname AS principal_schema,",
+        "        pt.relname AS principal_table,",
+        "        c.confupdtype AS update_rule,",
+        "        c.confdeltype AS delete_rule,",
+        "        string_agg(src.attname, ',' ORDER BY src_cols.ordinality) AS column_list,",
+        "        string_agg(dst.attname, ',' ORDER BY dst_cols.ordinality) AS referenced_column_list",
+        "    FROM pg_constraint c",
+        "    JOIN pg_class t ON t.oid = c.conrelid",
+        "    JOIN pg_namespace tn ON tn.oid = t.relnamespace",
+        "    JOIN pg_class pt ON pt.oid = c.confrelid",
+        "    JOIN pg_namespace pn ON pn.oid = pt.relnamespace",
+        "    JOIN LATERAL unnest(c.conkey) WITH ORDINALITY AS src_cols(attnum, ordinality) ON TRUE",
+        "    JOIN pg_attribute src ON src.attrelid = t.oid AND src.attnum = src_cols.attnum",
+        "    JOIN LATERAL unnest(c.confkey) WITH ORDINALITY AS dst_cols(attnum, ordinality) ON dst_cols.ordinality = src_cols.ordinality",
+        "    JOIN pg_attribute dst ON dst.attrelid = pt.oid AND dst.attnum = dst_cols.attnum",
+        $"    WHERE tn.nspname = {SqlLiteral(expected.Schema ?? "public")}",
+        $"      AND t.relname = {SqlLiteral(expected.Table)}",
+        $"      AND c.conname = {SqlLiteral(expected.Name)}",
+        "      AND c.contype = 'f'",
+        "    GROUP BY c.conname, tn.nspname, t.relname, pn.nspname, pt.relname, c.confupdtype, c.confdeltype",
+        ") AS fk",
+        $"WHERE fk.principal_schema = {SqlLiteral(expected.PrincipalSchema ?? "public")}",
+        $"  AND fk.principal_table = {SqlLiteral(expected.PrincipalTable)}",
+        $"  AND fk.column_list = {SqlLiteral(string.Join(",", expected.Columns))}",
+        $"  AND fk.referenced_column_list = {SqlLiteral(string.Join(",", expected.PrincipalColumns))}",
+        $"  AND fk.update_rule = {SqlLiteral(ToReferentialRule(expected.OnUpdate))}",
+        $"  AND fk.delete_rule = {SqlLiteral(ToReferentialRule(expected.OnDelete))}");
+
+    private static string BuildCheckConstraintMatchesSql(
+        ExpectedCheckConstraintDefinition expected
+    ) => string.Join(
+        Environment.NewLine,
+        "SELECT 1",
+        "FROM information_schema.check_constraints cc",
+        "JOIN information_schema.table_constraints tc",
+        "  ON tc.constraint_schema = cc.constraint_schema",
+        " AND tc.constraint_name = cc.constraint_name",
+        $"WHERE tc.constraint_schema = {SqlLiteral(expected.Schema ?? "public")}",
+        $"  AND tc.table_name = {SqlLiteral(expected.Table)}",
+        $"  AND tc.constraint_name = {SqlLiteral(expected.Name)}",
+        "  AND tc.constraint_type = 'CHECK'",
+        $"  AND LOWER({NormalizeSqlExpression("REPLACE(cc.check_clause, '\"', '')")}) = LOWER({SqlLiteral(NormalizeLiteralSql(expected.Sql.Replace("\"", string.Empty, StringComparison.Ordinal)))})");
+
+    private static SafeMigrationStrictMode GetStrictMode(
+        MigrationOperation operation
+    ) => operation[SafeMigrationAnnotationNames.StrictMode] is SafeMigrationStrictMode strictMode
+        ? strictMode
+        : SafeMigrationStrictMode.None;
+
+    private static TDefinition GetExpectedDefinition<TDefinition>(
+        MigrationOperation operation
     )
-        => string.Join(
-            Environment.NewLine,
-            "SELECT 1",
-            "FROM (",
-            "    SELECT",
-            "        c.conname,",
-            "        string_agg(att.attname, ',' ORDER BY cols.ordinality) AS column_list",
-            "    FROM pg_constraint c",
-            "    JOIN pg_class t ON t.oid = c.conrelid",
-            "    JOIN pg_namespace n ON n.oid = t.relnamespace",
-            "    JOIN LATERAL unnest(c.conkey) WITH ORDINALITY AS cols(attnum, ordinality) ON TRUE",
-            "    JOIN pg_attribute att ON att.attrelid = t.oid AND att.attnum = cols.attnum",
-            $"    WHERE n.nspname = {SqlLiteral(schema ?? "public")}",
-            $"      AND t.relname = {SqlLiteral(table)}",
-            $"      AND c.conname = {SqlLiteral(name)}",
-            $"      AND c.contype = {SqlLiteral(constraintType)}",
-            "    GROUP BY c.conname",
-            ") AS c",
-            $"WHERE c.column_list = {SqlLiteral(string.Join(",", columns))}");
+        where TDefinition : class =>
+        SafeMigrationDefinitionSerializer.Deserialize<TDefinition>(
+            operation[SafeMigrationAnnotationNames.ExpectedDefinition] as string)
+        ?? throw new InvalidOperationException(
+            $"Expected definition annotation missing for operation '{operation.GetType().Name}'.");
 
-    private static string BuildForeignKeyMatchesSql(ExpectedForeignKeyDefinition expected)
-        => string.Join(
-            Environment.NewLine,
-            "SELECT 1",
-            "FROM (",
-            "    SELECT",
-            "        c.conname,",
-            "        tn.nspname AS table_schema,",
-            "        t.relname AS table_name,",
-            "        pn.nspname AS principal_schema,",
-            "        pt.relname AS principal_table,",
-            "        c.confupdtype AS update_rule,",
-            "        c.confdeltype AS delete_rule,",
-            "        string_agg(src.attname, ',' ORDER BY src_cols.ordinality) AS column_list,",
-            "        string_agg(dst.attname, ',' ORDER BY dst_cols.ordinality) AS referenced_column_list",
-            "    FROM pg_constraint c",
-            "    JOIN pg_class t ON t.oid = c.conrelid",
-            "    JOIN pg_namespace tn ON tn.oid = t.relnamespace",
-            "    JOIN pg_class pt ON pt.oid = c.confrelid",
-            "    JOIN pg_namespace pn ON pn.oid = pt.relnamespace",
-            "    JOIN LATERAL unnest(c.conkey) WITH ORDINALITY AS src_cols(attnum, ordinality) ON TRUE",
-            "    JOIN pg_attribute src ON src.attrelid = t.oid AND src.attnum = src_cols.attnum",
-            "    JOIN LATERAL unnest(c.confkey) WITH ORDINALITY AS dst_cols(attnum, ordinality) ON dst_cols.ordinality = src_cols.ordinality",
-            "    JOIN pg_attribute dst ON dst.attrelid = pt.oid AND dst.attnum = dst_cols.attnum",
-            $"    WHERE tn.nspname = {SqlLiteral(expected.Schema ?? "public")}",
-            $"      AND t.relname = {SqlLiteral(expected.Table)}",
-            $"      AND c.conname = {SqlLiteral(expected.Name)}",
-            "      AND c.contype = 'f'",
-            "    GROUP BY c.conname, tn.nspname, t.relname, pn.nspname, pt.relname, c.confupdtype, c.confdeltype",
-            ") AS fk",
-            $"WHERE fk.principal_schema = {SqlLiteral(expected.PrincipalSchema ?? "public")}",
-            $"  AND fk.principal_table = {SqlLiteral(expected.PrincipalTable)}",
-            $"  AND fk.column_list = {SqlLiteral(string.Join(",", expected.Columns))}",
-            $"  AND fk.referenced_column_list = {SqlLiteral(string.Join(",", expected.PrincipalColumns))}",
-            $"  AND fk.update_rule = {SqlLiteral(ToReferentialRule(expected.OnUpdate))}",
-            $"  AND fk.delete_rule = {SqlLiteral(ToReferentialRule(expected.OnDelete))}");
+    private static bool IsIfExists(
+        MigrationOperation operation
+    ) => (operation[SafeMigrationAnnotationNames.IfExists] as bool?) == true;
 
-    private static string BuildCheckConstraintMatchesSql(ExpectedCheckConstraintDefinition expected)
-        => string.Join(
-            Environment.NewLine,
-            "SELECT 1",
-            "FROM information_schema.check_constraints cc",
-            "JOIN information_schema.table_constraints tc",
-            "  ON tc.constraint_schema = cc.constraint_schema",
-            " AND tc.constraint_name = cc.constraint_name",
-            $"WHERE tc.constraint_schema = {SqlLiteral(expected.Schema ?? "public")}",
-            $"  AND tc.table_name = {SqlLiteral(expected.Table)}",
-            $"  AND tc.constraint_name = {SqlLiteral(expected.Name)}",
-            "  AND tc.constraint_type = 'CHECK'",
-            $"  AND LOWER({NormalizeSqlExpression("REPLACE(cc.check_clause, '\"', '')")}) = LOWER({SqlLiteral(NormalizeLiteralSql(expected.Sql.Replace("\"", string.Empty, StringComparison.Ordinal)))})");
+    private static bool IsIfNotExists(
+        MigrationOperation operation
+    ) => (operation[SafeMigrationAnnotationNames.IfNotExists] as bool?) == true;
 
-    private static SafeMigrationStrictMode GetStrictMode(MigrationOperation operation)
-        => operation[SafeMigrationAnnotationNames.StrictMode] is SafeMigrationStrictMode strictMode
-            ? strictMode
-            : SafeMigrationStrictMode.None;
+    private static bool IsAlterIfDifferent(
+        MigrationOperation operation
+    ) => (operation[SafeMigrationAnnotationNames.AlterIfDifferent] as bool?) == true;
 
-    private static TDefinition GetExpectedDefinition<TDefinition>(MigrationOperation operation)
-        where TDefinition : class
-        => SafeMigrationDefinitionSerializer.Deserialize<TDefinition>(operation[SafeMigrationAnnotationNames.ExpectedDefinition] as string)
-           ?? throw new InvalidOperationException($"Expected definition annotation missing for operation '{operation.GetType().Name}'.");
+    private static string SingleLine(
+        string sql
+    ) => string.Join(
+        " ",
+        sql.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
 
-    private static bool IsIfExists(MigrationOperation operation)
-        => operation[SafeMigrationAnnotationNames.IfExists] as bool? == true;
+    private static string EscapeSqlLiteral(
+        string value
+    ) => value.Replace("'", "''", StringComparison.Ordinal);
 
-    private static bool IsIfNotExists(MigrationOperation operation)
-        => operation[SafeMigrationAnnotationNames.IfNotExists] as bool? == true;
-
-    private static bool IsAlterIfDifferent(MigrationOperation operation)
-        => operation[SafeMigrationAnnotationNames.AlterIfDifferent] as bool? == true;
-
-    private static string SingleLine(string sql)
-        => string.Join(" ", sql.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
-
-    private static string EscapeSqlLiteral(string value)
-        => value.Replace("'", "''", StringComparison.Ordinal);
-
-    private static string SqlLiteral(string value)
-        => $"'{EscapeSqlLiteral(value)}'";
+    private static string SqlLiteral(
+        string value
+    ) => $"'{EscapeSqlLiteral(value)}'";
 
     private static string BuildMismatchMessage(
         string objectType,
         string objectName,
         string table,
         object expectedDefinition
-    )
-        => $"Safe migration strict-mode mismatch for {objectType} '{objectName}' on table '{table}'. Expected: {SafeMigrationDefinitionSerializer.Serialize(expectedDefinition)}. Provider: PostgreSQL.";
+    ) =>
+        $"Safe migration strict-mode mismatch for {objectType} '{objectName}' on table '{table}'. Expected: {SafeMigrationDefinitionSerializer.Serialize(expectedDefinition)}. Provider: PostgreSQL.";
 
     private static string BuildMissingMessage(
         string objectType,
         string objectName,
         string table
+    ) =>
+        $"Safe migration alter-if-different target {objectType} '{objectName}' on table '{table}' was not found. Provider: PostgreSQL.";
+
+    private static string NormalizeSqlExpression(
+        string sqlExpression
+    ) => $"regexp_replace({sqlExpression}, '\\s+', '', 'g')";
+
+    private static string NormalizeLiteralSql(
+        string sql
+    ) => string.Concat(sql.Where(ch => !char.IsWhiteSpace(ch)));
+
+    private string BuildPostgreSqlDefaultValueLiteralPredicate(
+        ExpectedColumnDefinition expected
     )
-        => $"Safe migration alter-if-different target {objectType} '{objectName}' on table '{table}' was not found. Provider: PostgreSQL.";
-
-    private static string NormalizeSqlExpression(string sqlExpression)
-        => $"regexp_replace({sqlExpression}, '\\s+', '', 'g')";
-
-    private static string NormalizeLiteralSql(string sql)
-        => string.Concat(sql.Where(ch => !char.IsWhiteSpace(ch)));
-
-    private string BuildPostgreSqlDefaultValueLiteralPredicate(ExpectedColumnDefinition expected)
     {
         var candidates = BuildTypedDefaultValueCandidates(expected);
-        if (candidates.Count == 0 && expected.DefaultValueLiteral is not null)
+        if (candidates.Count == 0
+            && expected.DefaultValueLiteral is not null)
         {
             candidates.Add(NormalizeLiteralSql(expected.DefaultValueLiteral));
         }
@@ -1287,13 +1342,16 @@ public sealed class PostgreSqlSafeMigrationsSqlGenerator : NpgsqlMigrationsSqlGe
             return "d.adbin IS NULL";
         }
 
-        var normalizedCatalogDefault = NormalizePostgreSqlDefaultExpression("COALESCE(pg_get_expr(d.adbin, d.adrelid), '')");
+        var normalizedCatalogDefault =
+            NormalizePostgreSqlDefaultExpression("COALESCE(pg_get_expr(d.adbin, d.adrelid), '')");
         return string.Join(
             " OR ",
             candidates.Select(candidate => $"LOWER({normalizedCatalogDefault}) = LOWER({SqlLiteral(candidate)})"));
     }
 
-    private List<string> BuildTypedDefaultValueCandidates(ExpectedColumnDefinition expected)
+    private List<string> BuildTypedDefaultValueCandidates(
+        ExpectedColumnDefinition expected
+    )
     {
         var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -1305,7 +1363,7 @@ public sealed class PostgreSqlSafeMigrationsSqlGenerator : NpgsqlMigrationsSqlGe
 
         AddDefaultValueCandidate(candidates, expected.DefaultValueLiteral);
 
-        return candidates.ToList();
+        return [.. candidates];
     }
 
     private bool TryGenerateSqlLiteral(
@@ -1340,7 +1398,8 @@ public sealed class PostgreSqlSafeMigrationsSqlGenerator : NpgsqlMigrationsSqlGe
         }
 
         mapping ??= Dependencies.TypeMappingSource.FindMapping(clrType!);
-        if (mapping is null || value is null)
+        if (mapping is null
+            || value is null)
         {
             return false;
         }
@@ -1350,7 +1409,7 @@ public sealed class PostgreSqlSafeMigrationsSqlGenerator : NpgsqlMigrationsSqlGe
     }
 
     private static void AddDefaultValueCandidate(
-        ISet<string> candidates,
+        HashSet<string> candidates,
         string? value
     )
     {
@@ -1362,10 +1421,13 @@ public sealed class PostgreSqlSafeMigrationsSqlGenerator : NpgsqlMigrationsSqlGe
         candidates.Add(NormalizeLiteralSql(value));
     }
 
-    private static string? ExtractQuotedSqlLiteral(string sqlLiteral)
+    private static string? ExtractQuotedSqlLiteral(
+        string sqlLiteral
+    )
     {
         var firstQuote = sqlLiteral.IndexOf('\'');
-        if (firstQuote < 0 || sqlLiteral[^1] != '\'')
+        if (firstQuote < 0
+            || sqlLiteral[^1] != '\'')
         {
             return null;
         }
@@ -1373,23 +1435,27 @@ public sealed class PostgreSqlSafeMigrationsSqlGenerator : NpgsqlMigrationsSqlGe
         return sqlLiteral[firstQuote..];
     }
 
-    private static string NormalizePostgreSqlDefaultExpression(string sqlExpression)
-        => StripOuterParentheses(StripPostgreSqlTypeCast(NormalizeSqlExpression(sqlExpression)));
+    private static string NormalizePostgreSqlDefaultExpression(
+        string sqlExpression
+    ) => StripOuterParentheses(StripPostgreSqlTypeCast(NormalizeSqlExpression(sqlExpression)));
 
-    private static string StripOuterParentheses(string sqlExpression)
-        => $"regexp_replace({sqlExpression}, '^\\((.*)\\)$', '\\1')";
+    private static string StripOuterParentheses(
+        string sqlExpression
+    ) => $@"regexp_replace({sqlExpression}, '^\((.*)\)$', '\1')";
 
-    private static string StripPostgreSqlTypeCast(string sqlExpression)
-        => $"regexp_replace({sqlExpression}, '::[A-Za-z0-9_\\.\\[\\]\" ]+$', '', 'g')";
+    private static string StripPostgreSqlTypeCast(
+        string sqlExpression
+    ) => $"regexp_replace({sqlExpression}, '::[A-Za-z0-9_\\.\\[\\]\" ]+$', '', 'g')";
 
-    private static string ToReferentialRule(ReferentialAction action)
-        => action switch
-        {
-            ReferentialAction.Cascade => "c",
-            ReferentialAction.SetNull => "n",
-            ReferentialAction.SetDefault => "d",
-            ReferentialAction.Restrict => "r",
-            _ => "a"
-        };
+    private static string ToReferentialRule(
+        ReferentialAction action
+    ) => action switch
+    {
+        ReferentialAction.Cascade => "c",
+        ReferentialAction.SetNull => "n",
+        ReferentialAction.SetDefault => "d",
+        ReferentialAction.Restrict => "r",
+        _ => "a",
+    };
 }
 #pragma warning restore EF1001

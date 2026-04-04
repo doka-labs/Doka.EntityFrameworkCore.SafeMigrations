@@ -10,10 +10,15 @@ internal static class SafeMigrationOperationFactory
         var operation = new DropTableOperation
         {
             Name = table,
-            Schema = schema
+            Schema = schema,
         };
 
-        SafeMigrationSqlHelper.ApplyCommonAnnotations(operation, SafeMigrationStrictMode.None, expectedDefinition: null, ExistenceCheck.IfExists);
+        SafeMigrationSqlHelper.ApplyCommonAnnotations(
+            operation,
+            SafeMigrationStrictMode.None,
+            expectedDefinition: null,
+            ExistenceCheck.IfExists);
+
         return operation;
     }
 
@@ -27,10 +32,15 @@ internal static class SafeMigrationOperationFactory
         {
             Name = name,
             Table = table,
-            Schema = schema
+            Schema = schema,
         };
 
-        SafeMigrationSqlHelper.ApplyCommonAnnotations(operation, SafeMigrationStrictMode.None, expectedDefinition: null, ExistenceCheck.IfExists);
+        SafeMigrationSqlHelper.ApplyCommonAnnotations(
+            operation,
+            SafeMigrationStrictMode.None,
+            expectedDefinition: null,
+            ExistenceCheck.IfExists);
+
         return operation;
     }
 
@@ -44,10 +54,15 @@ internal static class SafeMigrationOperationFactory
         {
             Name = name,
             Table = table,
-            Schema = schema
+            Schema = schema,
         };
 
-        SafeMigrationSqlHelper.ApplyCommonAnnotations(operation, SafeMigrationStrictMode.None, expectedDefinition: null, ExistenceCheck.IfExists);
+        SafeMigrationSqlHelper.ApplyCommonAnnotations(
+            operation,
+            SafeMigrationStrictMode.None,
+            expectedDefinition: null,
+            ExistenceCheck.IfExists);
+
         return operation;
     }
 
@@ -62,10 +77,15 @@ internal static class SafeMigrationOperationFactory
             // Name is unused by MariaDB (DROP PRIMARY KEY carries no name); PostgreSQL resolves the constraint via catalog lookup.
             Name = name ?? string.Empty,
             Table = table,
-            Schema = schema
+            Schema = schema,
         };
 
-        SafeMigrationSqlHelper.ApplyCommonAnnotations(operation, SafeMigrationStrictMode.None, expectedDefinition: null, ExistenceCheck.IfExists);
+        SafeMigrationSqlHelper.ApplyCommonAnnotations(
+            operation,
+            SafeMigrationStrictMode.None,
+            expectedDefinition: null,
+            ExistenceCheck.IfExists);
+
         return operation;
     }
 
@@ -79,10 +99,15 @@ internal static class SafeMigrationOperationFactory
         {
             Name = name,
             Table = table,
-            Schema = schema
+            Schema = schema,
         };
 
-        SafeMigrationSqlHelper.ApplyCommonAnnotations(operation, SafeMigrationStrictMode.None, expectedDefinition: null, ExistenceCheck.IfExists);
+        SafeMigrationSqlHelper.ApplyCommonAnnotations(
+            operation,
+            SafeMigrationStrictMode.None,
+            expectedDefinition: null,
+            ExistenceCheck.IfExists);
+
         return operation;
     }
 
@@ -96,10 +121,15 @@ internal static class SafeMigrationOperationFactory
         {
             Name = name,
             Table = table,
-            Schema = schema
+            Schema = schema,
         };
 
-        SafeMigrationSqlHelper.ApplyCommonAnnotations(operation, SafeMigrationStrictMode.None, expectedDefinition: null, ExistenceCheck.IfExists);
+        SafeMigrationSqlHelper.ApplyCommonAnnotations(
+            operation,
+            SafeMigrationStrictMode.None,
+            expectedDefinition: null,
+            ExistenceCheck.IfExists);
+
         return operation;
     }
 
@@ -113,10 +143,15 @@ internal static class SafeMigrationOperationFactory
         {
             Name = name,
             Table = table,
-            Schema = schema
+            Schema = schema,
         };
 
-        SafeMigrationSqlHelper.ApplyCommonAnnotations(operation, SafeMigrationStrictMode.None, expectedDefinition: null, ExistenceCheck.IfExists);
+        SafeMigrationSqlHelper.ApplyCommonAnnotations(
+            operation,
+            SafeMigrationStrictMode.None,
+            expectedDefinition: null,
+            ExistenceCheck.IfExists);
+
         return operation;
     }
 
@@ -152,7 +187,7 @@ internal static class SafeMigrationOperationFactory
             Collation = collation,
             Precision = precision,
             Scale = scale,
-            IsStored = stored
+            IsStored = stored,
         };
 
         var (defaultValueTypeName, defaultValueJson) = SafeMigrationDefaultValueSerializer.Capture(defaultValue);
@@ -170,7 +205,12 @@ internal static class SafeMigrationOperationFactory
             Collation: collation,
             IsStored: stored);
 
-        SafeMigrationSqlHelper.ApplyCommonAnnotations(operation, strictMode, expectedDefinition, ExistenceCheck.IfNotExists);
+        SafeMigrationSqlHelper.ApplyCommonAnnotations(
+            operation,
+            strictMode,
+            expectedDefinition,
+            ExistenceCheck.IfNotExists);
+
         return operation;
     }
 
@@ -230,11 +270,24 @@ internal static class SafeMigrationOperationFactory
             Columns = columns,
             IsUnique = unique,
             Filter = filter,
-            IsDescending = descending
+            IsDescending = descending,
         };
 
-        var expectedDefinition = new ExpectedIndexDefinition(name, table, schema, columns, unique, filter, descending);
-        SafeMigrationSqlHelper.ApplyCommonAnnotations(operation, strictMode, expectedDefinition, ExistenceCheck.IfNotExists);
+        var expectedDefinition = new ExpectedIndexDefinition(
+            name,
+            table,
+            schema,
+            columns,
+            unique,
+            filter,
+            descending);
+
+        SafeMigrationSqlHelper.ApplyCommonAnnotations(
+            operation,
+            strictMode,
+            expectedDefinition,
+            ExistenceCheck.IfNotExists);
+
         return operation;
     }
 
@@ -278,7 +331,11 @@ internal static class SafeMigrationOperationFactory
             Schema = schema,
             Columns = columns,
             StrictMode = strictMode,
-            ExpectedDefinition = new ExpectedPrimaryKeyDefinition(name, table, schema, columns)
+            ExpectedDefinition = new ExpectedPrimaryKeyDefinition(
+                name,
+                table,
+                schema,
+                columns),
         };
 
         return operation;
@@ -318,7 +375,11 @@ internal static class SafeMigrationOperationFactory
             Schema = schema,
             Columns = columns,
             StrictMode = strictMode,
-            ExpectedDefinition = new ExpectedUniqueConstraintDefinition(name, table, schema, columns)
+            ExpectedDefinition = new ExpectedUniqueConstraintDefinition(
+                name,
+                table,
+                schema,
+                columns),
         };
 
         return operation;
@@ -377,7 +438,7 @@ internal static class SafeMigrationOperationFactory
                 principalSchema,
                 principalColumns,
                 onUpdate,
-                onDelete)
+                onDelete),
         };
 
         return operation;
@@ -427,7 +488,11 @@ internal static class SafeMigrationOperationFactory
             Schema = schema,
             Sql = sql,
             StrictMode = strictMode,
-            ExpectedDefinition = new ExpectedCheckConstraintDefinition(name, table, schema, sql)
+            ExpectedDefinition = new ExpectedCheckConstraintDefinition(
+                name,
+                table,
+                schema,
+                sql),
         };
 
         return operation;

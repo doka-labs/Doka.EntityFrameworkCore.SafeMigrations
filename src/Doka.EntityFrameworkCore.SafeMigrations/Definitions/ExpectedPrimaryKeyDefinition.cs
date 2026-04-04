@@ -7,8 +7,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// <param name="Table">The table name.</param>
 /// <param name="Schema">The optional schema name.</param>
 /// <param name="Columns">The primary-key column names.</param>
-public sealed record ExpectedPrimaryKeyDefinition
-(
+public sealed record ExpectedPrimaryKeyDefinition(
     string Name,
     string Table,
     string? Schema,

@@ -2,7 +2,9 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Sample;
 
 internal static class SampleMigrationUsage
 {
-    public static void BuildUpOperations(MigrationBuilder migrationBuilder)
+    public static void BuildUpOperations(
+        MigrationBuilder migrationBuilder
+    )
     {
         ArgumentNullException.ThrowIfNull(migrationBuilder);
 
@@ -13,12 +15,9 @@ internal static class SampleMigrationUsage
             table => new
             {
                 id = table.Column<Guid>(nullable: false),
-                email = table.Column<string>(type: "varchar(320)", nullable: false)
+                email = table.Column<string>(type: "varchar(320)", nullable: false),
             },
-            constraints: table =>
-            {
-                table.PrimaryKey("pk_users", x => x.id);
-            });
+            constraints: table => table.PrimaryKey("pk_users", x => x.id));
 
         migrationBuilder.CreateTableIfNotExists(
             "orders",
@@ -28,16 +27,12 @@ internal static class SampleMigrationUsage
                 user_id = table.Column<Guid>(nullable: false),
                 total = table.Column<decimal>(type: "decimal(18,2)", nullable: false)
             },
-            constraints: table =>
-            {
-                table.PrimaryKey("pk_orders", x => x.id);
-            });
+            constraints: table => table.PrimaryKey("pk_orders", x => x.id));
 
         migrationBuilder.AddColumnIfNotExists<string>(
             name: "display_name",
             table: "users",
-            execution: new SafeMigrationExecutionOptions(
-                SafeMigrationConflictMode.RepairIfPossible),
+            execution: new SafeMigrationExecutionOptions(SafeMigrationConflictMode.RepairIfPossible),
             maxLength: 200,
             nullable: true);
 
@@ -45,15 +40,13 @@ internal static class SampleMigrationUsage
             name: "ix_orders_user_id",
             table: "orders",
             columns: ["user_id"],
-            execution: new SafeMigrationExecutionOptions(
-                SafeMigrationConflictMode.RepairIfPossible));
+            execution: new SafeMigrationExecutionOptions(SafeMigrationConflictMode.RepairIfPossible));
 
         migrationBuilder.AddUniqueConstraintIfNotExists(
             name: "ux_users_email",
             table: "users",
             columns: ["email"],
-            execution: new SafeMigrationExecutionOptions(
-                SafeMigrationConflictMode.RepairIfPossible));
+            execution: new SafeMigrationExecutionOptions(SafeMigrationConflictMode.RepairIfPossible));
 
         migrationBuilder.AddCheckConstraintIfNotExists(
             name: "ck_orders_total_non_negative",
@@ -69,11 +62,12 @@ internal static class SampleMigrationUsage
             columns: ["user_id"],
             principalTable: "users",
             principalColumns: ["id"],
-            execution: new SafeMigrationExecutionOptions(
-                SafeMigrationConflictMode.RepairIfPossible));
+            execution: new SafeMigrationExecutionOptions(SafeMigrationConflictMode.RepairIfPossible));
     }
 
-    public static void BuildMaintenanceOperations(MigrationBuilder migrationBuilder)
+    public static void BuildMaintenanceOperations(
+        MigrationBuilder migrationBuilder
+    )
     {
         ArgumentNullException.ThrowIfNull(migrationBuilder);
 
@@ -81,14 +75,9 @@ internal static class SampleMigrationUsage
         // same safe/idempotent semantics as the initial synchronization path.
         migrationBuilder.EnsureSchemaExists("reporting");
 
-        migrationBuilder.RenameTableIfExists(
-            name: "legacy_users",
-            newName: "users");
+        migrationBuilder.RenameTableIfExists(name: "legacy_users", newName: "users");
 
-        migrationBuilder.RenameColumnIfExists(
-            name: "FullName",
-            table: "users",
-            newName: "DisplayName");
+        migrationBuilder.RenameColumnIfExists(name: "FullName", table: "users", newName: "DisplayName");
 
         migrationBuilder.RenameIndexIfExists(
             name: "ix_legacy_orders_customer_id",
@@ -108,18 +97,17 @@ internal static class SampleMigrationUsage
             name: "pk_daily_snapshots",
             table: "daily_snapshots",
             columns: ["id"],
-            execution: new SafeMigrationExecutionOptions(
-                SafeMigrationConflictMode.RepairIfPossible),
+            execution: new SafeMigrationExecutionOptions(SafeMigrationConflictMode.RepairIfPossible),
             schema: "reporting");
 
-        migrationBuilder.DropPrimaryKeyIfExists(
-            table: "legacy_import_jobs",
-            name: "pk_legacy_import_jobs");
+        migrationBuilder.DropPrimaryKeyIfExists(table: "legacy_import_jobs", name: "pk_legacy_import_jobs");
 
         migrationBuilder.DropSchemaIfExists("legacy_reporting");
     }
 
-    public static void BuildMaintenanceRollbackOperations(MigrationBuilder migrationBuilder)
+    public static void BuildMaintenanceRollbackOperations(
+        MigrationBuilder migrationBuilder
+    )
     {
         ArgumentNullException.ThrowIfNull(migrationBuilder);
 
@@ -131,8 +119,7 @@ internal static class SampleMigrationUsage
             name: "pk_legacy_import_jobs",
             table: "legacy_import_jobs",
             columns: ["id"],
-            execution: new SafeMigrationExecutionOptions(
-                SafeMigrationConflictMode.RepairIfPossible));
+            execution: new SafeMigrationExecutionOptions(SafeMigrationConflictMode.RepairIfPossible));
 
         migrationBuilder.DropPrimaryKeyIfExists(
             table: "daily_snapshots",
@@ -153,19 +140,16 @@ internal static class SampleMigrationUsage
             newName: "ix_legacy_orders_customer_id",
             table: "orders");
 
-        migrationBuilder.RenameColumnIfExists(
-            name: "DisplayName",
-            table: "users",
-            newName: "FullName");
+        migrationBuilder.RenameColumnIfExists(name: "DisplayName", table: "users", newName: "FullName");
 
-        migrationBuilder.RenameTableIfExists(
-            name: "users",
-            newName: "legacy_users");
+        migrationBuilder.RenameTableIfExists(name: "users", newName: "legacy_users");
 
         // Intentionally not dropping the 'reporting' schema here — dropping a schema in a rollback is destructive if it contains other objects.
     }
 
-    public static void BuildLegacyStrictModeExamples(MigrationBuilder migrationBuilder)
+    public static void BuildLegacyStrictModeExamples(
+        MigrationBuilder migrationBuilder
+    )
     {
         ArgumentNullException.ThrowIfNull(migrationBuilder);
 
@@ -185,31 +169,24 @@ internal static class SampleMigrationUsage
             strictMode: SafeMigrationStrictMode.ThrowIfDifferent);
     }
 
-    public static void BuildDownOperations(MigrationBuilder migrationBuilder)
+    public static void BuildDownOperations(
+        MigrationBuilder migrationBuilder
+    )
     {
         ArgumentNullException.ThrowIfNull(migrationBuilder);
 
-        migrationBuilder.DropForeignKeyIfExists(
-            name: "fk_orders_users_user_id",
-            table: "orders");
+        migrationBuilder.DropForeignKeyIfExists(name: "fk_orders_users_user_id", table: "orders");
 
-        migrationBuilder.DropCheckConstraintIfExists(
-            name: "ck_orders_total_non_negative",
-            table: "orders");
+        migrationBuilder.DropCheckConstraintIfExists(name: "ck_orders_total_non_negative", table: "orders");
 
-        migrationBuilder.DropUniqueConstraintIfExists(
-            name: "ux_users_email",
-            table: "users");
+        migrationBuilder.DropUniqueConstraintIfExists(name: "ux_users_email", table: "users");
 
-        migrationBuilder.DropIndexIfExists(
-            name: "ix_orders_user_id",
-            table: "orders");
+        migrationBuilder.DropIndexIfExists(name: "ix_orders_user_id", table: "orders");
 
-        migrationBuilder.DropColumnIfExists(
-            name: "display_name",
-            table: "users");
+        migrationBuilder.DropColumnIfExists(name: "display_name", table: "users");
 
         migrationBuilder.DropTableIfExists("orders");
+
         migrationBuilder.DropTableIfExists("users");
     }
 }

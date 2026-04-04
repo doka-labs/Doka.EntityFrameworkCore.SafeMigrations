@@ -6,7 +6,8 @@ internal static class SafeMigrationSqlHelper
         MigrationOperation operation,
         SafeMigrationStrictMode strictMode,
         object? expectedDefinition,
-        ExistenceCheck existenceCheck = ExistenceCheck.None)
+        ExistenceCheck existenceCheck = ExistenceCheck.None
+    )
     {
         switch (existenceCheck)
         {
@@ -26,7 +27,8 @@ internal static class SafeMigrationSqlHelper
 
         if (expectedDefinition is not null)
         {
-            operation[SafeMigrationAnnotationNames.ExpectedDefinition] = SafeMigrationDefinitionSerializer.Serialize(expectedDefinition);
+            operation[SafeMigrationAnnotationNames.ExpectedDefinition] =
+                SafeMigrationDefinitionSerializer.Serialize(expectedDefinition);
         }
     }
 }

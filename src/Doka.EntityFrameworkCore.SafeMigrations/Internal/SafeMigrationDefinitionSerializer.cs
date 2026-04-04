@@ -5,10 +5,10 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// </summary>
 public static class SafeMigrationDefinitionSerializer
 {
-    private static readonly JsonSerializerOptions _options = new()
+    private static readonly JsonSerializerOptions s_options = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        WriteIndented = false
+        WriteIndented = false,
     };
 
     /// <summary>
@@ -17,10 +17,12 @@ public static class SafeMigrationDefinitionSerializer
     /// <typeparam name="TDefinition">The expected-definition type to serialize.</typeparam>
     /// <param name="definition">The definition instance to serialize.</param>
     /// <returns>The serialized JSON representation.</returns>
-    public static string Serialize<TDefinition>(TDefinition definition)
+    public static string Serialize<TDefinition>(
+        TDefinition definition
+    )
     {
         ArgumentNullException.ThrowIfNull(definition);
-        return JsonSerializer.Serialize(definition, _options);
+        return JsonSerializer.Serialize(definition, s_options);
     }
 
     /// <summary>
@@ -29,6 +31,7 @@ public static class SafeMigrationDefinitionSerializer
     /// <typeparam name="TDefinition">The expected-definition type to deserialize.</typeparam>
     /// <param name="json">The serialized JSON text.</param>
     /// <returns>The deserialized definition, or <see langword="null"/> when the input is empty.</returns>
-    public static TDefinition? Deserialize<TDefinition>(string? json)
-        => string.IsNullOrWhiteSpace(json) ? default : JsonSerializer.Deserialize<TDefinition>(json, _options);
+    public static TDefinition? Deserialize<TDefinition>(
+        string? json
+    ) => string.IsNullOrWhiteSpace(json) ? default : JsonSerializer.Deserialize<TDefinition>(json, s_options);
 }

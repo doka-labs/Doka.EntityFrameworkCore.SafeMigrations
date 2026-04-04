@@ -4,5 +4,5 @@ internal enum ExistenceCheck
 {
     None,
     IfExists,
-    IfNotExists
+    IfNotExists,
 }

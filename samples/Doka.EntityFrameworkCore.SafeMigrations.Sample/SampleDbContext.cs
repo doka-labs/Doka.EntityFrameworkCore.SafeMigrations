@@ -6,17 +6,21 @@ internal sealed class SampleDbContext : DbContext
 
     public DbSet<OrderRecord> Orders => Set<OrderRecord>();
 
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    protected override void OnConfiguring(
+        DbContextOptionsBuilder optionsBuilder
+    )
     {
         if (!optionsBuilder.IsConfigured)
         {
             throw new InvalidOperationException(
-                "SampleDbContext requires provider configuration from the consuming application. " +
-                "Configure UseMySql(...) or UseNpgsql(...) together with UseMariaDbSafeMigrations() or UsePostgreSqlSafeMigrations().");
+                "SampleDbContext requires provider configuration from the consuming application. "
+                + "Configure UseMySql(...) or UseNpgsql(...) together with UseMariaDbSafeMigrations() or UsePostgreSqlSafeMigrations().");
         }
     }
 
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    protected override void OnModelCreating(
+        ModelBuilder modelBuilder
+    )
     {
         modelBuilder.Entity<UserRecord>(entity =>
         {

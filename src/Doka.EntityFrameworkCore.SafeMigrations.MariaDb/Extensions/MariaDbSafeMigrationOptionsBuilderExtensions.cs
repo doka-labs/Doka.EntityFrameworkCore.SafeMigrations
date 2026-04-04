@@ -8,7 +8,9 @@ public static class MariaDbSafeMigrationOptionsBuilderExtensions
     /// <summary>
     /// Replaces the active migrations SQL generator with the MariaDB safe-migrations generator.
     /// </summary>
-    public static DbContextOptionsBuilder UseMariaDbSafeMigrations(this DbContextOptionsBuilder optionsBuilder)
+    public static DbContextOptionsBuilder UseMariaDbSafeMigrations(
+        this DbContextOptionsBuilder optionsBuilder
+    )
     {
         optionsBuilder.ReplaceService<IMigrationsSqlGenerator, MariaDbSafeMigrationsSqlGenerator>();
         return optionsBuilder;

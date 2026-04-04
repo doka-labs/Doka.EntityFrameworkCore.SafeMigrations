@@ -51,8 +51,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// CLR type will continue to match using the legacy literal representation.
 /// </para>
 /// </remarks>
-public sealed record ExpectedColumnDefinition
-(
+public sealed record ExpectedColumnDefinition(
     string Name,
     string? StoreType,
     bool IsNullable,

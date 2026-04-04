@@ -5,25 +5,21 @@ internal static class SafeMigrationDecisionPlanner
     public static SafeMigrationDecision Plan(
         SafeMigrationExecutionOptions execution,
         SafeMigrationComparisonState comparisonState
-    )
-        => comparisonState switch
-        {
-            SafeMigrationComparisonState.Missing => new(
-                SafeMigrationExecutionOutcome.Created,
-                SafeMigrationPlannedAction.CreateMissingObject,
-                ShouldExecute(execution),
-                "Object is missing and should be created."),
-
-            SafeMigrationComparisonState.Matches => new(
-                SafeMigrationExecutionOutcome.Matched,
-                SafeMigrationPlannedAction.None,
-                false,
-                "Existing definition already matches."),
-
-            SafeMigrationComparisonState.Different => PlanForDifferentDefinition(execution),
-
-            _ => throw new ArgumentOutOfRangeException(nameof(comparisonState))
-        };
+    ) => comparisonState switch
+    {
+        SafeMigrationComparisonState.Missing => new SafeMigrationDecision(
+            SafeMigrationExecutionOutcome.Created,
+            SafeMigrationPlannedAction.CreateMissingObject,
+            ShouldExecute(execution),
+            "Object is missing and should be created."),
+        SafeMigrationComparisonState.Matches => new SafeMigrationDecision(
+            SafeMigrationExecutionOutcome.Matched,
+            SafeMigrationPlannedAction.None,
+            false,
+            "Existing definition already matches."),
+        SafeMigrationComparisonState.Different => PlanForDifferentDefinition(execution.ConflictMode),
+        _ => throw new ArgumentOutOfRangeException(nameof(comparisonState)),
+    };
 
     public static SafeMigrationDecision PlanUniqueConstraint(
         SafeMigrationExecutionOptions execution,
@@ -88,31 +84,28 @@ internal static class SafeMigrationDecisionPlanner
     }
 
     private static SafeMigrationDecision PlanForDifferentDefinition(
+        SafeMigrationConflictMode conflictMode
+    ) => conflictMode switch
+    {
+        SafeMigrationConflictMode.None => new SafeMigrationDecision(
+            SafeMigrationExecutionOutcome.NoOp,
+            SafeMigrationPlannedAction.None,
+            false,
+            "Object already exists and conflict mode is None."),
+        SafeMigrationConflictMode.ThrowIfDifferent => new SafeMigrationDecision(
+            SafeMigrationExecutionOutcome.Rejected,
+            SafeMigrationPlannedAction.Reject,
+            false,
+            "Existing definition differs and conflict mode requires rejection."),
+        SafeMigrationConflictMode.RepairIfPossible => new SafeMigrationDecision(
+            SafeMigrationExecutionOutcome.Rejected,
+            SafeMigrationPlannedAction.Reject,
+            false,
+            "Existing definition differs and cannot be repaired safely."),
+        _ => throw new ArgumentOutOfRangeException(nameof(conflictMode), conflictMode, null),
+    };
+
+    private static bool ShouldExecute(
         SafeMigrationExecutionOptions execution
-    )
-        => execution.ConflictMode switch
-        {
-            SafeMigrationConflictMode.None => new(
-                SafeMigrationExecutionOutcome.NoOp,
-                SafeMigrationPlannedAction.None,
-                false,
-                "Object already exists and conflict mode is None."),
-
-            SafeMigrationConflictMode.ThrowIfDifferent => new(
-                SafeMigrationExecutionOutcome.Rejected,
-                SafeMigrationPlannedAction.Reject,
-                false,
-                "Existing definition differs and conflict mode requires rejection."),
-
-            SafeMigrationConflictMode.RepairIfPossible => new(
-                SafeMigrationExecutionOutcome.Rejected,
-                SafeMigrationPlannedAction.Reject,
-                false,
-                "Existing definition differs and cannot be repaired safely."),
-
-            _ => throw new ArgumentOutOfRangeException(nameof(execution.ConflictMode), execution.ConflictMode, null)
-        };
-
-    private static bool ShouldExecute(SafeMigrationExecutionOptions execution)
-        => !execution.PreflightOnly;
+    ) => !execution.PreflightOnly;
 }
