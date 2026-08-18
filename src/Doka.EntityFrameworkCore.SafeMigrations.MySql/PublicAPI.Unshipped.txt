@@ -1,0 +1,6 @@
+#nullable enable
+Doka.EntityFrameworkCore.SafeMigrations.MySql.MySqlSafeMigrationOptionsBuilderExtensions
+Doka.EntityFrameworkCore.SafeMigrations.MySql.MySqlServiceCollectionExtensions
+static Doka.EntityFrameworkCore.SafeMigrations.MySql.MySqlSafeMigrationOptionsBuilderExtensions.UseMySqlSafeMigrations(this Microsoft.EntityFrameworkCore.DbContextOptionsBuilder! optionsBuilder) -> Microsoft.EntityFrameworkCore.DbContextOptionsBuilder!
+static Doka.EntityFrameworkCore.SafeMigrations.MySql.MySqlSafeMigrationOptionsBuilderExtensions.UseMySqlSafeMigrations<TContext>(this Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<TContext!>! optionsBuilder) -> Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<TContext!>!
+static Doka.EntityFrameworkCore.SafeMigrations.MySql.MySqlServiceCollectionExtensions.AddEntityFrameworkDokaMySqlSafeMigrations(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!

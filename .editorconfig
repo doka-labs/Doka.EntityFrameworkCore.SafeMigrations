@@ -52,15 +52,23 @@ generated_code = true
 [*.AssemblyInfo.cs]
 generated_code = true
 
+[*Generated.cs]
+generated_code = true
+
+[tests/Doka.EntityFrameworkCore.MySql.RuntimeSmoke/CompiledModels/**.cs]
+generated_code = true
+
 # -----------------------------------------------------------------------------
 # C# (Roslyn / .NET)
 # -----------------------------------------------------------------------------
 
 [*.cs]
 # --- Analyzer Severities -----------------------------------------------------
-# Keep build-relevant style diagnostics explicit here; formatting is enforced
-# through IDE0055.
-dotnet_diagnostic.IDE0055.severity = warning
+# Keep build-relevant style diagnostics explicit here. Rider/ReSharper is the
+# repository formatter because its overlay rules define layouts that Roslyn
+# cannot represent. IDE0055 therefore remains advisory.
+dotnet_diagnostic.IDE0005.severity = suggestion
+dotnet_diagnostic.IDE0055.severity = suggestion
 dotnet_diagnostic.IDE1006.severity = warning
 dotnet_diagnostic.IDE0007.severity = warning
 dotnet_diagnostic.IDE0063.severity = suggestion

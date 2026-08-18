@@ -1,6 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
     <AssemblyName>Doka.EntityFrameworkCore.SafeMigrations.PostgreSql</AssemblyName>
     <RootNamespace>Doka.EntityFrameworkCore.SafeMigrations.PostgreSql</RootNamespace>
 
@@ -8,8 +7,8 @@
     <IsPackable>true</IsPackable>
     <PackageId>Doka.EntityFrameworkCore.SafeMigrations.PostgreSql</PackageId>
     <Description>
-      PostgreSQL provider for Doka.EntityFrameworkCore.SafeMigrations — safe, idempotent,
-      provider-aware EF Core migration operations with live PostgreSQL 17 integration coverage.
+      PostgreSQL provider for Doka.EntityFrameworkCore.SafeMigrations - safe, idempotent,
+      provider-aware EF Core migration operations across supported PostgreSQL versions.
     </Description>
     <PackageTags>efcore;entityframeworkcore;migrations;safe-migrations;idempotent;postgresql;npgsql</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
@@ -23,6 +22,7 @@
   <ItemGroup>
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
     <ProjectReference Include="..\Doka.EntityFrameworkCore.SafeMigrations\Doka.EntityFrameworkCore.SafeMigrations.csproj" />
   </ItemGroup>
 </Project>

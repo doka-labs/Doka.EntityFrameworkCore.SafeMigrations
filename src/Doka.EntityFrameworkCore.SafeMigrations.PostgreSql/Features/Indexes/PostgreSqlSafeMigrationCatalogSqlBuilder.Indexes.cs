@@ -1,0 +1,277 @@
+namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
+
+internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
+{
+    private static string? GetUnsupportedIndexFeature(
+        SafeMigrationIntent intent
+    ) => intent is EnsureIndexIntent index && index.Definition.Keys.Any(static key => key.PrefixLength is not null)
+        ? "index_prefix_length"
+        : null;
+
+    private PostgreSqlSafeMigrationRuntimePlan BuildEnsureIndex(
+        EnsureIndexIntent intent
+    )
+    {
+        var definition = intent.Definition;
+        var table = TableExists(definition.Table, definition.Schema);
+        var exists = IndexExists(definition.Name, definition.Schema);
+        var matching = IndexMatches(definition);
+        var dataBlocked = definition.Unique ? UniqueIndexDataBlocked(definition) : "FALSE";
+        var unsupported = definition.NullsDistinct == false
+            ? "current_setting('server_version_num')::integer < 150000"
+            : "FALSE";
+
+        return Plan(
+            $"CASE WHEN {unsupported} THEN 'unsupported' "
+            + $"WHEN NOT {table} THEN 'data_blocked' "
+            + $"WHEN NOT {exists} AND {dataBlocked} THEN 'data_blocked' "
+            + $"WHEN NOT {exists} THEN 'missing' "
+            + $"WHEN {matching} THEN 'matching' ELSE 'different' END",
+            matching);
+    }
+
+    private PostgreSqlSafeMigrationRuntimePlan BuildDropIndex(
+        DropIndexIntent intent
+    )
+    {
+        var exists = IndexExists(intent.Name, intent.Schema);
+        var belongsToTable = IndexExists(intent.Name, intent.Schema, intent.Table);
+
+        return Plan(
+            $"CASE WHEN NOT {exists} THEN 'missing' WHEN {belongsToTable} THEN 'matching' " + "ELSE 'different' END",
+            $"NOT {exists}");
+    }
+
+    private PostgreSqlSafeMigrationRuntimePlan BuildRenameIndex(
+        RenameIndexIntent intent
+    )
+    {
+        var source = IndexExists(intent.Name, intent.Schema);
+        var sourceOnTable = IndexExists(intent.Name, intent.Schema, intent.Table);
+        var target = IndexExists(intent.NewName, intent.Schema);
+
+        return Plan(
+            $"CASE WHEN NOT {source} THEN 'missing' WHEN NOT {sourceOnTable} THEN 'different' "
+            + $"WHEN {target} THEN 'different' "
+            + "ELSE 'matching' END",
+            $"NOT {source}");
+    }
+
+    private string IndexMatches(
+        ExpectedIndexDefinition definition
+    )
+    {
+        var conditions = new List<string>
+        {
+            $"i.indisunique = {definition.Unique.ToString().ToUpperInvariant()}",
+            $"i.indnkeyatts = {definition.Keys.Count.ToString(CultureInfo.InvariantCulture)}",
+            $"i.indnatts = {(definition.Keys.Count + definition.IncludedColumns.Count).ToString(CultureInfo.InvariantCulture)}",
+            $"am.amname = {Literal(definition.Method ?? "btree")}",
+        };
+
+        conditions.Add(
+            definition.Filter is null
+                ? "i.indpred IS NULL"
+                : ExpressionMatches("pg_catalog.pg_get_expr(i.indpred, i.indrelid)", definition.Filter));
+
+        var nullsNotDistinct = "POSITION('NULLS NOT DISTINCT' IN pg_catalog.pg_get_indexdef(i.indexrelid)) > 0";
+        conditions.Add(definition.NullsDistinct == false ? nullsNotDistinct : $"NOT ({nullsNotDistinct})");
+
+        for (var index = 0; index < definition.Keys.Count; index++)
+        {
+            var position = index + 1;
+            var optionIndex = index.ToString(CultureInfo.InvariantCulture);
+            var key = definition.Keys[index];
+            if (key.Column is not null)
+            {
+                conditions.Add($"i.indkey[{optionIndex}] > 0");
+                conditions.Add(
+                    "EXISTS (SELECT 1 FROM pg_catalog.pg_attribute key_attribute "
+                    + "WHERE key_attribute.attrelid = i.indrelid "
+                    + $"AND key_attribute.attnum = i.indkey[{optionIndex}] "
+                    + $"AND key_attribute.attname = {Literal(key.Column)})");
+            }
+            else
+            {
+                var expected = IndexExpressionSql(key);
+                conditions.Add($"i.indkey[{optionIndex}] = 0");
+                conditions.Add(
+                    $"pg_catalog.pg_get_indexdef(i.indexrelid, {position.ToString(CultureInfo.InvariantCulture)}, TRUE) "
+                    + $"IN ({string.Join(", ", expected.Select(Literal))})");
+            }
+
+            conditions.Add(
+                $"((i.indoption[{optionIndex}] & 1) <> 0) = "
+                + key
+                    .Descending.ToString()
+                    .ToUpperInvariant());
+
+            conditions.Add(
+                $"((i.indoption[{optionIndex}] & 2) <> 0) = "
+                + key
+                    .Descending.ToString()
+                    .ToUpperInvariant());
+
+            var keySql =
+                $"pg_catalog.pg_get_indexdef(i.indexrelid, {position.ToString(CultureInfo.InvariantCulture)}, TRUE)";
+
+            conditions.Add(
+                key.Collation is null
+                    ? $"POSITION(' COLLATE ' IN {keySql}) = 0"
+                    : CatalogPathMatches(
+                        $"i.indcollation[{optionIndex}]",
+                        "pg_catalog.pg_collation",
+                        "coll",
+                        "collnamespace",
+                        "collname",
+                        key.Collation!));
+
+            conditions.Add(
+                key.OperatorClass is null
+                    ? $"EXISTS (SELECT 1 FROM pg_catalog.pg_opclass opc "
+                    + $"WHERE opc.oid = i.indclass[{optionIndex}] AND opc.opcdefault)"
+                    : CatalogPathMatches(
+                        $"i.indclass[{optionIndex}]",
+                        "pg_catalog.pg_opclass",
+                        "opc",
+                        "opcnamespace",
+                        "opcname",
+                        key.OperatorClass!));
+        }
+
+        for (var index = 0; index < definition.IncludedColumns.Count; index++)
+        {
+            var position = definition.Keys.Count + index + 1;
+            var column = definition.IncludedColumns[index];
+            conditions.Add(
+                $"pg_catalog.pg_get_indexdef(i.indexrelid, {position.ToString(CultureInfo.InvariantCulture)}, TRUE) "
+                + $"IN ({Literal(column)}, {Literal(_sqlGenerationHelper.DelimitIdentifier(column))})");
+        }
+
+        return "EXISTS (SELECT 1 FROM pg_catalog.pg_index i "
+            + "JOIN pg_catalog.pg_class idx ON idx.oid = i.indexrelid "
+            + "JOIN pg_catalog.pg_class tbl ON tbl.oid = i.indrelid "
+            + "JOIN pg_catalog.pg_namespace n ON n.oid = idx.relnamespace "
+            + "JOIN pg_catalog.pg_am am ON am.oid = idx.relam "
+            + $"WHERE n.nspname = {SchemaExpression(definition.Schema)} "
+            + $"AND idx.relname = {Literal(definition.Name)} AND tbl.relname = {Literal(definition.Table)} "
+            + $"AND {string.Join(" AND ", conditions)})";
+    }
+
+    private string UniqueIndexDataBlocked(
+        ExpectedIndexDefinition definition
+    )
+    {
+        var keys = definition
+            .Keys.Select(IndexDataExpression)
+            .ToArray();
+
+        var predicates = new List<string>();
+        if (definition.Filter is not null)
+        {
+            predicates.Add($"({definition.Filter})");
+        }
+
+        if (definition.NullsDistinct != false)
+        {
+            predicates.AddRange(keys.Select(static key => $"({key}) IS NOT NULL"));
+        }
+
+        return DuplicateDataExists(
+            definition.Table,
+            definition.Schema,
+            keys,
+            predicates.Count == 0 ? "TRUE" : string.Join(" AND ", predicates));
+    }
+
+    private string IndexDataExpression(
+        ExpectedIndexKeyDefinition key
+    ) => key.Column is not null ? Delimited(key.Column) : key.Expression!;
+
+    private List<string> IndexExpressionSql(
+        ExpectedIndexKeyDefinition key
+    )
+    {
+        var roots = new[]
+        {
+            key.Expression!,
+            $"({key.Expression})"
+        };
+
+        var results = new List<string>();
+        foreach (var root in roots)
+        {
+            var builder = new StringBuilder(root);
+            if (key.Collation is not null)
+            {
+                builder
+                    .Append(" COLLATE ")
+                    .Append(DelimitedPath(key.Collation));
+            }
+
+            if (key.OperatorClass is not null)
+            {
+                builder
+                    .Append(' ')
+                    .Append(DelimitedPath(key.OperatorClass));
+            }
+
+            results.Add(builder.ToString());
+        }
+
+        return results
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private string CatalogPathMatches(
+        string oidExpression,
+        string catalog,
+        string alias,
+        string namespaceColumn,
+        string nameColumn,
+        string expectedPath
+    )
+    {
+        var parts = expectedPath.Split('.', StringSplitOptions.None);
+        if (parts.Length is < 1 or > 2
+            || parts.Any(static part => string.IsNullOrWhiteSpace(part)))
+        {
+            throw new NotSupportedException(
+                "A PostgreSQL catalog identifier must be an unqualified name or schema-qualified name.");
+        }
+
+        var name = parts[^1];
+        var namespaceCondition = parts.Length == 1 ? string.Empty : $" AND ns.nspname = {Literal(parts[0])}";
+
+        return $"EXISTS (SELECT 1 FROM {catalog} {alias} "
+            + $"JOIN pg_catalog.pg_namespace ns ON ns.oid = {alias}.{namespaceColumn} "
+            + $"WHERE {alias}.oid = {oidExpression} AND {alias}.{nameColumn} = {Literal(name)}"
+            + namespaceCondition
+            + ")";
+    }
+
+    private string IndexExists(
+        string name,
+        string? schema
+    ) => "EXISTS (SELECT 1 FROM pg_catalog.pg_class idx "
+        + "JOIN pg_catalog.pg_namespace n ON n.oid = idx.relnamespace "
+        + $"WHERE n.nspname = {SchemaExpression(schema)} AND idx.relname = {Literal(name)} "
+        + "AND idx.relkind = 'i')";
+
+    private string IndexExists(
+        string name,
+        string? schema,
+        string table
+    ) => "EXISTS (SELECT 1 FROM pg_catalog.pg_index i "
+        + "JOIN pg_catalog.pg_class idx ON idx.oid = i.indexrelid "
+        + "JOIN pg_catalog.pg_class tbl ON tbl.oid = i.indrelid "
+        + "JOIN pg_catalog.pg_namespace n ON n.oid = idx.relnamespace "
+        + $"WHERE n.nspname = {SchemaExpression(schema)} AND idx.relname = {Literal(name)} "
+        + $"AND tbl.relname = {Literal(table)} AND idx.relkind = 'i')";
+
+    private string ExpressionMatches(
+        string catalogExpression,
+        string expected
+    ) => $"({catalogExpression} = {Literal(expected)} " + $"OR {catalogExpression} = {Literal($"({expected})")})";
+}

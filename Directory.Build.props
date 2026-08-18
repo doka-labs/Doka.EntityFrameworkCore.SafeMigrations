@@ -1,12 +1,20 @@
 <Project>
   <PropertyGroup>
-    <LangVersion>13</LangVersion>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latestMajor</LangVersion>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <Deterministic>true</Deterministic>
-    <AnalysisLevel>9-recommended</AnalysisLevel>
+    <!-- NuGet 7.9+ uses this fixed RFC 3339/Unix timestamp for byte-identical packages. -->
+    <DeterministicTimestamp>946684800</DeterministicTimestamp>
+    <AnalysisLevel>latest-Recommended</AnalysisLevel>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>low</NuGetAuditLevel>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RestoreLockedMode Condition="'$(ContinuousIntegrationBuild)' == 'true'">true</RestoreLockedMode>
   </PropertyGroup>
 
   <!-- NuGet packaging - shared across all three publishable packages -->
@@ -16,16 +24,17 @@
       On CI releases the version is derived from the Git tag by release.yml
       and passed via -p:PackageVersion=<tag>.
     -->
-    <PackageVersion Condition="'$(PackageVersion)' == ''">0.1.0-dev</PackageVersion>
+    <PackageVersion Condition="'$(PackageVersion)' == ''">1.0.0-dev</PackageVersion>
     <Authors>Dominic Kalkbrenner</Authors>
-    <Company>Dominic Kalkbrenner</Company>
-    <Copyright>Copyright © Dominic Kalkbrenner 2026</Copyright>
+    <Company>Doka Labs</Company>
+    <Copyright>Copyright (c) 2026 Dominic Kalkbrenner</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
-    <RepositoryUrl>https://github.com/kdominic89/Doka.EntityFrameworkCore.SafeMigrations</RepositoryUrl>
+    <EnablePackageValidation>true</EnablePackageValidation>
+    <RepositoryUrl>https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageProjectUrl>$(RepositoryUrl)</PackageProjectUrl>
-    <PackageReleaseNotes>See the full changelog at https://github.com/kdominic89/Doka.EntityFrameworkCore.SafeMigrations/blob/main/CHANGELOG.md</PackageReleaseNotes>
+    <PackageReleaseNotes>See the full changelog at https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/blob/main/CHANGELOG.md</PackageReleaseNotes>
     <!-- Default: do not pack unless the project opts in via <IsPackable>true</IsPackable> -->
     <IsPackable>false</IsPackable>
   </PropertyGroup>

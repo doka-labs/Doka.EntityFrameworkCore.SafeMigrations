@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Doka.EntityFrameworkCore.SafeMigrations.MySql</AssemblyName>
+    <RootNamespace>Doka.EntityFrameworkCore.SafeMigrations.MySql</RootNamespace>
+
+    <!-- NuGet packaging -->
+    <IsPackable>true</IsPackable>
+    <PackageId>Doka.EntityFrameworkCore.SafeMigrations.MySql</PackageId>
+    <Description>
+      MySQL and MariaDB provider for Doka.EntityFrameworkCore.SafeMigrations - safe,
+      idempotent EF Core migration operations integrated through the Doka provider SPI.
+    </Description>
+    <PackageTags>efcore;entityframeworkcore;migrations;safe-migrations;idempotent;mysql;mariadb;doka</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Doka.EntityFrameworkCore.MySql" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
+    <ProjectReference Include="..\Doka.EntityFrameworkCore.SafeMigrations\Doka.EntityFrameworkCore.SafeMigrations.csproj" />
+  </ItemGroup>
+</Project>

@@ -12,7 +12,32 @@ public static class PostgreSqlSafeMigrationOptionsBuilderExtensions
         this DbContextOptionsBuilder optionsBuilder
     )
     {
-        optionsBuilder.ReplaceService<IMigrationsSqlGenerator, PostgreSqlSafeMigrationsSqlGenerator>();
+        ArgumentNullException.ThrowIfNull(optionsBuilder);
+        AddOptionsExtension(optionsBuilder);
         return optionsBuilder;
+    }
+
+    /// <summary>
+    /// Activates PostgreSQL SafeMigrations on a typed options builder.
+    /// </summary>
+    public static DbContextOptionsBuilder<TContext> UsePostgreSqlSafeMigrations<TContext>(
+        this DbContextOptionsBuilder<TContext> optionsBuilder
+    )
+        where TContext : DbContext
+    {
+        ArgumentNullException.ThrowIfNull(optionsBuilder);
+
+        AddOptionsExtension(optionsBuilder);
+        return optionsBuilder;
+    }
+
+    private static void AddOptionsExtension(
+        DbContextOptionsBuilder optionsBuilder
+    )
+    {
+        var extension = optionsBuilder.Options.FindExtension<PostgreSqlSafeMigrationsOptionsExtension>()
+            ?? new PostgreSqlSafeMigrationsOptionsExtension();
+
+        ((IDbContextOptionsBuilderInfrastructure)optionsBuilder).AddOrUpdateExtension(extension);
     }
 }

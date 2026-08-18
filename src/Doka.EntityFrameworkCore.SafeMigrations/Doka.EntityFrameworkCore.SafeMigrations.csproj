@@ -1,6 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
     <AssemblyName>Doka.EntityFrameworkCore.SafeMigrations</AssemblyName>
     <RootNamespace>Doka.EntityFrameworkCore.SafeMigrations</RootNamespace>
 
@@ -9,19 +8,23 @@
     <PackageId>Doka.EntityFrameworkCore.SafeMigrations</PackageId>
     <Description>
       Core abstractions, planning layer, and MigrationBuilder extension methods for
-      Doka.EntityFrameworkCore.SafeMigrations — safe, idempotent, provider-aware EF Core
-      migration operations for MariaDB and PostgreSQL.
+      Doka.EntityFrameworkCore.SafeMigrations - safe, idempotent, provider-neutral EF Core
+      migration operations for MySQL, MariaDB and PostgreSQL.
     </Description>
-    <PackageTags>efcore;entityframeworkcore;migrations;safe-migrations;idempotent;mariadb;postgresql</PackageTags>
+    <PackageTags>efcore;entityframeworkcore;migrations;safe-migrations;idempotent;mysql;mariadb;postgresql</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
     <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+    <None Include="..\..\schemas\safe-migration-run-report-v1.schema.json"
+          Pack="true"
+          PackagePath="schemas\" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
   </ItemGroup>
 </Project>

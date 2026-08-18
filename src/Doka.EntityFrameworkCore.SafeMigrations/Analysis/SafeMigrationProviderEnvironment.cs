@@ -1,0 +1,26 @@
+namespace Doka.EntityFrameworkCore.SafeMigrations;
+
+/// <summary>Describes the live provider environment used by a report.</summary>
+public sealed class SafeMigrationProviderEnvironment
+{
+    /// <summary>Initializes provider environment metadata.</summary>
+    public SafeMigrationProviderEnvironment(
+        string providerId,
+        string engineFamily,
+        string serverVersion
+    )
+    {
+        ProviderId = SafeMigrationDefinitionValidator.Required(providerId, nameof(providerId));
+        EngineFamily = SafeMigrationDefinitionValidator.Required(engineFamily, nameof(engineFamily));
+        ServerVersion = SafeMigrationDefinitionValidator.Required(serverVersion, nameof(serverVersion));
+    }
+
+    /// <summary>Gets the stable SafeMigrations provider identifier.</summary>
+    public string ProviderId { get; }
+
+    /// <summary>Gets the low-cardinality database engine family.</summary>
+    public string EngineFamily { get; }
+
+    /// <summary>Gets the exact version reported by the live server connection.</summary>
+    public string ServerVersion { get; }
+}

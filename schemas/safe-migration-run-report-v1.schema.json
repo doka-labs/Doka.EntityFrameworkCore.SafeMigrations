@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/schemas/safe-migration-run-report-v1.schema.json",
+  "title": "SafeMigrationRunReport v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "mode",
+    "status",
+    "generatedAtUtc",
+    "instanceId",
+    "environment",
+    "targetMigrationId",
+    "modelFingerprint",
+    "contractFingerprint",
+    "assessments",
+    "unexpectedObjects"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "mode": { "enum": ["preflight", "postflight"] },
+    "status": {
+      "enum": ["no_operations", "ready", "ready_with_provider_operations", "blocked"]
+    },
+    "generatedAtUtc": { "type": "string", "format": "date-time" },
+    "instanceId": { "type": "string", "minLength": 1 },
+    "environment": { "$ref": "#/$defs/environment" },
+    "targetMigrationId": { "type": ["string", "null"] },
+    "modelFingerprint": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "contractFingerprint": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "assessments": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/assessment" }
+    },
+    "unexpectedObjects": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/unexpectedObject" }
+    }
+  },
+  "$defs": {
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["providerId", "engineFamily", "serverVersion"],
+      "properties": {
+        "providerId": { "type": "string", "minLength": 1 },
+        "engineFamily": { "enum": ["mysql", "mariadb", "postgresql"] },
+        "serverVersion": { "type": "string", "minLength": 1 }
+      }
+    },
+    "assessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ordinal",
+        "operationType",
+        "isSafeOperation",
+        "operationKind",
+        "objectName",
+        "observedState",
+        "action",
+        "postconditionSatisfied",
+        "code"
+      ],
+      "properties": {
+        "ordinal": { "type": "integer", "minimum": 0 },
+        "operationType": { "type": "string", "minLength": 1 },
+        "isSafeOperation": { "type": "boolean" },
+        "operationKind": {
+          "enum": [
+            "ensure_schema",
+            "drop_schema",
+            "ensure_table",
+            "drop_table",
+            "rename_table",
+            "ensure_column",
+            "drop_column",
+            "rename_column",
+            "alter_column",
+            "ensure_index",
+            "drop_index",
+            "rename_index",
+            "ensure_primary_key",
+            "drop_primary_key",
+            "ensure_unique_constraint",
+            "drop_unique_constraint",
+            "ensure_check_constraint",
+            "drop_check_constraint",
+            "ensure_foreign_key",
+            "drop_foreign_key",
+            null
+          ]
+        },
+        "objectName": { "type": ["string", "null"] },
+        "observedState": {
+          "enum": ["missing", "matching", "different", "unsupported", "data_blocked", null]
+        },
+        "action": {
+          "enum": [
+            "apply",
+            "no_op",
+            "repair",
+            "reject_different",
+            "reject_unsupported",
+            "reject_data_blocked",
+            null
+          ]
+        },
+        "postconditionSatisfied": { "type": ["boolean", "null"] },
+        "code": { "type": "string", "minLength": 1 }
+      }
+    },
+    "unexpectedObject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["objectKind", "schema", "table", "name", "code"],
+      "properties": {
+        "objectKind": {
+          "enum": [
+            "table",
+            "column",
+            "index",
+            "primary_key",
+            "unique_constraint",
+            "check_constraint",
+            "foreign_key"
+          ]
+        },
+        "schema": { "type": ["string", "null"] },
+        "table": { "type": ["string", "null"] },
+        "name": { "type": "string", "minLength": 1 },
+        "code": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

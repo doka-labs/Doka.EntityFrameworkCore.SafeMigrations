@@ -8,5 +8,5 @@ internal sealed class InitialSafeMigrationExample : Migration
 
     protected override void Down(
         MigrationBuilder migrationBuilder
-    ) => SampleMigrationUsage.BuildDownOperations(migrationBuilder);
+    ) => throw new NotSupportedException("The convergence baseline is forward-only and has no destructive Down path.");
 }

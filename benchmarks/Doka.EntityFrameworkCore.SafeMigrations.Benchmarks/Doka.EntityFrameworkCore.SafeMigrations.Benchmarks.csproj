@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Doka.EntityFrameworkCore.SafeMigrations\Doka.EntityFrameworkCore.SafeMigrations.csproj" />
+    <ProjectReference Include="..\..\src\Doka.EntityFrameworkCore.SafeMigrations.MySql\Doka.EntityFrameworkCore.SafeMigrations.MySql.csproj" />
+    <ProjectReference Include="..\..\src\Doka.EntityFrameworkCore.SafeMigrations.PostgreSql\Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.csproj" />
+  </ItemGroup>
+</Project>

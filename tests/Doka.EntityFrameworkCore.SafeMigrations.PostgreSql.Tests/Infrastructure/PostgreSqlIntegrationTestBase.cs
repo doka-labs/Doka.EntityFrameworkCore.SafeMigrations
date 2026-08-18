@@ -1,15 +1,17 @@
-namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.Integration;
+namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
 public abstract class PostgreSqlIntegrationTestBase : IClassFixture<PostgreSqlContainerFixture>
 {
-    protected PostgreSqlContainerFixture Fixture { get; }
-
     protected PostgreSqlIntegrationTestBase(
         PostgreSqlContainerFixture fixture
-    )
-    {
-        Fixture = fixture;
-    }
+    ) => Fixture = fixture;
+
+    protected PostgreSqlContainerFixture Fixture { get; }
+
+    protected static SafeMigrationDbContext CreateContext(
+        string connectionString,
+        bool registerSafeMigrations = true
+    ) => new(connectionString, registerSafeMigrations);
 
     protected static async Task ExecuteOperationsAsync(
         DbContext context,
@@ -18,19 +20,21 @@ public abstract class PostgreSqlIntegrationTestBase : IClassFixture<PostgreSqlCo
     {
         var generator = context.GetService<IMigrationsSqlGenerator>();
         var commands = generator.Generate(operations, context.Model);
-
-        await using var connection = new NpgsqlConnection(context.Database.GetConnectionString());
-        await connection.OpenAsync();
-
-        foreach (var migrationCommand in commands)
+        var connection = context.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
         {
-            await using var command = connection.CreateCommand();
-            command.CommandText = migrationCommand.CommandText;
-            await command.ExecuteNonQueryAsync();
+            await connection.OpenAsync();
+        }
+
+        foreach (var command in commands)
+        {
+            await using var dbCommand = connection.CreateCommand();
+            dbCommand.CommandText = command.CommandText;
+            await dbCommand.ExecuteNonQueryAsync();
         }
     }
 
-    protected static async Task ExecuteNonQueryAsync(
+    protected static async Task ExecuteSqlAsync(
         string connectionString,
         string sql
     )
@@ -42,11 +46,41 @@ public abstract class PostgreSqlIntegrationTestBase : IClassFixture<PostgreSqlCo
         await command.ExecuteNonQueryAsync();
     }
 
-    protected static async Task<int> ExecuteScalarAsInt32Async(
-        System.Data.Common.DbCommand command
-    ) => Convert.ToInt32(await command.ExecuteScalarAsync(), System.Globalization.CultureInfo.InvariantCulture);
+    protected static async Task<int> ScalarIntAsync(
+        string connectionString,
+        string sql
+    )
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        return Convert.ToInt32(await command.ExecuteScalarAsync(), CultureInfo.InvariantCulture);
+    }
 
-    protected static async Task<string?> ExecuteScalarAsStringAsync(
-        System.Data.Common.DbCommand command
-    ) => Convert.ToString(await command.ExecuteScalarAsync(), System.Globalization.CultureInfo.InvariantCulture);
+    protected static async Task<string> ScalarStringAsync(
+        string connectionString,
+        string sql
+    )
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        return Convert.ToString(await command.ExecuteScalarAsync(), CultureInfo.InvariantCulture) ?? "<null>";
+    }
+
+    protected static async Task<string> ReadCheckExpressionAsync(
+        string connectionString,
+        string constraintName
+    )
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT pg_catalog.pg_get_expr(co.conbin, co.conrelid) "
+            + "FROM pg_catalog.pg_constraint co WHERE co.conname = @name;";
+        command.Parameters.AddWithValue("name", constraintName);
+        return Convert.ToString(await command.ExecuteScalarAsync(), CultureInfo.InvariantCulture) ?? "<null>";
+    }
 }

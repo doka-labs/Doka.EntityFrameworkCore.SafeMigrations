@@ -1,0 +1,48 @@
+namespace Doka.EntityFrameworkCore.SafeMigrations;
+
+/// <summary>Represents ensuring a primary key exists.</summary>
+public sealed class EnsurePrimaryKeyIntent : SafeMigrationIntent
+{
+    /// <summary>Initializes the intent.</summary>
+    public EnsurePrimaryKeyIntent(
+        ExpectedPrimaryKeyDefinition definition
+    ) : base(SafeMigrationOperationKind.EnsurePrimaryKey)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        Definition = definition;
+    }
+
+    /// <summary>Gets the expected primary-key definition.</summary>
+    public ExpectedPrimaryKeyDefinition Definition { get; }
+
+    /// <inheritdoc />
+    public override string ObjectName => Definition.Name;
+}
+
+/// <summary>Represents dropping a primary key when it exists.</summary>
+public sealed class DropPrimaryKeyIntent : SafeMigrationIntent
+{
+    /// <summary>Initializes the intent.</summary>
+    public DropPrimaryKeyIntent(
+        string name,
+        string table,
+        string? schema = null
+    ) : base(SafeMigrationOperationKind.DropPrimaryKey)
+    {
+        Name = SafeMigrationDefinitionValidator.Required(name, nameof(name));
+        Table = SafeMigrationDefinitionValidator.Required(table, nameof(table));
+        Schema = SafeMigrationDefinitionValidator.Optional(schema, nameof(schema));
+    }
+
+    /// <summary>Gets the declared primary-key name.</summary>
+    public string Name { get; }
+
+    /// <summary>Gets the table name.</summary>
+    public string Table { get; }
+
+    /// <summary>Gets the schema name when specified.</summary>
+    public string? Schema { get; }
+
+    /// <inheritdoc />
+    public override string ObjectName => Name;
+}

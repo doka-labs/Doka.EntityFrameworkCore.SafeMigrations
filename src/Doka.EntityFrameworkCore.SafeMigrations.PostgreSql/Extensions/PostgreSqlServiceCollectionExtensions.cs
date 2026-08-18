@@ -12,7 +12,13 @@ public static class PostgreSqlServiceCollectionExtensions
         this IServiceCollection services
     )
     {
-        services.Replace(ServiceDescriptor.Singleton<IMigrationsSqlGenerator, PostgreSqlSafeMigrationsSqlGenerator>());
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddScoped<NpgsqlMigrationsSqlGenerator>();
+        services.TryAddScoped<ISafeMigrationProviderAnalyzer, PostgreSqlSafeMigrationProviderAnalyzer>();
+        services.TryAddScoped<ISafeMigrationRunner, SafeMigrationRunner>();
+        services.Replace(ServiceDescriptor.Scoped<IMigrationsSqlGenerator, PostgreSqlSafeMigrationsSqlGenerator>());
+
         return services;
     }
 }

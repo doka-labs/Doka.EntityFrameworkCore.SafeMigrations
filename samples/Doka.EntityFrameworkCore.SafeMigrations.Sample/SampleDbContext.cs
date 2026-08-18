@@ -14,7 +14,7 @@ internal sealed class SampleDbContext : DbContext
         {
             throw new InvalidOperationException(
                 "SampleDbContext requires provider configuration from the consuming application. "
-                + "Configure UseMySql(...) or UseNpgsql(...) together with UseMariaDbSafeMigrations() or UsePostgreSqlSafeMigrations().");
+                + "Configure UseMySql(...) or UseNpgsql(...) together with UseMySqlSafeMigrations() or UsePostgreSqlSafeMigrations().");
         }
     }
 
@@ -25,16 +25,27 @@ internal sealed class SampleDbContext : DbContext
         modelBuilder.Entity<UserRecord>(entity =>
         {
             entity.ToTable("users");
-            entity.HasKey(x => x.Id).HasName("pk_users");
-            entity.Property(x => x.Email).HasMaxLength(320).IsRequired();
-            entity.Property(x => x.DisplayName).HasMaxLength(200);
+            entity
+                .HasKey(x => x.Id)
+                .HasName("pk_users");
+            entity
+                .Property(x => x.Email)
+                .HasMaxLength(320)
+                .IsRequired();
+            entity
+                .Property(x => x.DisplayName)
+                .HasMaxLength(200);
         });
 
         modelBuilder.Entity<OrderRecord>(entity =>
         {
             entity.ToTable("orders");
-            entity.HasKey(x => x.Id).HasName("pk_orders");
-            entity.Property(x => x.Total).HasPrecision(18, 2);
+            entity
+                .HasKey(x => x.Id)
+                .HasName("pk_orders");
+            entity
+                .Property(x => x.Total)
+                .HasPrecision(18, 2);
         });
     }
 }
