@@ -1,159 +1,87 @@
-# EF Core / Provider Upgrade Maintenance Risk
+# EF Core and provider upgrade boundary
 
-This note documents one of the most important maintenance boundaries in the project:
+SafeMigrations integrates with two different public provider boundaries. An
+upgrade is accepted only after the full package, engine, tooling, and
+dependency-profile gates pass; compilation alone is insufficient.
 
-- the MariaDB and PostgreSQL providers replace EF Core's migrations SQL generator
-- both provider generators subclass provider-specific migrations generator base classes
-- both implementations intentionally suppress `EF1001`
+## MySQL and MariaDB boundary
 
-That combination is powerful, but it also means provider upgrades deserve deliberate review.
+The `.MySql` package consumes the public
+`Doka.EntityFrameworkCore.MySql.Migrations` operation-handler SPI:
 
-## Where The Risk Lives
+- `IMySqlMigrationOperationHandler`;
+- `MySqlMigrationOperationContext`;
+- `RenderStandardOperation`;
+- immutable handler result and command contracts;
+- canonical engine feature projection.
 
-The main touchpoints are:
+SafeMigrations registers one exact handler for `SafeMigrationOperation`. It
+does not replace or derive from the Doka migrations generator. This removes the
+former Pomelo/internal-generator coupling, but the SPI remains a versioned
+binary and behavioral dependency. A Doka update must preserve exact dispatch,
+baseline rendering, command ordering, feature projection, diagnostics, and
+failure behavior.
 
-- [MariaDbSafeMigrationsSqlGenerator.cs](../src/Doka.EntityFrameworkCore.SafeMigrations.MariaDb/SqlGeneration/MariaDbSafeMigrationsSqlGenerator.cs)
-- [PostgreSqlSafeMigrationsSqlGenerator.cs](../src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/SqlGeneration/PostgreSqlSafeMigrationsSqlGenerator.cs)
-- [MariaDbSafeMigrationOptionsBuilderExtensions.cs](../src/Doka.EntityFrameworkCore.SafeMigrations.MariaDb/Extensions/MariaDbSafeMigrationOptionsBuilderExtensions.cs)
-- [PostgreSqlSafeMigrationOptionsBuilderExtensions.cs](../src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/Extensions/PostgreSqlSafeMigrationOptionsBuilderExtensions.cs)
-- [MariaDbServiceCollectionExtensions.cs](../src/Doka.EntityFrameworkCore.SafeMigrations.MariaDb/Extensions/MariaDbServiceCollectionExtensions.cs)
-- [PostgreSqlServiceCollectionExtensions.cs](../src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/Extensions/PostgreSqlServiceCollectionExtensions.cs)
+## PostgreSQL boundary
 
-The provider SQL generators inherit from:
+The `.PostgreSql` package composes Npgsql's
+`NpgsqlMigrationsSqlGenerator` behind `IMigrationsSqlGenerator`. Ordinary EF
+operations are delegated unchanged. Safe operations are classified and wrapped
+by SafeMigrations before provider-rendered commands are returned.
 
-- `MySqlMigrationsSqlGenerator`
-- `NpgsqlMigrationsSqlGenerator`
+Npgsql generator constructor changes, migration command semantics, catalog
+representation, or SQL normalization can affect the adapter even when the
+project still compiles. PostgreSQL major upgrades can also change catalog
+shape. PostgreSQL 18, for example, exposes `NOT NULL` constraints as catalog
+constraint rows, so tests must select owned constraint families rather than
+count every `pg_constraint` row.
 
-Those base classes are close enough to provider internals that the compiler emits `EF1001`, which is why both generator files explicitly suppress that warning.
+## Qualified dependency ranges
 
-## Why `EF1001` Matters Here
+Central package declarations use bounded ranges. Lockfiles establish the Floor
+profile. `eng/verify-dependency-profile.sh` creates a fresh source snapshot,
+forces the current Latest patch profile, confirms exact resolved versions,
+builds, and runs all three suites without modifying committed Floor lockfiles.
 
-`EF1001` is the warning EF Core uses to signal that code is relying on internal APIs that may change without normal compatibility guarantees.
+The declared range must never be widened beyond the profiles actually tested.
+Stable SafeMigrations packages must depend on a stable Doka package; the package
+content gate rejects a prerelease Doka dependency during a stable tag run.
 
-In this project, the warning is not suppressed casually. It is suppressed because the library intentionally integrates at the migrations SQL-generator layer, which is the only practical place to:
+## Required upgrade evidence
 
-- inspect provider-specific `MigrationOperation`s
-- reuse provider DDL generation
-- wrap provider DDL in guarded existence / strict / repair / preflight behavior
+Every EF, Doka, Npgsql, or supported database update requires:
 
-There is no equally capable high-level hook that would give the same control with less risk.
+1. locked Floor restore and warning-free Release build;
+2. Latest profile restore with exact lockfile assertions;
+3. core planner, fingerprint, definition, report, and model-guard tests;
+4. all supported MySQL/MariaDB and PostgreSQL engine endpoints;
+5. missing, matching, different, unsupported, and data-blocked states;
+6. `Database.MigrateAsync`, `IMigrator`, history, missing/conflicting adapter,
+   parallel migrator, least-privilege, and recovery tests;
+7. normal, idempotent, and no-transaction script generation;
+8. `dotnet ef database update` and Migration Bundle;
+9. deterministic pack, exact contents, package-only consumer, and Public API
+   validation;
+10. performance/allocation budgets and SPDX SBOM validation.
 
-So the right reading is:
+If any behavior changes, update expected definitions or provider logic only
+after determining whether the new behavior is semantically correct for every
+supported engine. Do not normalize a failing comparison until quoted literals,
+identifier case, ordering, and provider semantics have been checked.
 
-- this is an intentional architecture decision
-- it is acceptable
-- it carries explicit maintenance cost
+## Version research
 
-## What Can Break During Upgrades
+Version pins and support statements are fast-stale. Update them from primary
+sources at author time:
 
-When upgrading EF Core, Pomelo, or Npgsql, the following areas are at risk:
+- [.NET and .NET SDK support policy](https://dotnet.microsoft.com/platform/support/policy)
+- [EF Core releases and planning](https://learn.microsoft.com/ef/core/what-is-new/)
+- [NuGet package versioning](https://learn.microsoft.com/nuget/concepts/package-versioning)
+- [Npgsql EF Core release notes](https://www.npgsql.org/efcore/release-notes/)
+- [PostgreSQL versioning policy](https://www.postgresql.org/support/versioning/)
+- [MySQL supported platforms and lifecycle](https://www.mysql.com/support/supportedplatforms/database.html)
+- [MariaDB release criteria](https://mariadb.org/about/release-criteria/)
+- [Doka.EntityFrameworkCore.MySql repository](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql)
 
-### Constructor Signatures
-
-The provider base classes can change constructor dependencies or required service types.
-
-That would break:
-
-- [MariaDbSafeMigrationsSqlGenerator.cs](../src/Doka.EntityFrameworkCore.SafeMigrations.MariaDb/SqlGeneration/MariaDbSafeMigrationsSqlGenerator.cs)
-- [PostgreSqlSafeMigrationsSqlGenerator.cs](../src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/SqlGeneration/PostgreSqlSafeMigrationsSqlGenerator.cs)
-
-### Overridable Method Shape
-
-Protected `Generate(...)` overloads, helper methods, or base behavior can change.
-
-That matters because this library overrides provider generation for:
-
-- create/add/drop operations
-- rename operations
-- alter-column behavior
-- safe constraint families
-
-Even when code still compiles, behavior can drift if the provider changes how it expects those methods to cooperate with the base generator.
-
-### Provider SQL Helper Behavior
-
-Changes in quoting, type rendering, constraint rendering, or DDL statement splitting can affect:
-
-- generated SQL shape
-- single-statement assumptions
-- alter-column handling
-- strict-mode comparison behavior when provider-generated SQL changes indirectly influence expectations
-
-### Command Batching Or Statement-Termination Behavior
-
-This project builds some statements manually and relies on `MigrationCommandListBuilder` plus provider helpers. Changes in batching or statement generation could affect:
-
-- command boundaries
-- whether certain helper-generated SQL stays single-statement
-- preflight and guarded multi-statement flows
-
-### Service Replacement Wiring
-
-The registration layer uses `ReplaceService<IMigrationsSqlGenerator, ...>()` and service-collection replacement for the active provider generator.
-
-If provider wiring changes, the library can appear to register successfully while silently no longer intercepting migrations the way it expects.
-
-## Symptoms To Watch For After An Upgrade
-
-After an EF Core or provider version change, watch for:
-
-- compile errors in the provider generator constructors
-- compile errors in overridden `Generate(...)` methods
-- failing SQL-shape unit tests
-- failing MariaDB or PostgreSQL integration tests
-- generated SQL that falls back to the provider default instead of the safe generator
-- missing strict-mode mismatches
-- preflight unexpectedly executing DDL
-- repaired operations changing from additive to destructive behavior
-
-The live integration suites are especially important here, because many upgrade problems are behavioral rather than purely compile-time.
-
-## Required Upgrade Procedure
-
-When upgrading EF Core, Pomelo, or Npgsql, the minimum safe procedure is:
-
-1. Update one provider stack at a time when possible.
-2. Build the solution and inspect the two provider generator files first.
-3. Review constructor changes and overridden method signatures in the new provider version.
-4. Run the full solution test suite:
-   - `dotnet test Doka.EntityFrameworkCore.SafeMigrations.slnx`
-5. Review SQL-shape changes in the shared unit tests.
-6. Pay special attention to the live MariaDB and PostgreSQL integration suites.
-7. Re-read the generated SQL for:
-   - strict-mode guarded operations
-   - preflight paths
-   - repair paths
-   - alter-column paths
-   - rename/drop guarded paths
-8. Only keep `#pragma warning disable EF1001` in place if the upgraded provider surface still justifies the same architecture.
-
-## Why The Integration Tests Matter So Much
-
-This project already has strong live provider coverage, and that is the main defense against upgrade regressions.
-
-The reason is simple:
-
-- generator subclassing can keep compiling while behavior changes underneath
-- provider catalog semantics can shift
-- provider DDL generation can change shape without obvious compile-time signals
-
-So for this project, a green unit test run is not enough on its own after provider upgrades. The live MariaDB and PostgreSQL suites are part of the real maintenance contract.
-
-## What Maintainers Should Not Do
-
-During upgrades, do not:
-
-- assume `EF1001` is harmless and ignore the changed surface
-- remove provider-specific test coverage to make upgrades easier
-- widen supported behavior without provider-specific verification
-- keep suppressed warnings without checking whether the integration point itself has changed
-
-## Bottom Line
-
-The project intentionally uses a low-level but appropriate integration point:
-
-- it gives the control needed for safe migrations
-- it is worth the maintenance cost
-- it requires disciplined review whenever EF Core or the underlying providers change
-
-That is the real contract behind the `EF1001` suppression.
+The exact release evidence belongs in the workflow run, lockfiles, package
+SBOM, and final plan-to-ship reconciliation, not in an unchecked comment.

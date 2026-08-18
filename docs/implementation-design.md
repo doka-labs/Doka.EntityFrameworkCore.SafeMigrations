@@ -1,293 +1,248 @@
-# Implementation Design
-
-This document explains how the library is implemented today and why the main design choices were made. It is intentionally focused on the code paths that are easiest to misread when coming in fresh: the migration-builder extensions, the operation-factory layer, the provider SQL generators, the comparison/planning logic, and the controlled repair and preflight flow.
-
-## 1. High-Level Architecture
-
-The library is built around EF Core migration operations rather than around handwritten provider SQL.
-
-The runtime flow is:
-
-1. Public extension methods on `MigrationBuilder` create or decorate EF Core `MigrationOperation` instances.
-2. The operation layer stores safe-migration intent either as:
-   - annotations on standard EF Core operations, or
-   - dedicated safe operation types for constraint families that need richer CLR properties.
-3. Provider-specific `IMigrationsSqlGenerator` implementations inspect those operations and emit guarded SQL for MariaDB or PostgreSQL.
-4. For controlled repair and preflight, shared planning helpers classify the operation before the provider emits either executable SQL or analysis-only SQL.
-
-The key consequence of this design is that the library stays inside EF Core's migration pipeline. Consumers still author migrations in the normal EF Core style, and providers remain responsible for provider-specific SQL generation.
-
-## 2. Why The Public API Uses `MigrationBuilder` Extensions
-
-The public API lives in [SafeMigrationBuilderExtensions.cs](../src/Doka.EntityFrameworkCore.SafeMigrations/Extensions/SafeMigrationBuilderExtensions.cs).
-
-This layer exists for two reasons:
-
-- It gives consumers migration methods that read like ordinary EF Core migration code.
-- It lets the library attach safe-migration metadata at authoring time, before SQL generation starts.
-
-For simple EF Core operations such as `CreateTableOperation`, `AddColumnOperation`, or `CreateIndexOperation`, the extension methods usually create a normal EF operation and then mark it with annotations such as:
-
-- `IfExists`
-- `IfNotExists`
-- `StrictMode`
-- `ExpectedDefinition`
-- `ConflictMode`
-- `PreflightOnly`
-
-That keeps the public surface small and lets provider generators reuse EF Core's normal SQL emission where possible.
-
-Some methods rely on `migrationBuilder.Operations[^1]` after calling a normal EF Core method such as `CreateTable`, `DropSchema`, `RenameTable`, `RenameColumn`, or `RenameIndex`. That is a deliberate implementation shortcut: EF Core currently appends the just-created operation last, so the library can decorate that operation without rebuilding it from scratch. The code documents that assumption inline so it is easy to revisit if EF Core changes that behavior.
-
-## 3. Why Some Constraint Families Use Dedicated Safe Operations
-
-The core factory logic lives in [SafeMigrationOperationFactory.cs](../src/Doka.EntityFrameworkCore.SafeMigrations/Internal/SafeMigrationOperationFactory.cs).
-
-Indexes and columns can stay close to standard EF Core operations because their comparison metadata fits naturally as annotations plus the normal EF Core properties.
-
-Constraint families such as:
-
-- primary keys
-- unique constraints
-- foreign keys
-- check constraints
-
-use dedicated safe operation types such as:
-
-- [SafeAddPrimaryKeyOperation.cs](../src/Doka.EntityFrameworkCore.SafeMigrations/Operations/SafeAddPrimaryKeyOperation.cs)
-- [SafeAddUniqueConstraintOperation.cs](../src/Doka.EntityFrameworkCore.SafeMigrations/Operations/SafeAddUniqueConstraintOperation.cs)
-- [SafeAddForeignKeyOperation.cs](../src/Doka.EntityFrameworkCore.SafeMigrations/Operations/SafeAddForeignKeyOperation.cs)
-- [SafeAddCheckConstraintOperation.cs](../src/Doka.EntityFrameworkCore.SafeMigrations/Operations/SafeAddCheckConstraintOperation.cs)
-
-That split exists because those operations need richer expected-definition data and clearer provider access than the old annotation-only approach provided. Storing the comparison state as CLR properties makes the generator code easier to follow and avoids a lot of fragile annotation parsing for complex constraint definitions.
-
-## 4. Expected Definitions And Why They Are Serialized
-
-The expected-definition records live in [src/Doka.EntityFrameworkCore.SafeMigrations/Definitions](../src/Doka.EntityFrameworkCore.SafeMigrations/Definitions), and serialization is handled by [SafeMigrationDefinitionSerializer.cs](../src/Doka.EntityFrameworkCore.SafeMigrations/Internal/SafeMigrationDefinitionSerializer.cs).
-
-The library stores an expected definition for operations that need comparison against the live catalog. Examples include:
-
-- table shape
-- column shape
-- index definition
-- primary key definition
-- unique constraint definition
-- foreign key definition
-- check constraint definition
-
-These definitions are serialized onto normal EF Core operations because the generator only receives the operation model, not the original migration-builder call site. By persisting an explicit expected definition, the provider generator can decide whether the existing live object matches, differs, or is missing.
-
-The code intentionally keeps expected definitions normalized and explicit rather than reconstructing them from generated SQL. Comparing structured metadata is much more stable than trying to reverse-engineer intent from provider SQL text.
-
-## 5. Legacy Strict Mode Versus The Extended Execution Pipeline
-
-The library currently supports two related but intentionally distinct models.
-
-### 5.1 Legacy strict mode
-
-Legacy strict mode is represented by [SafeMigrationStrictMode.cs](../src/Doka.EntityFrameworkCore.SafeMigrations/Abstractions/SafeMigrationStrictMode.cs).
-
-Its role is narrow:
-
-- `None`: normal idempotent behavior
-- `ThrowIfDifferent`: reject an existing conflicting definition
-
-This mode is preserved because it is simple, stable, and already embedded in the original safe-operation API.
-
-### 5.2 Extended execution options
-
-The newer controlled execution model is represented by:
-
-- [SafeMigrationConflictMode.cs](../src/Doka.EntityFrameworkCore.SafeMigrations/Abstractions/SafeMigrationConflictMode.cs)
-- [SafeMigrationExecutionOptions.cs](../src/Doka.EntityFrameworkCore.SafeMigrations/Abstractions/SafeMigrationExecutionOptions.cs)
-- [SafeMigrationExecutionAnnotationHelper.cs](../src/Doka.EntityFrameworkCore.SafeMigrations/Internal/SafeMigrationExecutionAnnotationHelper.cs)
-
-This exists because a single strict-mode enum was no longer expressive enough once the library gained:
-
-- preflight-only analysis
-- safe additive repair
-- provider veto rules
-
-The execution-options model therefore adds:
-
-- `ConflictMode`
-- `PreflightOnly`
-
-The compatibility helper maps execution options back onto the legacy strict-mode semantics where needed, so the generators can preserve existing behavior while gradually supporting the broader execution pipeline.
-
-## 6. How Planning Works
-
-The shared planner lives in [SafeMigrationDecisionPlanner.cs](../src/Doka.EntityFrameworkCore.SafeMigrations/Internal/SafeMigrationDecisionPlanner.cs), supported by the internal decision types in the same project.
-
-The planner answers a small but important question:
-
-Given the requested execution mode and the comparison result, should the operation:
-
-- do nothing
-- create the missing object
-- repair by adding a missing object
-- reject the operation
-
-The shared planner only handles provider-neutral rules. For example:
-
-- a missing object can be created
-- a matching object becomes a no-op
-- a different object is rejected under `ThrowIfDifferent`
-- a different object is only repairable when the operation family explicitly allows safe additive repair
-
-Provider-aware planners refine that result for provider-specific edge cases:
-
-- [MariaDbSafeMigrationPlanner.cs](../src/Doka.EntityFrameworkCore.SafeMigrations.MariaDb/Planning/MariaDbSafeMigrationPlanner.cs)
-- [PostgreSqlSafeMigrationPlanner.cs](../src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/Planning/PostgreSqlSafeMigrationPlanner.cs)
-
-This split is intentional. Provider differences such as filtered-index support should not leak into the shared planner, but they also should not be buried as ad hoc special cases all over the SQL generators.
-
-## 7. Why Preflight Is Implemented In The SQL Generators
-
-Preflight is exposed through `SafeMigrationExecutionOptions.PreflightOnly`, but the actual analysis SQL is emitted by the provider generators.
-
-That might seem surprising at first, but it is a deliberate choice:
-
-- the generator already knows how to ask the live provider catalog whether an object exists or matches
-- provider metadata queries are strongly provider-specific
-- preflight must stay behaviorally aligned with real execution
-
-Because of that, the same generator that would execute a guarded create or repair path can instead emit analysis-only SQL when `PreflightOnly` is set.
-
-The design goal is consistency:
-
-- preflight should classify the object the same way execution would
-- preflight should never emit DDL
-- provider vetoes should apply equally in preflight and execution modes
-
-## 8. Why The Library Uses Provider-Specific SQL Generators
-
-The core provider implementations are:
-
-- [MariaDbSafeMigrationsSqlGenerator.cs](../src/Doka.EntityFrameworkCore.SafeMigrations.MariaDb/SqlGeneration/MariaDbSafeMigrationsSqlGenerator.cs)
-- [PostgreSqlSafeMigrationsSqlGenerator.cs](../src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/SqlGeneration/PostgreSqlSafeMigrationsSqlGenerator.cs)
-
-They subclass the provider migrations generators because this library needs to intercept EF Core migration operations at SQL-generation time, not after SQL has already been flattened into raw text.
-
-This gives the library three benefits:
-
-- reuse of the provider's normal SQL generation for the underlying operation
-- direct access to the provider's existing quoting/type/DDL behavior
-- a single place to wrap operations in idempotent or strict/repair guards
-
-The tradeoff is maintenance risk when EF Core or the provider changes internal APIs. That risk is already tracked separately in the checklist because this code intentionally extends a low-level part of the EF Core stack.
-
-## 9. How Guarded SQL Is Structured
-
-The exact SQL differs per provider, but the pattern is consistent.
-
-### 9.1 MariaDB
-
-MariaDB relies on:
-
-- native `IF EXISTS` / `IF NOT EXISTS` where the server supports it
-- `information_schema` lookups where native syntax is missing or not expressive enough
-- guarded blocks for strict mismatch signaling and preflight behavior
-
-MariaDB also needs more care around features that are unavailable or inconsistent at the server level. A good example is filtered indexes: the code preserves the ordinary non-strict path where possible, but the planning/generator layers veto unsupported repair or strict-comparison cases rather than pretending they are safe.
-
-### 9.2 PostgreSQL
-
-PostgreSQL relies heavily on:
-
-- native `IF EXISTS` / `IF NOT EXISTS`
-- `pg_catalog` queries for detailed comparison
-- guarded `DO` blocks when the operation needs branching logic
-
-This provider can support some richer comparison paths more naturally than MariaDB because PostgreSQL's catalog model is stronger and because its anonymous block support makes analysis and rejection flows easier to express.
-
-## 10. Controlled Repair: What It Means Here
-
-The repair flow is intentionally narrow.
-
-The library does not attempt broad schema healing, object renaming inference, drop-and-recreate repair, or data-loss operations. Instead, controlled repair is currently limited to additive cases that can be justified as safe, such as:
-
-- creating a missing index
-- creating a missing unique constraint
-- creating a missing foreign key
-- creating a missing check constraint
-- adding a missing column only in explicitly safe additive cases
-
-This constraint exists for a reason: once a library starts changing existing objects automatically, the risk of destructive or ambiguous behavior rises quickly. The code therefore treats "repair" as "finish the missing additive part safely," not "rewrite an existing schema into shape by any means necessary."
-
-## 11. Why Column Repair Has Stronger Safety Gates
-
-Column repair is more dangerous than the other supported repair families, so it uses explicit safety checks in [SafeMigrationColumnRepairHelper.cs](../src/Doka.EntityFrameworkCore.SafeMigrations/Internal/SafeMigrationColumnRepairHelper.cs).
-
-A missing column is only auto-added when it is considered safely additive. In practice that means cases such as:
-
-- nullable columns
-- columns with a default or computed expression that can populate existing rows safely
-
-The code rejects unsafe column repair cases rather than guessing. That keeps the library aligned with its "safe migration" promise and avoids hidden data backfill or nullability failures on existing databases.
-
-## 12. Why Matching Is Provider-Metadata Based Instead Of SQL-Text Based
-
-The library compares structured database metadata, not generated DDL text.
-
-That design avoids several common problems:
-
-- provider SQL text often varies in formatting without changing meaning
-- providers can normalize definitions differently than EF Core authored them
-- reconstructing intent from SQL strings is brittle for constraints and indexes
-
-Instead, the code compares concrete catalog facts such as:
-
-- column type/nullability/default-related facts
-- index uniqueness, columns, ordering, and filters where supported
-- constraint names and participating columns
-- foreign-key principal mapping and referential actions
-
-This makes the strict and repair decisions more stable across reruns and across provider upgrades.
-
-## 13. How The Initial-Migration Workflow Fits In
-
-One important use case for this library is a consolidated initial migration for an already existing database.
-
-The intended flow is:
-
-1. Merge multiple application contexts into a single target model.
-2. Generate a clean EF Core initial migration from that unified model.
-3. Convert the migration to safe operations such as:
-   - `CreateTableIfNotExists`
-   - `AddColumnIfNotExists`
-   - `CreateIndexIfNotExists`
-   - safe constraint-add operations
-4. Run that migration against an existing populated database.
-5. Use strict checks, preflight, and controlled repair to synchronize missing additive pieces without dropping data.
-
-The implementation choices in this library are heavily influenced by that scenario. The code is designed to be safe to rerun, explicit about mismatches, and conservative about what it will repair automatically.
-
-## 14. How To Extend The Library Safely
-
-When adding a new operation family, the safest pattern is:
-
-1. Add or extend the public `MigrationBuilder` API.
-2. Decide whether the operation can stay as a normal EF Core operation with annotations or needs a dedicated safe operation type.
-3. Define an expected-definition shape if live comparison is required.
-4. Add or extend shared planning only for provider-neutral rules.
-5. Add provider planner rules for provider-specific vetoes or capabilities.
-6. Update both provider SQL generators.
-7. Add unit tests for:
-   - operation creation
-   - planner decisions
-   - SQL shape
-8. Add live MariaDB and PostgreSQL integration coverage.
-
-The most important rule is to reject uncertain cases rather than widen the definition of "safe" silently.
-
-## 15. Known Maintenance Boundaries
-
-The code intentionally accepts a few boundaries that future maintainers should remember:
-
-- It depends on EF Core migration internals deeply enough that provider upgrades deserve careful review.
-- Some public extension methods intentionally rely on EF Core appending the created operation last.
-- Preflight and execution are kept close together on purpose so that they cannot drift semantically.
-- Provider support is intentionally asymmetric where the underlying databases differ. A provider veto is preferred over faking support.
-
-That conservatism is part of the design, not an accident.
+# Implementation design
+
+## Architectural objective
+
+SafeMigrations turns an ordered EF Core migration into a deterministic
+convergence contract. Provider-neutral code owns intent, policy, expected
+definitions, planning, fingerprints, and reports. Provider packages own live
+catalog interpretation and SQL generation. The database remains authoritative
+for observed state; neither provider tries to reconstruct history from names or
+SQL text.
+
+```text
+MigrationBuilder extension
+  -> sealed SafeMigrationOperation
+     -> sealed typed SafeMigrationIntent
+        + immutable Expected Definition
+        + SafeMigrationPolicy
+  -> provider live-state classifier
+  -> pure SafeMigrationDecisionPlanner
+  -> provider command plan or classified rejection
+  -> read-only postcondition verification
+```
+
+Core has no compile-time dependency on MySQL, MariaDB, PostgreSQL, Doka's
+provider, or Npgsql.
+
+Source ownership follows the hybrid vertical-slice contract in
+[Vertical-slice architecture](vertical-slice-architecture.md). Public
+namespaces and package boundaries remain stable; core and provider behavior is
+co-located by `Schemas`, `Tables`, `Columns`, `Indexes`, and the four constraint
+families. Shared lifecycle orchestration remains centralized.
+
+## Package boundaries
+
+### Core
+
+`Doka.EntityFrameworkCore.SafeMigrations` owns:
+
+- the exact `SafeMigrationOperation` envelope;
+- the closed set of 20 intent kinds;
+- immutable table, column, index, and constraint definitions;
+- `SafeMigrationPolicy` and `SafeMigrationTableMode`;
+- the total, I/O-free `SafeMigrationDecisionPlanner`;
+- `ISafeMigrationRunner` and the report contract;
+- model and ordered-operation SHA-256 fingerprints;
+- unexpected-object inventory;
+- reflection-free report JSON and its packaged JSON Schema;
+- bounded diagnostic names and low-cardinality telemetry.
+
+It does not generate provider SQL and does not register a relational provider.
+
+### MySQL and MariaDB
+
+`Doka.EntityFrameworkCore.SafeMigrations.MySql` registers exactly one
+`IMySqlMigrationOperationHandler` for the exact `SafeMigrationOperation` type.
+Doka's public SPI performs constant-time exact-type dispatch and remains owner
+of the provider migrations generator. SafeMigrations does not derive from,
+replace, reflect over, or copy Doka provider internals.
+
+The handler:
+
+1. validates the exact envelope and active engine features;
+2. renders provider-owned baseline DDL through
+   `MySqlMigrationOperationContext.RenderStandardOperation`;
+3. creates session-local catalog state and assertion commands;
+4. executes target DDL only after the state and repair preconditions pass;
+5. exposes raw read-only classifier expressions to the analyzer;
+6. clears session variables and temporary state on every successful plan.
+
+No permanent helper object or stored routine is created. Prepared statements
+contain only DDL rendered from typed EF operations. Catalog literals are
+extracted into `DbParameter` values for preflight.
+
+### PostgreSQL
+
+`Doka.EntityFrameworkCore.SafeMigrations.PostgreSql` decorates Npgsql's public
+migrations generator boundary. It intercepts only `SafeMigrationOperation` and
+delegates every ordinary EF operation to the provider generator. Safe commands
+use parameter-free migration SQL because EF migration scripts have no runtime
+parameter channel; all identifiers and literals are rendered by Npgsql/EF SQL
+helpers and type mappings.
+
+The read-only PostgreSQL analyzer builds parameterized `pg_catalog` queries
+directly. Guarded runtime execution uses PostgreSQL anonymous blocks and normal
+EF transaction semantics.
+
+## Fail-closed ownership
+
+A safe operation is never encoded as an annotation on an ordinary EF
+operation. Without the matching adapter, the provider cannot silently execute
+the operation as normal DDL:
+
+- Doka rejects an unowned `SafeMigrationOperation`;
+- the PostgreSQL wrapper rejects a safe envelope when registration is absent or
+  conflicting;
+- multiple owners for the same exact operation type are rejected;
+- provider-owned ordinary operations continue through the base provider.
+
+Integration tests prove that missing and conflicting registration writes
+neither target DDL nor the EF history row.
+
+## Expected definitions
+
+Definitions snapshot enumerable input exactly once and expose read-only
+collections. The column contract distinguishes:
+
+- CLR type and explicit store type;
+- nullability, Unicode, maximum length, fixed length, and row-version facets;
+- precision and scale;
+- collation and comment;
+- no default, literal default including literal `null`, and SQL default;
+- computed SQL and stored/virtual form.
+
+Indexes contain ordered key definitions with direction plus provider facets for
+filter, included columns, operator classes, collations, null ordering,
+null-distinctness, and MySQL prefix lengths. Constraints retain ordered columns,
+principal identity, referential actions, and check SQL.
+
+Comparison reads structured catalog metadata. It does not globally lowercase
+or strip whitespace from expressions because doing so can change quoted
+literals. Provider-specific normalization is limited to representation known to
+be semantically irrelevant.
+
+## Table modes and convergence
+
+`StrictDefinition` compares the complete owned table shape: ordered columns,
+primary key, unique constraints, checks, and foreign keys. Unexpected owned
+members reject the strict operation.
+
+`ConvergenceContainer` checks only that the target name denotes a table. It is
+used by `ConvergeTable`, which immediately emits granular strict operations for
+every required child object. This prevents an existing copied empty table from
+hiding missing columns while preserving unknown extra objects.
+
+## State and policy
+
+Each provider must classify exactly one state:
+
+| State | Meaning |
+|---|---|
+| `Missing` | The operation target or source does not exist. |
+| `Matching` | The relevant live definition satisfies the expected contract. |
+| `Different` | The target name exists but the definition or rename target conflicts. |
+| `Unsupported` | The active engine cannot represent the requested feature. |
+| `DataBlocked` | Existing rows violate a required transition precondition. |
+
+The pure planner maps operation kind, state, policy, and repair capability to
+one action. It is total over all defined enum combinations and performs no
+allocation-backed discovery, SQL generation, service lookup, or I/O.
+
+Repair is an allowlist, not a general reconciliation algorithm. Missing
+nullable/default/computed columns and additive indexes or constraints can be
+safe after data preconditions. Alter-column repair requires the live column to
+match the declared old definition and permits only the implementation's
+lossless metadata/default transition. Type narrowing, collation changes,
+renames, primary-key reconstruction, and violated constraints reject.
+
+## Preflight and postflight
+
+Preflight is a separate API. `ISafeMigrationRunner`:
+
+- resolves pending migrations through EF services without writing history;
+- validates that a derived runtime context has the canonical migration model;
+- reads provider/engine/server identity;
+- runs every ordered safe-operation classification as one parameterized
+  database command per preflight or postflight;
+- projects earlier accepted operations into later preflight observations;
+- reports ordinary provider-owned operations as not analyzable;
+- inventories unexpected additive objects without deleting them;
+- emits model and operation-contract fingerprints.
+
+Postflight re-runs the live classifier and requires each final postcondition to
+hold. Reports are immutable and can be streamed through a caller-owned
+`Utf8JsonWriter` without reflection or an intermediate DTO graph.
+
+Preflight cannot eliminate time-of-check/time-of-use drift. Deployment must
+prevent out-of-band DDL and data writes that invalidate checked constraints.
+Runtime guards and postflight remain authoritative.
+
+## EF history and context ownership
+
+SafeMigrations uses normal EF migration execution and history. A successful
+migration receives one history row only after all of its commands complete. A
+failed MySQL/MariaDB migration may have committed earlier DDL because the
+server performs implicit DDL commits; retry converges from that partial state.
+
+All application instances share one canonical Core model, migration assembly,
+ordered migration sequence, and Core history table. A derived runtime context
+is accepted only when EF's relational model differ reports no difference from
+the canonical `ModelSnapshot`. Schema-bearing instance extensions use a
+separate context and history.
+
+## Concurrency and recovery
+
+Provider migration locks serialize multiple migrators for the same database.
+Different databases can proceed independently. SafeMigrations adds no process
+global lock or mutable static cache.
+
+Every multi-command provider plan is idempotent at command boundaries. Tests
+cover failure after earlier standard DDL, same-session recovery after a guard
+failure, and repeat execution. Recovery is forward fix or restore from a tested
+backup; a heterogeneous convergence baseline has no destructive `Down`.
+
+## Performance and memory
+
+The runtime path has:
+
+- one exact Doka registry lookup and one scoped handler instance per MySQL safe
+  operation;
+- no reflection, JSON intent serialization, type-name deserialization, or
+  service-provider lookup per operation;
+- allocations proportional to immutable input snapshots and generated
+  commands;
+- no database I/O during SQL generation;
+- one parameterized classification batch plus one family-oriented unexpected-
+  object inventory query per preflight or postflight;
+- caller-owned report serialization support;
+- bounded telemetry tags without object names or connection data.
+
+The repository gates construction, planning, both provider generators, and
+report serialization at 1, 100, and 1000 operations against explicit duration
+and allocation budgets in `eng/performance-budgets.json`.
+
+These budgets are deterministic regression and allocation gates for the
+qualified runner profile. They are not a substitute for a statistically
+controlled, hardware-normalized microbenchmark laboratory when absolute or
+cross-machine performance claims are required.
+
+## Verification surfaces
+
+Release qualification covers:
+
+- direct generator tests and real catalogs;
+- `Database.MigrateAsync` and `IMigrator.MigrateAsync`;
+- migration history success and failure paths;
+- normal, idempotent, and no-transaction scripts;
+- `dotnet ef database update` and Migration Bundle;
+- external internal-service-provider registration;
+- a package-only consumer with no ProjectReference;
+- deterministic pairwise legacy states;
+- supported engine endpoints and dependency Floor/Latest profiles;
+- byte-identical packages, SBOM, provenance, and NuGet readback.
+
+Primary boundaries are based on the public contracts documented by
+[EF Core migrations](https://learn.microsoft.com/ef/core/managing-schemas/migrations/),
+[Doka.EntityFrameworkCore.MySql](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql),
+[Npgsql EF Core](https://www.npgsql.org/efcore/), and the database catalog and
+DDL documentation linked from the operational guides.
