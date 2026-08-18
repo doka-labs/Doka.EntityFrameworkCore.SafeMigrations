@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "budgets": {
+    "core_intent_construction_1": { "baselineDurationMilliseconds": 0.05, "regressionTolerancePercent": 25, "maximumAllocatedBytes": 1024 },
+    "core_intent_construction_100": { "baselineDurationMilliseconds": 0.2, "regressionTolerancePercent": 25, "maximumAllocatedBytes": 40000 },
+    "core_intent_construction_1000": { "baselineDurationMilliseconds": 1, "regressionTolerancePercent": 25, "maximumAllocatedBytes": 400000 },
+    "decision_planner_1": { "baselineDurationMilliseconds": 0.05, "regressionTolerancePercent": 25, "maximumAllocatedBytes": 2048 },
+    "decision_planner_100": { "baselineDurationMilliseconds": 0.1, "regressionTolerancePercent": 25, "maximumAllocatedBytes": 8192 },
+    "decision_planner_1000": { "baselineDurationMilliseconds": 0.5, "regressionTolerancePercent": 25, "maximumAllocatedBytes": 49152 },
+    "mysql_generation_1": { "baselineDurationMilliseconds": 0.5, "regressionTolerancePercent": 25, "maximumAllocatedBytes": 65536 },
+    "mysql_generation_100": { "baselineDurationMilliseconds": 5, "regressionTolerancePercent": 25, "maximumAllocatedBytes": 5000000 },
+    "mysql_generation_1000": { "baselineDurationMilliseconds": 60, "regressionTolerancePercent": 25, "maximumAllocatedBytes": 50000000 },
+    "postgresql_generation_1": { "baselineDurationMilliseconds": 0.5, "regressionTolerancePercent": 25, "maximumAllocatedBytes": 81920 },
+    "postgresql_generation_100": { "baselineDurationMilliseconds": 5, "regressionTolerancePercent": 25, "maximumAllocatedBytes": 7000000 },
+    "postgresql_generation_1000": { "baselineDurationMilliseconds": 40, "regressionTolerancePercent": 25, "maximumAllocatedBytes": 70000000 },
+    "report_json_1": { "baselineDurationMilliseconds": 0.2, "regressionTolerancePercent": 25, "maximumAllocatedBytes": 16384 },
+    "report_json_100": { "baselineDurationMilliseconds": 1, "regressionTolerancePercent": 25, "maximumAllocatedBytes": 160000 },
+    "report_json_1000": { "baselineDurationMilliseconds": 5, "regressionTolerancePercent": 25, "maximumAllocatedBytes": 1500000 }
+  }
+}

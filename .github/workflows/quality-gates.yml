@@ -1,0 +1,285 @@
+name: Quality gates
+
+on:
+  workflow_call:
+    inputs:
+      package-version:
+        description: Version assigned to qualified SafeMigrations packages.
+        required: true
+        type: string
+      artifact-name:
+        description: Immutable workflow artifact containing packages and evidence.
+        required: true
+        type: string
+      artifact-retention-days:
+        description: Retention period for qualification evidence.
+        required: false
+        default: 14
+        type: number
+      require-stable-dependencies:
+        description: Reject prerelease dependencies in publishable packages.
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: '1'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: '1'
+  DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE: '1'
+  DOKA_PACKAGE_SOURCE: https://api.nuget.org/v3/index.json
+
+jobs:
+  package-and-core:
+    name: Core, performance, packages, and SBOM
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.400
+
+      - name: Verify vertical-slice architecture
+        run: eng/verify-vertical-slices.sh
+
+      - name: Locked restore
+        run: >-
+          dotnet restore Doka.EntityFrameworkCore.SafeMigrations.slnx
+          --locked-mode --disable-parallel --disable-build-servers -m:1
+          /nodeReuse:false
+
+      - name: Release build
+        run: >-
+          dotnet build Doka.EntityFrameworkCore.SafeMigrations.slnx
+          --configuration Release --no-restore --disable-build-servers -m:1
+          /nodeReuse:false -p:ContinuousIntegrationBuild=true
+
+      - name: Core tests
+        run: >-
+          dotnet test
+          tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Doka.EntityFrameworkCore.SafeMigrations.Tests.csproj
+          --configuration Release --no-build --no-restore --disable-build-servers
+          --logger "trx;LogFileName=core-tests.trx" -m:1 /nodeReuse:false
+
+      - name: Performance and allocation budgets
+        run: >-
+          dotnet run
+          --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks.csproj
+          --configuration Release --no-build --no-restore --
+          --output artifacts/performance/results.json
+
+      - name: Qualify reproducible packages
+        env:
+          REQUIRE_STABLE_DEPENDENCIES: ${{ inputs.require-stable-dependencies }}
+        run: |
+          stable_arguments=()
+          if [[ "$REQUIRE_STABLE_DEPENDENCIES" == "true" ]]; then
+            stable_arguments+=(--require-stable-dependencies)
+          fi
+          mkdir -p artifacts/packages
+          eng/qualify-packages.sh \
+            --version "${{ inputs.package-version }}" \
+            --output artifacts/packages \
+            --doka-source "$DOKA_PACKAGE_SOURCE" \
+            "${stable_arguments[@]}"
+
+      - name: Generate and validate SPDX SBOM
+        run: |
+          mkdir -p artifacts/sbom
+          eng/generate-sbom.sh \
+            --package-dir artifacts/packages \
+            --output artifacts/sbom \
+            --version "${{ inputs.package-version }}"
+
+      - name: Upload core test results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: core-test-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: '**/TestResults/*.trx'
+          if-no-files-found: warn
+          retention-days: ${{ inputs.artifact-retention-days }}
+
+      - name: Upload qualified packages and evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: |
+            artifacts/packages
+            artifacts/performance
+            artifacts/sbom
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: ${{ inputs.artifact-retention-days }}
+
+  mysql-engine:
+    name: ${{ matrix.engine }} ${{ matrix.version }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - engine: mysql
+            version: 8.4.11
+            image: mysql:8.4.11@sha256:b3b90af2a6552ae30c266fdb7d5dd55f3afb72404bb78d37fe8a23eb857fd3fb
+          - engine: mysql
+            version: 9.7.2
+            image: mysql:9.7.2@sha256:257388edf9c84dbc04c763625446d5f3fa6ed60d1b0873bc552c614ba0a7ab4e
+          - engine: mariadb
+            version: 10.11.18
+            image: mariadb:10.11.18@sha256:de61fed4a40d3842f3ee09944ba52792156cfd9adf489b2cc670fc6ded28df8d
+          - engine: mariadb
+            version: 11.4.12
+            image: mariadb:11.4.12@sha256:a794d9eb009e20de605858a11f32f63b4075cbd197c650436f0e3b457e4caed7
+          - engine: mariadb
+            version: 11.8.8
+            image: mariadb:11.8.8@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17481111890c4
+          - engine: mariadb
+            version: 12.3.2
+            image: mariadb:12.3.2@sha256:759869cb6f003234a95c6384cdee245b4bce7de26913fe607a8110362c0c007d
+    env:
+      SAFE_MIGRATIONS_MYSQL_ENGINE: ${{ matrix.engine }}
+      SAFE_MIGRATIONS_MYSQL_VERSION: ${{ matrix.version }}
+      SAFE_MIGRATIONS_MYSQL_IMAGE: ${{ matrix.image }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.400
+
+      - name: Locked restore
+        run: >-
+          dotnet restore
+          tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests.csproj
+          --locked-mode --disable-parallel --disable-build-servers -m:1
+          /nodeReuse:false
+
+      - name: Release build
+        run: >-
+          dotnet build
+          tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests.csproj
+          --configuration Release --no-restore --disable-build-servers -m:1
+          /nodeReuse:false -p:ContinuousIntegrationBuild=true
+
+      - name: Integration tests
+        run: >-
+          dotnet test
+          tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests.csproj
+          --configuration Release --no-build --no-restore --disable-build-servers
+          --logger "trx;LogFileName=${{ matrix.engine }}-${{ matrix.version }}.trx"
+          -m:1 /nodeReuse:false
+
+      - name: EF CLI, scripts, and bundle
+        run: eng/verify-ef-tooling.sh "${{ matrix.engine }}" "${{ matrix.image }}" "${{ matrix.version }}"
+
+      - name: Upload test and tooling evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ matrix.engine }}-${{ matrix.version }}-evidence-${{ github.run_attempt }}
+          path: |
+            **/TestResults/*.trx
+            artifacts/ef-tooling/${{ matrix.engine }}
+          if-no-files-found: warn
+          compression-level: 0
+          retention-days: ${{ inputs.artifact-retention-days }}
+
+  postgresql-engine:
+    name: PostgreSQL ${{ matrix.version }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - version: 14.24
+            image: postgres:14.24@sha256:2fdfb9b432d4a73bd3eea3d989752c1e669b68d502347e0bfd2cc6d709f3d6b4
+          - version: 18.6
+            image: postgres:18.6@sha256:06cad38a5d9f5d24b4d83d86def30795d5e4b757fedbf5281172b576dedcd941
+    env:
+      SAFE_MIGRATIONS_POSTGRES_IMAGE: ${{ matrix.image }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.400
+
+      - name: Locked restore
+        run: >-
+          dotnet restore
+          tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.csproj
+          --locked-mode --disable-parallel --disable-build-servers -m:1
+          /nodeReuse:false
+
+      - name: Release build
+        run: >-
+          dotnet build
+          tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.csproj
+          --configuration Release --no-restore --disable-build-servers -m:1
+          /nodeReuse:false -p:ContinuousIntegrationBuild=true
+
+      - name: Integration tests
+        run: >-
+          dotnet test
+          tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.csproj
+          --configuration Release --no-build --no-restore --disable-build-servers
+          --logger "trx;LogFileName=postgresql-${{ matrix.version }}.trx"
+          -m:1 /nodeReuse:false
+
+      - name: EF CLI, scripts, and bundle
+        run: eng/verify-ef-tooling.sh postgres "${{ matrix.image }}" "${{ matrix.version }}"
+
+      - name: Upload test and tooling evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: postgresql-${{ matrix.version }}-evidence-${{ github.run_attempt }}
+          path: |
+            **/TestResults/*.trx
+            artifacts/ef-tooling/postgres
+          if-no-files-found: warn
+          compression-level: 0
+          retention-days: ${{ inputs.artifact-retention-days }}
+
+  latest-dependency-profile:
+    name: Latest EF and Npgsql patch profile
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.400
+
+      - name: Verify latest dependency profile
+        run: >-
+          eng/verify-dependency-profile.sh
+          --ef-version 10.0.10
+          --npgsql-version 10.0.3
+          --di-version 10.0.10
+          --doka-source "$DOKA_PACKAGE_SOURCE"

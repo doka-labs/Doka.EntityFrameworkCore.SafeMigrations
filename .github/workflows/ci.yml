@@ -2,117 +2,28 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
   pull_request:
-    branches: [ main ]
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build-and-unit-tests:
-    name: Build and unit tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7  # v5.2.0
-        with:
-          dotnet-version: '9.0.x'
-
-      - name: Restore
-        run: dotnet restore Doka.EntityFrameworkCore.SafeMigrations.slnx
-
-      - name: Build
-        run: dotnet build Doka.EntityFrameworkCore.SafeMigrations.slnx --no-restore --configuration Release
-
-      - name: Unit tests
-        run: >
-          dotnet test
-          tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Doka.EntityFrameworkCore.SafeMigrations.Tests.csproj
-          --no-build --configuration Release
-          --logger "trx;LogFileName=unit-tests.trx"
-
-      - name: Pack (CI)
-        run: >
-          dotnet pack Doka.EntityFrameworkCore.SafeMigrations.slnx
-          --no-build --configuration Release
-          --output ./artifacts
-          -p:PackageVersion=0.0.0-ci.${{ github.run_number }}
-
-      - name: Upload unit test results
-        if: always()
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
-        with:
-          name: unit-test-results
-          path: '**/TestResults/*.trx'
-
-      - name: Upload package artifacts
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
-        with:
-          name: nuget-packages
-          path: ./artifacts/*
-
-  integration-tests-mariadb:
-    name: MariaDB integration tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7  # v5.2.0
-        with:
-          dotnet-version: '9.0.x'
-
-      - name: Restore
-        run: dotnet restore Doka.EntityFrameworkCore.SafeMigrations.slnx
-
-      - name: Build
-        run: dotnet build Doka.EntityFrameworkCore.SafeMigrations.slnx --no-restore --configuration Release
-
-      - name: MariaDB integration tests
-        run: >
-          dotnet test
-          tests/Doka.EntityFrameworkCore.SafeMigrations.MariaDb.Tests/Doka.EntityFrameworkCore.SafeMigrations.MariaDb.Tests.csproj
-          --no-build --configuration Release
-          --logger "trx;LogFileName=mariadb-integration-tests.trx"
-
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
-        with:
-          name: mariadb-integration-test-results
-          path: '**/TestResults/*.trx'
-
-  integration-tests-postgresql:
-    name: PostgreSQL integration tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7  # v5.2.0
-        with:
-          dotnet-version: '9.0.x'
-
-      - name: Restore
-        run: dotnet restore Doka.EntityFrameworkCore.SafeMigrations.slnx
-
-      - name: Build
-        run: dotnet build Doka.EntityFrameworkCore.SafeMigrations.slnx --no-restore --configuration Release
-
-      - name: PostgreSQL integration tests
-        run: >
-          dotnet test
-          tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.csproj
-          --no-build --configuration Release
-          --logger "trx;LogFileName=postgresql-integration-tests.trx"
-
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
-        with:
-          name: postgresql-integration-test-results
-          path: '**/TestResults/*.trx'
+  quality-gates:
+    name: Full qualification
+    uses: ./.github/workflows/quality-gates.yml
+    permissions:
+      contents: read
+    with:
+      package-version: 0.0.0-ci.${{ github.run_id }}.${{ github.run_attempt }}
+      artifact-name: safe-migrations-ci-${{ github.run_id }}-${{ github.run_attempt }}
+      artifact-retention-days: 14
+      require-stable-dependencies: false
