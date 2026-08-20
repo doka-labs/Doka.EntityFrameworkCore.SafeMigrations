@@ -1,6 +1,5 @@
 using System;
 using Doka.EntityFrameworkCore.SafeMigrations;
-using Doka.EntityFrameworkCore.SafeMigrations.MySql;
 using Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -15,14 +14,10 @@ if (migrationBuilder.Operations.Count != 1
     return 1;
 }
 
-_ = new DbContextOptionsBuilder()
-    .UseMySqlSafeMigrations();
-_ = new DbContextOptionsBuilder()
-    .UsePostgreSqlSafeMigrations();
+_ = new DbContextOptionsBuilder().UsePostgreSqlSafeMigrations();
 
 IServiceCollection services = new ServiceCollection();
-services.AddEntityFrameworkDokaMySqlSafeMigrations();
 services.AddPostgreSqlSafeMigrations();
 
-Console.WriteLine("SafeMigrations package consumer verified.");
+Console.WriteLine("SafeMigrations PostgreSQL package consumer verified.");
 return 0;

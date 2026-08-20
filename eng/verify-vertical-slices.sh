@@ -51,6 +51,8 @@ require_file "$core_root/Schemas/SafeMigrationPreflightProjection.Schemas.cs"
 require_file "$postgresql_root/Indexes/PostgreSqlSafeMigrationsSqlGenerator.Indexes.cs"
 require_file "$mysql_root/Indexes/MySqlSafeMigrationOperationHandler.Indexes.cs"
 require_file "benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks/Features/Columns/ColumnBenchmarkWorkload.cs"
+require_file "benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks.csproj"
+require_file "benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks.csproj"
 
 core_test_root="tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Unit/Features"
 for slice in Schemas Tables Columns Indexes Lifecycle; do

@@ -22,6 +22,10 @@ coverage*/
 *.trx
 *.coveragexml
 
+# Python tooling caches
+__pycache__/
+*.py[cod]
+
 # Local environment / secrets
 .env
 *.local

@@ -11,7 +11,6 @@
       provider-aware EF Core migration operations across supported PostgreSQL versions.
     </Description>
     <PackageTags>efcore;entityframeworkcore;migrations;safe-migrations;idempotent;postgresql;npgsql</PackageTags>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
@@ -22,7 +21,6 @@
   <ItemGroup>
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
-    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
     <ProjectReference Include="..\Doka.EntityFrameworkCore.SafeMigrations\Doka.EntityFrameworkCore.SafeMigrations.csproj" />
   </ItemGroup>
 </Project>

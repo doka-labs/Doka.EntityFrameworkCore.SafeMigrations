@@ -12,7 +12,6 @@
       migration operations for MySQL, MariaDB and PostgreSQL.
     </Description>
     <PackageTags>efcore;entityframeworkcore;migrations;safe-migrations;idempotent;mysql;mariadb;postgresql</PackageTags>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
@@ -25,6 +24,5 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
-    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
   </ItemGroup>
 </Project>

@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+    <AssemblyName>SafeMigrations.PostgreSql.PackageConsumer</AssemblyName>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>disable</ImplicitUsings>
@@ -9,8 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Doka.EntityFrameworkCore.SafeMigrations" Version="$(SafeMigrationsPackageVersion)" />
-    <PackageReference Include="Doka.EntityFrameworkCore.SafeMigrations.MySql" Version="$(SafeMigrationsPackageVersion)" />
-    <PackageReference Include="Doka.EntityFrameworkCore.SafeMigrations.PostgreSql" Version="$(SafeMigrationsPackageVersion)" />
+    <PackageReference Include="Doka.EntityFrameworkCore.SafeMigrations.PostgreSql"
+                      Version="$(SafeMigrationsPackageVersion)" />
   </ItemGroup>
 </Project>

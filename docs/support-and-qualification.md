@@ -120,7 +120,9 @@ capability.
 ## Performance and memory
 
 `eng/performance-budgets.json` defines explicit duration, regression tolerance,
-and allocation ceilings at 1, 100, and 1000 operations for:
+and allocation ceilings at 1, 100, and 1000 operations. Three independently
+restored and executed benchmark projects enforce the Core, MySQL/MariaDB, and
+PostgreSQL dependency boundaries for:
 
 - intent construction;
 - decision planning;
@@ -132,6 +134,15 @@ The benchmark is a deterministic gate, not a throughput claim. Changes to a
 budget require captured before/after evidence on the same runner class and a
 review of asymptotic behavior; a budget must not be raised merely to make CI
 green.
+
+The MySQL/MariaDB benchmark has no Npgsql dependency, and the PostgreSQL
+benchmark has no Doka MySQL dependency. Shared measurement and workload source
+is linked at compile time; no benchmark assembly introduces a cross-provider
+runtime edge.
+
+After locked restore, the quality workflow rejects warning-level Roslyn style
+violations and unnecessary imports. Rider/ReSharper remains the repository
+formatter for layout rules that Roslyn cannot represent.
 
 ## Package and supply-chain evidence
 

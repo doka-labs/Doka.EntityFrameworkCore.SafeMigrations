@@ -30,6 +30,7 @@ env:
   DOTNET_NOLOGO: '1'
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: '1'
   DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE: '1'
+  PYTHONDONTWRITEBYTECODE: '1'
   DOKA_PACKAGE_SOURCE: https://api.nuget.org/v3/index.json
 
 jobs:
@@ -49,13 +50,26 @@ jobs:
           dotnet-version: 10.0.400
 
       - name: Verify vertical-slice architecture
-        run: eng/verify-vertical-slices.sh
+        run: |
+          eng/verify-vertical-slices.sh
+          python3 eng/verify-project-boundaries.py
 
       - name: Locked restore
         run: >-
           dotnet restore Doka.EntityFrameworkCore.SafeMigrations.slnx
           --locked-mode --disable-parallel --disable-build-servers -m:1
           /nodeReuse:false
+
+      - name: Verify warning-level code style
+        run: >-
+          dotnet format Doka.EntityFrameworkCore.SafeMigrations.slnx style
+          --severity warn --verify-no-changes --no-restore
+
+      - name: Verify unnecessary imports
+        run: >-
+          dotnet format Doka.EntityFrameworkCore.SafeMigrations.slnx style
+          --diagnostics IDE0005 --severity hidden
+          --verify-no-changes --no-restore
 
       - name: Release build
         run: >-
@@ -70,12 +84,26 @@ jobs:
           --configuration Release --no-build --no-restore --disable-build-servers
           --logger "trx;LogFileName=core-tests.trx" -m:1 /nodeReuse:false
 
-      - name: Performance and allocation budgets
+      - name: Core performance and allocation budgets
         run: >-
           dotnet run
           --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks.csproj
           --configuration Release --no-build --no-restore --
-          --output artifacts/performance/results.json
+          --output artifacts/performance/core-results.json
+
+      - name: MySQL and MariaDB performance and allocation budgets
+        run: >-
+          dotnet run
+          --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks.csproj
+          --configuration Release --no-build --no-restore --
+          --output artifacts/performance/mysql-results.json
+
+      - name: PostgreSQL performance and allocation budgets
+        run: >-
+          dotnet run
+          --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks.csproj
+          --configuration Release --no-build --no-restore --
+          --output artifacts/performance/postgresql-results.json
 
       - name: Qualify reproducible packages
         env:

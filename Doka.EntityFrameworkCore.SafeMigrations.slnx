@@ -10,20 +10,46 @@
     <File Path="NuGet.config" />
     <File Path="global.json" />
   </Folder>
-  <Folder Name="/benchmarks/">
+  <Folder Name="/Config/benchmarks/">
+    <File Path="benchmarks/Directory.Build.props" />
+  </Folder>
+  <Folder Name="/Config/samples/">
+    <File Path="samples/Directory.Build.props" />
+  </Folder>
+  <Folder Name="/Config/src/">
+    <File Path="src/Directory.Build.props" />
+  </Folder>
+  <Folder Name="/Config/tests/">
+    <File Path="tests/Directory.Build.props" />
+  </Folder>
+  <Folder Name="/benchmarks/Core/">
     <Project Path="benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks.csproj" />
   </Folder>
-  <Folder Name="/samples/">
+  <Folder Name="/benchmarks/MySQL-MariaDB/">
+    <Project Path="benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks.csproj" />
+  </Folder>
+  <Folder Name="/benchmarks/PostgreSQL/">
+    <Project Path="benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks.csproj" />
+  </Folder>
+  <Folder Name="/samples/CrossProvider/">
     <Project Path="samples/Doka.EntityFrameworkCore.SafeMigrations.Sample/Doka.EntityFrameworkCore.SafeMigrations.Sample.csproj" />
   </Folder>
-  <Folder Name="/src/">
-    <Project Path="src/Doka.EntityFrameworkCore.SafeMigrations.MySql/Doka.EntityFrameworkCore.SafeMigrations.MySql.csproj" />
-    <Project Path="src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.csproj" />
+  <Folder Name="/src/Core/">
     <Project Path="src/Doka.EntityFrameworkCore.SafeMigrations/Doka.EntityFrameworkCore.SafeMigrations.csproj" />
   </Folder>
-  <Folder Name="/tests/">
-    <Project Path="tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests.csproj" />
-    <Project Path="tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.csproj" />
+  <Folder Name="/src/MySQL-MariaDB/">
+    <Project Path="src/Doka.EntityFrameworkCore.SafeMigrations.MySql/Doka.EntityFrameworkCore.SafeMigrations.MySql.csproj" />
+  </Folder>
+  <Folder Name="/src/PostgreSQL/">
+    <Project Path="src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.csproj" />
+  </Folder>
+  <Folder Name="/tests/Core/">
     <Project Path="tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Doka.EntityFrameworkCore.SafeMigrations.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tests/MySQL-MariaDB/">
+    <Project Path="tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tests/PostgreSQL/">
+    <Project Path="tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.csproj" />
   </Folder>
 </Solution>

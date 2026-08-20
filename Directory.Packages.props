@@ -7,18 +7,29 @@
     <NpgsqlPackageVersion Condition="'$(NpgsqlPackageVersion)' == ''">[10.0.0,11.0.0)</NpgsqlPackageVersion>
     <DependencyInjectionPackageVersion Condition="'$(DependencyInjectionPackageVersion)' == ''">[10.0.8,10.1.0)</DependencyInjectionPackageVersion>
   </PropertyGroup>
-  <ItemGroup>
-    <!-- EF Core providers -->
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="$(EfCorePackageVersion)" />
+
+  <ItemGroup Label="Production">
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="$(EfCorePackageVersion)" />
-    <PackageVersion Include="Doka.EntityFrameworkCore.MySql" Version="$(DokaMySqlPackageVersion)" />
-    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="$(NpgsqlPackageVersion)" />
-    <!-- Shared -->
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="$(DependencyInjectionPackageVersion)" />
+  </ItemGroup>
+
+  <ItemGroup Label="Production - MySQL/MariaDB">
+    <PackageVersion Include="Doka.EntityFrameworkCore.MySql" Version="$(DokaMySqlPackageVersion)" />
+  </ItemGroup>
+
+  <ItemGroup Label="Production - PostgreSQL">
+    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="$(NpgsqlPackageVersion)" />
+  </ItemGroup>
+
+  <ItemGroup Label="Production analyzers">
     <PackageVersion Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" Version="5.6.0" />
-    <!-- Test -->
+  </ItemGroup>
+
+  <ItemGroup Label="Tests">
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="$(EfCorePackageVersion)" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
     <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0" />
   </ItemGroup>
+
 </Project>

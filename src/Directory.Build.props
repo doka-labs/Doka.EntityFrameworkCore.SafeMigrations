@@ -1,0 +1,29 @@
+<Project>
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <PropertyGroup>
+    <PackageVersion Condition="'$(PackageVersion)' == ''">1.0.0-dev</PackageVersion>
+    <Authors>Dominic Kalkbrenner</Authors>
+    <Company>Doka Labs</Company>
+    <Copyright>Copyright (c) 2026 Dominic Kalkbrenner</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <EnablePackageValidation>true</EnablePackageValidation>
+    <RepositoryUrl>https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>$(RepositoryUrl)</PackageProjectUrl>
+    <PackageReleaseNotes>See the full changelog at https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/blob/main/CHANGELOG.md</PackageReleaseNotes>
+    <DeterministicTimestamp>946684800</DeterministicTimestamp>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <DebugType>portable</DebugType>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

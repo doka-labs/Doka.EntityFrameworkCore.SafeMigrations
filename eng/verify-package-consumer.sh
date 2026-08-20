@@ -62,40 +62,77 @@ cleanup() {
 }
 trap cleanup EXIT
 
-consumer_dir="$work_dir/consumer"
-mkdir -p "$consumer_dir"
-cp "$script_dir/package-consumer/PackageConsumer.csproj" "$consumer_dir/"
-cp "$script_dir/package-consumer/Program.cs" "$consumer_dir/"
+verify_consumer() {
+    local consumer_name="$1"
+    local consumer_dir="$work_dir/$consumer_name"
+    local assets_file="$consumer_dir/obj/project.assets.json"
+    local -a restore_args
 
-restore_args=(
-    "$consumer_dir/PackageConsumer.csproj"
-    --packages "$work_dir/packages"
-    --source "$package_dir"
-    --source "$doka_source"
-    --source "https://api.nuget.org/v3/index.json"
-    --use-lock-file
-    --disable-parallel
-    -p:SafeMigrationsPackageVersion="$package_version"
-)
+    mkdir -p "$consumer_dir"
+    cp "$script_dir/package-consumer/$consumer_name/PackageConsumer.csproj" "$consumer_dir/"
+    cp "$script_dir/package-consumer/$consumer_name/Program.cs" "$consumer_dir/"
 
-dotnet restore "${restore_args[@]}"
-dotnet restore "${restore_args[@]}" --locked-mode
+    restore_args=(
+        "$consumer_dir/PackageConsumer.csproj"
+        --packages "$work_dir/packages"
+        --source "$package_dir"
+        --source "$doka_source"
+        --source "https://api.nuget.org/v3/index.json"
+        --use-lock-file
+        --disable-parallel
+        -p:SafeMigrationsPackageVersion="$package_version"
+    )
 
-assets_file="$consumer_dir/obj/project.assets.json"
-if grep -Fq '"type": "project"' "$assets_file"; then
-    echo "Package consumer unexpectedly resolved a ProjectReference." >&2
-    exit 1
-fi
+    dotnet restore "${restore_args[@]}"
+    dotnet restore "${restore_args[@]}" --locked-mode
 
-dotnet build "$consumer_dir/PackageConsumer.csproj" \
-    --configuration Release \
-    --no-restore \
-    --disable-build-servers \
-    -p:SafeMigrationsPackageVersion="$package_version"
+    if grep -Fq '"type": "project"' "$assets_file"; then
+        echo "$consumer_name package consumer unexpectedly resolved a ProjectReference." >&2
+        exit 1
+    fi
 
-dotnet run \
-    --project "$consumer_dir/PackageConsumer.csproj" \
-    --configuration Release \
-    --no-build \
-    --no-restore \
-    -p:SafeMigrationsPackageVersion="$package_version"
+    grep -Fq 'Doka.EntityFrameworkCore.SafeMigrations/' "$assets_file"
+
+    case "$consumer_name" in
+        MySql)
+            grep -Fq 'Doka.EntityFrameworkCore.SafeMigrations.MySql/' "$assets_file"
+            grep -Fq 'Doka.EntityFrameworkCore.MySql/' "$assets_file"
+
+            if grep -Fq 'Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/' "$assets_file" \
+                || grep -Fq 'Npgsql.EntityFrameworkCore.PostgreSQL/' "$assets_file"; then
+                echo "MySQL/MariaDB consumer resolved PostgreSQL assets." >&2
+                exit 1
+            fi
+            ;;
+        PostgreSql)
+            grep -Fq 'Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/' "$assets_file"
+            grep -Fq 'Npgsql.EntityFrameworkCore.PostgreSQL/' "$assets_file"
+
+            if grep -Fq 'Doka.EntityFrameworkCore.SafeMigrations.MySql/' "$assets_file" \
+                || grep -Fq 'Doka.EntityFrameworkCore.MySql/' "$assets_file"; then
+                echo "PostgreSQL consumer resolved MySQL/MariaDB assets." >&2
+                exit 1
+            fi
+            ;;
+        *)
+            echo "Unknown package consumer: $consumer_name" >&2
+            exit 1
+            ;;
+    esac
+
+    dotnet build "$consumer_dir/PackageConsumer.csproj" \
+        --configuration Release \
+        --no-restore \
+        --disable-build-servers \
+        -p:SafeMigrationsPackageVersion="$package_version"
+
+    dotnet run \
+        --project "$consumer_dir/PackageConsumer.csproj" \
+        --configuration Release \
+        --no-build \
+        --no-restore \
+        -p:SafeMigrationsPackageVersion="$package_version"
+}
+
+verify_consumer MySql
+verify_consumer PostgreSql

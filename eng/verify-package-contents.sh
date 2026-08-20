@@ -99,12 +99,26 @@ done
 
 core_package="$package_dir/Doka.EntityFrameworkCore.SafeMigrations.$package_version.nupkg"
 core_entries="$(unzip -Z1 "$core_package")"
+core_nuspec="$(unzip -p "$core_package" Doka.EntityFrameworkCore.SafeMigrations.nuspec)"
 grep -Fxq "schemas/safe-migration-run-report-v1.schema.json" <<<"$core_entries"
+
+if grep -Eq '<dependency id="(Doka\.EntityFrameworkCore\.MySql|Npgsql\.EntityFrameworkCore\.PostgreSQL|Doka\.EntityFrameworkCore\.SafeMigrations\.(MySql|PostgreSql))"' \
+    <<<"$core_nuspec"; then
+    echo "Core package resolved a provider-specific dependency." >&2
+    exit 1
+fi
 
 mysql_nuspec="$(unzip -p \
     "$package_dir/Doka.EntityFrameworkCore.SafeMigrations.MySql.$package_version.nupkg" \
     Doka.EntityFrameworkCore.SafeMigrations.MySql.nuspec)"
 grep -Fq '<dependency id="Doka.EntityFrameworkCore.MySql"' <<<"$mysql_nuspec"
+grep -Fq '<dependency id="Doka.EntityFrameworkCore.SafeMigrations"' <<<"$mysql_nuspec"
+if grep -Eq '<dependency id="(Npgsql\.EntityFrameworkCore\.PostgreSQL|Doka\.EntityFrameworkCore\.SafeMigrations\.PostgreSql)"' \
+    <<<"$mysql_nuspec"; then
+    echo "MySQL/MariaDB package resolved a PostgreSQL dependency." >&2
+    exit 1
+fi
+
 if [[ "$require_stable_dependencies" == true ]]; then
     doka_version="$(
         grep -o '<dependency id="Doka.EntityFrameworkCore.MySql" version="[^"]*"' \
@@ -121,5 +135,11 @@ postgres_nuspec="$(unzip -p \
     "$package_dir/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.$package_version.nupkg" \
     Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.nuspec)"
 grep -Fq '<dependency id="Npgsql.EntityFrameworkCore.PostgreSQL"' <<<"$postgres_nuspec"
+grep -Fq '<dependency id="Doka.EntityFrameworkCore.SafeMigrations"' <<<"$postgres_nuspec"
+if grep -Eq '<dependency id="(Doka\.EntityFrameworkCore\.MySql|Doka\.EntityFrameworkCore\.SafeMigrations\.MySql)"' \
+    <<<"$postgres_nuspec"; then
+    echo "PostgreSQL package resolved a MySQL/MariaDB dependency." >&2
+    exit 1
+fi
 
 echo "SafeMigrations package contents verified."

@@ -1,13 +1,15 @@
 <Project>
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
+    <UseArtifactsOutput>true</UseArtifactsOutput>
+    <ArtifactsPath>$(MSBuildThisFileDirectory)artifacts</ArtifactsPath>
+    <IncludeProjectNameInArtifactsPaths>true</IncludeProjectNameInArtifactsPaths>
+    <UseArtifactsIntermediateOutput>true</UseArtifactsIntermediateOutput>
     <LangVersion>latestMajor</LangVersion>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <Deterministic>true</Deterministic>
-    <!-- NuGet 7.9+ uses this fixed RFC 3339/Unix timestamp for byte-identical packages. -->
-    <DeterministicTimestamp>946684800</DeterministicTimestamp>
     <AnalysisLevel>latest-Recommended</AnalysisLevel>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <NuGetAudit>true</NuGetAudit>
@@ -15,44 +17,8 @@
     <NuGetAuditLevel>low</NuGetAuditLevel>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <RestoreLockedMode Condition="'$(ContinuousIntegrationBuild)' == 'true'">true</RestoreLockedMode>
-  </PropertyGroup>
-
-  <!-- NuGet packaging - shared across all three publishable packages -->
-  <PropertyGroup>
-    <!--
-      PackageVersion is the fallback for local development.
-      On CI releases the version is derived from the Git tag by release.yml
-      and passed via -p:PackageVersion=<tag>.
-    -->
-    <PackageVersion Condition="'$(PackageVersion)' == ''">1.0.0-dev</PackageVersion>
-    <Authors>Dominic Kalkbrenner</Authors>
-    <Company>Doka Labs</Company>
-    <Copyright>Copyright (c) 2026 Dominic Kalkbrenner</Copyright>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
-    <EnablePackageValidation>true</EnablePackageValidation>
-    <RepositoryUrl>https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations</RepositoryUrl>
-    <RepositoryType>git</RepositoryType>
-    <PackageProjectUrl>$(RepositoryUrl)</PackageProjectUrl>
-    <PackageReleaseNotes>See the full changelog at https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/blob/main/CHANGELOG.md</PackageReleaseNotes>
-    <!-- Default: do not pack unless the project opts in via <IsPackable>true</IsPackable> -->
     <IsPackable>false</IsPackable>
-  </PropertyGroup>
-
-  <!-- Source Link, reproducible-build, and symbol-package settings (all projects) -->
-  <PropertyGroup>
     <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
-    <PublishRepositoryUrl>true</PublishRepositoryUrl>
-    <EmbedUntrackedSources>true</EmbedUntrackedSources>
-    <DebugType>portable</DebugType>
-    <IncludeSymbols>true</IncludeSymbols>
-    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-    <!--
-      GenerateDocumentationFile must be set here (props, not targets) so the SDK can
-      derive DocumentationFile before the compiler task runs.
-      Non-packable projects (tests, sample) suppress CS1591 locally so that
-      undocumented public test members do not fail the build.
-    -->
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
 </Project>

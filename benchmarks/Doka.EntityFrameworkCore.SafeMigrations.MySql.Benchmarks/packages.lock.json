@@ -91,10 +91,43 @@
         "resolved": "10.0.8",
         "contentHash": "OBPo4nYhMyIbtueoC10CBm6AGAbo/A9IV8QQ/6ryZS7VvmqpGT7hunazeHLxFawRzn3oLOq4jhqhpBX4tfswWQ=="
       },
+      "MySqlConnector": {
+        "type": "Transitive",
+        "resolved": "2.5.0",
+        "contentHash": "hoAwfHHF8DlRRqwHOhN3u1KLi+XbX/4LPS7Anfa+SYC97vRyIfdEOEEfj1L50q01Ik8aDNvmDrNmu/VPFiAiaQ==",
+        "dependencies": {
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "8.0.2",
+          "Microsoft.Extensions.Logging.Abstractions": "8.0.2"
+        }
+      },
+      "System.IO.Hashing": {
+        "type": "Transitive",
+        "resolved": "10.0.11",
+        "contentHash": "OzKDcIRkeNJeC8qAsbn8yJXnfTLP1dtkWILe+T56Gf/z+IkAASi7sMqLqJQat08j5z/mRN5xVtoAwbkMNMoBUQ=="
+      },
       "doka.entityframeworkcore.safemigrations": {
         "type": "Project",
         "dependencies": {
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.8, 10.1.0)"
+        }
+      },
+      "doka.entityframeworkcore.safemigrations.mysql": {
+        "type": "Project",
+        "dependencies": {
+          "Doka.EntityFrameworkCore.MySql": "[10.0.0-rc.9, 10.0.0-rc.9]",
+          "Doka.EntityFrameworkCore.SafeMigrations": "[1.0.0-dev, )",
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.0.8, 10.1.0)"
+        }
+      },
+      "Doka.EntityFrameworkCore.MySql": {
+        "type": "CentralTransitive",
+        "requested": "[10.0.0-rc.9, 10.0.0-rc.9]",
+        "resolved": "10.0.0-rc.9",
+        "contentHash": "J+PwMlr8AUGdA0/80HfLVEeWRwnlKohFRrHXKPBrQmPPumUNBwULFB6puY6/2yWsmPZ+gf/btjqaaydHnxs31g==",
+        "dependencies": {
+          "Microsoft.EntityFrameworkCore.Relational": "[10.0.8, 10.1.0)",
+          "MySqlConnector": "[2.5.0, 3.0.0)",
+          "System.IO.Hashing": "10.0.11"
         }
       },
       "Microsoft.EntityFrameworkCore.Relational": {

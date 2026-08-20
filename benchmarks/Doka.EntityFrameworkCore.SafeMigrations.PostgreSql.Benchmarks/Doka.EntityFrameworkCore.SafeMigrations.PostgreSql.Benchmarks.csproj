@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks</AssemblyName>
+    <RootNamespace>Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Doka.EntityFrameworkCore.SafeMigrations.Benchmarks\BenchmarkRunner.cs"
+             Link="Infrastructure\BenchmarkRunner.cs" />
+    <Compile Include="..\Doka.EntityFrameworkCore.SafeMigrations.Benchmarks\Features\Columns\ColumnBenchmarkWorkload.cs"
+             Link="Features\Columns\ColumnBenchmarkWorkload.cs" />
+    <ProjectReference Include="..\..\src\Doka.EntityFrameworkCore.SafeMigrations\Doka.EntityFrameworkCore.SafeMigrations.csproj" />
+    <ProjectReference Include="..\..\src\Doka.EntityFrameworkCore.SafeMigrations.PostgreSql\Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.csproj" />
+  </ItemGroup>
+</Project>

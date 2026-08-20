@@ -15,6 +15,12 @@ The architecture has three package-level boundaries:
 - `Doka.EntityFrameworkCore.SafeMigrations.PostgreSql` owns PostgreSQL
   classification and guarded command generation through Npgsql composition.
 
+These boundaries also apply to tests, benchmarks, and package consumers. Core,
+MySQL/MariaDB, and PostgreSQL have independent projects and restore graphs.
+Provider packages may depend on Core, but never on each other. The package-only
+qualification restores one consumer per provider package so a combined test
+application cannot conceal an accidental cross-provider dependency.
+
 Inside every package, the same feature slices are mirrored:
 
 - `Schemas`
@@ -35,6 +41,9 @@ src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/Features/<slice>/
 tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Unit/Features/<slice>/
 tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Integration/Features/<slice>/
 tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Integration/Features/<slice>/
+benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks/
+benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks/
+benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks/
 ```
 
 The provider test trees additionally contain `Lifecycle` and `Identifiers`;
@@ -132,4 +141,20 @@ The executable architecture contract is `eng/verify-vertical-slices.sh`. It
 verifies mirrored directories, required ownership files, dispatcher-only
 central builders, fact-free shared integration fixtures, focused provider test
 slices, and the column benchmark workload. The reusable CI quality workflow
-runs it before restore and build.
+runs it before restore and build. `eng/verify-project-boundaries.py` separately
+parses every relevant project file and fails when Core, test, benchmark, or
+package-consumer references cross a provider boundary.
+
+The repository uses MSBuild folder scoping deliberately. The root
+`Directory.Build.props` contains only repository-wide compiler, audit, lockfile,
+and artifact settings. `src`, `tests`, `benchmarks`, and `samples` import that
+root and add only their role-specific defaults. Provider dependencies remain in
+the corresponding project files so Rider and command-line reviews expose the
+same graph.
+
+Primary references:
+
+- [Customize the build by folder](https://learn.microsoft.com/en-us/visualstudio/msbuild/customize-by-directory)
+- [MSBuild extensibility hooks](https://learn.microsoft.com/en-us/visualstudio/msbuild/customize-your-build)
+- [NuGet Central Package Management](https://learn.microsoft.com/en-us/nuget/consume-packages/central-package-management)
+- [Select assemblies referenced by projects](https://learn.microsoft.com/en-us/nuget/create-packages/select-assemblies-referenced-by-projects)

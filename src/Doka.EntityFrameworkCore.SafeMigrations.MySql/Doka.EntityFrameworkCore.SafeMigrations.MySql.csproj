@@ -11,7 +11,6 @@
       idempotent EF Core migration operations integrated through the Doka provider SPI.
     </Description>
     <PackageTags>efcore;entityframeworkcore;migrations;safe-migrations;idempotent;mysql;mariadb;doka</PackageTags>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
@@ -22,7 +21,6 @@
   <ItemGroup>
     <PackageReference Include="Doka.EntityFrameworkCore.MySql" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
-    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
     <ProjectReference Include="..\Doka.EntityFrameworkCore.SafeMigrations\Doka.EntityFrameworkCore.SafeMigrations.csproj" />
   </ItemGroup>
 </Project>
