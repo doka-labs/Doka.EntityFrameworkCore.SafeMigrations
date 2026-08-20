@@ -66,11 +66,13 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("test-instance"));
+
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
         Assert.Equal(SafeMigrationAction.NoOp, assessment.Action);
 
         await ExecuteOperationsAsync(context, builder.Operations);
+
         Assert.Equal(
             20,
             await ScalarIntAsync(
@@ -139,6 +141,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 "different" => ", `payload` varchar(20) NULL",
                 _ => throw new InvalidOperationException("Unknown generated column state."),
             };
+
             await ExecuteSqlAsync(
                 connectionString,
                 $"CREATE TABLE `{table}` (`id` int NOT NULL, `alternate_id` int NOT NULL{columnSql});");
@@ -153,6 +156,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 var insertColumns = scenario.Values["column"] == "missing"
                     ? "`id`, `alternate_id`"
                     : "`id`, `alternate_id`, `payload`";
+
                 var insertValues = scenario.Values["column"] == "missing" ? "1, 2" : "1, 2, 'legacy'";
                 await ExecuteSqlAsync(
                     connectionString,
@@ -191,9 +195,11 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 "SELECT COALESCE(MAX(CHARACTER_MAXIMUM_LENGTH), 0) "
                 + "FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
                 + $"AND TABLE_NAME = '{table}' AND COLUMN_NAME = 'payload';");
+
             var report = await context
                 .GetService<ISafeMigrationRunner>()
                 .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions($"pairwise-{scenario.Index}"));
+
             Assert.Equal(
                 beforeColumnLength,
                 await ScalarIntAsync(
@@ -203,6 +209,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                     + $"AND TABLE_NAME = '{table}' AND COLUMN_NAME = 'payload';"));
 
             var shouldBlock = scenario.Values["column"] == "different" || scenario.Values["index"] == "different";
+
             Assert.Equal(
                 shouldBlock ? SafeMigrationReportStatus.Blocked : SafeMigrationReportStatus.Ready,
                 report.Status);
@@ -216,6 +223,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
             await ExecuteOperationsAsync(context, builder.Operations);
             await ExecuteOperationsAsync(context, builder.Operations);
+
             Assert.Equal(
                 40,
                 await ScalarIntAsync(
@@ -254,6 +262,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             [
                 new ExpectedCheckConstraintDefinition("ck_strict_id", "strict_table", "id >= 0"),
             ]);
+
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(definition, SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
 
@@ -264,6 +273,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("test-instance"));
+
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(
             SafeMigrationObservedState.Different,
@@ -277,6 +287,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("test-instance"));
+
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(
             SafeMigrationObservedState.Different,

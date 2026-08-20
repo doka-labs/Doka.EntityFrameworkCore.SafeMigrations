@@ -7,12 +7,15 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
     private readonly TimeProvider _timeProvider;
 
     /// <summary>Initializes the runner with one provider analyzer.</summary>
+    /// <param name="providerAnalyzer">The provider-specific read-only catalog analyzer.</param>
+    /// <param name="timeProvider">The time source, or null to use the system time provider.</param>
     public SafeMigrationRunner(
         ISafeMigrationProviderAnalyzer providerAnalyzer,
         TimeProvider? timeProvider = null
     )
     {
         ArgumentNullException.ThrowIfNull(providerAnalyzer);
+
         _providerAnalyzer = providerAnalyzer;
         _timeProvider = timeProvider ?? TimeProvider.System;
     }
@@ -56,6 +59,9 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
         }
 
         var operations = new List<MigrationOperation>();
+
+        // Reconstruct the pending Up-operation stream in the migration-ID order
+        // used for target selection throughout this method.
         foreach (var migrationEntry in migrations)
         {
             if (targetMigrationId is not null
@@ -72,6 +78,7 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
             var migration = migrationsAssembly.CreateMigration(
                 migrationEntry.Value,
                 context.Database.ProviderName ?? string.Empty);
+
             operations.AddRange(migration.UpOperations);
         }
 
@@ -111,6 +118,9 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
         ArgumentNullException.ThrowIfNull(options);
 
         cancellationToken.ThrowIfCancellationRequested();
+
+        // Validate the canonical Core model before trusting any catalog result
+        // produced for an instance-specific derived DbContext.
         ValidateCanonicalMigrationModel(context);
         var fingerprint = SafeMigrationModelFingerprint.Create(context.Model);
 
@@ -196,6 +206,9 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
     )
     {
         var migrationsAssembly = context.GetService<IMigrationsAssembly>();
+
+        // Derived instance contexts may not own a snapshot; select the nearest
+        // compatible base-context snapshot and reject ambiguous hierarchies.
         var snapshot = migrationsAssembly.ModelSnapshot
             ?? FindCompatibleBaseContextSnapshot(migrationsAssembly.Assembly, context.GetType());
 
@@ -210,6 +223,7 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
 
         var runtimeDesignTimeModel = context.GetService<IDesignTimeModel>()
             .Model;
+
         var modelDiffer = context.GetService<IMigrationsModelDiffer>();
 
         if (modelDiffer.HasDifferences(snapshotModel.GetRelationalModel(), runtimeDesignTimeModel.GetRelationalModel()))
@@ -299,6 +313,8 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
             .OfType<SafeMigrationOperation>()
             .ToArray();
 
+        // Providers classify the safe subset in one batch. The projection then
+        // advances sequentially without rereading the database, which preflight cannot mutate.
         var liveAnalyses = await _providerAnalyzer.AnalyzeAsync(context, safeOperations, cancellationToken);
         if (liveAnalyses.Count != safeOperations.Length)
         {

@@ -4,6 +4,10 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 public sealed class SafeMigrationProviderAnalysis
 {
     /// <summary>Initializes a provider analysis.</summary>
+    /// <param name="observedState">The provider-classified live state.</param>
+    /// <param name="repairCapability">The provider-proven repair capability.</param>
+    /// <param name="postconditionSatisfied">Whether the operation's final target condition currently holds.</param>
+    /// <param name="code">The stable low-cardinality result code.</param>
     public SafeMigrationProviderAnalysis(
         SafeMigrationObservedState observedState,
         SafeMigrationRepairCapability repairCapability,
@@ -22,6 +26,7 @@ public sealed class SafeMigrationProviderAnalysis
         }
 
         ArgumentException.ThrowIfNullOrWhiteSpace(code);
+
         ObservedState = observedState;
         RepairCapability = repairCapability;
         PostconditionSatisfied = postconditionSatisfied;

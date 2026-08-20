@@ -13,6 +13,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     {
         ArgumentNullException.ThrowIfNull(typeMappingSource);
         ArgumentNullException.ThrowIfNull(sqlGenerationHelper);
+
         _typeMappingSource = typeMappingSource;
         _sqlGenerationHelper = sqlGenerationHelper;
         _stringMapping = typeMappingSource.FindMapping(typeof(string))

@@ -6,8 +6,6 @@ global using System.IO;
 global using System.Linq;
 global using System.Text;
 global using System.Text.Json;
-global using Doka.EntityFrameworkCore.SafeMigrations;
-global using Microsoft.EntityFrameworkCore;
 global using Microsoft.EntityFrameworkCore.Migrations;
 global using Microsoft.EntityFrameworkCore.Migrations.Operations;
 global using Xunit;

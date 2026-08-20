@@ -9,6 +9,7 @@ internal sealed class PostgreSqlCatalogQueryParameters
     )
     {
         ArgumentNullException.ThrowIfNull(command);
+
         _command = command;
     }
 

@@ -29,12 +29,13 @@ public sealed class PostgreSqlContainerFixture : IAsyncLifetime, IDisposable
             Password = "postgrespw",
             Database = "bootstrap",
             IncludeErrorDetail = true,
-            Pooling = true,
+            Pooling = false,
         }.ConnectionString;
 
     public async Task InitializeAsync()
     {
         var image = string.IsNullOrWhiteSpace(_configuredImage) ? $"postgres:{_version}" : _configuredImage;
+
         await RunDockerCommandAsync(
         [
             "run",
@@ -49,17 +50,20 @@ public sealed class PostgreSqlContainerFixture : IAsyncLifetime, IDisposable
             "0:5432",
             image,
         ]);
+
         var output = await RunDockerCommandAsync(
         [
             "port",
             _containerName,
             "5432/tcp"
         ]);
+
         _port = int.Parse(
             output
                 .Split(':')
                 .Last(),
             CultureInfo.InvariantCulture);
+
         await WaitUntilAvailableAsync();
     }
 
@@ -125,12 +129,16 @@ public sealed class PostgreSqlContainerFixture : IAsyncLifetime, IDisposable
         try
         {
             var database = $"sm_{Guid.NewGuid():N}";
+
             await using var connection = new NpgsqlConnection(RootConnectionString);
             await connection.OpenAsync();
+
             await using var command = connection.CreateCommand();
             command.CommandText = $"CREATE DATABASE \"{database}\";";
             await command.ExecuteNonQueryAsync();
+
             _createdDatabases.Add(database);
+
             return new NpgsqlConnectionStringBuilder(RootConnectionString)
             {
                 Database = database,
@@ -152,6 +160,7 @@ public sealed class PostgreSqlContainerFixture : IAsyncLifetime, IDisposable
 
         await using var connection = new NpgsqlConnection(RootConnectionString);
         await connection.OpenAsync();
+
         foreach (var database in _createdDatabases)
         {
             await using var terminate = connection.CreateCommand();
@@ -159,6 +168,7 @@ public sealed class PostgreSqlContainerFixture : IAsyncLifetime, IDisposable
                 + "WHERE datname = @database AND pid <> pg_backend_pid();";
             terminate.Parameters.AddWithValue("database", database);
             await terminate.ExecuteNonQueryAsync();
+
             await using var drop = connection.CreateCommand();
             drop.CommandText = $"DROP DATABASE IF EXISTS \"{database}\";";
             await drop.ExecuteNonQueryAsync();
@@ -179,6 +189,7 @@ public sealed class PostgreSqlContainerFixture : IAsyncLifetime, IDisposable
                 {
                     Timeout = 3,
                 }.ConnectionString;
+
                 await using var connection = new NpgsqlConnection(probe);
                 await connection.OpenAsync();
                 return;
@@ -197,6 +208,7 @@ public sealed class PostgreSqlContainerFixture : IAsyncLifetime, IDisposable
             "40",
             _containerName
         ]);
+
         throw new TimeoutException(
             $"Container '{_containerName}' did not become ready. Logs:{Environment.NewLine}{logs}",
             lastException);
@@ -212,6 +224,7 @@ public sealed class PostgreSqlContainerFixture : IAsyncLifetime, IDisposable
             RedirectStandardError = true,
             UseShellExecute = false,
         };
+
         foreach (var argument in arguments)
         {
             startInfo.ArgumentList.Add(argument);

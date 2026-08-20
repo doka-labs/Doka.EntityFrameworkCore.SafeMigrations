@@ -4,6 +4,10 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 public sealed class ExpectedUniqueConstraintDefinition
 {
     /// <summary>Initializes an expected unique constraint.</summary>
+    /// <param name="name">The database object name.</param>
+    /// <param name="table">The table name.</param>
+    /// <param name="columns">The ordered constrained column names.</param>
+    /// <param name="schema">The schema name, or null for the provider default.</param>
     public ExpectedUniqueConstraintDefinition(
         string name,
         string table,

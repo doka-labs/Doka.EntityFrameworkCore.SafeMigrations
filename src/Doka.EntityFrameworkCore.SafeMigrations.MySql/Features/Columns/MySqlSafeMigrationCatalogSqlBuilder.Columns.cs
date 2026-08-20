@@ -222,6 +222,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             var expression = expected.SqlExpression!;
             var sqlCandidates = BuildDefaultSqlCandidates(expression)
                 .Select(Literal);
+
             return $"{catalogExpression} IN ({string.Join(", ", sqlCandidates)})";
         }
 

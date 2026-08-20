@@ -17,6 +17,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             includedColumns: ["payload"],
             method: "btree",
             nullsDistinct: false);
+
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureIndex(definition, SafeMigrationPolicy.ThrowIfDifferent);
         builder.EnsureIndex(
@@ -34,12 +35,14 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             var unsupported = await context
                 .GetService<ISafeMigrationRunner>()
                 .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("test-instance"));
+
             Assert.Equal(SafeMigrationReportStatus.Blocked, unsupported.Status);
             Assert.Contains(
                 unsupported.Assessments,
                 assessment => assessment.ObservedState == SafeMigrationObservedState.Unsupported);
             var exception =
                 await Assert.ThrowsAsync<PostgresException>(() => ExecuteOperationsAsync(context, builder.Operations));
+
             Assert.Equal("P1002", exception.SqlState);
             Assert.Equal("doka_sm_unsupported", exception.MessageText);
             return;
@@ -63,6 +66,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, drift.Operations, new SafeMigrationRunOptions("test-instance"));
+
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(
             SafeMigrationObservedState.Different,

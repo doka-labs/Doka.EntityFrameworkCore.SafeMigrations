@@ -47,6 +47,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         ArgumentNullException.ThrowIfNull(operation);
         ArgumentNullException.ThrowIfNull(analysis);
         ArgumentNullException.ThrowIfNull(decision);
+
         if (decision.Action is SafeMigrationAction.RejectDifferent
             or SafeMigrationAction.RejectUnsupported
             or SafeMigrationAction.RejectDataBlocked)
@@ -54,6 +55,8 @@ internal sealed partial class SafeMigrationPreflightProjection
             return;
         }
 
+        // Preflight never mutates the database. Accepted operations instead
+        // update this in-memory catalog so later operations observe prior ones.
         switch (operation.Intent)
         {
             case EnsureSchemaIntent value:
@@ -177,8 +180,6 @@ internal sealed partial class SafeMigrationPreflightProjection
         SafeMigrationObservedState.Missing => "missing",
         SafeMigrationObservedState.Matching => "matching",
         SafeMigrationObservedState.Different => "different",
-        SafeMigrationObservedState.Unsupported => "unsupported",
-        SafeMigrationObservedState.DataBlocked => "data_blocked",
         _ => throw new ArgumentOutOfRangeException(nameof(state)),
     };
 
@@ -468,6 +469,7 @@ internal sealed partial class SafeMigrationPreflightProjection
 
                 var token = sql[start..index]
                     .Replace(new string(quote, 2), quote.ToString(), StringComparison.Ordinal);
+
                 builder
                     .Append(quote)
                     .Append(StringComparer.Ordinal.Equals(token, source) ? target : token)

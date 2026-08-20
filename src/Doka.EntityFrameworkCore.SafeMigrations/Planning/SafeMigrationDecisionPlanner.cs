@@ -7,6 +7,11 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 public static class SafeMigrationDecisionPlanner
 {
     /// <summary>Selects the deterministic action for one classified operation.</summary>
+    /// <param name="operationKind">The SafeMigrations operation family.</param>
+    /// <param name="observedState">The provider-classified live state.</param>
+    /// <param name="policy">The conflict policy for the operation.</param>
+    /// <param name="repairCapability">The provider-proven repair capability.</param>
+    /// <returns>The deterministic provider-neutral decision.</returns>
     public static SafeMigrationDecision Plan(
         SafeMigrationOperationKind operationKind,
         SafeMigrationObservedState observedState,

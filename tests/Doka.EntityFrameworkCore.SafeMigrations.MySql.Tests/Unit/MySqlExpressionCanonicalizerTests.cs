@@ -11,6 +11,7 @@ public sealed class MySqlExpressionCanonicalizerTests
             $"{identifier} IS NULL OR {identifier} <> ''");
 
         var renderedIdentifier = "`Co``de" + new string('\\', 3) + "'_\u00c3\u00bc`";
+
         Assert.Contains(
             $"(({renderedIdentifier} is null) or " + $"({renderedIdentifier} <> _utf8mb4\\'\\'))",
             candidates,

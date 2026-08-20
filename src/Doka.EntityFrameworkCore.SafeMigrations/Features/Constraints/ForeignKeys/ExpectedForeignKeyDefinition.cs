@@ -4,6 +4,15 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 public sealed class ExpectedForeignKeyDefinition
 {
     /// <summary>Initializes an expected foreign key.</summary>
+    /// <param name="name">The database object name.</param>
+    /// <param name="table">The table name.</param>
+    /// <param name="columns">The ordered dependent column names.</param>
+    /// <param name="principalTable">The referenced table name.</param>
+    /// <param name="principalColumns">The ordered referenced columns.</param>
+    /// <param name="schema">The schema name, or null for the provider default.</param>
+    /// <param name="principalSchema">The referenced schema name, or null for the provider default.</param>
+    /// <param name="onUpdate">The referential action applied on principal-key update.</param>
+    /// <param name="onDelete">The referential action applied on principal-row deletion.</param>
     public ExpectedForeignKeyDefinition(
         string name,
         string table,

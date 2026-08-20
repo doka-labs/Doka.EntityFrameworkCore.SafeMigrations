@@ -15,6 +15,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
 
         var exception =
             await Assert.ThrowsAsync<PostgresException>(() => ExecuteOperationsAsync(context, builder.Operations));
+
         Assert.Equal("P1003", exception.SqlState);
         Assert.Equal(
             0,
@@ -41,6 +42,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             isNullable: true,
             storeType: "character varying(40)",
             maxLength: 40);
+
         var target = new ExpectedColumnDefinition(
             "safe_value",
             typeof(string),
@@ -48,11 +50,13 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             storeType: "character varying(40)",
             maxLength: 40,
             comment: "approved repair");
+
         var safeRepair = new MigrationBuilder(context.Database.ProviderName!);
         safeRepair.AlterColumnIfDifferent("repair_guard", target, declaredOld, SafeMigrationPolicy.RepairIfSafe);
 
         await ExecuteOperationsAsync(context, safeRepair.Operations);
         await ExecuteOperationsAsync(context, safeRepair.Operations);
+
         Assert.Equal(
             "approved repair",
             await ScalarStringAsync(
@@ -70,6 +74,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             isNullable: true,
             storeType: "character varying(40)",
             maxLength: 40);
+
         var driftedTarget = new ExpectedColumnDefinition(
             "drifted_value",
             typeof(string),
@@ -77,6 +82,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             storeType: "character varying(40)",
             maxLength: 40,
             comment: "must not land");
+
         var blockedRepair = new MigrationBuilder(context.Database.ProviderName!);
         blockedRepair.AlterColumnIfDifferent(
             "repair_guard",
@@ -87,6 +93,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, blockedRepair.Operations, new SafeMigrationRunOptions("test-instance"));
+
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
@@ -95,6 +102,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             await Assert.ThrowsAsync<PostgresException>(() => ExecuteOperationsAsync(
                 context,
                 blockedRepair.Operations));
+
         Assert.Equal("P1001", exception.SqlState);
         Assert.Equal(
             30,

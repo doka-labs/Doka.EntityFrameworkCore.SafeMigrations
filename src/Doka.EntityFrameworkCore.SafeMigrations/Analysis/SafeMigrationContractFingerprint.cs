@@ -7,17 +7,24 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 public static partial class SafeMigrationContractFingerprint
 {
     /// <summary>Creates the lowercase contract fingerprint.</summary>
+    /// <param name="operations">The ordered migration operations.</param>
+    /// <returns>The lowercase SHA-256 fingerprint.</returns>
     public static string Create(
         IReadOnlyList<MigrationOperation> operations
     )
     {
         ArgumentNullException.ThrowIfNull(operations);
+
         using var writer = new CanonicalHashWriter();
+
+        // Domain-separate this wire format so a future canonical form cannot
+        // collide with fingerprints produced by this contract version.
         writer.Add("safe-migrations-contract-v1");
         writer.Add(operations.Count);
         foreach (var operation in operations)
         {
             ArgumentNullException.ThrowIfNull(operation);
+
             if (operation is SafeMigrationOperation safeOperation)
             {
                 writer.Add("safe");
@@ -152,6 +159,9 @@ public static partial class SafeMigrationContractFingerprint
             try
             {
                 var length = Encoding.UTF8.GetBytes(value, rented);
+
+                // Length-prefixing makes adjacent strings unambiguous without
+                // allocating a delimiter-escaped intermediate representation.
                 Add(length);
                 _hash.AppendData(rented.AsSpan(0, length));
             }

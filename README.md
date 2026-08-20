@@ -32,7 +32,7 @@ The qualified engine matrix is:
 | Provider package | Engines |
 |---|---|
 | `.MySql` | MySQL 8.4 and 9.7; MariaDB 10.11, 11.4, 11.8, and 12.3 |
-| `.PostgreSql` | PostgreSQL 14 through 18, with release evidence at 14.24 and 18.6 |
+| `.PostgreSql` | PostgreSQL 14 through 18, with one release-gate cell per supported major |
 
 The CI and release workflows pin the exact patch tags and image digests used as
 release evidence. See [Support and qualification](docs/support-and-qualification.md).

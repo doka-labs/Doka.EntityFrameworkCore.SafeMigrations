@@ -10,6 +10,8 @@ public static class MySqlSafeMigrationOptionsBuilderExtensions
     /// Adds the SafeMigrations handler without replacing the Doka migrations
     /// SQL generator.
     /// </summary>
+    /// <param name="optionsBuilder">The EF Core options builder to configure.</param>
+    /// <returns>The same options builder so additional calls can be chained.</returns>
     public static DbContextOptionsBuilder UseMySqlSafeMigrations(
         this DbContextOptionsBuilder optionsBuilder
     )
@@ -18,6 +20,7 @@ public static class MySqlSafeMigrationOptionsBuilderExtensions
 
         var extension = optionsBuilder.Options.FindExtension<MySqlSafeMigrationsOptionsExtension>()
             ?? new MySqlSafeMigrationsOptionsExtension();
+
         ((IDbContextOptionsBuilderInfrastructure)optionsBuilder).AddOrUpdateExtension(extension);
         return optionsBuilder;
     }
@@ -25,6 +28,9 @@ public static class MySqlSafeMigrationOptionsBuilderExtensions
     /// <summary>
     /// Adds the SafeMigrations handler to a typed options builder.
     /// </summary>
+    /// <param name="optionsBuilder">The EF Core options builder to configure.</param>
+    /// <typeparam name="TContext">The DbContext type being configured.</typeparam>
+    /// <returns>The same options builder so additional calls can be chained.</returns>
     public static DbContextOptionsBuilder<TContext> UseMySqlSafeMigrations<TContext>(
         this DbContextOptionsBuilder<TContext> optionsBuilder
     )

@@ -15,6 +15,7 @@ public sealed class SafeMigrationOperation : MigrationOperation
     )
     {
         ArgumentNullException.ThrowIfNull(intent);
+
         if (!Enum.IsDefined(policy))
         {
             throw new ArgumentOutOfRangeException(nameof(policy));

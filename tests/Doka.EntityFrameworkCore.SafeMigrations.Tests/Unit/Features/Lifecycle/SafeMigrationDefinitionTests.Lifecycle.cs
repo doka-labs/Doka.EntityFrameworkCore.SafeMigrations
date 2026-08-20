@@ -10,19 +10,23 @@ public sealed partial class SafeMigrationDefinitionTests
             "tenant_id",
             "id"
         };
+
         var bytes = new byte[]
         {
             1,
             2,
             3,
         };
+
         var key = new ExpectedPrimaryKeyDefinition("pk_items", "items", columns);
         var defaultValue = SafeMigrationDefaultValue.Literal(bytes);
 
         columns[0] = "changed";
         bytes[0] = 9;
+
         var firstRead = Assert.IsType<byte[]>(defaultValue.LiteralValue);
         firstRead[1] = 9;
+
         var secondRead = Assert.IsType<byte[]>(defaultValue.LiteralValue);
 
         Assert.Equal(

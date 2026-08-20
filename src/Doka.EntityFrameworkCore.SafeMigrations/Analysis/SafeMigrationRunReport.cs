@@ -33,6 +33,15 @@ public enum SafeMigrationReportStatus
 public sealed class SafeMigrationAssessment
 {
     /// <summary>Initializes an assessment.</summary>
+    /// <param name="ordinal">The zero-based operation ordinal.</param>
+    /// <param name="operationType">The exact CLR migration-operation type name.</param>
+    /// <param name="isSafeOperation">Whether the assessment represents a SafeMigrations operation.</param>
+    /// <param name="operationKind">The SafeMigrations operation family.</param>
+    /// <param name="objectName">The database object name, or null for provider-owned operations.</param>
+    /// <param name="observedState">The provider-classified live state.</param>
+    /// <param name="action">The provider-neutral action selected for the operation.</param>
+    /// <param name="postconditionSatisfied">Whether the operation's final target condition currently holds.</param>
+    /// <param name="code">The stable low-cardinality result code.</param>
     public SafeMigrationAssessment(
         int ordinal,
         string operationType,
@@ -48,6 +57,7 @@ public sealed class SafeMigrationAssessment
         ArgumentOutOfRangeException.ThrowIfNegative(ordinal);
         ArgumentException.ThrowIfNullOrWhiteSpace(operationType);
         ArgumentException.ThrowIfNullOrWhiteSpace(code);
+
         Ordinal = ordinal;
         OperationType = operationType;
         IsSafeOperation = isSafeOperation;
@@ -94,6 +104,16 @@ public sealed class SafeMigrationRunReport
     public const int CurrentSchemaVersion = 1;
 
     /// <summary>Initializes a run report and snapshots its assessments.</summary>
+    /// <param name="mode">Whether this is a preflight analysis or postflight verification.</param>
+    /// <param name="status">The aggregate report status.</param>
+    /// <param name="generatedAtUtc">The report timestamp; it is normalized to UTC.</param>
+    /// <param name="instanceId">The caller-generated pseudonymous database-instance identifier.</param>
+    /// <param name="environment">The live provider environment.</param>
+    /// <param name="targetMigrationId">The intended target migration identifier, or null when unknown.</param>
+    /// <param name="modelFingerprint">The fingerprint of the canonical target model.</param>
+    /// <param name="contractFingerprint">The fingerprint of the ordered migration contract.</param>
+    /// <param name="assessments">The ordered operation assessments to snapshot.</param>
+    /// <param name="unexpectedObjects">The unexpected live database objects to snapshot.</param>
     public SafeMigrationRunReport(
         SafeMigrationReportMode mode,
         SafeMigrationReportStatus status,
@@ -119,6 +139,7 @@ public sealed class SafeMigrationRunReport
 
         ArgumentException.ThrowIfNullOrWhiteSpace(instanceId);
         ArgumentNullException.ThrowIfNull(environment);
+
         if (targetMigrationId is not null)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(targetMigrationId);
@@ -132,11 +153,14 @@ public sealed class SafeMigrationRunReport
         Status = status;
         SchemaVersion = CurrentSchemaVersion;
         GeneratedAtUtc = generatedAtUtc.ToUniversalTime();
+
         InstanceId = instanceId;
         Environment = environment;
         TargetMigrationId = targetMigrationId;
+
         ModelFingerprint = modelFingerprint;
         ContractFingerprint = contractFingerprint;
+
         Assessments = Array.AsReadOnly(assessments.ToArray());
         UnexpectedObjects = Array.AsReadOnly((unexpectedObjects ?? []).ToArray());
     }

@@ -10,7 +10,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             new EnsureSchemaIntent("app"),
             new DropSchemaIntent("app"),
         ];
+
         var projection = new SafeMigrationPreflightProjection();
+
         foreach (var intent in intents)
         {
             var operation = new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent);
@@ -26,6 +28,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 projected.ObservedState,
                 operation.Policy,
                 projected.RepairCapability);
+
             projection.Observe(operation, projected, decision);
 
             Assert.Same(live, projected);

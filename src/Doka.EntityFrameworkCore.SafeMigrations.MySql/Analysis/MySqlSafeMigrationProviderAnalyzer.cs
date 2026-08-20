@@ -12,6 +12,7 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
     )
     {
         ArgumentNullException.ThrowIfNull(sqlGenerator);
+
         _sqlGenerator = sqlGenerator;
     }
 
@@ -78,6 +79,8 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
             var parameterizer = new MySqlCatalogQueryParameterizer(command);
             var selections = new List<string>(operations.Count);
 
+            // One UNION ALL query classifies the complete batch against one
+            // catalog observation and avoids a round trip per operation.
             for (var ordinal = 0; ordinal < operations.Count; ordinal++)
             {
                 var operation = operations[ordinal]
@@ -114,6 +117,7 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
                 var repairCapability = reader.GetBoolean(3)
                     ? SafeMigrationRepairCapability.Safe
                     : SafeMigrationRepairCapability.None;
+
                 results.Add(
                     new SafeMigrationProviderAnalysis(
                         state,
@@ -172,6 +176,8 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             var findings = new List<SafeMigrationUnexpectedObject>();
 
+            // Unexpected objects are evidence only. They are never folded into
+            // the expected catalog and never authorize destructive cleanup.
             while (await reader.ReadAsync(cancellationToken))
             {
                 var kind = ParseObjectKind(reader.GetString(0));

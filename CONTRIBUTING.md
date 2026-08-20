@@ -53,6 +53,7 @@ or:
 
 ```bash
 SAFE_MIGRATIONS_POSTGRES_IMAGE='postgres:14.24@sha256:2fdfb9b432d4a73bd3eea3d989752c1e669b68d502347e0bfd2cc6d709f3d6b4' \
+SAFE_MIGRATIONS_POSTGRES_VERSION=14.24 \
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.csproj --configuration Release
 ```
 
@@ -67,6 +68,21 @@ dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Doka.EntityFrame
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests.csproj --configuration Release --no-build --no-restore
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.csproj --configuration Release --no-build --no-restore
 dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks.csproj --configuration Release --no-build --no-restore
+dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks.csproj --configuration Release --no-build --no-restore
+dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks.csproj --configuration Release --no-build --no-restore
+python3 eng/verify-project-boundaries.py
+python3 -m unittest discover -s eng/tests -p 'test_*.py' -v
+dotnet format Doka.EntityFrameworkCore.SafeMigrations.slnx style --severity warn --verify-no-changes --no-restore
+dotnet format Doka.EntityFrameworkCore.SafeMigrations.slnx style --diagnostics IDE0005 --severity hidden --verify-no-changes --no-restore
+```
+
+The reusable quality workflow additionally collects Microsoft Cobertura output
+from all three test assemblies, merges product lines conservatively, and runs:
+
+```bash
+python3 eng/verify-coverage.py \
+  --reports-root artifacts/coverage \
+  --thresholds-file eng/coverage-thresholds.json
 ```
 
 Package qualification requires an empty output directory and the Doka feed:
@@ -78,8 +94,9 @@ eng/qualify-packages.sh \
   --doka-source /absolute/path/to/immutable-doka-feed
 ```
 
-The reusable CI workflow additionally runs all engine images, EF CLI/script/
-bundle gates, the Latest dependency profile, and SBOM validation.
+The reusable CI workflow additionally runs all engine images, the merged
+coverage floor, EF CLI/script/bundle gates, the Latest dependency profile, and
+SBOM validation.
 
 ## Change requirements
 

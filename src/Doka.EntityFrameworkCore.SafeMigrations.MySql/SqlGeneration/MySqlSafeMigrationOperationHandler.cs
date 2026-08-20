@@ -40,6 +40,10 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         var runtimePlan = _catalogSqlBuilder.Build(operation, context);
         var baseline = RenderBaseline(operation.Intent, runtimePlan, context);
         var defaultSuppression = baseline[0].TransactionSuppressed;
+
+        // A connection-local temporary table turns rejected decisions and a
+        // failed postcondition into deterministic server errors without a
+        // persistent stored routine or shared database object.
         var commands = new List<MySqlMigrationCommandSpec>(24 + (baseline.Count * 4))
         {
             Command("DROP TEMPORARY TABLE IF EXISTS `__doka_sm_assert`;", defaultSuppression),
@@ -63,6 +67,8 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
                 command.CommandText,
                 HasBackslashDdlComment(operation.Intent));
 
+            // PREPARE selects the real DDL only for apply or repair; every
+            // no-op path executes the harmless placeholder on the same path.
             commands.Add(Command(BuildPreparedSqlAssignment(ddl), command.TransactionSuppressed));
             commands.Add(Command($"PREPARE {PreparedStatementName} FROM @doka_sm_sql;", command.TransactionSuppressed));
             commands.Add(Command($"EXECUTE {PreparedStatementName};", command.TransactionSuppressed));
@@ -156,6 +162,9 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         };
 
         var builder = new StringBuilder("SET @doka_sm_action = CASE @doka_sm_state ");
+
+        // Materialize every planner state into SQL so runtime behavior stays
+        // coupled to the provider-neutral decision table.
         foreach (var state in states)
         {
             var decision = SafeMigrationDecisionPlanner.Plan(

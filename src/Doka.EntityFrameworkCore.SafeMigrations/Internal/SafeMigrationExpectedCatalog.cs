@@ -12,6 +12,7 @@ internal sealed class SafeMigrationExpectedTableInventory
     {
         Table = table;
         Schema = schema;
+
         Columns = columns.ToHashSet(StringComparer.Ordinal);
         Indexes = indexes.ToHashSet(StringComparer.Ordinal);
         Constraints = constraints.ToDictionary(

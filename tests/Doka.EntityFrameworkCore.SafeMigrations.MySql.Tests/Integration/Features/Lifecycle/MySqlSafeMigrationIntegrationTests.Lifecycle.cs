@@ -19,12 +19,14 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             policy: SafeMigrationPolicy.ThrowIfDifferent);
 
         var exception =
-            await Assert.ThrowsAnyAsync<Exception>(() => ExecuteOperationsAsync(context, mismatch.Operations));
+            await Assert.ThrowsAsync<MySqlException>(() => ExecuteOperationsAsync(context, mismatch.Operations));
+
         Assert.Contains("doka_sm_different", exception.Message, StringComparison.OrdinalIgnoreCase);
 
         var valid = new MigrationBuilder(context.Database.ProviderName!);
         valid.AddColumnIfNotExists<string>("description", "accounts", type: "varchar(100)", nullable: true);
         await ExecuteOperationsAsync(context, valid.Operations);
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
@@ -60,14 +62,18 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             type: "varchar(100)",
             nullable: true,
             policy: SafeMigrationPolicy.ThrowIfDifferent);
+
         var mismatchException =
-            await Assert.ThrowsAnyAsync<Exception>(() => ExecuteOperationsAsync(context, mismatch.Operations));
+            await Assert.ThrowsAsync<MySqlException>(() => ExecuteOperationsAsync(context, mismatch.Operations));
+
         Assert.Contains("doka_sm_different", mismatchException.Message, StringComparison.OrdinalIgnoreCase);
 
         var blockedCheck = new MigrationBuilder(context.Database.ProviderName!);
         blockedCheck.AddCheckConstraintIfNotExists("ck_sql_mode_guard_quantity", "sql_mode_guard", "quantity >= 0");
+
         var blockedException =
-            await Assert.ThrowsAnyAsync<Exception>(() => ExecuteOperationsAsync(context, blockedCheck.Operations));
+            await Assert.ThrowsAsync<MySqlException>(() => ExecuteOperationsAsync(context, blockedCheck.Operations));
+
         Assert.Contains("doka_sm_data_blocked", blockedException.Message, StringComparison.OrdinalIgnoreCase);
 
         var recovery = new MigrationBuilder(context.Database.ProviderName!);
@@ -108,8 +114,11 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             table => new { Id = table.Column<int>(type: "int", nullable: false) });
 
         var generator = context.GetService<IMigrationsSqlGenerator>();
-        var exception = Assert.ThrowsAny<Exception>(() => generator.Generate(builder.Operations, context.Model));
-        Assert.Contains("handler", exception.Message, StringComparison.OrdinalIgnoreCase);
+
+        var exception = Assert.Throws<MySqlMigrationOperationHandlerException>(() =>
+            generator.Generate(builder.Operations, context.Model));
+
+        Assert.Equal(MySqlMigrationHandlerFailureCode.UnknownOperationType, exception.FailureCode);
         Assert.Equal(
             0,
             await ScalarIntAsync(
@@ -193,7 +202,10 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var connectionString = await Fixture.CreateDatabaseAsync();
         await using var context = CreateContext(connectionString, registerSafeMigrations: false);
 
-        await Assert.ThrowsAnyAsync<Exception>(() => context.Database.MigrateAsync());
+        var exception = await Assert.ThrowsAsync<MySqlMigrationOperationHandlerException>(() =>
+            context.Database.MigrateAsync());
+
+        Assert.Equal(MySqlMigrationHandlerFailureCode.UnknownOperationType, exception.FailureCode);
 
         Assert.Equal(
             0,
@@ -223,7 +235,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         await ExecuteSqlAsync(connectionString, "CREATE VIEW `pipeline_state` AS SELECT 1 AS `id`;");
         await using var context = CreateContext(connectionString);
 
-        var exception = await Assert.ThrowsAnyAsync<Exception>(() => context.Database.MigrateAsync());
+        var exception = await Assert.ThrowsAsync<MySqlException>(() => context.Database.MigrateAsync());
 
         Assert.Contains("doka_sm_unsupported", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(
@@ -269,6 +281,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                     .MigrationsHistoryTable("__CoreDbContextMigrationsHistory"))
             .UseMySqlSafeMigrations()
             .Options;
+
         await using var context = new SafeMigrationDbContext(options);
 
         Assert.NotNull(context.GetService<ISafeMigrationRunner>());
@@ -302,6 +315,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                     .MigrationsHistoryTable("__CoreDbContextMigrationsHistory"))
             .UseMySqlSafeMigrations()
             .Options;
+
         await using var context = new SafeMigrationDbContext(options);
 
         var exception =
@@ -356,6 +370,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         await using var left = CreateContext(leftConnectionString);
         await using var right = CreateContext(rightConnectionString);
         await Task.WhenAll(left.Database.MigrateAsync(), right.Database.MigrateAsync());
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
@@ -413,6 +428,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         await ExecuteOperationsAsync(context, builder.Operations);
         var postflight = await runner.VerifyAsync(context, builder.Operations, runOptions);
+
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
         Assert.True(
             Assert.Single(postflight.Assessments)
@@ -534,6 +550,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             isNullable: true,
             storeType: "varchar(40)",
             maxLength: 40);
+
         var newColumn = new ExpectedColumnDefinition(
             "name",
             typeof(string),
@@ -542,6 +559,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             maxLength: 40,
             comment: "canonical name",
             defaultValue: SafeMigrationDefaultValue.Literal("unknown"));
+
         var alter = new MigrationBuilder(context.Database.ProviderName!);
         alter.AlterColumnIfDifferent("lifecycle", newColumn, oldColumn, SafeMigrationPolicy.RepairIfSafe);
         await ExecuteOperationsAsync(context, alter.Operations);
@@ -558,6 +576,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         dropTable.DropTableIfExists("renamed_lifecycle");
         await ExecuteOperationsAsync(context, dropTable.Operations);
         await ExecuteOperationsAsync(context, dropTable.Operations);
+
         Assert.Equal(
             0,
             await ScalarIntAsync(
@@ -597,6 +616,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var generator = templateContext.GetService<IMigrationsSqlGenerator>();
         var commandCount = generator.Generate(templateBuilder.Operations, templateContext.Model)
             .Count;
+
         Assert.True(commandCount > 10);
 
         for (var boundary = 1; boundary <= commandCount; boundary++)
@@ -610,6 +630,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 var commands = interruptedContext
                     .GetService<IMigrationsSqlGenerator>()
                     .Generate(builder.Operations, interruptedContext.Model);
+
                 var connection = interruptedContext.Database.GetDbConnection();
                 await connection.OpenAsync();
                 for (var index = 0; index < boundary; index++)
@@ -627,6 +648,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             retry.AddColumnIfNotExists<int>("guarded_value", "fault_target", type: "int", nullable: true);
             await ExecuteOperationsAsync(retryContext, retry.Operations);
             await ExecuteOperationsAsync(retryContext, retry.Operations);
+
             Assert.Equal(
                 1,
                 await ScalarIntAsync(
@@ -650,12 +672,14 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var commands = context
             .GetService<IMigrationsSqlGenerator>()
             .Generate(builder.Operations, context.Model);
+
         Assert.DoesNotContain(
             commands,
             command => command.CommandText.Contains("ROUTINE", StringComparison.OrdinalIgnoreCase)
                 || command.CommandText.Contains("PROCEDURE", StringComparison.OrdinalIgnoreCase));
         await ExecuteOperationsAsync(context, builder.Operations);
         await ExecuteOperationsAsync(context, builder.Operations);
+
         Assert.Equal(
             1,
             await ScalarIntAsync(

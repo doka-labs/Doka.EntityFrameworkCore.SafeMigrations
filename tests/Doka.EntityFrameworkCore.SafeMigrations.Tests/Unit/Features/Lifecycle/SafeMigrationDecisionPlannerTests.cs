@@ -14,6 +14,7 @@ public sealed class SafeMigrationDecisionPlannerTests
                     foreach (var repair in Enum.GetValues<SafeMigrationRepairCapability>())
                     {
                         var decision = SafeMigrationDecisionPlanner.Plan(kind, state, policy, repair);
+
                         Assert.True(Enum.IsDefined(decision.Action));
                         Assert.False(string.IsNullOrWhiteSpace(decision.Code));
                     }

@@ -100,6 +100,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         {
             var oldTable = _table;
             var oldSchema = _schema;
+
             PrimaryKey = PrimaryKey is null ? null : Copy(PrimaryKey, table: table, schema: schema);
             ReplaceValues(UniqueConstraints, value => Copy(value, table: table, schema: schema));
             ReplaceValues(CheckConstraints, value => Copy(value, table: table, schema: schema));
@@ -116,6 +117,7 @@ internal sealed partial class SafeMigrationPreflightProjection
                         ? schema
                         : value.PrincipalSchema));
             ReplaceValues(Indexes, value => Copy(value, table: table, schema: schema));
+
             _table = table;
             _schema = schema;
         }

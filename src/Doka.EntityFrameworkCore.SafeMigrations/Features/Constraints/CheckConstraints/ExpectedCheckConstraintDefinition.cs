@@ -4,6 +4,10 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 public sealed class ExpectedCheckConstraintDefinition
 {
     /// <summary>Initializes an expected check constraint.</summary>
+    /// <param name="name">The database object name.</param>
+    /// <param name="table">The table name.</param>
+    /// <param name="sql">The SQL expression.</param>
+    /// <param name="schema">The schema name, or null for the provider default.</param>
     public ExpectedCheckConstraintDefinition(
         string name,
         string table,

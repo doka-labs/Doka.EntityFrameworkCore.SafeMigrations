@@ -14,6 +14,7 @@ public sealed partial class SafeMigrationStandardOperationFactoryTests
                         typeof(string),
                         true,
                         defaultValue: SafeMigrationDefaultValue.Literal(null)))));
+
         var withoutDefault = Assert.IsType<AddColumnOperation>(
             SafeMigrationStandardOperationFactory.Create(
                 new EnsureColumnIntent("items", new ExpectedColumnDefinition("other", typeof(string), true))));

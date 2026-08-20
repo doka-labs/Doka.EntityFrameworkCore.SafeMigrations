@@ -4,11 +4,13 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 public sealed class EnsureCheckConstraintIntent : SafeMigrationIntent
 {
     /// <summary>Initializes the intent.</summary>
+    /// <param name="definition">The complete expected database-object definition.</param>
     public EnsureCheckConstraintIntent(
         ExpectedCheckConstraintDefinition definition
     ) : base(SafeMigrationOperationKind.EnsureCheckConstraint)
     {
         ArgumentNullException.ThrowIfNull(definition);
+
         Definition = definition;
     }
 
@@ -23,6 +25,9 @@ public sealed class EnsureCheckConstraintIntent : SafeMigrationIntent
 public sealed class DropCheckConstraintIntent : SafeMigrationIntent
 {
     /// <summary>Initializes the intent.</summary>
+    /// <param name="name">The database object name.</param>
+    /// <param name="table">The table name.</param>
+    /// <param name="schema">The schema name, or null for the provider default.</param>
     public DropCheckConstraintIntent(
         string name,
         string table,

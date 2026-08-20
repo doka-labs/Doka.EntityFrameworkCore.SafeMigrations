@@ -13,6 +13,7 @@ public sealed partial class SafeMigrationBuilderExtensionsTests
             "ix_items_value",
             "items",
             [new ExpectedIndexKeyDefinition(column: "value")]);
+
         var primaryKey = new ExpectedPrimaryKeyDefinition("pk_items", "items", ["id"]);
         var unique = new ExpectedUniqueConstraintDefinition("uq_items_value", "items", ["value"]);
         var check = new ExpectedCheckConstraintDefinition("ck_items_id", "items", "id > 0");
@@ -42,6 +43,7 @@ public sealed partial class SafeMigrationBuilderExtensionsTests
         var operations = builder
             .Operations.Cast<SafeMigrationOperation>()
             .ToArray();
+
         Assert.Equal(
             Enum.GetValues<SafeMigrationOperationKind>()
                 .Length,

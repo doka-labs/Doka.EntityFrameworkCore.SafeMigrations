@@ -4,6 +4,10 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 public sealed class ExpectedPrimaryKeyDefinition
 {
     /// <summary>Initializes an expected primary key.</summary>
+    /// <param name="name">The database object name.</param>
+    /// <param name="table">The table name.</param>
+    /// <param name="columns">The ordered primary-key column names.</param>
+    /// <param name="schema">The schema name, or null for the provider default.</param>
     public ExpectedPrimaryKeyDefinition(
         string name,
         string table,

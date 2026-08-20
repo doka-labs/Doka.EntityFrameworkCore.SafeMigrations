@@ -37,6 +37,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             [
                 new ExpectedForeignKeyDefinition(foreignKey, table, [parent], table, [id]),
             ]);
+
         var connectionString = await Fixture.CreateDatabaseAsync();
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -55,10 +56,12 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             var diagnostics = await context
                 .GetService<ISafeMigrationRunner>()
                 .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("identifier-instance"));
+
             var failures = diagnostics
                 .Assessments.Where(static assessment => assessment.ObservedState != SafeMigrationObservedState.Matching)
                 .Select(static assessment => $"{assessment.Ordinal}:{assessment.OperationKind}:"
                     + $"{assessment.ObjectName}:{assessment.ObservedState}:{assessment.Code}");
+
             var catalogCheck = await DescribeCheckConstraintAsync(connectionString, check);
             throw new InvalidOperationException(
                 $"Identifier convergence failed: {string.Join(";", failures)}. " + $"Catalog check: {catalogCheck}",

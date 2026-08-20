@@ -16,6 +16,9 @@ internal static class MySqlExpressionCanonicalizer
         ArgumentNullException.ThrowIfNull(sqlGenerationHelper);
 
         var builder = new StringBuilder(expression.Length + 16);
+
+        // Quoted tokens are already complete SQL. Only bare identifiers can be
+        // delimited without changing string literals or provider syntax.
         for (var index = 0; index < expression.Length;)
         {
             var current = expression[index];
@@ -76,6 +79,8 @@ internal static class MySqlExpressionCanonicalizer
             .Concat(tokens.Select(static token => token.Text))
             .Trim();
 
+        // MySQL and MariaDB may add outer or per-term parentheses when they
+        // expose expressions through INFORMATION_SCHEMA.
         var candidates = new List<string>
         {
             flat,
@@ -127,6 +132,9 @@ internal static class MySqlExpressionCanonicalizer
     {
         var tokens = new List<CatalogToken>();
         var depth = 0;
+
+        // Boolean terms are regrouped only at depth zero; nested predicates
+        // must retain their original parenthesis structure.
         for (var index = 0; index < expression.Length;)
         {
             var current = expression[index];
@@ -188,6 +196,7 @@ internal static class MySqlExpressionCanonicalizer
 
                 var word = expression[start..index]
                     .ToLowerInvariant();
+
                 tokens.Add(new CatalogToken(word, depth == 0 && word is "and" or "or"));
                 continue;
             }

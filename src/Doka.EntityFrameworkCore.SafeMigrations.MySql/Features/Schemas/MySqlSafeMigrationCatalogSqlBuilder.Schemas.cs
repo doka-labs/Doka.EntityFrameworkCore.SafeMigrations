@@ -28,6 +28,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             DropForeignKeyIntent value => value.Schema,
             _ => null,
         };
+
         return schema is null ? null : "schema_qualified_object";
     }
 

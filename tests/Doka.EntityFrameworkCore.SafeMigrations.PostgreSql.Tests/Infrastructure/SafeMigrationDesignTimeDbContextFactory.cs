@@ -7,6 +7,7 @@ public sealed class SafeMigrationDesignTimeDbContextFactory : IDesignTimeDbConte
     )
     {
         ArgumentNullException.ThrowIfNull(args);
+
         var connectionString = Environment.GetEnvironmentVariable("SAFE_MIGRATIONS_CONNECTION_STRING");
         if (string.IsNullOrWhiteSpace(connectionString))
         {

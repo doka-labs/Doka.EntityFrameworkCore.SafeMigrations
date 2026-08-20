@@ -15,6 +15,7 @@ internal sealed class MySqlCatalogQueryParameterizer
     )
     {
         ArgumentNullException.ThrowIfNull(command);
+
         _command = command;
     }
 

@@ -7,6 +7,14 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 public sealed class ExpectedTableDefinition
 {
     /// <summary>Initializes an expected table definition.</summary>
+    /// <param name="table">The table name.</param>
+    /// <param name="columns">The ordered expected column definitions.</param>
+    /// <param name="schema">The schema name, or null for the provider default.</param>
+    /// <param name="comment">The expected database comment, or null when unspecified.</param>
+    /// <param name="primaryKey">The expected primary key, or null when absent.</param>
+    /// <param name="uniqueConstraints">The expected unique constraints.</param>
+    /// <param name="checkConstraints">The expected check constraints.</param>
+    /// <param name="foreignKeys">The expected foreign keys.</param>
     public ExpectedTableDefinition(
         string table,
         IEnumerable<ExpectedColumnDefinition> columns,

@@ -92,6 +92,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("test-instance"));
+
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.All(
             report.Assessments,
@@ -104,6 +105,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         {
             var exception =
                 await Assert.ThrowsAsync<PostgresException>(() => ExecuteOperationsAsync(context, [operation]));
+
             Assert.Equal("P1001", exception.SqlState);
         }
     }
@@ -137,6 +139,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("test-instance"));
+
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.All(
             report.Assessments,
@@ -146,6 +149,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         {
             var exception =
                 await Assert.ThrowsAsync<PostgresException>(() => ExecuteOperationsAsync(context, [operation]));
+
             Assert.Equal("P1003", exception.SqlState);
         }
 

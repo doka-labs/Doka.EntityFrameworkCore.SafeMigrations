@@ -11,6 +11,9 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
     private readonly ISqlGenerationHelper _sqlGenerationHelper;
 
     /// <summary>Initializes the composed SafeMigrations generator.</summary>
+    /// <param name="npgsqlGenerator">The standard Npgsql migrations SQL generator.</param>
+    /// <param name="typeMappingSource">The provider relational type-mapping service.</param>
+    /// <param name="sqlGenerationHelper">The provider SQL identifier-generation service.</param>
     public PostgreSqlSafeMigrationsSqlGenerator(
         NpgsqlMigrationsSqlGenerator npgsqlGenerator,
         IRelationalTypeMappingSource typeMappingSource,
@@ -20,6 +23,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         ArgumentNullException.ThrowIfNull(npgsqlGenerator);
         ArgumentNullException.ThrowIfNull(typeMappingSource);
         ArgumentNullException.ThrowIfNull(sqlGenerationHelper);
+
         _npgsqlGenerator = npgsqlGenerator;
         _sqlGenerationHelper = sqlGenerationHelper;
         _catalogSqlBuilder = new PostgreSqlSafeMigrationCatalogSqlBuilder(typeMappingSource, sqlGenerationHelper);
@@ -96,6 +100,8 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         var tag = SelectDollarTag(
             baselineSql + runtimePlan.StateExpression + runtimePlan.RepairPrecondition + runtimePlan.Postcondition);
 
+        // The selected dollar tag cannot occur in embedded SQL, so provider
+        // output cannot terminate the anonymous block accidentally.
         var builder = new StringBuilder()
             .Append("DO ")
             .Append(tag)
@@ -228,7 +234,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         string sql
     )
     {
-        for (var suffix = 0;; suffix++)
+        for (var suffix = 0; ; suffix++)
         {
             var tag = suffix == 0 ? "$doka_safe_migration$" : $"$doka_safe_migration_{suffix}$";
             if (!sql.Contains(tag, StringComparison.Ordinal))

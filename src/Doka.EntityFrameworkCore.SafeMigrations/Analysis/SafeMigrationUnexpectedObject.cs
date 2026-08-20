@@ -33,6 +33,11 @@ public enum SafeMigrationDatabaseObjectKind
 public sealed class SafeMigrationUnexpectedObject
 {
     /// <summary>Initializes an immutable unexpected-object result.</summary>
+    /// <param name="objectKind">The database-object family.</param>
+    /// <param name="schema">The schema name, or null for the provider default.</param>
+    /// <param name="table">The table name.</param>
+    /// <param name="name">The database object name.</param>
+    /// <param name="code">The stable low-cardinality result code.</param>
     public SafeMigrationUnexpectedObject(
         SafeMigrationDatabaseObjectKind objectKind,
         string? schema,

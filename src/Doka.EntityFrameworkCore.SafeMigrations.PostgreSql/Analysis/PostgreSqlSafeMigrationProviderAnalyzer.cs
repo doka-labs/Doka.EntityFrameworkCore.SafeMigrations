@@ -12,6 +12,7 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
     {
         ArgumentNullException.ThrowIfNull(typeMappingSource);
         ArgumentNullException.ThrowIfNull(sqlGenerationHelper);
+
         _typeMappingSource = typeMappingSource;
         _sqlGenerationHelper = sqlGenerationHelper;
     }
@@ -24,6 +25,7 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
     )
     {
         ArgumentNullException.ThrowIfNull(context);
+
         var connection = context.Database.GetDbConnection();
         var openedHere = connection.State != System.Data.ConnectionState.Open;
         if (openedHere)
@@ -52,6 +54,7 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(operations);
+
         if (operations.Count == 0)
         {
             return [];
@@ -74,6 +77,9 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
                 parameters.AddString);
 
             var selections = new List<string>(operations.Count);
+
+            // One UNION ALL query classifies the complete batch against one
+            // catalog observation and avoids a round trip per operation.
             for (var ordinal = 0; ordinal < operations.Count; ordinal++)
             {
                 var operation = operations[ordinal]
@@ -160,6 +166,9 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
             command.CommandText = BuildUnexpectedObjectSql(scope);
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             var findings = new List<SafeMigrationUnexpectedObject>();
+
+            // Unexpected objects are evidence only. They are never folded into
+            // the expected catalog and never authorize destructive cleanup.
             while (await reader.ReadAsync(cancellationToken))
             {
                 var kind = ParseObjectKind(reader.GetString(0));

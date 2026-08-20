@@ -248,6 +248,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         {
             var castPrefix = Literal($"{candidate}::");
             var castExpression = $"({castPrefix} || pg_catalog.format_type(a.atttypid, NULL))";
+
             conditions.Add($"{catalogExpression} = {Literal(candidate)}");
             conditions.Add($"{catalogExpression} = {Literal($"({candidate})")}");
             conditions.Add($"{catalogExpression} = {castExpression}");

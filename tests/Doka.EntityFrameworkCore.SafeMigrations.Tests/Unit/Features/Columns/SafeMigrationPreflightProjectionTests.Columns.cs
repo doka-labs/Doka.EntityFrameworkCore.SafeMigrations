@@ -12,6 +12,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             isNullable: true,
             storeType: "varchar(40)",
             maxLength: 40);
+
         var target = new ExpectedColumnDefinition(
             "value",
             typeof(string),
@@ -19,6 +20,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             storeType: "varchar(40)",
             maxLength: 40,
             comment: "canonical");
+
         Apply(
             projection,
             new EnsureTableIntent(

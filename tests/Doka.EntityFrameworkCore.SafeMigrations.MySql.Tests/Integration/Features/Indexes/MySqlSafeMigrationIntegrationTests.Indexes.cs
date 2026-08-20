@@ -12,7 +12,8 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         builder.CreateIndexIfNotExists("ix_events_filtered", "events", ["id"], filter: "id > 0");
 
         var exception =
-            await Assert.ThrowsAnyAsync<Exception>(() => ExecuteOperationsAsync(context, builder.Operations));
+            await Assert.ThrowsAsync<MySqlException>(() => ExecuteOperationsAsync(context, builder.Operations));
+
         Assert.Contains("doka_sm_unsupported", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(
             0,
@@ -36,6 +37,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             "advanced_indexes",
             [new ExpectedIndexKeyDefinition(column: "value", descending: true, prefixLength: 12)],
             method: "BTREE");
+
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureIndex(definition, SafeMigrationPolicy.ThrowIfDifferent);
 
@@ -53,6 +55,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, drift.Operations, new SafeMigrationRunOptions("test-instance"));
+
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(
             SafeMigrationObservedState.Different,
@@ -77,6 +80,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var preflight = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("test-instance"));
+
         if (Fixture.IsMariaDb)
         {
             Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);

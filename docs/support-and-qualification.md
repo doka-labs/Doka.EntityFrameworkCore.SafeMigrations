@@ -31,12 +31,15 @@ CI and stable releases. It pins these exact qualification images:
 | MariaDB 11.8 | `mariadb:11.8.8@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17481111890c4` |
 | MariaDB 12.3 | `mariadb:12.3.2@sha256:759869cb6f003234a95c6384cdee245b4bce7de26913fe607a8110362c0c007d` |
 | PostgreSQL 14 | `postgres:14.24@sha256:2fdfb9b432d4a73bd3eea3d989752c1e669b68d502347e0bfd2cc6d709f3d6b4` |
+| PostgreSQL 15 | `postgres:15.19@sha256:5f72c7b5bd616308ccfd2e74d6be16fb06364e5eecbb815fe9dc6ab9761d2111` |
+| PostgreSQL 16 | `postgres:16.15@sha256:e17e86066e5ef83e0952a9347f5c792b7ece00972e2aa787a6986f471b3dd3d5` |
+| PostgreSQL 17 | `postgres:17.11@sha256:e38411452a464af89e5adadb8d223bf53b898d47d6ef918b2d58c08707350449` |
 | PostgreSQL 18 | `postgres:18.6@sha256:06cad38a5d9f5d24b4d83d86def30795d5e4b757fedbf5281172b576dedcd941` |
 
 MySQL/MariaDB support follows Doka's canonical feature profiles. PostgreSQL
-support spans major versions 14 through 18; the oldest and newest supported
-majors are release gates. A new endpoint or removed upstream version requires a
-reviewed support-contract change and fresh evidence.
+support spans major versions 14 through 18; every supported major is an
+independent release-gate cell. A new endpoint or removed upstream version
+requires a reviewed support-contract change and fresh evidence.
 
 ## Dependency profiles
 
@@ -59,11 +62,12 @@ silently modifying the Floor contract.
 
 ## Behavioral evidence
 
-The test inventory currently contains 103 tests:
+The test inventory currently contains 145 xUnit tests plus two tests for the
+coverage-gate parser:
 
-- 27 provider-neutral tests;
-- 46 MySQL/MariaDB tests;
-- 30 PostgreSQL tests.
+- 35 provider-neutral tests;
+- 65 MySQL/MariaDB tests;
+- 45 PostgreSQL tests.
 
 Provider tests use real Docker servers and cover:
 
@@ -73,14 +77,20 @@ Provider tests use real Docker servers and cover:
 - granular heterogeneous table convergence and pairwise legacy-state
   generation with a fixed seed;
 - exact expected column, index, primary-key, unique, check, and foreign-key
-  facets;
+  facets, including one-field drift matrices and strict-table embedding;
 - provider-specific index capabilities and unsupported branches;
 - quotes, backslashes, mixed case, Unicode, and maximum-length identifiers;
+- PostgreSQL non-default schemas, cross-schema foreign keys, and
+  same-named-object isolation;
+- fail-closed schema qualification across every MySQL/MariaDB operation family;
 - same-session guard recovery, partial-command retry, least privilege, and
   provider migration locks;
+- four concurrent migrators on one database and parallel independent
+  databases;
 - normal EF operations mixed with safe operations;
 - EF history success/failure and derived-context model-snapshot guards;
-- read-only preflight, unexpected-object inventory, and postflight.
+- read-only preflight, unexpected-object inventory, positive and negative
+  postflight, and cancellation before and during catalog access.
 
 The provider-analyzer contract accepts the ordered safe-operation batch. Each
 provider executes that classification in one parameterized database command;
@@ -116,6 +126,26 @@ These are complete fail-closed outcomes, not silent degradation. A provider or
 server update may remove a boundary only after the same missing, matching,
 different, retry, preflight, and EF-pipeline evidence passes for the changed
 capability.
+
+## Coverage gate
+
+The release workflow runs all three test assemblies against pinned MariaDB
+11.8 and PostgreSQL 18 images with Microsoft's built-in code-coverage
+collector. `eng/verify-coverage.py` conservatively merges Cobertura line and
+branch evidence by product source line and excludes test and third-party
+assemblies by exact package name.
+
+`eng/coverage-thresholds.json` is a blocking floor, not a quality target:
+
+| Product assembly | Line floor | Branch floor |
+|---|---:|---:|
+| Core | 92% | 80% |
+| MySQL/MariaDB adapter | 92% | 75% |
+| PostgreSQL adapter | 94% | 84% |
+
+The behavioral and engine matrices remain mandatory even when the numeric
+floor passes. A threshold reduction requires reviewed evidence and must not be
+used to hide an uncovered regression.
 
 ## Performance and memory
 

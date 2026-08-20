@@ -61,6 +61,7 @@ internal static class SampleMigrationUsage
     )
     {
         ArgumentNullException.ThrowIfNull(migrationBuilder);
+
         migrationBuilder.EnsureSchemaExists("reporting");
         migrationBuilder.RenameTableIfExists("legacy_users", "users");
         migrationBuilder.RenameColumnIfExists("full_name", "users", "display_name");

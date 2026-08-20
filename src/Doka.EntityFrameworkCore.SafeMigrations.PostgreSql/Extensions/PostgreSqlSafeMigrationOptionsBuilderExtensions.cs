@@ -8,11 +8,14 @@ public static class PostgreSqlSafeMigrationOptionsBuilderExtensions
     /// <summary>
     /// Replaces the active migrations SQL generator with the PostgreSQL safe-migrations generator.
     /// </summary>
+    /// <param name="optionsBuilder">The EF Core options builder to configure.</param>
+    /// <returns>The same options builder so additional calls can be chained.</returns>
     public static DbContextOptionsBuilder UsePostgreSqlSafeMigrations(
         this DbContextOptionsBuilder optionsBuilder
     )
     {
         ArgumentNullException.ThrowIfNull(optionsBuilder);
+
         AddOptionsExtension(optionsBuilder);
         return optionsBuilder;
     }
@@ -20,6 +23,9 @@ public static class PostgreSqlSafeMigrationOptionsBuilderExtensions
     /// <summary>
     /// Activates PostgreSQL SafeMigrations on a typed options builder.
     /// </summary>
+    /// <param name="optionsBuilder">The EF Core options builder to configure.</param>
+    /// <typeparam name="TContext">The DbContext type being configured.</typeparam>
+    /// <returns>The same options builder so additional calls can be chained.</returns>
     public static DbContextOptionsBuilder<TContext> UsePostgreSqlSafeMigrations<TContext>(
         this DbContextOptionsBuilder<TContext> optionsBuilder
     )

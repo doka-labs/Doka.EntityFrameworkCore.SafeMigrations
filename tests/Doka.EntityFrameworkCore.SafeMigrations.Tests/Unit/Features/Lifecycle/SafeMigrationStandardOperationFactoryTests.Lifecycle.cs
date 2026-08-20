@@ -8,6 +8,7 @@ public sealed partial class SafeMigrationStandardOperationFactoryTests
         foreach (var intent in CreateIntents())
         {
             var operation = SafeMigrationStandardOperationFactory.Create(intent);
+
             Assert.NotNull(operation);
             Assert.NotEqual(typeof(SafeMigrationOperation), operation.GetType());
         }

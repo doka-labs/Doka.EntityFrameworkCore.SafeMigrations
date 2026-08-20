@@ -15,6 +15,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
 
         var exception =
             await Assert.ThrowsAsync<PostgresException>(() => ExecuteOperationsAsync(context, builder.Operations));
+
         Assert.Equal("P1001", exception.SqlState);
         Assert.Equal("doka_sm_different", exception.MessageText);
     }
@@ -30,7 +31,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             table => new { Id = table.Column<int>(type: "integer", nullable: false) });
         var generator = context.GetService<IMigrationsSqlGenerator>();
 
-        Assert.ThrowsAny<Exception>(() => generator.Generate(builder.Operations, context.Model));
+        Assert.Throws<InvalidOperationException>(() => generator.Generate(builder.Operations, context.Model));
         Assert.Equal(
             0,
             await ScalarIntAsync(
@@ -117,6 +118,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                     .MigrationsHistoryTable("__CoreDbContextMigrationsHistory"))
             .UsePostgreSqlSafeMigrations()
             .Options;
+
         await using var context = new SafeMigrationDbContext(options);
 
         Assert.NotNull(context.GetService<ISafeMigrationRunner>());
@@ -204,6 +206,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         await using var left = CreateContext(leftConnectionString);
         await using var right = CreateContext(rightConnectionString);
         await Task.WhenAll(left.Database.MigrateAsync(), right.Database.MigrateAsync());
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
@@ -260,6 +263,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
 
         await ExecuteOperationsAsync(context, builder.Operations);
         var postflight = await runner.VerifyAsync(context, builder.Operations, runOptions);
+
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
         Assert.True(
             Assert.Single(postflight.Assessments)
@@ -327,6 +331,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             isNullable: true,
             storeType: "character varying(40)",
             maxLength: 40);
+
         var targetColumn = new ExpectedColumnDefinition(
             "name",
             typeof(string),
@@ -335,6 +340,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             maxLength: 40,
             comment: "canonical name",
             defaultValue: SafeMigrationDefaultValue.Literal("unknown"));
+
         var alter = new MigrationBuilder(context.Database.ProviderName!);
         alter.AlterColumnIfDifferent("lifecycle", targetColumn, oldColumn, SafeMigrationPolicy.RepairIfSafe);
         await ExecuteOperationsAsync(context, alter.Operations);
@@ -351,6 +357,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         dropTable.DropTableIfExists("renamed_lifecycle");
         await ExecuteOperationsAsync(context, dropTable.Operations);
         await ExecuteOperationsAsync(context, dropTable.Operations);
+
         Assert.Equal(
             0,
             await ScalarIntAsync(

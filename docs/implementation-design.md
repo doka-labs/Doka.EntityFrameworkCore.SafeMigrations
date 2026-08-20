@@ -238,7 +238,9 @@ Release qualification covers:
 - external internal-service-provider registration;
 - a package-only consumer with no ProjectReference;
 - deterministic pairwise legacy states;
-- supported engine endpoints and dependency Floor/Latest profiles;
+- every supported PostgreSQL major, every qualified Doka engine profile, and
+  dependency Floor/Latest profiles;
+- conservatively merged product line and branch coverage floors;
 - byte-identical packages, SBOM, provenance, and NuGet readback.
 
 Primary boundaries are based on the public contracts documented by

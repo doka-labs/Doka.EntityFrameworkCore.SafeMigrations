@@ -4,12 +4,15 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 public sealed class EnsureTableIntent : SafeMigrationIntent
 {
     /// <summary>Initializes the intent.</summary>
+    /// <param name="definition">The complete expected database-object definition.</param>
+    /// <param name="mode">The table-definition comparison mode.</param>
     public EnsureTableIntent(
         ExpectedTableDefinition definition,
         SafeMigrationTableMode mode
     ) : base(SafeMigrationOperationKind.EnsureTable)
     {
         ArgumentNullException.ThrowIfNull(definition);
+
         if (!Enum.IsDefined(mode))
         {
             throw new ArgumentOutOfRangeException(nameof(mode));
@@ -33,6 +36,8 @@ public sealed class EnsureTableIntent : SafeMigrationIntent
 public sealed class DropTableIntent : SafeMigrationIntent
 {
     /// <summary>Initializes the intent.</summary>
+    /// <param name="table">The table name.</param>
+    /// <param name="schema">The schema name, or null for the provider default.</param>
     public DropTableIntent(
         string table,
         string? schema = null
@@ -56,6 +61,10 @@ public sealed class DropTableIntent : SafeMigrationIntent
 public sealed class RenameTableIntent : SafeMigrationIntent
 {
     /// <summary>Initializes the intent.</summary>
+    /// <param name="name">The database object name.</param>
+    /// <param name="newName">The target database object name.</param>
+    /// <param name="schema">The schema name, or null for the provider default.</param>
+    /// <param name="newSchema">The target schema name, or null when unchanged.</param>
     public RenameTableIntent(
         string name,
         string? newName = null,

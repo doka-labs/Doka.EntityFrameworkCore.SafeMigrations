@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "assemblies": [
+    {
+      "name": "Doka.EntityFrameworkCore.SafeMigrations",
+      "minimumLineRate": 0.92,
+      "minimumBranchRate": 0.80
+    },
+    {
+      "name": "Doka.EntityFrameworkCore.SafeMigrations.MySql",
+      "minimumLineRate": 0.92,
+      "minimumBranchRate": 0.75
+    },
+    {
+      "name": "Doka.EntityFrameworkCore.SafeMigrations.PostgreSql",
+      "minimumLineRate": 0.94,
+      "minimumBranchRate": 0.84
+    }
+  ]
+}

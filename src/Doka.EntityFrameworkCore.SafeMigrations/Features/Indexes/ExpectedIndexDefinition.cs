@@ -6,6 +6,12 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 public sealed class ExpectedIndexKeyDefinition
 {
     /// <summary>Initializes an expected index key.</summary>
+    /// <param name="column">The column name.</param>
+    /// <param name="expression">The index or check expression, or null when absent.</param>
+    /// <param name="descending">The ordered descending flags, or null for ascending keys.</param>
+    /// <param name="prefixLength">The index prefix length, or null when unspecified.</param>
+    /// <param name="collation">The expected database collation, or null when unspecified.</param>
+    /// <param name="operatorClass">The provider operator class, or null when unspecified.</param>
     public ExpectedIndexKeyDefinition(
         string? column = null,
         string? expression = null,
@@ -59,6 +65,15 @@ public sealed class ExpectedIndexKeyDefinition
 public sealed class ExpectedIndexDefinition
 {
     /// <summary>Initializes an expected index definition.</summary>
+    /// <param name="name">The database object name.</param>
+    /// <param name="table">The table name.</param>
+    /// <param name="keys">The ordered index keys.</param>
+    /// <param name="schema">The schema name, or null for the provider default.</param>
+    /// <param name="unique">Whether the index enforces uniqueness.</param>
+    /// <param name="filter">The index predicate, or null for an unfiltered index.</param>
+    /// <param name="includedColumns">The non-key columns included by the index.</param>
+    /// <param name="method">The provider index method, or null when unspecified.</param>
+    /// <param name="nullsDistinct">The unique-index null-distinctness setting, or null when unspecified.</param>
     public ExpectedIndexDefinition(
         string name,
         string table,

@@ -41,8 +41,10 @@ public abstract class PostgreSqlIntegrationTestBase : IClassFixture<PostgreSqlCo
     {
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
+
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
+
         await command.ExecuteNonQueryAsync();
     }
 
@@ -53,8 +55,10 @@ public abstract class PostgreSqlIntegrationTestBase : IClassFixture<PostgreSqlCo
     {
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
+
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
+
         return Convert.ToInt32(await command.ExecuteScalarAsync(), CultureInfo.InvariantCulture);
     }
 
@@ -65,8 +69,10 @@ public abstract class PostgreSqlIntegrationTestBase : IClassFixture<PostgreSqlCo
     {
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
+
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
+
         return Convert.ToString(await command.ExecuteScalarAsync(), CultureInfo.InvariantCulture) ?? "<null>";
     }
 
@@ -77,10 +83,12 @@ public abstract class PostgreSqlIntegrationTestBase : IClassFixture<PostgreSqlCo
     {
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
+
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT pg_catalog.pg_get_expr(co.conbin, co.conrelid) "
             + "FROM pg_catalog.pg_constraint co WHERE co.conname = @name;";
         command.Parameters.AddWithValue("name", constraintName);
+
         return Convert.ToString(await command.ExecuteScalarAsync(), CultureInfo.InvariantCulture) ?? "<null>";
     }
 }

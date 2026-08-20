@@ -14,6 +14,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             analysis.ObservedState,
             operation.Policy,
             analysis.RepairCapability);
+
         Assert.DoesNotContain(
             decision.Action,
             new[]
@@ -32,6 +33,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     {
         var operation = new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent);
         var analysis = projection.Project(operation, Live(SafeMigrationObservedState.Missing));
+
         Assert.Equal(SafeMigrationObservedState.Matching, analysis.ObservedState);
     }
 

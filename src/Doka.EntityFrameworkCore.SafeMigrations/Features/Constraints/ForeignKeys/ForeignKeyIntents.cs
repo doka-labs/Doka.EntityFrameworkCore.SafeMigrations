@@ -4,11 +4,13 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 public sealed class EnsureForeignKeyIntent : SafeMigrationIntent
 {
     /// <summary>Initializes the intent.</summary>
+    /// <param name="definition">The complete expected database-object definition.</param>
     public EnsureForeignKeyIntent(
         ExpectedForeignKeyDefinition definition
     ) : base(SafeMigrationOperationKind.EnsureForeignKey)
     {
         ArgumentNullException.ThrowIfNull(definition);
+
         Definition = definition;
     }
 
@@ -23,6 +25,9 @@ public sealed class EnsureForeignKeyIntent : SafeMigrationIntent
 public sealed class DropForeignKeyIntent : SafeMigrationIntent
 {
     /// <summary>Initializes the intent.</summary>
+    /// <param name="name">The database object name.</param>
+    /// <param name="table">The table name.</param>
+    /// <param name="schema">The schema name, or null for the provider default.</param>
     public DropForeignKeyIntent(
         string name,
         string table,

@@ -64,11 +64,13 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("test-instance"));
+
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
         Assert.Equal(SafeMigrationAction.NoOp, assessment.Action);
 
         await ExecuteOperationsAsync(context, builder.Operations);
+
         Assert.Equal(
             20,
             await ScalarIntAsync(
@@ -137,6 +139,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 "different" => ", payload character varying(20) NULL",
                 _ => throw new InvalidOperationException("Unknown generated column state."),
             };
+
             await ExecuteSqlAsync(
                 connectionString,
                 $"CREATE TABLE {table} (id integer NOT NULL, alternate_id integer NOT NULL{columnSql});");
@@ -151,6 +154,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 var insertColumns = scenario.Values["column"] == "missing"
                     ? "id, alternate_id"
                     : "id, alternate_id, payload";
+
                 var insertValues = scenario.Values["column"] == "missing" ? "1, 2" : "1, 2, 'legacy'";
                 await ExecuteSqlAsync(
                     connectionString,
@@ -194,9 +198,11 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 "SELECT COALESCE(MAX(character_maximum_length), 0) "
                 + "FROM information_schema.columns WHERE table_schema = current_schema() "
                 + $"AND table_name = '{table}' AND column_name = 'payload';");
+
             var report = await context
                 .GetService<ISafeMigrationRunner>()
                 .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions($"pairwise-{scenario.Index}"));
+
             Assert.Equal(
                 beforeColumnLength,
                 await ScalarIntAsync(
@@ -206,6 +212,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                     + $"AND table_name = '{table}' AND column_name = 'payload';"));
 
             var shouldBlock = scenario.Values["column"] == "different" || scenario.Values["index"] == "different";
+
             Assert.Equal(
                 shouldBlock ? SafeMigrationReportStatus.Blocked : SafeMigrationReportStatus.Ready,
                 report.Status);
@@ -219,6 +226,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
 
             await ExecuteOperationsAsync(context, builder.Operations);
             await ExecuteOperationsAsync(context, builder.Operations);
+
             Assert.Equal(
                 40,
                 await ScalarIntAsync(
@@ -259,6 +267,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             [
                 new ExpectedCheckConstraintDefinition("ck_strict_id", "strict_table", "id >= 0"),
             ]);
+
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(definition, SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
 
@@ -269,6 +278,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("test-instance"));
+
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(
             SafeMigrationObservedState.Different,
@@ -281,6 +291,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("test-instance"));
+
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(
             SafeMigrationObservedState.Different,

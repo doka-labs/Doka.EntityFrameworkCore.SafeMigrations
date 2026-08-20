@@ -62,6 +62,8 @@ internal static class MySqlPreparedStatementText
     {
         var state = LexerState.Normal;
 
+        // A semicolon is a statement separator only in normal lexer state.
+        // Rejecting it here keeps PREPARE confined to one provider command.
         for (var index = 0; index < sql.Length; index++)
         {
             var current = sql[index];
@@ -176,6 +178,8 @@ internal static class MySqlPreparedStatementText
         string commandText
     )
     {
+        // The provider wraps DDL comments in a four-statement sql_mode scope.
+        // Only its inner DDL statement belongs in the SafeMigrations guard.
         var statements = SplitStatements(commandText);
         if (statements.Length != 4
             || !IsExecutableSqlModeSet(statements[0], requireSession: false)
@@ -196,6 +200,8 @@ internal static class MySqlPreparedStatementText
         var statements = new List<string>();
         var start = 0;
         var state = LexerState.Normal;
+
+        // Track quoted tokens and comments so embedded semicolons remain data.
         for (var index = 0; index < sql.Length; index++)
         {
             var current = sql[index];
@@ -337,6 +343,8 @@ internal static class MySqlPreparedStatementText
         string sql
     )
     {
+        // The DDL is embedded in a second SQL literal for PREPARE. Default
+        // sql_mode therefore needs one additional backslash-escaping layer.
         var builder = new StringBuilder(sql.Length + 16);
         var state = LexerState.Normal;
         for (var index = 0; index < sql.Length; index++)

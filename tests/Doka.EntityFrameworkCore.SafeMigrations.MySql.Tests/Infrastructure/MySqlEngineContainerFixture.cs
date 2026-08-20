@@ -149,6 +149,7 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
         var database = new MySqlConnectionStringBuilder(rootConnectionString).Database;
         var user = $"smu{Guid.NewGuid():N}"[..24];
         var password = $"smp{Guid.NewGuid():N}";
+
         await _databaseLifecycleLock.WaitAsync();
 
         try
@@ -160,7 +161,9 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
                 + $"GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, REFERENCES, "
                 + $"DROP, CREATE TEMPORARY TABLES ON `{database}`.* TO `{user}`@'%';";
             await command.ExecuteNonQueryAsync();
+
             _createdUsers.Add(user);
+
             return BuildConnectionString(database, user, password);
         }
         finally
@@ -181,7 +184,7 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
         Password = password,
         Database = database,
         AllowUserVariables = true,
-        Pooling = true,
+        Pooling = false,
     }.ConnectionString;
 
     private async Task DropCreatedDatabasesAsync()
@@ -224,6 +227,7 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
                 {
                     ConnectionTimeout = 3,
                 }.ConnectionString;
+
                 await using var connection = new MySqlConnection(probe);
                 await connection.OpenAsync();
                 return;

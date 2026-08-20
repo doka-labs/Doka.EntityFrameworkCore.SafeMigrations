@@ -13,6 +13,7 @@ public sealed partial class SafeMigrationExpectedCatalogTests
             [
                 new ExpectedUniqueConstraintDefinition("uq_items_id", "items", ["id"]),
             ]);
+
         IReadOnlyList<MigrationOperation> operations =
         [
             Envelope(new EnsureTableIntent(table, SafeMigrationTableMode.ConvergenceContainer)),
@@ -51,6 +52,7 @@ public sealed partial class SafeMigrationExpectedCatalogTests
             "old_items",
             [new ExpectedColumnDefinition("id", typeof(int), false)],
             schema: "legacy");
+
         IReadOnlyList<MigrationOperation> operations =
         [
             Envelope(new EnsureTableIntent(table, SafeMigrationTableMode.StrictDefinition)),

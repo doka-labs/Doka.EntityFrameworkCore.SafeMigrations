@@ -9,6 +9,7 @@ public sealed partial class SafeMigrationStandardOperationFactoryTests
             "ix_items_lower_name",
             "items",
             [new ExpectedIndexKeyDefinition(expression: "lower(name)")]);
+
         Assert.Throws<NotSupportedException>(() =>
             SafeMigrationStandardOperationFactory.Create(new EnsureIndexIntent(definition)));
     }

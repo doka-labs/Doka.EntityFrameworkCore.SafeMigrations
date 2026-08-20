@@ -4,6 +4,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 public sealed class EnsureSchemaIntent : SafeMigrationIntent
 {
     /// <summary>Initializes the intent.</summary>
+    /// <param name="name">The database object name.</param>
     public EnsureSchemaIntent(
         string name
     ) : base(SafeMigrationOperationKind.EnsureSchema)
@@ -22,6 +23,7 @@ public sealed class EnsureSchemaIntent : SafeMigrationIntent
 public sealed class DropSchemaIntent : SafeMigrationIntent
 {
     /// <summary>Initializes the intent.</summary>
+    /// <param name="name">The database object name.</param>
     public DropSchemaIntent(
         string name
     ) : base(SafeMigrationOperationKind.DropSchema)

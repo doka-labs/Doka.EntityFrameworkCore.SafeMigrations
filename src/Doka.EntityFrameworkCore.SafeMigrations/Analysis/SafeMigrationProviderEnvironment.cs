@@ -4,6 +4,9 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 public sealed class SafeMigrationProviderEnvironment
 {
     /// <summary>Initializes provider environment metadata.</summary>
+    /// <param name="providerId">The stable SafeMigrations provider identifier.</param>
+    /// <param name="engineFamily">The low-cardinality database engine family.</param>
+    /// <param name="serverVersion">The exact server version reported by the connection.</param>
     public SafeMigrationProviderEnvironment(
         string providerId,
         string engineFamily,

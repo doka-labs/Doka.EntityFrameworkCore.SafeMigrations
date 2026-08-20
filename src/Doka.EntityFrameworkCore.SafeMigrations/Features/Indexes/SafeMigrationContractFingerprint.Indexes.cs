@@ -37,12 +37,14 @@ public static partial class SafeMigrationContractFingerprint
         writer.Add(definition.Filter);
         writer.Add(definition.Method);
         writer.Add(definition.NullsDistinct);
+
         writer.Add(definition.Keys.Count);
 
         foreach (var key in definition.Keys)
         {
             writer.Add(key.Column);
             writer.Add(key.Expression);
+
             writer.Add(key.Descending);
             writer.Add(key.PrefixLength);
             writer.Add(key.Collation);

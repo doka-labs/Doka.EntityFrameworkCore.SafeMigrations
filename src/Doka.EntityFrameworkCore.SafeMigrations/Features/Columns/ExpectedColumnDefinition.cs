@@ -6,6 +6,21 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 public sealed class ExpectedColumnDefinition
 {
     /// <summary>Initializes a complete expected column definition.</summary>
+    /// <param name="name">The database object name.</param>
+    /// <param name="clrType">The CLR type used for provider type mapping.</param>
+    /// <param name="isNullable">Whether the column accepts null values.</param>
+    /// <param name="storeType">The explicit store type, or null for provider inference.</param>
+    /// <param name="isUnicode">The Unicode facet, or null when unspecified.</param>
+    /// <param name="maxLength">The maximum-length facet, or null when unspecified.</param>
+    /// <param name="isFixedLength">The fixed-length facet, or null when unspecified.</param>
+    /// <param name="isRowVersion">Whether the column is a row-version column.</param>
+    /// <param name="precision">The numeric precision, or null when unspecified.</param>
+    /// <param name="scale">The numeric scale, or null when unspecified.</param>
+    /// <param name="collation">The expected database collation, or null when unspecified.</param>
+    /// <param name="comment">The expected database comment, or null when unspecified.</param>
+    /// <param name="defaultValue">The provider-neutral default-value representation.</param>
+    /// <param name="computedColumnSql">The computed-column SQL expression, or null when absent.</param>
+    /// <param name="isStored">Whether the computed column is stored, or null when unspecified.</param>
     public ExpectedColumnDefinition(
         string name,
         Type clrType,
@@ -26,6 +41,7 @@ public sealed class ExpectedColumnDefinition
     {
         Name = SafeMigrationDefinitionValidator.Required(name, nameof(name));
         ArgumentNullException.ThrowIfNull(clrType);
+
         ClrType = clrType;
         StoreType = SafeMigrationDefinitionValidator.Optional(storeType, nameof(storeType));
         IsNullable = isNullable;

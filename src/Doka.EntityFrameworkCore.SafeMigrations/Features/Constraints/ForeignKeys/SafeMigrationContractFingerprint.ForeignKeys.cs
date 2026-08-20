@@ -24,8 +24,10 @@ public static partial class SafeMigrationContractFingerprint
         WriteTableIdentity(writer, definition.Table, definition.Schema);
         writer.Add(definition.Name);
         WriteStrings(writer, definition.Columns);
+
         WriteTableIdentity(writer, definition.PrincipalTable, definition.PrincipalSchema);
         WriteStrings(writer, definition.PrincipalColumns);
+
         writer.Add((int)definition.OnUpdate);
         writer.Add((int)definition.OnDelete);
     }

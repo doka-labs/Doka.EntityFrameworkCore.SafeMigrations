@@ -4,6 +4,9 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 public sealed class EnsureColumnIntent : SafeMigrationIntent
 {
     /// <summary>Initializes the intent.</summary>
+    /// <param name="table">The table name.</param>
+    /// <param name="definition">The complete expected database-object definition.</param>
+    /// <param name="schema">The schema name, or null for the provider default.</param>
     public EnsureColumnIntent(
         string table,
         ExpectedColumnDefinition definition,
@@ -13,6 +16,7 @@ public sealed class EnsureColumnIntent : SafeMigrationIntent
         Table = SafeMigrationDefinitionValidator.Required(table, nameof(table));
         Schema = SafeMigrationDefinitionValidator.Optional(schema, nameof(schema));
         ArgumentNullException.ThrowIfNull(definition);
+
         Definition = definition;
     }
 
@@ -33,6 +37,9 @@ public sealed class EnsureColumnIntent : SafeMigrationIntent
 public sealed class DropColumnIntent : SafeMigrationIntent
 {
     /// <summary>Initializes the intent.</summary>
+    /// <param name="name">The database object name.</param>
+    /// <param name="table">The table name.</param>
+    /// <param name="schema">The schema name, or null for the provider default.</param>
     public DropColumnIntent(
         string name,
         string table,
@@ -61,6 +68,10 @@ public sealed class DropColumnIntent : SafeMigrationIntent
 public sealed class RenameColumnIntent : SafeMigrationIntent
 {
     /// <summary>Initializes the intent.</summary>
+    /// <param name="name">The database object name.</param>
+    /// <param name="table">The table name.</param>
+    /// <param name="newName">The target database object name.</param>
+    /// <param name="schema">The schema name, or null for the provider default.</param>
     public RenameColumnIntent(
         string name,
         string table,
@@ -94,6 +105,10 @@ public sealed class RenameColumnIntent : SafeMigrationIntent
 public sealed class AlterColumnIntent : SafeMigrationIntent
 {
     /// <summary>Initializes the intent.</summary>
+    /// <param name="table">The table name.</param>
+    /// <param name="definition">The complete expected database-object definition.</param>
+    /// <param name="oldDefinition">The prior model definition, or null when unavailable.</param>
+    /// <param name="schema">The schema name, or null for the provider default.</param>
     public AlterColumnIntent(
         string table,
         ExpectedColumnDefinition definition,

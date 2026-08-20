@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.Testing;
 
 internal sealed record SafeMigrationStateDimension(
@@ -22,6 +18,7 @@ internal static class SafeMigrationStateSpaceGenerator
     )
     {
         ArgumentNullException.ThrowIfNull(dimensions);
+
         if (dimensions.Count < 2)
         {
             throw new ArgumentException("Pairwise generation requires at least two dimensions.", nameof(dimensions));

@@ -20,6 +20,7 @@ public sealed partial class SafeMigrationContractFingerprintTests
                 new ExpectedCheckConstraintDefinition("ck_items_id", "items", "id > 0", "app"),
             ],
             foreignKeys: []);
+
         var strict = Fingerprint(new EnsureTableIntent(table, SafeMigrationTableMode.StrictDefinition));
 
         Assert.NotEqual(strict, Fingerprint(new EnsureTableIntent(table, SafeMigrationTableMode.ConvergenceContainer)));

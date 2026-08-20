@@ -4,11 +4,14 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 public static class SafeMigrationReportJson
 {
     /// <summary>Serializes a report to a compact UTF-8 JSON document.</summary>
+    /// <param name="report">The report to serialize.</param>
+    /// <returns>A compact UTF-8 JSON document.</returns>
     public static byte[] SerializeToUtf8Bytes(
         SafeMigrationRunReport report
     )
     {
         ArgumentNullException.ThrowIfNull(report);
+
         var buffer = new ArrayBufferWriter<byte>();
         using var writer = new Utf8JsonWriter(buffer);
         Write(writer, report);
@@ -21,6 +24,8 @@ public static class SafeMigrationReportJson
     /// Writes one report to a caller-owned writer without reflection or an
     /// intermediate object graph.
     /// </summary>
+    /// <param name="writer">The caller-owned UTF-8 JSON writer.</param>
+    /// <param name="report">The report to serialize.</param>
     public static void Write(
         Utf8JsonWriter writer,
         SafeMigrationRunReport report
@@ -64,9 +69,11 @@ public static class SafeMigrationReportJson
     )
     {
         writer.WriteStartObject("environment");
+
         writer.WriteString("providerId", environment.ProviderId);
         writer.WriteString("engineFamily", environment.EngineFamily);
         writer.WriteString("serverVersion", environment.ServerVersion);
+
         writer.WriteEndObject();
     }
 

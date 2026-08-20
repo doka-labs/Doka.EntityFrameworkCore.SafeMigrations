@@ -116,6 +116,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("test-instance"));
+
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.All(
             report.Assessments,
@@ -128,6 +129,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         {
             var exception =
                 await Assert.ThrowsAsync<MySqlException>(() => ExecuteOperationsAsync(context, [operation]));
+
             Assert.Contains("doka_sm_different", exception.Message, StringComparison.OrdinalIgnoreCase);
         }
     }
@@ -161,6 +163,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("test-instance"));
+
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.All(
             report.Assessments,
@@ -170,6 +173,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         {
             var exception =
                 await Assert.ThrowsAsync<MySqlException>(() => ExecuteOperationsAsync(context, [operation]));
+
             Assert.Contains("doka_sm_data_blocked", exception.Message, StringComparison.OrdinalIgnoreCase);
         }
 

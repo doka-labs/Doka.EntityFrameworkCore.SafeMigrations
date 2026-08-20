@@ -11,6 +11,7 @@ public sealed partial class SafeMigrationContractFingerprintTests
             2,
             3,
         };
+
         var operations = Operations(
             new EnsureColumnIntent(
                 "items",

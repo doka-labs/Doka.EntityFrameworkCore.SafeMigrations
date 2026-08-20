@@ -4,11 +4,13 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 public sealed class EnsureIndexIntent : SafeMigrationIntent
 {
     /// <summary>Initializes the intent.</summary>
+    /// <param name="definition">The complete expected database-object definition.</param>
     public EnsureIndexIntent(
         ExpectedIndexDefinition definition
     ) : base(SafeMigrationOperationKind.EnsureIndex)
     {
         ArgumentNullException.ThrowIfNull(definition);
+
         Definition = definition;
     }
 
@@ -23,6 +25,9 @@ public sealed class EnsureIndexIntent : SafeMigrationIntent
 public sealed class DropIndexIntent : SafeMigrationIntent
 {
     /// <summary>Initializes the intent.</summary>
+    /// <param name="name">The database object name.</param>
+    /// <param name="table">The table name.</param>
+    /// <param name="schema">The schema name, or null for the provider default.</param>
     public DropIndexIntent(
         string name,
         string table,
@@ -51,6 +56,10 @@ public sealed class DropIndexIntent : SafeMigrationIntent
 public sealed class RenameIndexIntent : SafeMigrationIntent
 {
     /// <summary>Initializes the intent.</summary>
+    /// <param name="name">The database object name.</param>
+    /// <param name="table">The table name.</param>
+    /// <param name="newName">The target database object name.</param>
+    /// <param name="schema">The schema name, or null for the provider default.</param>
     public RenameIndexIntent(
         string name,
         string table,

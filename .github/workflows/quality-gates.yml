@@ -149,6 +149,82 @@ jobs:
           compression-level: 0
           retention-days: ${{ inputs.artifact-retention-days }}
 
+  coverage:
+    name: Merged product coverage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      SAFE_MIGRATIONS_MYSQL_ENGINE: mariadb
+      SAFE_MIGRATIONS_MYSQL_VERSION: 11.8.8
+      SAFE_MIGRATIONS_MYSQL_IMAGE: mariadb:11.8.8@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17481111890c4
+      SAFE_MIGRATIONS_POSTGRES_VERSION: 18.6
+      SAFE_MIGRATIONS_POSTGRES_IMAGE: postgres:18.6@sha256:06cad38a5d9f5d24b4d83d86def30795d5e4b757fedbf5281172b576dedcd941
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.400
+
+      - name: Locked restore
+        run: >-
+          dotnet restore Doka.EntityFrameworkCore.SafeMigrations.slnx
+          --locked-mode --disable-parallel --disable-build-servers -m:1
+          /nodeReuse:false
+
+      - name: Release build
+        run: >-
+          dotnet build Doka.EntityFrameworkCore.SafeMigrations.slnx
+          --configuration Release --no-restore --disable-build-servers -m:1
+          /nodeReuse:false -p:ContinuousIntegrationBuild=true
+
+      - name: Verify coverage-gate parser
+        run: python3 -m unittest discover -s eng/tests -p 'test_*.py' -v
+
+      - name: Collect Core coverage
+        run: >-
+          dotnet test
+          tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Doka.EntityFrameworkCore.SafeMigrations.Tests.csproj
+          --configuration Release --no-build --no-restore --disable-build-servers
+          --collect "Code Coverage;Format=cobertura"
+          --results-directory artifacts/coverage/core -m:1 /nodeReuse:false
+
+      - name: Collect MySQL and MariaDB adapter coverage
+        run: >-
+          dotnet test
+          tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests.csproj
+          --configuration Release --no-build --no-restore --disable-build-servers
+          --collect "Code Coverage;Format=cobertura"
+          --results-directory artifacts/coverage/mysql -m:1 /nodeReuse:false
+
+      - name: Collect PostgreSQL adapter coverage
+        run: >-
+          dotnet test
+          tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.csproj
+          --configuration Release --no-build --no-restore --disable-build-servers
+          --collect "Code Coverage;Format=cobertura"
+          --results-directory artifacts/coverage/postgresql -m:1 /nodeReuse:false
+
+      - name: Enforce merged product coverage
+        run: >-
+          python3 eng/verify-coverage.py
+          --reports-root artifacts/coverage
+          --thresholds-file eng/coverage-thresholds.json
+
+      - name: Upload coverage evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: product-coverage-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/coverage
+          if-no-files-found: warn
+          compression-level: 0
+          retention-days: ${{ inputs.artifact-retention-days }}
+
   mysql-engine:
     name: ${{ matrix.engine }} ${{ matrix.version }}
     runs-on: ubuntu-24.04
@@ -237,10 +313,17 @@ jobs:
         include:
           - version: 14.24
             image: postgres:14.24@sha256:2fdfb9b432d4a73bd3eea3d989752c1e669b68d502347e0bfd2cc6d709f3d6b4
+          - version: 15.19
+            image: postgres:15.19@sha256:5f72c7b5bd616308ccfd2e74d6be16fb06364e5eecbb815fe9dc6ab9761d2111
+          - version: 16.15
+            image: postgres:16.15@sha256:e17e86066e5ef83e0952a9347f5c792b7ece00972e2aa787a6986f471b3dd3d5
+          - version: 17.11
+            image: postgres:17.11@sha256:e38411452a464af89e5adadb8d223bf53b898d47d6ef918b2d58c08707350449
           - version: 18.6
             image: postgres:18.6@sha256:06cad38a5d9f5d24b4d83d86def30795d5e4b757fedbf5281172b576dedcd941
     env:
       SAFE_MIGRATIONS_POSTGRES_IMAGE: ${{ matrix.image }}
+      SAFE_MIGRATIONS_POSTGRES_VERSION: ${{ matrix.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

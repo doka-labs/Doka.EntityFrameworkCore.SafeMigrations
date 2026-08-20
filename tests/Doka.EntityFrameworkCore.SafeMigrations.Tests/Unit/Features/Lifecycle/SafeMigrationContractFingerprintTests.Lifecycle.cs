@@ -55,6 +55,7 @@ public sealed partial class SafeMigrationContractFingerprintTests
             new EnsureIndexIntent(
                 Index(keys: [new ExpectedIndexKeyDefinition(column: "value", operatorClass: "text_ops")])),
         };
+
         Assert.All(indexVariants, variant => Assert.NotEqual(baselineIndex, Fingerprint(variant)));
 
         AssertDifferent(

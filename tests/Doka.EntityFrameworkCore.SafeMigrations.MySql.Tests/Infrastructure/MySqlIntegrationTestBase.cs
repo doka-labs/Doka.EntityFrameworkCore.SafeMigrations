@@ -44,8 +44,10 @@ public abstract class MySqlIntegrationTestBase : IClassFixture<MySqlEngineContai
     {
         await using var connection = new MySqlConnection(connectionString);
         await connection.OpenAsync();
+
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
+
         await command.ExecuteNonQueryAsync();
     }
 
@@ -80,6 +82,7 @@ public abstract class MySqlIntegrationTestBase : IClassFixture<MySqlEngineContai
             var statementText = statement
                 .ToString()
                 .TrimEnd();
+
             if (!statementText.EndsWith(delimiter, StringComparison.Ordinal))
             {
                 continue;

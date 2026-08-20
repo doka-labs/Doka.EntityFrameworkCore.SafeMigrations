@@ -38,6 +38,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             [
                 new ExpectedForeignKeyDefinition(foreignKey, table, [parent], table, [id]),
             ]);
+
         var connectionString = await Fixture.CreateDatabaseAsync();
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -59,6 +60,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 var detail = operation.Intent.Kind == SafeMigrationOperationKind.EnsureCheckConstraint
                     ? await ReadCheckExpressionAsync(connectionString, check)
                     : "not_applicable";
+
                 throw new InvalidOperationException(
                     $"Identifier convergence failed at {ordinal}:{operation.Intent.Kind}. "
                     + $"Catalog expression: {detail}",
