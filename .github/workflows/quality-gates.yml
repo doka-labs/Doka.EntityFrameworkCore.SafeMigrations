@@ -55,6 +55,9 @@ jobs:
           eng/verify-vertical-slices.sh
           python3 eng/verify-project-boundaries.py
 
+      - name: Verify release reconciliation
+        run: node --test eng/tests/github-release.test.js
+
       - name: Locked restore
         run: >-
           dotnet restore Doka.EntityFrameworkCore.SafeMigrations.slnx

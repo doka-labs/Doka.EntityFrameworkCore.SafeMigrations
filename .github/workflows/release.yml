@@ -181,21 +181,11 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         with:
           script: |
-            const fs = require('fs');
             const path = require('path');
+            const { reconcileRelease } = require('./eng/release/github-release.js');
             const tag = process.env.RELEASE_TAG;
-            const { data: release } = await github.rest.repos.createRelease({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              tag_name: tag,
-              target_commitish: context.sha,
-              name: tag,
-              body: `See [CHANGELOG.md](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/${tag}/CHANGELOG.md).`,
-              draft: true,
-              prerelease: false
-            });
             const assetPaths = [
-              ...fs.readdirSync('artifacts/packages')
+              ...require('fs').readdirSync('artifacts/packages')
                 .filter((name) => name.endsWith('.nupkg') || name.endsWith('.snupkg') || name === 'SHA256SUMS')
                 .map((name) => path.join('artifacts/packages', name)),
               'artifacts/sbom/_manifest/spdx_2.2/manifest.spdx.json',
@@ -203,19 +193,13 @@ jobs:
               'artifacts/attestations/sbom-attestation.sigstore.json',
               'artifacts/nuget-readback/SIGNED_SHA256SUMS'
             ];
-            for (const assetPath of assetPaths) {
-              const data = fs.readFileSync(assetPath);
-              await github.rest.repos.uploadReleaseAsset({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                release_id: release.id,
-                name: path.basename(assetPath),
-                data
-              });
-            }
-            await github.rest.repos.updateRelease({
+            await reconcileRelease({
+              github,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              release_id: release.id,
-              draft: false
+              tag,
+              targetCommitish: context.sha,
+              name: tag,
+              body: `See [CHANGELOG.md](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/${tag}/CHANGELOG.md).`,
+              assetPaths
             });
