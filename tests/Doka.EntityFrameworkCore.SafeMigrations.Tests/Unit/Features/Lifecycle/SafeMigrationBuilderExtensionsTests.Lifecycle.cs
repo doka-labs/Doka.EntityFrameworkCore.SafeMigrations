@@ -41,7 +41,8 @@ public sealed partial class SafeMigrationBuilderExtensionsTests
         builder.DropForeignKeyIfExists("fk_items_parent", "items");
 
         var operations = builder
-            .Operations.Cast<SafeMigrationOperation>()
+            .Operations
+            .Cast<SafeMigrationOperation>()
             .ToArray();
 
         Assert.Equal(

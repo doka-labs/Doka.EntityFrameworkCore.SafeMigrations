@@ -16,10 +16,7 @@ internal static class SampleMigrationUsage
                 new ExpectedColumnDefinition("display_name", typeof(string), isNullable: true, maxLength: 200),
             ],
             primaryKey: new ExpectedPrimaryKeyDefinition("pk_users", "users", ["id"]),
-            uniqueConstraints:
-            [
-                new ExpectedUniqueConstraintDefinition("ux_users_email", "users", ["email"]),
-            ]);
+            uniqueConstraints: [new ExpectedUniqueConstraintDefinition("ux_users_email", "users", ["email"]),]);
 
         migrationBuilder.ConvergeTable(users);
 
@@ -33,7 +30,13 @@ internal static class SampleMigrationUsage
             primaryKey: new ExpectedPrimaryKeyDefinition("pk_orders", "orders", ["id"]),
             checkConstraints:
             [
-                new ExpectedCheckConstraintDefinition("ck_orders_total_non_negative", "orders", "total >= 0"),
+                ExpectedCheckConstraintDefinition.FromExpression(
+                    "ck_orders_total_non_negative",
+                    "orders",
+                    SafeMigrationSql.Binary(
+                        SafeMigrationSql.Identifier("total"),
+                        SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
+                        SafeMigrationSql.Literal(0))),
             ],
             foreignKeys:
             [

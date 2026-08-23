@@ -6,4 +6,7 @@ internal sealed record PostgreSqlSafeMigrationRuntimePlan(
     SafeMigrationRepairCapability RepairCapability,
     string RepairPrecondition,
     string? UnsupportedCode = null
-);
+)
+{
+    public string PrerequisiteExpression { get; init; } = "TRUE";
+}

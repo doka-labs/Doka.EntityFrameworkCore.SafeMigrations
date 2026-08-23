@@ -37,12 +37,12 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
             .ToHashSet(StringComparer.Ordinal);
 
         var migrations = migrationsAssembly
-            .Migrations.OrderBy(static entry => entry.Key)
+            .Migrations
+            .OrderBy(static entry => entry.Key)
             .ToArray();
 
         var targetMigrationId = options.TargetMigrationId
-            ?? migrations.LastOrDefault()
-                .Key;
+            ?? migrations.LastOrDefault().Key;
 
         if (targetMigrationId is not null
             && !migrations.Any(entry => StringComparer.Ordinal.Equals(entry.Key, targetMigrationId)))
@@ -121,8 +121,10 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
 
         // Validate the canonical Core model before trusting any catalog result
         // produced for an instance-specific derived DbContext.
-        ValidateCanonicalMigrationModel(context);
-        var fingerprint = SafeMigrationModelFingerprint.Create(context.Model);
+        var providerContract = context.Database.ProviderName
+            ?? throw new InvalidOperationException("The DbContext does not expose an EF Core provider name.");
+
+        var fingerprint = ValidateCanonicalMigrationModelAndCreateFingerprint(context, providerContract);
 
         SafeMigrationModelFingerprint.ValidateExpected(fingerprint, options.ExpectedModelFingerprint);
 
@@ -132,7 +134,8 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
 
         using var activity = SafeMigrationTelemetry.ActivitySource.StartActivity(
             SafeMigrationDiagnostics.RunActivityName,
-            ActivityKind.Internal);
+            ActivityKind.Internal,
+            parentContext: default);
 
         activity?.SetTag("safe_migrations.mode", SafeMigrationTelemetry.ModeCode(mode));
         activity?.SetTag("safe_migrations.operation_count", operations.Count);
@@ -153,8 +156,12 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
                     "The SafeMigrations analyzer returned an inconsistent provider identifier.");
             }
 
-            activity?.SetTag("db.system", environment.EngineFamily);
+            activity?.SetTag("db.system.name", environment.EngineFamily);
             activity?.SetTag("safe_migrations.provider", environment.ProviderId);
+
+            await using var analysisScope = await _providerAnalyzer.AcquireAnalysisScopeAsync(
+                context,
+                cancellationToken);
 
             var report = await AnalyzeOperationsAsync(
                 context,
@@ -201,96 +208,35 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
         }
     }
 
-    private static void ValidateCanonicalMigrationModel(
-        DbContext context
+    internal static string ValidateCanonicalMigrationModelAndCreateFingerprint(
+        DbContext context,
+        string providerContract
     )
     {
         var migrationsAssembly = context.GetService<IMigrationsAssembly>();
-
-        // Derived instance contexts may not own a snapshot; select the nearest
-        // compatible base-context snapshot and reject ambiguous hierarchies.
-        var snapshot = migrationsAssembly.ModelSnapshot
-            ?? FindCompatibleBaseContextSnapshot(migrationsAssembly.Assembly, context.GetType());
-
-        if (snapshot is null)
-        {
-            return;
-        }
-
-        var snapshotModel = context
-            .GetService<IModelRuntimeInitializer>()
-            .Initialize(snapshot.Model, designTime: true);
-
+        var snapshot = migrationsAssembly.ModelSnapshot;
         var runtimeDesignTimeModel = context.GetService<IDesignTimeModel>()
             .Model;
 
-        var modelDiffer = context.GetService<IMigrationsModelDiffer>();
-
-        if (modelDiffer.HasDifferences(snapshotModel.GetRelationalModel(), runtimeDesignTimeModel.GetRelationalModel()))
+        if (snapshot is not null)
         {
-            throw new SafeMigrationModelMismatchException(
-                SafeMigrationModelFingerprint.Create(snapshotModel),
-                SafeMigrationModelFingerprint.Create(runtimeDesignTimeModel));
-        }
-    }
+            var snapshotModel = context
+                .GetService<IModelRuntimeInitializer>()
+                .Initialize(snapshot.Model, designTime: true);
 
-    private static ModelSnapshot? FindCompatibleBaseContextSnapshot(
-        System.Reflection.Assembly assembly,
-        Type runtimeContextType
-    )
-    {
-        var candidates = assembly
-            .GetTypes()
-            .Where(type => !type.IsAbstract && typeof(ModelSnapshot).IsAssignableFrom(type))
-            .Select(type => new
+            var modelDiffer = context.GetService<IMigrationsModelDiffer>();
+
+            if (modelDiffer.HasDifferences(
+                    snapshotModel.GetRelationalModel(),
+                    runtimeDesignTimeModel.GetRelationalModel()))
             {
-                Type = type,
-                Attribute = type
-                    .GetCustomAttributes(typeof(DbContextAttribute), inherit: false)
-                    .Cast<DbContextAttribute>()
-                    .SingleOrDefault(),
-            })
-            .Where(candidate => candidate.Attribute is not null
-                && candidate.Attribute.ContextType.IsAssignableFrom(runtimeContextType))
-            .OrderBy(candidate => InheritanceDistance(runtimeContextType, candidate.Attribute!.ContextType))
-            .ToArray();
-
-        if (candidates.Length == 0)
-        {
-            return null;
-        }
-
-        var bestDistance = InheritanceDistance(runtimeContextType, candidates[0].Attribute!.ContextType);
-        if (candidates
-            .Skip(1)
-            .Any(candidate =>
-                InheritanceDistance(runtimeContextType, candidate.Attribute!.ContextType) == bestDistance))
-        {
-            throw new InvalidOperationException(
-                "Multiple migration model snapshots match the runtime DbContext hierarchy.");
-        }
-
-        return Activator.CreateInstance(candidates[0].Type, nonPublic: true) as ModelSnapshot
-            ?? throw new InvalidOperationException("The canonical migration model snapshot could not be constructed.");
-    }
-
-    private static int InheritanceDistance(
-        Type runtimeContextType,
-        Type candidateContextType
-    )
-    {
-        var distance = 0;
-        for (var current = runtimeContextType; current is not null; current = current.BaseType)
-        {
-            if (current == candidateContextType)
-            {
-                return distance;
+                throw new SafeMigrationModelMismatchException(
+                    SafeMigrationModelFingerprint.Create(snapshotModel, providerContract),
+                    SafeMigrationModelFingerprint.Create(runtimeDesignTimeModel, providerContract));
             }
-
-            distance++;
         }
 
-        return int.MaxValue;
+        return SafeMigrationModelFingerprint.Create(runtimeDesignTimeModel, providerContract);
     }
 
     private async Task<SafeMigrationRunReport> AnalyzeOperationsAsync(
@@ -333,10 +279,8 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
                 assessments.Add(
                     new SafeMigrationAssessment(
                         ordinal,
-                        operation.GetType()
-                            .FullName
-                        ?? operation.GetType()
-                            .Name,
+                        operation.GetType().FullName
+                        ?? operation.GetType().Name,
                         isSafeOperation: false,
                         operationKind: null,
                         objectName: null,
@@ -360,6 +304,7 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
                 ? decision.Action is SafeMigrationAction.RejectDifferent
                     or SafeMigrationAction.RejectUnsupported
                     or SafeMigrationAction.RejectDataBlocked
+                    or SafeMigrationAction.RejectPrerequisiteMissing
                 : !analysis.PostconditionSatisfied;
 
             blocked |= operationBlocked;
@@ -375,14 +320,21 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
                     decision.Action,
                     analysis.PostconditionSatisfied,
                     operationBlocked
-                        ? mode == SafeMigrationReportMode.Postflight ? "postcondition_failed" : decision.Code
+                        ? mode == SafeMigrationReportMode.Postflight
+                            ? "postcondition_failed"
+                            : analysis.ObservedState == SafeMigrationObservedState.Unsupported
+                                ? analysis.Code
+                                : decision.Code
                         : analysis.Code));
         }
 
-        var status = operations.Count == 0 ? SafeMigrationReportStatus.NoOperations :
-            blocked ? SafeMigrationReportStatus.Blocked :
-            hasProviderOperations ? SafeMigrationReportStatus.ReadyWithProviderOperations :
-            SafeMigrationReportStatus.Ready;
+        var status = operations.Count == 0
+            ? SafeMigrationReportStatus.NoOperations
+            : blocked
+                ? SafeMigrationReportStatus.Blocked
+                : hasProviderOperations
+                    ? SafeMigrationReportStatus.ReadyWithProviderOperations
+                    : SafeMigrationReportStatus.Ready;
 
         var unexpectedObjects = await _providerAnalyzer.FindUnexpectedObjectsAsync(
             context,

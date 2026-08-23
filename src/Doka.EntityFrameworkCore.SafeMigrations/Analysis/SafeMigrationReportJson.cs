@@ -165,7 +165,30 @@ public static class SafeMigrationReportJson
 
     private static string OperationKindCode(
         SafeMigrationOperationKind value
-    ) => ToSnakeCase(value.ToString());
+    ) => value switch
+    {
+        SafeMigrationOperationKind.EnsureSchema => "ensure_schema",
+        SafeMigrationOperationKind.DropSchema => "drop_schema",
+        SafeMigrationOperationKind.EnsureTable => "ensure_table",
+        SafeMigrationOperationKind.DropTable => "drop_table",
+        SafeMigrationOperationKind.RenameTable => "rename_table",
+        SafeMigrationOperationKind.EnsureColumn => "ensure_column",
+        SafeMigrationOperationKind.DropColumn => "drop_column",
+        SafeMigrationOperationKind.RenameColumn => "rename_column",
+        SafeMigrationOperationKind.AlterColumn => "alter_column",
+        SafeMigrationOperationKind.EnsureIndex => "ensure_index",
+        SafeMigrationOperationKind.DropIndex => "drop_index",
+        SafeMigrationOperationKind.RenameIndex => "rename_index",
+        SafeMigrationOperationKind.EnsurePrimaryKey => "ensure_primary_key",
+        SafeMigrationOperationKind.DropPrimaryKey => "drop_primary_key",
+        SafeMigrationOperationKind.EnsureUniqueConstraint => "ensure_unique_constraint",
+        SafeMigrationOperationKind.DropUniqueConstraint => "drop_unique_constraint",
+        SafeMigrationOperationKind.EnsureCheckConstraint => "ensure_check_constraint",
+        SafeMigrationOperationKind.DropCheckConstraint => "drop_check_constraint",
+        SafeMigrationOperationKind.EnsureForeignKey => "ensure_foreign_key",
+        SafeMigrationOperationKind.DropForeignKey => "drop_foreign_key",
+        _ => throw new ArgumentOutOfRangeException(nameof(value)),
+    };
 
     private static string ObservedStateCode(
         SafeMigrationObservedState value
@@ -176,6 +199,7 @@ public static class SafeMigrationReportJson
         SafeMigrationObservedState.Different => "different",
         SafeMigrationObservedState.Unsupported => "unsupported",
         SafeMigrationObservedState.DataBlocked => "data_blocked",
+        SafeMigrationObservedState.PrerequisiteMissing => "prerequisite_missing",
         _ => throw new ArgumentOutOfRangeException(nameof(value)),
     };
 
@@ -189,6 +213,7 @@ public static class SafeMigrationReportJson
         SafeMigrationAction.RejectDifferent => "reject_different",
         SafeMigrationAction.RejectUnsupported => "reject_unsupported",
         SafeMigrationAction.RejectDataBlocked => "reject_data_blocked",
+        SafeMigrationAction.RejectPrerequisiteMissing => "reject_prerequisite_missing",
         _ => throw new ArgumentOutOfRangeException(nameof(value)),
     };
 
@@ -205,24 +230,4 @@ public static class SafeMigrationReportJson
         SafeMigrationDatabaseObjectKind.ForeignKey => "foreign_key",
         _ => throw new ArgumentOutOfRangeException(nameof(value)),
     };
-
-    private static string ToSnakeCase(
-        string value
-    )
-    {
-        var builder = new StringBuilder(value.Length + 8);
-        for (var index = 0; index < value.Length; index++)
-        {
-            var character = value[index];
-            if (char.IsUpper(character)
-                && index > 0)
-            {
-                builder.Append('_');
-            }
-
-            builder.Append(char.ToLowerInvariant(character));
-        }
-
-        return builder.ToString();
-    }
 }

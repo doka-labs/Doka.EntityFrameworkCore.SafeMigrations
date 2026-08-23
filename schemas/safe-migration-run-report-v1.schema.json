@@ -27,7 +27,10 @@
     "instanceId": { "type": "string", "minLength": 1 },
     "environment": { "$ref": "#/$defs/environment" },
     "targetMigrationId": { "type": ["string", "null"] },
-    "modelFingerprint": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "modelFingerprint": {
+      "type": "string",
+      "pattern": "^safe-relational-model:v1:[^:]+:sha256:[0-9a-f]{64}$"
+    },
     "contractFingerprint": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
     "assessments": {
       "type": "array",
@@ -94,7 +97,15 @@
         },
         "objectName": { "type": ["string", "null"] },
         "observedState": {
-          "enum": ["missing", "matching", "different", "unsupported", "data_blocked", null]
+          "enum": [
+            "missing",
+            "matching",
+            "different",
+            "unsupported",
+            "data_blocked",
+            "prerequisite_missing",
+            null
+          ]
         },
         "action": {
           "enum": [
@@ -104,6 +115,7 @@
             "reject_different",
             "reject_unsupported",
             "reject_data_blocked",
+            "reject_prerequisite_missing",
             null
           ]
         },

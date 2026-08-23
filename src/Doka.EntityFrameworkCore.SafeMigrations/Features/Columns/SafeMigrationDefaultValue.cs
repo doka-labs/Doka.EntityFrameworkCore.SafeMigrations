@@ -26,12 +26,14 @@ public sealed class SafeMigrationDefaultValue
     private SafeMigrationDefaultValue(
         SafeMigrationDefaultValueKind kind,
         object? literalValue,
-        string? sqlExpression
+        string? sqlExpression,
+        SafeMigrationSqlExpression? structuredExpression = null
     )
     {
         Kind = kind;
         _literalValue = CloneLiteral(literalValue);
         SqlExpression = sqlExpression;
+        StructuredExpression = structuredExpression;
     }
 
     /// <summary>Gets the shared representation for a column without a default.</summary>
@@ -54,6 +56,9 @@ public sealed class SafeMigrationDefaultValue
     /// <see cref="SafeMigrationDefaultValueKind.Sql"/>.
     /// </summary>
     public string? SqlExpression { get; }
+
+    /// <summary>Gets the structured SQL expression when one was supplied.</summary>
+    public SafeMigrationSqlExpression? StructuredExpression { get; }
 
     /// <summary>Creates a typed literal default.</summary>
     /// <param name="value">The literal value. A null value means SQL NULL.</param>
@@ -82,6 +87,22 @@ public sealed class SafeMigrationDefaultValue
         ArgumentException.ThrowIfNullOrWhiteSpace(sqlExpression);
 
         return new SafeMigrationDefaultValue(SafeMigrationDefaultValueKind.Sql, literalValue: null, sqlExpression);
+    }
+
+    /// <summary>Creates a structurally comparable SQL expression default.</summary>
+    /// <param name="expression">The typed SQL expression.</param>
+    /// <returns>An immutable default-value representation.</returns>
+    public static SafeMigrationDefaultValue Sql(
+        SafeMigrationSqlExpression expression
+    )
+    {
+        ArgumentNullException.ThrowIfNull(expression);
+
+        return new SafeMigrationDefaultValue(
+            SafeMigrationDefaultValueKind.Sql,
+            literalValue: null,
+            sqlExpression: null,
+            expression);
     }
 
     internal object? GetLiteralValue() => CloneLiteral(_literalValue);

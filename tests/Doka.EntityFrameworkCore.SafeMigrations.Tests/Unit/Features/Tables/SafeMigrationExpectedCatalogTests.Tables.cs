@@ -9,10 +9,7 @@ public sealed partial class SafeMigrationExpectedCatalogTests
             "items",
             [new ExpectedColumnDefinition("id", typeof(int), false)],
             primaryKey: new ExpectedPrimaryKeyDefinition("pk_items", "items", ["id"]),
-            uniqueConstraints:
-            [
-                new ExpectedUniqueConstraintDefinition("uq_items_id", "items", ["id"]),
-            ]);
+            uniqueConstraints: [new ExpectedUniqueConstraintDefinition("uq_items_id", "items", ["id"]),]);
 
         IReadOnlyList<MigrationOperation> operations =
         [
@@ -32,12 +29,7 @@ public sealed partial class SafeMigrationExpectedCatalogTests
 
         var inventory = Assert.Single(SafeMigrationExpectedCatalog.Create(operations));
 
-        Assert.Equal(
-            [
-                "id",
-                "name"
-            ],
-            inventory.Columns.Order());
+        Assert.Equal(["id", "name"], inventory.Columns.Order());
         Assert.Equal(["ix_name"], inventory.Indexes);
         Assert.Equal(
             SafeMigrationDatabaseObjectKind.PrimaryKey,

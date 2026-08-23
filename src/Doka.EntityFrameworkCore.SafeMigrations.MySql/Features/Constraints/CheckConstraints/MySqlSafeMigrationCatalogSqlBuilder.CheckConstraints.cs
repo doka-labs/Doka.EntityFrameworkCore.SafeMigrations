@@ -10,16 +10,17 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         : null;
 
     private MySqlSafeMigrationRuntimePlan BuildEnsureCheckConstraint(
-        EnsureCheckConstraintIntent intent
+        EnsureCheckConstraintIntent intent,
+        bool isMariaDb
     )
     {
         var definition = intent.Definition;
         var exists = ConstraintExists(definition.Table, definition.Name, "CHECK");
-        var matching = CheckConstraintMatches(definition);
+        var matching = CheckConstraintMatches(definition, isMariaDb);
         var dataBlocked = CheckConstraintDataBlocked(definition);
 
         return Plan(
-            $"CASE WHEN NOT {BaseTableExists(definition.Table)} THEN 'data_blocked' "
+            $"CASE WHEN NOT {BaseTableExists(definition.Table)} THEN 'prerequisite_missing' "
             + $"WHEN NOT {exists} AND {dataBlocked} THEN 'data_blocked' "
             + $"WHEN NOT {exists} THEN 'missing' "
             + $"WHEN {matching} THEN 'matching' ELSE 'different' END",
@@ -37,18 +38,16 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     }
 
     private string CheckConstraintMatches(
-        ExpectedCheckConstraintDefinition definition
+        ExpectedCheckConstraintDefinition definition,
+        bool isMariaDb
     )
     {
-        var quoted = MySqlExpressionCanonicalizer.QuoteIdentifiers(definition.Sql, _sqlGenerationHelper);
-        var candidates = new[]
-            {
-                definition.Sql,
-                $"({definition.Sql})",
-                quoted,
-                $"({quoted})",
-            }
-            .Concat(MySqlExpressionCanonicalizer.BuildCatalogDisplayCandidates(quoted))
+        var expression = definition.Sql ?? _expressionRenderer.Render(definition.Expression!);
+        var candidates = new[] { expression, $"({expression})", }
+            .Concat(
+                MySqlExpressionCanonicalizer.BuildCatalogDisplayCandidates(
+                    expression,
+                    includeMySqlEncodedDisplay: !isMariaDb))
             .Distinct(StringComparer.Ordinal)
             .Select(Literal);
 
@@ -63,6 +62,11 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
     private string CheckConstraintDataBlocked(
         ExpectedCheckConstraintDefinition definition
-    ) => $"EXISTS (SELECT 1 FROM {Delimited(definition.Table)} "
-        + $"WHERE NOT COALESCE(({definition.Sql}), TRUE) LIMIT 1)";
+    )
+    {
+        var expression = definition.Sql ?? _expressionRenderer.Render(definition.Expression!);
+
+        return $"EXISTS (SELECT 1 FROM {Delimited(definition.Table)} "
+            + $"WHERE NOT COALESCE(({expression}), TRUE) LIMIT 1)";
+    }
 }

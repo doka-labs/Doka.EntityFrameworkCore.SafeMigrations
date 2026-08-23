@@ -47,7 +47,8 @@ internal static partial class SafeMigrationExpectedCatalog
         }
 
         return tables
-            .Values.OrderBy(static value => value.Schema, StringComparer.Ordinal)
+            .Values
+            .OrderBy(static value => value.Schema, StringComparer.Ordinal)
             .ThenBy(static value => value.Table, StringComparer.Ordinal)
             .Select(static value => value.Snapshot())
             .ToArray();

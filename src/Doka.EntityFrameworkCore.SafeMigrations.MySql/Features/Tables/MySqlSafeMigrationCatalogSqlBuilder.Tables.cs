@@ -91,7 +91,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 : ConstraintColumnsMatch(definition.Table, "PRIMARY", definition.PrimaryKey.Columns, "PRIMARY KEY"));
 
         conditions.AddRange(definition.UniqueConstraints.Select(ConstraintMatches));
-        conditions.AddRange(definition.CheckConstraints.Select(CheckConstraintMatches));
+        conditions.AddRange(
+            definition.CheckConstraints.Select(checkConstraint => CheckConstraintMatches(checkConstraint, isMariaDb)));
         conditions.AddRange(definition.ForeignKeys.Select(ForeignKeyMatches));
 
         return $"({string.Join(" AND ", conditions)})";

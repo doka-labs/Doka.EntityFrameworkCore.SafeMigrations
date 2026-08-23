@@ -21,7 +21,8 @@ public static partial class SafeMigrationBuilderExtensions
     /// <param name="schema">The schema name, or null for the provider default.</param>
     /// <param name="unique">Whether the index enforces uniqueness.</param>
     /// <param name="filter">The index predicate, or null for an unfiltered index.</param>
-    /// <param name="descending">The ordered descending flags, or null for ascending keys.</param>
+    /// <param name="sortOrders">The ordered key directions, or null for provider defaults.</param>
+    /// <param name="nullOrders">The ordered null placements, or null for provider defaults.</param>
     /// <param name="policy">The conflict policy for the operation.</param>
     /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
     public static OperationBuilder<SafeMigrationOperation> CreateIndexIfNotExists(
@@ -32,18 +33,26 @@ public static partial class SafeMigrationBuilderExtensions
         string? schema = null,
         bool unique = false,
         string? filter = null,
-        IEnumerable<bool>? descending = null,
+        IEnumerable<SafeMigrationIndexSortOrder>? sortOrders = null,
+        IEnumerable<SafeMigrationIndexNullOrder>? nullOrders = null,
         SafeMigrationPolicy policy = SafeMigrationPolicy.ThrowIfDifferent
     )
     {
         ArgumentNullException.ThrowIfNull(columns);
 
         var columnSnapshot = columns.ToArray();
-        var descendingSnapshot = descending?.ToArray();
-        if (descendingSnapshot is not null
-            && descendingSnapshot.Length != columnSnapshot.Length)
+        var sortOrderSnapshot = sortOrders?.ToArray();
+        if (sortOrderSnapshot is not null
+            && sortOrderSnapshot.Length != columnSnapshot.Length)
         {
-            throw new ArgumentException("Descending flags must have the same length as columns.", nameof(descending));
+            throw new ArgumentException("Sort orders must have the same length as columns.", nameof(sortOrders));
+        }
+
+        var nullOrderSnapshot = nullOrders?.ToArray();
+        if (nullOrderSnapshot is not null
+            && nullOrderSnapshot.Length != columnSnapshot.Length)
+        {
+            throw new ArgumentException("Null orders must have the same length as columns.", nameof(nullOrders));
         }
 
         var keys = columnSnapshot.Select((
@@ -51,7 +60,8 @@ public static partial class SafeMigrationBuilderExtensions
             index
         ) => new ExpectedIndexKeyDefinition(
             column,
-            descending: descendingSnapshot is not null && descendingSnapshot[index]));
+            sortOrder: sortOrderSnapshot?[index] ?? SafeMigrationIndexSortOrder.ProviderDefault,
+            nullOrder: nullOrderSnapshot?[index] ?? SafeMigrationIndexNullOrder.ProviderDefault));
 
         var definition = new ExpectedIndexDefinition(name, table, keys, schema, unique, filter);
 

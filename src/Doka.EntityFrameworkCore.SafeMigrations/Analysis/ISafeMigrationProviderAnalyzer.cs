@@ -19,6 +19,18 @@ public interface ISafeMigrationProviderAnalyzer
     );
 
     /// <summary>
+    /// Acquires the provider-specific consistency and concurrency scope that
+    /// encloses classification and unexpected-object inventory.
+    /// </summary>
+    /// <param name="context">The configured DbContext whose database is inspected.</param>
+    /// <param name="cancellationToken">The token used to cancel the asynchronous operation.</param>
+    /// <returns>A scope whose disposal releases owned locks and transactions.</returns>
+    Task<IAsyncDisposable> AcquireAnalysisScopeAsync(
+        DbContext context,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
     /// Analyzes an ordered operation batch against one consistent current
     /// database observation.
     /// </summary>

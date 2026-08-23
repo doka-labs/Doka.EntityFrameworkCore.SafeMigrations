@@ -18,22 +18,17 @@ public abstract class MySqlIntegrationTestBase : IClassFixture<MySqlEngineContai
 
     protected static async Task ExecuteOperationsAsync(
         DbContext context,
-        IReadOnlyList<MigrationOperation> operations
+        IReadOnlyList<MigrationOperation> operations,
+        CancellationToken cancellationToken = default
     )
     {
         var generator = context.GetService<IMigrationsSqlGenerator>();
         var commands = generator.Generate(operations, context.Model);
-        var connection = context.Database.GetDbConnection();
-        if (connection.State != System.Data.ConnectionState.Open)
-        {
-            await connection.OpenAsync();
-        }
+        var connection = context.GetService<IRelationalConnection>();
 
         foreach (var command in commands)
         {
-            await using var dbCommand = connection.CreateCommand();
-            dbCommand.CommandText = command.CommandText;
-            await dbCommand.ExecuteNonQueryAsync();
+            _ = await command.ExecuteNonQueryAsync(connection, cancellationToken: cancellationToken);
         }
     }
 
@@ -43,12 +38,12 @@ public abstract class MySqlIntegrationTestBase : IClassFixture<MySqlEngineContai
     )
     {
         await using var connection = new MySqlConnection(connectionString);
-        await connection.OpenAsync();
+        await connection.OpenAsync(CancellationToken.None);
 
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
 
-        await command.ExecuteNonQueryAsync();
+        await command.ExecuteNonQueryAsync(CancellationToken.None);
     }
 
     protected static async Task ExecuteMigrationScriptAsync(
@@ -57,7 +52,7 @@ public abstract class MySqlIntegrationTestBase : IClassFixture<MySqlEngineContai
     )
     {
         await using var connection = new MySqlConnection(connectionString);
-        await connection.OpenAsync();
+        await connection.OpenAsync(CancellationToken.None);
         var delimiter = ";";
         var statement = new StringBuilder();
         foreach (var line in script
@@ -98,7 +93,7 @@ public abstract class MySqlIntegrationTestBase : IClassFixture<MySqlEngineContai
 
             await using var command = connection.CreateCommand();
             command.CommandText = statementText;
-            await command.ExecuteNonQueryAsync();
+            await command.ExecuteNonQueryAsync(CancellationToken.None);
         }
 
         if (!string.IsNullOrWhiteSpace(statement.ToString()))
@@ -113,11 +108,28 @@ public abstract class MySqlIntegrationTestBase : IClassFixture<MySqlEngineContai
     )
     {
         await using var connection = new MySqlConnection(connectionString);
-        await connection.OpenAsync();
+        await connection.OpenAsync(CancellationToken.None);
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
 
-        return Convert.ToInt32(await command.ExecuteScalarAsync(), CultureInfo.InvariantCulture);
+        return Convert.ToInt32(await command.ExecuteScalarAsync(CancellationToken.None), CultureInfo.InvariantCulture);
+    }
+
+    protected static async Task<int> ContextScalarIntAsync(
+        DbContext context,
+        string sql
+    )
+    {
+        var connection = context.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync(CancellationToken.None);
+        }
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+
+        return Convert.ToInt32(await command.ExecuteScalarAsync(CancellationToken.None), CultureInfo.InvariantCulture);
     }
 
     protected static async Task<string> ScalarStringAsync(
@@ -126,10 +138,10 @@ public abstract class MySqlIntegrationTestBase : IClassFixture<MySqlEngineContai
     )
     {
         await using var connection = new MySqlConnection(connectionString);
-        await connection.OpenAsync();
+        await connection.OpenAsync(CancellationToken.None);
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
 
-        return Convert.ToString(await command.ExecuteScalarAsync(), CultureInfo.InvariantCulture) ?? "<null>";
+        return Convert.ToString(await command.ExecuteScalarAsync(CancellationToken.None), CultureInfo.InvariantCulture) ?? "<null>";
     }
 }

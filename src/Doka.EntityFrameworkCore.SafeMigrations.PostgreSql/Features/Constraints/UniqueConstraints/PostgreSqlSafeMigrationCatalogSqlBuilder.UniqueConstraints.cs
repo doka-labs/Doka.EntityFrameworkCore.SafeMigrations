@@ -26,7 +26,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     )
     {
         var keys = definition
-            .Columns.Select(Delimited)
+            .Columns
+            .Select(Delimited)
             .ToArray();
 
         var nonNull = string.Join(" AND ", keys.Select(static key => $"{key} IS NOT NULL"));

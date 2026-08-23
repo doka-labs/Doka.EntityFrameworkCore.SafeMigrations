@@ -71,17 +71,19 @@ Doka.EntityFrameworkCore.SafeMigrations.EnsureUniqueConstraintIntent.Definition.
 Doka.EntityFrameworkCore.SafeMigrations.EnsureUniqueConstraintIntent.EnsureUniqueConstraintIntent(Doka.EntityFrameworkCore.SafeMigrations.ExpectedUniqueConstraintDefinition! definition) -> void
 Doka.EntityFrameworkCore.SafeMigrations.ExpectedCheckConstraintDefinition
 Doka.EntityFrameworkCore.SafeMigrations.ExpectedCheckConstraintDefinition.ExpectedCheckConstraintDefinition(string! name, string! table, string! sql, string? schema = null) -> void
+Doka.EntityFrameworkCore.SafeMigrations.ExpectedCheckConstraintDefinition.Expression.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression?
 Doka.EntityFrameworkCore.SafeMigrations.ExpectedCheckConstraintDefinition.Name.get -> string!
 Doka.EntityFrameworkCore.SafeMigrations.ExpectedCheckConstraintDefinition.Schema.get -> string?
-Doka.EntityFrameworkCore.SafeMigrations.ExpectedCheckConstraintDefinition.Sql.get -> string!
+Doka.EntityFrameworkCore.SafeMigrations.ExpectedCheckConstraintDefinition.Sql.get -> string?
 Doka.EntityFrameworkCore.SafeMigrations.ExpectedCheckConstraintDefinition.Table.get -> string!
 Doka.EntityFrameworkCore.SafeMigrations.ExpectedColumnDefinition
 Doka.EntityFrameworkCore.SafeMigrations.ExpectedColumnDefinition.ClrType.get -> System.Type!
-Doka.EntityFrameworkCore.SafeMigrations.ExpectedColumnDefinition.Collation.get -> string?
+Doka.EntityFrameworkCore.SafeMigrations.ExpectedColumnDefinition.Collation.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationCollationIdentifier?
 Doka.EntityFrameworkCore.SafeMigrations.ExpectedColumnDefinition.Comment.get -> string?
 Doka.EntityFrameworkCore.SafeMigrations.ExpectedColumnDefinition.ComputedColumnSql.get -> string?
+Doka.EntityFrameworkCore.SafeMigrations.ExpectedColumnDefinition.ComputedExpression.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression?
 Doka.EntityFrameworkCore.SafeMigrations.ExpectedColumnDefinition.DefaultValue.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDefaultValue!
-Doka.EntityFrameworkCore.SafeMigrations.ExpectedColumnDefinition.ExpectedColumnDefinition(string! name, System.Type! clrType, bool isNullable, string? storeType = null, bool? isUnicode = null, int? maxLength = null, bool? isFixedLength = null, bool isRowVersion = false, int? precision = null, int? scale = null, string? collation = null, string? comment = null, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDefaultValue? defaultValue = null, string? computedColumnSql = null, bool? isStored = null) -> void
+Doka.EntityFrameworkCore.SafeMigrations.ExpectedColumnDefinition.ExpectedColumnDefinition(string! name, System.Type! clrType, bool isNullable, string? storeType = null, bool? isUnicode = null, int? maxLength = null, bool? isFixedLength = null, bool isRowVersion = false, int? precision = null, int? scale = null, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationCollationIdentifier? collation = null, string? comment = null, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDefaultValue? defaultValue = null, string? computedColumnSql = null, bool? isStored = null, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression? computedExpression = null) -> void
 Doka.EntityFrameworkCore.SafeMigrations.ExpectedColumnDefinition.IsFixedLength.get -> bool?
 Doka.EntityFrameworkCore.SafeMigrations.ExpectedColumnDefinition.IsNullable.get -> bool
 Doka.EntityFrameworkCore.SafeMigrations.ExpectedColumnDefinition.IsRowVersion.get -> bool
@@ -104,7 +106,7 @@ Doka.EntityFrameworkCore.SafeMigrations.ExpectedForeignKeyDefinition.PrincipalTa
 Doka.EntityFrameworkCore.SafeMigrations.ExpectedForeignKeyDefinition.Schema.get -> string?
 Doka.EntityFrameworkCore.SafeMigrations.ExpectedForeignKeyDefinition.Table.get -> string!
 Doka.EntityFrameworkCore.SafeMigrations.ExpectedIndexDefinition
-Doka.EntityFrameworkCore.SafeMigrations.ExpectedIndexDefinition.ExpectedIndexDefinition(string! name, string! table, System.Collections.Generic.IEnumerable<Doka.EntityFrameworkCore.SafeMigrations.ExpectedIndexKeyDefinition!>! keys, string? schema = null, bool unique = false, string? filter = null, System.Collections.Generic.IEnumerable<string!>? includedColumns = null, string? method = null, bool? nullsDistinct = null) -> void
+Doka.EntityFrameworkCore.SafeMigrations.ExpectedIndexDefinition.ExpectedIndexDefinition(string! name, string! table, System.Collections.Generic.IEnumerable<Doka.EntityFrameworkCore.SafeMigrations.ExpectedIndexKeyDefinition!>! keys, string? schema = null, bool unique = false, string? filter = null, System.Collections.Generic.IEnumerable<string!>? includedColumns = null, string? method = null, bool? nullsDistinct = null, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression? structuredFilter = null) -> void
 Doka.EntityFrameworkCore.SafeMigrations.ExpectedIndexDefinition.Filter.get -> string?
 Doka.EntityFrameworkCore.SafeMigrations.ExpectedIndexDefinition.IncludedColumns.get -> System.Collections.Generic.IReadOnlyList<string!>!
 Doka.EntityFrameworkCore.SafeMigrations.ExpectedIndexDefinition.Keys.get -> System.Collections.Generic.IReadOnlyList<Doka.EntityFrameworkCore.SafeMigrations.ExpectedIndexKeyDefinition!>!
@@ -112,16 +114,19 @@ Doka.EntityFrameworkCore.SafeMigrations.ExpectedIndexDefinition.Method.get -> st
 Doka.EntityFrameworkCore.SafeMigrations.ExpectedIndexDefinition.Name.get -> string!
 Doka.EntityFrameworkCore.SafeMigrations.ExpectedIndexDefinition.NullsDistinct.get -> bool?
 Doka.EntityFrameworkCore.SafeMigrations.ExpectedIndexDefinition.Schema.get -> string?
+Doka.EntityFrameworkCore.SafeMigrations.ExpectedIndexDefinition.StructuredFilter.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression?
 Doka.EntityFrameworkCore.SafeMigrations.ExpectedIndexDefinition.Table.get -> string!
 Doka.EntityFrameworkCore.SafeMigrations.ExpectedIndexDefinition.Unique.get -> bool
 Doka.EntityFrameworkCore.SafeMigrations.ExpectedIndexKeyDefinition
-Doka.EntityFrameworkCore.SafeMigrations.ExpectedIndexKeyDefinition.Collation.get -> string?
+Doka.EntityFrameworkCore.SafeMigrations.ExpectedIndexKeyDefinition.Collation.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationCollationIdentifier?
 Doka.EntityFrameworkCore.SafeMigrations.ExpectedIndexKeyDefinition.Column.get -> string?
-Doka.EntityFrameworkCore.SafeMigrations.ExpectedIndexKeyDefinition.Descending.get -> bool
-Doka.EntityFrameworkCore.SafeMigrations.ExpectedIndexKeyDefinition.ExpectedIndexKeyDefinition(string? column = null, string? expression = null, bool descending = false, int? prefixLength = null, string? collation = null, string? operatorClass = null) -> void
+Doka.EntityFrameworkCore.SafeMigrations.ExpectedIndexKeyDefinition.ExpectedIndexKeyDefinition(string? column = null, string? expression = null, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationIndexSortOrder sortOrder = Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationIndexSortOrder.ProviderDefault, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationIndexNullOrder nullOrder = Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationIndexNullOrder.ProviderDefault, int? prefixLength = null, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationCollationIdentifier? collation = null, string? operatorClass = null, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression? structuredExpression = null) -> void
+Doka.EntityFrameworkCore.SafeMigrations.ExpectedIndexKeyDefinition.NullOrder.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationIndexNullOrder
+Doka.EntityFrameworkCore.SafeMigrations.ExpectedIndexKeyDefinition.SortOrder.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationIndexSortOrder
 Doka.EntityFrameworkCore.SafeMigrations.ExpectedIndexKeyDefinition.Expression.get -> string?
 Doka.EntityFrameworkCore.SafeMigrations.ExpectedIndexKeyDefinition.OperatorClass.get -> string?
 Doka.EntityFrameworkCore.SafeMigrations.ExpectedIndexKeyDefinition.PrefixLength.get -> int?
+Doka.EntityFrameworkCore.SafeMigrations.ExpectedIndexKeyDefinition.StructuredExpression.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression?
 Doka.EntityFrameworkCore.SafeMigrations.ExpectedPrimaryKeyDefinition
 Doka.EntityFrameworkCore.SafeMigrations.ExpectedPrimaryKeyDefinition.Columns.get -> System.Collections.Generic.IReadOnlyList<string!>!
 Doka.EntityFrameworkCore.SafeMigrations.ExpectedPrimaryKeyDefinition.ExpectedPrimaryKeyDefinition(string! name, string! table, System.Collections.Generic.IEnumerable<string!>! columns, string? schema = null) -> void
@@ -145,6 +150,7 @@ Doka.EntityFrameworkCore.SafeMigrations.ExpectedUniqueConstraintDefinition.Name.
 Doka.EntityFrameworkCore.SafeMigrations.ExpectedUniqueConstraintDefinition.Schema.get -> string?
 Doka.EntityFrameworkCore.SafeMigrations.ExpectedUniqueConstraintDefinition.Table.get -> string!
 Doka.EntityFrameworkCore.SafeMigrations.ISafeMigrationProviderAnalyzer
+Doka.EntityFrameworkCore.SafeMigrations.ISafeMigrationProviderAnalyzer.AcquireAnalysisScopeAsync(Microsoft.EntityFrameworkCore.DbContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.IAsyncDisposable!>!
 Doka.EntityFrameworkCore.SafeMigrations.ISafeMigrationProviderAnalyzer.AnalyzeAsync(Microsoft.EntityFrameworkCore.DbContext! context, System.Collections.Generic.IReadOnlyList<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperation!>! operations, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationProviderAnalysis!>!>!
 Doka.EntityFrameworkCore.SafeMigrations.ISafeMigrationProviderAnalyzer.FindUnexpectedObjectsAsync(Microsoft.EntityFrameworkCore.DbContext! context, System.Collections.Generic.IReadOnlyList<Microsoft.EntityFrameworkCore.Migrations.Operations.MigrationOperation!>! operations, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationUnexpectedObject!>!>!
 Doka.EntityFrameworkCore.SafeMigrations.ISafeMigrationProviderAnalyzer.GetEnvironmentAsync(Microsoft.EntityFrameworkCore.DbContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationProviderEnvironment!>!
@@ -175,6 +181,7 @@ Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAction
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAction.Apply = 0 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAction
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAction.NoOp = 1 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAction
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAction.RejectDataBlocked = 5 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAction
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAction.RejectPrerequisiteMissing = 6 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAction
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAction.RejectDifferent = 4 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAction
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAction.RejectUnsupported = 3 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAction
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAction.Repair = 2 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAction
@@ -190,6 +197,11 @@ Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAssessment.Ordinal.get -> i
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAssessment.PostconditionSatisfied.get -> bool?
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAssessment.SafeMigrationAssessment(int ordinal, string! operationType, bool isSafeOperation, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperationKind? operationKind, string? objectName, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationObservedState? observedState, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAction? action, bool? postconditionSatisfied, string! code) -> void
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationBuilderExtensions
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationCollationIdentifier
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationCollationIdentifier.Equals(Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationCollationIdentifier? other) -> bool
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationCollationIdentifier.Name.get -> string!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationCollationIdentifier.SafeMigrationCollationIdentifier(string! name, string? schema = null) -> void
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationCollationIdentifier.Schema.get -> string?
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationContractFingerprint
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDatabaseObjectKind
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDatabaseObjectKind.CheckConstraint = 5 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDatabaseObjectKind
@@ -208,6 +220,7 @@ Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDefaultValue
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDefaultValue.Kind.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDefaultValueKind
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDefaultValue.LiteralValue.get -> object?
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDefaultValue.SqlExpression.get -> string?
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDefaultValue.StructuredExpression.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression?
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDefaultValueKind
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDefaultValueKind.Literal = 1 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDefaultValueKind
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDefaultValueKind.None = 0 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDefaultValueKind
@@ -215,6 +228,14 @@ Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDefaultValueKind.Sql = 2 ->
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDiagnostics
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationIntent
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationIntent.Kind.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperationKind
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationIndexNullOrder
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationIndexNullOrder.First = 1 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationIndexNullOrder
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationIndexNullOrder.Last = 2 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationIndexNullOrder
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationIndexNullOrder.ProviderDefault = 0 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationIndexNullOrder
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationIndexSortOrder
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationIndexSortOrder.Ascending = 1 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationIndexSortOrder
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationIndexSortOrder.Descending = 2 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationIndexSortOrder
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationIndexSortOrder.ProviderDefault = 0 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationIndexSortOrder
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationModelFingerprint
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationModelMismatchException
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationModelMismatchException.ActualFingerprint.get -> string!
@@ -222,6 +243,7 @@ Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationModelMismatchException.Expe
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationModelMismatchException.SafeMigrationModelMismatchException(string! expectedFingerprint, string! actualFingerprint) -> void
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationObservedState
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationObservedState.DataBlocked = 4 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationObservedState
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationObservedState.PrerequisiteMissing = 5 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationObservedState
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationObservedState.Different = 2 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationObservedState
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationObservedState.Matching = 1 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationObservedState
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationObservedState.Missing = 0 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationObservedState
@@ -301,6 +323,86 @@ Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationRunner.AnalyzeAsync(Microso
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationRunner.AnalyzePendingMigrationsAsync(Microsoft.EntityFrameworkCore.DbContext! context, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationRunOptions! options, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationRunReport!>!
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationRunner.SafeMigrationRunner(Doka.EntityFrameworkCore.SafeMigrations.ISafeMigrationProviderAnalyzer! providerAnalyzer, System.TimeProvider? timeProvider = null) -> void
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationRunner.VerifyAsync(Microsoft.EntityFrameworkCore.DbContext! context, System.Collections.Generic.IReadOnlyList<Microsoft.EntityFrameworkCore.Migrations.Operations.MigrationOperation!>! operations, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationRunOptions! options, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationRunReport!>!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSql
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBetweenExpression
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBetweenExpression.Lower.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBetweenExpression.Negated.get -> bool
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBetweenExpression.Operand.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBetweenExpression.SafeMigrationSqlBetweenExpression(Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression! operand, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression! lower, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression! upper, bool negated = false) -> void
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBetweenExpression.Upper.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBinaryExpression
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBinaryExpression.Left.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBinaryExpression.Operator.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBinaryOperator
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBinaryExpression.Right.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBinaryExpression.SafeMigrationSqlBinaryExpression(Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression! left, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBinaryOperator operator, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression! right) -> void
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBinaryOperator
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBinaryOperator.Add = 8 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBinaryOperator
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBinaryOperator.And = 0 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBinaryOperator
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBinaryOperator.Divide = 11 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBinaryOperator
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBinaryOperator.Equal = 2 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBinaryOperator
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBinaryOperator.GreaterThan = 6 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBinaryOperator
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBinaryOperator.GreaterThanOrEqual = 7 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBinaryOperator
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBinaryOperator.LessThan = 4 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBinaryOperator
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBinaryOperator.LessThanOrEqual = 5 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBinaryOperator
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBinaryOperator.Modulo = 12 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBinaryOperator
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBinaryOperator.Multiply = 10 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBinaryOperator
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBinaryOperator.NotEqual = 3 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBinaryOperator
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBinaryOperator.Or = 1 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBinaryOperator
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBinaryOperator.Subtract = 9 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBinaryOperator
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlCastExpression
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlCastExpression.Operand.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlCastExpression.SafeMigrationSqlCastExpression(Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression! operand, string! storeType) -> void
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlCastExpression.StoreType.get -> string!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlCollateExpression
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlCollateExpression.Name.get -> string!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlCollateExpression.Operand.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlCollateExpression.SafeMigrationSqlCollateExpression(Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression! operand, string! name, string? schema = null) -> void
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlCollateExpression.Schema.get -> string?
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlCurrentValue
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlCurrentValue.Date = 0 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlCurrentValue
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlCurrentValue.Time = 1 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlCurrentValue
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlCurrentValue.Timestamp = 2 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlCurrentValue
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlCurrentValueExpression
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlCurrentValueExpression.Precision.get -> int?
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlCurrentValueExpression.SafeMigrationSqlCurrentValueExpression(Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlCurrentValue value, int? precision = null) -> void
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlCurrentValueExpression.Value.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlCurrentValue
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression.SafeMigrationSqlExpression() -> void
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlFunctionExpression
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlFunctionExpression.Arguments.get -> System.Collections.Generic.IReadOnlyList<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression!>!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlFunctionExpression.Name.get -> string!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlFunctionExpression.SafeMigrationSqlFunctionExpression(string! name, System.Collections.Generic.IEnumerable<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression!>? arguments = null) -> void
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlIdentifierExpression
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlIdentifierExpression.Parts.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlIdentifierExpression.SafeMigrationSqlIdentifierExpression(System.Collections.Generic.IEnumerable<string!>! parts) -> void
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlInExpression
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlInExpression.Negated.get -> bool
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlInExpression.Operand.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlInExpression.SafeMigrationSqlInExpression(Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression! operand, System.Collections.Generic.IEnumerable<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression!>! values, bool negated = false) -> void
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlInExpression.Values.get -> System.Collections.Generic.IReadOnlyList<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression!>!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlLiteralExpression
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlLiteralExpression.SafeMigrationSqlLiteralExpression(object? value, string? storeType = null) -> void
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlLiteralExpression.StoreType.get -> string?
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlLiteralExpression.Value.get -> object?
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlNullTestExpression
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlNullTestExpression.Negated.get -> bool
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlNullTestExpression.Operand.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlNullTestExpression.SafeMigrationSqlNullTestExpression(Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression! operand, bool negated = false) -> void
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlOpaqueExpression
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlOpaqueExpression.FollowsIdentifierRename.get -> bool
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlOpaqueExpression.SafeMigrationSqlOpaqueExpression(string! sql) -> void
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlOpaqueExpression.Sql.get -> string!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlProviderFragmentExpression
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlProviderFragmentExpression.ProviderId.get -> string!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlProviderFragmentExpression.SafeMigrationSqlProviderFragmentExpression(string! providerId, string! sql) -> void
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlProviderFragmentExpression.Sql.get -> string!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlUnaryExpression
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlUnaryExpression.Operand.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlUnaryExpression.Operator.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlUnaryOperator
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlUnaryExpression.SafeMigrationSqlUnaryExpression(Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlUnaryOperator operator, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression! operand) -> void
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlUnaryOperator
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlUnaryOperator.Negate = 1 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlUnaryOperator
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlUnaryOperator.Not = 0 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlUnaryOperator
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationTableMode
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationTableMode.ConvergenceContainer = 1 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationTableMode
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationTableMode.StrictDefinition = 0 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationTableMode
@@ -341,14 +443,17 @@ override Doka.EntityFrameworkCore.SafeMigrations.EnsureUniqueConstraintIntent.Ob
 override Doka.EntityFrameworkCore.SafeMigrations.RenameColumnIntent.ObjectName.get -> string!
 override Doka.EntityFrameworkCore.SafeMigrations.RenameIndexIntent.ObjectName.get -> string!
 override Doka.EntityFrameworkCore.SafeMigrations.RenameTableIntent.ObjectName.get -> string!
+override Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationCollationIdentifier.Equals(object? obj) -> bool
+override Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationCollationIdentifier.GetHashCode() -> int
+static Doka.EntityFrameworkCore.SafeMigrations.ExpectedCheckConstraintDefinition.FromExpression(string! name, string! table, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression! expression, string? schema = null) -> Doka.EntityFrameworkCore.SafeMigrations.ExpectedCheckConstraintDefinition!
 static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationBuilderExtensions.AddCheckConstraintIfNotExists(this Microsoft.EntityFrameworkCore.Migrations.MigrationBuilder! migrationBuilder, string! name, string! table, string! sql, string? schema = null, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationPolicy policy = Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationPolicy.ThrowIfDifferent) -> Microsoft.EntityFrameworkCore.Migrations.Operations.Builders.OperationBuilder<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperation!>!
-static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationBuilderExtensions.AddColumnIfNotExists<T>(this Microsoft.EntityFrameworkCore.Migrations.MigrationBuilder! migrationBuilder, string! name, string! table, string? type = null, bool? unicode = null, int? maxLength = null, bool rowVersion = false, string? schema = null, bool nullable = false, object? defaultValue = null, string? defaultValueSql = null, string? computedColumnSql = null, bool? fixedLength = null, string? comment = null, string? collation = null, int? precision = null, int? scale = null, bool? stored = null, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationPolicy policy = Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationPolicy.ThrowIfDifferent) -> Microsoft.EntityFrameworkCore.Migrations.Operations.Builders.OperationBuilder<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperation!>!
+static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationBuilderExtensions.AddColumnIfNotExists<T>(this Microsoft.EntityFrameworkCore.Migrations.MigrationBuilder! migrationBuilder, string! name, string! table, string? type = null, bool? unicode = null, int? maxLength = null, bool rowVersion = false, string? schema = null, bool nullable = false, object? defaultValue = null, string? defaultValueSql = null, string? computedColumnSql = null, bool? fixedLength = null, string? comment = null, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationCollationIdentifier? collation = null, int? precision = null, int? scale = null, bool? stored = null, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationPolicy policy = Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationPolicy.ThrowIfDifferent) -> Microsoft.EntityFrameworkCore.Migrations.Operations.Builders.OperationBuilder<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperation!>!
 static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationBuilderExtensions.AddForeignKeyIfNotExists(this Microsoft.EntityFrameworkCore.Migrations.MigrationBuilder! migrationBuilder, string! name, string! table, System.Collections.Generic.IEnumerable<string!>! columns, string! principalTable, System.Collections.Generic.IEnumerable<string!>! principalColumns, string? schema = null, string? principalSchema = null, Microsoft.EntityFrameworkCore.Migrations.ReferentialAction onUpdate = Microsoft.EntityFrameworkCore.Migrations.ReferentialAction.NoAction, Microsoft.EntityFrameworkCore.Migrations.ReferentialAction onDelete = Microsoft.EntityFrameworkCore.Migrations.ReferentialAction.NoAction, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationPolicy policy = Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationPolicy.ThrowIfDifferent) -> Microsoft.EntityFrameworkCore.Migrations.Operations.Builders.OperationBuilder<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperation!>!
 static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationBuilderExtensions.AddPrimaryKeyIfNotExists(this Microsoft.EntityFrameworkCore.Migrations.MigrationBuilder! migrationBuilder, string! name, string! table, System.Collections.Generic.IEnumerable<string!>! columns, string? schema = null, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationPolicy policy = Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationPolicy.ThrowIfDifferent) -> Microsoft.EntityFrameworkCore.Migrations.Operations.Builders.OperationBuilder<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperation!>!
 static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationBuilderExtensions.AddUniqueConstraintIfNotExists(this Microsoft.EntityFrameworkCore.Migrations.MigrationBuilder! migrationBuilder, string! name, string! table, System.Collections.Generic.IEnumerable<string!>! columns, string? schema = null, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationPolicy policy = Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationPolicy.ThrowIfDifferent) -> Microsoft.EntityFrameworkCore.Migrations.Operations.Builders.OperationBuilder<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperation!>!
 static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationBuilderExtensions.AlterColumnIfDifferent(this Microsoft.EntityFrameworkCore.Migrations.MigrationBuilder! migrationBuilder, string! table, Doka.EntityFrameworkCore.SafeMigrations.ExpectedColumnDefinition! definition, Doka.EntityFrameworkCore.SafeMigrations.ExpectedColumnDefinition? oldDefinition, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationPolicy policy, string? schema = null) -> Microsoft.EntityFrameworkCore.Migrations.Operations.Builders.OperationBuilder<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperation!>!
 static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationBuilderExtensions.ConvergeTable(this Microsoft.EntityFrameworkCore.Migrations.MigrationBuilder! migrationBuilder, Doka.EntityFrameworkCore.SafeMigrations.ExpectedTableDefinition! definition, System.Collections.Generic.IEnumerable<Doka.EntityFrameworkCore.SafeMigrations.ExpectedIndexDefinition!>? indexes = null, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationPolicy policy = Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationPolicy.ThrowIfDifferent) -> Microsoft.EntityFrameworkCore.Migrations.MigrationBuilder!
-static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationBuilderExtensions.CreateIndexIfNotExists(this Microsoft.EntityFrameworkCore.Migrations.MigrationBuilder! migrationBuilder, string! name, string! table, System.Collections.Generic.IEnumerable<string!>! columns, string? schema = null, bool unique = false, string? filter = null, System.Collections.Generic.IEnumerable<bool>? descending = null, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationPolicy policy = Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationPolicy.ThrowIfDifferent) -> Microsoft.EntityFrameworkCore.Migrations.Operations.Builders.OperationBuilder<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperation!>!
+static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationBuilderExtensions.CreateIndexIfNotExists(this Microsoft.EntityFrameworkCore.Migrations.MigrationBuilder! migrationBuilder, string! name, string! table, System.Collections.Generic.IEnumerable<string!>! columns, string? schema = null, bool unique = false, string? filter = null, System.Collections.Generic.IEnumerable<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationIndexSortOrder>? sortOrders = null, System.Collections.Generic.IEnumerable<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationIndexNullOrder>? nullOrders = null, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationPolicy policy = Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationPolicy.ThrowIfDifferent) -> Microsoft.EntityFrameworkCore.Migrations.Operations.Builders.OperationBuilder<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperation!>!
 static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationBuilderExtensions.CreateTableIfNotExists<TColumns>(this Microsoft.EntityFrameworkCore.Migrations.MigrationBuilder! migrationBuilder, string! table, System.Func<Microsoft.EntityFrameworkCore.Migrations.Operations.Builders.ColumnsBuilder!, TColumns>! columns, string? schema = null, System.Action<Microsoft.EntityFrameworkCore.Migrations.Operations.Builders.CreateTableBuilder<TColumns>!>? constraints = null, string? comment = null, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationPolicy policy = Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationPolicy.ThrowIfDifferent, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationTableMode mode = Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationTableMode.StrictDefinition) -> Microsoft.EntityFrameworkCore.Migrations.Operations.Builders.OperationBuilder<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperation!>!
 static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationBuilderExtensions.DropCheckConstraintIfExists(this Microsoft.EntityFrameworkCore.Migrations.MigrationBuilder! migrationBuilder, string! name, string! table, string? schema = null) -> Microsoft.EntityFrameworkCore.Migrations.Operations.Builders.OperationBuilder<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperation!>!
 static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationBuilderExtensions.DropColumnIfExists(this Microsoft.EntityFrameworkCore.Migrations.MigrationBuilder! migrationBuilder, string! name, string! table, string? schema = null) -> Microsoft.EntityFrameworkCore.Migrations.Operations.Builders.OperationBuilder<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperation!>!
@@ -373,8 +478,23 @@ static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationContractFingerprint.
 static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDecisionPlanner.Plan(Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperationKind operationKind, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationObservedState observedState, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationPolicy policy, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationRepairCapability repairCapability = Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationRepairCapability.None) -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDecision!
 static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDefaultValue.Literal(object? value) -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDefaultValue!
 static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDefaultValue.None.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDefaultValue!
+static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDefaultValue.Sql(Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression! expression) -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDefaultValue!
 static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDefaultValue.Sql(string! sqlExpression) -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDefaultValue!
-static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationModelFingerprint.Create(Microsoft.EntityFrameworkCore.Metadata.IModel! model) -> string!
+static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationModelFingerprint.Create(Microsoft.EntityFrameworkCore.Metadata.IModel! model, string! providerContract) -> string!
 static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationModelFingerprint.ValidateExpected(string! actualFingerprint, string? expectedFingerprint) -> void
 static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationReportJson.SerializeToUtf8Bytes(Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationRunReport! report) -> byte[]!
 static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationReportJson.Write(System.Text.Json.Utf8JsonWriter! writer, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationRunReport! report) -> void
+static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSql.Binary(Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression! left, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlBinaryOperator operator, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression! right) -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression!
+static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSql.Between(Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression! operand, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression! lower, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression! upper, bool negated = false) -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression!
+static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSql.Cast(Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression! operand, string! storeType) -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression!
+static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSql.Collate(Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression! operand, string! name, string? schema = null) -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression!
+static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSql.Current(Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlCurrentValue value, int? precision = null) -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression!
+static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSql.Function(string! name, params System.ReadOnlySpan<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression!> arguments) -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression!
+static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSql.Identifier(params System.ReadOnlySpan<string!> parts) -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression!
+static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSql.In(Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression! operand, System.Collections.Generic.IEnumerable<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression!>! values, bool negated = false) -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression!
+static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSql.IsNotNull(Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression! operand) -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression!
+static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSql.IsNull(Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression! operand) -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression!
+static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSql.Literal(object? value, string? storeType = null) -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression!
+static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSql.Opaque(string! sql) -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression!
+static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSql.ProviderFragment(string! providerId, string! sql) -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression!
+static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSql.Unary(Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlUnaryOperator operator, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression! operand) -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression!

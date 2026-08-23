@@ -6,13 +6,15 @@ internal static partial class SafeMigrationExpectedCatalog
         Dictionary<TableKey, MutableTable> tables,
         EnsureColumnIntent intent
     ) => Find(tables, intent.Schema, intent.Table)
-        ?.Columns.Add(intent.Definition.Name);
+        ?.Columns
+        .Add(intent.Definition.Name);
 
     private static void Apply(
         Dictionary<TableKey, MutableTable> tables,
         DropColumnIntent intent
     ) => Find(tables, intent.Schema, intent.Table)
-        ?.Columns.Remove(intent.Name);
+        ?.Columns
+        .Remove(intent.Name);
 
     private static void Apply(
         Dictionary<TableKey, MutableTable> tables,

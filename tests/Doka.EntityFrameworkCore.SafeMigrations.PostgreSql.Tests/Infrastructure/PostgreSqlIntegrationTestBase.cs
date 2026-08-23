@@ -23,14 +23,14 @@ public abstract class PostgreSqlIntegrationTestBase : IClassFixture<PostgreSqlCo
         var connection = context.Database.GetDbConnection();
         if (connection.State != System.Data.ConnectionState.Open)
         {
-            await connection.OpenAsync();
+            await connection.OpenAsync(CancellationToken.None);
         }
 
         foreach (var command in commands)
         {
             await using var dbCommand = connection.CreateCommand();
             dbCommand.CommandText = command.CommandText;
-            await dbCommand.ExecuteNonQueryAsync();
+            await dbCommand.ExecuteNonQueryAsync(CancellationToken.None);
         }
     }
 
@@ -40,12 +40,12 @@ public abstract class PostgreSqlIntegrationTestBase : IClassFixture<PostgreSqlCo
     )
     {
         await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync();
+        await connection.OpenAsync(CancellationToken.None);
 
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
 
-        await command.ExecuteNonQueryAsync();
+        await command.ExecuteNonQueryAsync(CancellationToken.None);
     }
 
     protected static async Task<int> ScalarIntAsync(
@@ -54,12 +54,12 @@ public abstract class PostgreSqlIntegrationTestBase : IClassFixture<PostgreSqlCo
     )
     {
         await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync();
+        await connection.OpenAsync(CancellationToken.None);
 
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
 
-        return Convert.ToInt32(await command.ExecuteScalarAsync(), CultureInfo.InvariantCulture);
+        return Convert.ToInt32(await command.ExecuteScalarAsync(CancellationToken.None), CultureInfo.InvariantCulture);
     }
 
     protected static async Task<string> ScalarStringAsync(
@@ -68,12 +68,12 @@ public abstract class PostgreSqlIntegrationTestBase : IClassFixture<PostgreSqlCo
     )
     {
         await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync();
+        await connection.OpenAsync(CancellationToken.None);
 
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
 
-        return Convert.ToString(await command.ExecuteScalarAsync(), CultureInfo.InvariantCulture) ?? "<null>";
+        return Convert.ToString(await command.ExecuteScalarAsync(CancellationToken.None), CultureInfo.InvariantCulture) ?? "<null>";
     }
 
     protected static async Task<string> ReadCheckExpressionAsync(
@@ -82,13 +82,13 @@ public abstract class PostgreSqlIntegrationTestBase : IClassFixture<PostgreSqlCo
     )
     {
         await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync();
+        await connection.OpenAsync(CancellationToken.None);
 
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT pg_catalog.pg_get_expr(co.conbin, co.conrelid) "
             + "FROM pg_catalog.pg_constraint co WHERE co.conname = @name;";
         command.Parameters.AddWithValue("name", constraintName);
 
-        return Convert.ToString(await command.ExecuteScalarAsync(), CultureInfo.InvariantCulture) ?? "<null>";
+        return Convert.ToString(await command.ExecuteScalarAsync(CancellationToken.None), CultureInfo.InvariantCulture) ?? "<null>";
     }
 }

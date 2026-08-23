@@ -2,6 +2,26 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 public sealed class SafeMigrationRunContractTests
 {
+    private static readonly HashSet<string> s_supportedSchemaKeywords = new(StringComparer.Ordinal)
+    {
+        "$schema",
+        "$id",
+        "$ref",
+        "$defs",
+        "title",
+        "type",
+        "additionalProperties",
+        "required",
+        "properties",
+        "const",
+        "enum",
+        "format",
+        "minLength",
+        "pattern",
+        "items",
+        "minimum",
+    };
+
     [Fact]
     public void RunOptions_RequireExplicitNonEmptyPseudonymousIdentity()
     {
@@ -9,11 +29,16 @@ public sealed class SafeMigrationRunContractTests
         Assert.Throws<ArgumentException>(() => new SafeMigrationRunOptions("instance", " "));
         Assert.Throws<ArgumentException>(() => new SafeMigrationRunOptions("instance", expectedModelFingerprint: " "));
 
-        var options = new SafeMigrationRunOptions("instance-7f3a", "202608170101_Core", new string('a', 64));
+        Assert.Throws<ArgumentException>(() => new SafeMigrationRunOptions(
+            "instance",
+            expectedModelFingerprint: new string('a', 64)));
+
+        var expectedFingerprint = ModelFingerprint();
+        var options = new SafeMigrationRunOptions("instance-7f3a", "202608170101_Core", expectedFingerprint);
 
         Assert.Equal("instance-7f3a", options.InstanceId);
         Assert.Equal("202608170101_Core", options.TargetMigrationId);
-        Assert.Equal(new string('a', 64), options.ExpectedModelFingerprint);
+        Assert.Equal(expectedFingerprint, options.ExpectedModelFingerprint);
     }
 
     [Fact]
@@ -50,7 +75,7 @@ public sealed class SafeMigrationRunContractTests
             "instance-7f3a",
             environment,
             "202608170101_Core",
-            new string('a', 64),
+            ModelFingerprint(),
             new string('b', 64),
             assessments,
             [
@@ -150,9 +175,20 @@ public sealed class SafeMigrationRunContractTests
                 using var document = JsonDocument.Parse(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
                 var root = document.RootElement;
 
-                Assert.Equal(mode.Code, root.GetProperty("mode").GetString());
-                Assert.Equal(status.Code, root.GetProperty("status").GetString());
-                Assert.Equal(JsonValueKind.Null, root.GetProperty("targetMigrationId").ValueKind);
+                Assert.Equal(
+                    mode.Code,
+                    root
+                        .GetProperty("mode")
+                        .GetString());
+                Assert.Equal(
+                    status.Code,
+                    root
+                        .GetProperty("status")
+                        .GetString());
+                Assert.Equal(
+                    JsonValueKind.Null,
+                    root.GetProperty("targetMigrationId")
+                        .ValueKind);
             }
         }
 
@@ -187,16 +223,17 @@ public sealed class SafeMigrationRunContractTests
             (Value: SafeMigrationObservedState.Different, Code: "different"),
             (Value: SafeMigrationObservedState.Unsupported, Code: "unsupported"),
             (Value: SafeMigrationObservedState.DataBlocked, Code: "data_blocked"),
+            (Value: SafeMigrationObservedState.PrerequisiteMissing, Code: "prerequisite_missing"),
         };
 
         var actions = new[]
         {
-            (Value: SafeMigrationAction.Apply, Code: "apply"),
-            (Value: SafeMigrationAction.NoOp, Code: "no_op"),
+            (Value: SafeMigrationAction.Apply, Code: "apply"), (Value: SafeMigrationAction.NoOp, Code: "no_op"),
             (Value: SafeMigrationAction.Repair, Code: "repair"),
             (Value: SafeMigrationAction.RejectUnsupported, Code: "reject_unsupported"),
             (Value: SafeMigrationAction.RejectDifferent, Code: "reject_different"),
             (Value: SafeMigrationAction.RejectDataBlocked, Code: "reject_data_blocked"),
+            (Value: SafeMigrationAction.RejectPrerequisiteMissing, Code: "reject_prerequisite_missing"),
         };
 
         var objectKinds = new[]
@@ -211,7 +248,10 @@ public sealed class SafeMigrationRunContractTests
         };
 
         var assessments = operationKinds
-            .Select((value, index) => new SafeMigrationAssessment(
+            .Select((
+                value,
+                index
+            ) => new SafeMigrationAssessment(
                 index,
                 typeof(SafeMigrationOperation).FullName!,
                 isSafeOperation: true,
@@ -221,16 +261,17 @@ public sealed class SafeMigrationRunContractTests
                 actions[index % actions.Length].Value,
                 index % 2 == 0,
                 "stable_code"))
-            .Append(new SafeMigrationAssessment(
-                operationKinds.Length,
-                typeof(MigrationOperation).FullName!,
-                isSafeOperation: false,
-                operationKind: null,
-                objectName: null,
-                observedState: null,
-                action: null,
-                postconditionSatisfied: null,
-                "provider_operation"))
+            .Append(
+                new SafeMigrationAssessment(
+                    operationKinds.Length,
+                    typeof(MigrationOperation).FullName!,
+                    isSafeOperation: false,
+                    operationKind: null,
+                    objectName: null,
+                    observedState: null,
+                    action: null,
+                    postconditionSatisfied: null,
+                    "provider_operation"))
             .ToArray();
 
         var unexpectedObjects = objectKinds
@@ -247,26 +288,127 @@ public sealed class SafeMigrationRunContractTests
         var assessmentElements = completeDocument.RootElement.GetProperty("assessments");
         var unexpectedElements = completeDocument.RootElement.GetProperty("unexpectedObjects");
 
-        Assert.Equal(operationKinds.Select(static value => value.Code),
-            assessmentElements.EnumerateArray().Take(operationKinds.Length)
-                .Select(static value => value.GetProperty("operationKind").GetString()));
-        Assert.Equal(states.Select(static value => value.Code),
-            assessmentElements.EnumerateArray().Take(states.Length)
-                .Select(static value => value.GetProperty("observedState").GetString()));
-        Assert.Equal(actions.Select(static value => value.Code),
-            assessmentElements.EnumerateArray().Take(actions.Length)
-                .Select(static value => value.GetProperty("action").GetString()));
-        Assert.Equal(objectKinds.Select(static value => value.Code),
-            unexpectedElements.EnumerateArray()
-                .Select(static value => value.GetProperty("objectKind").GetString()));
+        Assert.Equal(
+            operationKinds.Select(static value => value.Code),
+            assessmentElements
+                .EnumerateArray()
+                .Take(operationKinds.Length)
+                .Select(static value => value
+                    .GetProperty("operationKind")
+                    .GetString()));
+        Assert.Equal(
+            states.Select(static value => value.Code),
+            assessmentElements
+                .EnumerateArray()
+                .Take(states.Length)
+                .Select(static value => value
+                    .GetProperty("observedState")
+                    .GetString()));
+        Assert.Equal(
+            actions.Select(static value => value.Code),
+            assessmentElements
+                .EnumerateArray()
+                .Take(actions.Length)
+                .Select(static value => value
+                    .GetProperty("action")
+                    .GetString()));
+        Assert.Equal(
+            objectKinds.Select(static value => value.Code),
+            unexpectedElements
+                .EnumerateArray()
+                .Select(static value => value
+                    .GetProperty("objectKind")
+                    .GetString()));
+
+        using var schema = LoadReportSchema();
+        var schemaRoot = schema.RootElement;
+        var definitions = schemaRoot.GetProperty("$defs");
+
+        AssertSchemaEnum(
+            schemaRoot
+                .GetProperty("properties")
+                .GetProperty("mode"),
+            modes.Select(static value => value.Code));
+        AssertSchemaEnum(
+            schemaRoot
+                .GetProperty("properties")
+                .GetProperty("status"),
+            statuses.Select(static value => value.Code));
+        AssertSchemaEnum(
+            definitions
+                .GetProperty("environment")
+                .GetProperty("properties")
+                .GetProperty("engineFamily"),
+            ["mysql", "mariadb", "postgresql"]);
+        AssertSchemaEnum(
+            definitions
+                .GetProperty("assessment")
+                .GetProperty("properties")
+                .GetProperty("operationKind"),
+            operationKinds.Select(static value => value.Code));
+        AssertSchemaEnum(
+            definitions
+                .GetProperty("assessment")
+                .GetProperty("properties")
+                .GetProperty("observedState"),
+            states.Select(static value => value.Code));
+        AssertSchemaEnum(
+            definitions
+                .GetProperty("assessment")
+                .GetProperty("properties")
+                .GetProperty("action"),
+            actions.Select(static value => value.Code));
+        AssertSchemaEnum(
+            definitions
+                .GetProperty("unexpectedObject")
+                .GetProperty("properties")
+                .GetProperty("objectKind"),
+            objectKinds.Select(static value => value.Code));
+
+        AssertClosedObjectSurface(schemaRoot, completeDocument.RootElement);
+        AssertClosedObjectSurface(
+            definitions.GetProperty("environment"),
+            completeDocument.RootElement.GetProperty("environment"));
+        AssertClosedObjectSurface(definitions.GetProperty("assessment"), assessmentElements[0]);
+        AssertClosedObjectSurface(definitions.GetProperty("unexpectedObject"), unexpectedElements[0]);
+
+        var modelPattern = schemaRoot
+            .GetProperty("properties")
+            .GetProperty("modelFingerprint")
+            .GetProperty("pattern")
+            .GetString()!;
+        var contractPattern = schemaRoot
+            .GetProperty("properties")
+            .GetProperty("contractFingerprint")
+            .GetProperty("pattern")
+            .GetString()!;
+
+        Assert.Matches(new Regex(modelPattern, RegexOptions.CultureInvariant), completeReport.ModelFingerprint);
+        Assert.Matches(new Regex(contractPattern, RegexOptions.CultureInvariant), completeReport.ContractFingerprint);
+        AssertMatchesSchema(schemaRoot, completeDocument.RootElement, schemaRoot);
 
         var providerAssessment = assessmentElements[operationKinds.Length];
 
-        Assert.Equal(JsonValueKind.Null, providerAssessment.GetProperty("operationKind").ValueKind);
-        Assert.Equal(JsonValueKind.Null, providerAssessment.GetProperty("objectName").ValueKind);
-        Assert.Equal(JsonValueKind.Null, providerAssessment.GetProperty("observedState").ValueKind);
-        Assert.Equal(JsonValueKind.Null, providerAssessment.GetProperty("action").ValueKind);
-        Assert.Equal(JsonValueKind.Null, providerAssessment.GetProperty("postconditionSatisfied").ValueKind);
+        Assert.Equal(
+            JsonValueKind.Null,
+            providerAssessment.GetProperty("operationKind")
+                .ValueKind);
+        Assert.Equal(
+            JsonValueKind.Null,
+            providerAssessment.GetProperty("objectName")
+                .ValueKind);
+        Assert.Equal(
+            JsonValueKind.Null,
+            providerAssessment.GetProperty("observedState")
+                .ValueKind);
+        Assert.Equal(
+            JsonValueKind.Null,
+            providerAssessment.GetProperty("action")
+                .ValueKind);
+        Assert.Equal(
+            JsonValueKind.Null,
+            providerAssessment.GetProperty("postconditionSatisfied")
+                .ValueKind);
     }
 
     [Fact]
@@ -311,12 +453,121 @@ public sealed class SafeMigrationRunContractTests
                 == true);
     }
 
+    [Fact]
+    public void ReportAndEnvironmentRejectValuesOutsideThePackagedSchemaContract()
+    {
+        Assert.Throws<ArgumentException>(() => new SafeMigrationProviderEnvironment("provider", "sqlite", "1.0"));
+        Assert.Throws<ArgumentException>(() => CreateReport(modelFingerprint: new string('a', 64)));
+        Assert.Throws<ArgumentException>(() => CreateReport(contractFingerprint: "ABC"));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new SafeMigrationAssessment(
+            0,
+            "operation",
+            isSafeOperation: true,
+            (SafeMigrationOperationKind)int.MaxValue,
+            "object",
+            SafeMigrationObservedState.Matching,
+            SafeMigrationAction.NoOp,
+            postconditionSatisfied: true,
+            "invalid_operation_kind"));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new SafeMigrationAssessment(
+            0,
+            "operation",
+            isSafeOperation: true,
+            SafeMigrationOperationKind.EnsureTable,
+            "object",
+            (SafeMigrationObservedState)int.MaxValue,
+            SafeMigrationAction.NoOp,
+            postconditionSatisfied: true,
+            "invalid_observed_state"));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new SafeMigrationAssessment(
+            0,
+            "operation",
+            isSafeOperation: true,
+            SafeMigrationOperationKind.EnsureTable,
+            "object",
+            SafeMigrationObservedState.Matching,
+            (SafeMigrationAction)int.MaxValue,
+            postconditionSatisfied: true,
+            "invalid_action"));
+    }
+
+    [Fact]
+    public void SuccessfulTelemetry_UsesStableDatabaseSemanticConventionTags()
+    {
+        var measurements = new List<(string Instrument, KeyValuePair<string, object?>[] Tags)>();
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (
+            instrument,
+            meterListener
+        ) =>
+        {
+            if (instrument.Meter.Name == SafeMigrationDiagnostics.MeterName
+                && instrument.Name is SafeMigrationDiagnostics.RunCountMetricName
+                    or SafeMigrationDiagnostics.RunDurationMetricName
+                    or SafeMigrationDiagnostics.OperationCountMetricName)
+            {
+                meterListener.EnableMeasurementEvents(instrument);
+            }
+        };
+        listener.SetMeasurementEventCallback<long>((
+            instrument,
+            _,
+            tags,
+            _
+        ) => measurements.Add((instrument.Name, tags.ToArray())));
+        listener.SetMeasurementEventCallback<double>((
+            instrument,
+            _,
+            tags,
+            _
+        ) => measurements.Add((instrument.Name, tags.ToArray())));
+        listener.Start();
+
+        SafeMigrationTelemetry.Record(
+            SafeMigrationReportMode.Preflight,
+            SafeMigrationReportStatus.Ready,
+            "npgsql_postgresql",
+            "postgresql",
+            operationCount: 3,
+            TimeSpan.FromMilliseconds(5));
+
+        Assert.Equal(3, measurements.Count);
+        Assert.Equal(
+            [
+                SafeMigrationDiagnostics.RunCountMetricName,
+                SafeMigrationDiagnostics.RunDurationMetricName,
+                SafeMigrationDiagnostics.OperationCountMetricName,
+            ],
+            measurements.Select(static measurement => measurement.Instrument));
+        Assert.All(
+            measurements,
+            measurement =>
+            {
+                Assert.Equal(4, measurement.Tags.Length);
+                Assert.Contains(
+                    measurement.Tags,
+                    value => value.Key == "db.system.name" && Equals(value.Value, "postgresql"));
+                Assert.DoesNotContain(measurement.Tags, value => value.Key == "db.system");
+                Assert.Contains(
+                    measurement.Tags,
+                    value => value.Key == "safe_migrations.provider" && Equals(value.Value, "npgsql_postgresql"));
+                Assert.Contains(
+                    measurement.Tags,
+                    value => value.Key == "safe_migrations.mode" && Equals(value.Value, "preflight"));
+                Assert.Contains(
+                    measurement.Tags,
+                    value => value.Key == "safe_migrations.status" && Equals(value.Value, "ready"));
+            });
+    }
+
     private static SafeMigrationRunReport CreateReport(
         SafeMigrationReportMode mode = SafeMigrationReportMode.Preflight,
         SafeMigrationReportStatus status = SafeMigrationReportStatus.Ready,
         string? targetMigrationId = "202608170101_Core",
         IEnumerable<SafeMigrationAssessment>? assessments = null,
-        IEnumerable<SafeMigrationUnexpectedObject>? unexpectedObjects = null
+        IEnumerable<SafeMigrationUnexpectedObject>? unexpectedObjects = null,
+        string? modelFingerprint = null,
+        string? contractFingerprint = null
     )
     {
         var environment = new SafeMigrationProviderEnvironment("npgsql_postgresql", "postgresql", "18.6");
@@ -334,9 +585,10 @@ public sealed class SafeMigrationRunContractTests
             "instance-7f3a",
             environment,
             targetMigrationId,
-            new string('a', 64),
-            new string('b', 64),
-            assessments ??
+            modelFingerprint ?? ModelFingerprint(),
+            contractFingerprint ?? new string('b', 64),
+            assessments
+            ??
             [
                 new SafeMigrationAssessment(
                     0,
@@ -349,7 +601,8 @@ public sealed class SafeMigrationRunContractTests
                     postconditionSatisfied: false,
                     "apply_missing"),
             ],
-            unexpectedObjects ??
+            unexpectedObjects
+            ??
             [
                 new SafeMigrationUnexpectedObject(
                     SafeMigrationDatabaseObjectKind.Table,
@@ -358,5 +611,195 @@ public sealed class SafeMigrationRunContractTests
                     "legacy",
                     "unexpected_table"),
             ]);
+    }
+
+    private static string ModelFingerprint() =>
+        $"safe-relational-model:v1:npgsql_postgresql:sha256:{new string('a', 64)}";
+
+    private static JsonDocument LoadReportSchema() => JsonDocument.Parse(
+        File.ReadAllBytes(
+            Path.Combine(AppContext.BaseDirectory, "schemas", "safe-migration-run-report-v1.schema.json")));
+
+    private static void AssertSchemaEnum(
+        JsonElement schema,
+        IEnumerable<string> expectedValues
+    )
+    {
+        var actual = schema
+            .GetProperty("enum")
+            .EnumerateArray()
+            .Where(static value => value.ValueKind == JsonValueKind.String)
+            .Select(static value => value.GetString()!)
+            .Order(StringComparer.Ordinal);
+
+        Assert.Equal(expectedValues.Order(StringComparer.Ordinal), actual);
+    }
+
+    private static void AssertClosedObjectSurface(
+        JsonElement schema,
+        JsonElement value
+    )
+    {
+        Assert.False(
+            schema
+                .GetProperty("additionalProperties")
+                .GetBoolean());
+
+        var properties = schema
+            .GetProperty("properties")
+            .EnumerateObject()
+            .Select(static property => property.Name)
+            .Order(StringComparer.Ordinal);
+        var required = schema
+            .GetProperty("required")
+            .EnumerateArray()
+            .Select(static property => property.GetString()!)
+            .Order(StringComparer.Ordinal);
+        var serialized = value
+            .EnumerateObject()
+            .Select(static property => property.Name)
+            .Order(StringComparer.Ordinal);
+
+        Assert.Equal(properties, required);
+        Assert.Equal(properties, serialized);
+    }
+
+    private static void AssertMatchesSchema(
+        JsonElement schema,
+        JsonElement value,
+        JsonElement rootSchema
+    )
+    {
+        Assert.All(schema.EnumerateObject(), property => Assert.Contains(property.Name, s_supportedSchemaKeywords));
+
+        if (schema.TryGetProperty("$ref", out var reference))
+        {
+            const string definitionsPrefix = "#/$defs/";
+            var referenceValue = reference.GetString()!;
+
+            Assert.StartsWith(definitionsPrefix, referenceValue, StringComparison.Ordinal);
+            AssertMatchesSchema(
+                rootSchema
+                    .GetProperty("$defs")
+                    .GetProperty(referenceValue[definitionsPrefix.Length..]),
+                value,
+                rootSchema);
+            return;
+        }
+
+        if (schema.TryGetProperty("type", out var type))
+        {
+            AssertSchemaType(type, value);
+        }
+
+        if (schema.TryGetProperty("const", out var constant))
+        {
+            Assert.True(JsonElement.DeepEquals(constant, value));
+        }
+
+        if (schema.TryGetProperty("enum", out var enumValues))
+        {
+            Assert.Contains(enumValues.EnumerateArray(), candidate => JsonElement.DeepEquals(candidate, value));
+        }
+
+        if (value.ValueKind == JsonValueKind.String)
+        {
+            var stringValue = value.GetString()!;
+
+            if (schema.TryGetProperty("minLength", out var minimumLength))
+            {
+                Assert.True(stringValue.Length >= minimumLength.GetInt32());
+            }
+
+            if (schema.TryGetProperty("pattern", out var pattern))
+            {
+                Assert.Matches(new Regex(pattern.GetString()!, RegexOptions.CultureInvariant), stringValue);
+            }
+
+            if (schema.TryGetProperty("format", out var format))
+            {
+                Assert.Equal("date-time", format.GetString());
+                Assert.True(
+                    DateTimeOffset.TryParse(
+                        stringValue,
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.RoundtripKind,
+                        out _));
+            }
+        }
+
+        if (value.ValueKind == JsonValueKind.Number
+            && schema.TryGetProperty("minimum", out var minimum))
+        {
+            Assert.True(value.GetDecimal() >= minimum.GetDecimal());
+        }
+
+        if (value.ValueKind == JsonValueKind.Object)
+        {
+            AssertSchemaObject(schema, value, rootSchema);
+        }
+
+        if (value.ValueKind == JsonValueKind.Array
+            && schema.TryGetProperty("items", out var items))
+        {
+            foreach (var item in value.EnumerateArray())
+            {
+                AssertMatchesSchema(items, item, rootSchema);
+            }
+        }
+    }
+
+    private static void AssertSchemaType(
+        JsonElement schemaType,
+        JsonElement value
+    )
+    {
+        var allowedTypes = schemaType.ValueKind == JsonValueKind.Array
+            ? schemaType
+                .EnumerateArray()
+                .Select(static item => item.GetString()!)
+                .ToArray()
+            : [schemaType.GetString()!];
+        var actualType = value.ValueKind switch
+        {
+            JsonValueKind.Object => "object",
+            JsonValueKind.Array => "array",
+            JsonValueKind.String => "string",
+            JsonValueKind.Number when value.TryGetInt64(out _) => "integer",
+            JsonValueKind.Number => "number",
+            JsonValueKind.True or JsonValueKind.False => "boolean",
+            JsonValueKind.Null => "null",
+            _ => throw new InvalidOperationException($"Unsupported JSON value kind '{value.ValueKind}'."),
+        };
+
+        Assert.Contains(actualType, allowedTypes);
+    }
+
+    private static void AssertSchemaObject(
+        JsonElement schema,
+        JsonElement value,
+        JsonElement rootSchema
+    )
+    {
+        var properties = schema.GetProperty("properties");
+        if (schema.TryGetProperty("required", out var required))
+        {
+            Assert.All(
+                required.EnumerateArray(),
+                property => Assert.True(value.TryGetProperty(property.GetString()!, out _)));
+        }
+
+        foreach (var property in value.EnumerateObject())
+        {
+            if (!properties.TryGetProperty(property.Name, out var propertySchema))
+            {
+                Assert.False(
+                    schema
+                        .GetProperty("additionalProperties")
+                        .GetBoolean());
+            }
+
+            AssertMatchesSchema(propertySchema, property.Value, rootSchema);
+        }
     }
 }

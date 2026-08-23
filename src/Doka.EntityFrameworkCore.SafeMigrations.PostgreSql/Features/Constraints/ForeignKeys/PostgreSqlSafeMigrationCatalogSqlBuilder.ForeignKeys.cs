@@ -29,10 +29,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             " AND ",
             definition.Columns.Zip(
                 definition.PrincipalColumns,
-                (
-                        local,
-                        principal
-                    ) => $"d.{Delimited(local)} = p.{Delimited(principal)}"));
+                (local, principal) => $"d.{Delimited(local)} = p.{Delimited(principal)}"));
 
         return $"EXISTS (SELECT 1 FROM {Qualified(definition.Table, definition.Schema)} d "
             + $"LEFT JOIN {Qualified(definition.PrincipalTable, definition.PrincipalSchema)} p ON {join} "

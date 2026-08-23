@@ -5,7 +5,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ObservableIndexFacetDrift_IsRejectedOneFieldAtATime()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE index_facets (value text NULL, alternate text NULL, payload text NULL, other text NULL);");
@@ -13,16 +13,25 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         var canonical = new ExpectedIndexDefinition(
             "ix_index_facets",
             "index_facets",
-            [new ExpectedIndexKeyDefinition(expression: "lower(value)", descending: true)],
+            [
+                new ExpectedIndexKeyDefinition(
+                    structuredExpression: SqlFunction("lower", "value"),
+                    sortOrder: SafeMigrationIndexSortOrder.Descending)
+            ],
             unique: true,
-            filter: "value IS NOT NULL",
+            structuredFilter: SafeMigrationSql.IsNotNull(SqlColumn("value")),
             includedColumns: ["payload"],
             method: "btree",
             nullsDistinct: true);
         var collated = new ExpectedIndexDefinition(
             "ix_index_facets_collated",
             "index_facets",
-            [new ExpectedIndexKeyDefinition(column: "value", collation: "C", operatorClass: "text_pattern_ops")],
+            [
+                new ExpectedIndexKeyDefinition(
+                    column: "value",
+                    collation: new SafeMigrationCollationIdentifier("C"),
+                    operatorClass: "text_pattern_ops")
+            ],
             method: "btree");
         var create = new MigrationBuilder(context.Database.ProviderName!);
         create.EnsureIndex(canonical, SafeMigrationPolicy.ThrowIfDifferent);
@@ -38,63 +47,81 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 canonical.Table,
                 canonical.Keys,
                 unique: false,
-                filter: canonical.Filter,
-                includedColumns: canonical.IncludedColumns,
-                method: canonical.Method),
-            new ExpectedIndexDefinition(
-                canonical.Name,
-                canonical.Table,
-                canonical.Keys,
-                unique: true,
-                filter: "value <> ''",
                 includedColumns: canonical.IncludedColumns,
                 method: canonical.Method,
-                nullsDistinct: true),
+                structuredFilter: canonical.StructuredFilter),
             new ExpectedIndexDefinition(
                 canonical.Name,
                 canonical.Table,
                 canonical.Keys,
                 unique: true,
-                filter: canonical.Filter,
+                includedColumns: canonical.IncludedColumns,
+                method: canonical.Method,
+                nullsDistinct: true,
+                structuredFilter:
+                SqlBinary(
+                    SqlColumn("value"),
+                    SafeMigrationSqlBinaryOperator.NotEqual,
+                    SafeMigrationSql.Literal(string.Empty, "text"))),
+            new ExpectedIndexDefinition(
+                canonical.Name,
+                canonical.Table,
+                canonical.Keys,
+                unique: true,
                 includedColumns: ["other"],
                 method: canonical.Method,
-                nullsDistinct: true),
+                nullsDistinct: true,
+                structuredFilter: canonical.StructuredFilter),
             new ExpectedIndexDefinition(
                 canonical.Name,
                 canonical.Table,
-                canonical.Keys,
+                [new ExpectedIndexKeyDefinition(structuredExpression: SqlFunction("lower", "value"))],
                 unique: true,
-                filter: canonical.Filter,
                 includedColumns: canonical.IncludedColumns,
                 method: "hash",
-                nullsDistinct: true),
+                nullsDistinct: true,
+                structuredFilter: canonical.StructuredFilter),
             new ExpectedIndexDefinition(
                 canonical.Name,
                 canonical.Table,
-                [new ExpectedIndexKeyDefinition(expression: "upper(value)", descending: true)],
+                [
+                    new ExpectedIndexKeyDefinition(
+                        structuredExpression: SqlFunction("upper", "value"),
+                        sortOrder: SafeMigrationIndexSortOrder.Descending)
+                ],
                 unique: true,
-                filter: canonical.Filter,
                 includedColumns: canonical.IncludedColumns,
                 method: canonical.Method,
-                nullsDistinct: true),
+                nullsDistinct: true,
+                structuredFilter: canonical.StructuredFilter),
             new ExpectedIndexDefinition(
                 canonical.Name,
                 canonical.Table,
-                [new ExpectedIndexKeyDefinition(expression: "lower(value)")],
+                [new ExpectedIndexKeyDefinition(structuredExpression: SqlFunction("lower", "value"))],
                 unique: true,
-                filter: canonical.Filter,
                 includedColumns: canonical.IncludedColumns,
                 method: canonical.Method,
-                nullsDistinct: true),
+                nullsDistinct: true,
+                structuredFilter: canonical.StructuredFilter),
             new ExpectedIndexDefinition(
                 collated.Name,
                 collated.Table,
-                [new ExpectedIndexKeyDefinition(column: "value", collation: "POSIX", operatorClass: "text_pattern_ops")],
+                [
+                    new ExpectedIndexKeyDefinition(
+                        column: "value",
+                        collation: new SafeMigrationCollationIdentifier("POSIX"),
+                        operatorClass: "text_pattern_ops")
+                ],
                 method: "btree"),
             new ExpectedIndexDefinition(
                 collated.Name,
                 collated.Table,
-                [new ExpectedIndexKeyDefinition(column: "value", collation: "C", operatorClass: "text_ops")],
+                [
+                    new ExpectedIndexKeyDefinition(
+                        column: "value",
+                        collation: new SafeMigrationCollationIdentifier("C"),
+                        operatorClass: "text_ops")
+                ],
                 method: "btree"),
         };
 
@@ -121,10 +148,10 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 canonical.Table,
                 canonical.Keys,
                 unique: true,
-                filter: canonical.Filter,
                 includedColumns: canonical.IncludedColumns,
                 method: canonical.Method,
-                nullsDistinct: false),
+                nullsDistinct: false,
+                structuredFilter: canonical.StructuredFilter),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var nullReport = await context
@@ -143,7 +170,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task PrefixLength_IsRejectedAsUnsupportedBeforeTargetDdl()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE unsupported_prefix (value text NULL);");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);

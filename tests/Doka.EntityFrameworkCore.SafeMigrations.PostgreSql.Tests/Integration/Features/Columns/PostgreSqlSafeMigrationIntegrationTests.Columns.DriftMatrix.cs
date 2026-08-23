@@ -5,10 +5,8 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ObservableColumnFacetDrift_IsRejectedOneFieldAtATime()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync();
-        await ExecuteSqlAsync(
-            connectionString,
-            "CREATE TABLE column_facets (a integer NOT NULL, b integer NOT NULL);");
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE column_facets (a integer NOT NULL, b integer NOT NULL);");
         await using var context = CreateContext(connectionString);
         var canonical = new[]
         {
@@ -18,7 +16,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 true,
                 "character varying(80)",
                 maxLength: 80,
-                collation: "C",
+                collation: new SafeMigrationCollationIdentifier("C"),
                 comment: "canonical",
                 defaultValue: SafeMigrationDefaultValue.Literal("canonical")),
             new ExpectedColumnDefinition(
@@ -41,8 +39,8 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 typeof(int),
                 true,
                 "integer",
-                computedColumnSql: "a + b",
-                isStored: true),
+                isStored: true,
+                computedExpression: SqlColumnAndColumn("a", SafeMigrationSqlBinaryOperator.Add, "b")),
         };
 
         var create = new MigrationBuilder(context.Database.ProviderName!);
@@ -59,8 +57,9 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             .AnalyzeAsync(context, create.Operations, new SafeMigrationRunOptions("column-facets-canonical"));
 
         Assert.Equal(SafeMigrationReportStatus.Ready, canonicalReport.Status);
-        Assert.All(canonicalReport.Assessments, assessment =>
-            Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState));
+        Assert.All(
+            canonicalReport.Assessments,
+            assessment => Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState));
 
         var variants = new[]
         {
@@ -70,7 +69,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 true,
                 "character varying(81)",
                 maxLength: 81,
-                collation: "C",
+                collation: new SafeMigrationCollationIdentifier("C"),
                 comment: "canonical",
                 defaultValue: SafeMigrationDefaultValue.Literal("canonical")),
             new ExpectedColumnDefinition(
@@ -79,7 +78,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 false,
                 "character varying(80)",
                 maxLength: 80,
-                collation: "C",
+                collation: new SafeMigrationCollationIdentifier("C"),
                 comment: "canonical",
                 defaultValue: SafeMigrationDefaultValue.Literal("canonical")),
             new ExpectedColumnDefinition(
@@ -88,7 +87,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 true,
                 "character varying(80)",
                 maxLength: 80,
-                collation: "POSIX",
+                collation: new SafeMigrationCollationIdentifier("POSIX"),
                 comment: "canonical",
                 defaultValue: SafeMigrationDefaultValue.Literal("canonical")),
             new ExpectedColumnDefinition(
@@ -97,7 +96,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 true,
                 "character varying(80)",
                 maxLength: 80,
-                collation: "C",
+                collation: new SafeMigrationCollationIdentifier("C"),
                 comment: "different",
                 defaultValue: SafeMigrationDefaultValue.Literal("canonical")),
             new ExpectedColumnDefinition(
@@ -106,7 +105,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 true,
                 "character varying(80)",
                 maxLength: 80,
-                collation: "C",
+                collation: new SafeMigrationCollationIdentifier("C"),
                 comment: "canonical",
                 defaultValue: SafeMigrationDefaultValue.Literal("different")),
             new ExpectedColumnDefinition(
@@ -115,7 +114,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 true,
                 "character varying(80)",
                 maxLength: 80,
-                collation: "C",
+                collation: new SafeMigrationCollationIdentifier("C"),
                 comment: "canonical"),
             new ExpectedColumnDefinition(
                 "fixed_value",
@@ -145,8 +144,8 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 typeof(int),
                 true,
                 "integer",
-                computedColumnSql: "a - b",
-                isStored: true),
+                isStored: true,
+                computedExpression: SqlColumnAndColumn("a", SafeMigrationSqlBinaryOperator.Subtract, "b")),
         };
 
         foreach (var variant in variants)

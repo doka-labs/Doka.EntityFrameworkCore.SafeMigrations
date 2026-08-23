@@ -6,15 +6,38 @@ public sealed partial class MySqlSafeMigrationIntegrationTests : MySqlIntegratio
         MySqlEngineContainerFixture fixture
     ) : base(fixture) { }
 
+    private static SafeMigrationSqlExpression SqlColumn(
+        string name
+    ) => SafeMigrationSql.Identifier(name);
+
+    private static SafeMigrationSqlExpression SqlBinary(
+        SafeMigrationSqlExpression left,
+        SafeMigrationSqlBinaryOperator @operator,
+        SafeMigrationSqlExpression right
+    ) => SafeMigrationSql.Binary(left, @operator, right);
+
+    private static SafeMigrationSqlExpression SqlColumnAndColumn(
+        string left,
+        SafeMigrationSqlBinaryOperator @operator,
+        string right
+    ) => SqlBinary(SqlColumn(left), @operator, SqlColumn(right));
+
+    private static SafeMigrationSqlExpression SqlColumnAndInt(
+        string column,
+        SafeMigrationSqlBinaryOperator @operator,
+        int value
+    ) => SqlBinary(SqlColumn(column), @operator, SafeMigrationSql.Literal(value));
+
+    private static SafeMigrationSqlExpression SqlFunction(
+        string name,
+        string column
+    ) => SafeMigrationSql.Function(name, SqlColumn(column));
+
     private sealed class UnmappedValue;
 
     private static string MySqlMaximumIdentifier(
         string prefix
     ) => prefix + new string('x', 64 - prefix.Length);
-
-    private static string MySqlIdentifier(
-        string value
-    ) => $"`{value.Replace("`", "``", StringComparison.Ordinal)}`";
 
     private sealed class ConflictingSafeMigrationHandler : IMySqlMigrationOperationHandler
     {
@@ -25,6 +48,27 @@ public sealed partial class MySqlSafeMigrationIntegrationTests : MySqlIntegratio
         public MySqlMigrationOperationResult Generate(
             MySqlMigrationOperationContext context
         ) => throw new InvalidOperationException("A conflicting handler must never execute.");
+    }
+
+    private sealed class CleanupFailureOperation : MigrationOperation;
+
+    private sealed class CleanupFailureHandler : IMySqlMigrationOperationHandler
+    {
+        public string HandlerId => "safe_migrations_tests.cleanup_failure";
+
+        public Type OperationType => typeof(CleanupFailureOperation);
+
+        public MySqlMigrationOperationResult Generate(
+            MySqlMigrationOperationContext context
+        ) => MySqlMigrationOperationResult.Generated(
+            [
+                MySqlMigrationCommandSpec.CreateScoped(
+                    ["SET @safe_migrations_cleanup_probe = CONNECTION_ID();"],
+                    "DO 0;",
+                    ["SELECT * FROM `__doka_missing_cleanup_table`;"],
+                    transactionSuppressed: true)
+            ],
+            "cleanup_failure_probe");
     }
 
     private sealed class SchemaChangingDerivedContext(

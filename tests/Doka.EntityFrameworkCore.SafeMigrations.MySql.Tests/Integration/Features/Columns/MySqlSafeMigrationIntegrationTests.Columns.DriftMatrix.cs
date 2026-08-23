@@ -5,10 +5,8 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ObservableColumnFacetDrift_IsRejectedOneFieldAtATime()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync();
-        await ExecuteSqlAsync(
-            connectionString,
-            "CREATE TABLE `column_facets` (`a` int NOT NULL, `b` int NOT NULL);");
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE `column_facets` (`a` int NOT NULL, `b` int NOT NULL);");
         await using var context = CreateContext(connectionString);
         var canonical = new[]
         {
@@ -18,7 +16,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 true,
                 "varchar(80)",
                 maxLength: 80,
-                collation: "utf8mb4_bin",
+                collation: new SafeMigrationCollationIdentifier("utf8mb4_bin"),
                 comment: "canonical",
                 defaultValue: SafeMigrationDefaultValue.Literal("canonical")),
             new ExpectedColumnDefinition(
@@ -41,7 +39,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 typeof(int),
                 true,
                 "int",
-                computedColumnSql: "a + b",
+                computedExpression: SqlColumnAndColumn("a", SafeMigrationSqlBinaryOperator.Add, "b"),
                 isStored: true),
         };
 
@@ -59,8 +57,9 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             .AnalyzeAsync(context, create.Operations, new SafeMigrationRunOptions("column-facets-canonical"));
 
         Assert.Equal(SafeMigrationReportStatus.Ready, canonicalReport.Status);
-        Assert.All(canonicalReport.Assessments, assessment =>
-            Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState));
+        Assert.All(
+            canonicalReport.Assessments,
+            assessment => Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState));
 
         var variants = new[]
         {
@@ -70,7 +69,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 true,
                 "varchar(81)",
                 maxLength: 81,
-                collation: "utf8mb4_bin",
+                collation: new SafeMigrationCollationIdentifier("utf8mb4_bin"),
                 comment: "canonical",
                 defaultValue: SafeMigrationDefaultValue.Literal("canonical")),
             new ExpectedColumnDefinition(
@@ -79,7 +78,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 false,
                 "varchar(80)",
                 maxLength: 80,
-                collation: "utf8mb4_bin",
+                collation: new SafeMigrationCollationIdentifier("utf8mb4_bin"),
                 comment: "canonical",
                 defaultValue: SafeMigrationDefaultValue.Literal("canonical")),
             new ExpectedColumnDefinition(
@@ -88,7 +87,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 true,
                 "varchar(80)",
                 maxLength: 80,
-                collation: "utf8mb4_general_ci",
+                collation: new SafeMigrationCollationIdentifier("utf8mb4_general_ci"),
                 comment: "canonical",
                 defaultValue: SafeMigrationDefaultValue.Literal("canonical")),
             new ExpectedColumnDefinition(
@@ -97,7 +96,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 true,
                 "varchar(80)",
                 maxLength: 80,
-                collation: "utf8mb4_bin",
+                collation: new SafeMigrationCollationIdentifier("utf8mb4_bin"),
                 comment: "different",
                 defaultValue: SafeMigrationDefaultValue.Literal("canonical")),
             new ExpectedColumnDefinition(
@@ -106,7 +105,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 true,
                 "varchar(80)",
                 maxLength: 80,
-                collation: "utf8mb4_bin",
+                collation: new SafeMigrationCollationIdentifier("utf8mb4_bin"),
                 comment: "canonical",
                 defaultValue: SafeMigrationDefaultValue.Literal("different")),
             new ExpectedColumnDefinition(
@@ -115,7 +114,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 true,
                 "varchar(80)",
                 maxLength: 80,
-                collation: "utf8mb4_bin",
+                collation: new SafeMigrationCollationIdentifier("utf8mb4_bin"),
                 comment: "canonical"),
             new ExpectedColumnDefinition(
                 "fixed_value",
@@ -145,14 +144,14 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 typeof(int),
                 true,
                 "int",
-                computedColumnSql: "a - b",
+                computedExpression: SqlColumnAndColumn("a", SafeMigrationSqlBinaryOperator.Subtract, "b"),
                 isStored: true),
             new ExpectedColumnDefinition(
                 "generated_value",
                 typeof(int),
                 true,
                 "int",
-                computedColumnSql: "a + b",
+                computedExpression: SqlColumnAndColumn("a", SafeMigrationSqlBinaryOperator.Add, "b"),
                 isStored: false),
         };
 

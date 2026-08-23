@@ -50,7 +50,8 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         if (decision.Action is SafeMigrationAction.RejectDifferent
             or SafeMigrationAction.RejectUnsupported
-            or SafeMigrationAction.RejectDataBlocked)
+            or SafeMigrationAction.RejectDataBlocked
+            or SafeMigrationAction.RejectPrerequisiteMissing)
         {
             return;
         }
@@ -203,7 +204,8 @@ internal sealed partial class SafeMigrationPreflightProjection
             _schema = definition.Schema;
             _comment = definition.Comment;
             _columnOrder = definition
-                .Columns.Select(static value => value.Name)
+                .Columns
+                .Select(static value => value.Name)
                 .ToList();
 
             Columns = definition.Columns.ToDictionary(static value => value.Name, StringComparer.Ordinal);
@@ -277,7 +279,9 @@ internal sealed partial class SafeMigrationPreflightProjection
         private static ExpectedColumnDefinition Copy(
             ExpectedColumnDefinition value,
             string? name = null,
-            string? computedColumnSql = null
+            string? computedColumnSql = null,
+            SafeMigrationSqlExpression? computedExpression = null,
+            bool replaceComputed = false
         ) => new(
             name ?? value.Name,
             value.ClrType,
@@ -292,8 +296,9 @@ internal sealed partial class SafeMigrationPreflightProjection
             value.Collation,
             value.Comment,
             value.DefaultValue,
-            computedColumnSql ?? value.ComputedColumnSql,
-            value.IsStored);
+            replaceComputed ? computedColumnSql : computedColumnSql ?? value.ComputedColumnSql,
+            value.IsStored,
+            replaceComputed ? computedExpression : computedExpression ?? value.ComputedExpression);
 
         private static ExpectedPrimaryKeyDefinition Copy(
             ExpectedPrimaryKeyDefinition value,
@@ -313,8 +318,26 @@ internal sealed partial class SafeMigrationPreflightProjection
             ExpectedCheckConstraintDefinition value,
             string? table = null,
             string? schema = null,
-            string? sql = null
-        ) => new(value.Name, table ?? value.Table, sql ?? value.Sql, schema ?? value.Schema);
+            string? sql = null,
+            SafeMigrationSqlExpression? expression = null,
+            bool replaceExpression = false
+        )
+        {
+            var selectedSql = replaceExpression ? sql : sql ?? value.Sql;
+            var selectedExpression = replaceExpression ? expression : expression ?? value.Expression;
+
+            return selectedSql is not null
+                ? new ExpectedCheckConstraintDefinition(
+                    value.Name,
+                    table ?? value.Table,
+                    selectedSql,
+                    schema ?? value.Schema)
+                : ExpectedCheckConstraintDefinition.FromExpression(
+                    value.Name,
+                    table ?? value.Table,
+                    selectedExpression ?? throw new InvalidOperationException("A check constraint has no expression."),
+                    schema ?? value.Schema);
+        }
 
         private static ExpectedForeignKeyDefinition Copy(
             ExpectedForeignKeyDefinition value,
@@ -341,17 +364,20 @@ internal sealed partial class SafeMigrationPreflightProjection
             string? table = null,
             string? schema = null,
             IEnumerable<ExpectedIndexKeyDefinition>? keys = null,
-            string? filter = null
+            string? filter = null,
+            SafeMigrationSqlExpression? structuredFilter = null,
+            bool replaceFilter = false
         ) => new(
             name ?? value.Name,
             table ?? value.Table,
             keys ?? value.Keys,
             schema ?? value.Schema,
             value.Unique,
-            filter ?? value.Filter,
+            replaceFilter ? filter : filter ?? value.Filter,
             value.IncludedColumns,
             value.Method,
-            value.NullsDistinct);
+            value.NullsDistinct,
+            replaceFilter ? structuredFilter : structuredFilter ?? value.StructuredFilter);
 
         private static ExpectedIndexKeyDefinition Copy(
             ExpectedIndexKeyDefinition value,
@@ -359,127 +385,16 @@ internal sealed partial class SafeMigrationPreflightProjection
             string target
         ) => new(
             value.Column is not null && StringComparer.Ordinal.Equals(value.Column, source) ? target : value.Column,
-            value.Expression is null ? null : RenameIdentifier(value.Expression, source, target),
-            value.Descending,
+            expression: null,
+            value.SortOrder,
+            value.NullOrder,
             value.PrefixLength,
             value.Collation,
-            value.OperatorClass);
-
-        private static string RenameIdentifier(
-            string sql,
-            string source,
-            string target
-        )
-        {
-            var builder = new StringBuilder(sql.Length + Math.Max(0, target.Length - source.Length));
-            for (var index = 0; index < sql.Length;)
-            {
-                var current = sql[index];
-                if (current == '\'')
-                {
-                    index = CopyStringLiteral(sql, index, builder);
-                    continue;
-                }
-
-                if (current is '`' or '"')
-                {
-                    index = CopyOrRenameQuotedIdentifier(sql, index, builder, current, source, target);
-                    continue;
-                }
-
-                if (current == '_'
-                    || char.IsLetter(current))
-                {
-                    var start = index++;
-                    while (index < sql.Length
-                           && (sql[index] == '_' || sql[index] == '$' || char.IsLetterOrDigit(sql[index])))
-                    {
-                        index++;
-                    }
-
-                    var token = sql[start..index];
-                    builder.Append(StringComparer.Ordinal.Equals(token, source) ? target : token);
-                    continue;
-                }
-
-                builder.Append(current);
-                index++;
-            }
-
-            return builder.ToString();
-        }
-
-        private static int CopyStringLiteral(
-            string sql,
-            int index,
-            StringBuilder builder
-        )
-        {
-            builder.Append(sql[index++]);
-            while (index < sql.Length)
-            {
-                var current = sql[index++];
-                builder.Append(current);
-                if (current == '\\'
-                    && index < sql.Length)
-                {
-                    builder.Append(sql[index++]);
-                }
-                else if (current == '\'')
-                {
-                    if (index < sql.Length
-                        && sql[index] == '\'')
-                    {
-                        builder.Append(sql[index++]);
-                    }
-                    else
-                    {
-                        break;
-                    }
-                }
-            }
-
-            return index;
-        }
-
-        private static int CopyOrRenameQuotedIdentifier(
-            string sql,
-            int index,
-            StringBuilder builder,
-            char quote,
-            string source,
-            string target
-        )
-        {
-            var start = ++index;
-            while (index < sql.Length)
-            {
-                if (sql[index] != quote)
-                {
-                    index++;
-                    continue;
-                }
-
-                if (index + 1 < sql.Length
-                    && sql[index + 1] == quote)
-                {
-                    index += 2;
-                    continue;
-                }
-
-                var token = sql[start..index]
-                    .Replace(new string(quote, 2), quote.ToString(), StringComparison.Ordinal);
-
-                builder
-                    .Append(quote)
-                    .Append(StringComparer.Ordinal.Equals(token, source) ? target : token)
-                    .Append(quote);
-
-                return index + 1;
-            }
-
-            builder.Append(sql[(start - 1)..]);
-            return sql.Length;
-        }
+            value.OperatorClass,
+            value.Expression is not null
+                ? SafeMigrationSql.OpaqueAfterRename(value.Expression)
+                : value.StructuredExpression is null
+                    ? null
+                    : SafeMigrationSqlExpressionInspector.RenameIdentifier(value.StructuredExpression, source, target));
     }
 }

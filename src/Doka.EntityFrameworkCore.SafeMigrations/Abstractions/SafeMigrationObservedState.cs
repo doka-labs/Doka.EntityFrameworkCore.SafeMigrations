@@ -20,4 +20,7 @@ public enum SafeMigrationObservedState
 
     /// <summary>Existing data prevents the requested safe transition.</summary>
     DataBlocked = 4,
+
+    /// <summary>A parent object required by the operation is absent.</summary>
+    PrerequisiteMissing = 5,
 }

@@ -12,13 +12,13 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             return null;
         }
 
-        if (index.Definition.Filter is not null
+        if ((index.Definition.Filter is not null || index.Definition.StructuredFilter is not null)
             && !Supported(features, MySqlMigrationFeature.FilteredIndexes))
         {
             return "filtered_index";
         }
 
-        if (index.Definition.Keys.Any(static key => key.Expression is not null)
+        if (index.Definition.Keys.Any(static key => key.Expression is not null || key.StructuredExpression is not null)
             && !Supported(features, MySqlMigrationFeature.FunctionalIndexes))
         {
             return "functional_index";
@@ -30,7 +30,18 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             return "index_prefix_length";
         }
 
-        if (index.Definition.Keys.Any(static key => key.Descending)
+        if (index.Definition.Keys.Any(static key => key.NullOrder != SafeMigrationIndexNullOrder.ProviderDefault))
+        {
+            return "index_null_order";
+        }
+
+        if (StringComparer.OrdinalIgnoreCase.Equals(index.Definition.Method, "HASH")
+            && index.Definition.Keys.Any(static key => key.SortOrder != SafeMigrationIndexSortOrder.ProviderDefault))
+        {
+            return "index_sort_order";
+        }
+
+        if (index.Definition.Keys.Any(static key => key.SortOrder == SafeMigrationIndexSortOrder.Descending)
             && !Supported(features, MySqlMigrationFeature.DescendingIndexes))
         {
             return "descending_index";
@@ -66,7 +77,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var dataBlocked = definition.Unique ? UniqueIndexDataBlocked(definition) : "FALSE";
 
         return Plan(
-            $"CASE WHEN NOT {tableExists} THEN 'data_blocked' "
+            $"CASE WHEN NOT {tableExists} THEN 'prerequisite_missing' "
             + $"WHEN NOT {indexExists} AND {dataBlocked} THEN 'data_blocked' "
             + $"WHEN NOT {indexExists} THEN 'missing' "
             + $"WHEN {matching} THEN 'matching' ELSE 'different' END",
@@ -130,9 +141,14 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             var keyConditions = new List<string>
             {
                 $"s.SEQ_IN_INDEX = {position}",
-                key.Column is not null ? $"s.COLUMN_NAME = {Literal(key.Column)}" :
-                isMariaDb ? "FALSE" : BuildIndexExpressionMatches("s.EXPRESSION", key.Expression!),
-                key.Descending ? "s.COLLATION = 'D'" : "s.COLLATION = 'A'",
+                key.Column is not null
+                    ? $"s.COLUMN_NAME = {Literal(key.Column)}"
+                    : isMariaDb
+                        ? "FALSE"
+                        : BuildIndexExpressionMatches(
+                            "s.EXPRESSION",
+                            key.Expression ?? _expressionRenderer.Render(key.StructuredExpression!)),
+                BuildIndexSortMatches(key),
                 key.PrefixLength is null
                     ? "s.SUB_PART IS NULL"
                     : $"s.SUB_PART = {key.PrefixLength.Value.ToString(CultureInfo.InvariantCulture)}",
@@ -148,12 +164,23 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         return $"({string.Join(" AND ", conditions)})";
     }
 
+    private static string BuildIndexSortMatches(
+        ExpectedIndexKeyDefinition key
+    ) => key.SortOrder switch
+    {
+        SafeMigrationIndexSortOrder.ProviderDefault => "(s.COLLATION IS NULL OR s.COLLATION = 'A')",
+        SafeMigrationIndexSortOrder.Ascending => "s.COLLATION = 'A'",
+        SafeMigrationIndexSortOrder.Descending => "s.COLLATION = 'D'",
+        _ => throw new ArgumentOutOfRangeException(nameof(key)),
+    };
+
     private string UniqueIndexDataBlocked(
         ExpectedIndexDefinition definition
     )
     {
         var keys = definition
-            .Keys.Select(IndexDataExpression)
+            .Keys
+            .Select(IndexDataExpression)
             .ToArray();
 
         var nonNull = string.Join(" AND ", keys.Select(static key => $"({key}) IS NOT NULL"));
@@ -165,9 +192,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         ExpectedIndexKeyDefinition key
     )
     {
-        if (key.Expression is not null)
+        if (key.Expression is not null
+            || key.StructuredExpression is not null)
         {
-            return key.Expression;
+            return key.Expression ?? _expressionRenderer.Render(key.StructuredExpression!);
         }
 
         var column = Delimited(key.Column!);
@@ -182,14 +210,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         string expected
     )
     {
-        var quoted = MySqlExpressionCanonicalizer.QuoteIdentifiers(expected, _sqlGenerationHelper);
-        var candidates = new[]
-            {
-                expected,
-                $"({expected})",
-                quoted,
-                $"({quoted})",
-            }
+        var candidates = new[] { expected, $"({expected})", }
             .Distinct(StringComparer.Ordinal)
             .Select(Literal);
 

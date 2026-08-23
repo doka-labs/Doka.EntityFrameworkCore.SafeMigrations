@@ -22,30 +22,28 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 new ExpectedColumnDefinition(parent, typeof(int), true, "int"),
             ],
             primaryKey: new ExpectedPrimaryKeyDefinition(primaryKey, table, [id]),
-            uniqueConstraints:
-            [
-                new ExpectedUniqueConstraintDefinition(unique, table, [code]),
-            ],
+            uniqueConstraints: [new ExpectedUniqueConstraintDefinition(unique, table, [code]),],
             checkConstraints:
             [
-                new ExpectedCheckConstraintDefinition(
+                ExpectedCheckConstraintDefinition.FromExpression(
                     check,
                     table,
-                    $"{MySqlIdentifier(code)} IS NULL OR {MySqlIdentifier(code)} <> ''"),
+                    SqlBinary(
+                        SafeMigrationSql.IsNull(SqlColumn(code)),
+                        SafeMigrationSqlBinaryOperator.Or,
+                        SqlBinary(
+                            SqlColumn(code),
+                            SafeMigrationSqlBinaryOperator.NotEqual,
+                            SafeMigrationSql.Literal(string.Empty)))),
             ],
-            foreignKeys:
-            [
-                new ExpectedForeignKeyDefinition(foreignKey, table, [parent], table, [id]),
-            ]);
+            foreignKeys: [new ExpectedForeignKeyDefinition(foreignKey, table, [parent], table, [id]),]);
 
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.ConvergeTable(
             definition,
-            [
-                new ExpectedIndexDefinition(index, table, [new ExpectedIndexKeyDefinition(column: parent)]),
-            ]);
+            [new ExpectedIndexDefinition(index, table, [new ExpectedIndexKeyDefinition(column: parent)]),]);
 
         try
         {
@@ -58,7 +56,8 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("identifier-instance"));
 
             var failures = diagnostics
-                .Assessments.Where(static assessment => assessment.ObservedState != SafeMigrationObservedState.Matching)
+                .Assessments
+                .Where(static assessment => assessment.ObservedState != SafeMigrationObservedState.Matching)
                 .Select(static assessment => $"{assessment.Ordinal}:{assessment.OperationKind}:"
                     + $"{assessment.ObjectName}:{assessment.ObservedState}:{assessment.Code}");
 

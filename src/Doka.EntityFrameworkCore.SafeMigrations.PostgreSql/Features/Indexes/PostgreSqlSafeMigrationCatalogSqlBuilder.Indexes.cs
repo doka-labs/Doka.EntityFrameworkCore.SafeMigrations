@@ -17,13 +17,28 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         var exists = IndexExists(definition.Name, definition.Schema);
         var matching = IndexMatches(definition);
         var dataBlocked = definition.Unique ? UniqueIndexDataBlocked(definition) : "FALSE";
-        var unsupported = definition.NullsDistinct == false
-            ? "current_setting('server_version_num')::integer < 150000"
-            : "FALSE";
+        var unsupportedConditions = new List<string>();
+        if (definition.NullsDistinct == false)
+        {
+            unsupportedConditions.Add("current_setting('server_version_num')::integer < 150000");
+        }
+
+        if (definition.Keys.Any(static key => key.SortOrder != SafeMigrationIndexSortOrder.ProviderDefault
+                || key.NullOrder != SafeMigrationIndexNullOrder.ProviderDefault))
+        {
+            var method = definition.Method ?? "btree";
+            unsupportedConditions.Add(
+                "pg_catalog.pg_indexam_has_property((SELECT am.oid FROM pg_catalog.pg_am am "
+                + $"WHERE am.amname = {Literal(method)}), 'can_order') IS NOT TRUE");
+        }
+
+        var unsupported = unsupportedConditions.Count == 0
+            ? "FALSE"
+            : $"({string.Join(" OR ", unsupportedConditions)})";
 
         return Plan(
             $"CASE WHEN {unsupported} THEN 'unsupported' "
-            + $"WHEN NOT {table} THEN 'data_blocked' "
+            + $"WHEN NOT {table} THEN 'prerequisite_missing' "
             + $"WHEN NOT {exists} AND {dataBlocked} THEN 'data_blocked' "
             + $"WHEN NOT {exists} THEN 'missing' "
             + $"WHEN {matching} THEN 'matching' ELSE 'different' END",
@@ -70,9 +85,11 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         };
 
         conditions.Add(
-            definition.Filter is null
+            definition.Filter is null && definition.StructuredFilter is null
                 ? "i.indpred IS NULL"
-                : ExpressionMatches("pg_catalog.pg_get_expr(i.indpred, i.indrelid)", definition.Filter));
+                : definition.StructuredFilter is not null
+                    ? ExpressionMatches("pg_catalog.pg_get_expr(i.indpred, i.indrelid)", definition.StructuredFilter)
+                    : ExpressionMatches("pg_catalog.pg_get_expr(i.indpred, i.indrelid)", definition.Filter!));
 
         var nullsNotDistinct = "POSITION('NULLS NOT DISTINCT' IN pg_catalog.pg_get_indexdef(i.indexrelid)) > 0";
         conditions.Add(definition.NullsDistinct == false ? nullsNotDistinct : $"NOT ({nullsNotDistinct})");
@@ -81,6 +98,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         {
             var position = index + 1;
             var optionIndex = index.ToString(CultureInfo.InvariantCulture);
+            var propertyPosition = position.ToString(CultureInfo.InvariantCulture);
             var key = definition.Keys[index];
             if (key.Column is not null)
             {
@@ -97,20 +115,11 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 conditions.Add($"i.indkey[{optionIndex}] = 0");
                 conditions.Add(
                     $"pg_catalog.pg_get_indexdef(i.indexrelid, {position.ToString(CultureInfo.InvariantCulture)}, TRUE) "
-                    + $"IN ({string.Join(", ", expected.Select(Literal))})");
+                    + $"IN ({string.Join(", ", expected)})");
             }
 
-            conditions.Add(
-                $"((i.indoption[{optionIndex}] & 1) <> 0) = "
-                + key
-                    .Descending.ToString()
-                    .ToUpperInvariant());
-
-            conditions.Add(
-                $"((i.indoption[{optionIndex}] & 2) <> 0) = "
-                + key
-                    .Descending.ToString()
-                    .ToUpperInvariant());
+            conditions.Add(IndexSortMatches(propertyPosition, key));
+            conditions.Add(IndexNullOrderMatches(propertyPosition, key));
 
             var keySql =
                 $"pg_catalog.pg_get_indexdef(i.indexrelid, {position.ToString(CultureInfo.InvariantCulture)}, TRUE)";
@@ -118,7 +127,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             conditions.Add(
                 key.Collation is null
                     ? $"POSITION(' COLLATE ' IN {keySql}) = 0"
-                    : CatalogPathMatches(
+                    : CatalogIdentifierMatches(
                         $"i.indcollation[{optionIndex}]",
                         "pg_catalog.pg_collation",
                         "coll",
@@ -158,18 +167,64 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             + $"AND {string.Join(" AND ", conditions)})";
     }
 
+    private static string IndexSortMatches(
+        string position,
+        ExpectedIndexKeyDefinition key
+    )
+    {
+        var orderable = $"pg_catalog.pg_index_column_has_property(i.indexrelid, {position}, 'orderable')";
+        var property = key.SortOrder switch
+        {
+            SafeMigrationIndexSortOrder.ProviderDefault => "asc",
+            SafeMigrationIndexSortOrder.Ascending => "asc",
+            SafeMigrationIndexSortOrder.Descending => "desc",
+            _ => throw new ArgumentOutOfRangeException(nameof(key)),
+        };
+
+        var matches = $"pg_catalog.pg_index_column_has_property(i.indexrelid, {position}, '{property}') IS TRUE";
+
+        return key.SortOrder == SafeMigrationIndexSortOrder.ProviderDefault
+            ? $"({orderable} IS NOT TRUE OR {matches})"
+            : $"({orderable} IS TRUE AND {matches})";
+    }
+
+    private static string IndexNullOrderMatches(
+        string position,
+        ExpectedIndexKeyDefinition key
+    )
+    {
+        var orderable = $"pg_catalog.pg_index_column_has_property(i.indexrelid, {position}, 'orderable')";
+        var property = key.NullOrder switch
+        {
+            SafeMigrationIndexNullOrder.ProviderDefault when key.SortOrder == SafeMigrationIndexSortOrder.Descending =>
+                "nulls_first",
+            SafeMigrationIndexNullOrder.ProviderDefault => "nulls_last",
+            SafeMigrationIndexNullOrder.First => "nulls_first",
+            SafeMigrationIndexNullOrder.Last => "nulls_last",
+            _ => throw new ArgumentOutOfRangeException(nameof(key)),
+        };
+
+        var matches = $"pg_catalog.pg_index_column_has_property(i.indexrelid, {position}, '{property}') IS TRUE";
+
+        return key.NullOrder == SafeMigrationIndexNullOrder.ProviderDefault
+            ? $"({orderable} IS NOT TRUE OR {matches})"
+            : $"({orderable} IS TRUE AND {matches})";
+    }
+
     private string UniqueIndexDataBlocked(
         ExpectedIndexDefinition definition
     )
     {
         var keys = definition
-            .Keys.Select(IndexDataExpression)
+            .Keys
+            .Select(IndexDataExpression)
             .ToArray();
 
         var predicates = new List<string>();
-        if (definition.Filter is not null)
+        if (definition.Filter is not null
+            || definition.StructuredFilter is not null)
         {
-            predicates.Add($"({definition.Filter})");
+            predicates.Add($"({definition.Filter ?? _expressionRenderer.Render(definition.StructuredFilter!)})");
         }
 
         if (definition.NullsDistinct != false)
@@ -186,37 +241,55 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
     private string IndexDataExpression(
         ExpectedIndexKeyDefinition key
-    ) => key.Column is not null ? Delimited(key.Column) : key.Expression!;
+    ) => key.Column is not null
+        ? Delimited(key.Column)
+        : key.Expression ?? _expressionRenderer.Render(key.StructuredExpression!);
 
     private List<string> IndexExpressionSql(
         ExpectedIndexKeyDefinition key
     )
     {
-        var roots = new[]
+        var expression = key.Expression ?? _expressionRenderer.Render(key.StructuredExpression!);
+        var roots = new List<(string Sql, bool IsValueExpression)>
         {
-            key.Expression!,
-            $"({key.Expression})"
+            (expression, false),
+            ($"({expression})", false),
         };
+        if (key.StructuredExpression is not null)
+        {
+            var catalogCandidate = _expressionRenderer.RenderCatalogCandidateSql(key.StructuredExpression, Literal);
+            var deparsedCandidate = _expressionRenderer.RenderCatalogDeparsedCandidateSql(
+                key.StructuredExpression,
+                Literal);
+
+            roots.Add((catalogCandidate, true));
+            roots.Add(($"({Literal("(")} || {catalogCandidate} || {Literal(")")})", true));
+            roots.Add((deparsedCandidate, true));
+            roots.Add(($"({Literal("(")} || {deparsedCandidate} || {Literal(")")})", true));
+        }
 
         var results = new List<string>();
         foreach (var root in roots)
         {
-            var builder = new StringBuilder(root);
+            var suffix = new StringBuilder();
             if (key.Collation is not null)
             {
-                builder
+                suffix
                     .Append(" COLLATE ")
-                    .Append(DelimitedPath(key.Collation));
+                    .Append(Delimited(key.Collation));
             }
 
             if (key.OperatorClass is not null)
             {
-                builder
+                suffix
                     .Append(' ')
                     .Append(DelimitedPath(key.OperatorClass));
             }
 
-            results.Add(builder.ToString());
+            results.Add(
+                root.IsValueExpression
+                    ? suffix.Length == 0 ? root.Sql : $"({root.Sql} || {Literal(suffix.ToString())})"
+                    : Literal(root.Sql + suffix));
         }
 
         return results
@@ -251,6 +324,32 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             + ")";
     }
 
+    private string CatalogIdentifierMatches(
+        string oidExpression,
+        string catalog,
+        string alias,
+        string namespaceColumn,
+        string nameColumn,
+        SafeMigrationCollationIdentifier expected
+    )
+    {
+        var namespaceCondition = expected.Schema is null
+            ? string.Empty
+            : $" AND ns.nspname = {Literal(expected.Schema)}";
+
+        return $"EXISTS (SELECT 1 FROM {catalog} {alias} "
+            + $"JOIN pg_catalog.pg_namespace ns ON ns.oid = {alias}.{namespaceColumn} "
+            + $"WHERE {alias}.oid = {oidExpression} AND {alias}.{nameColumn} = {Literal(expected.Name)}"
+            + namespaceCondition
+            + ")";
+    }
+
+    private string Delimited(
+        SafeMigrationCollationIdentifier value
+    ) => value.Schema is null
+        ? _sqlGenerationHelper.DelimitIdentifier(value.Name)
+        : _sqlGenerationHelper.DelimitIdentifier(value.Name, value.Schema);
+
     private string IndexExists(
         string name,
         string? schema
@@ -274,4 +373,24 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         string catalogExpression,
         string expected
     ) => $"({catalogExpression} = {Literal(expected)} " + $"OR {catalogExpression} = {Literal($"({expected})")})";
+
+    private string ExpressionMatches(
+        string catalogExpression,
+        SafeMigrationSqlExpression expected
+    )
+    {
+        var rendered = _expressionRenderer.Render(expected);
+        var catalogCandidate = _expressionRenderer.RenderCatalogCandidateSql(expected, Literal);
+        var deparsedCandidate = _expressionRenderer.RenderCatalogDeparsedCandidateSql(expected, Literal);
+        var candidates = new[]
+            {
+                Literal(rendered), Literal($"({rendered})"), catalogCandidate,
+                $"({Literal("(")} || {catalogCandidate} || {Literal(")")})", deparsedCandidate,
+                $"({Literal("(")} || {deparsedCandidate} || {Literal(")")})",
+            }
+            .Distinct(StringComparer.Ordinal)
+            .Select(candidate => $"{catalogExpression} = {candidate}");
+
+        return $"({string.Join(" OR ", candidates)})";
+    }
 }

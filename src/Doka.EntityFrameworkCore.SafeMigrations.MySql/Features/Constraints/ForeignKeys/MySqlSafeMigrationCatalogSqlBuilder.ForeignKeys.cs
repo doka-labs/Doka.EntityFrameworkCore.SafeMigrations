@@ -13,7 +13,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
         return Plan(
             $"CASE WHEN NOT {BaseTableExists(definition.Table)} "
-            + $"OR NOT {BaseTableExists(definition.PrincipalTable)} THEN 'data_blocked' "
+            + $"OR NOT {BaseTableExists(definition.PrincipalTable)} THEN 'prerequisite_missing' "
             + $"WHEN NOT {exists} AND {dataBlocked} THEN 'data_blocked' "
             + $"WHEN NOT {exists} THEN 'missing' "
             + $"WHEN {matching} THEN 'matching' ELSE 'different' END",
@@ -85,11 +85,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         ReferentialAction.SetNull => ["SET NULL"],
         ReferentialAction.SetDefault => ["SET DEFAULT"],
         ReferentialAction.Restrict => ["RESTRICT"],
-        ReferentialAction.NoAction =>
-        [
-            "NO ACTION",
-            "RESTRICT",
-        ],
+        ReferentialAction.NoAction => ["NO ACTION", "RESTRICT",],
         _ => throw new ArgumentOutOfRangeException(nameof(action)),
     };
 }

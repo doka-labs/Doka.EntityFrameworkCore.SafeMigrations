@@ -21,6 +21,13 @@ public sealed class SafeMigrationRunOptions
         ExpectedModelFingerprint = SafeMigrationDefinitionValidator.Optional(
             expectedModelFingerprint,
             nameof(expectedModelFingerprint));
+
+        if (ExpectedModelFingerprint is not null)
+        {
+            SafeMigrationModelFingerprint.ValidateFingerprint(
+                ExpectedModelFingerprint,
+                nameof(expectedModelFingerprint));
+        }
     }
 
     /// <summary>Gets the caller-generated pseudonymous instance identifier.</summary>

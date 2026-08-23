@@ -1,5 +1,3 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
-internal static partial class SafeMigrationExpectedDefinitionFactory
-{
-}
+internal static partial class SafeMigrationExpectedDefinitionFactory { }

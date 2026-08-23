@@ -19,97 +19,103 @@ public static class SafeMigrationDecisionPlanner
         SafeMigrationRepairCapability repairCapability = SafeMigrationRepairCapability.None
     )
     {
-        Validate(operationKind, observedState, policy, repairCapability);
+        var operationFamily = ClassifyOperation(operationKind);
+
+        Validate(observedState, policy, repairCapability);
 
         return observedState switch
         {
+            SafeMigrationObservedState.Missing => PlanMissing(operationFamily),
+            SafeMigrationObservedState.Matching => PlanMatching(operationFamily),
+            SafeMigrationObservedState.Different => PlanDifferent(operationFamily, policy, repairCapability),
             SafeMigrationObservedState.Unsupported => Decision(SafeMigrationAction.RejectUnsupported, "unsupported"),
             SafeMigrationObservedState.DataBlocked => Decision(SafeMigrationAction.RejectDataBlocked, "data_blocked"),
-            _ when IsDrop(operationKind) => PlanDrop(observedState),
-            _ when IsRename(operationKind) => PlanRename(observedState),
-            _ when operationKind == SafeMigrationOperationKind.AlterColumn => PlanAlter(
-                observedState,
-                policy,
-                repairCapability),
-            _ => PlanEnsure(observedState, policy, repairCapability),
+            SafeMigrationObservedState.PrerequisiteMissing => Decision(
+                SafeMigrationAction.RejectPrerequisiteMissing,
+                "prerequisite_missing"),
+            _ => throw new UnreachableException(),
         };
     }
 
-    private static SafeMigrationDecision PlanEnsure(
-        SafeMigrationObservedState observedState,
+    private static SafeMigrationDecision PlanMissing(
+        OperationFamily operationFamily
+    ) => operationFamily switch
+    {
+        OperationFamily.Ensure => Decision(SafeMigrationAction.Apply, "missing_apply"),
+        OperationFamily.Drop => Decision(SafeMigrationAction.NoOp, "missing_noop"),
+        OperationFamily.Rename => Decision(SafeMigrationAction.NoOp, "source_missing_noop"),
+        OperationFamily.Alter => Decision(SafeMigrationAction.RejectDifferent, "alter_target_missing"),
+        _ => throw new UnreachableException(),
+    };
+
+    private static SafeMigrationDecision PlanMatching(
+        OperationFamily operationFamily
+    ) => operationFamily switch
+    {
+        OperationFamily.Ensure => Decision(SafeMigrationAction.NoOp, "matching_noop"),
+        OperationFamily.Drop => Decision(SafeMigrationAction.Apply, "existing_drop"),
+        OperationFamily.Rename => Decision(SafeMigrationAction.Apply, "source_exists_rename"),
+        OperationFamily.Alter => Decision(SafeMigrationAction.NoOp, "matching_noop"),
+        _ => throw new UnreachableException(),
+    };
+
+    private static SafeMigrationDecision PlanDifferent(
+        OperationFamily operationFamily,
         SafeMigrationPolicy policy,
         SafeMigrationRepairCapability repairCapability
-    ) => observedState switch
+    ) => operationFamily switch
     {
-        SafeMigrationObservedState.Missing => Decision(SafeMigrationAction.Apply, "missing_apply"),
-        SafeMigrationObservedState.Matching => Decision(SafeMigrationAction.NoOp, "matching_noop"),
-        SafeMigrationObservedState.Different => policy switch
-        {
-            SafeMigrationPolicy.ExistenceOnly => Decision(SafeMigrationAction.NoOp, "existing_existence_noop"),
-            SafeMigrationPolicy.ThrowIfDifferent => Decision(SafeMigrationAction.RejectDifferent, "different_reject"),
-            SafeMigrationPolicy.RepairIfSafe when repairCapability == SafeMigrationRepairCapability.Safe => Decision(
-                SafeMigrationAction.Repair,
-                "different_repair"),
-            SafeMigrationPolicy.RepairIfSafe => Decision(
-                SafeMigrationAction.RejectDifferent,
-                "different_no_safe_repair"),
-            _ => throw new UnreachableException(),
-        },
-        _ => throw new UnreachableException(),
-    };
-
-    private static SafeMigrationDecision PlanDrop(
-        SafeMigrationObservedState observedState
-    ) => observedState switch
-    {
-        SafeMigrationObservedState.Missing => Decision(SafeMigrationAction.NoOp, "missing_noop"),
-        SafeMigrationObservedState.Matching => Decision(SafeMigrationAction.Apply, "existing_drop"),
-        SafeMigrationObservedState.Different => Decision(SafeMigrationAction.RejectDifferent, "wrong_object_kind"),
-        _ => throw new UnreachableException(),
-    };
-
-    private static SafeMigrationDecision PlanRename(
-        SafeMigrationObservedState observedState
-    ) => observedState switch
-    {
-        SafeMigrationObservedState.Missing => Decision(SafeMigrationAction.NoOp, "source_missing_noop"),
-        SafeMigrationObservedState.Matching => Decision(SafeMigrationAction.Apply, "source_exists_rename"),
-        SafeMigrationObservedState.Different => Decision(SafeMigrationAction.RejectDifferent, "rename_target_conflict"),
-        _ => throw new UnreachableException(),
-    };
-
-    private static SafeMigrationDecision PlanAlter(
-        SafeMigrationObservedState observedState,
-        SafeMigrationPolicy policy,
-        SafeMigrationRepairCapability repairCapability
-    ) => observedState switch
-    {
-        SafeMigrationObservedState.Missing => Decision(SafeMigrationAction.RejectDifferent, "alter_target_missing"),
-        SafeMigrationObservedState.Matching => Decision(SafeMigrationAction.NoOp, "matching_noop"),
-        SafeMigrationObservedState.Different when policy == SafeMigrationPolicy.RepairIfSafe
+        OperationFamily.Ensure => PlanDifferentEnsure(policy, repairCapability),
+        OperationFamily.Drop => Decision(SafeMigrationAction.RejectDifferent, "wrong_object_kind"),
+        OperationFamily.Rename => Decision(SafeMigrationAction.RejectDifferent, "rename_target_conflict"),
+        OperationFamily.Alter when policy == SafeMigrationPolicy.RepairIfSafe
             && repairCapability == SafeMigrationRepairCapability.Safe => Decision(
                 SafeMigrationAction.Repair,
                 "different_repair"),
-        SafeMigrationObservedState.Different => Decision(SafeMigrationAction.RejectDifferent, "alter_not_approved"),
+        OperationFamily.Alter => Decision(SafeMigrationAction.RejectDifferent, "alter_not_approved"),
         _ => throw new UnreachableException(),
     };
 
-    private static bool IsDrop(
-        SafeMigrationOperationKind kind
-    ) => kind is SafeMigrationOperationKind.DropSchema
-        or SafeMigrationOperationKind.DropTable
-        or SafeMigrationOperationKind.DropColumn
-        or SafeMigrationOperationKind.DropIndex
-        or SafeMigrationOperationKind.DropPrimaryKey
-        or SafeMigrationOperationKind.DropUniqueConstraint
-        or SafeMigrationOperationKind.DropCheckConstraint
-        or SafeMigrationOperationKind.DropForeignKey;
+    private static SafeMigrationDecision PlanDifferentEnsure(
+        SafeMigrationPolicy policy,
+        SafeMigrationRepairCapability repairCapability
+    ) => policy switch
+    {
+        SafeMigrationPolicy.ExistenceOnly => Decision(SafeMigrationAction.NoOp, "existing_existence_noop"),
+        SafeMigrationPolicy.ThrowIfDifferent => Decision(SafeMigrationAction.RejectDifferent, "different_reject"),
+        SafeMigrationPolicy.RepairIfSafe when repairCapability == SafeMigrationRepairCapability.Safe => Decision(
+            SafeMigrationAction.Repair,
+            "different_repair"),
+        SafeMigrationPolicy.RepairIfSafe => Decision(SafeMigrationAction.RejectDifferent, "different_no_safe_repair"),
+        _ => throw new UnreachableException(),
+    };
 
-    private static bool IsRename(
-        SafeMigrationOperationKind kind
-    ) => kind is SafeMigrationOperationKind.RenameTable
-        or SafeMigrationOperationKind.RenameColumn
-        or SafeMigrationOperationKind.RenameIndex;
+    private static OperationFamily ClassifyOperation(
+        SafeMigrationOperationKind operationKind
+    ) => operationKind switch
+    {
+        SafeMigrationOperationKind.EnsureSchema
+            or SafeMigrationOperationKind.EnsureTable
+            or SafeMigrationOperationKind.EnsureColumn
+            or SafeMigrationOperationKind.EnsureIndex
+            or SafeMigrationOperationKind.EnsurePrimaryKey
+            or SafeMigrationOperationKind.EnsureUniqueConstraint
+            or SafeMigrationOperationKind.EnsureCheckConstraint
+            or SafeMigrationOperationKind.EnsureForeignKey => OperationFamily.Ensure,
+        SafeMigrationOperationKind.DropSchema
+            or SafeMigrationOperationKind.DropTable
+            or SafeMigrationOperationKind.DropColumn
+            or SafeMigrationOperationKind.DropIndex
+            or SafeMigrationOperationKind.DropPrimaryKey
+            or SafeMigrationOperationKind.DropUniqueConstraint
+            or SafeMigrationOperationKind.DropCheckConstraint
+            or SafeMigrationOperationKind.DropForeignKey => OperationFamily.Drop,
+        SafeMigrationOperationKind.RenameTable
+            or SafeMigrationOperationKind.RenameColumn
+            or SafeMigrationOperationKind.RenameIndex => OperationFamily.Rename,
+        SafeMigrationOperationKind.AlterColumn => OperationFamily.Alter,
+        _ => throw new ArgumentOutOfRangeException(nameof(operationKind)),
+    };
 
     private static SafeMigrationDecision Decision(
         SafeMigrationAction action,
@@ -117,17 +123,11 @@ public static class SafeMigrationDecisionPlanner
     ) => new(action, code);
 
     private static void Validate(
-        SafeMigrationOperationKind operationKind,
         SafeMigrationObservedState observedState,
         SafeMigrationPolicy policy,
         SafeMigrationRepairCapability repairCapability
     )
     {
-        if (!Enum.IsDefined(operationKind))
-        {
-            throw new ArgumentOutOfRangeException(nameof(operationKind));
-        }
-
         if (!Enum.IsDefined(observedState))
         {
             throw new ArgumentOutOfRangeException(nameof(observedState));
@@ -142,5 +142,13 @@ public static class SafeMigrationDecisionPlanner
         {
             throw new ArgumentOutOfRangeException(nameof(repairCapability));
         }
+    }
+
+    private enum OperationFamily
+    {
+        Ensure,
+        Drop,
+        Rename,
+        Alter,
     }
 }

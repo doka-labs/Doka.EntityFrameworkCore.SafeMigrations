@@ -18,6 +18,33 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests : PostgreSql
         string value
     ) => $"\"{value.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
 
+    private static SafeMigrationSqlExpression SqlColumn(
+        string name
+    ) => SafeMigrationSql.Identifier(name);
+
+    private static SafeMigrationSqlExpression SqlBinary(
+        SafeMigrationSqlExpression left,
+        SafeMigrationSqlBinaryOperator @operator,
+        SafeMigrationSqlExpression right
+    ) => SafeMigrationSql.Binary(left, @operator, right);
+
+    private static SafeMigrationSqlExpression SqlColumnAndColumn(
+        string left,
+        SafeMigrationSqlBinaryOperator @operator,
+        string right
+    ) => SqlBinary(SqlColumn(left), @operator, SqlColumn(right));
+
+    private static SafeMigrationSqlExpression SqlColumnAndInt(
+        string column,
+        SafeMigrationSqlBinaryOperator @operator,
+        int value
+    ) => SqlBinary(SqlColumn(column), @operator, SafeMigrationSql.Literal(value));
+
+    private static SafeMigrationSqlExpression SqlFunction(
+        string name,
+        string column
+    ) => SafeMigrationSql.Function(name, SqlColumn(column));
+
     private sealed class UnmappedValue;
 
     private sealed class SchemaChangingDerivedContext(string connectionString)

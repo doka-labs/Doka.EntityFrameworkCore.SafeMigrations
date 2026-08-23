@@ -59,13 +59,29 @@ public static partial class SafeMigrationContractFingerprint
         writer.Add(definition.IsRowVersion);
         writer.Add(definition.Precision);
         writer.Add(definition.Scale);
-        writer.Add(definition.Collation);
+        WriteCollation(writer, definition.Collation);
         writer.Add(definition.Comment);
 
         WriteDefault(writer, definition.DefaultValue);
 
         writer.Add(definition.ComputedColumnSql);
+        SafeMigrationSqlExpressionContract.Write(writer, definition.ComputedExpression);
         writer.Add(definition.IsStored);
+    }
+
+    private static void WriteCollation(
+        CanonicalHashWriter writer,
+        SafeMigrationCollationIdentifier? collation
+    )
+    {
+        writer.Add(collation is not null);
+        if (collation is null)
+        {
+            return;
+        }
+
+        writer.Add(collation.Schema);
+        writer.Add(collation.Name);
     }
 
     private static void WriteDefault(
@@ -77,6 +93,7 @@ public static partial class SafeMigrationContractFingerprint
         if (value.Kind == SafeMigrationDefaultValueKind.Sql)
         {
             writer.Add(value.SqlExpression);
+            SafeMigrationSqlExpressionContract.Write(writer, value.StructuredExpression);
             return;
         }
 

@@ -12,6 +12,8 @@ from pathlib import Path
 CORE_PROJECT = "Doka.EntityFrameworkCore.SafeMigrations"
 MYSQL_PROJECT = "Doka.EntityFrameworkCore.SafeMigrations.MySql"
 POSTGRESQL_PROJECT = "Doka.EntityFrameworkCore.SafeMigrations.PostgreSql"
+MYSQL_TESTCONTAINERS_PACKAGE = "Testcontainers.MySql"
+POSTGRESQL_TESTCONTAINERS_PACKAGE = "Testcontainers.PostgreSql"
 
 
 @dataclass(frozen=True)
@@ -66,6 +68,7 @@ PROJECT_CONTRACTS = (
             {
                 "Microsoft.EntityFrameworkCore.Design",
                 "Microsoft.NET.Test.Sdk",
+                MYSQL_TESTCONTAINERS_PACKAGE,
                 "xunit",
                 "xunit.runner.visualstudio",
             }
@@ -78,6 +81,7 @@ PROJECT_CONTRACTS = (
             {
                 "Microsoft.EntityFrameworkCore.Design",
                 "Microsoft.NET.Test.Sdk",
+                POSTGRESQL_TESTCONTAINERS_PACKAGE,
                 "xunit",
                 "xunit.runner.visualstudio",
             }

@@ -22,4 +22,7 @@ public enum SafeMigrationAction
 
     /// <summary>Reject because existing data prevents the operation.</summary>
     RejectDataBlocked = 5,
+
+    /// <summary>Reject because a required parent object is absent.</summary>
+    RejectPrerequisiteMissing = 6,
 }

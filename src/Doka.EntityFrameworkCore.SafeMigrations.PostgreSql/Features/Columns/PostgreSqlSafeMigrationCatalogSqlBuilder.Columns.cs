@@ -20,7 +20,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         }
 
         return definitions.Any(static definition =>
-            definition.ComputedColumnSql is not null && definition.IsStored == false)
+            (definition.ComputedColumnSql is not null || definition.ComputedExpression is not null)
+            && definition.IsStored == false)
             ? "virtual_generated_column"
             : null;
     }
@@ -32,19 +33,14 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         var table = TableExists(intent.Table, intent.Schema);
         var exists = ColumnExists(intent.Table, intent.Schema, intent.Definition.Name);
         var matching = ColumnMatches(intent.Table, intent.Schema, intent.Definition);
-        var unsafeAdd = intent.Definition is
-        {
-            IsNullable: false,
-            DefaultValue.Kind: SafeMigrationDefaultValueKind.None,
-            ComputedColumnSql: null,
-        };
+        var unsafeAdd = !SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(intent.Definition);
 
         var dataBlocked = unsafeAdd
             ? $"EXISTS (SELECT 1 FROM {Qualified(intent.Table, intent.Schema)} LIMIT 1)"
             : "FALSE";
 
         return Plan(
-            $"CASE WHEN NOT {table} THEN 'data_blocked' "
+            $"CASE WHEN NOT {table} THEN 'prerequisite_missing' "
             + $"WHEN NOT {exists} AND {dataBlocked} THEN 'data_blocked' "
             + $"WHEN NOT {exists} THEN 'missing' WHEN {matching} THEN 'matching' "
             + "ELSE 'different' END",
@@ -149,6 +145,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         return "EXISTS (SELECT 1 FROM pg_catalog.pg_attribute a "
             + "JOIN pg_catalog.pg_class c ON c.oid = a.attrelid "
             + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
+            + "JOIN pg_catalog.pg_type t ON t.oid = a.atttypid "
             + "LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = c.oid AND d.adnum = a.attnum "
             + $"WHERE n.nspname = {SchemaExpression(schema)} AND c.relname = {Literal(table)} "
             + $"AND a.attname = {Literal(definition.Name)} AND a.attnum > 0 AND NOT a.attisdropped "
@@ -161,11 +158,17 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     {
         if (definition.Collation is null)
         {
-            return "TRUE";
+            return "a.attcollation = t.typcollation";
         }
 
-        return "EXISTS (SELECT 1 FROM pg_catalog.pg_collation coll "
-            + $"WHERE coll.oid = a.attcollation AND coll.collname = {Literal(definition.Collation)})";
+        var expected = "(SELECT coll.oid FROM pg_catalog.pg_collation coll "
+            + "JOIN pg_catalog.pg_namespace ns ON ns.oid = coll.collnamespace "
+            + $"WHERE coll.collname = {Literal(definition.Collation.Name)} "
+            + (definition.Collation.Schema is null
+                ? $"AND pg_catalog.pg_collation_is_visible(coll.oid) LIMIT 1)"
+                : $"AND ns.nspname = {Literal(definition.Collation.Schema)})");
+
+        return $"{expected} IS NOT NULL AND a.attcollation = {expected}";
     }
 
     private string DefaultAndGenerationMatches(
@@ -173,12 +176,14 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         RelationalTypeMapping mapping
     )
     {
-        if (definition.ComputedColumnSql is not null)
+        if (definition.ComputedColumnSql is not null
+            || definition.ComputedExpression is not null)
         {
             var generation = definition.IsStored == false ? "'v'" : "'s'";
-
             return $"a.attgenerated = {generation} AND d.oid IS NOT NULL AND "
-                + ExpressionMatches("pg_catalog.pg_get_expr(d.adbin, d.adrelid)", definition.ComputedColumnSql);
+                + (definition.ComputedExpression is not null
+                    ? ExpressionMatches("pg_catalog.pg_get_expr(d.adbin, d.adrelid)", definition.ComputedExpression)
+                    : ExpressionMatches("pg_catalog.pg_get_expr(d.adbin, d.adrelid)", definition.ComputedColumnSql!));
         }
 
         if (definition.DefaultValue.Kind == SafeMigrationDefaultValueKind.None)
@@ -187,7 +192,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         }
 
         var expected = definition.DefaultValue.Kind == SafeMigrationDefaultValueKind.Sql
-            ? definition.DefaultValue.SqlExpression!
+            ? definition.DefaultValue.SqlExpression
+            ?? _expressionRenderer.Render(definition.DefaultValue.StructuredExpression!)
             : mapping.GenerateSqlLiteral(definition.DefaultValue.GetLiteralValue());
 
         var expressionMatches = definition.DefaultValue.Kind == SafeMigrationDefaultValueKind.Literal
@@ -195,7 +201,11 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 "pg_catalog.pg_get_expr(d.adbin, d.adrelid)",
                 expected,
                 definition.DefaultValue.GetLiteralValue())
-            : ExpressionMatches("pg_catalog.pg_get_expr(d.adbin, d.adrelid)", expected);
+            : definition.DefaultValue.StructuredExpression is not null
+                ? ExpressionMatches(
+                    "pg_catalog.pg_get_expr(d.adbin, d.adrelid)",
+                    definition.DefaultValue.StructuredExpression)
+                : ExpressionMatches("pg_catalog.pg_get_expr(d.adbin, d.adrelid)", expected);
 
         return "a.attgenerated = '' AND d.oid IS NOT NULL AND " + expressionMatches;
     }
@@ -341,32 +351,12 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     {
         string[] casts = value switch
         {
-            sbyte or byte or short or ushort =>
-            [
-                "smallint",
-                "integer",
-            ],
-            int or uint =>
-            [
-                "integer",
-                "bigint",
-            ],
-            long or ulong =>
-            [
-                "bigint",
-                "numeric",
-            ],
+            sbyte or byte or short or ushort => ["smallint", "integer",],
+            int or uint => ["integer", "bigint",],
+            long or ulong => ["bigint", "numeric",],
             decimal => ["numeric"],
-            float =>
-            [
-                "real",
-                "double precision",
-            ],
-            double =>
-            [
-                "double precision",
-                "numeric",
-            ],
+            float => ["real", "double precision",],
+            double => ["double precision", "numeric",],
             _ => [],
         };
 

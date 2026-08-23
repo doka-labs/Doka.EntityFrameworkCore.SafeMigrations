@@ -16,24 +16,21 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                     typeof(int),
                     isNullable: true,
                     storeType: "int",
-                    computedColumnSql: "id + 1",
-                    isStored: true),
+                    isStored: true,
+                    computedExpression: AddOne("id")),
             ],
             primaryKey: new ExpectedPrimaryKeyDefinition("pk_parent", "legacy_parent", ["id"]),
             checkConstraints:
             [
-                new ExpectedCheckConstraintDefinition(
+                ExpectedCheckConstraintDefinition.FromExpression(
                     "ck_parent_id",
                     "legacy_parent",
-                    "id > 0 AND note = 'id\\path' AND note = 'it''s id' AND \"id\" > 0 AND `id` > 0"),
+                    ParentPredicate("id")),
             ]);
 
         var child = new ExpectedTableDefinition(
             "child",
-            [
-                Column("id"),
-                Column("parent_id")
-            ],
+            [Column("id"), Column("parent_id")],
             foreignKeys:
             [
                 new ExpectedForeignKeyDefinition("fk_child_parent", "child", ["parent_id"], "legacy_parent", ["id"]),
@@ -48,18 +45,17 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                     "ix_parent_id",
                     "legacy_parent",
                     [new ExpectedIndexKeyDefinition(column: "id")],
-                    filter: "id > 0")));
+                    structuredFilter: Positive("id"))));
         Apply(projection, new RenameColumnIntent("id", "legacy_parent", "canonical_id"));
 
         AssertMatching(projection, new EnsureColumnIntent("legacy_parent", Column("canonical_id")));
         AssertMatching(
             projection,
             new EnsureCheckConstraintIntent(
-                new ExpectedCheckConstraintDefinition(
+                ExpectedCheckConstraintDefinition.FromExpression(
                     "ck_parent_id",
                     "legacy_parent",
-                    "canonical_id > 0 AND note = 'id\\path' AND note = 'it''s id' "
-                    + "AND \"canonical_id\" > 0 AND `canonical_id` > 0")));
+                    ParentPredicate("canonical_id"))));
         AssertMatching(
             projection,
             new EnsureForeignKeyIntent(
@@ -78,7 +74,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                     "ix_parent_canonical_id",
                     "legacy_parent",
                     [new ExpectedIndexKeyDefinition(column: "canonical_id")],
-                    filter: "canonical_id > 0")));
+                    structuredFilter: Positive("canonical_id"))));
 
         Apply(projection, new RenameTableIntent("legacy_parent", "canonical_parent"));
         var finalParent = new ExpectedTableDefinition(
@@ -91,17 +87,16 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                     typeof(int),
                     isNullable: true,
                     storeType: "int",
-                    computedColumnSql: "canonical_id + 1",
-                    isStored: true),
+                    isStored: true,
+                    computedExpression: AddOne("canonical_id")),
             ],
             primaryKey: new ExpectedPrimaryKeyDefinition("pk_parent", "canonical_parent", ["canonical_id"]),
             checkConstraints:
             [
-                new ExpectedCheckConstraintDefinition(
+                ExpectedCheckConstraintDefinition.FromExpression(
                     "ck_parent_id",
                     "canonical_parent",
-                    "canonical_id > 0 AND note = 'id\\path' AND note = 'it''s id' "
-                    + "AND \"canonical_id\" > 0 AND `canonical_id` > 0"),
+                    ParentPredicate("canonical_id")),
             ]);
 
         AssertMatching(projection, new EnsureTableIntent(finalParent, SafeMigrationTableMode.StrictDefinition));
@@ -117,24 +112,79 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     }
 
     [Fact]
-    public void ProjectionAppliesEveryConstraintAndIndexDropSequence()
+    public void ProjectionDoesNotRewriteOpaqueSqlAcrossColumnRename()
     {
         var projection = new SafeMigrationPreflightProjection();
         var table = new ExpectedTableDefinition(
             "items",
             [
                 Column("id"),
-                Column("parent_id"),
+                new ExpectedColumnDefinition(
+                    "derived",
+                    typeof(int),
+                    isNullable: true,
+                    storeType: "int",
+                    computedColumnSql: "id + 1",
+                    isStored: true),
             ],
+            checkConstraints: [new ExpectedCheckConstraintDefinition("ck_items_id", "items", "id > 0"),]);
+
+        Apply(projection, new EnsureTableIntent(table, SafeMigrationTableMode.StrictDefinition));
+        Apply(projection, new RenameColumnIntent("id", "items", "canonical_id"));
+
+        AssertProjectedState(
+            projection,
+            new EnsureCheckConstraintIntent(
+                new ExpectedCheckConstraintDefinition("ck_items_id", "items", "canonical_id > 0")),
+            SafeMigrationObservedState.Different);
+        AssertProjectedState(
+            projection,
+            new EnsureColumnIntent(
+                "items",
+                new ExpectedColumnDefinition(
+                    "derived",
+                    typeof(int),
+                    isNullable: true,
+                    storeType: "int",
+                    computedColumnSql: "canonical_id + 1",
+                    isStored: true)),
+            SafeMigrationObservedState.Different);
+    }
+
+    private static SafeMigrationSqlExpression AddOne(
+        string column
+    ) => SafeMigrationSql.Binary(
+        SafeMigrationSql.Identifier(column),
+        SafeMigrationSqlBinaryOperator.Add,
+        SafeMigrationSql.Literal(1));
+
+    private static SafeMigrationSqlExpression Positive(
+        string column
+    ) => SafeMigrationSql.Binary(
+        SafeMigrationSql.Identifier(column),
+        SafeMigrationSqlBinaryOperator.GreaterThan,
+        SafeMigrationSql.Literal(0));
+
+    private static SafeMigrationSqlExpression ParentPredicate(
+        string column
+    ) => SafeMigrationSql.Binary(
+        Positive(column),
+        SafeMigrationSqlBinaryOperator.And,
+        SafeMigrationSql.Binary(
+            SafeMigrationSql.Identifier("note"),
+            SafeMigrationSqlBinaryOperator.Equal,
+            SafeMigrationSql.Literal("id\\path and it's id")));
+
+    [Fact]
+    public void ProjectionAppliesEveryConstraintAndIndexDropSequence()
+    {
+        var projection = new SafeMigrationPreflightProjection();
+        var table = new ExpectedTableDefinition(
+            "items",
+            [Column("id"), Column("parent_id"),],
             primaryKey: new ExpectedPrimaryKeyDefinition("pk_items", "items", ["id"]),
-            uniqueConstraints:
-            [
-                new ExpectedUniqueConstraintDefinition("uq_items_parent", "items", ["parent_id"]),
-            ],
-            checkConstraints:
-            [
-                new ExpectedCheckConstraintDefinition("ck_items_id", "items", "id > 0"),
-            ],
+            uniqueConstraints: [new ExpectedUniqueConstraintDefinition("uq_items_parent", "items", ["parent_id"]),],
+            checkConstraints: [new ExpectedCheckConstraintDefinition("ck_items_id", "items", "id > 0"),],
             foreignKeys:
             [
                 new ExpectedForeignKeyDefinition("fk_items_parent", "items", ["parent_id"], "parents", ["id"]),

@@ -11,14 +11,8 @@ public sealed partial class SafeMigrationContractFingerprintTests
             schema: "app",
             comment: "canonical",
             primaryKey: new ExpectedPrimaryKeyDefinition("pk_items", "items", ["id"], "app"),
-            uniqueConstraints:
-            [
-                new ExpectedUniqueConstraintDefinition("uq_items_id", "items", ["id"], "app"),
-            ],
-            checkConstraints:
-            [
-                new ExpectedCheckConstraintDefinition("ck_items_id", "items", "id > 0", "app"),
-            ],
+            uniqueConstraints: [new ExpectedUniqueConstraintDefinition("uq_items_id", "items", ["id"], "app"),],
+            checkConstraints: [new ExpectedCheckConstraintDefinition("ck_items_id", "items", "id > 0", "app"),],
             foreignKeys: []);
 
         var strict = Fingerprint(new EnsureTableIntent(table, SafeMigrationTableMode.StrictDefinition));

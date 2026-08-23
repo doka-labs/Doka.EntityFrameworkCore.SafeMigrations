@@ -32,7 +32,8 @@ internal static partial class SafeMigrationExpectedCatalog
         }
 
         var names = table
-            .Constraints.Where(static value => value.Value == SafeMigrationDatabaseObjectKind.PrimaryKey)
+            .Constraints
+            .Where(static value => value.Value == SafeMigrationDatabaseObjectKind.PrimaryKey)
             .Select(static value => value.Key)
             .ToArray();
 

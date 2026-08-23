@@ -1,7 +1,9 @@
 global using System;
 global using System.Buffers;
 global using System.Buffers.Binary;
+global using System.Collections;
 global using System.Collections.Generic;
+global using System.Data;
 global using System.Data.Common;
 global using System.Diagnostics;
 global using System.Diagnostics.CodeAnalysis;
@@ -20,3 +22,4 @@ global using Microsoft.EntityFrameworkCore.Metadata;
 global using Microsoft.EntityFrameworkCore.Migrations;
 global using Microsoft.EntityFrameworkCore.Migrations.Operations;
 global using Microsoft.EntityFrameworkCore.Migrations.Operations.Builders;
+global using Microsoft.Extensions.DependencyInjection;

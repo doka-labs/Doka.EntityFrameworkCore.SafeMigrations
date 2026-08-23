@@ -5,9 +5,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     private string? GetUnsupportedColumnFeature(
         SafeMigrationIntent intent,
         MySqlMigrationFeatureSet features,
-        bool isMariaDb
+        MySqlServerVersion serverVersion
     )
     {
+        var isMariaDb = serverVersion.IsMariaDb;
         var definitions = intent switch
         {
             EnsureTableIntent value => value.Definition.Columns,
@@ -21,12 +22,18 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             return "column_type_mapping";
         }
 
-        if (definitions.Any(definition => !CanRepresentLiteralDefault(definition, isMariaDb)))
+        if (definitions.Any(static definition => definition.Collation?.Schema is not null))
+        {
+            return "schema_qualified_collation";
+        }
+
+        if (definitions.Any(definition => !CanRepresentLiteralDefault(definition, serverVersion)))
         {
             return "literal_default_catalog_representation";
         }
 
-        if (definitions.Any(definition => definition.ComputedColumnSql is not null
+        if (definitions.Any(definition =>
+                (definition.ComputedColumnSql is not null || definition.ComputedExpression is not null)
                 && !Supported(
                     features,
                     definition.IsStored == true
@@ -50,17 +57,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var tableExists = BaseTableExists(intent.Table);
         var columnExists = ColumnExists(intent.Table, intent.Definition.Name);
         var matching = BuildColumnMatches(intent.Table, intent.Definition, isMariaDb);
-        var unsafeAdd = intent.Definition is
-        {
-            IsNullable: false,
-            DefaultValue.Kind: SafeMigrationDefaultValueKind.None,
-            ComputedColumnSql: null,
-        };
+        var unsafeAdd = !SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(intent.Definition);
 
         var dataBlocked = unsafeAdd ? $"EXISTS (SELECT 1 FROM {Delimited(intent.Table)} LIMIT 1)" : "FALSE";
 
         return Plan(
-            $"CASE WHEN NOT {tableExists} THEN 'data_blocked' "
+            $"CASE WHEN NOT {tableExists} THEN 'prerequisite_missing' "
             + $"WHEN NOT {columnExists} AND {dataBlocked} THEN 'data_blocked' "
             + $"WHEN NOT {columnExists} THEN 'missing' "
             + $"WHEN {matching} THEN 'matching' ELSE 'different' END",
@@ -155,10 +157,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         {
             BuildStoreTypeMatches(storeType, isMariaDb),
             $"c.IS_NULLABLE = {(definition.IsNullable ? "'YES'" : "'NO'")}",
-            definition.Collation is null ? "TRUE" : $"c.COLLATION_NAME <=> {Literal(definition.Collation)}",
+            BuildCollationMatches(table, definition.Collation),
             $"COALESCE(c.COLUMN_COMMENT, '') = {Literal(definition.Comment ?? string.Empty)}",
-            BuildDefaultMatches("c.COLUMN_DEFAULT", definition.DefaultValue, definition.IsNullable, mapping, isMariaDb),
-            BuildComputedMatches(definition),
+            BuildDefaultMatches("c.COLUMN_DEFAULT", definition.DefaultValue, definition.IsNullable, mapping),
+            BuildComputedMatches(definition, isMariaDb),
         };
 
         if (ordinal is not null)
@@ -169,6 +171,21 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         return $"EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS c "
             + $"WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = {Literal(table)} "
             + $"AND c.COLUMN_NAME = {Literal(definition.Name)} AND {string.Join(" AND ", conditions)})";
+    }
+
+    private string BuildCollationMatches(
+        string table,
+        SafeMigrationCollationIdentifier? expectedCollation
+    )
+    {
+        if (expectedCollation is not null)
+        {
+            return $"c.COLLATION_NAME <=> {Literal(expectedCollation.Name)}";
+        }
+
+        return "(c.COLLATION_NAME IS NULL OR c.COLLATION_NAME <=> "
+            + "(SELECT t.TABLE_COLLATION FROM INFORMATION_SCHEMA.TABLES t "
+            + $"WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_NAME = {Literal(table)}))";
     }
 
     private string BuildStoreTypeMatches(
@@ -206,8 +223,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         string catalogExpression,
         SafeMigrationDefaultValue expected,
         bool isNullable,
-        RelationalTypeMapping mapping,
-        bool isMariaDb
+        RelationalTypeMapping mapping
     )
     {
         if (expected.Kind == SafeMigrationDefaultValueKind.None)
@@ -219,7 +235,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
         if (expected.Kind == SafeMigrationDefaultValueKind.Sql)
         {
-            var expression = expected.SqlExpression!;
+            var expression = expected.SqlExpression ?? _expressionRenderer.Render(expected.StructuredExpression!);
             var sqlCandidates = BuildDefaultSqlCandidates(expression)
                 .Select(Literal);
 
@@ -237,10 +253,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             return BuildBinaryDefaultMatches(catalogExpression, bytes);
         }
 
-        var candidates = new HashSet<string>(StringComparer.Ordinal)
-        {
-            mapping.GenerateSqlLiteral(value),
-        };
+        var providerLiteral = mapping.GenerateSqlLiteral(value);
+        var candidates = new HashSet<string>(StringComparer.Ordinal) { providerLiteral };
+        AddSimpleStringLiteralDisplayCandidate(candidates, providerLiteral);
+        AddExpressionDefaultDisplayCandidate(candidates, providerLiteral);
 
         var invariant = Convert.ToString(value, CultureInfo.InvariantCulture);
         if (invariant is not null)
@@ -258,23 +274,51 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         return $"{catalogExpression} IN ({string.Join(", ", candidates.Select(Literal))})";
     }
 
+    private static void AddSimpleStringLiteralDisplayCandidate(
+        HashSet<string> candidates,
+        string providerLiteral
+    )
+    {
+        if (providerLiteral.Length < 2
+            || providerLiteral[0] != '\''
+            || providerLiteral[^1] != '\'')
+        {
+            return;
+        }
+
+        var interior = providerLiteral[1..^1];
+        var unescaped = interior.Replace("''", "'", StringComparison.Ordinal);
+        var escapedQuoteCount = interior.Count(static character => character == '\'');
+        var unescapedQuoteCount = unescaped.Count(static character => character == '\'');
+
+        if (unescapedQuoteCount * 2 != escapedQuoteCount)
+        {
+            return;
+        }
+
+        candidates.Add(unescaped);
+    }
+
+    private static void AddExpressionDefaultDisplayCandidate(
+        HashSet<string> candidates,
+        string providerLiteral
+    )
+    {
+        if (providerLiteral.Contains('\'', StringComparison.Ordinal))
+        {
+            candidates.Add(providerLiteral.Replace("'", "\\'", StringComparison.Ordinal));
+        }
+    }
+
     private string BuildBinaryDefaultMatches(
         string catalogExpression,
         byte[] value
     )
     {
         var hex = Convert.ToHexString(value);
-        var textualForms = new[]
-        {
-            $"0X{hex}",
-            $"X'{hex}'",
-        }.Select(Literal);
+        var textualForms = new[] { $"0X{hex}", $"X'{hex}'", }.Select(Literal);
 
-        var encodedForms = new[]
-        {
-            hex,
-            $"27{hex}27",
-        }.Select(Literal);
+        var encodedForms = new[] { hex, $"27{hex}27", }.Select(Literal);
 
         return $"(UPPER({catalogExpression}) IN ({string.Join(", ", textualForms)}) "
             + $"OR UPPER(HEX({catalogExpression})) IN ({string.Join(", ", encodedForms)}))";
@@ -319,11 +363,17 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         switch (value)
         {
             case DateOnly date:
-                AddQuotedCandidate(candidates, date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+                AddTemporalTypedCandidate(
+                    candidates,
+                    "DATE",
+                    date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
                 break;
             case TimeOnly time:
-                AddQuotedCandidate(candidates, time.ToString("HH:mm:ss", CultureInfo.InvariantCulture));
-                AddQuotedCandidate(candidates, time.ToString("HH:mm:ss.ffffff", CultureInfo.InvariantCulture));
+                AddTemporalTypedCandidate(candidates, "TIME", time.ToString("HH:mm:ss", CultureInfo.InvariantCulture));
+                AddTemporalTypedCandidate(
+                    candidates,
+                    "TIME",
+                    time.ToString("HH:mm:ss.ffffff", CultureInfo.InvariantCulture));
                 break;
             case DateTime dateTime:
                 AddQuotedCandidate(candidates, dateTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture));
@@ -332,10 +382,30 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                     dateTime.ToString("yyyy-MM-dd HH:mm:ss.ffffff", CultureInfo.InvariantCulture));
                 break;
             case TimeSpan timeSpan:
-                AddQuotedCandidate(candidates, timeSpan.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture));
-                AddQuotedCandidate(candidates, timeSpan.ToString(@"hh\:mm\:ss\.ffffff", CultureInfo.InvariantCulture));
+                AddTemporalTypedCandidate(
+                    candidates,
+                    "TIME",
+                    timeSpan.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture));
+                AddTemporalTypedCandidate(
+                    candidates,
+                    "TIME",
+                    timeSpan.ToString(@"hh\:mm\:ss\.ffffff", CultureInfo.InvariantCulture));
                 break;
         }
+    }
+
+    private static void AddTemporalTypedCandidate(
+        HashSet<string> candidates,
+        string keyword,
+        string value
+    )
+    {
+        AddQuotedCandidate(candidates, value);
+        candidates.Add($"{keyword} '{value}'");
+        candidates.Add($"{keyword}'{value}'");
+        candidates.Add($"{keyword}\\'{value}\\'");
+        candidates.Add($"_utf8mb4'{value}'");
+        candidates.Add($"_utf8mb4\\'{value}\\'");
     }
 
     private static void AddQuotedCandidate(
@@ -348,23 +418,22 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     }
 
     private string BuildComputedMatches(
-        ExpectedColumnDefinition definition
+        ExpectedColumnDefinition definition,
+        bool isMariaDb
     )
     {
-        if (definition.ComputedColumnSql is null)
+        if (definition.ComputedColumnSql is null
+            && definition.ComputedExpression is null)
         {
             return "(c.GENERATION_EXPRESSION IS NULL OR c.GENERATION_EXPRESSION = '')";
         }
 
-        var expression = definition.ComputedColumnSql;
-        var quoted = MySqlExpressionCanonicalizer.QuoteIdentifiers(expression, _sqlGenerationHelper);
-        var candidates = new[]
-            {
-                expression,
-                $"({expression})",
-                quoted,
-                $"({quoted})",
-            }
+        var expression = definition.ComputedColumnSql ?? _expressionRenderer.Render(definition.ComputedExpression!);
+        var candidates = new[] { expression, $"({expression})" }
+            .Concat(
+                MySqlExpressionCanonicalizer.BuildCatalogDisplayCandidates(
+                    expression,
+                    includeMySqlEncodedDisplay: !isMariaDb))
             .Distinct(StringComparer.Ordinal)
             .Select(Literal);
 
@@ -401,7 +470,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
     private bool CanRepresentLiteralDefault(
         ExpectedColumnDefinition definition,
-        bool isMariaDb
+        MySqlServerVersion serverVersion
     )
     {
         if (definition.DefaultValue.Kind != SafeMigrationDefaultValueKind.Literal)
@@ -430,20 +499,13 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         if (value is Guid
             && storeType?.StartsWith("binary", StringComparison.OrdinalIgnoreCase) == true)
         {
-            return false;
+            var version = serverVersion.Version;
+
+            return serverVersion.IsMariaDb
+                && version is { Major: 11, Minor: 8 } or { Major: 12, Minor: 3 };
         }
 
-        if (isMariaDb
-            || value is not DateOnly and not TimeOnly
-            || mapping is null)
-        {
-            return true;
-        }
-
-        var literal = mapping.GenerateSqlLiteral(value);
-
-        return !literal.StartsWith("DATE ", StringComparison.OrdinalIgnoreCase)
-            && !literal.StartsWith("TIME ", StringComparison.OrdinalIgnoreCase);
+        return true;
     }
 
     private string ColumnExists(

@@ -75,6 +75,58 @@ class ProjectBoundaryTests(unittest.TestCase):
             self.assertIn("PackageReference set", errors[0])
             self.assertIn(boundaries.POSTGRESQL_PROJECT, errors[0])
 
+    def test_mysql_test_contract_rejects_postgresql_testcontainers_package(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project_path = root / "Sample.csproj"
+            project_path.write_text(
+                """<Project Sdk=\"Microsoft.NET.Sdk\">
+  <ItemGroup>
+    <PackageReference Include=\"Testcontainers.MySql\" />
+    <PackageReference Include=\"Testcontainers.PostgreSql\" />
+  </ItemGroup>
+</Project>
+""",
+                encoding="utf-8",
+            )
+            contract = boundaries.ProjectContract(
+                "Sample.csproj",
+                frozenset(),
+                frozenset({boundaries.MYSQL_TESTCONTAINERS_PACKAGE}),
+            )
+
+            errors = boundaries.validate_project_contract(root, contract)
+
+            self.assertEqual(1, len(errors))
+            self.assertIn("PackageReference set", errors[0])
+            self.assertIn(boundaries.POSTGRESQL_TESTCONTAINERS_PACKAGE, errors[0])
+
+    def test_postgresql_test_contract_rejects_mysql_testcontainers_package(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project_path = root / "Sample.csproj"
+            project_path.write_text(
+                """<Project Sdk=\"Microsoft.NET.Sdk\">
+  <ItemGroup>
+    <PackageReference Include=\"Testcontainers.MySql\" />
+    <PackageReference Include=\"Testcontainers.PostgreSql\" />
+  </ItemGroup>
+</Project>
+""",
+                encoding="utf-8",
+            )
+            contract = boundaries.ProjectContract(
+                "Sample.csproj",
+                frozenset(),
+                frozenset({boundaries.POSTGRESQL_TESTCONTAINERS_PACKAGE}),
+            )
+
+            errors = boundaries.validate_project_contract(root, contract)
+
+            self.assertEqual(1, len(errors))
+            self.assertIn("PackageReference set", errors[0])
+            self.assertIn(boundaries.MYSQL_TESTCONTAINERS_PACKAGE, errors[0])
+
     def test_unexpected_provider_package_reference_in_role_props_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

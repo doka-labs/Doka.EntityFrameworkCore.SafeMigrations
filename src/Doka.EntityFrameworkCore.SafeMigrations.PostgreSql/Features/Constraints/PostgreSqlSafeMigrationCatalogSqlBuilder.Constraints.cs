@@ -16,7 +16,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         var exists = ConstraintExists(table, schema, name, type);
 
         return Plan(
-            $"CASE WHEN NOT {tableExists} OR NOT ({additionalPrerequisite}) THEN 'data_blocked' "
+            $"CASE WHEN NOT {tableExists} OR NOT ({additionalPrerequisite}) THEN 'prerequisite_missing' "
             + $"WHEN NOT {exists} AND {dataBlocked} THEN 'data_blocked' "
             + $"WHEN NOT {exists} THEN 'missing' "
             + $"WHEN {matching} THEN 'matching' ELSE 'different' END",

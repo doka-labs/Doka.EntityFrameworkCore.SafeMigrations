@@ -3,12 +3,148 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 public sealed partial class MySqlSafeMigrationIntegrationTests
 {
     [Fact]
+    public async Task OrdinaryNullableTimestamp_RequiresAndExecutesExplicitSqlBackfill()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `timestamp_repair` (`id` int NOT NULL, `occurred_at` timestamp(6) NULL); "
+            + "INSERT INTO `timestamp_repair` (`id`, `occurred_at`) VALUES (1, NULL);");
+
+        await using var context = CreateContext(connectionString);
+        var operation = new AlterColumnOperation
+        {
+            Table = "timestamp_repair",
+            Name = "occurred_at",
+            ClrType = typeof(DateTime),
+            ColumnType = "timestamp(6)",
+            IsNullable = false,
+            OldColumn =
+            {
+                ClrType = typeof(DateTime),
+                ColumnType = "timestamp(6)",
+                IsNullable = true,
+            },
+        };
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+
+        var exception = Assert.Throws<InvalidOperationException>(() => generator.Generate([operation], context.Model));
+
+        Assert.Contains("explicit DefaultValue or DefaultValueSql", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM `timestamp_repair` WHERE `occurred_at` IS NULL;"));
+
+        operation.DefaultValueSql = "CURRENT_TIMESTAMP(6)";
+
+        await ExecuteOperationsAsync(context, [operation]);
+
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM `timestamp_repair` WHERE `occurred_at` IS NULL;"));
+        Assert.Equal(
+            "NO",
+            await ScalarStringAsync(
+                connectionString,
+                "SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS "
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'timestamp_repair' "
+                + "AND COLUMN_NAME = 'occurred_at';"));
+    }
+
+    [Fact]
+    public async Task SchemaQualifiedColumnCollation_IsUnsupportedBeforeTargetDdl()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE qualified_collation (id int NOT NULL);");
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureColumn(
+            "qualified_collation",
+            new ExpectedColumnDefinition(
+                "value",
+                typeof(string),
+                true,
+                "varchar(40)",
+                maxLength: 40,
+                collation: new SafeMigrationCollationIdentifier("utf8mb4_bin", "other_database")),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("qualified-collation"));
+
+        var exception =
+            await Assert.ThrowsAsync<MySqlException>(() => ExecuteOperationsAsync(context, builder.Operations));
+
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(
+            SafeMigrationObservedState.Unsupported,
+            Assert.Single(report.Assessments)
+                .ObservedState);
+        Assert.Contains("doka_sm_unsupported", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'qualified_collation' "
+                + "AND COLUMN_NAME = 'value';"));
+    }
+
+    [Fact]
+    public async Task NullCollation_MeansTableDefaultAndNeverWildcard()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `collation_defaults` ("
+            + "`inherited` varchar(40) NULL, "
+            + "`explicit` varchar(40) COLLATE utf8mb4_bin NULL) "
+            + "DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;");
+
+        await using var context = CreateContext(connectionString);
+        var inherited = new MigrationBuilder(context.Database.ProviderName!);
+        inherited.EnsureColumn(
+            "collation_defaults",
+            new ExpectedColumnDefinition("inherited", typeof(string), true, "varchar(40)", maxLength: 40),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var explicitDrift = new MigrationBuilder(context.Database.ProviderName!);
+        explicitDrift.EnsureColumn(
+            "collation_defaults",
+            new ExpectedColumnDefinition("explicit", typeof(string), true, "varchar(40)", maxLength: 40),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var inheritedReport = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(context, inherited.Operations, new SafeMigrationRunOptions("inherited-collation"));
+
+        var driftReport = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(context, explicitDrift.Operations, new SafeMigrationRunOptions("explicit-collation"));
+
+        Assert.Equal(
+            SafeMigrationObservedState.Matching,
+            Assert.Single(inheritedReport.Assessments)
+                .ObservedState);
+        Assert.Equal(
+            SafeMigrationObservedState.Different,
+            Assert.Single(driftReport.Assessments)
+                .ObservedState);
+    }
+
+    [Fact]
     public async Task UnsafeNotNullAdd_FailsBeforeTargetDdl()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `orders` (`id` int NOT NULL); INSERT INTO `orders` VALUES (1);");
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<int>("sequence", "orders", type: "int", nullable: false);
@@ -29,10 +165,11 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task RepairIfSafe_RequiresTheLiveColumnToMatchTheDeclaredOldDefinition()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `repair_guard` (" + "`safe_value` varchar(40) NULL, `drifted_value` varchar(30) NULL); ");
+
         await using var context = CreateContext(connectionString);
         var declaredOld = new ExpectedColumnDefinition(
             "safe_value",
@@ -110,7 +247,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task LiteralDefaultMatrix_ConvergesAndIsIdempotent()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE `default_values` (`id` int NOT NULL);");
         await using var context = CreateContext(connectionString);
         var definitions = new[]
@@ -210,13 +347,16 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 false,
                 "varbinary(4)",
                 maxLength: 4,
-                defaultValue: SafeMigrationDefaultValue.Literal(
-                    new byte[]
-                    {
-                        1,
-                        2,
-                        3
-                    })),
+                defaultValue: SafeMigrationDefaultValue.Literal(new byte[] { 1, 2, 3 })),
+            new ExpectedColumnDefinition(
+                "guid_value",
+                typeof(Guid),
+                false,
+                "binary(16)",
+                maxLength: 16,
+                isFixedLength: true,
+                defaultValue:
+                SafeMigrationDefaultValue.Literal(Guid.Parse("0198bfe2-5573-7000-8000-000000000001"))),
             new ExpectedColumnDefinition(
                 "enum_value",
                 typeof(DayOfWeek),
@@ -252,6 +392,19 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                         56,
                         DateTimeKind.Unspecified))),
             new ExpectedColumnDefinition(
+                "datetime_offset_value",
+                typeof(DateTimeOffset),
+                false,
+                defaultValue: SafeMigrationDefaultValue.Literal(
+                    new DateTimeOffset(
+                        2026,
+                        8,
+                        17,
+                        12,
+                        34,
+                        56,
+                        TimeSpan.FromMinutes(330)).AddTicks(1_234_567))),
+            new ExpectedColumnDefinition(
                 "duration_value",
                 typeof(TimeSpan),
                 false,
@@ -272,8 +425,18 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 false,
                 "datetime(6)",
                 precision: 6,
-                defaultValue: SafeMigrationDefaultValue.Sql("CURRENT_TIMESTAMP(6)")),
+                defaultValue: SafeMigrationDefaultValue.Sql(
+                    SafeMigrationSql.Current(SafeMigrationSqlCurrentValue.Timestamp, precision: 6))),
         };
+
+        var coveredLiteralTypes = definitions
+            .Where(static definition => definition.DefaultValue.Kind == SafeMigrationDefaultValueKind.Literal)
+            .Select(static definition => definition.DefaultValue.LiteralValue)
+            .Where(static value => value is not null)
+            .Select(static value => value!.GetType())
+            .Distinct()
+            .OrderBy(static type => type.FullName, StringComparer.Ordinal)
+            .ToArray();
 
         var expectedColumnCount = 1;
         var unsupportedColumns = new List<string>();
@@ -321,15 +484,8 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             }
         }
 
-        Assert.Equal(
-            Fixture.IsMariaDb
-                ? []
-                :
-                [
-                    "date_value",
-                    "time_value"
-                ],
-            unsupportedColumns);
+        Assert.Equal(SupportsBinaryGuidCatalogDefaults() ? [] : ["guid_value"], unsupportedColumns);
+        Assert.Equal(SafeMigrationLiteralContract.CreateSupportedNonNullTypes(), coveredLiteralTypes);
         Assert.Equal(
             expectedColumnCount,
             await ScalarIntAsync(
@@ -344,16 +500,17 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         await using var connection = new MySqlConnection(connectionString);
-        await connection.OpenAsync();
+        await connection.OpenAsync(CancellationToken.None);
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT COLUMN_TYPE, COLUMN_DEFAULT, IS_NULLABLE, EXTRA, "
             + "HEX(COLUMN_DEFAULT) "
             + "FROM INFORMATION_SCHEMA.COLUMNS "
             + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'default_values' "
             + "AND COLUMN_NAME = @column;";
+
         command.Parameters.AddWithValue("column", column);
-        await using var reader = await command.ExecuteReaderAsync();
-        if (!await reader.ReadAsync())
+        await using var reader = await command.ExecuteReaderAsync(CancellationToken.None);
+        if (!await reader.ReadAsync(CancellationToken.None))
         {
             return "missing";
         }
@@ -375,14 +532,15 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         await using var connection = new MySqlConnection(connectionString);
-        await connection.OpenAsync();
+        await connection.OpenAsync(CancellationToken.None);
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT CHECK_CLAUSE, HEX(CHECK_CLAUSE) "
             + "FROM INFORMATION_SCHEMA.CHECK_CONSTRAINTS "
             + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND CONSTRAINT_NAME = @constraint;";
+
         command.Parameters.AddWithValue("constraint", constraint);
-        await using var reader = await command.ExecuteReaderAsync();
-        if (!await reader.ReadAsync())
+        await using var reader = await command.ExecuteReaderAsync(CancellationToken.None);
+        if (!await reader.ReadAsync(CancellationToken.None))
         {
             return "missing";
         }
@@ -393,7 +551,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task UnmappedClrType_IsClassifiedUnsupportedBeforeDdl()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE `unsupported_values` (`id` int NOT NULL);");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -421,9 +579,9 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     }
 
     [Fact]
-    public async Task BinaryGuidDefault_IsUnsupportedBeforeTargetDdlWhenCatalogIsLossy()
+    public async Task BinaryGuidDefault_RespectsEngineCatalogFidelity()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE `unsupported_binary_default` (`id` int NOT NULL);");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -443,29 +601,84 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("test-instance"));
 
-        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        if (!SupportsBinaryGuidCatalogDefaults())
+        {
+            Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+            Assert.Equal(
+                SafeMigrationObservedState.Unsupported,
+                Assert.Single(report.Assessments)
+                    .ObservedState);
+            var exception =
+                await Assert.ThrowsAsync<MySqlException>(() => ExecuteOperationsAsync(context, builder.Operations));
+
+            Assert.Contains("doka_sm_unsupported", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(
+                0,
+                await ScalarIntAsync(
+                    connectionString,
+                    "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
+                    + "WHERE TABLE_SCHEMA = DATABASE() "
+                    + "AND TABLE_NAME = 'unsupported_binary_default' "
+                    + "AND COLUMN_NAME = 'binary_guid';"));
+
+            return;
+        }
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.Equal(
-            SafeMigrationObservedState.Unsupported,
+            SafeMigrationObservedState.Missing,
             Assert.Single(report.Assessments)
                 .ObservedState);
-        var exception =
-            await Assert.ThrowsAsync<MySqlException>(() => ExecuteOperationsAsync(context, builder.Operations));
 
-        Assert.Contains("doka_sm_unsupported", exception.Message, StringComparison.OrdinalIgnoreCase);
+        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations);
+
+        var matching = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("test-instance"));
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, matching.Status);
         Assert.Equal(
-            0,
-            await ScalarIntAsync(
-                connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() "
-                + "AND TABLE_NAME = 'unsupported_binary_default' "
-                + "AND COLUMN_NAME = 'binary_guid';"));
+            SafeMigrationObservedState.Matching,
+            Assert.Single(matching.Assessments)
+                .ObservedState);
+
+        var different = new MigrationBuilder(context.Database.ProviderName!);
+        different.EnsureColumn(
+            "unsupported_binary_default",
+            new ExpectedColumnDefinition(
+                "binary_guid",
+                typeof(Guid),
+                false,
+                "binary(16)",
+                maxLength: 16,
+                isFixedLength: true,
+                defaultValue: SafeMigrationDefaultValue.Literal(Guid.Parse("0198bfe2-5573-7000-8000-000000000002"))),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var mismatch = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(context, different.Operations, new SafeMigrationRunOptions("test-instance"));
+
+        Assert.Equal(SafeMigrationReportStatus.Blocked, mismatch.Status);
+        Assert.Equal(
+            SafeMigrationObservedState.Different,
+            Assert.Single(mismatch.Assessments)
+                .ObservedState);
+    }
+
+    private bool SupportsBinaryGuidCatalogDefaults()
+    {
+        var version = Fixture.ServerVersion.Version;
+
+        return Fixture.IsMariaDb
+            && ((version.Major == 11 && version.Minor == 8) || (version.Major == 12 && version.Minor == 3));
     }
 
     [Fact]
     public async Task ComputedCollationAndCommentFacets_ConvergeAndDetectSingleFieldDrift()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `advanced_columns` (`a` int NOT NULL, `b` int NOT NULL);");
@@ -479,7 +692,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 true,
                 "varchar(80)",
                 maxLength: 80,
-                collation: "utf8mb4_bin",
+                collation: new SafeMigrationCollationIdentifier("utf8mb4_bin"),
                 comment: "quote ' slash \\ umlaut \u00fc"),
             SafeMigrationPolicy.ThrowIfDifferent);
         builder.EnsureColumn(
@@ -489,7 +702,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 typeof(int),
                 true,
                 "int",
-                computedColumnSql: "a + b",
+                computedExpression: SqlColumnAndColumn("a", SafeMigrationSqlBinaryOperator.Add, "b"),
                 isStored: false),
             SafeMigrationPolicy.ThrowIfDifferent);
         builder.EnsureColumn(
@@ -499,7 +712,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 typeof(int),
                 true,
                 "int",
-                computedColumnSql: "a + b",
+                computedExpression: SqlColumnAndColumn("a", SafeMigrationSqlBinaryOperator.Add, "b"),
                 isStored: true),
             SafeMigrationPolicy.ThrowIfDifferent);
 
@@ -515,7 +728,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 true,
                 "varchar(80)",
                 maxLength: 80,
-                collation: "utf8mb4_bin",
+                collation: new SafeMigrationCollationIdentifier("utf8mb4_bin"),
                 comment: "different"),
             SafeMigrationPolicy.ThrowIfDifferent);
         var report = await context

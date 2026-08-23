@@ -3,9 +3,10 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
     <EfCorePackageVersion Condition="'$(EfCorePackageVersion)' == ''">[10.0.8,10.1.0)</EfCorePackageVersion>
-    <DokaMySqlPackageVersion Condition="'$(DokaMySqlPackageVersion)' == ''">[10.0.0-rc.10]</DokaMySqlPackageVersion>
+    <DokaMySqlPackageVersion Condition="'$(DokaMySqlPackageVersion)' == ''">[10.0.0-rc.12]</DokaMySqlPackageVersion>
     <NpgsqlPackageVersion Condition="'$(NpgsqlPackageVersion)' == ''">[10.0.0,11.0.0)</NpgsqlPackageVersion>
     <DependencyInjectionPackageVersion Condition="'$(DependencyInjectionPackageVersion)' == ''">[10.0.8,10.1.0)</DependencyInjectionPackageVersion>
+    <TestcontainersPackageVersion Condition="'$(TestcontainersPackageVersion)' == ''">[4.14.0]</TestcontainersPackageVersion>
   </PropertyGroup>
 
   <ItemGroup Label="Production">
@@ -30,6 +31,14 @@
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
     <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="Tests - MySQL/MariaDB">
+    <PackageVersion Include="Testcontainers.MySql" Version="$(TestcontainersPackageVersion)" />
+  </ItemGroup>
+
+  <ItemGroup Label="Tests - PostgreSQL">
+    <PackageVersion Include="Testcontainers.PostgreSql" Version="$(TestcontainersPackageVersion)" />
   </ItemGroup>
 
 </Project>

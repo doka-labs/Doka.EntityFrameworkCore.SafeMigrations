@@ -3,7 +3,9 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 internal static partial class SafeMigrationStandardOperationFactory
 {
     private static CreateTableOperation CreateOperation(
-        EnsureTableIntent intent
+        EnsureTableIntent intent,
+        Func<SafeMigrationSqlExpression, string>? renderExpression,
+        Func<SafeMigrationCollationIdentifier, string?>? renderCollation
     )
     {
         var definition = intent.Definition;
@@ -16,7 +18,8 @@ internal static partial class SafeMigrationStandardOperationFactory
 
         foreach (var column in definition.Columns)
         {
-            operation.Columns.Add(CreateColumn(definition.Table, definition.Schema, column));
+            operation.Columns.Add(
+                CreateColumn(definition.Table, definition.Schema, column, renderExpression, renderCollation));
         }
 
         if (definition.PrimaryKey is not null)
@@ -31,7 +34,7 @@ internal static partial class SafeMigrationStandardOperationFactory
 
         foreach (var checkConstraint in definition.CheckConstraints)
         {
-            operation.CheckConstraints.Add(CreateCheckConstraint(checkConstraint));
+            operation.CheckConstraints.Add(CreateCheckConstraint(checkConstraint, renderExpression));
         }
 
         foreach (var foreignKey in definition.ForeignKeys)

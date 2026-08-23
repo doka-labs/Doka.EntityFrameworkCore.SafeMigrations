@@ -10,7 +10,8 @@ internal static class SafeMigrationColumnRepairHelper
 
         return expected.IsNullable
             || expected.DefaultValue.Kind != SafeMigrationDefaultValueKind.None
-            || expected.ComputedColumnSql is not null;
+            || expected.ComputedColumnSql is not null
+            || expected.ComputedExpression is not null;
     }
 
     public static bool CanSafelyAlterColumn(
@@ -30,8 +31,11 @@ internal static class SafeMigrationColumnRepairHelper
             && oldDefinition.IsRowVersion == targetDefinition.IsRowVersion
             && oldDefinition.Precision == targetDefinition.Precision
             && oldDefinition.Scale == targetDefinition.Scale
-            && StringComparer.Ordinal.Equals(oldDefinition.Collation, targetDefinition.Collation)
+            && Equals(oldDefinition.Collation, targetDefinition.Collation)
             && StringComparer.Ordinal.Equals(oldDefinition.ComputedColumnSql, targetDefinition.ComputedColumnSql)
+            && SafeMigrationSqlExpressionContract.Equivalent(
+                oldDefinition.ComputedExpression,
+                targetDefinition.ComputedExpression)
             && oldDefinition.IsStored == targetDefinition.IsStored;
     }
 }

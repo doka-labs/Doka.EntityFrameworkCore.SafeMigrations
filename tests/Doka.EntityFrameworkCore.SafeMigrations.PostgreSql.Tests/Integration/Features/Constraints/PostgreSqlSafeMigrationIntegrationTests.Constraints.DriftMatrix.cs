@@ -5,7 +5,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ObservableConstraintFacetDrift_IsRejectedOneFieldAtATime()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE constraint_matrix_parents ("
@@ -28,10 +28,12 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             "uq_constraint_matrix_code",
             "constraint_matrix_children",
             ["code", "alternate_code"]);
-        canonical.AddCheckConstraintIfNotExists(
-            "ck_constraint_matrix_quantity",
-            "constraint_matrix_children",
-            "quantity >= 0");
+        canonical.EnsureCheckConstraint(
+            ExpectedCheckConstraintDefinition.FromExpression(
+                "ck_constraint_matrix_quantity",
+                "constraint_matrix_children",
+                SqlColumnAndInt("quantity", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0)),
+            SafeMigrationPolicy.ThrowIfDifferent);
         canonical.AddForeignKeyIfNotExists(
             "fk_constraint_matrix_parent",
             "constraint_matrix_children",
@@ -49,8 +51,9 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             .AnalyzeAsync(context, canonical.Operations, new SafeMigrationRunOptions("constraint-matrix-canonical"));
 
         Assert.Equal(SafeMigrationReportStatus.Ready, canonicalReport.Status);
-        Assert.All(canonicalReport.Assessments, assessment =>
-            Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState));
+        Assert.All(
+            canonicalReport.Assessments,
+            assessment => Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState));
 
         var strictDefinition = CreateStrictConstraintMatrixTable(ReferentialAction.SetNull);
         var strict = new MigrationBuilder(context.Database.ProviderName!);
@@ -64,7 +67,10 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             .AnalyzeAsync(context, strict.Operations, new SafeMigrationRunOptions("constraint-matrix-strict"));
 
         Assert.Equal(SafeMigrationReportStatus.Ready, strictReport.Status);
-        Assert.Equal(SafeMigrationObservedState.Matching, Assert.Single(strictReport.Assessments).ObservedState);
+        Assert.Equal(
+            SafeMigrationObservedState.Matching,
+            Assert.Single(strictReport.Assessments)
+                .ObservedState);
 
         var strictDrift = new MigrationBuilder(context.Database.ProviderName!);
         strictDrift.EnsureTable(
@@ -82,7 +88,8 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         Assert.Equal(SafeMigrationReportStatus.Blocked, strictDriftReport.Status);
         Assert.Equal(
             SafeMigrationObservedState.Different,
-            Assert.Single(strictDriftReport.Assessments).ObservedState);
+            Assert.Single(strictDriftReport.Assessments)
+                .ObservedState);
 
         var variants = new List<IReadOnlyList<MigrationOperation>>();
 
@@ -101,10 +108,12 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         variants.Add(uniqueColumnOrder.Operations);
 
         var checkExpression = new MigrationBuilder(context.Database.ProviderName!);
-        checkExpression.AddCheckConstraintIfNotExists(
-            "ck_constraint_matrix_quantity",
-            "constraint_matrix_children",
-            "quantity > 0");
+        checkExpression.EnsureCheckConstraint(
+            ExpectedCheckConstraintDefinition.FromExpression(
+                "ck_constraint_matrix_quantity",
+                "constraint_matrix_children",
+                SqlColumnAndInt("quantity", SafeMigrationSqlBinaryOperator.GreaterThan, 0)),
+            SafeMigrationPolicy.ThrowIfDifferent);
         variants.Add(checkExpression.Operations);
 
         var dependentColumnOrder = new MigrationBuilder(context.Database.ProviderName!);
@@ -183,12 +192,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         [
             new ExpectedColumnDefinition("id", typeof(int), false, "integer"),
             new ExpectedColumnDefinition("alternate_id", typeof(int), false, "integer"),
-            new ExpectedColumnDefinition(
-                "code",
-                typeof(string),
-                true,
-                "character varying(30)",
-                maxLength: 30),
+            new ExpectedColumnDefinition("code", typeof(string), true, "character varying(30)", maxLength: 30),
             new ExpectedColumnDefinition(
                 "alternate_code",
                 typeof(string),
@@ -199,11 +203,13 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             new ExpectedColumnDefinition("parent_id", typeof(int), true, "integer"),
             new ExpectedColumnDefinition("alternate_parent_id", typeof(int), true, "integer"),
         ],
-        primaryKey: new ExpectedPrimaryKeyDefinition(
+        primaryKey:
+        new ExpectedPrimaryKeyDefinition(
             "pk_constraint_matrix_children",
             "constraint_matrix_children",
             ["id", "alternate_id"]),
-        uniqueConstraints:
+        uniqueConstraints
+        :
         [
             new ExpectedUniqueConstraintDefinition(
                 "uq_constraint_matrix_code",
@@ -212,10 +218,10 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         ],
         checkConstraints:
         [
-            new ExpectedCheckConstraintDefinition(
+            ExpectedCheckConstraintDefinition.FromExpression(
                 "ck_constraint_matrix_quantity",
                 "constraint_matrix_children",
-                "quantity >= 0"),
+                SqlColumnAndInt("quantity", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0)),
         ],
         foreignKeys:
         [

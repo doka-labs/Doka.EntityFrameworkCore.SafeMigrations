@@ -15,10 +15,11 @@ internal static partial class SafeMigrationDefinitionEquivalence
         && left.IsRowVersion == right.IsRowVersion
         && left.Precision == right.Precision
         && left.Scale == right.Scale
-        && StringComparer.Ordinal.Equals(left.Collation, right.Collation)
+        && Equals(left.Collation, right.Collation)
         && StringComparer.Ordinal.Equals(left.Comment, right.Comment)
         && DefaultValue(left.DefaultValue, right.DefaultValue)
         && StringComparer.Ordinal.Equals(left.ComputedColumnSql, right.ComputedColumnSql)
+        && SafeMigrationSqlExpressionContract.Equivalent(left.ComputedExpression, right.ComputedExpression)
         && left.IsStored == right.IsStored;
 
     private static bool DefaultValue(
@@ -27,7 +28,8 @@ internal static partial class SafeMigrationDefinitionEquivalence
     )
     {
         if (left.Kind != right.Kind
-            || !StringComparer.Ordinal.Equals(left.SqlExpression, right.SqlExpression))
+            || !StringComparer.Ordinal.Equals(left.SqlExpression, right.SqlExpression)
+            || !SafeMigrationSqlExpressionContract.Equivalent(left.StructuredExpression, right.StructuredExpression))
         {
             return false;
         }

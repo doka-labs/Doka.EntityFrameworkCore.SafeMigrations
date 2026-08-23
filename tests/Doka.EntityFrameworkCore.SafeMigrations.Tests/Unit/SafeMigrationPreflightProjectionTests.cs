@@ -22,6 +22,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 SafeMigrationAction.RejectDifferent,
                 SafeMigrationAction.RejectUnsupported,
                 SafeMigrationAction.RejectDataBlocked,
+                SafeMigrationAction.RejectPrerequisiteMissing,
             });
         projection.Observe(operation, analysis, decision);
     }

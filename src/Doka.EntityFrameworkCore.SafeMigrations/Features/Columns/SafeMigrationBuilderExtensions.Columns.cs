@@ -34,7 +34,10 @@ public static partial class SafeMigrationBuilderExtensions
     /// <param name="computedColumnSql">The computed-column SQL expression, or null when absent.</param>
     /// <param name="fixedLength">The fixed-length facet, or null when unspecified.</param>
     /// <param name="comment">The expected database comment, or null when unspecified.</param>
-    /// <param name="collation">The expected database collation, or null when unspecified.</param>
+    /// <param name="collation">
+    /// The expected database collation identity. Null requires the effective
+    /// provider-inferred default and never disables comparison.
+    /// </param>
     /// <param name="precision">The numeric precision, or null when unspecified.</param>
     /// <param name="scale">The numeric scale, or null when unspecified.</param>
     /// <param name="stored">Whether the computed column is stored, or null when unspecified.</param>
@@ -56,7 +59,7 @@ public static partial class SafeMigrationBuilderExtensions
         string? computedColumnSql = null,
         bool? fixedLength = null,
         string? comment = null,
-        string? collation = null,
+        SafeMigrationCollationIdentifier? collation = null,
         int? precision = null,
         int? scale = null,
         bool? stored = null,

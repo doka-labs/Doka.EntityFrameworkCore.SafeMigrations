@@ -5,34 +5,7 @@ public sealed partial class SafeMigrationDefinitionTests
     [Fact]
     public void DefaultValueSupportsEveryDocumentedLiteralFamily()
     {
-        object?[] values =
-        [
-            null,
-            true,
-            (byte)1,
-            (sbyte)-1,
-            (short)-2,
-            (ushort)2,
-            -3,
-            (uint)3,
-            -4L,
-            4UL,
-            1.25m,
-            1.5f,
-            1.75d,
-            "value",
-            'x',
-            new byte[] { 1 },
-            Guid.Empty,
-            new DateOnly(2026, 8, 17),
-            new TimeOnly(12, 30),
-            DateTime.UnixEpoch,
-            DateTimeOffset.UnixEpoch,
-            TimeSpan.FromMinutes(1),
-            DayOfWeek.Monday,
-        ];
-
-        foreach (var value in values)
+        foreach (var value in SafeMigrationLiteralContract.CreateRepresentativeValues())
         {
             Assert.Equal(
                 SafeMigrationDefaultValueKind.Literal,
@@ -46,10 +19,12 @@ public sealed partial class SafeMigrationDefinitionTests
     {
         Assert.Throws<ArgumentNullException>(() => SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(null!));
         Assert.True(SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(RepairColumn(isNullable: true)));
-        Assert.True(SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(
-            RepairColumn(defaultValue: SafeMigrationDefaultValue.Literal(1m))));
-        Assert.True(SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(
-            RepairColumn(computedColumnSql: "1 + 1", isStored: true)));
+        Assert.True(
+            SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(
+                RepairColumn(defaultValue: SafeMigrationDefaultValue.Literal(1m))));
+        Assert.True(
+            SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(
+                RepairColumn(computedColumnSql: "1 + 1", isStored: true)));
         Assert.False(SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(RepairColumn()));
 
         var baseline = RepairColumn(isNullable: true, comment: "legacy");
@@ -113,7 +88,7 @@ public sealed partial class SafeMigrationDefinitionTests
         isRowVersion,
         precision,
         scale,
-        collation,
+        collation is null ? null : new SafeMigrationCollationIdentifier(collation),
         comment,
         defaultValue ?? SafeMigrationDefaultValue.None,
         computedColumnSql,

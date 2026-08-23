@@ -9,22 +9,12 @@ public sealed partial class SafeMigrationContractFingerprintTests
         var second = new SafeMigrationOperation(new DropSchemaIntent("legacy"), SafeMigrationPolicy.ThrowIfDifferent);
 
         Assert.NotEqual(
-            SafeMigrationContractFingerprint.Create(
-            [
-                first,
-                second
-            ]),
-            SafeMigrationContractFingerprint.Create(
-            [
-                second,
-                first
-            ]));
+            SafeMigrationContractFingerprint.Create([first, second]),
+            SafeMigrationContractFingerprint.Create([second, first]));
         Assert.NotEqual(
             SafeMigrationContractFingerprint.Create([first]),
             SafeMigrationContractFingerprint.Create(
-            [
-                new SafeMigrationOperation(first.Intent, SafeMigrationPolicy.ExistenceOnly),
-            ]));
+                [new SafeMigrationOperation(first.Intent, SafeMigrationPolicy.ExistenceOnly),]));
     }
 
     [Fact]
@@ -33,25 +23,31 @@ public sealed partial class SafeMigrationContractFingerprintTests
         var baselineIndex = Fingerprint(new EnsureIndexIntent(Index()));
         var indexVariants = new SafeMigrationIntent[]
         {
-            new EnsureIndexIntent(Index(name: "ix_other")),
-            new EnsureIndexIntent(Index(table: "other")),
+            new EnsureIndexIntent(Index(name: "ix_other")), new EnsureIndexIntent(Index(table: "other")),
             new EnsureIndexIntent(Index(schema: "app")),
             new EnsureIndexIntent(Index(unique: false, nullsDistinct: null)),
             new EnsureIndexIntent(Index(filter: "value IS NOT NULL")),
-            new EnsureIndexIntent(
-                Index(
-                    includedColumns:
-                    [
-                        "payload",
-                        "other"
-                    ])),
-            new EnsureIndexIntent(Index(method: "hash")),
-            new EnsureIndexIntent(Index(nullsDistinct: false)),
+            new EnsureIndexIntent(Index(includedColumns: ["payload", "other"])),
+            new EnsureIndexIntent(Index(method: "hash")), new EnsureIndexIntent(Index(nullsDistinct: false)),
             new EnsureIndexIntent(Index(keys: [new ExpectedIndexKeyDefinition(column: "other")])),
             new EnsureIndexIntent(Index(keys: [new ExpectedIndexKeyDefinition(expression: "lower(value)")])),
-            new EnsureIndexIntent(Index(keys: [new ExpectedIndexKeyDefinition(column: "value", descending: true)])),
+            new EnsureIndexIntent(
+                Index(
+                    keys:
+                    [
+                        new ExpectedIndexKeyDefinition(
+                            column: "value",
+                            sortOrder: SafeMigrationIndexSortOrder.Descending)
+                    ])),
             new EnsureIndexIntent(Index(keys: [new ExpectedIndexKeyDefinition(column: "value", prefixLength: 8)])),
-            new EnsureIndexIntent(Index(keys: [new ExpectedIndexKeyDefinition(column: "value", collation: "binary")])),
+            new EnsureIndexIntent(
+                Index(
+                    keys:
+                    [
+                        new ExpectedIndexKeyDefinition(
+                            column: "value",
+                            collation: new SafeMigrationCollationIdentifier("binary"))
+                    ])),
             new EnsureIndexIntent(
                 Index(keys: [new ExpectedIndexKeyDefinition(column: "value", operatorClass: "text_ops")])),
         };
@@ -60,14 +56,7 @@ public sealed partial class SafeMigrationContractFingerprintTests
 
         AssertDifferent(
             new EnsurePrimaryKeyIntent(new ExpectedPrimaryKeyDefinition("pk", "items", ["id"])),
-            new EnsurePrimaryKeyIntent(
-                new ExpectedPrimaryKeyDefinition(
-                    "pk",
-                    "items",
-                    [
-                        "tenant_id",
-                        "id"
-                    ])));
+            new EnsurePrimaryKeyIntent(new ExpectedPrimaryKeyDefinition("pk", "items", ["tenant_id", "id"])));
         AssertDifferent(
             new EnsureUniqueConstraintIntent(new ExpectedUniqueConstraintDefinition("uq", "items", ["value"])),
             new EnsureUniqueConstraintIntent(new ExpectedUniqueConstraintDefinition("uq_other", "items", ["value"])));

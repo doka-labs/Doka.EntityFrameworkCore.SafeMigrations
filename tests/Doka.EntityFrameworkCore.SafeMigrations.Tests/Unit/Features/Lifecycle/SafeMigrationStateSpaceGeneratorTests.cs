@@ -1,5 +1,3 @@
-using Doka.EntityFrameworkCore.SafeMigrations.Testing;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 public sealed class SafeMigrationStateSpaceGeneratorTests
@@ -69,24 +67,10 @@ public sealed class SafeMigrationStateSpaceGeneratorTests
         new(
             "column",
             [
-                "missing_subset",
-                "matching",
-                "single_drift",
-                "multiple_drift",
+                "missing_subset", "matching", "single_drift", "multiple_drift",
             ]),
-        new(
-            "relations",
-            [
-                "missing",
-                "matching",
-                "different",
-            ]),
-        new(
-            "extras",
-            [
-                "none",
-                "unknown_objects",
-            ]),
+        new("relations", ["missing", "matching", "different",]),
+        new("extras", ["none", "unknown_objects",]),
         new(
             "data",
             [
@@ -99,24 +83,10 @@ public sealed class SafeMigrationStateSpaceGeneratorTests
         new(
             "history",
             [
-                "none",
-                "legacy",
-                "partial_failure",
-                "complete_core",
+                "none", "legacy", "partial_failure", "complete_core",
             ]),
-        new(
-            "parallelism",
-            [
-                "separate_databases",
-                "same_database",
-            ]),
-        new(
-            "context",
-            [
-                "canonical",
-                "derived_matching",
-                "derived_different",
-            ]),
+        new("parallelism", ["separate_databases", "same_database",]),
+        new("context", ["canonical", "derived_matching", "derived_different",]),
     ];
 
     private static string Serialize(
@@ -128,6 +98,7 @@ public sealed class SafeMigrationStateSpaceGeneratorTests
     ) => string.Join(
         "|",
         scenario
-            .Values.OrderBy(static pair => pair.Key, StringComparer.Ordinal)
+            .Values
+            .OrderBy(static pair => pair.Key, StringComparer.Ordinal)
             .Select(static pair => $"{pair.Key}={pair.Value}"));
 }

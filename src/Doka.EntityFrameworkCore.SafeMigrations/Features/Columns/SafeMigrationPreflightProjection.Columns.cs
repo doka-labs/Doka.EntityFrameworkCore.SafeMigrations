@@ -33,9 +33,11 @@ internal sealed partial class SafeMigrationPreflightProjection
         SafeMigrationProviderAnalysis liveAnalysis
     ) => TryGet(intent.Table, intent.Schema, out var table)
         ? Analysis(
-            !table.Columns.ContainsKey(intent.Name) ? SafeMigrationObservedState.Missing :
-            table.Columns.ContainsKey(intent.NewName) ? SafeMigrationObservedState.Different :
-            SafeMigrationObservedState.Matching)
+            !table.Columns.ContainsKey(intent.Name)
+                ? SafeMigrationObservedState.Missing
+                : table.Columns.ContainsKey(intent.NewName)
+                    ? SafeMigrationObservedState.Different
+                    : SafeMigrationObservedState.Matching)
         : liveAnalysis;
 
     private void Observe(
@@ -159,16 +161,37 @@ internal sealed partial class SafeMigrationPreflightProjection
 
             ReplaceValues(
                 Columns,
-                value => value.ComputedColumnSql is null
-                    ? value
-                    : Copy(value, computedColumnSql: RenameIdentifier(value.ComputedColumnSql, source, target)));
+                value => value.ComputedColumnSql is not null
+                    ? Copy(
+                        value,
+                        computedExpression: SafeMigrationSql.OpaqueAfterRename(value.ComputedColumnSql),
+                        replaceComputed: true)
+                    : value.ComputedExpression is not null
+                        ? Copy(
+                            value,
+                            computedExpression: SafeMigrationSqlExpressionInspector.RenameIdentifier(
+                                value.ComputedExpression,
+                                source,
+                                target),
+                            replaceComputed: true)
+                        : value);
 
             PrimaryKey = PrimaryKey is null
                 ? null
                 : Copy(PrimaryKey, columns: Rename(PrimaryKey.Columns, source, target));
 
             ReplaceValues(UniqueConstraints, value => Copy(value, columns: Rename(value.Columns, source, target)));
-            ReplaceValues(CheckConstraints, value => Copy(value, sql: RenameIdentifier(value.Sql, source, target)));
+            ReplaceValues(
+                CheckConstraints,
+                value => value.Sql is not null
+                    ? Copy(value, expression: SafeMigrationSql.OpaqueAfterRename(value.Sql), replaceExpression: true)
+                    : Copy(
+                        value,
+                        expression: SafeMigrationSqlExpressionInspector.RenameIdentifier(
+                            value.Expression!,
+                            source,
+                            target),
+                        replaceExpression: true));
             ReplaceValues(
                 ForeignKeys,
                 value => Copy(
@@ -183,7 +206,15 @@ internal sealed partial class SafeMigrationPreflightProjection
                 value => Copy(
                     value,
                     keys: value.Keys.Select(key => Copy(key, source, target)),
-                    filter: value.Filter is null ? null : RenameIdentifier(value.Filter, source, target)));
+                    structuredFilter: value.Filter is not null
+                        ? SafeMigrationSql.OpaqueAfterRename(value.Filter)
+                        : value.StructuredFilter is null
+                            ? null
+                            : SafeMigrationSqlExpressionInspector.RenameIdentifier(
+                                value.StructuredFilter,
+                                source,
+                                target),
+                    replaceFilter: value.Filter is not null || value.StructuredFilter is not null));
         }
 
         public void RenamePrincipalColumn(

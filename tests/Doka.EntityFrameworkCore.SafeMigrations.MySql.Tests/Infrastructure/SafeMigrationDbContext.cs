@@ -42,7 +42,7 @@ public class SafeMigrationDbContext : DbContext
 
         if (_registerSafeMigrations)
         {
-            optionsBuilder.UseMySqlSafeMigrations();
+            optionsBuilder.UseMySqlSafeMigrations<SafeMigrationDbContext>();
         }
     }
 }

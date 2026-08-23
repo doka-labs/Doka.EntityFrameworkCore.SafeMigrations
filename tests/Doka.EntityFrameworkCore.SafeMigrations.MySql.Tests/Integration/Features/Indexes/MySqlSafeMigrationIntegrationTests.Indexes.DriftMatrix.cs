@@ -5,7 +5,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ObservableIndexFacetDrift_IsRejectedOneFieldAtATime()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `index_facets` ("
@@ -15,7 +15,10 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             "ix_index_facets",
             "index_facets",
             [
-                new ExpectedIndexKeyDefinition(column: "value", descending: true, prefixLength: 12),
+                new ExpectedIndexKeyDefinition(
+                    column: "value",
+                    sortOrder: SafeMigrationIndexSortOrder.Descending,
+                    prefixLength: 12),
                 new ExpectedIndexKeyDefinition(column: "id"),
             ],
             method: "BTREE");
@@ -27,26 +30,49 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         var variants = new[]
         {
-            new ExpectedIndexDefinition(canonical.Name, canonical.Table, canonical.Keys, unique: true, method: "BTREE"),
-            new ExpectedIndexDefinition(canonical.Name, canonical.Table, canonical.Keys, method: "HASH"),
             new ExpectedIndexDefinition(
                 canonical.Name,
                 canonical.Table,
-                [new ExpectedIndexKeyDefinition(column: "value", descending: true, prefixLength: 12)],
+                canonical.Keys,
+                unique: true,
                 method: "BTREE"),
             new ExpectedIndexDefinition(
                 canonical.Name,
                 canonical.Table,
                 [
+                    new ExpectedIndexKeyDefinition(column: "value", prefixLength: 12),
                     new ExpectedIndexKeyDefinition(column: "id"),
-                    new ExpectedIndexKeyDefinition(column: "value", descending: true, prefixLength: 12),
+                ],
+                method: "HASH"),
+            new ExpectedIndexDefinition(
+                canonical.Name,
+                canonical.Table,
+                [
+                    new ExpectedIndexKeyDefinition(
+                        column: "value",
+                        sortOrder: SafeMigrationIndexSortOrder.Descending,
+                        prefixLength: 12)
                 ],
                 method: "BTREE"),
             new ExpectedIndexDefinition(
                 canonical.Name,
                 canonical.Table,
                 [
-                    new ExpectedIndexKeyDefinition(column: "alternate_id", descending: true, prefixLength: 12),
+                    new ExpectedIndexKeyDefinition(column: "id"),
+                    new ExpectedIndexKeyDefinition(
+                        column: "value",
+                        sortOrder: SafeMigrationIndexSortOrder.Descending,
+                        prefixLength: 12),
+                ],
+                method: "BTREE"),
+            new ExpectedIndexDefinition(
+                canonical.Name,
+                canonical.Table,
+                [
+                    new ExpectedIndexKeyDefinition(
+                        column: "alternate_id",
+                        sortOrder: SafeMigrationIndexSortOrder.Descending,
+                        prefixLength: 12),
                     new ExpectedIndexKeyDefinition(column: "id"),
                 ],
                 method: "BTREE"),
@@ -62,7 +88,10 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 canonical.Name,
                 canonical.Table,
                 [
-                    new ExpectedIndexKeyDefinition(column: "value", descending: true, prefixLength: 13),
+                    new ExpectedIndexKeyDefinition(
+                        column: "value",
+                        sortOrder: SafeMigrationIndexSortOrder.Descending,
+                        prefixLength: 13),
                     new ExpectedIndexKeyDefinition(column: "id"),
                 ],
                 method: "BTREE"),
@@ -88,7 +117,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task UnsupportedIndexFacetMatrix_FailsClosedBeforeTargetDdl()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE `unsupported_index_facets` (`value` varchar(80) NULL);");
         await using var context = CreateContext(connectionString);
         var definitions = new[]
@@ -112,7 +141,11 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             new ExpectedIndexDefinition(
                 "ix_unsupported_collation",
                 "unsupported_index_facets",
-                [new ExpectedIndexKeyDefinition(column: "value", collation: "utf8mb4_bin")]),
+                [
+                    new ExpectedIndexKeyDefinition(
+                        column: "value",
+                        collation: new SafeMigrationCollationIdentifier("utf8mb4_bin"))
+                ]),
             new ExpectedIndexDefinition(
                 "ix_unsupported_operator",
                 "unsupported_index_facets",
@@ -146,13 +179,13 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task FunctionalIndexExpressionDrift_IsRejectedWhenTheEngineSupportsIt()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE `functional_drift` (`value` varchar(80) NULL);");
         await using var context = CreateContext(connectionString);
         var canonical = new ExpectedIndexDefinition(
             "ix_functional_drift",
             "functional_drift",
-            [new ExpectedIndexKeyDefinition(expression: "lower(value)")]);
+            [new ExpectedIndexKeyDefinition(structuredExpression: SqlFunction("lower", "value"))]);
         var create = new MigrationBuilder(context.Database.ProviderName!);
         create.EnsureIndex(canonical, SafeMigrationPolicy.ThrowIfDifferent);
 
@@ -176,7 +209,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             new ExpectedIndexDefinition(
                 canonical.Name,
                 canonical.Table,
-                [new ExpectedIndexKeyDefinition(expression: "upper(value)")]),
+                [new ExpectedIndexKeyDefinition(structuredExpression: SqlFunction("upper", "value"))]),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var report = await context

@@ -7,25 +7,29 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
 {
     private readonly PostgreSqlSafeMigrationCatalogSqlBuilder _catalogSqlBuilder;
-    private readonly NpgsqlMigrationsSqlGenerator _npgsqlGenerator;
+    private readonly IPostgreSqlSafeMigrationsBaselineGenerator _baselineGenerator;
+    private readonly PostgreSqlSafeMigrationSqlExpressionRenderer _expressionRenderer;
     private readonly ISqlGenerationHelper _sqlGenerationHelper;
+    private readonly IRelationalTypeMappingSource _typeMappingSource;
 
     /// <summary>Initializes the composed SafeMigrations generator.</summary>
-    /// <param name="npgsqlGenerator">The standard Npgsql migrations SQL generator.</param>
+    /// <param name="baselineGenerator">The configured standard PostgreSQL migrations SQL generator.</param>
     /// <param name="typeMappingSource">The provider relational type-mapping service.</param>
     /// <param name="sqlGenerationHelper">The provider SQL identifier-generation service.</param>
     public PostgreSqlSafeMigrationsSqlGenerator(
-        NpgsqlMigrationsSqlGenerator npgsqlGenerator,
+        IPostgreSqlSafeMigrationsBaselineGenerator baselineGenerator,
         IRelationalTypeMappingSource typeMappingSource,
         ISqlGenerationHelper sqlGenerationHelper
     )
     {
-        ArgumentNullException.ThrowIfNull(npgsqlGenerator);
+        ArgumentNullException.ThrowIfNull(baselineGenerator);
         ArgumentNullException.ThrowIfNull(typeMappingSource);
         ArgumentNullException.ThrowIfNull(sqlGenerationHelper);
 
-        _npgsqlGenerator = npgsqlGenerator;
+        _baselineGenerator = baselineGenerator;
         _sqlGenerationHelper = sqlGenerationHelper;
+        _typeMappingSource = typeMappingSource;
+        _expressionRenderer = new PostgreSqlSafeMigrationSqlExpressionRenderer(typeMappingSource, sqlGenerationHelper);
         _catalogSqlBuilder = new PostgreSqlSafeMigrationCatalogSqlBuilder(typeMappingSource, sqlGenerationHelper);
     }
 
@@ -43,7 +47,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         {
             if (operation is not SafeMigrationOperation safeOperation)
             {
-                commands.AddRange(_npgsqlGenerator.Generate([operation], model, options));
+                commands.AddRange(_baselineGenerator.Generate([operation], model, options));
                 continue;
             }
 
@@ -57,7 +61,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
 
             var guardedSql = BuildGuardedSql(safeOperation, runtimePlan, baseline);
             var sqlOperation = new SqlOperation { Sql = guardedSql };
-            commands.AddRange(_npgsqlGenerator.Generate([sqlOperation], model, options));
+            commands.AddRange(_baselineGenerator.Generate([sqlOperation], model, options));
         }
 
         return commands.AsReadOnly();
@@ -79,12 +83,76 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             && RequiresCustomIndexSql(index.Definition))
         {
             var operation = new SqlOperation { Sql = BuildCustomCreateIndexSql(index.Definition) };
-            return _npgsqlGenerator.Generate([operation], model, options);
+            return _baselineGenerator.Generate([operation], model, options);
         }
 
-        var standardOperation = SafeMigrationStandardOperationFactory.Create(intent);
+        var standardOperation = SafeMigrationStandardOperationFactory.Create(
+            intent,
+            _expressionRenderer.Render,
+            static collation => collation.Schema is null ? collation.Name : null);
 
-        return _npgsqlGenerator.Generate([standardOperation], model, options);
+        var operations = new List<MigrationOperation> { standardOperation };
+        foreach (var (table, schema, definition) in QualifiedColumnCollations(intent))
+        {
+            operations.Add(
+                new SqlOperation
+                {
+                    Sql = BuildQualifiedColumnCollationSql(table, schema, definition),
+                });
+        }
+
+        return _baselineGenerator.Generate(operations, model, options);
+    }
+
+    private static IEnumerable<(string Table, string? Schema, ExpectedColumnDefinition Definition)>
+        QualifiedColumnCollations(
+            SafeMigrationIntent intent
+        ) => intent switch
+        {
+            EnsureTableIntent value => value
+                .Definition
+                .Columns
+                .Where(static definition => definition.Collation?.Schema is not null)
+                .Select(definition => (value.Definition.Table, value.Definition.Schema, definition)),
+            EnsureColumnIntent { Definition.Collation.Schema: not null } value =>
+            [
+                (value.Table, value.Schema, value.Definition)
+            ],
+            AlterColumnIntent { Definition.Collation.Schema: not null } value =>
+            [
+                (value.Table, value.Schema, value.Definition)
+            ],
+            _ => [],
+        };
+
+    private string BuildQualifiedColumnCollationSql(
+        string table,
+        string? schema,
+        ExpectedColumnDefinition definition
+    )
+    {
+        var mapping = _typeMappingSource.FindMapping(
+                definition.ClrType,
+                definition.StoreType,
+                keyOrIndex: false,
+                unicode: definition.IsUnicode,
+                size: definition.MaxLength,
+                rowVersion: definition.IsRowVersion,
+                fixedLength: definition.IsFixedLength,
+                precision: definition.Precision,
+                scale: definition.Scale)
+            ?? throw new NotSupportedException($"PostgreSQL has no type mapping for column '{definition.Name}'.");
+        var storeType = definition.StoreType ?? mapping.StoreType;
+
+        return "ALTER TABLE "
+            + Qualified(table, schema)
+            + " ALTER COLUMN "
+            + _sqlGenerationHelper.DelimitIdentifier(definition.Name)
+            + " TYPE "
+            + storeType
+            + " COLLATE "
+            + Delimited(definition.Collation!)
+            + ";";
     }
 
     private static string BuildGuardedSql(
@@ -93,65 +161,81 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         IReadOnlyList<MigrationCommand> baseline
     )
     {
-        var baselineSql = string.Join(
-            Environment.NewLine,
-            baseline.Select(static command => EnsureTerminated(command.CommandText)));
+        var baselineBuilder = new StringBuilder();
+        for (var index = 0; index < baseline.Count; index++)
+        {
+            if (index > 0)
+            {
+                baselineBuilder.Append('\n');
+            }
+
+            baselineBuilder.Append(EnsureTerminated(baseline[index].CommandText));
+        }
+
+        var baselineSql = baselineBuilder.ToString();
 
         var tag = SelectDollarTag(
-            baselineSql + runtimePlan.StateExpression + runtimePlan.RepairPrecondition + runtimePlan.Postcondition);
+            baselineSql,
+            runtimePlan.PrerequisiteExpression,
+            runtimePlan.StateExpression,
+            runtimePlan.RepairPrecondition,
+            runtimePlan.Postcondition);
 
         // The selected dollar tag cannot occur in embedded SQL, so provider
         // output cannot terminate the anonymous block accidentally.
         var builder = new StringBuilder()
             .Append("DO ")
             .Append(tag)
-            .AppendLine()
-            .AppendLine("DECLARE")
-            .AppendLine("    doka_state text;")
-            .AppendLine("    doka_action text;")
-            .AppendLine("    doka_repair_ok boolean;")
-            .AppendLine("BEGIN")
-            .Append("    doka_state := (")
+            .Append("\nDECLARE\n")
+            .Append("    doka_state text;\n")
+            .Append("    doka_action text;\n")
+            .Append("    doka_repair_ok boolean;\n")
+            .Append("BEGIN\n")
+            .Append("    IF NOT COALESCE((")
+            .Append(runtimePlan.PrerequisiteExpression)
+            .Append("), FALSE) THEN\n")
+            .Append("        doka_state := 'prerequisite_missing';\n")
+            .Append("        doka_repair_ok := FALSE;\n")
+            .Append("    ELSE\n")
+            .Append("        doka_state := (")
             .Append(runtimePlan.StateExpression)
-            .AppendLine(");")
-            .Append("    doka_repair_ok := COALESCE((")
+            .Append(");\n")
+            .Append("        doka_repair_ok := COALESCE((")
             .Append(runtimePlan.RepairPrecondition)
-            .AppendLine("), FALSE);")
+            .Append("), FALSE);\n")
+            .Append("    END IF;\n")
             .Append("    doka_action := ")
             .Append(BuildActionCase(operation, runtimePlan.RepairCapability))
-            .AppendLine(";")
-            .AppendLine("    IF doka_action = 'reject_different' THEN")
-            .AppendLine("        RAISE EXCEPTION USING ERRCODE = 'P1001', MESSAGE = 'doka_sm_different';")
-            .AppendLine("    ELSIF doka_action = 'reject_unsupported' THEN")
-            .AppendLine("        RAISE EXCEPTION USING ERRCODE = 'P1002', MESSAGE = 'doka_sm_unsupported';")
-            .AppendLine("    ELSIF doka_action = 'reject_data_blocked' THEN")
-            .AppendLine("        RAISE EXCEPTION USING ERRCODE = 'P1003', MESSAGE = 'doka_sm_data_blocked';")
-            .AppendLine("    ELSIF doka_action IN ('apply', 'repair') THEN");
+            .Append(";\n")
+            .Append("    IF doka_action = 'reject_different' THEN\n")
+            .Append("        RAISE EXCEPTION USING ERRCODE = 'P1001', MESSAGE = 'doka_sm_different';\n")
+            .Append("    ELSIF doka_action = 'reject_unsupported' THEN\n")
+            .Append("        RAISE EXCEPTION USING ERRCODE = 'P1002', MESSAGE = 'doka_sm_unsupported';\n")
+            .Append("    ELSIF doka_action = 'reject_data_blocked' THEN\n")
+            .Append("        RAISE EXCEPTION USING ERRCODE = 'P1003', MESSAGE = 'doka_sm_data_blocked';\n")
+            .Append("    ELSIF doka_action = 'reject_prerequisite_missing' THEN\n")
+            .Append("        RAISE EXCEPTION USING ERRCODE = 'P1004', MESSAGE = 'doka_sm_prerequisite_missing';\n")
+            .Append("    ELSIF doka_action IN ('apply', 'repair') THEN\n");
 
         if (baseline.Count == 0)
         {
-            builder.AppendLine("        NULL;");
+            builder.Append("        NULL;\n");
         }
         else
         {
-            foreach (var line in baselineSql.Split(Environment.NewLine, StringSplitOptions.None))
-            {
-                builder
-                    .Append("        ")
-                    .AppendLine(line);
-            }
+            AppendIndentedLines(builder, baselineSql);
         }
 
         builder
-            .AppendLine("        IF NOT COALESCE((")
+            .Append("        IF NOT COALESCE((\n")
             .Append("            ")
             .Append(runtimePlan.Postcondition)
-            .AppendLine()
-            .AppendLine("        ), FALSE) THEN")
-            .AppendLine("            RAISE EXCEPTION USING ERRCODE = 'P1004', MESSAGE = 'doka_sm_postcondition';")
-            .AppendLine("        END IF;")
-            .AppendLine("    END IF;")
-            .AppendLine("END")
+            .Append('\n')
+            .Append("        ), FALSE) THEN\n")
+            .Append("            RAISE EXCEPTION USING ERRCODE = 'P1005', MESSAGE = 'doka_sm_postcondition';\n")
+            .Append("        END IF;\n")
+            .Append("    END IF;\n")
+            .Append("END\n")
             .Append(tag)
             .Append(';');
 
@@ -206,6 +290,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         SafeMigrationObservedState.Different => "different",
         SafeMigrationObservedState.Unsupported => "unsupported",
         SafeMigrationObservedState.DataBlocked => "data_blocked",
+        SafeMigrationObservedState.PrerequisiteMissing => "prerequisite_missing",
         _ => throw new ArgumentOutOfRangeException(nameof(state)),
     };
 
@@ -219,6 +304,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         SafeMigrationAction.RejectDifferent => "reject_different",
         SafeMigrationAction.RejectUnsupported => "reject_unsupported",
         SafeMigrationAction.RejectDataBlocked => "reject_data_blocked",
+        SafeMigrationAction.RejectPrerequisiteMissing => "reject_prerequisite_missing",
         _ => throw new ArgumentOutOfRangeException(nameof(action)),
     };
 
@@ -231,16 +317,51 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         : $"{sql.TrimEnd()};";
 
     private static string SelectDollarTag(
-        string sql
+        params ReadOnlySpan<string> sqlParts
     )
     {
         for (var suffix = 0; ; suffix++)
         {
             var tag = suffix == 0 ? "$doka_safe_migration$" : $"$doka_safe_migration_{suffix}$";
-            if (!sql.Contains(tag, StringComparison.Ordinal))
+            var collision = false;
+            foreach (var sql in sqlParts)
+            {
+                if (sql.Contains(tag, StringComparison.Ordinal))
+                {
+                    collision = true;
+                    break;
+                }
+            }
+
+            if (!collision)
             {
                 return tag;
             }
+        }
+    }
+
+    private static void AppendIndentedLines(
+        StringBuilder builder,
+        string sql
+    )
+    {
+        var start = 0;
+        while (start <= sql.Length)
+        {
+            var newline = sql.IndexOf('\n', start);
+            var length = newline < 0 ? sql.Length - start : newline - start;
+
+            builder
+                .Append("        ")
+                .Append(sql, start, length)
+                .Append('\n');
+
+            if (newline < 0)
+            {
+                return;
+            }
+
+            start = newline + 1;
         }
     }
 }

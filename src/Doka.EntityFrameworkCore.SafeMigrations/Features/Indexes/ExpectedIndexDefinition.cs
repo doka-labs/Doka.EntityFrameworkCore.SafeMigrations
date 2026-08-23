@@ -8,23 +8,35 @@ public sealed class ExpectedIndexKeyDefinition
     /// <summary>Initializes an expected index key.</summary>
     /// <param name="column">The column name.</param>
     /// <param name="expression">The index or check expression, or null when absent.</param>
-    /// <param name="descending">The ordered descending flags, or null for ascending keys.</param>
+    /// <param name="sortOrder">The requested sort direction.</param>
+    /// <param name="nullOrder">The requested null placement.</param>
     /// <param name="prefixLength">The index prefix length, or null when unspecified.</param>
-    /// <param name="collation">The expected database collation, or null when unspecified.</param>
+    /// <param name="collation">
+    /// The expected collation identity, or null for the provider-default key
+    /// semantics. Null never disables comparison.
+    /// </param>
     /// <param name="operatorClass">The provider operator class, or null when unspecified.</param>
+    /// <param name="structuredExpression">The structured functional-key expression, or null when absent.</param>
     public ExpectedIndexKeyDefinition(
         string? column = null,
         string? expression = null,
-        bool descending = false,
+        SafeMigrationIndexSortOrder sortOrder = SafeMigrationIndexSortOrder.ProviderDefault,
+        SafeMigrationIndexNullOrder nullOrder = SafeMigrationIndexNullOrder.ProviderDefault,
         int? prefixLength = null,
-        string? collation = null,
-        string? operatorClass = null
+        SafeMigrationCollationIdentifier? collation = null,
+        string? operatorClass = null,
+        SafeMigrationSqlExpression? structuredExpression = null
     )
     {
         Column = SafeMigrationDefinitionValidator.Optional(column, nameof(column));
         Expression = SafeMigrationDefinitionValidator.Optional(expression, nameof(expression));
+        StructuredExpression = structuredExpression;
 
-        if ((Column is null) == (Expression is null))
+        var expressionCount = (Column is null ? 0 : 1)
+            + (Expression is null ? 0 : 1)
+            + (StructuredExpression is null ? 0 : 1);
+
+        if (expressionCount != 1)
         {
             throw new ArgumentException("Exactly one of column or expression must be specified.");
         }
@@ -34,9 +46,20 @@ public sealed class ExpectedIndexKeyDefinition
             throw new ArgumentOutOfRangeException(nameof(prefixLength), "Prefix length must be positive.");
         }
 
-        Descending = descending;
+        if (!Enum.IsDefined(sortOrder))
+        {
+            throw new ArgumentOutOfRangeException(nameof(sortOrder));
+        }
+
+        if (!Enum.IsDefined(nullOrder))
+        {
+            throw new ArgumentOutOfRangeException(nameof(nullOrder));
+        }
+
+        SortOrder = sortOrder;
+        NullOrder = nullOrder;
         PrefixLength = prefixLength;
-        Collation = SafeMigrationDefinitionValidator.Optional(collation, nameof(collation));
+        Collation = collation;
         OperatorClass = SafeMigrationDefinitionValidator.Optional(operatorClass, nameof(operatorClass));
     }
 
@@ -46,14 +69,20 @@ public sealed class ExpectedIndexKeyDefinition
     /// <summary>Gets the expression for a functional key.</summary>
     public string? Expression { get; }
 
-    /// <summary>Gets whether this key part is descending.</summary>
-    public bool Descending { get; }
+    /// <summary>Gets the structured functional-key expression when specified.</summary>
+    public SafeMigrationSqlExpression? StructuredExpression { get; }
+
+    /// <summary>Gets the requested sort direction.</summary>
+    public SafeMigrationIndexSortOrder SortOrder { get; }
+
+    /// <summary>Gets the requested null placement.</summary>
+    public SafeMigrationIndexNullOrder NullOrder { get; }
 
     /// <summary>Gets the index prefix length when specified.</summary>
     public int? PrefixLength { get; }
 
-    /// <summary>Gets the key collation when specified.</summary>
-    public string? Collation { get; }
+    /// <summary>Gets the key collation identity when specified.</summary>
+    public SafeMigrationCollationIdentifier? Collation { get; }
 
     /// <summary>Gets the operator class when specified.</summary>
     public string? OperatorClass { get; }
@@ -74,6 +103,7 @@ public sealed class ExpectedIndexDefinition
     /// <param name="includedColumns">The non-key columns included by the index.</param>
     /// <param name="method">The provider index method, or null when unspecified.</param>
     /// <param name="nullsDistinct">The unique-index null-distinctness setting, or null when unspecified.</param>
+    /// <param name="structuredFilter">The structured filter expression, or null when unfiltered.</param>
     public ExpectedIndexDefinition(
         string name,
         string table,
@@ -83,7 +113,8 @@ public sealed class ExpectedIndexDefinition
         string? filter = null,
         IEnumerable<string>? includedColumns = null,
         string? method = null,
-        bool? nullsDistinct = null
+        bool? nullsDistinct = null,
+        SafeMigrationSqlExpression? structuredFilter = null
     )
     {
         Name = SafeMigrationDefinitionValidator.Required(name, nameof(name));
@@ -92,6 +123,15 @@ public sealed class ExpectedIndexDefinition
         Keys = SafeMigrationDefinitionValidator.Definitions(keys, nameof(keys), allowEmpty: false);
         Unique = unique;
         Filter = SafeMigrationDefinitionValidator.Optional(filter, nameof(filter));
+        StructuredFilter = structuredFilter;
+        if (Filter is not null
+            && StructuredFilter is not null)
+        {
+            throw new ArgumentException(
+                "An index filter must use either opaque SQL or a structured expression, not both.",
+                nameof(structuredFilter));
+        }
+
         IncludedColumns = SafeMigrationDefinitionValidator.Identifiers(
             includedColumns ?? [],
             nameof(includedColumns),
@@ -138,6 +178,9 @@ public sealed class ExpectedIndexDefinition
 
     /// <summary>Gets the filter expression when specified.</summary>
     public string? Filter { get; }
+
+    /// <summary>Gets the structured filter expression when specified.</summary>
+    public SafeMigrationSqlExpression? StructuredFilter { get; }
 
     /// <summary>Gets non-key columns included by the index.</summary>
     public IReadOnlyList<string> IncludedColumns { get; }

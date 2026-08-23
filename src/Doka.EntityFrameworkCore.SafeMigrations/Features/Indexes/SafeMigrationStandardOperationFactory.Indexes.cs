@@ -3,11 +3,12 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 internal static partial class SafeMigrationStandardOperationFactory
 {
     private static CreateIndexOperation CreateOperation(
-        EnsureIndexIntent intent
+        EnsureIndexIntent intent,
+        Func<SafeMigrationSqlExpression, string>? renderExpression
     )
     {
         var definition = intent.Definition;
-        if (definition.Keys.Any(static key => key.Expression is not null))
+        if (definition.Keys.Any(static key => key.Expression is not null || key.StructuredExpression is not null))
         {
             throw new NotSupportedException(
                 "Functional index keys require a provider-specific baseline operation contract.");
@@ -19,12 +20,15 @@ internal static partial class SafeMigrationStandardOperationFactory
             Table = definition.Table,
             Schema = definition.Schema,
             Columns = definition
-                .Keys.Select(static key => key.Column!)
+                .Keys
+                .Select(static key => key.Column!)
                 .ToArray(),
             IsUnique = definition.Unique,
-            Filter = definition.Filter,
+            Filter = definition.Filter
+                ?? (definition.StructuredFilter is null ? null : Render(definition.StructuredFilter, renderExpression)),
             IsDescending = definition
-                .Keys.Select(static key => key.Descending)
+                .Keys
+                .Select(static key => key.SortOrder == SafeMigrationIndexSortOrder.Descending)
                 .ToArray(),
         };
     }

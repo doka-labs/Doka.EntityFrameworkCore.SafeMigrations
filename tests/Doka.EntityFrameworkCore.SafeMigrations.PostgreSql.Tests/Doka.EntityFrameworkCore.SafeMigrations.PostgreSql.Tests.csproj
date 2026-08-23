@@ -1,7 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <Compile Include="..\Shared\SafeMigrationLiteralContract.cs"
+             Link="Infrastructure\SafeMigrationLiteralContract.cs" />
     <Compile Include="..\Shared\SafeMigrationStateSpaceGenerator.cs"
              Link="Infrastructure\SafeMigrationStateSpaceGenerator.cs" />
+    <Compile Include="..\Shared\LivePerformanceEvidence.cs"
+             Link="Infrastructure\LivePerformanceEvidence.cs" />
     <ProjectReference Include="..\..\src\Doka.EntityFrameworkCore.SafeMigrations\Doka.EntityFrameworkCore.SafeMigrations.csproj" />
     <ProjectReference Include="..\..\src\Doka.EntityFrameworkCore.SafeMigrations.PostgreSql\Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.csproj" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
@@ -9,6 +13,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

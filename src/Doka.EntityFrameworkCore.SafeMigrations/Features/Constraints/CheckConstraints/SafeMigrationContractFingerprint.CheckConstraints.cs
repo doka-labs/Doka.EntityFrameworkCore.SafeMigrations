@@ -24,5 +24,6 @@ public static partial class SafeMigrationContractFingerprint
         WriteTableIdentity(writer, definition.Table, definition.Schema);
         writer.Add(definition.Name);
         writer.Add(definition.Sql);
+        SafeMigrationSqlExpressionContract.Write(writer, definition.Expression);
     }
 }

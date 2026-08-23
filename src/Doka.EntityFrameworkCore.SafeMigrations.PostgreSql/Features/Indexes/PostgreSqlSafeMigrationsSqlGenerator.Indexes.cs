@@ -22,7 +22,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator
         {
             builder
                 .Append(" USING ")
-                .Append(DelimitedPath(definition.Method));
+                .Append(_sqlGenerationHelper.DelimitIdentifier(definition.Method));
         }
 
         builder.Append(" (");
@@ -35,13 +35,15 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator
 
             var key = definition.Keys[index];
             builder.Append(
-                key.Column is not null ? _sqlGenerationHelper.DelimitIdentifier(key.Column) : $"({key.Expression})");
+                key.Column is not null
+                    ? _sqlGenerationHelper.DelimitIdentifier(key.Column)
+                    : $"({_expressionRenderer.Render(key.StructuredExpression ?? SafeMigrationSql.Opaque(key.Expression!))})");
 
             if (key.Collation is not null)
             {
                 builder
                     .Append(" COLLATE ")
-                    .Append(DelimitedPath(key.Collation));
+                    .Append(Delimited(key.Collation));
             }
 
             if (key.OperatorClass is not null)
@@ -51,10 +53,23 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator
                     .Append(DelimitedPath(key.OperatorClass));
             }
 
-            if (key.Descending)
-            {
-                builder.Append(" DESC");
-            }
+            builder.Append(
+                key.SortOrder switch
+                {
+                    SafeMigrationIndexSortOrder.ProviderDefault => string.Empty,
+                    SafeMigrationIndexSortOrder.Ascending => " ASC",
+                    SafeMigrationIndexSortOrder.Descending => " DESC",
+                    _ => throw new ArgumentOutOfRangeException(nameof(definition)),
+                });
+
+            builder.Append(
+                key.NullOrder switch
+                {
+                    SafeMigrationIndexNullOrder.ProviderDefault => string.Empty,
+                    SafeMigrationIndexNullOrder.First => " NULLS FIRST",
+                    SafeMigrationIndexNullOrder.Last => " NULLS LAST",
+                    _ => throw new ArgumentOutOfRangeException(nameof(definition)),
+                });
         }
 
         builder.Append(')');
@@ -71,11 +86,12 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator
             builder.Append(" NULLS NOT DISTINCT");
         }
 
-        if (definition.Filter is not null)
+        if (definition.Filter is not null
+            || definition.StructuredFilter is not null)
         {
             builder
                 .Append(" WHERE ")
-                .Append(definition.Filter);
+                .Append(definition.Filter ?? _expressionRenderer.Render(definition.StructuredFilter!));
         }
 
         var sql = builder
@@ -107,12 +123,21 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator
             .Split('.', StringSplitOptions.RemoveEmptyEntries)
             .Select(_sqlGenerationHelper.DelimitIdentifier));
 
+    private string Delimited(
+        SafeMigrationCollationIdentifier value
+    ) => value.Schema is null
+        ? _sqlGenerationHelper.DelimitIdentifier(value.Name)
+        : _sqlGenerationHelper.DelimitIdentifier(value.Name, value.Schema);
+
     private static bool RequiresCustomIndexSql(
         ExpectedIndexDefinition definition
     ) => definition.Keys.Any(static key => key.Expression is not null
+            || key.StructuredExpression is not null
             || key.Collation is not null
             || key.OperatorClass is not null)
         || definition.IncludedColumns.Count > 0
         || definition.Method is not null
+        || definition.StructuredFilter is not null
+        || definition.Keys.Any(static key => key.NullOrder != SafeMigrationIndexNullOrder.ProviderDefault)
         || definition.NullsDistinct is not null;
 }

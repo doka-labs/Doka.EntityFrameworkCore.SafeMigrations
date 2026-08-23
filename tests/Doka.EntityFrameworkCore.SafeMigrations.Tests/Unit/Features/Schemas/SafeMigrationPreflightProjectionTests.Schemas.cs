@@ -5,11 +5,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Fact]
     public void SchemaProjection_PreservesTheProviderClassification()
     {
-        SafeMigrationIntent[] intents =
-        [
-            new EnsureSchemaIntent("app"),
-            new DropSchemaIntent("app"),
-        ];
+        SafeMigrationIntent[] intents = [new EnsureSchemaIntent("app"), new DropSchemaIntent("app"),];
 
         var projection = new SafeMigrationPreflightProjection();
 

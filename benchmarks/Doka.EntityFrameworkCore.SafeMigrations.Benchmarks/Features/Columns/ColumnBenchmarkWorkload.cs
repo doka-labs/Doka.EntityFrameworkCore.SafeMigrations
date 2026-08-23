@@ -77,7 +77,7 @@ internal static class ColumnBenchmarkWorkload
             "benchmark-instance",
             new SafeMigrationProviderEnvironment("benchmark", "mysql", "10.0.0"),
             "202608170001_Benchmark",
-            new string('a', 64),
+            $"safe-relational-model:v1:benchmark:sha256:{new string('a', 64)}",
             new string('b', 64),
             assessments);
     }

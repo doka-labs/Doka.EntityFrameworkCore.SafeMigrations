@@ -60,21 +60,23 @@ public sealed partial class SafeMigrationBuilderExtensionsTests
             Name = "orders",
         };
 
-        operation.Columns.Add(new AddColumnOperation
-        {
-            Name = "customer_id",
-            Table = "orders",
-            ClrType = typeof(int),
-            IsNullable = false,
-        });
+        operation.Columns.Add(
+            new AddColumnOperation
+            {
+                Name = "customer_id",
+                Table = "orders",
+                ClrType = typeof(int),
+                IsNullable = false,
+            });
 
-        operation.ForeignKeys.Add(new AddForeignKeyOperation
-        {
-            Name = "fk_orders_customers",
-            Table = "orders",
-            Columns = ["customer_id"],
-            PrincipalTable = "customers",
-        });
+        operation.ForeignKeys.Add(
+            new AddForeignKeyOperation
+            {
+                Name = "fk_orders_customers",
+                Table = "orders",
+                Columns = ["customer_id"],
+                PrincipalTable = "customers",
+            });
 
         var exception = Assert.Throws<InvalidOperationException>(() =>
             SafeMigrationExpectedDefinitionFactory.From(operation));

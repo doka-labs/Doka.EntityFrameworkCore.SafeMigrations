@@ -19,7 +19,7 @@ internal static partial class SafeMigrationExpectedDefinitionFactory
             operation.IsRowVersion,
             operation.Precision,
             operation.Scale,
-            operation.Collation,
+            operation.Collation is null ? null : new SafeMigrationCollationIdentifier(operation.Collation),
             operation.Comment,
             CaptureDefault(operation),
             operation.ComputedColumnSql,

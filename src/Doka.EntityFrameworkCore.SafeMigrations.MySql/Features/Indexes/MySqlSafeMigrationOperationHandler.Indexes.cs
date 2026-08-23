@@ -51,11 +51,18 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
             {
                 builder
                     .Append("((")
-                    .Append(key.Expression)
+                    .Append(key.Expression ?? _expressionRenderer.Render(key.StructuredExpression!))
                     .Append("))");
             }
 
-            builder.Append(key.Descending ? " DESC" : " ASC");
+            builder.Append(
+                key.SortOrder switch
+                {
+                    SafeMigrationIndexSortOrder.ProviderDefault => string.Empty,
+                    SafeMigrationIndexSortOrder.Ascending => " ASC",
+                    SafeMigrationIndexSortOrder.Descending => " DESC",
+                    _ => throw new ArgumentOutOfRangeException(nameof(definition)),
+                });
         }
 
         return builder

@@ -41,6 +41,22 @@ public static partial class SafeMigrationContractFingerprint
         return writer.GetHash();
     }
 
+    internal static void Validate(
+        string fingerprint,
+        string parameterName
+    )
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(fingerprint, parameterName);
+
+        if (fingerprint.Length != 64
+            || fingerprint.Any(static value => value is not (>= '0' and <= '9') and not (>= 'a' and <= 'f')))
+        {
+            throw new ArgumentException(
+                "The contract fingerprint must contain exactly 64 lowercase hexadecimal characters.",
+                parameterName);
+        }
+    }
+
     private static void WriteIntent(
         CanonicalHashWriter writer,
         SafeMigrationIntent intent
@@ -137,94 +153,5 @@ public static partial class SafeMigrationContractFingerprint
         {
             writer.Add(value);
         }
-    }
-
-    private sealed class CanonicalHashWriter : IDisposable
-    {
-        private readonly IncrementalHash _hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        private bool _completed;
-
-        public void Add(
-            string? value
-        )
-        {
-            if (value is null)
-            {
-                Add(-1);
-                return;
-            }
-
-            var maximumLength = Encoding.UTF8.GetMaxByteCount(value.Length);
-            var rented = ArrayPool<byte>.Shared.Rent(maximumLength);
-            try
-            {
-                var length = Encoding.UTF8.GetBytes(value, rented);
-
-                // Length-prefixing makes adjacent strings unambiguous without
-                // allocating a delimiter-escaped intermediate representation.
-                Add(length);
-                _hash.AppendData(rented.AsSpan(0, length));
-            }
-            finally
-            {
-                ArrayPool<byte>.Shared.Return(rented, clearArray: true);
-            }
-        }
-
-        public void Add(
-            int value
-        )
-        {
-            Span<byte> bytes = stackalloc byte[sizeof(int)];
-            BinaryPrimitives.WriteInt32BigEndian(bytes, value);
-            _hash.AppendData(bytes);
-        }
-
-        public void Add(
-            int? value
-        )
-        {
-            Add(value.HasValue);
-            if (value.HasValue)
-            {
-                Add(value.Value);
-            }
-        }
-
-        public void Add(
-            bool value
-        ) => Add(value ? 1 : 0);
-
-        public void Add(
-            bool? value
-        )
-        {
-            Add(value.HasValue);
-            if (value.HasValue)
-            {
-                Add(value.Value);
-            }
-        }
-
-        public void Add(
-            byte[] bytes
-        )
-        {
-            Add(bytes.Length);
-            _hash.AppendData(bytes);
-        }
-
-        public string GetHash()
-        {
-            if (_completed)
-            {
-                throw new InvalidOperationException("The contract fingerprint has already been finalized.");
-            }
-
-            _completed = true;
-            return Convert.ToHexStringLower(_hash.GetHashAndReset());
-        }
-
-        public void Dispose() => _hash.Dispose();
     }
 }

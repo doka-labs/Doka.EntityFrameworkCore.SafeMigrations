@@ -3,9 +3,45 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 public sealed partial class PostgreSqlSafeMigrationIntegrationTests
 {
     [Fact]
+    public async Task NullCollation_MeansProviderInferredDefaultAndNeverWildcard()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE collation_defaults (inherited text NULL, explicit text COLLATE \"C\" NULL);");
+        await using var context = CreateContext(connectionString);
+        var inherited = new MigrationBuilder(context.Database.ProviderName!);
+        inherited.EnsureColumn(
+            "collation_defaults",
+            new ExpectedColumnDefinition("inherited", typeof(string), true, "text"),
+            SafeMigrationPolicy.ThrowIfDifferent);
+        var explicitDrift = new MigrationBuilder(context.Database.ProviderName!);
+        explicitDrift.EnsureColumn(
+            "collation_defaults",
+            new ExpectedColumnDefinition("explicit", typeof(string), true, "text"),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var inheritedReport = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(context, inherited.Operations, new SafeMigrationRunOptions("inherited-collation"));
+        var driftReport = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(context, explicitDrift.Operations, new SafeMigrationRunOptions("explicit-collation"));
+
+        Assert.Equal(
+            SafeMigrationObservedState.Matching,
+            Assert.Single(inheritedReport.Assessments)
+                .ObservedState);
+        Assert.Equal(
+            SafeMigrationObservedState.Different,
+            Assert.Single(driftReport.Assessments)
+                .ObservedState);
+    }
+
+    [Fact]
     public async Task UnsafeNotNullAdd_FailsBeforeTargetDdl()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE orders (id integer NOT NULL); INSERT INTO orders VALUES (1);");
@@ -29,7 +65,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task RepairIfSafe_RequiresTheLiveColumnToMatchTheDeclaredOldDefinition()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE repair_guard ("
@@ -116,7 +152,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task UnmappedClrType_IsClassifiedUnsupportedBeforeDdl()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE unsupported_values (id integer NOT NULL);");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -146,7 +182,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ComputedCollationAndCommentFacets_ConvergeAndDetectSingleFieldDrift()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE advanced_columns (a integer NOT NULL, b integer NOT NULL);");
@@ -160,7 +196,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 true,
                 "character varying(80)",
                 maxLength: 80,
-                collation: "C",
+                collation: new SafeMigrationCollationIdentifier("C"),
                 comment: "quote ' slash \\ umlaut \u00fc"),
             SafeMigrationPolicy.ThrowIfDifferent);
         builder.EnsureColumn(
@@ -170,8 +206,8 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 typeof(int),
                 true,
                 "integer",
-                computedColumnSql: "a + b",
-                isStored: true),
+                isStored: true,
+                computedExpression: SqlColumnAndColumn("a", SafeMigrationSqlBinaryOperator.Add, "b")),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         await ExecuteOperationsAsync(context, builder.Operations);
@@ -186,7 +222,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 true,
                 "character varying(80)",
                 maxLength: 80,
-                collation: "C",
+                collation: new SafeMigrationCollationIdentifier("C"),
                 comment: "different"),
             SafeMigrationPolicy.ThrowIfDifferent);
         var report = await context
@@ -203,7 +239,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task VirtualGeneratedColumn_IsClassifiedUnsupportedBeforeDdl()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE virtual_values (a integer NOT NULL);");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -214,8 +250,8 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 typeof(int),
                 true,
                 "integer",
-                computedColumnSql: "a + 1",
-                isStored: false),
+                isStored: false,
+                computedExpression: SqlColumnAndInt("a", SafeMigrationSqlBinaryOperator.Add, 1)),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var report = await context
@@ -238,7 +274,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task LiteralDefaultMatrix_ConvergesAndIsIdempotent()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE default_values (id integer NOT NULL);");
         await using var context = CreateContext(connectionString);
         var definitions = new[]
@@ -250,11 +286,29 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 "boolean",
                 defaultValue: SafeMigrationDefaultValue.Literal(true)),
             new ExpectedColumnDefinition(
+                "byte_value",
+                typeof(byte),
+                false,
+                "smallint",
+                defaultValue: SafeMigrationDefaultValue.Literal((byte)7)),
+            new ExpectedColumnDefinition(
+                "sbyte_value",
+                typeof(sbyte),
+                false,
+                "smallint",
+                defaultValue: SafeMigrationDefaultValue.Literal((sbyte)-7)),
+            new ExpectedColumnDefinition(
                 "short_value",
                 typeof(short),
                 false,
                 "smallint",
                 defaultValue: SafeMigrationDefaultValue.Literal((short)-12)),
+            new ExpectedColumnDefinition(
+                "ushort_value",
+                typeof(ushort),
+                false,
+                "integer",
+                defaultValue: SafeMigrationDefaultValue.Literal((ushort)12)),
             new ExpectedColumnDefinition(
                 "integer_value",
                 typeof(int),
@@ -262,11 +316,25 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 "integer",
                 defaultValue: SafeMigrationDefaultValue.Literal(42)),
             new ExpectedColumnDefinition(
+                "uint_value",
+                typeof(uint),
+                false,
+                "bigint",
+                defaultValue: SafeMigrationDefaultValue.Literal(42U)),
+            new ExpectedColumnDefinition(
                 "long_value",
                 typeof(long),
                 false,
                 "bigint",
                 defaultValue: SafeMigrationDefaultValue.Literal(4200L)),
+            new ExpectedColumnDefinition(
+                "ulong_value",
+                typeof(ulong),
+                false,
+                "numeric(20,0)",
+                precision: 20,
+                scale: 0,
+                defaultValue: SafeMigrationDefaultValue.Literal(4200UL)),
             new ExpectedColumnDefinition(
                 "decimal_value",
                 typeof(decimal),
@@ -307,13 +375,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 typeof(byte[]),
                 false,
                 "bytea",
-                defaultValue: SafeMigrationDefaultValue.Literal(
-                    new byte[]
-                    {
-                        1,
-                        2,
-                        3
-                    })),
+                defaultValue: SafeMigrationDefaultValue.Literal(new byte[] { 1, 2, 3 })),
             new ExpectedColumnDefinition(
                 "guid_value",
                 typeof(Guid),
@@ -395,13 +457,29 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 false,
                 "timestamp with time zone",
                 precision: 6,
-                defaultValue: SafeMigrationDefaultValue.Sql("CURRENT_TIMESTAMP")),
+                defaultValue: SafeMigrationDefaultValue.Sql(
+                    SafeMigrationSql.Current(SafeMigrationSqlCurrentValue.Timestamp))),
         };
+
+        var coveredLiteralTypes = definitions
+            .Where(static definition => definition.DefaultValue.Kind == SafeMigrationDefaultValueKind.Literal)
+            .Select(static definition => definition.DefaultValue.LiteralValue)
+            .Where(static value => value is not null)
+            .Select(static value => value!.GetType())
+            .Distinct()
+            .OrderBy(static type => type.FullName, StringComparer.Ordinal)
+            .ToArray();
 
         foreach (var definition in definitions)
         {
             var builder = new MigrationBuilder(context.Database.ProviderName!);
             builder.EnsureColumn("default_values", definition, SafeMigrationPolicy.ThrowIfDifferent);
+            var preflight = await context
+                .GetService<ISafeMigrationRunner>()
+                .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("default-matrix"));
+
+            var assessment = Assert.Single(preflight.Assessments);
+            Assert.Equal(SafeMigrationObservedState.Missing, assessment.ObservedState);
             try
             {
                 await ExecuteOperationsAsync(context, builder.Operations);
@@ -416,6 +494,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             }
         }
 
+        Assert.Equal(SafeMigrationLiteralContract.CreateSupportedNonNullTypes(), coveredLiteralTypes);
         Assert.Equal(
             definitions.Length + 1,
             await ScalarIntAsync(
@@ -430,7 +509,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync();
+        await connection.OpenAsync(CancellationToken.None);
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT pg_catalog.format_type(a.atttypid, a.atttypmod), "
             + "pg_catalog.pg_get_expr(d.adbin, d.adrelid), a.attnotnull, a.attgenerated "
@@ -441,8 +520,8 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             + "WHERE n.nspname = current_schema() AND c.relname = 'default_values' "
             + "AND a.attname = @column;";
         command.Parameters.AddWithValue("column", column);
-        await using var reader = await command.ExecuteReaderAsync();
-        if (!await reader.ReadAsync())
+        await using var reader = await command.ExecuteReaderAsync(CancellationToken.None);
+        if (!await reader.ReadAsync(CancellationToken.None))
         {
             return "missing";
         }

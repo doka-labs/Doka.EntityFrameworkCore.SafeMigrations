@@ -9,6 +9,7 @@ internal static partial class SafeMigrationDefinitionEquivalence
         && StringComparer.Ordinal.Equals(left.Name, right.Name)
         && left.Unique == right.Unique
         && StringComparer.Ordinal.Equals(left.Filter, right.Filter)
+        && SafeMigrationSqlExpressionContract.Equivalent(left.StructuredFilter, right.StructuredFilter)
         && StringComparer.Ordinal.Equals(left.Method, right.Method)
         && left.NullsDistinct == right.NullsDistinct
         && Sequence(left.Keys, right.Keys, IndexKey)
@@ -19,8 +20,10 @@ internal static partial class SafeMigrationDefinitionEquivalence
         ExpectedIndexKeyDefinition right
     ) => StringComparer.Ordinal.Equals(left.Column, right.Column)
         && StringComparer.Ordinal.Equals(left.Expression, right.Expression)
-        && left.Descending == right.Descending
+        && SafeMigrationSqlExpressionContract.Equivalent(left.StructuredExpression, right.StructuredExpression)
+        && left.SortOrder == right.SortOrder
+        && left.NullOrder == right.NullOrder
         && left.PrefixLength == right.PrefixLength
-        && StringComparer.Ordinal.Equals(left.Collation, right.Collation)
+        && Equals(left.Collation, right.Collation)
         && StringComparer.Ordinal.Equals(left.OperatorClass, right.OperatorClass);
 }

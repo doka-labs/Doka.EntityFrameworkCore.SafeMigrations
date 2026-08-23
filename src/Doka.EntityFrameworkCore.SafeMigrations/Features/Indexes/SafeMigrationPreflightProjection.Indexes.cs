@@ -28,9 +28,11 @@ internal sealed partial class SafeMigrationPreflightProjection
         SafeMigrationProviderAnalysis liveAnalysis
     ) => TryGet(intent.Table, intent.Schema, out var table)
         ? Analysis(
-            !table.Indexes.ContainsKey(intent.Name) ? SafeMigrationObservedState.Missing :
-            table.Indexes.ContainsKey(intent.NewName) ? SafeMigrationObservedState.Different :
-            SafeMigrationObservedState.Matching)
+            !table.Indexes.ContainsKey(intent.Name)
+                ? SafeMigrationObservedState.Missing
+                : table.Indexes.ContainsKey(intent.NewName)
+                    ? SafeMigrationObservedState.Different
+                    : SafeMigrationObservedState.Matching)
         : liveAnalysis;
 
     private void Observe(

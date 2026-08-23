@@ -12,7 +12,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var dataBlocked = UniqueConstraintDataBlocked(definition);
 
         return Plan(
-            $"CASE WHEN NOT {BaseTableExists(definition.Table)} THEN 'data_blocked' "
+            $"CASE WHEN NOT {BaseTableExists(definition.Table)} THEN 'prerequisite_missing' "
             + $"WHEN NOT {exists} AND {dataBlocked} THEN 'data_blocked' "
             + $"WHEN NOT {exists} THEN 'missing' "
             + $"WHEN {matching} THEN 'matching' ELSE 'different' END",
@@ -39,7 +39,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     )
     {
         var keys = definition
-            .Columns.Select(Delimited)
+            .Columns
+            .Select(Delimited)
             .ToArray();
 
         var nonNull = string.Join(" AND ", keys.Select(static key => $"{key} IS NOT NULL"));

@@ -35,6 +35,7 @@ public static partial class SafeMigrationContractFingerprint
         writer.Add(definition.Name);
         writer.Add(definition.Unique);
         writer.Add(definition.Filter);
+        SafeMigrationSqlExpressionContract.Write(writer, definition.StructuredFilter);
         writer.Add(definition.Method);
         writer.Add(definition.NullsDistinct);
 
@@ -44,10 +45,12 @@ public static partial class SafeMigrationContractFingerprint
         {
             writer.Add(key.Column);
             writer.Add(key.Expression);
+            SafeMigrationSqlExpressionContract.Write(writer, key.StructuredExpression);
 
-            writer.Add(key.Descending);
+            writer.Add((int)key.SortOrder);
+            writer.Add((int)key.NullOrder);
             writer.Add(key.PrefixLength);
-            writer.Add(key.Collation);
+            WriteCollation(writer, key.Collation);
             writer.Add(key.OperatorClass);
         }
 

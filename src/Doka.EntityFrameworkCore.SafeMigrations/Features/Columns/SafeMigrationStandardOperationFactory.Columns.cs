@@ -3,8 +3,10 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 internal static partial class SafeMigrationStandardOperationFactory
 {
     private static AddColumnOperation CreateOperation(
-        EnsureColumnIntent intent
-    ) => CreateColumn(intent.Table, intent.Schema, intent.Definition);
+        EnsureColumnIntent intent,
+        Func<SafeMigrationSqlExpression, string>? renderExpression,
+        Func<SafeMigrationCollationIdentifier, string?>? renderCollation
+    ) => CreateColumn(intent.Table, intent.Schema, intent.Definition, renderExpression, renderCollation);
 
     private static DropColumnOperation CreateOperation(
         DropColumnIntent intent
@@ -26,7 +28,9 @@ internal static partial class SafeMigrationStandardOperationFactory
     };
 
     private static AlterColumnOperation CreateOperation(
-        AlterColumnIntent intent
+        AlterColumnIntent intent,
+        Func<SafeMigrationSqlExpression, string>? renderExpression,
+        Func<SafeMigrationCollationIdentifier, string?>? renderCollation
     )
     {
         var target = intent.Definition;
@@ -44,9 +48,11 @@ internal static partial class SafeMigrationStandardOperationFactory
             IsNullable = target.IsNullable,
             Precision = target.Precision,
             Scale = target.Scale,
-            Collation = target.Collation,
+            Collation = Render(target.Collation, renderCollation),
             Comment = target.Comment,
-            ComputedColumnSql = target.ComputedColumnSql,
+            ComputedColumnSql =
+                target.ComputedColumnSql
+                ?? (target.ComputedExpression is null ? null : Render(target.ComputedExpression, renderExpression)),
             IsStored = target.IsStored,
             OldColumn = intent.OldDefinition is null
                 ? new AddColumnOperation
@@ -58,17 +64,19 @@ internal static partial class SafeMigrationStandardOperationFactory
                     ColumnType = target.StoreType,
                     IsNullable = target.IsNullable,
                 }
-                : CreateColumn(intent.Table, intent.Schema, intent.OldDefinition),
+                : CreateColumn(intent.Table, intent.Schema, intent.OldDefinition, renderExpression, renderCollation),
         };
 
-        ApplyDefault(operation, target.DefaultValue);
+        ApplyDefault(operation, target.DefaultValue, renderExpression);
         return operation;
     }
 
     private static AddColumnOperation CreateColumn(
         string table,
         string? schema,
-        ExpectedColumnDefinition definition
+        ExpectedColumnDefinition definition,
+        Func<SafeMigrationSqlExpression, string>? renderExpression,
+        Func<SafeMigrationCollationIdentifier, string?>? renderCollation
     )
     {
         var operation = new AddColumnOperation
@@ -85,19 +93,23 @@ internal static partial class SafeMigrationStandardOperationFactory
             IsNullable = definition.IsNullable,
             Precision = definition.Precision,
             Scale = definition.Scale,
-            Collation = definition.Collation,
+            Collation = Render(definition.Collation, renderCollation),
             Comment = definition.Comment,
-            ComputedColumnSql = definition.ComputedColumnSql,
+            ComputedColumnSql = definition.ComputedColumnSql
+                ?? (definition.ComputedExpression is null
+                    ? null
+                    : Render(definition.ComputedExpression, renderExpression)),
             IsStored = definition.IsStored,
         };
 
-        ApplyDefault(operation, definition.DefaultValue);
+        ApplyDefault(operation, definition.DefaultValue, renderExpression);
         return operation;
     }
 
     private static void ApplyDefault(
         ColumnOperation operation,
-        SafeMigrationDefaultValue defaultValue
+        SafeMigrationDefaultValue defaultValue,
+        Func<SafeMigrationSqlExpression, string>? renderExpression
     )
     {
         switch (defaultValue.Kind)
@@ -117,7 +129,8 @@ internal static partial class SafeMigrationStandardOperationFactory
 
                 return;
             case SafeMigrationDefaultValueKind.Sql:
-                operation.DefaultValueSql = defaultValue.SqlExpression;
+                operation.DefaultValueSql = defaultValue.SqlExpression
+                    ?? Render(defaultValue.StructuredExpression!, renderExpression);
                 return;
             default:
                 throw new ArgumentOutOfRangeException(nameof(defaultValue));

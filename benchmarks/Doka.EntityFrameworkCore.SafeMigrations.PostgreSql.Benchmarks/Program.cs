@@ -1,6 +1,10 @@
 using var context = new PostgreSqlGenerationContext();
 
 var generator = context.GetService<IMigrationsSqlGenerator>();
+var catalogBuilder = new PostgreSqlSafeMigrationCatalogSqlBuilder(
+    context.GetService<IRelationalTypeMappingSource>(),
+    context.GetService<ISqlGenerationHelper>());
+
 var runner = BenchmarkRunner.Create(args, "postgresql-results.json");
 
 foreach (var size in new[] { 1, 100, 1000 })
@@ -9,18 +13,57 @@ foreach (var size in new[] { 1, 100, 1000 })
 
     runner.Measure(
         $"postgresql_generation_{size}",
-        () => generator.Generate(operations, context.Model).Count);
+        () => generator.Generate(operations, context.Model)
+            .Count);
+
+    if (size is 1 or 1000)
+    {
+        runner.Measure($"postgresql_analyzer_build_{size}", () => BuildPlans(catalogBuilder, operations));
+    }
 }
 
+runner.Measure(
+    "postgresql_canonical_model_validation",
+    () => SafeMigrationRunner.ValidateCanonicalMigrationModelAndCreateFingerprint(
+            context,
+            "Npgsql.EntityFrameworkCore.PostgreSQL")
+        .Length);
+
+var analyzerOperations = ColumnBenchmarkWorkload.CreateOperations(512);
+runner.Measure("postgresql_analyzer_build_512", () => BuildPlans(catalogBuilder, analyzerOperations));
+
 return runner.Complete();
+
+static int BuildPlans(
+    PostgreSqlSafeMigrationCatalogSqlBuilder catalogBuilder,
+    IReadOnlyList<MigrationOperation> operations
+)
+{
+    var count = 0;
+    foreach (var operation in operations.Cast<SafeMigrationOperation>())
+    {
+        _ = catalogBuilder.Build(operation);
+        count++;
+    }
+
+    return count;
+}
 
 internal sealed class PostgreSqlGenerationContext : DbContext
 {
     protected override void OnConfiguring(
-        DbContextOptionsBuilder optionsBuilder)
+        DbContextOptionsBuilder optionsBuilder
+    )
     {
-        optionsBuilder.UseNpgsql(
-            "Host=127.0.0.1;Port=1;Username=benchmark;Password=benchmark;Database=benchmark");
+        optionsBuilder.UseNpgsql("Host=127.0.0.1;Port=1;Username=benchmark;Password=benchmark;Database=benchmark");
         optionsBuilder.UsePostgreSqlSafeMigrations();
     }
+}
+
+[DbContext(typeof(PostgreSqlGenerationContext))]
+internal sealed class PostgreSqlGenerationContextModelSnapshot : ModelSnapshot
+{
+    protected override void BuildModel(
+        ModelBuilder modelBuilder
+    ) => ArgumentNullException.ThrowIfNull(modelBuilder);
 }

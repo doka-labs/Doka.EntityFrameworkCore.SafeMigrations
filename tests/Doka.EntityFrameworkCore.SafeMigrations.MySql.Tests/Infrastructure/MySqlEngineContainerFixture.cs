@@ -2,19 +2,49 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
 {
-    private readonly string _engine = ReadEnvironment("SAFE_MIGRATIONS_MYSQL_ENGINE", "mariadb");
-    private readonly string _version = ReadEnvironment("SAFE_MIGRATIONS_MYSQL_VERSION", "11.8.8");
+    private const string BootstrapDatabase = "bootstrap";
+    private const string RootPassword = "rootpw";
+    private const string RootUser = "root";
 
-    private readonly string? _configuredImage = Environment
-        .GetEnvironmentVariable("SAFE_MIGRATIONS_MYSQL_IMAGE")
-        ?.Trim();
+    private static readonly TimeSpan s_startupTimeout = TimeSpan.FromMinutes(3);
 
-    private readonly string _containerName = $"safe-migrations-mysql-{Guid.NewGuid():N}";
-    private readonly SemaphoreSlim _databaseLifecycleLock = new(1, 1);
     private readonly List<string> _createdDatabases = [];
     private readonly List<string> _createdUsers = [];
+    private readonly SemaphoreSlim _databaseLifecycleLock = new(1, 1);
+    private readonly string _engine;
+    private readonly MySqlContainer _container;
+    private readonly string _version;
     private bool _disposed;
-    private int _port;
+
+    public MySqlEngineContainerFixture()
+    {
+        _engine = ReadEnvironment("SAFE_MIGRATIONS_MYSQL_ENGINE", "mariadb");
+        _version = ReadEnvironment("SAFE_MIGRATIONS_MYSQL_VERSION", "11.8.8");
+
+        var configuredImage = Environment
+            .GetEnvironmentVariable("SAFE_MIGRATIONS_MYSQL_IMAGE")
+            ?.Trim();
+        var image = string.IsNullOrWhiteSpace(configuredImage) ? $"{_engine}:{_version}" : configuredImage;
+
+        var builder = new MySqlBuilder(image)
+            .WithDatabase(BootstrapDatabase)
+            .WithUsername(RootUser)
+            .WithPassword(RootPassword);
+
+        if (_engine == "mariadb")
+        {
+            builder = builder.WithWaitStrategy(
+                Wait.ForUnixContainer()
+                    .UntilCommandIsCompleted(
+                        "mariadb",
+                        BootstrapDatabase,
+                        "--wait",
+                        "--silent",
+                        "--execute=SELECT 1;"));
+        }
+
+        _container = builder.Build();
+    }
 
     public MySqlServerVersion ServerVersion =>
         _engine switch
@@ -26,54 +56,26 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
 
     public bool IsMariaDb => _engine == "mariadb";
 
-    public string RootConnectionString => BuildConnectionString("bootstrap", "root", "rootpw");
+    private string RootConnectionString => BuildConnectionString(BootstrapDatabase, RootUser, RootPassword);
 
     public async Task InitializeAsync()
     {
-        var image = string.IsNullOrWhiteSpace(_configuredImage) ? $"{_engine}:{_version}" : _configuredImage;
-        var databaseVariable = _engine == "mariadb" ? "MARIADB_DATABASE" : "MYSQL_DATABASE";
-        var passwordVariable = _engine == "mariadb" ? "MARIADB_ROOT_PASSWORD" : "MYSQL_ROOT_PASSWORD";
+        using var startupCancellation = new CancellationTokenSource(s_startupTimeout);
 
-        await RunDockerCommandAsync(
-        [
-            "run",
-            "-d",
-            "--name",
-            _containerName,
-            "-e",
-            $"{passwordVariable}=rootpw",
-            "-e",
-            $"{databaseVariable}=bootstrap",
-            "-p",
-            "0:3306",
-            image,
-        ]);
-
-        var portOutput = await RunDockerCommandAsync(
-        [
-            "port",
-            _containerName,
-            "3306/tcp"
-        ]);
-
-        _port = int.Parse(
-            portOutput
-                .Split(':')
-                .Last(),
-            CultureInfo.InvariantCulture);
-
-        await WaitUntilAvailableAsync();
+        await _container.StartAsync(startupCancellation.Token);
     }
 
     public async Task DisposeAsync()
     {
         Exception? cleanupFailure = null;
+
         try
         {
-            await _databaseLifecycleLock.WaitAsync();
+            await _databaseLifecycleLock.WaitAsync(CancellationToken.None);
+
             try
             {
-                await DropCreatedDatabasesAsync();
+                await DropCreatedDatabasesAsync(CancellationToken.None);
             }
             finally
             {
@@ -87,12 +89,7 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
 
         try
         {
-            await RunDockerCommandAsync(
-            [
-                "rm",
-                "-f",
-                _containerName
-            ]);
+            await _container.DisposeAsync();
         }
         catch (Exception exception)
         {
@@ -118,23 +115,28 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
 
         _databaseLifecycleLock.Dispose();
         _disposed = true;
-        GC.SuppressFinalize(this);
     }
 
-    public async Task<string> CreateDatabaseAsync()
+    public async Task<string> CreateDatabaseAsync(
+        CancellationToken cancellationToken
+    )
     {
-        await _databaseLifecycleLock.WaitAsync();
+        await _databaseLifecycleLock.WaitAsync(cancellationToken);
+
         try
         {
             var databaseName = $"sm_{Guid.NewGuid():N}";
+
             await using var connection = new MySqlConnection(RootConnectionString);
-            await connection.OpenAsync();
+            await connection.OpenAsync(cancellationToken);
+
             await using var command = connection.CreateCommand();
             command.CommandText = $"CREATE DATABASE `{databaseName}`;";
-            await command.ExecuteNonQueryAsync();
+            await command.ExecuteNonQueryAsync(cancellationToken);
+
             _createdDatabases.Add(databaseName);
 
-            return BuildConnectionString(databaseName, "root", "rootpw");
+            return BuildConnectionString(databaseName, RootUser, RootPassword);
         }
         finally
         {
@@ -143,24 +145,26 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
     }
 
     public async Task<string> CreateLeastPrivilegeConnectionStringAsync(
-        string rootConnectionString
+        string rootConnectionString,
+        CancellationToken cancellationToken
     )
     {
         var database = new MySqlConnectionStringBuilder(rootConnectionString).Database;
         var user = $"smu{Guid.NewGuid():N}"[..24];
         var password = $"smp{Guid.NewGuid():N}";
 
-        await _databaseLifecycleLock.WaitAsync();
+        await _databaseLifecycleLock.WaitAsync(cancellationToken);
 
         try
         {
             await using var connection = new MySqlConnection(RootConnectionString);
-            await connection.OpenAsync();
+            await connection.OpenAsync(cancellationToken);
+
             await using var command = connection.CreateCommand();
             command.CommandText = $"CREATE USER `{user}`@'%' IDENTIFIED BY '{password}'; "
-                + $"GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, REFERENCES, "
+                + "GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, REFERENCES, "
                 + $"DROP, CREATE TEMPORARY TABLES ON `{database}`.* TO `{user}`@'%';";
-            await command.ExecuteNonQueryAsync();
+            await command.ExecuteNonQueryAsync(cancellationToken);
 
             _createdUsers.Add(user);
 
@@ -178,8 +182,8 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
         string password
     ) => new MySqlConnectionStringBuilder
     {
-        Server = "127.0.0.1",
-        Port = (uint)_port,
+        Server = _container.Hostname,
+        Port = _container.GetMappedPublicPort(MySqlBuilder.MySqlPort),
         UserID = user,
         Password = password,
         Database = database,
@@ -187,99 +191,35 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
         Pooling = false,
     }.ConnectionString;
 
-    private async Task DropCreatedDatabasesAsync()
+    private async Task DropCreatedDatabasesAsync(
+        CancellationToken cancellationToken
+    )
     {
-        if (_createdDatabases.Count == 0
-            || _port == 0)
+        if (_createdDatabases.Count == 0)
         {
             return;
         }
 
         await using var connection = new MySqlConnection(RootConnectionString);
-        await connection.OpenAsync();
+        await connection.OpenAsync(cancellationToken);
+
         foreach (var database in _createdDatabases)
         {
             await using var command = connection.CreateCommand();
             command.CommandText = $"DROP DATABASE IF EXISTS `{database}`;";
-            await command.ExecuteNonQueryAsync();
+            await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
         _createdDatabases.Clear();
+
         foreach (var user in _createdUsers)
         {
             await using var command = connection.CreateCommand();
             command.CommandText = $"DROP USER IF EXISTS `{user}`@'%';";
-            await command.ExecuteNonQueryAsync();
+            await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
         _createdUsers.Clear();
-    }
-
-    private async Task WaitUntilAvailableAsync()
-    {
-        var timeoutAt = DateTime.UtcNow.AddMinutes(3);
-        Exception? lastException = null;
-        while (DateTime.UtcNow < timeoutAt)
-        {
-            try
-            {
-                var probe = new MySqlConnectionStringBuilder(RootConnectionString)
-                {
-                    ConnectionTimeout = 3,
-                }.ConnectionString;
-
-                await using var connection = new MySqlConnection(probe);
-                await connection.OpenAsync();
-                return;
-            }
-            catch (Exception exception)
-            {
-                lastException = exception;
-                await Task.Delay(1000);
-            }
-        }
-
-        var logs = await RunDockerCommandAsync(
-        [
-            "logs",
-            "--tail",
-            "40",
-            _containerName
-        ]);
-
-        throw new TimeoutException(
-            $"Container '{_containerName}' did not become ready. Logs:{Environment.NewLine}{logs}",
-            lastException);
-    }
-
-    private static async Task<string> RunDockerCommandAsync(
-        IReadOnlyList<string> arguments
-    )
-    {
-        var startInfo = new ProcessStartInfo("docker")
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-        };
-
-        foreach (var argument in arguments)
-        {
-            startInfo.ArgumentList.Add(argument);
-        }
-
-        using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Failed to start Docker.");
-        var outputTask = process.StandardOutput.ReadToEndAsync();
-        var errorTask = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
-        var output = (await outputTask).Trim();
-        var error = (await errorTask).Trim();
-        if (process.ExitCode != 0)
-        {
-            throw new InvalidOperationException($"Docker exited with code {process.ExitCode}: {error}");
-        }
-
-        return output;
     }
 
     private static string ReadEnvironment(

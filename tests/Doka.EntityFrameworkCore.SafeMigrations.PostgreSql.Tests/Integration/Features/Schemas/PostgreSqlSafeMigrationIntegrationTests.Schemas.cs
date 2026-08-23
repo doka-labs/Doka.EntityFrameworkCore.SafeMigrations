@@ -5,7 +5,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task SchemaOperations_AreIdempotent()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var create = new MigrationBuilder(context.Database.ProviderName!);
         create.EnsureSchemaExists("module");
@@ -33,7 +33,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task CrossSchemaConvergence_IsQualifiedIdempotentAndCatalogExact()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE public.qualified_parent (id integer NOT NULL PRIMARY KEY); "
@@ -69,20 +69,14 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             ],
             childSchema,
             primaryKey: new ExpectedPrimaryKeyDefinition("pk_qualified_child", childTable, ["id"], childSchema),
-            uniqueConstraints:
-            [
-                new ExpectedUniqueConstraintDefinition(
-                    "uq_qualified_child_code",
-                    childTable,
-                    ["code"],
-                    childSchema),
-            ],
+            uniqueConstraints
+            : [new ExpectedUniqueConstraintDefinition("uq_qualified_child_code", childTable, ["code"], childSchema),],
             checkConstraints:
             [
-                new ExpectedCheckConstraintDefinition(
+                ExpectedCheckConstraintDefinition.FromExpression(
                     "ck_qualified_child_quantity",
                     childTable,
-                    "quantity >= 0",
+                    SqlColumnAndInt("quantity", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0),
                     childSchema),
             ],
             foreignKeys:
@@ -111,7 +105,9 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                     childTable,
                     [
                         new ExpectedIndexKeyDefinition(column: "parent_id"),
-                        new ExpectedIndexKeyDefinition(column: "parent_alternate_id", descending: true),
+                        new ExpectedIndexKeyDefinition(
+                            column: "parent_alternate_id",
+                            sortOrder: SafeMigrationIndexSortOrder.Descending),
                     ],
                     childSchema),
             ]);
@@ -124,8 +120,9 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("cross-schema-convergence"));
 
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
-        Assert.All(report.Assessments, assessment =>
-            Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState));
+        Assert.All(
+            report.Assessments,
+            assessment => Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState));
         Assert.Equal(
             1,
             await ScalarIntAsync(
@@ -149,7 +146,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task NonDefaultSchemaRenameAndDropMatrix_IsIdempotentAndIsolated()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE SCHEMA lifecycle_module; CREATE SCHEMA lifecycle_archive; "
@@ -174,45 +171,19 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
 
-        builder.RenameColumnIfExists(
-            "old_value",
-            "rename_source",
-            "renamed_value",
-            "lifecycle_module");
+        builder.RenameColumnIfExists("old_value", "rename_source", "renamed_value", "lifecycle_module");
         builder.RenameIndexIfExists(
             "ix_rename_source_old",
             "rename_source",
             "ix_rename_source_new",
             "lifecycle_module");
-        builder.RenameTableIfExists(
-            "rename_source",
-            "renamed_source",
-            "lifecycle_module");
-        builder.RenameTableIfExists(
-            "move_source",
-            "moved_table",
-            "lifecycle_module",
-            "lifecycle_archive");
-        builder.DropForeignKeyIfExists(
-            "fk_lifecycle_target_parent",
-            "lifecycle_target",
-            "lifecycle_module");
-        builder.DropCheckConstraintIfExists(
-            "ck_lifecycle_target_quantity",
-            "lifecycle_target",
-            "lifecycle_module");
-        builder.DropUniqueConstraintIfExists(
-            "uq_lifecycle_target_code",
-            "lifecycle_target",
-            "lifecycle_module");
-        builder.DropPrimaryKeyIfExists(
-            "pk_lifecycle_target",
-            "lifecycle_target",
-            "lifecycle_module");
-        builder.DropIndexIfExists(
-            "ix_lifecycle_target_payload",
-            "lifecycle_target",
-            "lifecycle_module");
+        builder.RenameTableIfExists("rename_source", "renamed_source", "lifecycle_module");
+        builder.RenameTableIfExists("move_source", "moved_table", "lifecycle_module", "lifecycle_archive");
+        builder.DropForeignKeyIfExists("fk_lifecycle_target_parent", "lifecycle_target", "lifecycle_module");
+        builder.DropCheckConstraintIfExists("ck_lifecycle_target_quantity", "lifecycle_target", "lifecycle_module");
+        builder.DropUniqueConstraintIfExists("uq_lifecycle_target_code", "lifecycle_target", "lifecycle_module");
+        builder.DropPrimaryKeyIfExists("pk_lifecycle_target", "lifecycle_target", "lifecycle_module");
+        builder.DropIndexIfExists("ix_lifecycle_target_payload", "lifecycle_target", "lifecycle_module");
         builder.DropColumnIfExists("payload", "lifecycle_target", "lifecycle_module");
         builder.DropTableIfExists("lifecycle_target", "lifecycle_module");
         builder.DropTableIfExists("lifecycle_parent", "lifecycle_module");

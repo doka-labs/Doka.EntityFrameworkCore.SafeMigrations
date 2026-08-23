@@ -4,6 +4,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 {
     private readonly IRelationalTypeMappingSource _typeMappingSource;
     private readonly ISqlGenerationHelper _sqlGenerationHelper;
+    private readonly PostgreSqlSafeMigrationSqlExpressionRenderer _expressionRenderer;
     private readonly RelationalTypeMapping _stringMapping;
     private readonly Func<string, string> _literal;
 
@@ -18,6 +19,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
         _typeMappingSource = typeMappingSource;
         _sqlGenerationHelper = sqlGenerationHelper;
+        _expressionRenderer = new PostgreSqlSafeMigrationSqlExpressionRenderer(typeMappingSource, sqlGenerationHelper);
         _stringMapping = typeMappingSource.FindMapping(typeof(string))
             ?? throw new InvalidOperationException("The PostgreSQL provider has no string type mapping.");
 
@@ -36,7 +38,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             return Unsupported(unsupported);
         }
 
-        return operation.Intent switch
+        var plan = operation.Intent switch
         {
             EnsureSchemaIntent value => BuildEnsureSchema(value),
             DropSchemaIntent value => BuildDropSchema(value),
@@ -64,11 +66,127 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                     .FullName,
                 "Unknown SafeMigrations intent type."),
         };
+
+        return plan with { PrerequisiteExpression = BuildPrerequisiteExpression(operation.Intent) };
+    }
+
+    public string BuildPrerequisiteExpression(
+        SafeMigrationIntent intent
+    )
+    {
+        ArgumentNullException.ThrowIfNull(intent);
+
+        if (GetUnsupportedFeature(intent) is not null)
+        {
+            return "TRUE";
+        }
+
+        return intent switch
+        {
+            EnsureColumnIntent value => TableExists(value.Table, value.Schema),
+            AlterColumnIntent value => TableExists(value.Table, value.Schema),
+            EnsureIndexIntent value => TableExists(value.Definition.Table, value.Definition.Schema),
+            EnsurePrimaryKeyIntent value => TableExists(value.Definition.Table, value.Definition.Schema),
+            EnsureUniqueConstraintIntent value => TableExists(value.Definition.Table, value.Definition.Schema),
+            EnsureCheckConstraintIntent value => TableExists(value.Definition.Table, value.Definition.Schema),
+            EnsureForeignKeyIntent value => $"({TableExists(value.Definition.Table, value.Definition.Schema)}) "
+                + $"AND ({TableExists(value.Definition.PrincipalTable, value.Definition.PrincipalSchema)})",
+            _ => "TRUE",
+        };
     }
 
     private string? GetUnsupportedFeature(
         SafeMigrationIntent intent
-    ) => GetUnsupportedColumnFeature(intent) ?? GetUnsupportedIndexFeature(intent);
+    ) => GetUnsupportedSqlExpressionFeature(intent)
+        ?? GetUnsupportedColumnFeature(intent) ?? GetUnsupportedIndexFeature(intent);
+
+    public string RenderExpression(
+        SafeMigrationSqlExpression expression
+    ) => _expressionRenderer.Render(expression);
+
+    private static string? GetUnsupportedSqlExpressionFeature(
+        SafeMigrationIntent intent
+    )
+    {
+        var expressions = intent switch
+        {
+            EnsureTableIntent value => value
+                .Definition
+                .Columns
+                .SelectMany(ColumnExpressions)
+                .Concat(value.Definition.CheckConstraints.Select(CheckExpression)),
+            EnsureColumnIntent value => ColumnExpressions(value.Definition),
+            AlterColumnIntent value => ColumnExpressions(value.Definition)
+                .Concat(value.OldDefinition is null ? [] : ColumnExpressions(value.OldDefinition)),
+            EnsureIndexIntent value => IndexExpressions(value.Definition),
+            EnsureCheckConstraintIntent value => [CheckExpression(value.Definition)],
+            _ => [],
+        };
+
+        foreach (var expression in expressions)
+        {
+            if (expression is SafeMigrationSqlOpaqueExpression { FollowsIdentifierRename: true })
+            {
+                return "opaque_expression_rename_projection";
+            }
+
+            if (!SafeMigrationSqlExpressionInspector.IsStructurallyComparable(expression))
+            {
+                return "opaque_sql_expression";
+            }
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<SafeMigrationSqlExpression> ColumnExpressions(
+        ExpectedColumnDefinition definition
+    )
+    {
+        if (definition.ComputedColumnSql is not null)
+        {
+            yield return SafeMigrationSql.Opaque(definition.ComputedColumnSql);
+        }
+        else if (definition.ComputedExpression is not null)
+        {
+            yield return definition.ComputedExpression;
+        }
+
+        if (definition.DefaultValue is { Kind: SafeMigrationDefaultValueKind.Sql } defaultValue)
+        {
+            yield return defaultValue.StructuredExpression ?? SafeMigrationSql.Opaque(defaultValue.SqlExpression!);
+        }
+    }
+
+    private static IEnumerable<SafeMigrationSqlExpression> IndexExpressions(
+        ExpectedIndexDefinition definition
+    )
+    {
+        if (definition.Filter is not null)
+        {
+            yield return SafeMigrationSql.Opaque(definition.Filter);
+        }
+        else if (definition.StructuredFilter is not null)
+        {
+            yield return definition.StructuredFilter;
+        }
+
+        foreach (var key in definition.Keys)
+        {
+            if (key.Expression is not null)
+            {
+                yield return SafeMigrationSql.Opaque(key.Expression);
+            }
+            else if (key.StructuredExpression is not null)
+            {
+                yield return key.StructuredExpression;
+            }
+        }
+    }
+
+    private static SafeMigrationSqlExpression CheckExpression(
+        ExpectedCheckConstraintDefinition definition
+    ) => definition.Expression ?? SafeMigrationSql.Opaque(definition.Sql!);
 
     private static PostgreSqlSafeMigrationRuntimePlan Plan(
         string stateExpression,

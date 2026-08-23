@@ -31,7 +31,7 @@ internal static class SafeMigrationTelemetry
     {
         var tags = new TagList
         {
-            { "db.system", engineFamily },
+            { "db.system.name", engineFamily },
             { "safe_migrations.provider", providerId },
             { "safe_migrations.mode", ModeCode(mode) },
             { "safe_migrations.status", StatusCode(status) },

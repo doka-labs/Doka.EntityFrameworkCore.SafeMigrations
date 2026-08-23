@@ -7,5 +7,6 @@ internal static partial class SafeMigrationDefinitionEquivalence
         ExpectedCheckConstraintDefinition right
     ) => Identity(left.Table, left.Schema, right.Table, right.Schema)
         && StringComparer.Ordinal.Equals(left.Name, right.Name)
-        && StringComparer.Ordinal.Equals(left.Sql, right.Sql);
+        && StringComparer.Ordinal.Equals(left.Sql, right.Sql)
+        && SafeMigrationSqlExpressionContract.Equivalent(left.Expression, right.Expression);
 }

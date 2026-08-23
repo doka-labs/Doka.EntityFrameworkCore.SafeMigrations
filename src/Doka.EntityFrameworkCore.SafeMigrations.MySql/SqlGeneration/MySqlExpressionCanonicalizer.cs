@@ -7,74 +7,30 @@ internal static class MySqlExpressionCanonicalizer
         bool IsTopLevelBooleanOperator = false
     );
 
-    public static string QuoteIdentifiers(
-        string expression,
-        ISqlGenerationHelper sqlGenerationHelper
-    )
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(expression);
-        ArgumentNullException.ThrowIfNull(sqlGenerationHelper);
-
-        var builder = new StringBuilder(expression.Length + 16);
-
-        // Quoted tokens are already complete SQL. Only bare identifiers can be
-        // delimited without changing string literals or provider syntax.
-        for (var index = 0; index < expression.Length;)
-        {
-            var current = expression[index];
-            if (current is '\'' or '"' or '`')
-            {
-                index = CopyQuoted(expression, index, builder, current);
-                continue;
-            }
-
-            if (current == '_'
-                || char.IsLetter(current))
-            {
-                var start = index++;
-                while (index < expression.Length
-                       && (expression[index] == '_'
-                           || expression[index] == '$'
-                           || char.IsLetterOrDigit(expression[index])))
-                {
-                    index++;
-                }
-
-                var token = expression[start..index];
-                var next = index;
-                while (next < expression.Length
-                       && char.IsWhiteSpace(expression[next]))
-                {
-                    next++;
-                }
-
-                if (IsKeyword(token)
-                    || next < expression.Length && expression[next] == '(')
-                {
-                    builder.Append(token);
-                }
-                else
-                {
-                    builder.Append(sqlGenerationHelper.DelimitIdentifier(token));
-                }
-
-                continue;
-            }
-
-            builder.Append(current);
-            index++;
-        }
-
-        return builder.ToString();
-    }
-
     public static IReadOnlyList<string> BuildCatalogDisplayCandidates(
-        string quotedExpression
+        string quotedExpression,
+        bool includeMySqlEncodedDisplay
     )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(quotedExpression);
 
-        var tokens = TokenizeCatalogDisplay(quotedExpression);
+        var normalizedExpression = RemoveBalancedOuterParentheses(quotedExpression.Trim());
+        var candidates = BuildCandidates(TokenizeCatalogDisplay(normalizedExpression, encodeForMySqlCatalog: false));
+        if (includeMySqlEncodedDisplay)
+        {
+            candidates.AddRange(
+                BuildCandidates(TokenizeCatalogDisplay(normalizedExpression, encodeForMySqlCatalog: true)));
+        }
+
+        return candidates
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private static List<string> BuildCandidates(
+        IReadOnlyList<CatalogToken> tokens
+    )
+    {
         var flat = string
             .Concat(tokens.Select(static token => token.Text))
             .Trim();
@@ -89,6 +45,7 @@ internal static class MySqlExpressionCanonicalizer
 
         if (tokens.Any(static token => token.IsTopLevelBooleanOperator))
         {
+            var unwrapped = new StringBuilder();
             var builder = new StringBuilder("((");
             var term = new StringBuilder();
             foreach (var token in tokens)
@@ -98,6 +55,20 @@ internal static class MySqlExpressionCanonicalizer
                     term.Append(token.Text);
                     continue;
                 }
+
+                if (unwrapped.Length > 0)
+                {
+                    unwrapped.Append(' ');
+                }
+
+                unwrapped
+                    .Append(
+                        RemoveBalancedOuterParentheses(
+                            term
+                                .ToString()
+                                .Trim()))
+                    .Append(' ')
+                    .Append(token.Text.Trim());
 
                 builder
                     .Append(
@@ -111,6 +82,14 @@ internal static class MySqlExpressionCanonicalizer
                 term.Clear();
             }
 
+            unwrapped
+                .Append(' ')
+                .Append(
+                    RemoveBalancedOuterParentheses(
+                        term
+                            .ToString()
+                            .Trim()));
+
             builder
                 .Append(
                     term
@@ -118,16 +97,16 @@ internal static class MySqlExpressionCanonicalizer
                         .Trim())
                 .Append("))");
 
+            candidates.Add(unwrapped.ToString());
             candidates.Add(builder.ToString());
         }
 
-        return candidates
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
+        return candidates;
     }
 
     private static List<CatalogToken> TokenizeCatalogDisplay(
-        string expression
+        string expression,
+        bool encodeForMySqlCatalog
     )
     {
         var tokens = new List<CatalogToken>();
@@ -153,7 +132,8 @@ internal static class MySqlExpressionCanonicalizer
             if (current == '`')
             {
                 var end = FindQuotedEnd(expression, index, current);
-                tokens.Add(new CatalogToken(RenderCatalogIdentifier(expression[index..end])));
+                var token = expression[index..end];
+                tokens.Add(new CatalogToken(encodeForMySqlCatalog ? RenderMySqlCatalogIdentifier(token) : token));
                 index = end;
                 continue;
             }
@@ -161,7 +141,8 @@ internal static class MySqlExpressionCanonicalizer
             if (current is '\'' or '"')
             {
                 var end = FindQuotedEnd(expression, index, current);
-                tokens.Add(new CatalogToken(RenderCatalogString(expression[index..end], current)));
+                var token = expression[index..end];
+                tokens.Add(new CatalogToken(encodeForMySqlCatalog ? RenderMySqlCatalogString(token, current) : token));
                 index = end;
                 continue;
             }
@@ -244,24 +225,28 @@ internal static class MySqlExpressionCanonicalizer
         throw new ArgumentException("The SQL expression contains an unterminated quoted token.", nameof(expression));
     }
 
-    private static string RenderCatalogIdentifier(
+    private static string RenderMySqlCatalogIdentifier(
         string token
     )
     {
+        // MySQL 8 can expose UTF-8 expression tokens through a single-byte
+        // INFORMATION_SCHEMA display. This encoded form is only an additional
+        // MySQL catalog candidate; the canonical token remains authoritative,
+        // and MariaDB does not opt into this candidate path.
         var escaped = token[1..^1]
             .Replace("\\", "\\\\", StringComparison.Ordinal)
             .Replace("'", "\\'", StringComparison.Ordinal);
 
-        var rendered = Encoding.Latin1.GetString(Encoding.UTF8.GetBytes(escaped));
-
-        return $"`{rendered}`";
+        return $"`{Encoding.Latin1.GetString(Encoding.UTF8.GetBytes(escaped))}`";
     }
 
-    private static string RenderCatalogString(
+    private static string RenderMySqlCatalogString(
         string token,
         char quote
     )
     {
+        // Keep literals on the same catalog-display path as quoted identifiers
+        // so one server-rendered expression is compared under one encoding rule.
         var inner = token[1..^1]
             .Replace(new string(quote, 2), quote.ToString(), StringComparison.Ordinal)
             .Replace("\\", "\\\\", StringComparison.Ordinal)
@@ -272,80 +257,83 @@ internal static class MySqlExpressionCanonicalizer
         return $@"_utf8mb4\'{rendered}\'";
     }
 
-    private static int CopyQuoted(
-        string expression,
-        int index,
-        StringBuilder builder,
-        char quote
+    private static string RemoveBalancedOuterParentheses(
+        string expression
     )
     {
-        builder.Append(quote);
-        index++;
-        while (index < expression.Length)
+        while (expression.Length >= 2
+               && expression[0] == '('
+               && expression[^1] == ')'
+               && OuterParenthesesEncloseExpression(expression))
+        {
+            expression = expression[1..^1]
+                .Trim();
+        }
+
+        return expression;
+    }
+
+    private static bool OuterParenthesesEncloseExpression(
+        string expression
+    )
+    {
+        var depth = 0;
+        var quote = '\0';
+        for (var index = 0; index < expression.Length; index++)
         {
             var current = expression[index];
-            builder.Append(current);
-            index++;
-            if (current == '\\'
-                && quote != '`'
-                && index < expression.Length)
+            if (quote != '\0')
             {
-                builder.Append(expression[index]);
-                index++;
-            }
-            else if (current == quote)
-            {
-                if (index < expression.Length
-                    && expression[index] == quote)
+                if (current == '\\'
+                    && quote != '`'
+                    && index + 1 < expression.Length)
                 {
-                    builder.Append(expression[index]);
                     index++;
+                    continue;
                 }
-                else
+
+                if (current == quote)
                 {
-                    return index;
+                    if (index + 1 < expression.Length
+                        && expression[index + 1] == quote)
+                    {
+                        index++;
+                    }
+                    else
+                    {
+                        quote = '\0';
+                    }
                 }
+
+                continue;
+            }
+
+            if (current is '\'' or '"' or '`')
+            {
+                quote = current;
+                continue;
+            }
+
+            if (current == '(')
+            {
+                depth++;
+            }
+            else if (current == ')')
+            {
+                depth--;
+                if (depth == 0
+                    && index != expression.Length - 1)
+                {
+                    return false;
+                }
+            }
+
+            if (depth < 0)
+            {
+                return false;
             }
         }
 
-        throw new ArgumentException("The SQL expression contains an unterminated quoted token.", nameof(expression));
+        return depth == 0 && quote == '\0';
     }
-
-    private static bool IsKeyword(
-        string token
-    ) => token.ToUpperInvariant() is "ALL"
-        or "AND"
-        or "ANY"
-        or "AS"
-        or "ASC"
-        or "BETWEEN"
-        or "BINARY"
-        or "BY"
-        or "CASE"
-        or "CAST"
-        or "COLLATE"
-        or "DESC"
-        or "DISTINCT"
-        or "ELSE"
-        or "END"
-        or "ESCAPE"
-        or "EXISTS"
-        or "FALSE"
-        or "FROM"
-        or "IN"
-        or "INTERVAL"
-        or "IS"
-        or "LIKE"
-        or "MOD"
-        or "NOT"
-        or "NULL"
-        or "OR"
-        or "REGEXP"
-        or "RLIKE"
-        or "THEN"
-        or "TRUE"
-        or "UNKNOWN"
-        or "WHEN"
-        or "WHERE"
-        or "XOR";
 }

@@ -32,6 +32,7 @@ env:
   DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE: '1'
   PYTHONDONTWRITEBYTECODE: '1'
   DOKA_PACKAGE_SOURCE: https://api.nuget.org/v3/index.json
+  TESTCONTAINERS_RYUK_CONTAINER_IMAGE: testcontainers/ryuk:0.14.0@sha256:7c1a8a9a47c780ed0f983770a662f80deb115d95cce3e2daa3d12115b8cd28f0
 
 jobs:
   package-and-core:
@@ -299,6 +300,7 @@ jobs:
           path: |
             **/TestResults/*.trx
             artifacts/ef-tooling/${{ matrix.engine }}
+            artifacts/performance/live
           if-no-files-found: warn
           compression-level: 0
           retention-days: ${{ inputs.artifact-retention-days }}
@@ -368,6 +370,7 @@ jobs:
           path: |
             **/TestResults/*.trx
             artifacts/ef-tooling/postgres
+            artifacts/performance/live
           if-no-files-found: warn
           compression-level: 0
           retention-days: ${{ inputs.artifact-retention-days }}

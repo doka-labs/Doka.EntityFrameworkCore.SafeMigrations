@@ -37,7 +37,7 @@ public class SafeMigrationDbContext : DbContext
                 .MigrationsHistoryTable("__CoreDbContextMigrationsHistory"));
         if (_registerSafeMigrations)
         {
-            optionsBuilder.UsePostgreSqlSafeMigrations();
+            optionsBuilder.UsePostgreSqlSafeMigrations<SafeMigrationDbContext>();
         }
     }
 }

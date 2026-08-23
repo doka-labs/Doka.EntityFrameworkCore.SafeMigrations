@@ -6,9 +6,18 @@ internal sealed class MySqlSafeMigrationsOptionsExtension : IDbContextOptionsExt
 
     public DbContextOptionsExtensionInfo Info => _info ??= new ExtensionInfo(this);
 
+    public Type? CanonicalContextType { get; private init; }
+
     public void ApplyServices(
         IServiceCollection services
-    ) => services.AddEntityFrameworkDokaMySqlSafeMigrations();
+    ) => services.AddEntityFrameworkDokaMySqlSafeMigrations(CanonicalContextType);
+
+    public static MySqlSafeMigrationsOptionsExtension WithCanonicalContext(
+        Type? canonicalContextType
+    ) => new()
+    {
+        CanonicalContextType = canonicalContextType,
+    };
 
     public void Validate(
         IDbContextOptions options
@@ -16,9 +25,20 @@ internal sealed class MySqlSafeMigrationsOptionsExtension : IDbContextOptionsExt
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        if (options.FindExtension<MySqlOptionsExtension>() is null)
+        var providerOptions = options.FindExtension<MySqlOptionsExtension>();
+        if (providerOptions is null)
         {
             throw new InvalidOperationException("MySQL safe migrations require Doka.EntityFrameworkCore.MySql.");
+        }
+
+        if (providerOptions.ConnectionString is not null)
+        {
+            MySqlSafeMigrationConnectionValidator.Validate(providerOptions.ConnectionString);
+        }
+
+        if (providerOptions.Connection is not null)
+        {
+            MySqlSafeMigrationConnectionValidator.Validate(providerOptions.Connection);
         }
     }
 
@@ -32,14 +52,18 @@ internal sealed class MySqlSafeMigrationsOptionsExtension : IDbContextOptionsExt
 
         public override string LogFragment => "doka-mysql-safe-migrations ";
 
-        public override int GetServiceProviderHashCode() => 0;
+        private new MySqlSafeMigrationsOptionsExtension Extension =>
+            (MySqlSafeMigrationsOptionsExtension)base.Extension;
+
+        public override int GetServiceProviderHashCode() => Extension.CanonicalContextType?.GetHashCode() ?? 0;
 
         public override void PopulateDebugInfo(
             IDictionary<string, string> debugInfo
-        ) => debugInfo["Doka:MySqlSafeMigrations"] = "1";
+        ) => debugInfo["Doka:MySqlSafeMigrations"] = Extension.CanonicalContextType?.FullName ?? "runtime";
 
         public override bool ShouldUseSameServiceProvider(
             DbContextOptionsExtensionInfo other
-        ) => other is ExtensionInfo;
+        ) => other is ExtensionInfo otherInfo
+            && otherInfo.Extension.CanonicalContextType == Extension.CanonicalContextType;
     }
 }

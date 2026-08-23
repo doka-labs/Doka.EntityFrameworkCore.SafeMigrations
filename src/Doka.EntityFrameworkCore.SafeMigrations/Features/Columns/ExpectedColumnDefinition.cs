@@ -16,11 +16,15 @@ public sealed class ExpectedColumnDefinition
     /// <param name="isRowVersion">Whether the column is a row-version column.</param>
     /// <param name="precision">The numeric precision, or null when unspecified.</param>
     /// <param name="scale">The numeric scale, or null when unspecified.</param>
-    /// <param name="collation">The expected database collation, or null when unspecified.</param>
+    /// <param name="collation">
+    /// The expected database collation identity. Null requires the effective
+    /// provider-inferred default and never disables collation comparison.
+    /// </param>
     /// <param name="comment">The expected database comment, or null when unspecified.</param>
     /// <param name="defaultValue">The provider-neutral default-value representation.</param>
     /// <param name="computedColumnSql">The computed-column SQL expression, or null when absent.</param>
     /// <param name="isStored">Whether the computed column is stored, or null when unspecified.</param>
+    /// <param name="computedExpression">The structured computed expression, or null when absent.</param>
     public ExpectedColumnDefinition(
         string name,
         Type clrType,
@@ -32,11 +36,12 @@ public sealed class ExpectedColumnDefinition
         bool isRowVersion = false,
         int? precision = null,
         int? scale = null,
-        string? collation = null,
+        SafeMigrationCollationIdentifier? collation = null,
         string? comment = null,
         SafeMigrationDefaultValue? defaultValue = null,
         string? computedColumnSql = null,
-        bool? isStored = null
+        bool? isStored = null,
+        SafeMigrationSqlExpression? computedExpression = null
     )
     {
         Name = SafeMigrationDefinitionValidator.Required(name, nameof(name));
@@ -73,13 +78,22 @@ public sealed class ExpectedColumnDefinition
         IsRowVersion = isRowVersion;
         Precision = precision;
         Scale = scale;
-        Collation = SafeMigrationDefinitionValidator.Optional(collation, nameof(collation));
+        Collation = collation;
         Comment = comment;
         DefaultValue = defaultValue ?? SafeMigrationDefaultValue.None;
         ComputedColumnSql = SafeMigrationDefinitionValidator.Optional(computedColumnSql, nameof(computedColumnSql));
+        ComputedExpression = computedExpression;
         IsStored = isStored;
 
         if (ComputedColumnSql is not null
+            && ComputedExpression is not null)
+        {
+            throw new ArgumentException(
+                "A computed column must use either opaque SQL or a structured expression, not both.",
+                nameof(computedExpression));
+        }
+
+        if ((ComputedColumnSql is not null || ComputedExpression is not null)
             && DefaultValue.Kind != SafeMigrationDefaultValueKind.None)
         {
             throw new ArgumentException("A computed column cannot also define a default value.", nameof(defaultValue));
@@ -105,6 +119,7 @@ public sealed class ExpectedColumnDefinition
         }
 
         if (ComputedColumnSql is null
+            && ComputedExpression is null
             && IsStored is not null)
         {
             throw new ArgumentException(
@@ -143,8 +158,11 @@ public sealed class ExpectedColumnDefinition
     /// <summary>Gets the numeric scale when specified.</summary>
     public int? Scale { get; }
 
-    /// <summary>Gets the expected collation when specified.</summary>
-    public string? Collation { get; }
+    /// <summary>
+    /// Gets the expected collation identity. Null requires the effective
+    /// provider-inferred default and never means wildcard comparison.
+    /// </summary>
+    public SafeMigrationCollationIdentifier? Collation { get; }
 
     /// <summary>Gets the expected comment when specified.</summary>
     public string? Comment { get; }
@@ -154,6 +172,9 @@ public sealed class ExpectedColumnDefinition
 
     /// <summary>Gets the computed-column expression when specified.</summary>
     public string? ComputedColumnSql { get; }
+
+    /// <summary>Gets the structured computed expression when specified.</summary>
+    public SafeMigrationSqlExpression? ComputedExpression { get; }
 
     /// <summary>Gets whether a computed column is stored or virtual.</summary>
     public bool? IsStored { get; }

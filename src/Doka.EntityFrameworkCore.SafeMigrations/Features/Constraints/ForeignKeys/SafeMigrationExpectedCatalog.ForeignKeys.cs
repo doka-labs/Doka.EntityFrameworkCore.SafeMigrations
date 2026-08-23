@@ -14,5 +14,6 @@ internal static partial class SafeMigrationExpectedCatalog
         Dictionary<TableKey, MutableTable> tables,
         DropForeignKeyIntent intent
     ) => Find(tables, intent.Schema, intent.Table)
-        ?.Constraints.Remove(intent.Name);
+        ?.Constraints
+        .Remove(intent.Name);
 }

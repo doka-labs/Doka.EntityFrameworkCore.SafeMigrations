@@ -5,7 +5,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task UnsupportedFilteredIndex_FailsBeforeTargetDdl()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE `events` (`id` int NOT NULL);");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -27,7 +27,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task AdvancedIndexFacets_ConvergeAndDetectDirectionDrift()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `advanced_indexes` (`id` int NOT NULL, `value` varchar(80) NULL);");
@@ -35,7 +35,12 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var definition = new ExpectedIndexDefinition(
             "ix_advanced_value",
             "advanced_indexes",
-            [new ExpectedIndexKeyDefinition(column: "value", descending: true, prefixLength: 12)],
+            [
+                new ExpectedIndexKeyDefinition(
+                    column: "value",
+                    sortOrder: SafeMigrationIndexSortOrder.Descending,
+                    prefixLength: 12)
+            ],
             method: "BTREE");
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -66,7 +71,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task FunctionalIndex_FollowsTheActiveEngineCapability()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE `functional_indexes` (`value` varchar(80) NULL);");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -74,7 +79,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             new ExpectedIndexDefinition(
                 "ix_functional_lower_value",
                 "functional_indexes",
-                [new ExpectedIndexKeyDefinition(expression: "lower(value)")]),
+                [new ExpectedIndexKeyDefinition(structuredExpression: SqlFunction("lower", "value"))]),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var preflight = await context

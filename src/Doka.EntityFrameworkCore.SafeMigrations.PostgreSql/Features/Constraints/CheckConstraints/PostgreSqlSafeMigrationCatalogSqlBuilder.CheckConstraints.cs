@@ -18,11 +18,18 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
     private string CheckConstraintDataBlocked(
         ExpectedCheckConstraintDefinition definition
-    ) => $"EXISTS (SELECT 1 FROM {Qualified(definition.Table, definition.Schema)} "
-        + $"WHERE NOT COALESCE(({definition.Sql}), TRUE) LIMIT 1)";
+    )
+    {
+        var expression = definition.Sql ?? _expressionRenderer.Render(definition.Expression!);
+
+        return $"EXISTS (SELECT 1 FROM {Qualified(definition.Table, definition.Schema)} "
+            + $"WHERE NOT COALESCE(({expression}), TRUE) LIMIT 1)";
+    }
 
     private string CheckMatches(
         ExpectedCheckConstraintDefinition definition
     ) => ConstraintBase(definition.Table, definition.Schema, definition.Name, 'c')
-        + $" AND co.convalidated AND {ExpressionMatches("pg_catalog.pg_get_expr(co.conbin, co.conrelid)", definition.Sql)})";
+        + $" AND co.convalidated AND {(definition.Expression is not null
+            ? ExpressionMatches("pg_catalog.pg_get_expr(co.conbin, co.conrelid)", definition.Expression)
+            : ExpressionMatches("pg_catalog.pg_get_expr(co.conbin, co.conrelid)", definition.Sql!))})";
 }

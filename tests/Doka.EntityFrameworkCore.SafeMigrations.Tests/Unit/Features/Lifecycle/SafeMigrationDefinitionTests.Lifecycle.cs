@@ -11,12 +11,7 @@ public sealed partial class SafeMigrationDefinitionTests
             "id"
         };
 
-        var bytes = new byte[]
-        {
-            1,
-            2,
-            3,
-        };
+        var bytes = new byte[] { 1, 2, 3, };
 
         var key = new ExpectedPrimaryKeyDefinition("pk_items", "items", columns);
         var defaultValue = SafeMigrationDefaultValue.Literal(bytes);
@@ -29,20 +24,8 @@ public sealed partial class SafeMigrationDefinitionTests
 
         var secondRead = Assert.IsType<byte[]>(defaultValue.LiteralValue);
 
-        Assert.Equal(
-            [
-                "tenant_id",
-                "id",
-            ],
-            key.Columns);
-        Assert.Equal(
-            new byte[]
-            {
-                1,
-                2,
-                3,
-            },
-            secondRead);
+        Assert.Equal(["tenant_id", "id",], key.Columns);
+        Assert.Equal(new byte[] { 1, 2, 3, }, secondRead);
     }
 
     [Fact]
@@ -58,10 +41,7 @@ public sealed partial class SafeMigrationDefinitionTests
         Assert.Throws<ArgumentException>(() => new ExpectedForeignKeyDefinition(
             "fk",
             "items",
-            [
-                "a",
-                "b",
-            ],
+            ["a", "b",],
             "parents",
             ["id"]));
         Assert.Throws<ArgumentException>(() => new ExpectedTableDefinition(

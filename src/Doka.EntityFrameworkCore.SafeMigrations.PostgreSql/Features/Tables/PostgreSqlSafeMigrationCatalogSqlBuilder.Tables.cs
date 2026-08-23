@@ -9,9 +9,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         var definition = intent.Definition;
         var exists = RelationExists(definition.Table, definition.Schema);
         var table = TableExists(definition.Table, definition.Schema);
-        var matching = intent.Mode == SafeMigrationTableMode.ConvergenceContainer
-            ? table
-            : TableMatches(definition);
+        var matching = intent.Mode == SafeMigrationTableMode.ConvergenceContainer ? table : TableMatches(definition);
 
         return Plan(
             $"CASE WHEN NOT {exists} THEN 'missing' WHEN NOT {table} THEN 'unsupported' "

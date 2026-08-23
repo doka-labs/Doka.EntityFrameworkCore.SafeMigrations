@@ -3,6 +3,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 internal sealed class SafeMigrationMigrationsAssembly : IMigrationsAssembly
 {
     private readonly DbContext _context;
+    private readonly TypeInfo[] _definedTypes;
     private readonly IMigrationsIdGenerator _idGenerator;
     private readonly Type _migrationContextType;
     private IReadOnlyDictionary<string, TypeInfo>? _migrations;
@@ -12,12 +13,14 @@ internal sealed class SafeMigrationMigrationsAssembly : IMigrationsAssembly
     public SafeMigrationMigrationsAssembly(
         ICurrentDbContext currentContext,
         IDbContextOptions options,
-        IMigrationsIdGenerator idGenerator
+        IMigrationsIdGenerator idGenerator,
+        SafeMigrationCanonicalContextConfiguration canonicalContext
     )
     {
         ArgumentNullException.ThrowIfNull(currentContext);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(idGenerator);
+        ArgumentNullException.ThrowIfNull(canonicalContext);
 
         _context = currentContext.Context;
         _idGenerator = idGenerator;
@@ -25,27 +28,34 @@ internal sealed class SafeMigrationMigrationsAssembly : IMigrationsAssembly
         var relationalOptions = RelationalOptionsExtension.Extract(options);
         Assembly = relationalOptions.MigrationsAssemblyObject
             ?? (relationalOptions.MigrationsAssembly is null
-                ? _context.GetType().Assembly
+                ? _context.GetType()
+                    .Assembly
                 : Assembly.Load(new AssemblyName(relationalOptions.MigrationsAssembly)));
 
-        _migrationContextType = ResolveMigrationContextType(Assembly, _context.GetType());
+        _definedTypes = GetDefinedTypes(Assembly);
+
+        _migrationContextType = canonicalContext.ContextType ?? _context.GetType();
+        if (!_migrationContextType.IsInstanceOfType(_context))
+        {
+            throw new InvalidOperationException(
+                $"Canonical migration context '{_migrationContextType.FullName}' is not assignable from runtime context "
+                + $"'{_context.GetType().FullName}'.");
+        }
     }
 
-    public IReadOnlyDictionary<string, TypeInfo> Migrations => _migrations ??= Assembly
-        .DefinedTypes
-        .Where(type => !type.IsAbstract && typeof(Migration).IsAssignableFrom(type))
-        .Select(type => new
-        {
-            Type = type,
-            Context = type.GetCustomAttribute<DbContextAttribute>()?.ContextType,
-            Migration = type.GetCustomAttribute<MigrationAttribute>(),
-        })
-        .Where(candidate => candidate.Context == _migrationContextType && candidate.Migration is not null)
-        .OrderBy(candidate => candidate.Migration!.Id, StringComparer.Ordinal)
-        .ToDictionary(
-            candidate => candidate.Migration!.Id,
-            candidate => candidate.Type,
-            StringComparer.Ordinal);
+    public IReadOnlyDictionary<string, TypeInfo> Migrations =>
+        _migrations ??= _definedTypes
+            .Where(type => !type.IsAbstract && typeof(Migration).IsAssignableFrom(type))
+            .Select(type => new
+            {
+                Type = type,
+                Context = type.GetCustomAttribute<DbContextAttribute>()
+                    ?.ContextType,
+                Migration = type.GetCustomAttribute<MigrationAttribute>(),
+            })
+            .Where(candidate => candidate.Context == _migrationContextType && candidate.Migration is not null)
+            .OrderBy(candidate => candidate.Migration!.Id, StringComparer.Ordinal)
+            .ToDictionary(candidate => candidate.Migration!.Id, candidate => candidate.Type, StringComparer.Ordinal);
 
     public ModelSnapshot? ModelSnapshot
     {
@@ -56,10 +66,11 @@ internal sealed class SafeMigrationMigrationsAssembly : IMigrationsAssembly
                 return _modelSnapshot;
             }
 
-            var snapshots = Assembly
-                .DefinedTypes
+            var snapshots = _definedTypes
                 .Where(type => !type.IsAbstract && typeof(ModelSnapshot).IsAssignableFrom(type))
-                .Where(type => type.GetCustomAttribute<DbContextAttribute>()?.ContextType == _migrationContextType)
+                .Where(type => type.GetCustomAttribute<DbContextAttribute>()
+                        ?.ContextType
+                    == _migrationContextType)
                 .ToArray();
 
             if (snapshots.Length > 1)
@@ -70,8 +81,11 @@ internal sealed class SafeMigrationMigrationsAssembly : IMigrationsAssembly
 
             _modelSnapshot = snapshots.Length == 0
                 ? null
-                : Activator.CreateInstance(snapshots[0].AsType(), nonPublic: true) as ModelSnapshot
-                    ?? throw new InvalidOperationException("The migration model snapshot could not be constructed.");
+                : Activator.CreateInstance(
+                    snapshots[0]
+                        .AsType(),
+                    nonPublic: true) as ModelSnapshot
+                ?? throw new InvalidOperationException("The migration model snapshot could not be constructed.");
 
             _modelSnapshotInitialized = true;
             return _modelSnapshot;
@@ -101,63 +115,25 @@ internal sealed class SafeMigrationMigrationsAssembly : IMigrationsAssembly
         ArgumentException.ThrowIfNullOrWhiteSpace(activeProvider);
 
         var migration = Activator.CreateInstance(migrationClass.AsType(), nonPublic: true) as Migration
-            ?? throw new InvalidOperationException(
-                $"Migration '{migrationClass.FullName}' could not be constructed.");
+            ?? throw new InvalidOperationException($"Migration '{migrationClass.FullName}' could not be constructed.");
 
         migration.ActiveProvider = activeProvider;
         return migration;
     }
 
-    private static Type ResolveMigrationContextType(
-        Assembly assembly,
-        Type runtimeContextType
+    private static TypeInfo[] GetDefinedTypes(
+        Assembly assembly
     )
     {
-        var candidates = assembly
-            .DefinedTypes
-            .Where(type => typeof(Migration).IsAssignableFrom(type) || typeof(ModelSnapshot).IsAssignableFrom(type))
-            .Select(type => type.GetCustomAttribute<DbContextAttribute>()?.ContextType)
-            .Where(type => type is not null && type.IsAssignableFrom(runtimeContextType))
-            .Distinct()
-            .Select(type => new
-            {
-                Type = type!,
-                Distance = InheritanceDistance(runtimeContextType, type!),
-            })
-            .OrderBy(candidate => candidate.Distance)
-            .ToArray();
-
-        if (candidates.Length == 0)
+        try
         {
-            return runtimeContextType;
+            return assembly.DefinedTypes.ToArray();
         }
-
-        if (candidates.Length > 1
-            && candidates[0].Distance == candidates[1].Distance)
+        catch (ReflectionTypeLoadException exception)
         {
             throw new InvalidOperationException(
-                $"Multiple migration context contracts match '{runtimeContextType.FullName}'.");
+                $"Migration types could not be loaded from assembly '{assembly.GetName().Name}'.",
+                exception);
         }
-
-        return candidates[0].Type;
-    }
-
-    private static int InheritanceDistance(
-        Type runtimeContextType,
-        Type candidateContextType
-    )
-    {
-        var distance = 0;
-        for (var current = runtimeContextType; current is not null; current = current.BaseType)
-        {
-            if (current == candidateContextType)
-            {
-                return distance;
-            }
-
-            distance++;
-        }
-
-        return int.MaxValue;
     }
 }

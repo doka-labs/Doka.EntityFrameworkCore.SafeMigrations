@@ -10,7 +10,8 @@ internal sealed class BenchmarkRunner
 
     private BenchmarkRunner(
         IReadOnlyDictionary<string, BenchmarkBudget> budgets,
-        string outputPath)
+        string outputPath
+    )
     {
         _budgets = budgets;
         _outputPath = outputPath;
@@ -18,7 +19,8 @@ internal sealed class BenchmarkRunner
 
     public static BenchmarkRunner Create(
         string[] arguments,
-        string defaultOutputFileName)
+        string defaultOutputFileName
+    )
     {
         var repositoryRoot = FindRepositoryRoot(AppContext.BaseDirectory);
         var budgetPath = Path.Combine(repositoryRoot, "eng", "performance-budgets.json");
@@ -29,7 +31,8 @@ internal sealed class BenchmarkRunner
 
     public void Measure(
         string name,
-        Func<int> action)
+        Func<int> action
+    )
     {
         if (!_budgets.TryGetValue(name, out var budget))
         {
@@ -60,8 +63,7 @@ internal sealed class BenchmarkRunner
 
         var duration = durations[SampleCount / 2];
         var allocated = allocations[SampleCount / 2];
-        var maximumDuration = budget.BaselineDurationMilliseconds
-            * (1d + (budget.RegressionTolerancePercent / 100d));
+        var maximumDuration = budget.BaselineDurationMilliseconds * (1d + (budget.RegressionTolerancePercent / 100d));
 
         _results.Add(
             new BenchmarkResult(
@@ -90,7 +92,8 @@ internal sealed class BenchmarkRunner
     }
 
     private static Dictionary<string, BenchmarkBudget> ReadBudgets(
-        string path)
+        string path
+    )
     {
         using var document = JsonDocument.Parse(File.ReadAllBytes(path));
         var result = new Dictionary<string, BenchmarkBudget>(StringComparer.Ordinal);
@@ -105,9 +108,15 @@ internal sealed class BenchmarkRunner
             result.Add(
                 property.Name,
                 new BenchmarkBudget(
-                    value.GetProperty("baselineDurationMilliseconds").GetDouble(),
-                    value.GetProperty("regressionTolerancePercent").GetDouble(),
-                    value.GetProperty("maximumAllocatedBytes").GetInt64()));
+                    value
+                        .GetProperty("baselineDurationMilliseconds")
+                        .GetDouble(),
+                    value
+                        .GetProperty("regressionTolerancePercent")
+                        .GetDouble(),
+                    value
+                        .GetProperty("maximumAllocatedBytes")
+                        .GetInt64()));
         }
 
         return result;
@@ -115,7 +124,8 @@ internal sealed class BenchmarkRunner
 
     private static void WriteResults(
         string path,
-        IReadOnlyList<BenchmarkResult> results)
+        IReadOnlyList<BenchmarkResult> results
+    )
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 
@@ -149,7 +159,8 @@ internal sealed class BenchmarkRunner
     private static string ReadOutputPath(
         string[] arguments,
         string repositoryRoot,
-        string defaultOutputFileName)
+        string defaultOutputFileName
+    )
     {
         if (arguments.Length == 0)
         {
@@ -162,7 +173,8 @@ internal sealed class BenchmarkRunner
     }
 
     private static string FindRepositoryRoot(
-        string start)
+        string start
+    )
     {
         for (var directory = new DirectoryInfo(start); directory is not null; directory = directory.Parent)
         {
@@ -178,7 +190,8 @@ internal sealed class BenchmarkRunner
     private sealed record BenchmarkBudget(
         double BaselineDurationMilliseconds,
         double RegressionTolerancePercent,
-        long MaximumAllocatedBytes);
+        long MaximumAllocatedBytes
+    );
 
     private sealed record BenchmarkResult(
         string Name,
@@ -186,5 +199,6 @@ internal sealed class BenchmarkRunner
         long AllocatedBytes,
         double MaximumDurationMilliseconds,
         long MaximumAllocatedBytes,
-        bool Passed);
+        bool Passed
+    );
 }

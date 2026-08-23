@@ -87,7 +87,8 @@ internal static class SafeMigrationStateSpaceGenerator
                 || dimension.Values.Count == 0
                 || dimension.Values.Any(string.IsNullOrWhiteSpace)
                 || dimension
-                    .Values.Distinct(StringComparer.Ordinal)
+                    .Values
+                    .Distinct(StringComparer.Ordinal)
                     .Count()
                 != dimension.Values.Count)
             {

@@ -5,7 +5,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ConstraintLifecycle_IsIdempotentAcrossEveryConstraintFamily()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE parents (id integer NOT NULL PRIMARY KEY); "
@@ -15,7 +15,12 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         var add = new MigrationBuilder(context.Database.ProviderName!);
         add.AddPrimaryKeyIfNotExists("pk_children", "children", ["id"]);
         add.AddUniqueConstraintIfNotExists("uq_children_code", "children", ["code"]);
-        add.AddCheckConstraintIfNotExists("ck_children_quantity", "children", "quantity >= 0");
+        add.EnsureCheckConstraint(
+            ExpectedCheckConstraintDefinition.FromExpression(
+                "ck_children_quantity",
+                "children",
+                SqlColumnAndInt("quantity", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0)),
+            SafeMigrationPolicy.ThrowIfDifferent);
         add.AddForeignKeyIfNotExists(
             "fk_children_parents",
             "children",
@@ -64,7 +69,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ExistingConstraintDefinitionDrift_IsRejectedForEveryConstraintFamily()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE constraint_parents (id integer NOT NULL PRIMARY KEY); "
@@ -81,7 +86,12 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddPrimaryKeyIfNotExists("pk_constraint_drift", "constraint_drift", ["id"]);
         builder.AddUniqueConstraintIfNotExists("uq_constraint_code", "constraint_drift", ["code"]);
-        builder.AddCheckConstraintIfNotExists("ck_constraint_quantity", "constraint_drift", "quantity >= 0");
+        builder.EnsureCheckConstraint(
+            ExpectedCheckConstraintDefinition.FromExpression(
+                "ck_constraint_quantity",
+                "constraint_drift",
+                SqlColumnAndInt("quantity", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0)),
+            SafeMigrationPolicy.ThrowIfDifferent);
         builder.AddForeignKeyIfNotExists(
             "fk_constraint_parent",
             "constraint_drift",
@@ -113,7 +123,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ConstraintAndUniqueIndexDataBlockers_StopBeforeTargetDdl()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE blocker_parents (id integer NOT NULL PRIMARY KEY); "
@@ -127,7 +137,12 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddPrimaryKeyIfNotExists("pk_blocker_children", "blocker_children", ["id"]);
         builder.AddUniqueConstraintIfNotExists("uq_blocker_children_code", "blocker_children", ["code"]);
-        builder.AddCheckConstraintIfNotExists("ck_blocker_children_quantity", "blocker_children", "quantity >= 0");
+        builder.EnsureCheckConstraint(
+            ExpectedCheckConstraintDefinition.FromExpression(
+                "ck_blocker_children_quantity",
+                "blocker_children",
+                SqlColumnAndInt("quantity", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0)),
+            SafeMigrationPolicy.ThrowIfDifferent);
         builder.AddForeignKeyIfNotExists(
             "fk_blocker_children_parent",
             "blocker_children",

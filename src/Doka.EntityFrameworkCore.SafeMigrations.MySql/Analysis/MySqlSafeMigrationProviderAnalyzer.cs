@@ -2,18 +2,19 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 
 internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProviderAnalyzer
 {
-    private const string StatePrefix = "SET @doka_sm_state = (";
-    private const string RepairPreconditionPrefix = "SET @doka_sm_repair_ok = (";
-    private const string PostconditionPrefix = "SET @doka_sm_observed_postcondition = (";
+    private readonly MySqlSafeMigrationPlanCapture _planCapture;
     private readonly IMigrationsSqlGenerator _sqlGenerator;
 
     public MySqlSafeMigrationProviderAnalyzer(
-        IMigrationsSqlGenerator sqlGenerator
+        IMigrationsSqlGenerator sqlGenerator,
+        MySqlSafeMigrationPlanCapture planCapture
     )
     {
         ArgumentNullException.ThrowIfNull(sqlGenerator);
+        ArgumentNullException.ThrowIfNull(planCapture);
 
         _sqlGenerator = sqlGenerator;
+        _planCapture = planCapture;
     }
 
     public string ProviderId => "doka_mysql";
@@ -52,6 +53,20 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
         }
     }
 
+    public async Task<IAsyncDisposable> AcquireAnalysisScopeAsync(
+        DbContext context,
+        CancellationToken cancellationToken = default
+    )
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        var migrationLock = await context
+            .GetService<IHistoryRepository>()
+            .AcquireDatabaseLockAsync(cancellationToken);
+
+        return new AnalysisScope(migrationLock);
+    }
+
     public async Task<IReadOnlyList<SafeMigrationProviderAnalysis>> AnalyzeAsync(
         DbContext context,
         IReadOnlyList<SafeMigrationOperation> operations,
@@ -75,55 +90,95 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
 
         try
         {
-            await using var command = connection.CreateCommand();
-            var parameterizer = new MySqlCatalogQueryParameterizer(command);
-            var selections = new List<string>(operations.Count);
+            MySqlSafeMigrationConnectionValidator.Validate(connection);
 
-            // One UNION ALL query classifies the complete batch against one
-            // catalog observation and avoids a round trip per operation.
-            for (var ordinal = 0; ordinal < operations.Count; ordinal++)
+            MySqlSafeMigrationRuntimePlan[] plans;
+            using (var capture = _planCapture.Begin(operations))
             {
-                var operation = operations[ordinal]
-                    ?? throw new ArgumentException(
-                        "The operation batch cannot contain null entries.",
-                        nameof(operations));
-
-                var commands = _sqlGenerator.Generate([operation], context.Model);
-                var stateExpression = parameterizer.Parameterize(ExtractExpression(commands, StatePrefix));
-                var postcondition = parameterizer.Parameterize(ExtractExpression(commands, PostconditionPrefix));
-                var repairPrecondition = parameterizer.Parameterize(
-                    ExtractExpression(commands, RepairPreconditionPrefix));
-
-                selections.Add(
-                    $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, "
-                    + $"({stateExpression}), "
-                    + $"COALESCE(({postcondition}), FALSE), "
-                    + $"COALESCE(({repairPrecondition}), FALSE)");
+                _ = _sqlGenerator.Generate(operations, context.Model);
+                plans = capture.Complete();
             }
 
-            command.CommandText = string.Join("\nUNION ALL\n", selections) + "\nORDER BY 1;";
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-            var results = new List<SafeMigrationProviderAnalysis>(operations.Count);
+            var maximumPayloadBytes = await GetMaximumPayloadBytesAsync(connection, cancellationToken);
+            var prerequisiteMissing = await FindMissingPrerequisitesAsync(
+                connection,
+                plans,
+                maximumPayloadBytes,
+                cancellationToken);
 
-            while (await reader.ReadAsync(cancellationToken))
+            var results = new List<SafeMigrationProviderAnalysis>(operations.Count);
+            var ordinal = 0;
+            var separatorBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Separator);
+            var trailerBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Trailer);
+            while (ordinal < operations.Count)
             {
-                if (reader.GetInt32(0) != results.Count)
+                cancellationToken.ThrowIfCancellationRequested();
+
+                while (ordinal < operations.Count
+                       && prerequisiteMissing[ordinal])
                 {
-                    throw new InvalidOperationException(
-                        "The MySQL SafeMigrations classifier returned an invalid ordinal.");
+                    results.Add(PrerequisiteMissingAnalysis());
+                    ordinal++;
                 }
 
-                var state = ParseState(reader.GetString(1));
-                var repairCapability = reader.GetBoolean(3)
-                    ? SafeMigrationRepairCapability.Safe
-                    : SafeMigrationRepairCapability.None;
+                if (ordinal == operations.Count)
+                {
+                    break;
+                }
 
-                results.Add(
-                    new SafeMigrationProviderAnalysis(
-                        state,
-                        repairCapability,
-                        reader.GetBoolean(2),
-                        $"classified_{StateCode(state)}"));
+                await using var command = connection.CreateCommand();
+                var parameterizer = new MySqlCatalogQueryParameterizer(command);
+                var selections = new List<string>(
+                    Math.Min(SafeMigrationCatalogQueryLimits.MaximumMySqlOperations, operations.Count - ordinal));
+
+                var sqlBytes = trailerBytes;
+                while (ordinal < operations.Count
+                       && selections.Count < SafeMigrationCatalogQueryLimits.MaximumMySqlOperations)
+                {
+                    if (prerequisiteMissing[ordinal])
+                    {
+                        break;
+                    }
+
+                    var checkpoint = parameterizer.Capture();
+                    var plan = plans[ordinal];
+                    var stateExpression = plan.RenderStateExpression(parameterizer.AddString);
+                    var postcondition = plan.RenderPostcondition(parameterizer.AddString);
+                    var repairPrecondition = plan.RenderRepairPrecondition(parameterizer.AddString);
+                    var selection = $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, "
+                        + $"({stateExpression}), "
+                        + $"COALESCE(({postcondition}), FALSE), "
+                        + $"COALESCE(({repairPrecondition}), FALSE)";
+
+                    var selectionBytes = Encoding.UTF8.GetByteCount(selection)
+                        + (selections.Count == 0 ? 0 : separatorBytes);
+                    var prospectivePayload = sqlBytes + selectionBytes + parameterizer.Utf8PayloadBytes;
+                    if (SafeMigrationCatalogQueryLimits.Exceeded(
+                            parameterizer.Count,
+                            prospectivePayload,
+                            maximumPayloadBytes))
+                    {
+                        var prospectiveParameters = parameterizer.Count;
+                        parameterizer.Rollback(checkpoint);
+                        if (selections.Count == 0)
+                        {
+                            throw SafeMigrationCatalogQueryLimits.OversizedOperation(
+                                ordinal,
+                                prospectiveParameters,
+                                prospectivePayload);
+                        }
+
+                        break;
+                    }
+
+                    selections.Add(selection);
+                    sqlBytes += selectionBytes;
+                    ordinal++;
+                }
+
+                command.CommandText = string.Join(SafeMigrationCatalogQueryLimits.Separator, selections)
+                    + SafeMigrationCatalogQueryLimits.Trailer;
+                await ReadAnalysisAsync(command, results, plans, cancellationToken);
             }
 
             if (results.Count != operations.Count)
@@ -143,6 +198,146 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
         }
     }
 
+    private static async Task<bool[]> FindMissingPrerequisitesAsync(
+        DbConnection connection,
+        MySqlSafeMigrationRuntimePlan[] plans,
+        int maximumPayloadBytes,
+        CancellationToken cancellationToken
+    )
+    {
+        var missing = new bool[plans.Length];
+        var rowsRead = 0;
+        var ordinal = 0;
+        var separatorBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Separator);
+        var trailerBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Trailer);
+        while (ordinal < plans.Length)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            await using var command = connection.CreateCommand();
+            var parameterizer = new MySqlCatalogQueryParameterizer(command);
+            var selections = new List<string>(
+                Math.Min(SafeMigrationCatalogQueryLimits.MaximumMySqlOperations, plans.Length - ordinal));
+
+            var sqlBytes = trailerBytes;
+            while (ordinal < plans.Length
+                   && selections.Count < SafeMigrationCatalogQueryLimits.MaximumMySqlOperations)
+            {
+                var checkpoint = parameterizer.Capture();
+                var prerequisite = plans[ordinal]
+                    .RenderPrerequisiteExpression(parameterizer.AddString);
+                var selection = $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, "
+                    + $"NOT COALESCE(({prerequisite}), FALSE)";
+
+                var selectionBytes = Encoding.UTF8.GetByteCount(selection)
+                    + (selections.Count == 0 ? 0 : separatorBytes);
+                var prospectivePayload = sqlBytes + selectionBytes + parameterizer.Utf8PayloadBytes;
+                if (SafeMigrationCatalogQueryLimits.Exceeded(
+                        parameterizer.Count,
+                        prospectivePayload,
+                        maximumPayloadBytes))
+                {
+                    var prospectiveParameters = parameterizer.Count;
+                    parameterizer.Rollback(checkpoint);
+                    if (selections.Count == 0)
+                    {
+                        throw SafeMigrationCatalogQueryLimits.OversizedOperation(
+                            ordinal,
+                            prospectiveParameters,
+                            prospectivePayload);
+                    }
+
+                    break;
+                }
+
+                selections.Add(selection);
+                sqlBytes += selectionBytes;
+                ordinal++;
+            }
+
+            command.CommandText = string.Join(SafeMigrationCatalogQueryLimits.Separator, selections)
+                + SafeMigrationCatalogQueryLimits.Trailer;
+
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var resultOrdinal = reader.GetInt32(0);
+                if (resultOrdinal != rowsRead)
+                {
+                    throw new InvalidOperationException(
+                        "The MySQL SafeMigrations prerequisite classifier returned an invalid ordinal.");
+                }
+
+                missing[resultOrdinal] = reader.GetBoolean(1);
+                rowsRead++;
+            }
+        }
+
+        if (rowsRead != plans.Length)
+        {
+            throw new InvalidOperationException(
+                "The MySQL SafeMigrations prerequisite classifier returned an inconsistent row count.");
+        }
+
+        return missing;
+    }
+
+    private static SafeMigrationProviderAnalysis PrerequisiteMissingAnalysis() => new(
+        SafeMigrationObservedState.PrerequisiteMissing,
+        SafeMigrationRepairCapability.None,
+        false,
+        "classified_prerequisite_missing");
+
+    private static async Task<int> GetMaximumPayloadBytesAsync(
+        DbConnection connection,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT @@max_allowed_packet;";
+        var raw = await command.ExecuteScalarAsync(cancellationToken)
+            ?? throw new InvalidOperationException("MySQL did not return max_allowed_packet.");
+
+        var maximumPacket = Convert.ToInt64(raw, CultureInfo.InvariantCulture);
+        try
+        {
+            return SafeMigrationCatalogQueryLimits.MySqlMaximumUtf8PayloadBytes(maximumPacket);
+        }
+        catch (ArgumentOutOfRangeException exception)
+        {
+            throw new InvalidOperationException("MySQL returned an invalid max_allowed_packet value.", exception);
+        }
+    }
+
+    private static async Task ReadAnalysisAsync(
+        DbCommand command,
+        List<SafeMigrationProviderAnalysis> results,
+        MySqlSafeMigrationRuntimePlan[] plans,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var ordinal = reader.GetInt32(0);
+            if (ordinal != results.Count)
+            {
+                throw new InvalidOperationException("The MySQL SafeMigrations classifier returned an invalid ordinal.");
+            }
+
+            var state = ParseState(reader.GetString(1));
+            var repairCapability = reader.GetBoolean(3)
+                ? SafeMigrationRepairCapability.Safe
+                : SafeMigrationRepairCapability.None;
+
+            var code = state == SafeMigrationObservedState.Unsupported
+                ? plans[ordinal].UnsupportedCode ?? "classified_unsupported"
+                : $"classified_{StateCode(state)}";
+
+            results.Add(new SafeMigrationProviderAnalysis(state, repairCapability, reader.GetBoolean(2), code));
+        }
+    }
+
     public async Task<IReadOnlyList<SafeMigrationUnexpectedObject>> FindUnexpectedObjectsAsync(
         DbContext context,
         IReadOnlyList<MigrationOperation> operations,
@@ -152,15 +347,10 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(operations);
 
-        var expected = SafeMigrationExpectedCatalog
-            .Create(operations)
+        var catalog = SafeMigrationExpectedCatalog.Create(operations);
+        var expected = catalog
             .Where(static table => table.Schema is null)
             .ToDictionary(static table => table.Table, StringComparer.Ordinal);
-
-        if (expected.Count == 0)
-        {
-            return [];
-        }
 
         var connection = context.Database.GetDbConnection();
         var openedHere = connection.State != System.Data.ConnectionState.Open;
@@ -171,36 +361,27 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
 
         try
         {
-            await using var command = connection.CreateCommand();
-            command.CommandText = UnexpectedObjectSql;
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             var findings = new List<SafeMigrationUnexpectedObject>();
+            var seen = new HashSet<(SafeMigrationDatabaseObjectKind Kind, string Table, string Name)>();
 
-            // Unexpected objects are evidence only. They are never folded into
-            // the expected catalog and never authorize destructive cleanup.
-            while (await reader.ReadAsync(cancellationToken))
+            await using (var tableCommand = connection.CreateCommand())
             {
-                var kind = ParseObjectKind(reader.GetString(0));
-                var tableName = reader.GetString(1);
-                var objectName = reader.GetString(2);
+                tableCommand.CommandText = BuildUnexpectedTableSql();
+                await ReadUnexpectedAsync(tableCommand, expected, findings, seen, cancellationToken);
+            }
 
-                if (!expected.TryGetValue(tableName, out var table))
-                {
-                    if (kind == SafeMigrationDatabaseObjectKind.Table)
-                    {
-                        findings.Add(Unexpected(kind, table: null, objectName));
-                    }
+            foreach (var tableBatch in expected
+                         .Keys
+                         .Order(StringComparer.Ordinal)
+                         .Chunk(SafeMigrationCatalogQueryLimits.MaximumInventoryValues))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
 
-                    continue;
-                }
-
-                if (kind == SafeMigrationDatabaseObjectKind.Table
-                    || IsExpected(table, kind, objectName))
-                {
-                    continue;
-                }
-
-                findings.Add(Unexpected(kind, tableName, objectName));
+                await using var command = connection.CreateCommand();
+                var parameters = new MySqlCatalogQueryParameterizer(command);
+                var tableScope = string.Join(", ", tableBatch.Select(parameters.AddString));
+                command.CommandText = BuildUnexpectedChildObjectSql(tableScope);
+                await ReadUnexpectedAsync(command, expected, findings, seen, cancellationToken);
             }
 
             return findings.AsReadOnly();
@@ -214,21 +395,46 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
         }
     }
 
-    private static string ExtractExpression(
-        IReadOnlyList<MigrationCommand> commands,
-        string prefix
+    private static async Task ReadUnexpectedAsync(
+        DbCommand command,
+        Dictionary<string, SafeMigrationExpectedTableInventory> expected,
+        List<SafeMigrationUnexpectedObject> findings,
+        HashSet<(SafeMigrationDatabaseObjectKind Kind, string Table, string Name)> seen,
+        CancellationToken cancellationToken
     )
     {
-        var commandText = commands
-            .Select(static command => command.CommandText)
-            .Single(command => command.StartsWith(prefix, StringComparison.Ordinal));
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
-        const string suffix = ");";
+        // Unexpected objects are evidence only. They are never folded into
+        // the expected catalog and never authorize destructive cleanup.
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var kind = ParseObjectKind(reader.GetString(0));
+            var tableName = reader.GetString(1);
+            var objectName = reader.GetString(2);
+            if (!seen.Add((kind, tableName, objectName)))
+            {
+                continue;
+            }
 
-        return commandText.EndsWith(suffix, StringComparison.Ordinal)
-            ? commandText[prefix.Length..^suffix.Length]
-            : throw new InvalidOperationException(
-                "The MySQL SafeMigrations classifier command has an invalid boundary.");
+            if (!expected.TryGetValue(tableName, out var table))
+            {
+                if (kind == SafeMigrationDatabaseObjectKind.Table)
+                {
+                    findings.Add(Unexpected(kind, table: null, objectName));
+                }
+
+                continue;
+            }
+
+            if (kind == SafeMigrationDatabaseObjectKind.Table
+                || IsExpected(table, kind, objectName))
+            {
+                continue;
+            }
+
+            findings.Add(Unexpected(kind, tableName, objectName));
+        }
     }
 
     private static SafeMigrationObservedState ParseState(
@@ -240,6 +446,7 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
         "different" => SafeMigrationObservedState.Different,
         "unsupported" => SafeMigrationObservedState.Unsupported,
         "data_blocked" => SafeMigrationObservedState.DataBlocked,
+        "prerequisite_missing" => SafeMigrationObservedState.PrerequisiteMissing,
         _ => throw new InvalidOperationException("The MySQL SafeMigrations classifier returned an unknown state."),
     };
 
@@ -252,6 +459,7 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
         SafeMigrationObservedState.Different => "different",
         SafeMigrationObservedState.Unsupported => "unsupported",
         SafeMigrationObservedState.DataBlocked => "data_blocked",
+        SafeMigrationObservedState.PrerequisiteMissing => "prerequisite_missing",
         _ => throw new ArgumentOutOfRangeException(nameof(state)),
     };
 
@@ -303,38 +511,65 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 
-    private const string UnexpectedObjectSql = """
-                                               SELECT 'table', t.TABLE_NAME, t.TABLE_NAME
-                                               FROM INFORMATION_SCHEMA.TABLES t
-                                               WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_TYPE = 'BASE TABLE'
-                                               UNION ALL
-                                               SELECT 'column', c.TABLE_NAME, c.COLUMN_NAME
-                                               FROM INFORMATION_SCHEMA.COLUMNS c
-                                               WHERE c.TABLE_SCHEMA = DATABASE()
-                                               UNION ALL
-                                               SELECT CASE tc.CONSTRAINT_TYPE
-                                                   WHEN 'PRIMARY KEY' THEN 'primary_key'
-                                                   WHEN 'UNIQUE' THEN 'unique_constraint'
-                                                   WHEN 'CHECK' THEN 'check_constraint'
-                                                   WHEN 'FOREIGN KEY' THEN 'foreign_key'
-                                                   END,
-                                                   tc.TABLE_NAME,
-                                                   tc.CONSTRAINT_NAME
-                                               FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
-                                               WHERE tc.CONSTRAINT_SCHEMA = DATABASE()
-                                                 AND tc.CONSTRAINT_TYPE IN ('PRIMARY KEY', 'UNIQUE', 'CHECK', 'FOREIGN KEY')
-                                               UNION ALL
-                                               SELECT 'index', s.TABLE_NAME, s.INDEX_NAME
-                                               FROM INFORMATION_SCHEMA.STATISTICS s
-                                               WHERE s.TABLE_SCHEMA = DATABASE()
-                                                 AND s.SEQ_IN_INDEX = 1
-                                                 AND s.INDEX_NAME <> 'PRIMARY'
-                                                 AND NOT EXISTS (
-                                                     SELECT 1
-                                                     FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
-                                                     WHERE tc.CONSTRAINT_SCHEMA = s.TABLE_SCHEMA
-                                                       AND tc.TABLE_NAME = s.TABLE_NAME
-                                                       AND tc.CONSTRAINT_NAME = s.INDEX_NAME)
-                                               ORDER BY 1, 2, 3;
-                                               """;
+    private static string BuildUnexpectedTableSql() => """
+                                                       SELECT 'table', t.TABLE_NAME, t.TABLE_NAME
+                                                       FROM INFORMATION_SCHEMA.TABLES t
+                                                       WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_TYPE = 'BASE TABLE'
+                                                       ORDER BY 1, 2, 3;
+                                                       """;
+
+    private static string BuildUnexpectedChildObjectSql(
+        string tableScope
+    ) => $"""
+          SELECT 'column', c.TABLE_NAME, c.COLUMN_NAME
+          FROM INFORMATION_SCHEMA.COLUMNS c
+          WHERE c.TABLE_SCHEMA = DATABASE()
+            AND c.TABLE_NAME IN ({tableScope})
+          UNION ALL
+          SELECT CASE tc.CONSTRAINT_TYPE
+              WHEN 'PRIMARY KEY' THEN 'primary_key'
+              WHEN 'UNIQUE' THEN 'unique_constraint'
+              WHEN 'CHECK' THEN 'check_constraint'
+              WHEN 'FOREIGN KEY' THEN 'foreign_key'
+              END,
+              tc.TABLE_NAME,
+              tc.CONSTRAINT_NAME
+          FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+          WHERE tc.CONSTRAINT_SCHEMA = DATABASE()
+            AND tc.TABLE_NAME IN ({tableScope})
+            AND tc.CONSTRAINT_TYPE IN ('PRIMARY KEY', 'UNIQUE', 'CHECK', 'FOREIGN KEY')
+          UNION ALL
+          SELECT 'index', s.TABLE_NAME, s.INDEX_NAME
+          FROM INFORMATION_SCHEMA.STATISTICS s
+          WHERE s.TABLE_SCHEMA = DATABASE()
+            AND s.TABLE_NAME IN ({tableScope})
+            AND s.SEQ_IN_INDEX = 1
+            AND s.INDEX_NAME <> 'PRIMARY'
+            AND NOT EXISTS (
+                SELECT 1
+                FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+                WHERE tc.CONSTRAINT_SCHEMA = s.TABLE_SCHEMA
+                  AND tc.TABLE_NAME = s.TABLE_NAME
+                  AND tc.CONSTRAINT_NAME = s.INDEX_NAME)
+          ORDER BY 1, 2, 3;
+          """;
+
+    private sealed class AnalysisScope : IAsyncDisposable
+    {
+        private IDisposable? _migrationLock;
+
+        public AnalysisScope(
+            IDisposable migrationLock
+        )
+        {
+            _migrationLock = migrationLock;
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            _migrationLock?.Dispose();
+            _migrationLock = null;
+            return ValueTask.CompletedTask;
+        }
+    }
 }

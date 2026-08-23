@@ -58,6 +58,24 @@ public sealed class SafeMigrationAssessment
         ArgumentException.ThrowIfNullOrWhiteSpace(operationType);
         ArgumentException.ThrowIfNullOrWhiteSpace(code);
 
+        if (operationKind is not null
+            && !Enum.IsDefined(operationKind.Value))
+        {
+            throw new ArgumentOutOfRangeException(nameof(operationKind));
+        }
+
+        if (observedState is not null
+            && !Enum.IsDefined(observedState.Value))
+        {
+            throw new ArgumentOutOfRangeException(nameof(observedState));
+        }
+
+        if (action is not null
+            && !Enum.IsDefined(action.Value))
+        {
+            throw new ArgumentOutOfRangeException(nameof(action));
+        }
+
         Ordinal = ordinal;
         OperationType = operationType;
         IsSafeOperation = isSafeOperation;
@@ -145,9 +163,21 @@ public sealed class SafeMigrationRunReport
             ArgumentException.ThrowIfNullOrWhiteSpace(targetMigrationId);
         }
 
-        ArgumentException.ThrowIfNullOrWhiteSpace(modelFingerprint);
-        ArgumentException.ThrowIfNullOrWhiteSpace(contractFingerprint);
+        SafeMigrationModelFingerprint.ValidateFingerprint(modelFingerprint, nameof(modelFingerprint));
+        SafeMigrationContractFingerprint.Validate(contractFingerprint, nameof(contractFingerprint));
         ArgumentNullException.ThrowIfNull(assessments);
+
+        var assessmentSnapshot = assessments.ToArray();
+        if (assessmentSnapshot.Any(static assessment => assessment is null))
+        {
+            throw new ArgumentException("Assessments cannot contain null values.", nameof(assessments));
+        }
+
+        var unexpectedObjectSnapshot = (unexpectedObjects ?? []).ToArray();
+        if (unexpectedObjectSnapshot.Any(static value => value is null))
+        {
+            throw new ArgumentException("Unexpected objects cannot contain null values.", nameof(unexpectedObjects));
+        }
 
         Mode = mode;
         Status = status;
@@ -161,8 +191,8 @@ public sealed class SafeMigrationRunReport
         ModelFingerprint = modelFingerprint;
         ContractFingerprint = contractFingerprint;
 
-        Assessments = Array.AsReadOnly(assessments.ToArray());
-        UnexpectedObjects = Array.AsReadOnly((unexpectedObjects ?? []).ToArray());
+        Assessments = Array.AsReadOnly(assessmentSnapshot);
+        UnexpectedObjects = Array.AsReadOnly(unexpectedObjectSnapshot);
     }
 
     /// <summary>Gets the machine-readable report schema version.</summary>
@@ -186,7 +216,7 @@ public sealed class SafeMigrationRunReport
     /// <summary>Gets the intended target migration when known.</summary>
     public string? TargetMigrationId { get; }
 
-    /// <summary>Gets the SHA-256 target-model fingerprint.</summary>
+    /// <summary>Gets the versioned, provider-bound SHA-256 target-model fingerprint.</summary>
     public string ModelFingerprint { get; }
 
     /// <summary>Gets the SHA-256 fingerprint of the ordered migration contract.</summary>

@@ -12,7 +12,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var dataBlocked = PrimaryKeyDataBlocked(definition);
 
         return Plan(
-            $"CASE WHEN NOT {BaseTableExists(definition.Table)} THEN 'data_blocked' "
+            $"CASE WHEN NOT {BaseTableExists(definition.Table)} THEN 'prerequisite_missing' "
             + $"WHEN NOT {exists} AND {dataBlocked} THEN 'data_blocked' "
             + $"WHEN NOT {exists} THEN 'missing' "
             + $"WHEN {matching} THEN 'matching' ELSE 'different' END",
