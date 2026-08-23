@@ -32,6 +32,8 @@ All notable changes are documented here. The format follows
 - Identifier, SQL mode, default literal, generated column, advanced index,
   constraint drift, data blocker, and wrong-object-kind coverage.
 - Dependency-free duration/allocation gate at 1, 100, and 1000 operations.
+- Pooled live full-runner p50/p95 evidence with 100 expected tables and 1,000
+  foreign tables for every qualified engine cell.
 - Locked Floor and isolated Latest dependency profiles.
 - Deterministic double-pack, exact package-content validation, package-only
   consumer, source/symbol packages, SPDX SBOM generation, and Public API gates.
@@ -58,6 +60,49 @@ All notable changes are documented here. The format follows
   parameterized provider command per run.
 - Isolated SBOM dependency detection in a canonical source snapshot with its
   own locked restore, excluding prior build and qualification artifacts.
+- Made the SBOM checksum envelope self-verifying and excluded `SHA256SUMS`
+  from hashing itself, preventing a deterministically stale self-reference.
+- Replaced bare model hashes with the provider-bound
+  `safe-relational-model:v1:<provider>:sha256:<hex>` contract. Deployment
+  manifests must regenerate `ExpectedModelFingerprint`; bare 64-character
+  hashes are rejected before catalog analysis.
+- Restricted persisted model fingerprints to relational migration metadata;
+  EF convention-cache annotations such as
+  `BaseTypeDiscoveryConvention:DerivedTypes` are excluded so patch-level EF
+  updates cannot change an otherwise identical model digest.
+- Replaced heuristic raw-SQL comparison with a typed expression contract.
+  Existing raw filter, computed-column, SQL-default, functional-index, and
+  check expressions now classify as `opaque_sql_expression`; migrate them to
+  `SafeMigrationSql` expression nodes when structural comparison is required.
+- Replaced the index-key `descending` flag with explicit
+  `SafeMigrationIndexSortOrder` and `SafeMigrationIndexNullOrder` values.
+  Existing definitions must choose provider defaults or an explicit direction
+  and null placement.
+- Replaced ambiguous collation strings with
+  `SafeMigrationCollationIdentifier`; PostgreSQL preserves exact schema/name
+  identity while MySQL and MariaDB reject schema-qualified collations.
+- Added explicit canonical migration-context registration and PostgreSQL
+  baseline-generator composition. Derived runtime contexts must name their
+  canonical Core context; custom PostgreSQL generators must use the composed
+  registration overload.
+- Added `prerequisite_missing` and `reject_prerequisite_missing` to report
+  schema v1 and aligned the packaged schema with every serializer wire code.
+- Required MySQL and MariaDB connections to set `Allow User Variables=true`
+  (`MySqlConnectionStringBuilder.AllowUserVariables`) before SafeMigrations
+  command execution.
+- Updated the exact Doka dependency to 10.0.0-rc.12 and moved each guarded
+  MySQL/MariaDB operation to the provider-owned scoped command contract. The
+  adapter now consumes validated baseline fragments directly and receives
+  failure- and cancellation-safe cleanup with pool eviction on cleanup failure.
+- Qualified Doka RC.12 temporal expression defaults on every supported
+  MySQL/MariaDB line and enabled Binary16 Guid defaults only where catalog
+  fidelity is proven: MariaDB 11.8 and 12.3. MySQL, MariaDB 10.11, and MariaDB
+  11.4 continue to fail closed before target DDL.
+- Consumed the RC.12 scoped-command allocation correction while retaining the
+  unchanged MySQL generation budgets at 1, 100, and 1,000 operations.
+- Made GitHub Release creation reconciling and rerunnable: the workflow verifies
+  the tag target, resumes exact draft assets, rejects conflicting bytes or
+  metadata, and publishes only after the complete asset set is re-read.
 
 ### Removed
 

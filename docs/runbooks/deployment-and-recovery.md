@@ -38,6 +38,13 @@ deployment output.
    contract fingerprint, and target migration.
 6. Review every assessment and unexpected object.
 
+PostgreSQL preflight and postflight normally create their own read-only
+`RepeatableRead` transaction and hold one transaction-scoped advisory lock
+through all catalog chunks. If deployment code supplies an existing
+transaction, configure it as read-only with `RepeatableRead` or `Serializable`
+before invoking the runner. SafeMigrations rejects weaker or read-write caller
+transactions without disposing, committing, or rolling them back.
+
 Gate interpretation:
 
 | Status | Operator action |
@@ -100,6 +107,16 @@ Only then release the write fence and mark the instance complete.
 
 ## Partial MySQL/MariaDB retry
 
+The connection must set `Allow User Variables=true`, corresponding to
+`MySqlConnectionStringBuilder.AllowUserVariables`; SafeMigrations validates
+this before its first guarded command. Doka rc.11 executes the handler cleanup
+after success, failure, or cancellation with an independent cancellation
+token. If cleanup itself fails, Doka closes the connection, clears its
+MySqlConnector pool generation, and reports a non-retryable cleanup exception.
+Dispose the failed `DbContext` before an operator-approved retry even when the
+provider reports successful cleanup; the retry must start from a fresh unit of
+work.
+
 1. Leave the Core history row unchanged.
 2. Keep writes fenced.
 3. Re-run preflight against the still-pending migration.
@@ -110,10 +127,10 @@ Only then release the write fence and mark the instance complete.
 6. Re-run the same migration artifact. Do not create a fake history row.
 7. Run postflight and history checks.
 
-The session-local guard has no permanent stored procedure to clean up. If a
-connection was terminated mid-command, disposing that session removes its
-temporary objects. A retry on a new or pooled session initializes its own guard
-state.
+The session-local guard has no permanent stored procedure to clean up. Runtime
+tests prove same-session cleanup with pool reset disabled after a rejected
+state, failed DDL, and cancellation. They also prove that an injected cleanup
+failure evicts the physical session before another borrower can receive it.
 
 ## Multiple application instances
 

@@ -51,7 +51,7 @@ The committed lockfiles are the Floor profile:
 
 The current Latest profile is:
 
-- EF Core and Microsoft.Extensions.DependencyInjection 10.0.10;
+- EF Core and Microsoft.Extensions.DependencyInjection 10.0.11;
 - Npgsql EF Core 10.0.3.
 
 `eng/verify-dependency-profile.sh` copies the repository to a clean canonical
@@ -62,17 +62,22 @@ silently modifying the Floor contract.
 
 ## Behavioral evidence
 
-The test inventory currently contains 145 xUnit tests plus two tests for the
-coverage-gate parser:
+The test inventory currently contains 250 xUnit test cases plus 14 repository
+tooling tests:
 
-- 35 provider-neutral tests;
-- 65 MySQL/MariaDB tests;
-- 45 PostgreSQL tests.
+- 66 provider-neutral tests;
+- 98 MySQL/MariaDB tests;
+- 86 PostgreSQL tests;
+- six Python tests for coverage and project-boundary gates;
+- eight Node.js tests for release reconciliation.
 
 Provider tests use real Docker servers and cover:
 
 - all 20 operation kinds;
-- missing, matching, different, unsupported, and data-blocked states;
+- all 22 supported non-null CLR literal families plus literal `NULL`, with
+  provider-specific convergence or pre-DDL fail-closed classification;
+- missing, matching, different, unsupported, data-blocked, and
+  prerequisite-missing states;
 - `ExistenceOnly`, `ThrowIfDifferent`, and `RepairIfSafe`;
 - granular heterogeneous table convergence and pairwise legacy-state
   generation with a fixed seed;
@@ -83,19 +88,25 @@ Provider tests use real Docker servers and cover:
 - PostgreSQL non-default schemas, cross-schema foreign keys, and
   same-named-object isolation;
 - fail-closed schema qualification across every MySQL/MariaDB operation family;
-- same-session guard recovery, partial-command retry, least privilege, and
-  provider migration locks;
+- connection-disposal guard recovery, partial-command retry, least privilege,
+  and provider migration locks;
 - four concurrent migrators on one database and parallel independent
   databases;
 - normal EF operations mixed with safe operations;
 - EF history success/failure and derived-context model-snapshot guards;
 - read-only preflight, unexpected-object inventory, positive and negative
   postflight, and cancellation before and during catalog access.
+- PostgreSQL-owned and caller-owned analysis transactions, including accepted
+  read-only `RepeatableRead`/`Serializable` scopes and fail-closed rejection of
+  read-write or weaker-isolation caller transactions.
 
 The provider-analyzer contract accepts the ordered safe-operation batch. Each
-provider executes that classification in one parameterized database command;
-the unexpected-object inventory is a second, family-oriented query. Projection
-then applies the ordered results without additional catalog roundtrips.
+provider first classifies table prerequisites, then executes classification in
+deterministic parameterized chunks bounded by operation count, parameter
+count, and UTF-8 payload. The unexpected-object inventory remains scoped to
+the expected table set for child objects while retaining complete table
+discovery. Projection applies global ordered results without per-operation
+catalog roundtrips, and no partial report is published after a later failure.
 
 Every engine matrix cell also runs:
 
@@ -115,12 +126,14 @@ applied heuristically:
 
 - PostgreSQL 14 rejects `NULLS NOT DISTINCT`; PostgreSQL introduced that
   `CREATE INDEX` clause in version 15.
-- MySQL rejects `DateOnly` and `TimeOnly` literal defaults while the active Doka
-  type mapping renders provider-incompatible typed literals. MariaDB's active
-  mappings for the same values are qualified.
-- MySQL and MariaDB reject a `Guid` literal default stored as `BINARY` when
-  `INFORMATION_SCHEMA.COLUMNS.COLUMN_DEFAULT` cannot preserve the complete
-  binary value required for a repeatable semantic comparison.
+- Doka rc.11 parenthesizes `DateOnly` and `TimeOnly` typed literals in column
+  defaults. The complete MySQL and MariaDB matrix qualifies the resulting DDL
+  and each engine's catalog display form.
+- MySQL, MariaDB 10.11, and MariaDB 11.4 reject a `Guid` literal default stored
+  as `BINARY` because `INFORMATION_SCHEMA.COLUMNS.COLUMN_DEFAULT` does not
+  preserve a complete value for repeatable semantic comparison. MariaDB 11.8
+  and 12.3 preserve the complete expression and are qualified for missing,
+  matching, different, retry, preflight, and EF-pipeline behavior.
 
 These are complete fail-closed outcomes, not silent degradation. A provider or
 server update may remove a boundary only after the same missing, matching,
@@ -158,6 +171,7 @@ PostgreSQL dependency boundaries for:
 - decision planning;
 - MySQL handler/generator output;
 - PostgreSQL adapter output;
+- canonical snapshot initialization, relational model differ, and fingerprint;
 - report JSON serialization.
 
 The benchmark is a deterministic gate, not a throughput claim. Changes to a
@@ -169,6 +183,14 @@ The MySQL/MariaDB benchmark has no Npgsql dependency, and the PostgreSQL
 benchmark has no Doka MySQL dependency. Shared measurement and workload source
 is linked at compile time; no benchmark assembly introduces a cross-provider
 runtime edge.
+
+Every provider engine cell additionally runs 20 complete pooled
+`SafeMigrationRunner` roundtrips against 100 expected tables, then repeats them
+after adding 1,000 foreign tables with child objects. The cell stores p50/p95
+JSON evidence and fails unless assessments are unchanged, foreign child rows
+remain excluded by the expected-table scope, and noisy p95 is at most
+`2 * clean p95 + 250 ms`. This is a same-runner relative SLO; it is not an
+absolute cross-machine latency promise.
 
 After locked restore, the quality workflow rejects warning-level Roslyn style
 violations and unnecessary imports. Rider/ReSharper remains the repository

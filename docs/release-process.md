@@ -54,7 +54,7 @@ package version and `require-stable-dependencies: true`. It must complete:
 
 - locked restore, warning-free Release build, Core tests;
 - all performance and allocation budgets;
-- six MySQL/MariaDB and two PostgreSQL engine cells;
+- six MySQL/MariaDB and five PostgreSQL engine cells;
 - EF CLI, normal/idempotent/no-transaction scripts, and Bundle in every cell;
 - Latest EF/Npgsql patch profile;
 - deterministic double-pack and exact package-content verification;
@@ -103,6 +103,14 @@ upload qualified packages, symbol packages, checksums, SPDX, attestation
 bundles, and signed-readback checksums, then publish the draft. A NuGet failure
 cannot produce a public GitHub Release.
 
+Release reconciliation resolves the immutable tag through GitHub's commit API
+and requires the qualified commit SHA. It lists releases and assets with full
+pagination. A rerun resumes an exact partial draft, uploads only missing assets,
+verifies each uploaded state, size, and SHA-256 digest, re-reads the exact asset
+set, and publishes last. An exact published release is an idempotent success.
+Duplicate releases or assets, unexpected assets, metadata conflicts, tag drift,
+and byte conflicts fail closed without publishing the draft.
+
 ## Failure handling
 
 - Before any package push: correct the source on `main`; do not move or reuse a
@@ -116,8 +124,9 @@ cannot produce a public GitHub Release.
 - NuGet complete, readback delayed: rerun. The publish script verifies all
   existing bytes and readback resumes.
 - Draft GitHub Release asset failure: keep the draft non-public, inspect the
-  workflow evidence, and complete or replace it only through an approved
-  operator action.
+  workflow evidence, then rerun the same immutable tag. Exact assets are reused
+  and missing assets are added; any conflict remains blocked for an approved
+  operator decision.
 
 ## Primary references
 
@@ -126,4 +135,8 @@ cannot produce a public GitHub Release.
 - [NuGet package signatures](https://learn.microsoft.com/nuget/reference/signed-package-verification-options)
 - [GitHub artifact attestations](https://docs.github.com/actions/security-for-github-actions/using-artifact-attestations/using-artifact-attestations-to-establish-provenance-for-builds)
 - [GitHub reusable workflows](https://docs.github.com/actions/using-workflows/reusing-workflows)
+- [GitHub Releases REST API](https://docs.github.com/rest/releases/releases)
+- [GitHub Release assets REST API](https://docs.github.com/rest/releases/assets)
+- [GitHub Get a commit REST API](https://docs.github.com/rest/commits/commits#get-a-commit)
+- [GitHub workflow concurrency](https://docs.github.com/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency)
 - [Microsoft SBOM Tool](https://github.com/microsoft/sbom-tool)

@@ -12,10 +12,11 @@ canonical migration sequence across MySQL, MariaDB, and PostgreSQL without
 assuming a common legacy migration history or deleting unknown objects.
 
 The library classifies each operation against the live catalog as `missing`,
-`matching`, `different`, `unsupported`, or `data_blocked`. It then applies one
-provider-neutral policy. An operation either converges safely, remains an
-idempotent no-op, or stops with a stable reason. It never guesses that two
-unknown objects are semantically equivalent.
+`matching`, `different`, `unsupported`, `data_blocked`, or
+`prerequisite_missing`. It then applies one provider-neutral policy. An
+operation either converges safely, remains an idempotent no-op, or stops with a
+stable reason. It never guesses that two unknown objects are semantically
+equivalent.
 
 ## Platform and packages
 
@@ -67,6 +68,11 @@ services.AddDbContext<AppDbContext>(options =>
 });
 ```
 
+The MySQL connection must set `Allow User Variables=true` (the
+`MySqlConnectionStringBuilder.AllowUserVariables` property). Registration
+also validates already-open connections and fails before SafeMigrations
+command execution without exposing the connection string.
+
 PostgreSQL registration is additive to `UseNpgsql`:
 
 ```csharp
@@ -96,6 +102,23 @@ services.AddPostgreSqlSafeMigrations();
 
 Missing or conflicting SafeMigrations integration fails before target DDL and
 before the migration history row is written.
+
+Registration replaces EF Core's scoped `IMigrationsAssembly` so migrations,
+the model snapshot, scripts, bundles, and `IMigrator` all use the same
+canonical context. The non-generic overload keeps EF's exact runtime-context
+behavior. A derived instance context must name its canonical base explicitly:
+
+```csharp
+options.UseMySqlSafeMigrations<CoreDbContext>();
+options.UsePostgreSqlSafeMigrations<CoreDbContext>();
+```
+
+The canonical type must be assignable from the runtime context. PostgreSQL
+applications with a custom migrations generator must compose it explicitly:
+
+```csharp
+options.UsePostgreSqlSafeMigrations<CustomNpgsqlMigrationsSqlGenerator, CoreDbContext>();
+```
 
 ## Policies
 
@@ -208,10 +231,48 @@ Defaults distinguish no default, literal `null`, typed literals, and SQL
 expressions. Provider catalog queries are parameterized; identifiers and DDL
 are rendered through provider SQL services.
 
+SQL-bearing definitions should use the typed `SafeMigrationSql` expression
+tree. Typed identifiers, literals, operators, null tests, ranges, lists,
+functions, casts, collations, and current date/time values can be rendered for
+DDL and compared structurally against provider catalog output. For example:
+
+```csharp
+var nonNegative = ExpectedCheckConstraintDefinition.FromExpression(
+    "ck_orders_total_non_negative",
+    "orders",
+    SafeMigrationSql.Binary(
+        SafeMigrationSql.Identifier("total"),
+        SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
+        SafeMigrationSql.Literal(0)));
+```
+
+Legacy raw SQL remains representable as opaque input, but opaque expressions
+cannot authorize `Matching`; they are classified with
+`opaque_sql_expression`. After an identifier rename, an affected opaque facet
+is classified with `opaque_expression_rename_projection`. This is deliberate:
+neither provider guesses semantic equivalence from SQL text.
+
 MySQL and MariaDB do not provide PostgreSQL-style schema namespaces, so schema
 operations are classified as unsupported there. Provider-specific features
 such as PostgreSQL filtered, included, operator-class, collation, descending,
 and null-distinctness index facets are explicit rather than silently degraded.
+An omitted column collation means the exact provider-inferred effective
+default, never an ignored comparison facet. Index key direction and null order
+distinguish provider default from explicit `ASC`, `DESC`, `NULLS FIRST`, and
+`NULLS LAST`.
+
+Collation identity is structured rather than dot-split text:
+
+```csharp
+var collation = new SafeMigrationCollationIdentifier(
+    name: "tenant.collation",
+    schema: "collation_catalog");
+```
+
+PostgreSQL resolves the exact schema/name identity to its catalog OID. MySQL
+and MariaDB accept unqualified collation names; a schema-qualified identity is
+classified as `schema_qualified_collation` before target DDL because those
+engines do not expose PostgreSQL-style collation namespaces.
 
 ## Multiple DbContext instances
 
@@ -236,7 +297,18 @@ one deterministic Core migration sequence.
   `CREATE ROUTINE` privilege.
 - PostgreSQL guarded operations participate in the normal EF migration
   transaction unless the migration explicitly suppresses transactions.
+- PostgreSQL analysis owns one read-only `RepeatableRead` transaction and
+  transaction-scoped advisory lock. If the caller already owns a transaction,
+  it must be read-only and use `RepeatableRead` or `Serializable`; otherwise
+  analysis fails before reading the catalog and leaves that transaction owned
+  by the caller.
 - Always run postflight and retain its report with deployment evidence.
+
+Analyzer commands are deterministically chunked at 512 MySQL/MariaDB operations
+or 128 PostgreSQL operations, 16,000 bound parameters, and 4 MiB of UTF-8
+payload. MySQL/MariaDB also cap a chunk at half the live
+`max_allowed_packet`. A single operation that exceeds a bound is rejected
+before query execution; partial multi-chunk reports are never published.
 
 See [Deployment and recovery](docs/runbooks/deployment-and-recovery.md) and
 [Failure codes](docs/runbooks/failure-codes.md).
@@ -258,6 +330,12 @@ Docker is required for provider tests. CI additionally executes every supported
 engine profile, EF CLI/script/bundle paths, Floor and Latest dependency
 profiles, performance/allocation budgets, deterministic double-pack, an
 isolated package-only consumer, and SPDX SBOM validation.
+
+Each provider matrix cell also persists a live full-runner latency artifact.
+It measures 20 pooled database roundtrips against 100 expected tables before
+and after adding 1,000 foreign tables with child objects. Expected assessments
+must remain identical, foreign child rows must stay outside the scoped child
+inventory, and noisy p95 must remain within `2 * clean p95 + 250 ms`.
 
 Stable releases are tag-driven. They publish the exact qualified bytes through
 NuGet Trusted Publishing, create SLSA provenance and SBOM attestations, verify

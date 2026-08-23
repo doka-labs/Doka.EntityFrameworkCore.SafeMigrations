@@ -22,6 +22,16 @@ binary and behavioral dependency. A Doka update must preserve exact dispatch,
 baseline rendering, command ordering, feature projection, diagnostics, and
 failure behavior.
 
+The read-only analyzer captures SafeMigrations' typed runtime plan while Doka
+invokes the registered handler with the real server-version, feature, and
+operation-ordinal context. It does not parse generated commands. The exact
+rc.11 package exposes provider-validated `Setup`, `Body`, and `Cleanup`
+fragments and a bounded `CreateScoped` command contract. SafeMigrations uses
+those fragments directly and returns one provider-executed scope per guarded
+operation. Doka runs cleanup after success, failure, or cancellation with an
+independent cancellation token; a cleanup failure closes the connection and
+evicts its physical session from the MySqlConnector pool.
+
 ## PostgreSQL boundary
 
 The `.PostgreSql` package composes Npgsql's
@@ -35,6 +45,36 @@ project still compiles. PostgreSQL major upgrades can also change catalog
 shape. PostgreSQL 18, for example, exposes `NOT NULL` constraints as catalog
 constraint rows, so tests must select owned constraint families rather than
 count every `pg_constraint` row.
+
+PostgreSQL performs identifier quoting through `pg_catalog.quote_ident`, but
+SafeMigrations still predicts version-sensitive decompiled forms returned by
+`pg_catalog.pg_get_expr`: `::` casts, `IN` rendered as `= ANY (ARRAY[...])`,
+`NOT IN` rendered as `<> ALL (ARRAY[...])`, expanded `BETWEEN` predicates, and
+binary-expression parentheses. `pg_get_expr` decompiles PostgreSQL's internal
+expression tree; it does not preserve the originally submitted SQL text. Every
+supported PostgreSQL major must therefore converge through the expression
+matrix. A previously unseen form fails closed and must not be admitted by
+unrestricted text normalization.
+
+Applications with a custom Npgsql migrations generator select it through the
+typed SafeMigrations registration overload. Upgrade tests must prove that
+ordinary operations, standard baselines inside safe operations, custom index
+SQL, scripts, and transaction-suppression boundaries continue through that
+selected generator.
+
+## Model fingerprint boundary
+
+The persisted fingerprint uses the versioned
+`safe-relational-model:v1:<provider-contract>:sha256:<digest>` format over
+canonical relational metadata. It does not use `IModel.ToDebugString`, whose
+format EF documents as debugging-only and unstable. Provider upgrades must
+test every migration-relevant annotation: unknown value shapes fail closed
+rather than disappearing from the digest.
+
+Facet-isolation tests and provider-specific golden digests run in the Floor and
+Latest profiles. The exact canonical snapshot initialization,
+`IMigrationsModelDiffer`, and fingerprint path used by the runner is covered by
+provider duration/allocation budgets.
 
 ## Qualified dependency ranges
 
@@ -62,7 +102,8 @@ Every EF, Doka, Npgsql, or supported database update requires:
 8. `dotnet ef database update` and Migration Bundle;
 9. deterministic pack, exact contents, package-only consumer, and Public API
    validation;
-10. performance/allocation budgets and SPDX SBOM validation.
+10. performance/allocation budgets, pooled clean/noisy live p95 evidence, and
+    SPDX SBOM validation.
 
 If any behavior changes, update expected definitions or provider logic only
 after determining whether the new behavior is semantically correct for every
@@ -79,6 +120,7 @@ sources at author time:
 - [NuGet package versioning](https://learn.microsoft.com/nuget/concepts/package-versioning)
 - [Npgsql EF Core release notes](https://www.npgsql.org/efcore/release-notes/)
 - [PostgreSQL versioning policy](https://www.postgresql.org/support/versioning/)
+- [PostgreSQL system information functions](https://www.postgresql.org/docs/current/functions-info.html)
 - [MySQL supported platforms and lifecycle](https://www.mysql.com/support/supportedplatforms/database.html)
 - [MariaDB release criteria](https://mariadb.org/about/release-criteria/)
 - [Doka.EntityFrameworkCore.MySql repository](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql)

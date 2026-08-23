@@ -38,9 +38,10 @@ dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Doka.Entit
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.csproj --configuration Release
 ```
 
-The provider fixtures invoke `docker run`, use a dynamically assigned host port,
-and create a fresh database for each test. The default local engines are
-MariaDB 11.8.8 and PostgreSQL 18.6. Select another qualified image with:
+The provider fixtures use Testcontainers with dynamically assigned host ports,
+readiness checks, and automatic resource-reaper cleanup. Each test receives a
+fresh database. The default local engines are MariaDB 11.8.8 and PostgreSQL
+18.6. Select another qualified image with:
 
 ```bash
 SAFE_MIGRATIONS_MYSQL_ENGINE=mysql \
