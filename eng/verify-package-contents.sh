@@ -37,6 +37,8 @@ if [[ -z "$package_dir" || -z "$package_version" ]]; then
 fi
 
 package_dir="$(cd "$package_dir" && pwd -P)"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+report_schema="$script_dir/../schemas/safe-migration-run-report-v1.schema.json"
 package_ids=(
     Doka.EntityFrameworkCore.SafeMigrations
     Doka.EntityFrameworkCore.SafeMigrations.MySql
@@ -101,6 +103,12 @@ core_package="$package_dir/Doka.EntityFrameworkCore.SafeMigrations.$package_vers
 core_entries="$(unzip -Z1 "$core_package")"
 core_nuspec="$(unzip -p "$core_package" Doka.EntityFrameworkCore.SafeMigrations.nuspec)"
 grep -Fxq "schemas/safe-migration-run-report-v1.schema.json" <<<"$core_entries"
+if ! cmp -s "$report_schema" <(
+    unzip -p "$core_package" schemas/safe-migration-run-report-v1.schema.json
+); then
+    echo "Packaged report schema differs from the repository contract." >&2
+    exit 1
+fi
 
 if grep -Eq '<dependency id="(Doka\.EntityFrameworkCore\.MySql|Npgsql\.EntityFrameworkCore\.PostgreSQL|Doka\.EntityFrameworkCore\.SafeMigrations\.(MySql|PostgreSql))"' \
     <<<"$core_nuspec"; then

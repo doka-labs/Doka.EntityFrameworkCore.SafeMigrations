@@ -1,5 +1,18 @@
 version: 2
 updates:
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      ef-core:
+        patterns:
+          - "Microsoft.EntityFrameworkCore*"
+      test-platform:
+        patterns:
+          - "Microsoft.NET.Test.Sdk"
+          - "xunit*"
+
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

@@ -390,7 +390,7 @@ jobs:
       - name: Verify latest dependency profile
         run: >-
           eng/verify-dependency-profile.sh
-          --ef-version 10.0.10
+          --ef-version 10.0.11
           --npgsql-version 10.0.3
-          --di-version 10.0.10
+          --di-version 10.0.11
           --doka-source "$DOKA_PACKAGE_SOURCE"

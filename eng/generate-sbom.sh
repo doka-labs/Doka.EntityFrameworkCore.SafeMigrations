@@ -161,7 +161,9 @@ jq \
     "$validation_output" > "$output_dir/validation.json"
 (
     cd "$output_dir"
-    find . -type f -exec shasum -a 256 {} \; | LC_ALL=C sort > SHA256SUMS
+    find . -type f ! -name SHA256SUMS -exec shasum -a 256 {} \; \
+        | LC_ALL=C sort > SHA256SUMS
+    shasum -a 256 -c SHA256SUMS
 )
 
 echo "SPDX 2.2 SBOM generated and validated with Microsoft SBOM Tool $sbom_tool_version."
