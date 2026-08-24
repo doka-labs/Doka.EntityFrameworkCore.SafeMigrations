@@ -90,16 +90,18 @@ All notable changes are documented here. The format follows
 - Required MySQL and MariaDB connections to set `Allow User Variables=true`
   (`MySqlConnectionStringBuilder.AllowUserVariables`) before SafeMigrations
   command execution.
-- Updated the exact Doka dependency to 10.0.0-rc.12 and moved each guarded
+- Updated the exact Doka dependency to the stable 10.0.0 release and moved each
+  guarded
   MySQL/MariaDB operation to the provider-owned scoped command contract. The
   adapter now consumes validated baseline fragments directly and receives
   failure- and cancellation-safe cleanup with pool eviction on cleanup failure.
-- Qualified Doka RC.12 temporal expression defaults on every supported
+- Qualified Doka 10.0.0 temporal expression defaults on every supported
   MySQL/MariaDB line and enabled Binary16 Guid defaults only where catalog
   fidelity is proven: MariaDB 11.8 and 12.3. MySQL, MariaDB 10.11, and MariaDB
   11.4 continue to fail closed before target DDL.
-- Consumed the RC.12 scoped-command allocation correction while retaining the
-  unchanged MySQL generation budgets at 1, 100, and 1,000 operations.
+- Retained the scoped-command allocation correction introduced in Doka RC.12
+  through the stable 10.0.0 package, with unchanged MySQL generation budgets
+  at 1, 100, and 1,000 operations.
 - Made GitHub Release creation reconciling and rerunnable: the workflow verifies
   the tag target, resumes exact draft assets, rejects conflicting bytes or
   metadata, and publishes only after the complete asset set is re-read.
