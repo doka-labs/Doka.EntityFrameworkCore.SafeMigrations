@@ -6,6 +6,19 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+## [10.0.0-rc.1] - 2026-08-24
+
+First complete release candidate of the SafeMigrations Core,
+MySQL/MariaDB, and PostgreSQL package family for .NET 10 and EF Core 10.
+Install prerelease packages explicitly because NuGet excludes them from normal
+stable-version resolution:
+
+```bash
+dotnet add package Doka.EntityFrameworkCore.SafeMigrations --version 10.0.0-rc.1
+dotnet add package Doka.EntityFrameworkCore.SafeMigrations.MySql --version 10.0.0-rc.1
+dotnet add package Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version 10.0.0-rc.1
+```
+
 ### Added
 
 - .NET 10 and EF Core 10 package, sample, test, benchmark, and tooling surface.
@@ -32,6 +45,8 @@ All notable changes are documented here. The format follows
 - Identifier, SQL mode, default literal, generated column, advanced index,
   constraint drift, data blocker, and wrong-object-kind coverage.
 - Dependency-free duration/allocation gate at 1, 100, and 1000 operations.
+- Schema-versioned benchmark sets that reject missing, duplicate, unknown, or
+  orphaned performance-budget measurements.
 - Pooled live full-runner p50/p95 evidence with 100 expected tables and 1,000
   foreign tables for every qualified engine cell.
 - Locked Floor and isolated Latest dependency profiles.
@@ -104,7 +119,23 @@ All notable changes are documented here. The format follows
   at 1, 100, and 1,000 operations.
 - Made GitHub Release creation reconciling and rerunnable: the workflow verifies
   the tag target, resumes exact draft assets, rejects conflicting bytes or
-  metadata, and publishes only after the complete asset set is re-read.
+  metadata, stages the draft before NuGet mutation, and publishes only after
+  the complete asset set and signed NuGet readback are re-read.
+- Aligned the package family with .NET 10, EF Core 10, and Doka 10. The manually
+  dispatched workflow qualifies and attests current `main` before a signed tag
+  is created at its protected publication wait. It accepts a canonical package
+  version instead of encoding one release line, marks prereleases correctly,
+  and leaves `latest` unchanged for release candidates.
+- Bound release inputs to the reviewed source `VersionPrefix`, exact dated
+  changelog entry, canonical 64-character NuGet limit, and shell-safe
+  environment-variable boundary.
+- Added repository-owned SSH signer authorization, pre-tag verification of the
+  exact waiting run and hosted signing key, downloaded provenance/SBOM bundle
+  verification, credential-free NuGet conflict preflight, and conditional
+  short-lived Trusted Publishing credentials with duplicate-tolerant recovery.
+- Moved every workflow value crossing into a shell through environment
+  variables, documented privileged job permissions, and applied a seven-day
+  Dependabot cooldown to non-security version updates.
 
 ### Removed
 
@@ -114,3 +145,6 @@ All notable changes are documented here. The format follows
   `SafeMigrationExecutionOptions`, `PreflightOnly`, annotation serializers, and
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
+
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.0.0-rc.1...HEAD
+[10.0.0-rc.1]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/releases/tag/v10.0.0-rc.1

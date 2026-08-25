@@ -1,5 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <Compile Include="..\..\benchmarks\Doka.EntityFrameworkCore.SafeMigrations.Benchmarks\BenchmarkRunner.cs"
+             Link="Infrastructure\BenchmarkRunner.cs" />
     <Compile Include="..\Shared\SafeMigrationLiteralContract.cs"
              Link="Infrastructure\SafeMigrationLiteralContract.cs" />
     <Compile Include="..\Shared\SafeMigrationStateSpaceGenerator.cs"
@@ -7,6 +9,7 @@
     <None Include="..\..\schemas\safe-migration-run-report-v1.schema.json"
           Link="schemas\safe-migration-run-report-v1.schema.json"
           CopyToOutputDirectory="PreserveNewest" />
+    <ProjectReference Include="..\..\eng\Doka.EntityFrameworkCore.SafeMigrations.NuGetSymbolReadback\Doka.EntityFrameworkCore.SafeMigrations.NuGetSymbolReadback.csproj" />
     <ProjectReference Include="..\..\src\Doka.EntityFrameworkCore.SafeMigrations\Doka.EntityFrameworkCore.SafeMigrations.csproj" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />

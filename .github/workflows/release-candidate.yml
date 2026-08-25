@@ -1,0 +1,402 @@
+name: Release candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Candidate package version without a leading v, for example 10.0.0-rc.1.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: safe-migrations-release-candidate-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Validate candidate identity and unused version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      package-version: ${{ steps.version.outputs.package-version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+      release-tag: ${{ steps.version.outputs.release-tag }}
+    steps:
+      - name: Checkout complete candidate history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate candidate version
+        id: version
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        shell: bash
+        run: eng/release/validate-version.sh "$REQUESTED_VERSION"
+
+      - name: Verify current main source before tag creation
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.release-tag }}
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "Release candidates must be dispatched from main." >&2
+            exit 1
+          fi
+
+          git fetch --quiet origin +refs/heads/main:refs/remotes/origin/main
+          if [[ "$(git rev-parse refs/remotes/origin/main)" != "$GITHUB_SHA" ]]; then
+            echo "The dispatched commit is no longer current main." >&2
+            exit 1
+          fi
+
+          if git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"; then
+            echo "Candidate qualification must complete before its release tag exists." >&2
+            exit 1
+          fi
+
+      - name: Require an unused NuGet version
+        env:
+          PACKAGE_VERSION: ${{ steps.version.outputs.package-version }}
+        shell: bash
+        run: |
+          for package_id in \
+            doka.entityframeworkcore.safemigrations \
+            doka.entityframeworkcore.safemigrations.mysql \
+            doka.entityframeworkcore.safemigrations.postgresql; do
+            package_url="https://api.nuget.org/v3-flatcontainer/$package_id/$PACKAGE_VERSION/$package_id.$PACKAGE_VERSION.nupkg"
+            http_code="$(curl --silent --show-error --location --connect-timeout 10 --max-time 60 --output /dev/null --write-out '%{http_code}' "$package_url")"
+            if [[ "$http_code" != "404" ]]; then
+              echo "NuGet version must be unused; $package_id returned HTTP $http_code." >&2
+              exit 1
+            fi
+          done
+
+  quality-gates:
+    name: Full reversible qualification
+    needs: preflight
+    uses: ./.github/workflows/quality-gates.yml
+    permissions:
+      contents: read
+    with:
+      package-version: ${{ needs.preflight.outputs.package-version }}
+      artifact-name: safe-migrations-release-${{ needs.preflight.outputs.package-version }}-${{ github.run_attempt }}
+      artifact-retention-days: 90
+      require-stable-dependencies: true
+
+  attest:
+    name: Attest qualified candidate
+    needs:
+      - preflight
+      - quality-gates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      attestation-artifact-name: ${{ steps.artifact-identity.outputs.name }}
+    permissions:
+      contents: read
+      id-token: write           # Mints the short-lived Sigstore signing certificate.
+      attestations: write       # Publishes provenance and SBOM attestations.
+      artifact-metadata: write  # Links attested subjects to GitHub artifact metadata.
+    steps:
+      - name: Checkout qualified source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download immutable qualified bytes
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ needs.quality-gates.outputs.qualified-artifact-name }}
+          path: artifacts
+
+      - name: Verify downloaded qualification evidence
+        env:
+          PACKAGE_VERSION: ${{ needs.preflight.outputs.package-version }}
+        shell: bash
+        run: |
+          (
+            cd artifacts/packages
+            sha256sum --check SHA256SUMS
+          )
+          eng/verify-package-contents.sh \
+            --package-dir artifacts/packages \
+            --version "$PACKAGE_VERSION" \
+            --require-stable-dependencies
+
+      - name: Attest build provenance
+        id: provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: |
+            artifacts/packages/*.nupkg
+            artifacts/packages/*.snupkg
+            artifacts/packages/SHA256SUMS
+            artifacts/packages/SYMBOLS.json
+            artifacts/sbom/_manifest/spdx_2.2/manifest.spdx.json
+
+      - name: Attest SPDX SBOM
+        id: sbom-attestation
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: |
+            artifacts/packages/*.nupkg
+            artifacts/packages/*.snupkg
+          sbom-path: artifacts/sbom/_manifest/spdx_2.2/manifest.spdx.json
+
+      - name: Preserve attestation bundles
+        env:
+          PROVENANCE_BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
+          SBOM_BUNDLE: ${{ steps.sbom-attestation.outputs.bundle-path }}
+        shell: bash
+        run: |
+          mkdir -p artifacts/attestations
+          cp "$PROVENANCE_BUNDLE" \
+            artifacts/attestations/build-provenance.sigstore.json
+          cp "$SBOM_BUNDLE" \
+            artifacts/attestations/sbom-attestation.sigstore.json
+
+      - name: Record attestation artifact identity
+        id: artifact-identity
+        env:
+          ATTESTATION_ARTIFACT_NAME: safe-migrations-attestations-${{ needs.preflight.outputs.package-version }}-${{ github.run_attempt }}
+        run: echo "name=$ATTESTATION_ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Upload candidate attestations
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.artifact-identity.outputs.name }}
+          path: artifacts/attestations
+          if-no-files-found: error
+          retention-days: 90
+
+  publish:
+    name: Verify tag, publish, and read back
+    needs:
+      - preflight
+      - quality-gates
+      - attest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    environment:
+      name: nuget
+    permissions:
+      actions: read       # Reads the exact qualification and attestation artifacts.
+      attestations: read  # Verifies the repository-owned attestation bundles.
+      contents: write     # Creates the draft and publishes the verified GitHub Release.
+      id-token: write     # Exchanges OIDC for a short-lived NuGet API key when needed.
+    env:
+      PACKAGE_VERSION: ${{ needs.preflight.outputs.package-version }}
+      RELEASE_PRERELEASE: ${{ needs.preflight.outputs.prerelease }}
+      RELEASE_TAG: ${{ needs.preflight.outputs.release-tag }}
+    steps:
+      - name: Checkout qualified source and complete history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - name: Download immutable qualified bytes
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ needs.quality-gates.outputs.qualified-artifact-name }}
+          path: artifacts
+
+      - name: Download candidate attestations
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ needs.attest.outputs.attestation-artifact-name }}
+          path: artifacts/attestations
+
+      - name: Bind publication to the qualified commit and requested tag
+        shell: bash
+        run: |
+          git fetch --quiet origin \
+            +refs/heads/main:refs/remotes/origin/main \
+            "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+
+          if [[ "$GITHUB_REF" != "refs/heads/main" \
+              || "$(git rev-parse HEAD)" != "$GITHUB_SHA" \
+              || "$(git rev-parse refs/remotes/origin/main)" != "$GITHUB_SHA" ]]; then
+            echo "Publication requires the qualified commit to remain current main." >&2
+            exit 1
+          fi
+
+          if [[ "$(git rev-list -n 1 "refs/tags/$RELEASE_TAG")" != "$GITHUB_SHA" ]]; then
+            echo "The release tag does not identify the qualified commit." >&2
+            exit 1
+          fi
+
+      - name: Verify authorized signed annotated release tag
+        shell: bash
+        run: eng/release/verify-tag.sh "$RELEASE_TAG" "$GITHUB_SHA"
+
+      - name: Verify GitHub release-tag signature state
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            const { verifySignedAnnotatedTag } = require('./eng/release/github-release.js');
+            await verifySignedAnnotatedTag(
+              github,
+              context.repo.owner,
+              context.repo.repo,
+              process.env.RELEASE_TAG,
+              context.sha
+            );
+
+      - name: Verify qualified bytes again before publication
+        shell: bash
+        run: |
+          (
+            cd artifacts/packages
+            sha256sum --check SHA256SUMS
+          )
+          eng/verify-package-contents.sh \
+            --package-dir artifacts/packages \
+            --version "$PACKAGE_VERSION" \
+            --require-stable-dependencies
+
+      - name: Verify provenance and SBOM attestations
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROVENANCE_BUNDLE: artifacts/attestations/build-provenance.sigstore.json
+          SBOM_BUNDLE: artifacts/attestations/sbom-attestation.sigstore.json
+          SIGNER_WORKFLOW: ${{ github.repository }}/.github/workflows/release-candidate.yml
+        shell: bash
+        run: |
+          identity_arguments=(
+            --repo "$GITHUB_REPOSITORY"
+            --signer-workflow "$SIGNER_WORKFLOW"
+            --signer-digest "$GITHUB_SHA"
+            --source-ref refs/heads/main
+            --source-digest "$GITHUB_SHA"
+            --deny-self-hosted-runners
+          )
+
+          for artifact in \
+            artifacts/packages/*.nupkg \
+            artifacts/packages/*.snupkg \
+            artifacts/packages/SHA256SUMS \
+            artifacts/packages/SYMBOLS.json \
+            artifacts/sbom/_manifest/spdx_2.2/manifest.spdx.json; do
+            gh attestation verify "$artifact" \
+              --bundle "$PROVENANCE_BUNDLE" \
+              "${identity_arguments[@]}"
+          done
+
+          for artifact in artifacts/packages/*.nupkg artifacts/packages/*.snupkg; do
+            gh attestation verify "$artifact" \
+              --bundle "$SBOM_BUNDLE" \
+              --predicate-type https://spdx.dev/Document/v2.3 \
+              "${identity_arguments[@]}"
+          done
+
+      - name: Stage and verify GitHub Release draft
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            const path = require('path');
+            const { stageRelease } = require('./eng/release/github-release.js');
+            const tag = process.env.RELEASE_TAG;
+            const prerelease = process.env.RELEASE_PRERELEASE === 'true';
+            const assetPaths = [
+              ...require('fs').readdirSync('artifacts/packages')
+                .filter((name) => name.endsWith('.nupkg') || name.endsWith('.snupkg') || name === 'SHA256SUMS' || name === 'SYMBOLS.json')
+                .map((name) => path.join('artifacts/packages', name)),
+              'artifacts/sbom/_manifest/spdx_2.2/manifest.spdx.json',
+              'artifacts/attestations/build-provenance.sigstore.json',
+              'artifacts/attestations/sbom-attestation.sigstore.json'
+            ];
+            await stageRelease({
+              github,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag,
+              targetCommitish: context.sha,
+              name: tag,
+              body: `See [CHANGELOG.md](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/${tag}/CHANGELOG.md).`,
+              prerelease,
+              assetPaths
+            });
+
+      - name: Check NuGet.org immediately before publication
+        id: nuget-preflight
+        shell: bash
+        run: >-
+          eng/publish-nuget.sh
+          --package-dir artifacts/packages
+          --version "$PACKAGE_VERSION"
+          --mode preflight
+
+      - name: Exchange GitHub OIDC token for NuGet API key
+        if: steps.nuget-preflight.outputs.publication_required == 'true'
+        id: nuget-login
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: Publish missing packages or verify exact existing bytes
+        if: steps.nuget-preflight.outputs.publication_required == 'true'
+        env:
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+        shell: bash
+        run: >-
+          eng/publish-nuget.sh
+          --package-dir artifacts/packages
+          --version "$PACKAGE_VERSION"
+          --mode publish
+
+      - name: Verify NuGet repository signatures and content readback
+        run: |
+          mkdir -p artifacts/nuget-readback
+          eng/readback-nuget.sh \
+            --package-dir artifacts/packages \
+            --output artifacts/nuget-readback \
+            --version "$PACKAGE_VERSION"
+
+      - name: Upload signed NuGet readback evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: safe-migrations-nuget-readback-${{ needs.preflight.outputs.package-version }}-${{ github.run_attempt }}
+          path: artifacts/nuget-readback
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 90
+
+      - name: Finalize verified GitHub Release
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            const path = require('path');
+            const { reconcileRelease } = require('./eng/release/github-release.js');
+            const tag = process.env.RELEASE_TAG;
+            const prerelease = process.env.RELEASE_PRERELEASE === 'true';
+            const assetPaths = [
+              ...require('fs').readdirSync('artifacts/packages')
+                .filter((name) => name.endsWith('.nupkg') || name.endsWith('.snupkg') || name === 'SHA256SUMS' || name === 'SYMBOLS.json')
+                .map((name) => path.join('artifacts/packages', name)),
+              'artifacts/sbom/_manifest/spdx_2.2/manifest.spdx.json',
+              'artifacts/attestations/build-provenance.sigstore.json',
+              'artifacts/attestations/sbom-attestation.sigstore.json',
+              'artifacts/nuget-readback/SIGNED_SHA256SUMS'
+            ];
+            await reconcileRelease({
+              github,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag,
+              targetCommitish: context.sha,
+              name: tag,
+              body: `See [CHANGELOG.md](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/${tag}/CHANGELOG.md).`,
+              prerelease,
+              assetPaths
+            });

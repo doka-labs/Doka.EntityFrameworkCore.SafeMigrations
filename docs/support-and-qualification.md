@@ -8,19 +8,20 @@ with roll-forward disabled. SafeMigrations supports EF Core 10 only.
 | Package | Runtime dependency contract |
 |---|---|
 | Core | `Microsoft.EntityFrameworkCore.Relational` `[10.0.8,10.1.0)` |
-| MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` `[10.0.0,10.1.0)` for stable publication |
+| MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` exact `[10.0.0]` |
 | PostgreSQL | `Npgsql.EntityFrameworkCore.PostgreSQL` `[10.0.0,11.0.0)` |
 
-During pre-release integration, the committed Doka version may identify a
-specific immutable development or RC package. `release.yml` passes
-`--require-stable-dependencies`; therefore a stable SafeMigrations tag cannot
-publish until its package graph resolves a stable Doka 10 package. CI does not
-build Doka and never uses a cross-repository ProjectReference.
+Release qualification passes `--require-stable-dependencies`; both candidate
+and stable package graphs must therefore resolve the exact stable Doka 10.0.0
+package. CI does not build Doka and never uses a cross-repository
+ProjectReference. A Doka update is accepted only after the complete package,
+engine, tooling, dependency-profile, and performance matrix passes again.
 
 ## Engine matrix
 
 The reusable workflow `.github/workflows/quality-gates.yml` is invoked by both
-CI and stable releases. It pins these exact qualification images:
+CI, release candidates, and stable releases. It pins these exact qualification
+images:
 
 | Engine | Image |
 |---|---|
@@ -62,14 +63,16 @@ silently modifying the Floor contract.
 
 ## Behavioral evidence
 
-The test inventory currently contains 250 xUnit test cases plus 14 repository
+The test inventory currently contains 260 xUnit test cases plus 29 repository
 tooling tests:
 
-- 66 provider-neutral tests;
-- 98 MySQL/MariaDB tests;
-- 86 PostgreSQL tests;
-- six Python tests for coverage and project-boundary gates;
-- eight Node.js tests for release reconciliation.
+- 74 provider-neutral tests;
+- 99 MySQL/MariaDB tests;
+- 87 PostgreSQL tests;
+- 16 Python tests for coverage, project-boundary, release-version, workflow
+  retry-contract, and fail-fast publication gates;
+- 13 Node.js tests for stable and prerelease release reconciliation and signed
+  annotated tag binding.
 
 Provider tests use real Docker servers and cover:
 
@@ -126,7 +129,7 @@ applied heuristically:
 
 - PostgreSQL 14 rejects `NULLS NOT DISTINCT`; PostgreSQL introduced that
   `CREATE INDEX` clause in version 15.
-- Doka rc.11 parenthesizes `DateOnly` and `TimeOnly` typed literals in column
+- Doka 10.0.0 parenthesizes `DateOnly` and `TimeOnly` typed literals in column
   defaults. The complete MySQL and MariaDB matrix qualifies the resulting DDL
   and each engine's catalog display form.
 - MySQL, MariaDB 10.11, and MariaDB 11.4 reject a `Guid` literal default stored
@@ -162,7 +165,8 @@ used to hide an uncovered regression.
 
 ## Performance and memory
 
-`eng/performance-budgets.json` defines explicit duration, regression tolerance,
+`eng/performance-budgets.json` defines explicit Core, MySQL/MariaDB, and
+PostgreSQL benchmark sets with duration, regression tolerance,
 and allocation ceilings at 1, 100, and 1000 operations. Three independently
 restored and executed benchmark projects enforce the Core, MySQL/MariaDB, and
 PostgreSQL dependency boundaries for:
@@ -212,10 +216,13 @@ against the platform-specific release digest before execution. The generated
 SPDX 2.2 manifest must validate all six packages plus the checksum file and
 contain the required resolved package graph.
 
-Stable release adds GitHub/Sigstore build provenance and SBOM attestations,
-NuGet Trusted Publishing, NuGet repository-signature verification, and a
-content readback that differs from the qualified package only by NuGet's
-`.signature.p7s` entry.
+Every release candidate and stable release adds GitHub/Sigstore build
+provenance and SBOM attestations, NuGet Trusted Publishing, NuGet
+repository-signature verification, and a content readback that differs from
+the qualified package only by NuGet's `.signature.p7s` entry. Publication
+re-verifies the downloaded attestation bundles, stages the exact GitHub Release
+draft before NuGet mutation, and obtains a short-lived NuGet credential only
+when credential-free readback proves that qualified content is missing.
 
 ## Primary references
 

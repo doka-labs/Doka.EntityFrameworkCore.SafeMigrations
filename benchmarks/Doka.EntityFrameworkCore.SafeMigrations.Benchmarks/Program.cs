@@ -1,4 +1,4 @@
-var runner = BenchmarkRunner.Create(args, "core-results.json");
+var runner = BenchmarkRunner.Create(args, "core-results.json", "core");
 
 foreach (var size in new[] { 1, 100, 1000 })
 {

@@ -4,7 +4,8 @@
 
 | Version | Supported |
 |---------|-----------|
-| Unreleased main branch | Security fixes only before the first stable release |
+| 10.0.x | Yes |
+| 10.0.0 prereleases | Only until stable 10.0.0 is published |
 
 ## Reporting a Vulnerability
 

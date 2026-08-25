@@ -261,7 +261,7 @@ global lock or mutable static cache.
 Every multi-command provider plan is idempotent at command boundaries. Tests
 cover failure after earlier standard DDL, same-session recovery after a guard
 failure, cancellation during blocked DDL, cleanup failure with pool eviction,
-and repeat execution. Doka rc.11 executes every handler-authored guard as one
+and repeat execution. Doka 10.0.0 executes every handler-authored guard as one
 bounded scope with ordered setup, one body, and reverse-order cleanup. Cleanup
 runs after success, failure, or cancellation with an independent cancellation
 token. A cleanup failure closes the connection and evicts its physical session
@@ -286,7 +286,9 @@ The runtime path has:
 
 The repository gates construction, planning, both provider generators, and
 report serialization at 1, 100, and 1000 operations against explicit duration
-and allocation budgets in `eng/performance-budgets.json`. It separately gates
+and allocation budgets in schema-versioned Core, MySQL/MariaDB, and PostgreSQL
+sets in `eng/performance-budgets.json`; missing, duplicate, unknown, and
+orphaned measurements fail the run. It separately gates
 the canonical snapshot initialization, `IMigrationsModelDiffer` comparison,
 and model fingerprint path used by the runner.
 

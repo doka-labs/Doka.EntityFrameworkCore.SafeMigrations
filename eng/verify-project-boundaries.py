@@ -12,6 +12,7 @@ from pathlib import Path
 CORE_PROJECT = "Doka.EntityFrameworkCore.SafeMigrations"
 MYSQL_PROJECT = "Doka.EntityFrameworkCore.SafeMigrations.MySql"
 POSTGRESQL_PROJECT = "Doka.EntityFrameworkCore.SafeMigrations.PostgreSql"
+SYMBOL_READBACK_PROJECT = "Doka.EntityFrameworkCore.SafeMigrations.NuGetSymbolReadback"
 MYSQL_TESTCONTAINERS_PACKAGE = "Testcontainers.MySql"
 POSTGRESQL_TESTCONTAINERS_PACKAGE = "Testcontainers.PostgreSql"
 
@@ -21,6 +22,7 @@ class ProjectContract:
     path: str
     project_references: frozenset[str]
     package_references: frozenset[str]
+    included_in_solution: bool = True
 
 
 @dataclass(frozen=True)
@@ -58,7 +60,7 @@ PROJECT_CONTRACTS = (
     ),
     ProjectContract(
         f"tests/{CORE_PROJECT}.Tests/{CORE_PROJECT}.Tests.csproj",
-        frozenset({CORE_PROJECT}),
+        frozenset({CORE_PROJECT, "Doka.EntityFrameworkCore.SafeMigrations.NuGetSymbolReadback"}),
         frozenset({"Microsoft.NET.Test.Sdk", "xunit", "xunit.runner.visualstudio"}),
     ),
     ProjectContract(
@@ -108,14 +110,21 @@ PROJECT_CONTRACTS = (
         frozenset(),
     ),
     ProjectContract(
+        f"eng/{SYMBOL_READBACK_PROJECT}/{SYMBOL_READBACK_PROJECT}.csproj",
+        frozenset(),
+        frozenset(),
+    ),
+    ProjectContract(
         "eng/package-consumer/MySql/PackageConsumer.csproj",
         frozenset(),
         frozenset({MYSQL_PROJECT}),
+        False,
     ),
     ProjectContract(
         "eng/package-consumer/PostgreSql/PackageConsumer.csproj",
         frozenset(),
         frozenset({POSTGRESQL_PROJECT}),
+        False,
     ),
 )
 
@@ -226,7 +235,7 @@ def validate_solution(repository_root: Path) -> list[str]:
     required_projects = {
         contract.path
         for contract in PROJECT_CONTRACTS
-        if contract.path.startswith(("src/", "tests/", "benchmarks/", "samples/"))
+        if contract.included_in_solution
     }
     missing = sorted(required_projects - solution_projects)
 

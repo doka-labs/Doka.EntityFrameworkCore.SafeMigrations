@@ -5,29 +5,17 @@
 - .NET SDK 10.0.400, selected by `global.json`
 - Docker for MySQL, MariaDB, and PostgreSQL tests
 - Bash, `jq`, `curl`, `unzip`, and `rsync` for engineering gates
-- the exact locked `Doka.EntityFrameworkCore.MySql` package from nuget.org or
-  an immutable local package feed during prerelease integration
+- the exact locked `Doka.EntityFrameworkCore.MySql` 10.0.0 package from
+  nuget.org
 
 Do not add a ProjectReference to the Doka repository. SafeMigrations verifies a
 real package boundary.
 
 ## Restore and build
 
-After the locked Doka package is public:
-
 ```bash
 dotnet restore Doka.EntityFrameworkCore.SafeMigrations.slnx --locked-mode
 dotnet build Doka.EntityFrameworkCore.SafeMigrations.slnx --configuration Release --no-restore
-```
-
-During Doka prerelease development, add the directory containing the exact
-`.nupkg` before nuget.org:
-
-```bash
-dotnet restore Doka.EntityFrameworkCore.SafeMigrations.slnx \
-  --locked-mode \
-  --source /absolute/path/to/immutable-doka-feed \
-  --source https://api.nuget.org/v3/index.json
 ```
 
 ## Tests
@@ -71,8 +59,11 @@ dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.
 dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks.csproj --configuration Release --no-build --no-restore
 dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks.csproj --configuration Release --no-build --no-restore
 dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks.csproj --configuration Release --no-build --no-restore
+eng/verify-vertical-slices.sh
 python3 eng/verify-project-boundaries.py
 python3 -m unittest discover -s eng/tests -p 'test_*.py' -v
+node --test eng/tests/github-release.test.js
+bash -n eng/*.sh eng/release/*.sh
 dotnet format Doka.EntityFrameworkCore.SafeMigrations.slnx style --severity warn --verify-no-changes --no-restore
 dotnet format Doka.EntityFrameworkCore.SafeMigrations.slnx style --diagnostics IDE0005 --severity hidden --verify-no-changes --no-restore
 ```
@@ -90,9 +81,9 @@ Package qualification requires an empty output directory and the Doka feed:
 
 ```bash
 eng/qualify-packages.sh \
-  --version 1.0.0-local.1 \
+  --version 10.0.0-local.1 \
   --output /absolute/empty/output \
-  --doka-source /absolute/path/to/immutable-doka-feed
+  --doka-source https://api.nuget.org/v3/index.json
 ```
 
 The reusable CI workflow additionally runs all engine images, the merged

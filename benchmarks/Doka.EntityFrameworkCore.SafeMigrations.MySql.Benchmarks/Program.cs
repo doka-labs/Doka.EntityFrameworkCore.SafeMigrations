@@ -2,7 +2,7 @@ using var context = new MySqlGenerationContext();
 
 var generator = context.GetService<IMigrationsSqlGenerator>();
 var planCapture = context.GetService<MySqlSafeMigrationPlanCapture>();
-var runner = BenchmarkRunner.Create(args, "mysql-results.json");
+var runner = BenchmarkRunner.Create(args, "mysql-results.json", "mysql");
 
 foreach (var size in new[] { 1, 100, 1000 })
 {

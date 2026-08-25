@@ -162,7 +162,8 @@ jq \
 (
     cd "$output_dir"
     find . -type f ! -name SHA256SUMS -exec shasum -a 256 {} \; \
-        | LC_ALL=C sort > SHA256SUMS
+        | LC_ALL=C sort > "$work_dir/SHA256SUMS"
+    mv "$work_dir/SHA256SUMS" SHA256SUMS
     shasum -a 256 -c SHA256SUMS
 )
 

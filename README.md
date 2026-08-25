@@ -337,10 +337,17 @@ and after adding 1,000 foreign tables with child objects. Expected assessments
 must remain identical, foreign child rows must stay outside the scoped child
 inventory, and noisy p95 must remain within `2 * clean p95 + 250 ms`.
 
-Stable releases are tag-driven. They publish the exact qualified bytes through
-NuGet Trusted Publishing, create SLSA provenance and SBOM attestations, verify
-NuGet repository signatures and package contents by readback, and only then
-create the GitHub Release. See [Release process](docs/release-process.md).
+Release candidates and stable releases use the same manually dispatched path.
+The workflow qualifies and attests exact bytes from current `main` before it
+waits at the protected NuGet environment. Only then does the operator create a
+signed annotated tag on that qualified commit and approve publication. NuGet
+Trusted Publishing is requested only for missing content after a
+credential-free conflict check. Authorized tag-signature, provenance, SBOM,
+repository-signature, package-content, public-symbol, and GitHub Release
+readbacks fail closed. The exact release draft exists before NuGet is mutated
+and is published only after the signed NuGet readback is attached. Candidates
+are marked prerelease and never replace the latest stable release. See
+[Release process](docs/release-process.md).
 
 ## Design boundaries
 

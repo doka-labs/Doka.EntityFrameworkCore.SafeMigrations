@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>Doka.EntityFrameworkCore.SafeMigrations.NuGetSymbolReadback</AssemblyName>
+    <RootNamespace>Doka.EntityFrameworkCore.SafeMigrations.NuGetSymbolReadback</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Doka.EntityFrameworkCore.SafeMigrations.Tests" />
+  </ItemGroup>
+</Project>

@@ -109,7 +109,7 @@ Only then release the write fence and mark the instance complete.
 
 The connection must set `Allow User Variables=true`, corresponding to
 `MySqlConnectionStringBuilder.AllowUserVariables`; SafeMigrations validates
-this before its first guarded command. Doka rc.11 executes the handler cleanup
+this before its first guarded command. Doka 10.0.0 executes the handler cleanup
 after success, failure, or cancellation with an independent cancellation
 token. If cleanup itself fails, Doka closes the connection, clears its
 MySqlConnector pool generation, and reports a non-retryable cleanup exception.

@@ -25,7 +25,7 @@ failure behavior.
 The read-only analyzer captures SafeMigrations' typed runtime plan while Doka
 invokes the registered handler with the real server-version, feature, and
 operation-ordinal context. It does not parse generated commands. The exact
-rc.11 package exposes provider-validated `Setup`, `Body`, and `Cleanup`
+Doka 10.0.0 package exposes provider-validated `Setup`, `Body`, and `Cleanup`
 fragments and a bounded `CreateScoped` command contract. SafeMigrations uses
 those fragments directly and returns one provider-executed scope per guarded
 operation. Doka runs cleanup after success, failure, or cancellation with an
@@ -48,7 +48,9 @@ count every `pg_constraint` row.
 
 PostgreSQL performs identifier quoting through `pg_catalog.quote_ident`, but
 SafeMigrations still predicts version-sensitive decompiled forms returned by
-`pg_catalog.pg_get_expr`: `::` casts, `IN` rendered as `= ANY (ARRAY[...])`,
+`pg_catalog.pg_get_expr` through
+`PostgreSqlSafeMigrationSqlExpressionRenderer.RenderCatalogDeparsedCandidateSql`:
+`::` casts, `IN` rendered as `= ANY (ARRAY[...])`,
 `NOT IN` rendered as `<> ALL (ARRAY[...])`, expanded `BETWEEN` predicates, and
 binary-expression parentheses. `pg_get_expr` decompiles PostgreSQL's internal
 expression tree; it does not preserve the originally submitted SQL text. Every
@@ -84,8 +86,9 @@ forces the current Latest patch profile, confirms exact resolved versions,
 builds, and runs all three suites without modifying committed Floor lockfiles.
 
 The declared range must never be widened beyond the profiles actually tested.
-Stable SafeMigrations packages must depend on a stable Doka package; the package
-content gate rejects a prerelease Doka dependency during a stable tag run.
+Publishable SafeMigrations candidates and stable packages must depend on a
+stable Doka package; the package content gate rejects a prerelease Doka
+dependency during every release qualification.
 
 ## Required upgrade evidence
 

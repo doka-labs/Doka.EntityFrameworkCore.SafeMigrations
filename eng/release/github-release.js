@@ -59,7 +59,7 @@ function validateRelease(release, expected) {
     conflicts.push('body');
   }
 
-  if (release.prerelease !== false) {
+  if (release.prerelease !== expected.prerelease) {
     conflicts.push('prerelease');
   }
 
@@ -79,6 +79,44 @@ async function validateTagTarget(github, owner, repo, tag, expectedCommit) {
     throw new Error(
       `Git tag '${tag}' resolves to ${response.data.sha}; expected ${expectedCommit}.`);
   }
+}
+
+async function verifySignedAnnotatedTag(github, owner, repo, tag, expectedCommit) {
+  const referenceResponse = await github.rest.git.getRef({
+    owner,
+    repo,
+    ref: `tags/${tag}`,
+  });
+  const reference = referenceResponse.data.object;
+  if (reference.type !== 'tag') {
+    throw new Error(`Git tag '${tag}' must be annotated.`);
+  }
+
+  const tagResponse = await github.rest.git.getTag({
+    owner,
+    repo,
+    tag_sha: reference.sha,
+  });
+  const annotatedTag = tagResponse.data;
+  if (annotatedTag.tag !== tag) {
+    throw new Error(
+      `Annotated tag object names '${annotatedTag.tag}'; expected '${tag}'.`);
+  }
+
+  if (annotatedTag.object.type !== 'commit'
+      || annotatedTag.object.sha !== expectedCommit) {
+    throw new Error(
+      `Git tag '${tag}' does not directly identify qualified commit ${expectedCommit}.`);
+  }
+
+  if (annotatedTag.verification?.verified !== true) {
+    const reason = annotatedTag.verification?.reason ?? 'missing';
+
+    throw new Error(
+      `GitHub did not verify the signature of tag '${tag}' (reason: ${reason}).`);
+  }
+
+  return annotatedTag;
 }
 
 async function readAssetDigest(github, owner, repo, asset) {
@@ -118,7 +156,14 @@ async function verifyAsset(github, owner, repo, actual, expected) {
   }
 }
 
-async function reconcileAssets(github, owner, repo, release, expectedAssets) {
+async function reconcileAssets(
+  github,
+  owner,
+  repo,
+  release,
+  expectedAssets,
+  allowAdditionalPublishedAssets = false,
+) {
   const existingAssets = await github.paginate(github.rest.repos.listReleaseAssets, {
     owner,
     repo,
@@ -133,7 +178,8 @@ async function reconcileAssets(github, owner, repo, release, expectedAssets) {
     }
 
     actualByName.set(asset.name, asset);
-    if (!expectedByName.has(asset.name)) {
+    if (!expectedByName.has(asset.name)
+        && !(allowAdditionalPublishedAssets && !release.draft)) {
       throw new Error(`GitHub Release contains unexpected asset '${asset.name}'.`);
     }
   }
@@ -164,7 +210,8 @@ async function reconcileAssets(github, owner, repo, release, expectedAssets) {
     release_id: release.id,
     per_page: 100,
   });
-  if (reconciled.length !== expectedAssets.length) {
+  if (!allowAdditionalPublishedAssets
+      && reconciled.length !== expectedAssets.length) {
     throw new Error(
       `GitHub Release has ${reconciled.length} assets; expected ${expectedAssets.length}.`);
   }
@@ -172,6 +219,10 @@ async function reconcileAssets(github, owner, repo, release, expectedAssets) {
   for (const actual of reconciled) {
     const expected = expectedByName.get(actual.name);
     if (!expected) {
+      if (allowAdditionalPublishedAssets && !release.draft) {
+        continue;
+      }
+
       throw new Error(`GitHub Release contains unexpected asset '${actual.name}'.`);
     }
 
@@ -179,7 +230,7 @@ async function reconcileAssets(github, owner, repo, release, expectedAssets) {
   }
 }
 
-async function reconcileRelease(options) {
+async function stageRelease(options) {
   const {
     github,
     owner,
@@ -188,9 +239,14 @@ async function reconcileRelease(options) {
     targetCommitish,
     name,
     body,
+    prerelease,
     assetPaths,
   } = options;
-  const expected = { tag, name, body };
+  if (typeof prerelease !== 'boolean') {
+    throw new Error('GitHub Release prerelease mode must be explicit.');
+  }
+
+  const expected = { tag, name, body, prerelease };
   const expectedAssets = loadAssets(assetPaths);
   await validateTagTarget(github, owner, repo, tag, targetCommitish);
   let release = await listReleaseByTag(github, owner, repo, tag);
@@ -203,24 +259,52 @@ async function reconcileRelease(options) {
       name,
       body,
       draft: true,
-      prerelease: false,
+      prerelease,
     });
     release = response.data;
   }
 
   validateRelease(release, expected);
-  await reconcileAssets(github, owner, repo, release, expectedAssets);
+  await reconcileAssets(
+    github,
+    owner,
+    repo,
+    release,
+    expectedAssets,
+    !release.draft,
+  );
+
+  return release;
+}
+
+async function reconcileRelease(options) {
+  const release = await stageRelease(options);
+  const {
+    github,
+    owner,
+    repo,
+    prerelease,
+    assetPaths,
+  } = options;
   if (release.draft) {
     const response = await github.rest.repos.updateRelease({
       owner,
       repo,
       release_id: release.id,
       draft: false,
-      make_latest: 'true',
+      make_latest: prerelease ? 'false' : 'true',
     });
 
-    release = response.data;
+    return response.data;
   }
+
+  await reconcileAssets(
+    github,
+    owner,
+    repo,
+    release,
+    loadAssets(assetPaths),
+  );
 
   return release;
 }
@@ -229,4 +313,6 @@ module.exports = {
   loadAssets,
   reconcileRelease,
   sha256,
+  stageRelease,
+  verifySignedAnnotatedTag,
 };

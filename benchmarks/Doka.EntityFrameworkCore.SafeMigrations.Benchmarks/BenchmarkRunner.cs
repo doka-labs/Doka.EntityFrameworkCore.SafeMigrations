@@ -5,6 +5,7 @@ internal sealed class BenchmarkRunner
     private const int SampleCount = 5;
 
     private readonly IReadOnlyDictionary<string, BenchmarkBudget> _budgets;
+    private readonly HashSet<string> _measuredNames = new(StringComparer.Ordinal);
     private readonly string _outputPath;
     private readonly List<BenchmarkResult> _results = [];
 
@@ -19,14 +20,15 @@ internal sealed class BenchmarkRunner
 
     public static BenchmarkRunner Create(
         string[] arguments,
-        string defaultOutputFileName
+        string defaultOutputFileName,
+        string benchmarkSet
     )
     {
         var repositoryRoot = FindRepositoryRoot(AppContext.BaseDirectory);
         var budgetPath = Path.Combine(repositoryRoot, "eng", "performance-budgets.json");
         var outputPath = ReadOutputPath(arguments, repositoryRoot, defaultOutputFileName);
 
-        return new BenchmarkRunner(ReadBudgets(budgetPath), outputPath);
+        return new BenchmarkRunner(ReadBudgets(budgetPath, benchmarkSet), outputPath);
     }
 
     public void Measure(
@@ -37,6 +39,11 @@ internal sealed class BenchmarkRunner
         if (!_budgets.TryGetValue(name, out var budget))
         {
             throw new InvalidOperationException($"No performance budget exists for '{name}'.");
+        }
+
+        if (!_measuredNames.Add(name))
+        {
+            throw new InvalidOperationException($"Benchmark '{name}' was measured more than once.");
         }
 
         _ = action();
@@ -77,6 +84,16 @@ internal sealed class BenchmarkRunner
 
     public int Complete()
     {
+        var unmeasuredBudgets = _budgets.Keys
+            .Where(name => !_measuredNames.Contains(name))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        if (unmeasuredBudgets.Length > 0)
+        {
+            throw new InvalidOperationException(
+                $"Performance budgets were not measured: {string.Join(", ", unmeasuredBudgets)}.");
+        }
+
         WriteResults(_outputPath, _results);
 
         foreach (var result in _results)
@@ -92,20 +109,26 @@ internal sealed class BenchmarkRunner
     }
 
     private static Dictionary<string, BenchmarkBudget> ReadBudgets(
-        string path
+        string path,
+        string benchmarkSet
     )
     {
         using var document = JsonDocument.Parse(File.ReadAllBytes(path));
-        var result = new Dictionary<string, BenchmarkBudget>(StringComparer.Ordinal);
+        var root = document.RootElement;
+        if (root.GetProperty("schemaVersion").GetInt32() != 2)
+        {
+            throw new InvalidOperationException("Unsupported performance-budget schema version.");
+        }
 
-        foreach (var property in document
-                     .RootElement
+        var allBudgets = new Dictionary<string, BenchmarkBudget>(StringComparer.Ordinal);
+
+        foreach (var property in root
                      .GetProperty("budgets")
                      .EnumerateObject())
         {
             var value = property.Value;
 
-            result.Add(
+            allBudgets.Add(
                 property.Name,
                 new BenchmarkBudget(
                     value
@@ -117,6 +140,60 @@ internal sealed class BenchmarkRunner
                     value
                         .GetProperty("maximumAllocatedBytes")
                         .GetInt64()));
+        }
+
+        var assignedNames = new HashSet<string>(StringComparer.Ordinal);
+        var selectedNames = new List<string>();
+        var selectedSetExists = false;
+        foreach (var set in root.GetProperty("benchmarkSets").EnumerateObject())
+        {
+            if (set.NameEquals(benchmarkSet))
+            {
+                selectedSetExists = true;
+            }
+
+            foreach (var nameElement in set.Value.EnumerateArray())
+            {
+                var name = nameElement.GetString()
+                    ?? throw new InvalidOperationException("Benchmark names must not be null.");
+                if (!allBudgets.ContainsKey(name))
+                {
+                    throw new InvalidOperationException(
+                        $"Benchmark set '{set.Name}' references missing budget '{name}'.");
+                }
+
+                if (!assignedNames.Add(name))
+                {
+                    throw new InvalidOperationException(
+                        $"Performance budget '{name}' belongs to more than one benchmark set.");
+                }
+
+                if (set.NameEquals(benchmarkSet))
+                {
+                    selectedNames.Add(name);
+                }
+            }
+        }
+
+        if (!selectedSetExists)
+        {
+            throw new InvalidOperationException($"Unknown benchmark set '{benchmarkSet}'.");
+        }
+
+        var orphanedBudgets = allBudgets.Keys
+            .Where(name => !assignedNames.Contains(name))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        if (orphanedBudgets.Length > 0)
+        {
+            throw new InvalidOperationException(
+                $"Performance budgets do not belong to a benchmark set: {string.Join(", ", orphanedBudgets)}.");
+        }
+
+        var result = new Dictionary<string, BenchmarkBudget>(selectedNames.Count, StringComparer.Ordinal);
+        foreach (var name in selectedNames)
+        {
+            result.Add(name, allBudgets[name]);
         }
 
         return result;

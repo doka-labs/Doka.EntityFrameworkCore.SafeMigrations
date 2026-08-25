@@ -44,6 +44,7 @@ package_ids=(
     Doka.EntityFrameworkCore.SafeMigrations.MySql
     Doka.EntityFrameworkCore.SafeMigrations.PostgreSql
 )
+symbol_manifest="$package_dir/SYMBOLS.json"
 
 expected_files=()
 for package_id in "${package_ids[@]}"; do
@@ -52,6 +53,24 @@ for package_id in "${package_ids[@]}"; do
         "$package_id.$package_version.snupkg"
     )
 done
+
+jq -e \
+    --arg version "$package_version" \
+    --arg core "${package_ids[0]}" \
+    --arg mysql "${package_ids[1]}" \
+    --arg postgresql "${package_ids[2]}" \
+    '.schemaVersion == 1
+        and .releaseVersion == $version
+        and (.symbols | length) == 3
+        and ([.symbols[].packageId] | sort) == ([$core, $mysql, $postgresql] | sort)
+        and all(.symbols[];
+            .packageVersion == $version
+            and (.pdbName == (.packageId + ".pdb"))
+            and (.symbolKey | test("^[0-9a-f]{32}FFFFFFFF$"))
+            and (.symbolUrl | startswith("https://symbols.nuget.org/download/symbols/"))
+            and (.checksumHeader | test("^SHA256:[0-9a-f]{64}$"))
+            and (.sha256 | test("^[0-9a-f]{64}$")))' \
+    "$symbol_manifest" >/dev/null
 
 actual_files="$(
     find "$package_dir" -maxdepth 1 -type f \

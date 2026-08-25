@@ -1,5 +1,39 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "benchmarkSets": {
+    "core": [
+      "core_intent_construction_1",
+      "core_intent_construction_100",
+      "core_intent_construction_1000",
+      "decision_planner_1",
+      "decision_planner_100",
+      "decision_planner_1000",
+      "report_json_1",
+      "report_json_100",
+      "report_json_1000"
+    ],
+    "mysql": [
+      "mysql_generation_1",
+      "mysql_generation_100",
+      "mysql_generation_1000",
+      "mysql_analyzer_build_1",
+      "mysql_analyzer_build_512",
+      "mysql_analyzer_build_1000",
+      "mysql_canonical_model_validation",
+      "model_fingerprint_10x10",
+      "model_fingerprint_100x10",
+      "model_fingerprint_1000x10"
+    ],
+    "postgresql": [
+      "postgresql_generation_1",
+      "postgresql_generation_100",
+      "postgresql_generation_1000",
+      "postgresql_analyzer_build_1",
+      "postgresql_analyzer_build_512",
+      "postgresql_analyzer_build_1000",
+      "postgresql_canonical_model_validation"
+    ]
+  },
   "budgets": {
     "core_intent_construction_1": { "baselineDurationMilliseconds": 0.05, "regressionTolerancePercent": 25, "maximumAllocatedBytes": 1024 },
     "core_intent_construction_100": { "baselineDurationMilliseconds": 0.2, "regressionTolerancePercent": 25, "maximumAllocatedBytes": 40000 },

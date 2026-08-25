@@ -55,14 +55,14 @@ server-version and feature context. The analyzer renders those plans directly
 with interned `DbParameter` values. It does not parse command text. Preflight
 does not run target DDL, create an EF history row, or create a stored routine.
 
-Every safe operation returns exactly one Doka rc.11 scoped migration command.
+Every safe operation returns exactly one Doka 10.0.0 scoped migration command.
 Its bounded fragment list contains ordered setup, one body, and reverse-order
 cleanup. A data-reading classifier adds setup fragments for lazy state
 evaluation without adding EF command boundaries. This shape reduces executor
 dispatch while retaining independent SQL commands inside the provider-owned
 scope.
 
-## Scoped cleanup in Doka rc.11
+## Scoped cleanup in Doka 10.0.0
 
 `RenderStandardOperation` exposes provider-validated `Setup`, `Body`, and
 `Cleanup` fragments. SafeMigrations embeds the exact body as UTF-8 hexadecimal

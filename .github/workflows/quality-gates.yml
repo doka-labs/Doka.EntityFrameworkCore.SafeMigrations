@@ -2,6 +2,10 @@ name: Quality gates
 
 on:
   workflow_call:
+    outputs:
+      qualified-artifact-name:
+        description: Exact immutable artifact produced by this qualification attempt.
+        value: ${{ jobs.package-and-core.outputs.qualified-artifact-name }}
     inputs:
       package-version:
         description: Version assigned to qualified SafeMigrations packages.
@@ -39,6 +43,8 @@ jobs:
     name: Core, performance, packages, and SBOM
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    outputs:
+      qualified-artifact-name: ${{ steps.artifact-identity.outputs.name }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -55,8 +61,11 @@ jobs:
           eng/verify-vertical-slices.sh
           python3 eng/verify-project-boundaries.py
 
-      - name: Verify release reconciliation
-        run: node --test eng/tests/github-release.test.js
+      - name: Verify engineering and release contracts
+        run: |
+          bash -n eng/*.sh eng/release/*.sh
+          python3 -m unittest discover -s eng/tests -p 'test_*.py' -v
+          node --test eng/tests/github-release.test.js
 
       - name: Locked restore
         run: >-
@@ -111,6 +120,7 @@ jobs:
 
       - name: Qualify reproducible packages
         env:
+          PACKAGE_VERSION: ${{ inputs.package-version }}
           REQUIRE_STABLE_DEPENDENCIES: ${{ inputs.require-stable-dependencies }}
         run: |
           stable_arguments=()
@@ -119,18 +129,20 @@ jobs:
           fi
           mkdir -p artifacts/packages
           eng/qualify-packages.sh \
-            --version "${{ inputs.package-version }}" \
+            --version "$PACKAGE_VERSION" \
             --output artifacts/packages \
             --doka-source "$DOKA_PACKAGE_SOURCE" \
             "${stable_arguments[@]}"
 
       - name: Generate and validate SPDX SBOM
+        env:
+          PACKAGE_VERSION: ${{ inputs.package-version }}
         run: |
           mkdir -p artifacts/sbom
           eng/generate-sbom.sh \
             --package-dir artifacts/packages \
             --output artifacts/sbom \
-            --version "${{ inputs.package-version }}"
+            --version "$PACKAGE_VERSION"
 
       - name: Upload core test results
         if: always()
@@ -140,6 +152,12 @@ jobs:
           path: '**/TestResults/*.trx'
           if-no-files-found: warn
           retention-days: ${{ inputs.artifact-retention-days }}
+
+      - name: Record qualified artifact identity
+        id: artifact-identity
+        env:
+          QUALIFIED_ARTIFACT_NAME: ${{ inputs.artifact-name }}
+        run: echo "name=$QUALIFIED_ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Upload qualified packages and evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -185,9 +203,6 @@ jobs:
           dotnet build Doka.EntityFrameworkCore.SafeMigrations.slnx
           --configuration Release --no-restore --disable-build-servers -m:1
           /nodeReuse:false -p:ContinuousIntegrationBuild=true
-
-      - name: Verify coverage-gate parser
-        run: python3 -m unittest discover -s eng/tests -p 'test_*.py' -v
 
       - name: Collect Core coverage
         run: >-
@@ -289,11 +304,15 @@ jobs:
           dotnet test
           tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests.csproj
           --configuration Release --no-build --no-restore --disable-build-servers
-          --logger "trx;LogFileName=${{ matrix.engine }}-${{ matrix.version }}.trx"
+          --logger "trx;LogFileName=$SAFE_MIGRATIONS_MYSQL_ENGINE-$SAFE_MIGRATIONS_MYSQL_VERSION.trx"
           -m:1 /nodeReuse:false
 
       - name: EF CLI, scripts, and bundle
-        run: eng/verify-ef-tooling.sh "${{ matrix.engine }}" "${{ matrix.image }}" "${{ matrix.version }}"
+        run: >-
+          eng/verify-ef-tooling.sh
+          "$SAFE_MIGRATIONS_MYSQL_ENGINE"
+          "$SAFE_MIGRATIONS_MYSQL_IMAGE"
+          "$SAFE_MIGRATIONS_MYSQL_VERSION"
 
       - name: Upload test and tooling evidence
         if: always()
@@ -359,11 +378,15 @@ jobs:
           dotnet test
           tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.csproj
           --configuration Release --no-build --no-restore --disable-build-servers
-          --logger "trx;LogFileName=postgresql-${{ matrix.version }}.trx"
+          --logger "trx;LogFileName=postgresql-$SAFE_MIGRATIONS_POSTGRES_VERSION.trx"
           -m:1 /nodeReuse:false
 
       - name: EF CLI, scripts, and bundle
-        run: eng/verify-ef-tooling.sh postgres "${{ matrix.image }}" "${{ matrix.version }}"
+        run: >-
+          eng/verify-ef-tooling.sh
+          postgres
+          "$SAFE_MIGRATIONS_POSTGRES_IMAGE"
+          "$SAFE_MIGRATIONS_POSTGRES_VERSION"
 
       - name: Upload test and tooling evidence
         if: always()

@@ -472,7 +472,7 @@
         "type": "Project",
         "dependencies": {
           "Doka.EntityFrameworkCore.MySql": "[10.0.0, 10.0.0]",
-          "Doka.EntityFrameworkCore.SafeMigrations": "[1.0.0-dev, )",
+          "Doka.EntityFrameworkCore.SafeMigrations": "[10.0.0-dev, )",
           "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.0.8, 10.1.0)"
         }
       },

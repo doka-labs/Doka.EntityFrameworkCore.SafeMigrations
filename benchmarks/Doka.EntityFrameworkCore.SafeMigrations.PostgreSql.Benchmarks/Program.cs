@@ -5,7 +5,7 @@ var catalogBuilder = new PostgreSqlSafeMigrationCatalogSqlBuilder(
     context.GetService<IRelationalTypeMappingSource>(),
     context.GetService<ISqlGenerationHelper>());
 
-var runner = BenchmarkRunner.Create(args, "postgresql-results.json");
+var runner = BenchmarkRunner.Create(args, "postgresql-results.json", "postgresql");
 
 foreach (var size in new[] { 1, 100, 1000 })
 {

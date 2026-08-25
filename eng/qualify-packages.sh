@@ -102,6 +102,16 @@ for package_id in "${package_ids[@]}"; do
     done
 done
 
+dotnet run \
+    --project "$repo_root/eng/Doka.EntityFrameworkCore.SafeMigrations.NuGetSymbolReadback/Doka.EntityFrameworkCore.SafeMigrations.NuGetSymbolReadback.csproj" \
+    --configuration Release \
+    --no-build \
+    --no-restore \
+    -- \
+    --package-dir "$output_dir" \
+    --version "$package_version" \
+    --output "$output_dir/SYMBOLS.json"
+
 content_arguments=(
     --package-dir "$output_dir"
     --version "$package_version"
@@ -118,7 +128,7 @@ fi
 
 (
     cd "$output_dir"
-    shasum -a 256 ./*.nupkg ./*.snupkg | LC_ALL=C sort > SHA256SUMS
+    shasum -a 256 ./*.nupkg ./*.snupkg SYMBOLS.json | LC_ALL=C sort > SHA256SUMS
 )
 
 echo "SafeMigrations package qualification passed with byte-identical pack output."
