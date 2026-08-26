@@ -7,9 +7,9 @@ with roll-forward disabled. SafeMigrations supports EF Core 10 only.
 
 | Package | Runtime dependency contract |
 |---|---|
-| Core | `Microsoft.EntityFrameworkCore.Relational` `[10.0.8,10.1.0)` |
+| Core | `Microsoft.EntityFrameworkCore.Relational` `[10.0.11,10.1.0)` |
 | MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` exact `[10.0.0]` |
-| PostgreSQL | `Npgsql.EntityFrameworkCore.PostgreSQL` `[10.0.0,11.0.0)` |
+| PostgreSQL | `Npgsql.EntityFrameworkCore.PostgreSQL` `[10.0.3,11.0.0)` |
 
 Release qualification passes `--require-stable-dependencies`; both candidate
 and stable package graphs must therefore resolve the exact stable Doka 10.0.0
@@ -46,8 +46,8 @@ requires a reviewed support-contract change and fresh evidence.
 
 The committed lockfiles are the Floor profile:
 
-- EF Core and Microsoft.Extensions.DependencyInjection 10.0.8;
-- Npgsql EF Core 10.0.0;
+- EF Core and Microsoft.Extensions.DependencyInjection 10.0.11;
+- Npgsql EF Core 10.0.3;
 - the exact committed Doka package.
 
 The current Latest profile is:

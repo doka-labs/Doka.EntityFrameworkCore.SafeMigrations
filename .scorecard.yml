@@ -1,0 +1,16 @@
+# OpenSSF Scorecard maintainer annotations.
+#
+# An annotation adds maintainer context to a check's findings. It does not
+# change the published score, so the measured result remains transparent.
+annotations:
+  - checks:
+      - pinned-dependencies
+    reasons:
+      # SafeMigrations is a library whose EF Core and Npgsql dependencies use
+      # deliberate patch ranges. Source and release builds remain reproducible
+      # through Central Package Management, committed lock files, and locked
+      # restore. Exact dependency versions would prevent consumers from taking
+      # compatible upstream correctness and security patches. Dependabot and
+      # the isolated latest-dependency profile verify updates, while GitHub
+      # Actions and container images remain pinned to immutable digests.
+      - reason: not-applicable

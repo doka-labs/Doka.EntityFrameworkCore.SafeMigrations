@@ -20,8 +20,8 @@ choose the required provider package, which brings Core transitively. All
 three package IDs use the same version. Changes and removals below are
 relative to the earlier proof of concept, not a previous supported release.
 
-Runtime dependencies are EF Core `[10.0.8,10.1.0)`, exact Doka `[10.0.0]` for
-MySQL/MariaDB, and Npgsql EF Core `[10.0.0,11.0.0)` for PostgreSQL. The release
+Runtime dependencies are EF Core `[10.0.11,10.1.0)`, exact Doka `[10.0.0]` for
+MySQL/MariaDB, and Npgsql EF Core `[10.0.3,11.0.0)` for PostgreSQL. The release
 matrix covers MySQL 8.4/9.7, MariaDB 10.11/11.4/11.8/12.3, and PostgreSQL
 14-18. Exact images, dependency profiles, and capability limits are maintained
 in [Support and qualification](docs/support-and-qualification.md).

@@ -22,6 +22,12 @@ assessment series; a Passing/Silver/Gold answer does not establish Baseline
 compliance or a Scorecard result. This page prepares the Best Practices series,
 not a second full Baseline assessment or a claim of SLSA certification.
 
+The repository-root [Scorecard annotations](../.scorecard.yml) document why
+library dependency patch ranges are not applicable to the pinned-dependency
+finding. They do not alter the published Scorecard score. Central Package
+Management, committed lock files, locked restore, SHA-pinned Actions, and
+digest-pinned container images remain the enforceable build controls.
+
 ## Reading the tables
 
 - **Prepared:** a repository document/control exists; review and public evidence

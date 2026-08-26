@@ -19,11 +19,57 @@ require_directory() {
   [[ -d "$1" ]] || fail "required directory is missing: $1"
 }
 
+directory_has_match() {
+  local pattern="$1"
+  local directory="$2"
+  local file
+  local status
+
+  while IFS= read -r -d '' file; do
+    if grep -Eq -- "$pattern" "$file"; then
+      return 0
+    else
+      status=$?
+      if ((status > 1)); then
+        return "$status"
+      fi
+    fi
+  done < <(find "$directory" -type f -name '*.cs' -print0)
+
+  return 1
+}
+
+require_directory_match() {
+  local pattern="$1"
+  local directory="$2"
+  local description="$3"
+  local status
+
+  if directory_has_match "$pattern" "$directory"; then
+    return
+  else
+    status=$?
+  fi
+
+  if ((status == 1)); then
+    fail "$description: $directory"
+  else
+    fail "could not inspect directory: $directory"
+  fi
+}
+
 require_no_match() {
   local pattern="$1"
   local file="$2"
-  if rg --quiet "$pattern" "$file"; then
+  local status
+
+  if grep -Eq -- "$pattern" "$file"; then
     fail "forbidden feature implementation in central file: $file ($pattern)"
+  else
+    status=$?
+    if ((status > 1)); then
+      fail "could not inspect file: $file"
+    fi
   fi
 }
 
@@ -57,9 +103,10 @@ require_file "benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benc
 core_test_root="tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Unit/Features"
 for slice in Schemas Tables Columns Indexes Lifecycle; do
   require_directory "$core_test_root/$slice"
-  if ! rg --quiet "^    \\[Fact\\]" "$core_test_root/$slice"; then
-    fail "core test slice has no facts: $core_test_root/$slice"
-  fi
+  require_directory_match \
+    "^    \\[Fact\\]" \
+    "$core_test_root/$slice" \
+    "core test slice has no facts"
 done
 
 require_no_match "public sealed record" \
@@ -88,9 +135,10 @@ for provider in MySql PostgreSql; do
   test_root="tests/Doka.EntityFrameworkCore.SafeMigrations.${provider}.Tests/Integration/Features"
   for slice in Schemas Tables Columns Indexes Constraints Lifecycle Identifiers; do
     require_directory "$test_root/$slice"
-    if ! rg --quiet "^    \\[Fact\\]" "$test_root/$slice"; then
-      fail "test slice has no facts: $test_root/$slice"
-    fi
+    require_directory_match \
+      "^    \\[Fact\\]" \
+      "$test_root/$slice" \
+      "test slice has no facts"
   done
 done
 
