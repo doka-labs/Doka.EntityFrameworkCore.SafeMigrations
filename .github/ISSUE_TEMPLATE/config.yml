@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability privately
+    url: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/security/policy
+    about: Use the private reporting process; never disclose vulnerabilities in public issues.
+  - name: Report a conduct concern privately
+    url: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/blob/main/CODE_OF_CONDUCT.md#reporting-an-incident
+    about: Use the private conduct contact, not a public issue or a security advisory.
+  - name: Read the support and routing policy
+    url: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/blob/main/SUPPORT.md
+    about: Check supported requests, safe diagnostics, and upstream ownership before posting.

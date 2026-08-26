@@ -8,7 +8,11 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import textwrap
 import unittest
+from unittest import mock
+
+import test_release_tag_contract as tag_contract
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -16,6 +20,7 @@ VALIDATOR = REPOSITORY_ROOT / "eng" / "release" / "validate-version.sh"
 QUALITY_WORKFLOW = REPOSITORY_ROOT / ".github" / "workflows" / "quality-gates.yml"
 RELEASE_WORKFLOW = REPOSITORY_ROOT / ".github" / "workflows" / "release-candidate.yml"
 PUBLISH_SCRIPT = REPOSITORY_ROOT / "eng" / "publish-nuget.sh"
+ATTESTATION_SCRIPT = REPOSITORY_ROOT / "eng" / "release" / "verify-attestations.sh"
 VERSION_CONTRACT_PATH = REPOSITORY_ROOT / "eng" / "release" / "version_contract.py"
 
 VERSION_CONTRACT_SPEC = importlib.util.spec_from_file_location(
@@ -137,9 +142,22 @@ class ReleaseVersionTests(unittest.TestCase):
             )
             self.assertNotIn("package-version=", result.stdout)
 
+    def test_validator_fixture_does_not_inherit_the_hosted_step_output(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "hosted-output"
+            output.write_text("Existing runner state.\n", encoding="ascii")
+
+            with mock.patch.dict(os.environ, {"GITHUB_OUTPUT": str(output)}):
+                result = self.run_validator("10.0.0-rc.1")
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(output.read_text(encoding="ascii"), "Existing runner state.\n")
+            self.assertIn("package-version=10.0.0-rc.1", result.stdout)
+
     def test_candidate_workflow_qualifies_before_waiting_for_the_tag(self) -> None:
         validator = VALIDATOR.read_text(encoding="utf-8")
         release_workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+        attestation_script = ATTESTATION_SCRIPT.read_text(encoding="utf-8")
 
         qualification = release_workflow.index("\n  quality-gates:")
         attestation = release_workflow.index("\n  attest:")
@@ -178,7 +196,7 @@ class ReleaseVersionTests(unittest.TestCase):
             publication,
         )
         release_finalization = release_workflow.index(
-            "Finalize verified GitHub Release",
+            "Publish and read back immutable GitHub Release",
             publication,
         )
 
@@ -197,8 +215,8 @@ class ReleaseVersionTests(unittest.TestCase):
         self.assertLess(release_staging, nuget_preflight)
         self.assertLess(nuget_preflight, nuget_login)
         self.assertLess(nuget_login, nuget_publication)
-        self.assertLess(nuget_publication, nuget_readback)
-        self.assertLess(nuget_readback, release_finalization)
+        self.assertLess(nuget_publication, release_finalization)
+        self.assertLess(release_finalization, nuget_readback)
         self.assertLess(tag_signature, nuget_login)
         self.assertNotIn("git tag -a", release_workflow)
         self.assertNotIn("git tag -s", release_workflow)
@@ -213,15 +231,21 @@ class ReleaseVersionTests(unittest.TestCase):
         )
         self.assertIn("verifySignedAnnotatedTag", release_workflow)
         self.assertIn("eng/release/verify-tag.sh", release_workflow)
-        self.assertIn("gh attestation verify", release_workflow)
-        self.assertIn("--bundle \"$PROVENANCE_BUNDLE\"", release_workflow)
-        self.assertIn("--bundle \"$SBOM_BUNDLE\"", release_workflow)
-        self.assertIn("--predicate-type https://spdx.dev/Document/v2.3", release_workflow)
-        self.assertIn("--signer-digest \"$GITHUB_SHA\"", release_workflow)
-        self.assertIn("--source-digest \"$GITHUB_SHA\"", release_workflow)
-        self.assertIn("--deny-self-hosted-runners", release_workflow)
-        self.assertIn("const { stageRelease }", release_workflow)
-        self.assertIn("const { reconcileRelease }", release_workflow)
+        self.assertIn("bash eng/release/verify-attestations.sh", release_workflow)
+        self.assertIn("gh attestation verify", attestation_script)
+        self.assertIn('--bundle "$provenance_bundle"', attestation_script)
+        self.assertIn('--bundle "$sbom_bundle"', attestation_script)
+        self.assertIn('--predicate-type "$sbom_predicate"', attestation_script)
+        self.assertIn('--source-digest "$GITHUB_SHA"', attestation_script)
+        self.assertIn("--deny-self-hosted-runners", attestation_script)
+        self.assertIn("const { candidateReleaseOptions, recordReleaseEvidence, stageRelease }", release_workflow)
+        self.assertIn("const { candidateReleaseOptions, recordReleaseEvidence, reconcileRelease }", release_workflow)
+        self.assertNotIn("SIGNED_SHA256SUMS", release_workflow)
+        self.assertIn('bash eng/release/verify-main-source.sh "$GITHUB_SHA"', release_workflow)
+        self.assertIn(
+            'if [[ "$(git rev-parse refs/remotes/origin/main)" != "$GITHUB_SHA" ]]; then',
+            release_workflow.split("\n  quality-gates:")[0],
+        )
 
     def test_workflow_inputs_cross_shell_boundaries_only_through_environment_variables(self) -> None:
         quality_workflow = QUALITY_WORKFLOW.read_text(encoding="utf-8")
@@ -264,7 +288,7 @@ class ReleaseVersionTests(unittest.TestCase):
             release_workflow,
         )
         self.assertIn(
-            "safe-migrations-nuget-readback-${{ needs.preflight.outputs.package-version }}-${{ github.run_attempt }}",
+            "safe-migrations-publication-${{ needs.preflight.outputs.package-version }}-${{ github.run_attempt }}",
             release_workflow,
         )
         self.assertIn(
@@ -281,6 +305,139 @@ class ReleaseVersionTests(unittest.TestCase):
             ),
             2,
         )
+
+    def test_failure_diagnostics_are_always_retained_separately_from_release_assets(self) -> None:
+        workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+        publication = workflow.split("\n  publish:\n")[1]
+
+        for step in (
+            "Initialize publication evidence",
+            "Record publication attempt outcome",
+            "Upload publication attempt evidence",
+        ):
+            body = publication.split(f"      - name: {step}\n")[1].split("\n      - name:")[0]
+
+            self.assertIn("        if: always()", body)
+
+        self.assertIn("path: artifacts/release-publication", publication)
+        self.assertIn("--output artifacts/release-publication/nuget-readback", publication)
+        self.assertNotIn("dotnet pack", publication)
+        self.assertNotIn("dotnet build", publication)
+        self.assertNotIn("clean: false", publication)
+        self.assertIn('"checkout":"${{ steps.checkout.outcome }}"', publication)
+        self.assertIn('"nuget-login":"${{ steps.nuget-login.outcome }}"', publication)
+        self.assertNotIn("toJSON(steps)", publication)
+        self.assertIn("github-tag.json", publication)
+
+    def test_engineering_gate_checks_every_shell_script_before_running_later_gates(self) -> None:
+        workflow = QUALITY_WORKFLOW.read_text(encoding="utf-8")
+        body = workflow.split("      - name: Verify engineering and release contracts\n")[1]
+        body = body.split("\n      - name:")[0]
+        script = textwrap.dedent(body.split("        run: |\n")[1])
+        scripts = ("eng/a.sh", "eng/z.sh", "eng/release/a.sh", "eng/release/z.sh")
+
+        for invalid in (None, *scripts):
+            with self.subTest(invalid=invalid), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                for file_name in scripts:
+                    helper = root / file_name
+                    helper.parent.mkdir(parents=True, exist_ok=True)
+                    helper.write_text("if then\n" if file_name == invalid else "true\n", encoding="ascii")
+
+                (root / "bin").mkdir()
+                for command in ("python3", "node"):
+                    helper = root / "bin" / command
+                    helper.write_text("#!/bin/sh\nprintf '%s\\n' gate >> later-gates.log\n", encoding="ascii")
+                    helper.chmod(0o755)
+
+                environment = tag_contract.isolated_environment()
+                environment["PATH"] = f"{root / 'bin'}{os.pathsep}{environment['PATH']}"
+                result = subprocess.run(
+                    ["bash", "--noprofile", "--norc", "-e", "-c", script],
+                    cwd=root, env=environment, capture_output=True, text=True, check=False, timeout=10,
+                )
+
+                if invalid is None:
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual((root / "later-gates.log").read_text().splitlines(), ["gate"] * 3)
+                else:
+                    self.assertNotEqual(result.returncode, 0, result.stdout)
+                    self.assertIn(invalid, result.stderr)
+                    self.assertFalse((root / "later-gates.log").exists())
+
+    def test_every_logged_publication_gate_preserves_failure_and_diagnostics(self) -> None:
+        workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8").split("\n  publish:\n")[1]
+        checks = (
+            ("Bind publication to the qualified commit and requested tag", "source.log", 1),
+            ("Verify authorized signed annotated release tag", "tag.log", 23),
+            ("Verify qualified bytes again before publication", "qualified-bytes.log", 23),
+            ("Verify provenance and SBOM attestations", "attestations.log", 23),
+            ("Check NuGet.org immediately before publication", "nuget-preflight.log", 23),
+            ("Publish missing packages or verify exact existing bytes", "nuget-push.log", 23),
+        )
+        for name, log_name, expected_exit in checks:
+            with self.subTest(step=name), tempfile.TemporaryDirectory(prefix="safemigrations-gate-") as directory:
+                body = workflow.split(f"      - name: {name}\n")[1].split("\n      - name:")[0]
+                self.assertIn("        shell: bash\n", body)
+                script = textwrap.dedent(body.split("        run: |\n")[1])
+                root = Path(directory)
+                for file_name in (
+                    "eng/release/verify-tag.sh", "eng/release/verify-attestations.sh",
+                    "eng/verify-package-contents.sh", "eng/publish-nuget.sh", "bin/sha256sum",
+                ):
+                    helper = root / file_name
+                    helper.parent.mkdir(parents=True, exist_ok=True)
+                    helper.write_text("#!/bin/sh\necho 'fixture rejection' >&2\nexit 23\n", encoding="ascii")
+                    helper.chmod(0o755)
+                (root / "artifacts/release-publication").mkdir(parents=True)
+                (root / "artifacts/packages").mkdir()
+                environment = tag_contract.isolated_environment()
+                environment.update({
+                    "PATH": f"{root / 'bin'}{os.pathsep}{environment['PATH']}",
+                    "GITHUB_REF": "refs/heads/other",
+                    "GITHUB_SHA": "a" * 40,
+                    "RELEASE_TAG": "v10.0.0-rc.1",
+                    "PACKAGE_VERSION": "10.0.0-rc.1",
+                })
+                result = subprocess.run(
+                    ["bash", "--noprofile", "--norc", "-e", "-o", "pipefail", "-c", script],
+                    cwd=root, env=environment, capture_output=True, text=True, check=False, timeout=10,
+                )
+
+                self.assertEqual(result.returncode, expected_exit, result.stdout + result.stderr)
+                self.assertTrue((root / "artifacts/release-publication" / log_name).read_text().strip())
+
+    def test_readback_failure_is_not_masked_by_successful_log_capture(self) -> None:
+        workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+        body = workflow.split(
+            "      - name: Verify NuGet repository signatures and content readback\n"
+        )[1].split("\n      - name:")[0]
+        script = textwrap.dedent(body.split("        run: |\n")[1])
+        # Match GitHub's documented distinction: implicit bash has only -e;
+        # explicit shell: bash also sets pipefail. Exercise the actual run block.
+        shell = ["bash", "--noprofile", "--norc", "-e"]
+        if "        shell: bash\n" in body:
+            shell.extend(["-o", "pipefail"])
+
+        with tempfile.TemporaryDirectory(prefix="safemigrations-readback-shell-") as directory:
+            root = Path(directory)
+            helper = root / "eng/readback-nuget.sh"
+            helper.parent.mkdir()
+            helper.write_text("#!/bin/sh\necho 'signature rejected' >&2\nexit 23\n", encoding="ascii")
+            helper.chmod(0o755)
+            (root / "artifacts/release-publication").mkdir(parents=True)
+            environment = tag_contract.isolated_environment()
+            environment["PACKAGE_VERSION"] = "10.0.0-rc.1"
+            result = subprocess.run(
+                [*shell, "-c", script], cwd=root, env=environment,
+                capture_output=True, text=True, check=False, timeout=10,
+            )
+
+            self.assertEqual(result.returncode, 23, result.stdout + result.stderr)
+            self.assertIn(
+                "signature rejected",
+                (root / "artifacts/release-publication/nuget-readback.log").read_text(),
+            )
 
     def test_nuget_preflight_functions_run_under_fail_fast_semantics(self) -> None:
         publish_script = PUBLISH_SCRIPT.read_text(encoding="utf-8")
@@ -302,7 +459,7 @@ class ReleaseVersionTests(unittest.TestCase):
         *arguments: str,
         environment: dict[str, str] | None = None,
     ) -> subprocess.CompletedProcess[str]:
-        process_environment = os.environ.copy()
+        process_environment = tag_contract.isolated_environment()
         process_environment.update(environment or {})
 
         return subprocess.run(

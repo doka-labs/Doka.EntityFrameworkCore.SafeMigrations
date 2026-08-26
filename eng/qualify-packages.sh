@@ -46,7 +46,12 @@ repo_root="$(cd "$script_dir/.." && pwd -P)"
 mkdir -p "$output_dir"
 output_dir="$(cd "$output_dir" && pwd -P)"
 
-if find "$output_dir" -mindepth 1 -maxdepth 1 -print -quit | grep -q .; then
+if ! existing_entry="$(find "$output_dir" -mindepth 1 -maxdepth 1 -print -quit)"; then
+    echo "Cannot inspect package output directory: $output_dir" >&2
+    exit 1
+fi
+
+if [[ -n "$existing_entry" ]]; then
     echo "Output directory must be empty: $output_dir" >&2
     exit 1
 fi

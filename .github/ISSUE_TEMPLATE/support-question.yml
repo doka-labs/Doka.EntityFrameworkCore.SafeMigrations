@@ -1,0 +1,84 @@
+name: Support question
+description: Ask about SafeMigrations usage, configuration, or a documented capability boundary.
+title: "support: "
+labels: [question]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Read the [support policy](https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/blob/main/SUPPORT.md)
+        first. Public support is best effort, not an incident-response service.
+        Use the bug form for a reproducible defect.
+
+        Do not post production dumps, connection strings, credentials, personal
+        data, internal host names, or unredacted migration reports. Suspected
+        vulnerabilities belong in the private
+        [security process](https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/security/policy).
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Question and intended outcome
+      description: Explain the migration behavior you need and where the documentation leaves uncertainty.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: engine
+    attributes:
+      label: Database family
+      options:
+        - MySQL
+        - MariaDB
+        - PostgreSQL
+        - Provider-neutral Core (no database)
+        - Not yet determined
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Versions and execution path
+      description: >-
+        List exact SafeMigrations, EF Core, provider, driver, .NET, and server
+        versions, OS/architecture, and the runtime, CLI, script, bundle, or
+        analysis path in use. Use not applicable where no database is involved.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Minimal configuration and initial schema
+      description: >-
+        Provide synthetic registration, operation/policy, expected definition,
+        starting schema/history, or derived-context details needed to understand
+        the question. Include only redacted diagnostics relevant to that question.
+    validations:
+      required: true
+
+  - type: textarea
+    id: attempts
+    attributes:
+      label: Documentation and approaches already tried
+      description: Link relevant documentation or issues and explain the remaining uncertainty.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: readiness
+    attributes:
+      label: Submission checklist
+      options:
+        - label: I checked the README, sample, support matrix, and existing issues.
+          required: true
+        - label: I removed secrets, personal data, and confidential schema or deployment details.
+          required: true
+        - label: This question does not disclose a suspected security vulnerability.
+          required: true
+        - label: >-
+            I agree to follow the
+            [Code of Conduct](https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/blob/main/CODE_OF_CONDUCT.md).
+          required: true

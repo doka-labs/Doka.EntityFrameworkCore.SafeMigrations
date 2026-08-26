@@ -7,7 +7,9 @@ const path = require('node:path');
 const test = require('node:test');
 
 const {
+  candidateReleaseOptions,
   reconcileRelease,
+  recordReleaseEvidence,
   sha256,
   stageRelease,
   verifySignedAnnotatedTag,
@@ -34,6 +36,7 @@ function release(overrides = {}) {
     name: 'v10.0.0',
     body: 'release body',
     draft: true,
+    immutable: overrides.draft === false,
     prerelease: false,
     ...overrides,
   };
@@ -45,6 +48,7 @@ function fixture(initialRelease, initialAssets = []) {
   const calls = {
     create: 0,
     getCommit: 0,
+    getRelease: 0,
     update: 0,
     upload: 0,
     paginate: 0,
@@ -57,6 +61,11 @@ function fixture(initialRelease, initialAssets = []) {
       calls.getCommit++;
 
       return { data: { sha: 'abc123' } };
+    },
+    getRelease: async () => {
+      calls.getRelease++;
+
+      return { data: currentRelease };
     },
     createRelease: async (request) => {
       calls.create++;
@@ -79,7 +88,7 @@ function fixture(initialRelease, initialAssets = []) {
     updateRelease: async (request) => {
       calls.update++;
       calls.makeLatest = request.make_latest;
-      currentRelease = { ...currentRelease, draft: request.draft };
+      currentRelease = { ...currentRelease, draft: request.draft, immutable: !request.draft };
 
       return { data: currentRelease };
     },
@@ -258,7 +267,7 @@ test('creates a draft, uploads every asset, verifies, and publishes last', async
     assert.equal(state.calls.upload, 2);
     assert.equal(state.calls.update, 1);
     assert.equal(state.calls.makeLatest, 'true');
-    assert.equal(state.calls.paginate, 3);
+    assert.equal(state.calls.getRelease, 2);
     assert.equal(result.draft, false);
     assert.equal(result.prerelease, false);
   }));
@@ -276,11 +285,11 @@ test('stages and verifies a complete draft without publishing it', async () =>
     assert.equal(result.prerelease, true);
   }));
 
-test('finalization adds post-publication evidence to the staged draft and publishes last', async () =>
+test('finalization reuses the complete staged asset set without adding readback evidence', async () =>
   withAssetFiles(async (assetPaths) => {
     const state = fixture(null);
 
-    await stageRelease(options(state.github, [assetPaths[0]]));
+    await stageRelease(options(state.github, assetPaths));
     const result = await reconcileRelease(options(state.github, assetPaths));
 
     assert.equal(state.calls.create, 1);
@@ -353,7 +362,7 @@ test('resumes when publication completed before the action received its response
     ];
     const state = fixture(release({ draft: false }), assets);
 
-    const staged = await stageRelease(options(state.github, [assetPaths[0]]));
+    const staged = await stageRelease(options(state.github, assetPaths));
     const finalized = await reconcileRelease(options(state.github, assetPaths));
 
     assert.equal(state.calls.create, 0);
@@ -451,3 +460,291 @@ test('downloads an asset when GitHub does not expose a digest', async () =>
     assert.equal(state.calls.upload, 0);
     assert.equal(state.calls.update, 1);
   }));
+
+test('rejects unexpected published assets during the early staging gate', async () =>
+  withAssetFiles(async (assetPaths) => {
+    const state = fixture(release({ draft: false }), [
+      asset('first.nupkg', 'first bytes', 1),
+      asset('second.snupkg', 'second bytes', 2),
+      asset('SIGNED_SHA256SUMS', 'unexpected readback evidence', 3),
+    ]);
+
+    await assert.rejects(stageRelease(options(state.github, assetPaths)), /unexpected asset/);
+    assert.equal(state.calls.upload, 0);
+    assert.equal(state.calls.update, 0);
+  }));
+
+test('checks late asset conflicts before uploading any missing early asset', async () =>
+  withAssetFiles(async (assetPaths) => {
+    const state = fixture(release(), [asset('second.snupkg', 'conflict', 2)]);
+
+    await assert.rejects(stageRelease(options(state.github, assetPaths)), /size|digest/);
+    assert.equal(state.calls.upload, 0);
+    assert.equal(state.calls.update, 0);
+  }));
+
+test('fails closed on duplicate assets and duplicate releases', async () =>
+  withAssetFiles(async (assetPaths) => {
+    const state = fixture(release(), [
+      asset('first.nupkg', 'first bytes', 1),
+      asset('first.nupkg', 'first bytes', 2),
+    ]);
+
+    await assert.rejects(stageRelease(options(state.github, assetPaths)), /duplicate asset/);
+    state.github.paginate = async () => [release(), release({ id: 8 })];
+
+    await assert.rejects(stageRelease(options(state.github, assetPaths)), /More than one/);
+    assert.equal(state.calls.create, 0);
+    assert.equal(state.calls.upload, 0);
+  }));
+
+test('rejects a published release that is not immutable', async () =>
+  withAssetFiles(async (assetPaths) => {
+    const state = fixture(release({ draft: false, immutable: false }), [
+      asset('first.nupkg', 'first bytes', 1),
+      asset('second.snupkg', 'second bytes', 2),
+    ]);
+
+    await assert.rejects(reconcileRelease(options(state.github, assetPaths)), /not immutable/);
+    assert.equal(state.calls.update, 0);
+  }));
+
+test('a successful update response cannot hide conflicting publication readback', async () =>
+  withAssetFiles(async (assetPaths) => {
+    const state = fixture(null);
+    const originalRead = state.github.rest.repos.getRelease;
+    state.github.rest.repos.getRelease = async () => {
+      const response = await originalRead();
+
+      return state.calls.update === 0 ? response : {
+        data: { ...response.data, name: 'unexpected release' },
+      };
+    };
+
+    await assert.rejects(reconcileRelease(options(state.github, assetPaths)), /name/);
+    assert.equal(state.calls.update, 1);
+    assert.equal(state.calls.getRelease, 2);
+  }));
+
+test('reuses uploaded bytes after a lost upload response', async () =>
+  withAssetFiles(async (assetPaths) => {
+    const state = fixture(null);
+    const upload = state.github.rest.repos.uploadReleaseAsset;
+    state.github.rest.repos.uploadReleaseAsset = async (request) => {
+      await upload(request);
+      throw new Error('upload response lost');
+    };
+
+    await assert.rejects(stageRelease(options(state.github, assetPaths)), /response lost/);
+    state.github.rest.repos.uploadReleaseAsset = upload;
+    const result = await reconcileRelease(options(state.github, assetPaths));
+
+    assert.equal(result.immutable, true);
+    assert.equal(state.calls.create, 1);
+    assert.equal(state.calls.upload, 2);
+    assert.equal(state.calls.update, 1);
+  }));
+
+test('reuses a created draft after a lost creation response', async () =>
+  withAssetFiles(async (assetPaths) => {
+    const state = fixture(null);
+    const create = state.github.rest.repos.createRelease;
+    state.github.rest.repos.createRelease = async (request) => {
+      await create(request);
+      throw new Error('creation response lost');
+    };
+
+    await assert.rejects(stageRelease(options(state.github, assetPaths)), /response lost/);
+    state.github.rest.repos.createRelease = create;
+    await reconcileRelease(options(state.github, assetPaths));
+
+    assert.equal(state.calls.create, 1);
+    assert.equal(state.calls.upload, 2);
+  }));
+
+test('retains sanitized failure evidence without claiming a remote rollback', async () =>
+  withAssetFiles(async (assetPaths) => {
+    const file = path.join(path.dirname(assetPaths[0]), 'github-staged.json');
+    const failure = Object.assign(new Error('upstream unavailable'), {
+      status: 503,
+      request: { headers: { authorization: 'secret credential' } },
+    });
+
+    await assert.rejects(recordReleaseEvidence(file, async () => { throw failure; }),
+      (error) => error === failure);
+    const evidence = fs.readFileSync(file, 'utf8');
+
+    assert.deepEqual(JSON.parse(evidence), {
+      status: 'failure', remoteState: 'unknown',
+      error: { name: 'Error', message: 'upstream unavailable', httpStatus: 503 },
+    });
+    assert.equal(evidence.includes('secret credential'), false);
+  }));
+
+test('retries transient GitHub readback but fails immediately on authorization errors', async () =>
+  withAssetFiles(async (assetPaths) => {
+    for (const status of [503, 403]) {
+      const state = fixture(null);
+      const read = state.github.rest.repos.getRelease;
+      let requests = 0;
+      state.github.rest.repos.getRelease = async () => {
+        requests++;
+        if (requests === 1) {
+          throw Object.assign(new Error('readback unavailable'), { status });
+        }
+
+        return read();
+      };
+
+      if (status === 503) {
+        await reconcileRelease(options(state.github, assetPaths));
+        assert.equal(requests, 3);
+        assert.equal(state.calls.update, 1);
+      } else {
+        await assert.rejects(reconcileRelease(options(state.github, assetPaths)), /unavailable/);
+        assert.equal(requests, 1);
+        assert.equal(state.calls.update, 0);
+      }
+    }
+  }));
+
+test('bounds unsuccessful readback without declaring or retrying publication', async () =>
+  withAssetFiles(async (assetPaths) => {
+    const state = fixture(null);
+    let requests = 0;
+    state.github.rest.repos.getRelease = async () => {
+      requests++;
+      throw Object.assign(new Error('readback still unavailable'), { status: 503 });
+    };
+
+    await assert.rejects(reconcileRelease(options(state.github, assetPaths)), /still unavailable/);
+    assert.equal(requests, 5);
+    assert.equal(state.calls.create, 1);
+    assert.equal(state.calls.upload, 2);
+    assert.equal(state.calls.update, 0);
+  }));
+
+test('waits for uploaded asset visibility without uploading the same bytes twice', async () =>
+  withAssetFiles(async (assetPaths) => {
+    const state = fixture(null);
+    const paginate = state.github.paginate;
+    let hiddenOnce = false;
+    state.github.paginate = async (endpoint, request) => {
+      const result = await paginate(endpoint, request);
+      if (endpoint === state.github.rest.repos.listReleaseAssets
+          && state.calls.upload === 2 && !hiddenOnce) {
+        hiddenOnce = true;
+
+        return result.slice(1);
+      }
+
+      return result;
+    };
+
+    await reconcileRelease(options(state.github, assetPaths));
+
+    assert.equal(hiddenOnce, true);
+    assert.equal(state.calls.upload, 2);
+    assert.equal(state.calls.update, 1);
+  }));
+
+test('waits for draft-to-published readback after an accepted publication request', async () =>
+  withAssetFiles(async (assetPaths) => {
+    const state = fixture(null);
+    const read = state.github.rest.repos.getRelease;
+    let staleOnce = false;
+    state.github.rest.repos.getRelease = async () => {
+      const response = await read();
+      if (state.calls.update === 1 && !staleOnce) {
+        staleOnce = true;
+
+        return { data: { ...response.data, draft: true, immutable: false } };
+      }
+
+      return response;
+    };
+
+    const result = await reconcileRelease(options(state.github, assetPaths));
+
+    assert.equal(staleOnce, true);
+    assert.equal(state.calls.update, 1);
+    assert.equal(result.immutable, true);
+  }));
+
+function workflowScript(stepName) {
+  const workflow = fs.readFileSync(
+    path.join(__dirname, '../../.github/workflows/release-candidate.yml'), 'utf8');
+  const step = workflow.split(`      - name: ${stepName}\n`)[1]?.split('\n      - name: ')[0];
+  const script = step?.split('          script: |\n')[1];
+  assert.ok(script, `Workflow step '${stepName}' must contain an executable script.`);
+
+  return script.split('\n').map((line) => line.replace(/^            /, '')).join('\n');
+}
+
+test('actual workflow stages and retries the same eleven assets across finalization failures', async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'safe-migrations-workflow-'));
+  const originalDirectory = process.cwd();
+  const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+  const version = '10.0.0-rc.7';
+  const context = { repo: { owner: 'doka-labs', repo: 'safe-migrations' }, sha: 'abc123' };
+  const candidate = candidateReleaseOptions({
+    ...context.repo, version, commit: context.sha, artifactRoot: path.join(directory, 'artifacts'),
+  });
+  for (const assetPath of candidate.assetPaths) {
+    fs.mkdirSync(path.dirname(assetPath), { recursive: true });
+    fs.writeFileSync(assetPath, `qualified ${path.basename(assetPath)}`);
+  }
+
+  const evidence = path.join(directory, 'artifacts/release-publication');
+  fs.mkdirSync(evidence, { recursive: true });
+  const load = (name) => name === './eng/release/github-release.js'
+    ? require('../release/github-release.js') : require(name);
+  const stage = new AsyncFunction('github', 'context', 'process', 'require',
+    workflowScript('Stage and verify GitHub Release draft'));
+  const publish = new AsyncFunction('github', 'context', 'process', 'require',
+    workflowScript('Publish and read back immutable GitHub Release'));
+  const environment = { env: { PACKAGE_VERSION: version } };
+
+  try {
+    process.chdir(directory);
+    for (const responseLost of [false, true]) {
+      const state = fixture(null);
+      const update = state.github.rest.repos.updateRelease;
+      await stage(state.github, context, environment, load);
+      state.github.rest.repos.updateRelease = async (request) => {
+        if (responseLost) {
+          await update(request);
+        }
+
+        throw new Error('publication interrupted');
+      };
+
+      await assert.rejects(publish(state.github, context, environment, load), /interrupted/);
+      const failure = JSON.parse(fs.readFileSync(path.join(evidence, 'github-published.json'), 'utf8'));
+      assert.equal(failure.status, 'failure');
+      assert.equal(failure.remoteState, 'unknown');
+      assert.equal(failure.error.message, 'publication interrupted');
+      assert.equal(state.getAssets().length, 11);
+      assert.equal(state.getRelease().draft, !responseLost);
+
+      // Retry observations change independently of the immutable candidate.
+      fs.writeFileSync(path.join(evidence, 'SIGNED_SHA256SUMS'), 'new attempt observations');
+      state.github.rest.repos.updateRelease = update;
+      await stage(state.github, context, environment, load);
+      await publish(state.github, context, environment, load);
+
+      assert.equal(state.calls.create, 1);
+      assert.equal(state.calls.upload, 11);
+      assert.equal(state.calls.update, 1);
+      assert.equal(state.getRelease().immutable, true);
+      assert.equal(state.getAssets().some((entry) => entry.name === 'SIGNED_SHA256SUMS'), false);
+      const readback = JSON.parse(fs.readFileSync(path.join(evidence, 'github-published.json'), 'utf8'));
+      assert.equal(readback.status, 'success');
+      assert.equal(readback.result.tag_name, `v${version}`);
+      assert.equal(readback.result.immutable, true);
+    }
+  } finally {
+    process.chdir(originalDirectory);
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});

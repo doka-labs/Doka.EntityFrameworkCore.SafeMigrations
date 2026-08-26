@@ -72,8 +72,9 @@ Preflight is read-only and cannot reserve the catalog state. Before execution:
 
 1. Capture the pre-migration Core history rows.
 2. Execute `Database.MigrateAsync`, `IMigrator.MigrateAsync`, the qualified EF
-   CLI path, or the qualified Bundle. Do not wrap MySQL/MariaDB migration DDL in
-   a caller-owned business transaction.
+   CLI path, or the qualified Bundle with the exact analyzed target migration.
+   Do not omit the target and thereby select an unchecked latest migration.
+   Do not wrap MySQL/MariaDB migration DDL in a caller-owned business transaction.
 3. Keep the process alive until the provider migration lock is released.
 4. Do not run `Down` automatically after a failure.
 5. Capture the exact exception type, provider error code, SafeMigrations/Doka
@@ -88,8 +89,12 @@ For the exact explicit operation contract used by the deployment, call
 - report status is not `Blocked`;
 - every safe operation has `postconditionSatisfied: true`;
 - model and contract fingerprints match preflight;
-- exactly the expected Core migration history row was added;
+- the exact expected Core history delta was added: one row for each applied
+  migration in the analyzed range, with no unexpected migration IDs;
 - ordinary provider-owned operations have their own postconditions;
+- rename destinations satisfy their independently reviewed existence/definition
+  checks or explicit ensure operations; a rename's built-in postcondition checks
+  source absence, not complete destination equivalence;
 - application health and critical read/write smoke checks pass.
 
 Only then release the write fence and mark the instance complete.
@@ -128,8 +133,8 @@ work.
 7. Run postflight and history checks.
 
 The session-local guard has no permanent stored procedure to clean up. Runtime
-tests prove same-session cleanup with pool reset disabled after a rejected
-state, failed DDL, and cancellation. They also prove that an injected cleanup
+tests exercise same-session cleanup with pool reset disabled after a rejected
+state, failed DDL, and cancellation. They also assert that an injected cleanup
 failure evicts the physical session before another borrower can receive it.
 
 ## Multiple application instances

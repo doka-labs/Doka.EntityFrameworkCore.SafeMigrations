@@ -1,0 +1,77 @@
+# Documentation
+
+This is the task-oriented entry point for SafeMigrations documentation. The
+repository prepares one complete 10.0.0 delivery; package availability and
+OpenSSF achievement must be established separately from source documentation.
+
+## Use and deploy
+
+| Task | Canonical guide |
+| --- | --- |
+| Install, register a provider, and write the first convergence migration | [Project README](../README.md) and [runnable sample](../samples/Doka.EntityFrameworkCore.SafeMigrations.Sample/README.md) |
+| Find public inputs, outputs, and failure boundaries | [API reference](api-reference.md) |
+| Check engines, dependency ranges, qualified boundaries, and evidence | [Support and qualification](support-and-qualification.md) |
+| Understand MySQL/MariaDB session guards and implicit commits | [MySQL and MariaDB DDL](mysql-mariadb-ddl-behavior.md) |
+| Deploy independently to heterogeneous instances and recover safely | [Deployment and recovery](runbooks/deployment-and-recovery.md) |
+| Interpret a blocked report or stable error | [Failure codes](runbooks/failure-codes.md) |
+| Collect metrics without exposing protected reports | [Observability](runbooks/observability.md) |
+| Independently verify a downloaded release | [Release verification](security/release-verification.md) |
+
+## Understand and contribute
+
+- [Implementation design](implementation-design.md): control flow, ownership,
+  policy, projection, fingerprints, resource bounds, and lifecycle.
+- [Vertical slices](vertical-slice-architecture.md): source layout and
+  Core/provider/test/benchmark dependency boundaries.
+- [EF Core and provider upgrades](efcore-provider-upgrade-risk.md): versioned
+  public integration points and the evidence required for updates.
+- [Architecture decisions](decisions/README.md): Doka MADR Enterprise Profile
+  1.0 on MADR 4.0.0, with named decision authority and explicit review status.
+- [Contributing](../CONTRIBUTING.md): development setup, positive/negative
+  tests, package verification, coding standards, and pull requests.
+- [Security design and assurance](security/security-design.md): assets, trust
+  boundaries, abuse cases, controls, and evidence limitations.
+- [Secure development](security/secure-development.md): review, analysis,
+  dependency handling, and incident evidence.
+
+## Maintain and govern
+
+- [Governance](../GOVERNANCE.md), [direction](../ROADMAP.md),
+  [Code of Conduct](../CODE_OF_CONDUCT.md), and [support](../SUPPORT.md).
+- [Security policy and private vulnerability reporting](../SECURITY.md).
+- [Publication operations](operations/release-publication.md): maintainer setup,
+  qualification, protected wait, signed tag, approval, readback, and recovery.
+- [Release process](release-process.md): package/version identity, qualification
+  scope, integrity requirements, and acceptance contract.
+- [Repository settings](runbooks/repository-settings.md): operator-owned
+  post-publication controls and read-only confirmation commands.
+- [OpenSSF preparation](openssf-best-practices.md): criterion-to-evidence
+  mapping, with unknown and external prerequisites kept visible.
+- [Changelog](../CHANGELOG.md): human-readable package changes.
+
+## Ownership and evidence discipline
+
+The README owns onboarding; the API guide owns the input/output overview;
+support owns the matrix; architecture owns implementation structure; ADRs own
+decision rationale; runbooks own procedures; security documents own assurance
+arguments; OpenSSF owns only the mapping to external criteria. Link to the
+owner instead of maintaining another copy of its contract.
+
+The author of a behavior change updates its canonical document and tests in
+the same review. Public XML documentation ships with each assembly for IDE
+help. Preserve published anchors when moving a section. Use English, ASCII,
+relative repository links, and dated primary sources for external claims.
+
+Run the dependency-free documentation gate from the repository root:
+
+```bash
+python3 eng/verify-documentation.py
+python3 -m unittest discover -s eng/tests -p 'test_*.py' -v
+```
+
+The gate checks local destinations/anchors, encoding, criterion coverage, and
+declared navigation. ADRs are included as Markdown; their format, history,
+relationships, and content are reviewed against the Doka profile, not a local
+ADR-specific validator. The gate does not certify the truth of prose, perform
+an external security assessment, or create hosted controls. Reviewers must
+trace claims to implementation and qualified execution evidence.

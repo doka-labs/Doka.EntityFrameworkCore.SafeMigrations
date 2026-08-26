@@ -5,6 +5,26 @@ names may appear in protected report fields but never as metric tags. Always
 correlate a code with operation ordinal, kind, provider environment, model and
 contract fingerprints, and the protected deployment record.
 
+## Which code appears in a report
+
+Provider analysis, the public decision planner, the run report, and database
+errors are distinct contracts. `SafeMigrationAssessment.Code` is selected by
+the runner as follows; do not treat all codes below as interchangeable:
+
+| Assessment | Code source |
+| --- | --- |
+| Ordinary EF/provider operation | `provider_owned_not_analyzed` |
+| Blocked postflight | `postcondition_failed` |
+| Blocked preflight with `Unsupported` state | The analyzer's specific unsupported reason, or `classified_unsupported` |
+| Other blocked preflight | The rejecting planner decision code |
+| Non-blocked safe operation | The analyzer/projection code, not the accepting planner decision code |
+
+Use report status, observed state, action, and postcondition together. A code
+prefix does not by itself establish whether deployment is permitted. The
+[runner](../../src/Doka.EntityFrameworkCore.SafeMigrations/Analysis/SafeMigrationRunner.cs)
+owns this mapping; the [planner](../../src/Doka.EntityFrameworkCore.SafeMigrations/Planning/SafeMigrationDecisionPlanner.cs)
+returns a separate `SafeMigrationDecision.Code`.
+
 ## Blocking decision codes
 
 | Code | Meaning | Required response |
@@ -14,15 +34,20 @@ contract fingerprints, and the protected deployment record.
 | `prerequisite_missing` | A required table does not exist, so dependent state or data checks cannot be evaluated safely. | Add or converge the prerequisite first. Do not reinterpret the result as an empty table or a data violation. |
 | `different_reject` | An ensure target exists with a different definition under `ThrowIfDifferent`. | Compare each expected/live facet. Correct drift or author an explicit safe transition. |
 | `different_no_safe_repair` | `RepairIfSafe` was requested but no allowlisted repair passed. | Do not widen the allowlist for this instance. Author a reviewed migration/backfill or restore the expected definition. |
-| `wrong_object_kind` | A drop target name denotes a conflicting object kind. | Stop and identify ownership. Never drop it by name alone. |
-| `rename_target_conflict` | Rename source exists and the intended target name is already occupied. | Resolve semantic ownership explicitly; do not infer merge/equivalence. |
+| `wrong_object_kind` | A drop target has a conflicting kind or ownership, such as an index belonging to another table. | Stop and identify ownership. Never drop it by name alone. |
+| `rename_target_conflict` | Rename is rejected because of target occupancy, source kind, or source table ownership. | Inspect both identities; do not infer merge/equivalence or assume that a free target is sufficient. |
 | `alter_target_missing` | An alter operation cannot find its target column. | Use an explicit ensure/add path if absence is valid, otherwise correct drift. |
-| `alter_not_approved` | Live column differs but does not exactly match the declared old definition or the transition is outside the lossless allowlist. | Correct `oldDefinition` only if catalog evidence proves it; otherwise design a forward data/schema transition. |
-| `postcondition_failed` | Runtime completed or postflight ran, but the expected final catalog condition is false. | Stop traffic, preserve catalog/history evidence, and use forward fix or backup restore. |
+| `alter_not_approved` | Live column differs and the policy is not `RepairIfSafe`, or the old definition/lossless transition is not proven. | Check policy and evidence; correct `oldDefinition` only if the catalog proves it, otherwise design a reviewed forward transition. |
 
 `RejectUnsupported`, `RejectDifferent`, `RejectDataBlocked`, and
 `RejectPrerequisiteMissing` are the corresponding `SafeMigrationAction`
 values.
+
+`unsupported` is the planner's generic rejection; a blocked preflight report
+retains the analyzer's more specific reason instead. `postcondition_failed` is
+a runner code for a false final condition in postflight. Keep writes fenced,
+preserve catalog/history evidence, and use the recovery runbook if it occurs;
+it does not prove that every earlier migration command completed.
 
 ## Runtime database error identity
 
@@ -39,48 +64,95 @@ Runtime guards preserve the same categories at the database boundary:
 MySQL/MariaDB uses unique constraints on a session-local temporary assertion
 table because `SIGNAL` cannot be used in its prepared-statement path.
 PostgreSQL uses private application SQLSTATE values in the provider `DO` block.
-Handle the stable identity/category; do not parse a localized provider message.
+PostgreSQL exposes the category through SQLSTATE. MySQL/MariaDB uses duplicate
+key error 1062 for these assertions; that number alone does not identify a
+SafeMigrations rejection. Match the invariant `doka_sm_*` constraint token for
+the guarded command, not localized sentence fragments. Do not export the full
+provider error message into public telemetry.
 
-## Non-blocking assessment codes
+<a id="non-blocking-assessment-codes"></a>
+
+## Analyzer and projection codes
+
+These describe observed or projected state, including blocking states. Report
+selection follows the mapping above. In particular, a blocked preflight
+data/prerequisite result uses its planner rejection code.
 
 | Code | Meaning |
 |---|---|
 | `classified_missing` | Live analyzer observed absence. |
 | `classified_matching` | Live analyzer observed the target definition. |
 | `classified_different` | Live analyzer observed drift; the policy determines whether this blocks. |
-| `classified_unsupported` | Provider classified unsupported; normally paired with `unsupported` when blocked. |
-| `classified_data_blocked` | Provider classified a data precondition failure; normally paired with `data_blocked`. |
+| `classified_unsupported` | Provider classified unsupported without a more specific static reason; remains the blocked preflight report code. |
+| `classified_data_blocked` | Provider classified a data precondition failure; a blocked preflight report uses `data_blocked`. |
 | `classified_prerequisite_missing` | Provider proved a required table is absent without evaluating dependent table SQL. |
 | `projected_missing` | Preflight projection observes absence after applying earlier accepted operations virtually. |
 | `projected_matching` | Preflight projection observes a match after earlier accepted operations virtually. |
 | `projected_different` | Preflight projection observes a conflict between ordered operations. |
-| `missing_apply` | Ensure target is absent and target DDL is planned. |
-| `matching_noop` | Existing target matches; no DDL is required. |
-| `existing_existence_noop` | Existing object is intentionally accepted under explicit existence-only semantics. |
-| `different_repair` | A proven lossless repair and its preconditions passed. |
-| `missing_noop` | Drop target or rename source is absent; operation is idempotently complete. |
-| `existing_drop` | Drop target exists with the expected kind and will be removed. |
-| `source_missing_noop` | Rename source is absent and no target conflict requires action. |
-| `source_exists_rename` | Rename source exists and target is free. |
 | `provider_owned_not_analyzed` | Ordinary EF/provider operation is present; SafeMigrations cannot classify it read-only. |
 
 When a report is `ReadyWithProviderOperations`, supply independent
 postconditions for every `provider_owned_not_analyzed` operation before
 deployment approval.
 
-## Stable unsupported reason codes
+## Accepting planner decision codes
 
-An unsupported assessment retains the provider's bounded reason instead of
-collapsing every case into one message. Important expression reasons are:
+These are the public planner's decision codes, not the normal code values in
+non-blocked run assessments. The report exposes the corresponding `Action`
+alongside the analyzer/projection code.
 
 | Code | Meaning |
-|---|---|
-| `opaque_sql_expression` | Raw SQL has no typed structure from which catalog equivalence can be proven. |
-| `opaque_expression_rename_projection` | An earlier identifier rename affected an opaque SQL facet that Core cannot rewrite safely. |
-| `index_sort_order` | The active access method or engine cannot represent the requested explicit order. |
-| `index_null_order` | The active engine cannot represent the requested explicit null order. |
+| --- | --- |
+| `missing_apply` | Ensure target is absent and target DDL is planned. |
+| `matching_noop` | Existing target matches; no DDL is required. |
+| `existing_existence_noop` | Existing object is intentionally accepted under explicit existence-only semantics. |
+| `different_repair` | A proven lossless repair and its preconditions passed. |
+| `missing_noop` | Drop target is absent; no DDL is required. |
+| `existing_drop` | Drop target exists with the expected kind and will be removed. |
+| `source_missing_noop` | Rename source is absent; no rename is performed. Independently check the destination; rename postflight proves source absence only. |
+| `source_exists_rename` | Rename source exists and target is free. |
 
-Treat an unknown unsupported reason as a contract change and stop rollout.
+## Stable unsupported reason codes
+
+An unsupported preflight assessment retains the provider's bounded reason
+instead of collapsing every case into one message. The current built-in
+adapters emit these static reasons. A listed provider is the producer of that
+code, not a claim that the feature is absent from every version of that engine.
+
+| Code | Provider | Meaning |
+| --- | --- | --- |
+| `opaque_sql_expression` | Both | Raw/provider-fragment SQL has no provable typed catalog equivalence. |
+| `opaque_expression_rename_projection` | Both | An earlier rename affected an opaque facet that cannot be safely rewritten. |
+| `column_type_mapping` | Both | The expected column has no supported relational type mapping. |
+| `index_prefix_length` | Both | Prefix-length keys are not supported by the selected provider/capability. |
+| `schema_operations` | MySQL/MariaDB | PostgreSQL-style schema ensure/drop is not a supported namespace operation. |
+| `schema_qualified_object` | MySQL/MariaDB | An object expectation supplies a PostgreSQL-style schema namespace. |
+| `schema_qualified_collation` | MySQL/MariaDB | A column collation supplies a schema-qualified identity. |
+| `literal_default_catalog_representation` | MySQL/MariaDB | The literal default cannot be represented and compared reliably through that catalog/profile. |
+| `generated_column` | MySQL/MariaDB | The active profile lacks the requested stored/virtual generated-column capability. |
+| `expression_default` | MySQL/MariaDB | The active profile lacks expression-default capability. |
+| `check_constraint` | MySQL/MariaDB | The active profile lacks the required check-constraint capability. |
+| `filtered_index` | MySQL/MariaDB | The active profile does not support a filtered index. |
+| `functional_index` | MySQL/MariaDB | The active profile does not support expression index keys. |
+| `index_null_order` | MySQL/MariaDB | Explicit index-key null ordering is not supported by the adapter. |
+| `index_sort_order` | MySQL/MariaDB | Explicit ordering is requested for a HASH index. |
+| `descending_index` | MySQL/MariaDB | The active profile lacks descending-index capability. |
+| `included_columns` | MySQL/MariaDB | Included/non-key index columns are not supported by the adapter. |
+| `nulls_not_distinct` | MySQL/MariaDB | A nulls-not-distinct index contract is not supported by the adapter. |
+| `index_key_collation` | MySQL/MariaDB | An explicit per-key index collation is not supported by the adapter. |
+| `operator_class` | MySQL/MariaDB | PostgreSQL-style index operator classes are not supported. |
+| `virtual_generated_column` | PostgreSQL | The adapter rejects an explicitly virtual computed column. |
+
+PostgreSQL also evaluates capabilities dynamically. A nulls-not-distinct index
+before PostgreSQL 15, or ordering on an access method without `can_order`,
+produces `classified_unsupported` rather than a new static reason above.
+
+The provider catalog builders and their feature slices own the reasons:
+[MySQL/MariaDB](../../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/SqlGeneration/MySqlSafeMigrationCatalogSqlBuilder.cs)
+and [PostgreSQL](../../src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/SqlGeneration/PostgreSqlSafeMigrationCatalogSqlBuilder.cs).
+For an unknown reason, stop automated rollout, record the actual package/engine
+versions, and investigate a documentation gap, version mismatch, or defect.
+Do not assume that an undocumented string alone proves a new runtime contract.
 
 ## Unexpected-object inventory codes
 
@@ -101,7 +173,15 @@ the intended migration or violates organizational schema ownership.
 
 ## Telemetry failure codes
 
-`safe_migrations.run.failure.count` uses only these bounded tags:
+`safe_migrations.run.failure.count` uses the bounded failure-code vocabulary
+below. See [observability](observability.md#measurement-boundary) for which
+runner regions emit it; not every preflight rejection is a failure metric.
+
+<a id="model_contract_mismatch"></a>
+<a id="provider_command_failed"></a>
+<a id="input_contract_invalid"></a>
+<a id="runtime_contract_invalid"></a>
+<a id="unexpected_failure"></a>
 
 | Code | Source | Response |
 |---|---|---|

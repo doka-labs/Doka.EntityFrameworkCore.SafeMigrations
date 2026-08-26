@@ -1,10 +1,17 @@
 # Contributing
 
+Participation follows the [Code of Conduct](CODE_OF_CONDUCT.md). Before opening
+an issue, use [SUPPORT.md](SUPPORT.md) to choose the correct public or private
+channel. Do not include production data, credentials, connection strings, or
+unredacted migration reports in issues, pull requests, or test fixtures.
+
 ## Prerequisites
 
 - .NET SDK 10.0.400, selected by `global.json`
 - Docker for MySQL, MariaDB, and PostgreSQL tests
 - Bash, `jq`, `curl`, `unzip`, and `rsync` for engineering gates
+- Python 3 and Node.js for the existing engineering and documentation suites
+- ripgrep (`rg`) for the vertical-slice gate
 - the exact locked `Doka.EntityFrameworkCore.MySql` 10.0.0 package from
   nuget.org
 
@@ -61,9 +68,10 @@ dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Be
 dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks.csproj --configuration Release --no-build --no-restore
 eng/verify-vertical-slices.sh
 python3 eng/verify-project-boundaries.py
+python3 eng/verify-documentation.py
 python3 -m unittest discover -s eng/tests -p 'test_*.py' -v
 node --test eng/tests/github-release.test.js
-bash -n eng/*.sh eng/release/*.sh
+bash -e -c 'for script in eng/*.sh eng/release/*.sh; do bash -n "$script"; done'
 dotnet format Doka.EntityFrameworkCore.SafeMigrations.slnx style --severity warn --verify-no-changes --no-restore
 dotnet format Doka.EntityFrameworkCore.SafeMigrations.slnx style --diagnostics IDE0005 --severity hidden --verify-no-changes --no-restore
 ```
@@ -97,6 +105,8 @@ SBOM validation.
   mandatory.
 - Keep public XML documentation and update `PublicAPI.Unshipped.txt` for public
   API changes.
+- Add automated tests for major new functionality and regression tests for bug
+  fixes, including relevant successful, rejected, and boundary behavior.
 - Do not suppress analyzer or compiler warnings; correct the design.
 - Do not introduce a third-party dependency without prior design approval.
 - Preserve provider-neutral Core boundaries and exact fail-closed operation
@@ -119,12 +129,41 @@ Every operation or facet change requires:
 - idempotent second run and failure recovery;
 - package consumer and Public API review when surface changes.
 
+## Documentation and architecture decisions
+
+Update the canonical guide when behavior, support, deployment, or public API
+changes. Use the [documentation index](docs/README.md) to find its owner. Keep
+English ASCII text, relative repository links, and dated primary sources for
+external behavior. Distinguish implemented behavior, executed checks, and
+operator-owned prerequisites.
+
+Material architectural choices use [Doka MADR Enterprise Profile 1.0](docs/decisions/MADR-PROFILE.md)
+on MADR 4.0.0. Start with the [template](docs/decisions/adr-template.md), name
+Dominic Kalkbrenner as decision maker, and provide concrete alternatives,
+symmetric consequences, confirmation, history, implementation references, and
+sources. Record actual consultation and approval rather than assuming them.
+
+The general documentation gate checks Markdown integrity and navigation; it
+does not validate ADR governance or semantic quality. Review every ADR against
+the full profile. External MCP/CLI generation or import is optional, must
+preserve the document contract, and does not replace review or add a build
+dependency.
+
 ## Pull requests
 
 Target `main`, keep the change cohesive, and include exact commands and results
-in the pull request. Do not claim support from a build-only result. All required
-checks in `quality-gates.yml` must pass before merge.
+in the pull request. Use the PR template to distinguish executed checks from
+checks not run and explain genuinely unaffected areas. Do not claim support
+from a build-only result or treat a default MariaDB run as MySQL qualification.
+All required checks in `quality-gates.yml` must pass before merge; a local
+not-applicable note does not waive the hosted matrix.
+
+Changes to engine behavior or dependencies need primary-source references and
+positive/negative regression evidence. Workflow and release changes must also
+verify their real upstream Action contracts and distinguish local tests from
+hosted execution. Do not create a release tag or publish a package to test a PR.
 
 Use [GitHub Issues](https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/issues)
-for bugs and feature requests. Report vulnerabilities according to
-[SECURITY.md](.github/SECURITY.md).
+for bugs, feature requests, and usage questions through the corresponding form.
+Report vulnerabilities according to [SECURITY.md](SECURITY.md#reporting-a-vulnerability) and
+conduct concerns through the private Code of Conduct contact.

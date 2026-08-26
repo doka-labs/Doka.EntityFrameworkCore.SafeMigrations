@@ -1,4 +1,3 @@
-* @doka-org/core-maintainers
-/.github/ @doka-org/repo-admins
-/src/ @doka-org/core-maintainers
-/tests/ @doka-org/core-maintainers
+# The visible team has explicit write access to this repository. The catch-all
+# also covers workflows, release tooling, tests, benchmarks, and this file.
+* @doka-labs/core-maintainers

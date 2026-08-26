@@ -23,6 +23,18 @@ case "$work_dir" in
     exit 1
     ;;
 esac
+container_name=""
+
+cleanup() {
+  if [[ "${container_name}" == safe-migrations-tooling-* ]]; then
+    docker rm -f "${container_name}" >/dev/null 2>&1 || true
+  fi
+  if [[ "${work_dir}" == "$temporary_root"/safemigrations-tooling.* ]]; then
+    rm -rf -- "${work_dir}"
+  fi
+}
+trap cleanup EXIT
+
 repository_root="${work_dir}/source"
 mkdir -p "${repository_root}"
 
@@ -30,7 +42,7 @@ hash_source_lockfiles() {
   local output_file="$1"
   find "${source_root}" \
     \( -name .git -o -name .fastembed_cache -o -name artifacts -o -name bin -o -name obj \) -prune -o \
-    -type f -name packages.lock.json -exec shasum -a 256 {} \; \
+    -type f -name packages.lock.json -exec shasum -a 256 {} + \
     | LC_ALL=C sort >"${output_file}"
 }
 
@@ -46,16 +58,6 @@ rsync -a \
 container_name="safe-migrations-tooling-${engine}-${RANDOM}-$$"
 artifacts_dir="${source_root}/artifacts/ef-tooling/${engine}"
 mkdir -p "${artifacts_dir}"
-
-cleanup() {
-  if [[ "${container_name}" == safe-migrations-tooling-* ]]; then
-    docker rm -f "${container_name}" >/dev/null 2>&1 || true
-  fi
-  if [[ "${work_dir}" == "$temporary_root"/safemigrations-tooling.* ]]; then
-    rm -rf -- "${work_dir}"
-  fi
-}
-trap cleanup EXIT
 
 wait_for_mysql() {
   local admin_client="$1"

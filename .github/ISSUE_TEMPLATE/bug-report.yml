@@ -1,0 +1,149 @@
+name: Bug report
+description: Report reproducible SafeMigrations behavior on MySQL, MariaDB, PostgreSQL, or Core.
+title: "bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Report suspected vulnerabilities through the private
+        [security process](https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/security/policy),
+        not this public form. For usage questions, choose the support form.
+
+        Use synthetic schemas and data. Remove credentials, connection strings,
+        customer identifiers, internal host names, and sensitive object names
+        from code, SQL, reports, logs, and attachments. Do not upload a production
+        database, backup, or unredacted SafeMigrationRunReport.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Defect and impact
+      description: Explain the incorrect behavior and its impact on migration safety or availability.
+    validations:
+      required: true
+
+  - type: textarea
+    id: versions
+    attributes:
+      label: Exact package and runtime versions
+      description: >-
+        List each SafeMigrations package, EF Core, Doka MySQL or Npgsql provider,
+        MySqlConnector or Npgsql driver, .NET SDK/runtime, OS, and architecture.
+        For unpublished code, include the commit SHA. Remove private feed URLs.
+      placeholder: Include resolved versions, not only version ranges from project files.
+      render: text
+    validations:
+      required: true
+
+  - type: dropdown
+    id: engine
+    attributes:
+      label: Database family
+      options:
+        - MySQL
+        - MariaDB
+        - PostgreSQL
+        - Provider-neutral Core (no database)
+        - Not yet determined
+    validations:
+      required: true
+
+  - type: input
+    id: server
+    attributes:
+      label: Server version and deployment topology
+      description: >-
+        Give the exact server version and relevant proxy, pooler, managed-service,
+        cluster, or container details. Use not applicable for a Core-only defect.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: execution-path
+    attributes:
+      label: Execution path
+      multiple: true
+      options:
+        - Runtime Migrate or MigrateAsync
+        - dotnet ef database update
+        - Migration SQL script
+        - Idempotent migration SQL script
+        - Migration bundle
+        - Read-only preflight or postflight
+        - Definition, planner, or report API
+        - Other or not yet determined
+    validations:
+      required: true
+
+  - type: dropdown
+    id: policy
+    attributes:
+      label: SafeMigrationPolicy
+      multiple: true
+      options:
+        - ExistenceOnly
+        - ThrowIfDifferent
+        - RepairIfSafe
+        - Not applicable or not yet determined
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction and initial state
+      description: >-
+        Include a self-contained migration or repository, provider registration,
+        exact commands, synthetic initial schema/data, and relevant EF migration
+        history. Explain missing or partially copied legacy objects, derived
+        contexts, or concurrent migrators when relevant. Reproduce only on a
+        disposable database; do not retry an unsafe production migration.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: State whether the operation should apply, be a no-op, or block, and why.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and resulting state
+      description: >-
+        Include stable failure codes and exception types. Describe any schema,
+        data, or history changes, whether a second run differs, and the last
+        working package version if this is a regression. Do not infer that a
+        blocked operation is a defect without comparing the documented contract.
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Sanitized diagnostics
+      description: >-
+        Add only relevant SQL, stack traces, report assessments, or test output.
+        Reports can contain object names and definitions even without credentials.
+        Replace sensitive values consistently so the behavior remains reproducible.
+      render: text
+
+  - type: checkboxes
+    id: readiness
+    attributes:
+      label: Submission checklist
+      options:
+        - label: I checked the documented support matrix and searched existing issues.
+          required: true
+        - label: I removed secrets, personal data, and confidential schema or deployment details.
+          required: true
+        - label: This public report does not disclose a suspected security vulnerability.
+          required: true
+        - label: >-
+            I agree to follow the
+            [Code of Conduct](https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/blob/main/CODE_OF_CONDUCT.md).
+          required: true

@@ -63,7 +63,10 @@ jobs:
 
       - name: Verify engineering and release contracts
         run: |
-          bash -n eng/*.sh eng/release/*.sh
+          for script in eng/*.sh eng/release/*.sh; do
+            bash -n "$script"
+          done
+          python3 eng/verify-documentation.py
           python3 -m unittest discover -s eng/tests -p 'test_*.py' -v
           node --test eng/tests/github-release.test.js
 

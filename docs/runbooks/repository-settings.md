@@ -1,0 +1,117 @@
+# Repository settings and public handoff
+
+This is an operator checklist, not an assertion that settings are enabled.
+Repository files cannot activate GitHub rules, security reporting, reviewer
+independence, NuGet ownership, or an OpenSSF badge. Apply hosted changes only
+through an explicitly authorized administration task and read back the result.
+
+## Before public visibility
+
+- Review the complete intended source/history and reachable refs for secrets,
+  private endpoints, sensitive artifacts, and licensing. Rotate real exposed
+  credentials at their issuer; deleting history is not revocation.
+- Confirm repository name/description, MIT license and document-specific
+  attribution, issue routing, conduct/security contacts, and documentation.
+- Confirm the maintainer accepts any author identity already in public history.
+  Do not rewrite history merely to satisfy a cosmetic preference.
+- Review obsolete workflow artifacts/logs separately; their deletion needs
+  explicit scope and loses evidence. Retain required release/incident records.
+- Keep public visibility, Actions enablement, badge registration, and release
+  publication as separate decisions. Publishing source does not publish NuGet.
+
+## After public visibility, before accepting changes
+
+| Control | Intended configuration and readback |
+| --- | --- |
+| Source and discussions | Public default `main`; anonymous README/source/issues access; working issue forms and support links |
+| Ownership | Visible `@doka-labs/core-maintainers` team with explicit repository write access; no CODEOWNERS parse errors |
+| Main protection | Reviewed pull requests, applicable required checks, resolved conversations, stale approval handling, restricted force-push/deletion and bypass |
+| Check identity | Copy exact check-run contexts/app identities from a real green hosted run; do not invent a composite check name |
+| Review independence | Reviewer distinct from author where claimed; record actual available roles, not just required-review count |
+| Actions permissions | Read-only default token, no workflow PR approval, approved actions, fork approval policy, no privileged execution of untrusted PR code |
+| Private vulnerability reporting | Enabled, external form reachable, responder subscribed to security alerts, fallback private channel tested |
+| Dependency and secret alerts | Supported Dependabot/security-update and secret-scanning/push-protection controls enabled and alerts triaged; availability verified for the repository/organization |
+| Analysis | Existing .NET analysis and engineering gate actually run; any additional code scanning selected explicitly, not assumed from this document |
+| Account access | Maintainer/release access reviewed, MFA enforced at the appropriate organization/account scope, recovery and succession assessed |
+
+The reusable workflow emits separate jobs. Requiring a guessed name such as a
+workflow title may leave a permanently pending check or protect the wrong
+surface. Record all mandatory contexts from the first full run, including
+matrix cells, coverage, and dependency qualification. When job names or matrix
+entries change, update protection using fresh check-run evidence.
+
+## Before the first candidate
+
+Follow [one-time release configuration](../operations/release-publication.md#one-time-setup):
+protected `nuget` environment on `main`, authorized reviewer, explicit bypass
+policy, `NUGET_USER`, NuGet Trusted Publishing scope, independently controlled
+signer policy, protected `v*` tags, artifact attestations, immutable releases,
+and evidence retention. A file declaring `environment: nuget` does not prove
+an approval wait exists. Verify a real candidate reaches the wait before
+creating its tag. Never dispatch or approve a release merely to inspect settings.
+
+If only one release-capable person exists, do not assert separation of duties
+or continuity. Reconcile actual reviewer availability and environment settings
+before attempting publication; document the limitation in the evidence record.
+
+## Read-only confirmation commands
+
+These commands require suitable existing GitHub read permissions. They do not
+enable controls, change visibility, start a workflow, or request publishing
+credentials. Use only fields needed for the review; keep sensitive access
+details in protected evidence.
+
+```bash
+repo='doka-labs/Doka.EntityFrameworkCore.SafeMigrations'
+gh api --method GET "repos/$repo" \
+  --jq '{visibility,default_branch,has_issues,has_wiki,security_and_analysis}'
+gh api --method GET "repos/$repo/actions/permissions"
+gh api --method GET "repos/$repo/actions/permissions/workflow"
+gh api --method GET "repos/$repo/rulesets?includes_parents=true"
+gh api --method GET "repos/$repo/branches/main/protection"
+gh api --method GET "repos/$repo/environments/nuget"
+gh api --method GET "repos/$repo/private-vulnerability-reporting"
+gh api --method GET "repos/$repo/codeowners/errors"
+gh api --method GET "orgs/doka-labs/teams/core-maintainers/repos/$repo" \
+  --jq '{full_name,permissions}'
+```
+
+For the qualified revision, read exact check contexts and the corresponding
+workflow run/jobs:
+
+```bash
+candidate_sha='THE_REVIEWED_40_CHARACTER_COMMIT'
+gh api --method GET "repos/$repo/commits/$candidate_sha/check-runs?per_page=100" \
+  --paginate --jq '.check_runs[] | {name,status,conclusion,app:.app.slug,details_url}'
+```
+
+A 403/404 may indicate permissions, feature availability, or absent
+configuration; it is not by itself proof that a security feature is disabled.
+Inspect each ruleset's details, inherited rules, and bypass actors. An empty
+branch-protection response does not rule out rulesets. Confirm GitHub UI-only
+settings and NuGet policy separately; do not expose secret values in evidence.
+
+Record date, actor, repository, source SHA, relevant responses, discrepancies,
+and the resulting decision. Repeat after a role, workflow, ruleset, credential,
+or hosting-plan change. Read back controls again before release until the
+audited configuration is established; do not copy historical status forward.
+
+## OpenSSF handoff
+
+Once public, the maintainer may register the project and use the
+[preparation matrix](../openssf-best-practices.md). Recheck current criteria,
+anonymous evidence URLs, operational history, and applicable exclusions. Save
+only justified answers, then verify the public entry. Add an achievement link
+only to an actual project entry and badge state. Documentation readiness is
+not a substitute for missing controls, people, or measured results.
+
+## Primary sources
+
+- [GitHub CODEOWNERS](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners),
+  retrieved 2026-08-26.
+- [GitHub Actions permissions API](https://docs.github.com/en/rest/actions/permissions),
+  retrieved 2026-08-26.
+- [GitHub rulesets](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets),
+  retrieved 2026-08-26.
+- [GitHub private reporting configuration](https://docs.github.com/en/code-security/how-tos/report-and-fix-vulnerabilities/configure-vulnerability-reporting/configure-for-a-repository),
+  retrieved 2026-08-26.

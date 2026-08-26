@@ -41,16 +41,26 @@ release evidence. See [Support and qualification](docs/support-and-qualification
 ## Installation
 
 Install one provider package. The core package is included transitively.
+Choose an exact version from the published release record and NuGet; replace
+the placeholder below before running either command. Release candidates need
+their complete prerelease version. Source or changelog entries alone do not
+mean that a version is available on NuGet.
 
 ```bash
-dotnet add package Doka.EntityFrameworkCore.SafeMigrations.MySql
+package_version='YOUR_APPROVED_PUBLISHED_VERSION'
+dotnet package add Doka.EntityFrameworkCore.SafeMigrations.MySql --version "$package_version"
 ```
 
 or:
 
 ```bash
-dotnet add package Doka.EntityFrameworkCore.SafeMigrations.PostgreSql
+package_version='YOUR_APPROVED_PUBLISHED_VERSION'
+dotnet package add Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version "$package_version"
 ```
+
+The [.NET package command](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-package-add)
+documents exact-version selection. Verify release identity and content using
+[Release verification](docs/security/release-verification.md).
 
 ## Provider registration
 
@@ -138,8 +148,10 @@ baseline. It is not a complete table-definition check.
 
 `ConvergeTable` solves the case where one instance has no table, another has an
 empty copied table, and a third has only some columns or constraints. It emits
-one existence-only table-container operation followed by strict granular
-operations for every owned column and constraint.
+one existence-only table-container operation followed by granular operations
+for every owned column, constraint, and supplied index. Those children use the
+selected policy, which defaults to `ThrowIfDifferent`; selecting another policy
+does not omit the child operations.
 
 ```csharp
 protected override void Up(MigrationBuilder migrationBuilder)
@@ -188,19 +200,38 @@ instance ID, never a host name, database name, credential, or connection
 string.
 
 ```csharp
+using Doka.EntityFrameworkCore.SafeMigrations;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
+
 var runner = context.GetService<ISafeMigrationRunner>();
 var options = new SafeMigrationRunOptions(
     instanceId: "tenant-7f3d8b1c",
     targetMigrationId: "202608170001_CoreConvergence");
 
-var preflight = await runner.AnalyzePendingMigrationsAsync(context, options);
-if (preflight.Status == SafeMigrationReportStatus.Blocked)
+var preflight = await runner.AnalyzePendingMigrationsAsync(context, options, CancellationToken.None);
+if (preflight.Status != SafeMigrationReportStatus.Ready)
 {
-    throw new InvalidOperationException("SafeMigrations preflight blocked deployment.");
+    throw new InvalidOperationException("Deployment requires a reviewed, safe-only ready preflight.");
 }
 
-await context.Database.MigrateAsync();
+var targetMigration = preflight.TargetMigrationId
+    ?? throw new InvalidOperationException("Preflight did not identify a migration target.");
+
+await context.GetService<IMigrator>().MigrateAsync(targetMigration, CancellationToken.None);
 ```
+
+This narrow example executes only a safe-only `Ready` report and binds execution
+to the exact analyzed target, not the latest migration in the assembly.
+`ReadyWithProviderOperations` requires separate review and postconditions for
+ordinary provider operations; `NoOperations` requires checking intended history
+and postconditions rather than executing an unqualified target. A blocked report
+must stop deployment. Propagate a deployment cancellation token when available.
+Keep the migration assembly fixed and the required write/DDL fences in place;
+preflight does not reserve database state. The
+[deployment runbook](docs/runbooks/deployment-and-recovery.md) owns these checks
+and postflight. EF's [targeted migrator](https://learn.microsoft.com/en-us/dotnet/api/microsoft.entityframeworkcore.migrations.imigrator.migrateasync?view=efcore-10.0)
+uses a null target to mean latest, so the example rejects a missing target.
 
 For an explicit operation contract shared by a migration and deployment tool,
 use `AnalyzeAsync` before migration and `VerifyAsync` after migration. Reports
@@ -278,7 +309,13 @@ engines do not expose PostgreSQL-style collation namespaces.
 
 All application instances may use a runtime class derived from one canonical
 `CoreDbContext`, but its effective relational model must equal the canonical
-migration snapshot. SafeMigrations checks that equality before preflight.
+migration snapshot. SafeMigrations checks that equality before preflight when
+the configured migrations assembly supplies a snapshot. Without a snapshot,
+the runner still fingerprints the runtime model but cannot compare it to a
+canonical snapshot. Supply an independently established
+`expectedModelFingerprint` when using a snapshot-free explicit contract; a
+fingerprint computed from the same unchecked instance is not a target-model
+proof. Keep the canonical snapshot in normal EF migration deployments.
 
 Instance-specific schema extensions require a separate `DbContext`, migration
 assembly, and history table. A different target model per instance cannot share
@@ -296,7 +333,10 @@ one deterministic Core migration sequence.
   temporary state and prepared DDL, not stored routines, and requires no
   `CREATE ROUTINE` privilege.
 - PostgreSQL guarded operations participate in the normal EF migration
-  transaction unless the migration explicitly suppresses transactions.
+  transaction. A baseline generator that emits a transaction-suppressed command
+  for a guarded operation is rejected before that operation executes. Ordinary
+  provider operations and externally executed no-transaction scripts have
+  separate boundaries described in the deployment runbook.
 - PostgreSQL analysis owns one read-only `RepeatableRead` transaction and
   transaction-scoped advisory lock. If the caller already owns a transaction,
   it must be read-only and use `RepeatableRead` or `Serializable`; otherwise
@@ -332,8 +372,9 @@ profiles, performance/allocation budgets, deterministic double-pack, an
 isolated package-only consumer, and SPDX SBOM validation.
 
 Each provider matrix cell also persists a live full-runner latency artifact.
-It measures 20 pooled database roundtrips against 100 expected tables before
-and after adding 1,000 foreign tables with child objects. Expected assessments
+It measures 20 full-runner invocations after a warmup against 100 expected
+tables before and after adding 1,000 foreign tables with child objects. Each
+invocation may execute multiple database roundtrips. Expected assessments
 must remain identical, foreign child rows must stay outside the scoped child
 inventory, and noisy p95 must remain within `2 * clean p95 + 250 ms`.
 
@@ -347,7 +388,9 @@ repository-signature, package-content, public-symbol, and GitHub Release
 readbacks fail closed. The exact release draft exists before NuGet is mutated
 and is published only after the signed NuGet readback is attached. Candidates
 are marked prerelease and never replace the latest stable release. See
-[Release process](docs/release-process.md).
+[Publication operations](docs/operations/release-publication.md) for the
+step-by-step maintainer guide and current readiness, and
+[Release process](docs/release-process.md) for the qualification contract.
 
 ## Design boundaries
 
@@ -358,6 +401,7 @@ classified rejection is part of the complete product contract.
 
 Further documentation:
 
+- [Documentation index and API reference](docs/README.md)
 - [Implementation design](docs/implementation-design.md)
 - [Vertical-slice architecture](docs/vertical-slice-architecture.md)
 - [Support and qualification](docs/support-and-qualification.md)
@@ -365,6 +409,18 @@ Further documentation:
 - [EF Core and provider upgrade boundary](docs/efcore-provider-upgrade-risk.md)
 - [Sample project](samples/Doka.EntityFrameworkCore.SafeMigrations.Sample/README.md)
 
+## Community and support
+
+- [Support channels and safe diagnostic sharing](SUPPORT.md)
+- [Contributing and verification requirements](CONTRIBUTING.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Security policy and private vulnerability reporting](SECURITY.md)
+- [Governance and responsibilities](GOVERNANCE.md)
+- [Project direction](ROADMAP.md)
+- [OpenSSF documentation and evidence preparation](docs/openssf-best-practices.md)
+
 ## License
 
-MIT. See [LICENSE](LICENSE).
+The product is MIT-licensed. See [LICENSE](LICENSE). The adapted
+[Code of Conduct](CODE_OF_CONDUCT.md#attribution) is separately licensed under
+CC BY-SA 4.0.

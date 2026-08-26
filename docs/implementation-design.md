@@ -155,9 +155,12 @@ primary key, unique constraints, checks, and foreign keys. Unexpected owned
 members reject the strict operation.
 
 `ConvergenceContainer` checks only that the target name denotes a table. It is
-used by `ConvergeTable`, which immediately emits granular strict operations for
-every required child object. This prevents an existing copied empty table from
-hiding missing columns while preserving unknown extra objects.
+used by `ConvergeTable`, which immediately emits granular operations for every
+required child object using the supplied policy (`ThrowIfDifferent` by
+default). Choosing `ExistenceOnly` explicitly relaxes child-definition checks;
+an existing table never skips emitting the child operations. This prevents a
+copied empty table from hiding missing columns while preserving unknown extra
+objects.
 
 ## State and policy
 
@@ -220,7 +223,8 @@ supported PostgreSQL 14 baseline. MySQL/MariaDB additionally uses half the live
 `max_allowed_packet` as an upper bound. Repeated typed values are interned
 within a chunk, global ordinals span chunks, and results are published only
 after every chunk succeeds. PostgreSQL holds one read-only `RepeatableRead`
-snapshot and provider migration lock across analysis. A caller-owned
+snapshot and transaction-scoped analysis advisory lock across analysis. This
+analysis lock is not an application write fence. A caller-owned
 transaction is accepted only when it is read-only and uses `RepeatableRead` or
 `Serializable`; weaker or read-write transactions fail before catalog access
 and remain caller-owned. MySQL/MariaDB uses the provider migration lock;

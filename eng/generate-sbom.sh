@@ -44,7 +44,12 @@ package_dir="$(cd "$package_dir" && pwd -P)"
 mkdir -p "$output_dir"
 output_dir="$(cd "$output_dir" && pwd -P)"
 
-if find "$output_dir" -mindepth 1 -maxdepth 1 -print -quit | grep -q .; then
+if ! existing_entry="$(find "$output_dir" -mindepth 1 -maxdepth 1 -print -quit)"; then
+    echo "Cannot inspect SBOM output directory: $output_dir" >&2
+    exit 1
+fi
+
+if [[ -n "$existing_entry" ]]; then
     echo "SBOM output directory must be empty: $output_dir" >&2
     exit 1
 fi
@@ -95,9 +100,7 @@ chmod 0755 "$tool_path"
 
 drop_dir="$work_dir/drop"
 mkdir -p "$drop_dir"
-find "$package_dir" -maxdepth 1 -type f \
-    \( -name '*.nupkg' -o -name '*.snupkg' -o -name 'SHA256SUMS' \) \
-    -exec cp {} "$drop_dir" \;
+cp "$package_dir"/*.nupkg "$package_dir"/*.snupkg "$package_dir/SHA256SUMS" "$drop_dir/"
 
 component_root="$work_dir/source"
 mkdir -p "$component_root"
@@ -161,7 +164,7 @@ jq \
     "$validation_output" > "$output_dir/validation.json"
 (
     cd "$output_dir"
-    find . -type f ! -name SHA256SUMS -exec shasum -a 256 {} \; \
+    find . -type f ! -name SHA256SUMS -exec shasum -a 256 {} + \
         | LC_ALL=C sort > "$work_dir/SHA256SUMS"
     mv "$work_dir/SHA256SUMS" SHA256SUMS
     shasum -a 256 -c SHA256SUMS

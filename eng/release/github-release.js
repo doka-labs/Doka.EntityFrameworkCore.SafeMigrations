@@ -3,6 +3,80 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { setTimeout: delay } = require('timers/promises');
+
+// Candidate identity is complete before publication. Attempt-specific readback
+// files deliberately never become immutable release assets.
+function candidateReleaseOptions({ github, owner, repo, version, commit, artifactRoot = 'artifacts' }) {
+  const packageIds = [
+    'Doka.EntityFrameworkCore.SafeMigrations',
+    'Doka.EntityFrameworkCore.SafeMigrations.MySql',
+    'Doka.EntityFrameworkCore.SafeMigrations.PostgreSql',
+  ];
+  const tag = `v${version}`;
+  const assetPaths = packageIds.flatMap((id) => ['nupkg', 'snupkg'].map(
+    (extension) => path.join(artifactRoot, 'packages', `${id}.${version}.${extension}`)));
+  assetPaths.push(
+    path.join(artifactRoot, 'packages', 'SHA256SUMS'),
+    path.join(artifactRoot, 'packages', 'SYMBOLS.json'),
+    path.join(artifactRoot, 'sbom', '_manifest', 'spdx_2.2', 'manifest.spdx.json'),
+    path.join(artifactRoot, 'attestations', 'build-provenance.sigstore.json'),
+    path.join(artifactRoot, 'attestations', 'sbom-attestation.sigstore.json'),
+  );
+
+  return {
+    github,
+    owner,
+    repo,
+    tag,
+    targetCommitish: commit,
+    name: tag,
+    body: `See [CHANGELOG.md](https://github.com/${owner}/${repo}/blob/${tag}/CHANGELOG.md).`,
+    prerelease: version.includes('-'),
+    assetPaths,
+  };
+}
+
+class PendingReleaseReadback extends Error {}
+
+async function recordReleaseEvidence(filePath, operation) {
+  let evidence;
+  try {
+    const release = await operation();
+    evidence = { status: 'success', result: release };
+
+    return release;
+  } catch (error) {
+    // A failed response cannot establish whether the remote mutation happened.
+    // Keep only diagnostic fields, never Octokit's request or credential headers.
+    evidence = {
+      status: 'failure',
+      remoteState: 'unknown',
+      error: { name: error.name, message: error.message, httpStatus: error.status ?? null },
+    };
+
+    throw error;
+  } finally {
+    fs.writeFileSync(filePath, JSON.stringify(evidence, null, 2) + '\n');
+  }
+}
+
+async function awaitReadback(read) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await read();
+    } catch (error) {
+      const transient = error instanceof PendingReleaseReadback
+        || [404, 408, 429].includes(error.status)
+        || (error.status >= 500 && error.status <= 599);
+      if (!transient || attempt === 4) {
+        throw error;
+      }
+
+      await delay(2000);
+    }
+  }
+}
 
 function sha256(data) {
   return crypto.createHash('sha256').update(data).digest('hex');
@@ -141,7 +215,7 @@ async function readAssetDigest(github, owner, repo, asset) {
 
 async function verifyAsset(github, owner, repo, actual, expected) {
   if (actual.state !== 'uploaded') {
-    throw new Error(`Release asset '${expected.name}' is in state '${actual.state}'.`);
+    throw new PendingReleaseReadback(`Release asset '${expected.name}' is in state '${actual.state}'.`);
   }
 
   if (actual.size !== expected.size) {
@@ -156,38 +230,59 @@ async function verifyAsset(github, owner, repo, actual, expected) {
   }
 }
 
-async function reconcileAssets(
-  github,
-  owner,
-  repo,
-  release,
-  expectedAssets,
-  allowAdditionalPublishedAssets = false,
-) {
-  const existingAssets = await github.paginate(github.rest.repos.listReleaseAssets, {
-    owner,
-    repo,
-    release_id: release.id,
-    per_page: 100,
-  });
-  const expectedByName = new Map(expectedAssets.map((asset) => [asset.name, asset]));
+function indexAssets(assets, expectedByName) {
   const actualByName = new Map();
-  for (const asset of existingAssets) {
+  for (const asset of assets) {
     if (actualByName.has(asset.name)) {
       throw new Error(`GitHub Release contains duplicate asset '${asset.name}'.`);
     }
 
     actualByName.set(asset.name, asset);
-    if (!expectedByName.has(asset.name)
-        && !(allowAdditionalPublishedAssets && !release.draft)) {
+    if (!expectedByName.has(asset.name)) {
       throw new Error(`GitHub Release contains unexpected asset '${asset.name}'.`);
     }
   }
 
+  return actualByName;
+}
+
+async function listAssets(github, owner, repo, releaseId) {
+  return github.paginate(github.rest.repos.listReleaseAssets, {
+    owner,
+    repo,
+    release_id: releaseId,
+    per_page: 100,
+  });
+}
+
+async function verifyCompleteAssets(github, owner, repo, release, expectedAssets) {
+  const expectedByName = new Map(expectedAssets.map((asset) => [asset.name, asset]));
+  const observed = indexAssets(await listAssets(github, owner, repo, release.id), expectedByName);
+  for (const expected of expectedAssets) {
+    const actual = observed.get(expected.name);
+    if (!actual) {
+      throw new PendingReleaseReadback(`GitHub Release is missing asset '${expected.name}'.`);
+    }
+
+    await verifyAsset(github, owner, repo, actual, expected);
+  }
+}
+
+async function reconcileAssets(github, owner, repo, release, expectedAssets) {
+  const expectedByName = new Map(expectedAssets.map((asset) => [asset.name, asset]));
+  const actualByName = indexAssets(await listAssets(github, owner, repo, release.id), expectedByName);
+
+  // Validate all existing content before the first upload, including a conflict
+  // late in the list. A retry never repairs conflicting bytes by replacement.
   for (const expected of expectedAssets) {
     const actual = actualByName.get(expected.name);
     if (actual) {
       await verifyAsset(github, owner, repo, actual, expected);
+    }
+  }
+
+  for (const expected of expectedAssets) {
+    if (actualByName.has(expected.name)) {
       continue;
     }
 
@@ -204,30 +299,36 @@ async function reconcileAssets(
     });
   }
 
-  const reconciled = await github.paginate(github.rest.repos.listReleaseAssets, {
-    owner,
-    repo,
-    release_id: release.id,
-    per_page: 100,
-  });
-  if (!allowAdditionalPublishedAssets
-      && reconciled.length !== expectedAssets.length) {
-    throw new Error(
-      `GitHub Release has ${reconciled.length} assets; expected ${expectedAssets.length}.`);
-  }
+  await awaitReadback(() => verifyCompleteAssets(github, owner, repo, release, expectedAssets));
+}
 
-  for (const actual of reconciled) {
-    const expected = expectedByName.get(actual.name);
-    if (!expected) {
-      if (allowAdditionalPublishedAssets && !release.draft) {
-        continue;
-      }
+async function readRelease(options, releaseId, expectedAssets, published) {
+  const { github, owner, repo } = options;
 
-      throw new Error(`GitHub Release contains unexpected asset '${actual.name}'.`);
+  return awaitReadback(async () => {
+    const { data: release } = await github.rest.repos.getRelease({
+      owner,
+      repo,
+      release_id: releaseId,
+    });
+    validateRelease(release, options);
+    if (typeof release.draft !== 'boolean') {
+      throw new Error('GitHub Release readback has no explicit draft state.');
     }
 
-    await verifyAsset(github, owner, repo, actual, expected);
-  }
+    if (published && release.draft) {
+      throw new PendingReleaseReadback('GitHub Release is still a draft after publication.');
+    }
+
+    if (!release.draft && release.immutable !== true) {
+      throw new Error('Published GitHub Release is not immutable.');
+    }
+
+    await validateTagTarget(github, owner, repo, options.tag, options.targetCommitish);
+    await verifyCompleteAssets(github, owner, repo, release, expectedAssets);
+
+    return release;
+  });
 }
 
 async function stageRelease(options) {
@@ -265,16 +366,9 @@ async function stageRelease(options) {
   }
 
   validateRelease(release, expected);
-  await reconcileAssets(
-    github,
-    owner,
-    repo,
-    release,
-    expectedAssets,
-    !release.draft,
-  );
+  await reconcileAssets(github, owner, repo, release, expectedAssets);
 
-  return release;
+  return readRelease(options, release.id, expectedAssets, !release.draft);
 }
 
 async function reconcileRelease(options) {
@@ -287,31 +381,23 @@ async function reconcileRelease(options) {
     assetPaths,
   } = options;
   if (release.draft) {
-    const response = await github.rest.repos.updateRelease({
+    await github.rest.repos.updateRelease({
       owner,
       repo,
       release_id: release.id,
       draft: false,
       make_latest: prerelease ? 'false' : 'true',
     });
-
-    return response.data;
   }
 
-  await reconcileAssets(
-    github,
-    owner,
-    repo,
-    release,
-    loadAssets(assetPaths),
-  );
-
-  return release;
+  return readRelease(options, release.id, loadAssets(assetPaths), true);
 }
 
 module.exports = {
+  candidateReleaseOptions,
   loadAssets,
   reconcileRelease,
+  recordReleaseEvidence,
   sha256,
   stageRelease,
   verifySignedAnnotatedTag,

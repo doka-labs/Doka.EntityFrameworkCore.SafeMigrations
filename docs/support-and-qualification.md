@@ -63,16 +63,21 @@ silently modifying the Floor contract.
 
 ## Behavioral evidence
 
-The test inventory currently contains 260 xUnit test cases plus 29 repository
-tooling tests:
+The executable test inventory consists of three independent xUnit assemblies
+and the repository engineering suites:
 
-- 74 provider-neutral tests;
-- 99 MySQL/MariaDB tests;
-- 87 PostgreSQL tests;
-- 16 Python tests for coverage, project-boundary, release-version, workflow
-  retry-contract, and fail-fast publication gates;
-- 13 Node.js tests for stable and prerelease release reconciliation and signed
-  annotated tag binding.
+- [provider-neutral Core tests](../tests/Doka.EntityFrameworkCore.SafeMigrations.Tests);
+- [MySQL/MariaDB tests](../tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests);
+- [PostgreSQL tests](../tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests);
+- [Python engineering tests](../eng/tests) for coverage, project boundaries,
+  release versions, signed tags, workflow retry contracts, NuGet publication,
+  and package/symbol readback;
+- [Node.js release tests](../eng/tests/github-release.test.js) for draft and
+  final release reconciliation, recovery, assets, and signed annotated tags.
+
+Test results from the qualified commit are the authority for current case
+counts. Counts are not duplicated here because parameterized cases and the
+engineering suites evolve independently of the support contract.
 
 Provider tests use real Docker servers and cover:
 
@@ -124,8 +129,8 @@ Every engine matrix cell also runs:
 
 The common intent model remains provider neutral, while execution follows the
 active engine's proven metadata and DDL capabilities. The following boundaries
-are classified as `unsupported` before target DDL instead of being compared or
-applied heuristically:
+distinguish qualified supported behavior from explicit rejections. Unsupported
+cases stop before target DDL instead of being compared or applied heuristically:
 
 - PostgreSQL 14 rejects `NULLS NOT DISTINCT`; PostgreSQL introduced that
   `CREATE INDEX` clause in version 15.

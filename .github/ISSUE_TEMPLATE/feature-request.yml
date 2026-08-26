@@ -1,0 +1,105 @@
+name: Feature request
+description: Propose a concrete migration capability, compatibility change, or documentation improvement.
+title: "feature: "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Start with the consumer problem, not a preferred implementation.
+        SafeMigrations preserves provider-neutral intent, explicit ownership,
+        fail-closed behavior, and one qualified contract across supported engines.
+        A request does not commit the project to a release or roadmap date.
+
+        Do not disclose vulnerabilities or sensitive data here. Use the private
+        [security process](https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/security/policy).
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Consumer problem and impact
+      description: Explain the concrete application scenario, current limitation, and active consumer.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Primary area
+      options:
+        - Operation or expected-definition contract
+        - Legacy-schema convergence
+        - Preflight, postflight, or reporting
+        - EF migrations, history, scripts, or bundles
+        - Provider or engine compatibility
+        - Diagnostics, performance, or memory
+        - Documentation or contributor tooling
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: engine-scope
+    attributes:
+      label: Engine scope
+      multiple: true
+      options:
+        - Provider-neutral Core or all supported engines
+        - MySQL
+        - MariaDB
+        - PostgreSQL
+        - Not yet determined
+    validations:
+      required: true
+
+  - type: textarea
+    id: contract
+    attributes:
+      label: Desired observable contract
+      description: >-
+        Describe the expected API or outcome and relevant engine versions.
+        Explain missing, matching, different, unsupported, or data-blocked states
+        when applicable. A safe classified rejection can be the correct outcome.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives and ownership
+      description: >-
+        Describe existing APIs or approaches and why they do not solve the problem.
+        Explain whether the change belongs in SafeMigrations, EF Core, Doka,
+        Npgsql, or the database engine; unknown ownership is acceptable.
+
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility, safety, and runtime cost
+      description: >-
+        Identify known effects on public API, generated SQL, existing migrations,
+        data integrity, retries, provider parity, catalog roundtrips, allocations,
+        or cancellation. State unknowns rather than assuming compatibility.
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence and acceptance examples
+      description: >-
+        Provide synthetic examples, expected positive and negative outcomes, and
+        relevant primary EF Core, provider, or engine documentation. Include
+        measured performance evidence if the request concerns runtime cost.
+
+  - type: checkboxes
+    id: readiness
+    attributes:
+      label: Submission checklist
+      options:
+        - label: I searched existing issues and documentation for this capability.
+          required: true
+        - label: This request contains no suspected vulnerability, secrets, or confidential data.
+          required: true
+        - label: >-
+            I agree to follow the
+            [Code of Conduct](https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/blob/main/CODE_OF_CONDUCT.md).
+          required: true
