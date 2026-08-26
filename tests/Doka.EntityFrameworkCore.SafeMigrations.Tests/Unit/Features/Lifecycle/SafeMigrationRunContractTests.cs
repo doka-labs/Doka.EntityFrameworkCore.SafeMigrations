@@ -27,11 +27,6 @@ public sealed class SafeMigrationRunContractTests
     {
         Assert.Throws<ArgumentException>(() => new SafeMigrationRunOptions(" "));
         Assert.Throws<ArgumentException>(() => new SafeMigrationRunOptions("instance", " "));
-        Assert.Throws<ArgumentException>(() => new SafeMigrationRunOptions("instance", expectedModelFingerprint: " "));
-
-        Assert.Throws<ArgumentException>(() => new SafeMigrationRunOptions(
-            "instance",
-            expectedModelFingerprint: new string('a', 64)));
 
         var expectedFingerprint = ModelFingerprint();
         var options = new SafeMigrationRunOptions("instance-7f3a", "202608170101_Core", expectedFingerprint);
@@ -39,6 +34,50 @@ public sealed class SafeMigrationRunContractTests
         Assert.Equal("instance-7f3a", options.InstanceId);
         Assert.Equal("202608170101_Core", options.TargetMigrationId);
         Assert.Equal(expectedFingerprint, options.ExpectedModelFingerprint);
+    }
+
+    [Theory]
+    [InlineData("", 0, 'a')]
+    [InlineData(" ", 0, 'a')]
+    [InlineData("", 64, 'a')]
+    [InlineData("other-model:v1:npgsql_postgresql:sha256:", 64, 'a')]
+    [InlineData("safe-relational-model:v0:npgsql_postgresql:sha256:", 64, 'a')]
+    [InlineData("safe-relational-model:v1::sha256:", 64, 'a')]
+    [InlineData("safe-relational-model:v1: :sha256:", 64, 'a')]
+    [InlineData("safe-relational-model:v1:npgsql:postgresql:sha256:", 64, 'a')]
+    [InlineData("safe-relational-model:v1:npgsql_postgresql:sha512:", 64, 'a')]
+    [InlineData("safe-relational-model:v1:npgsql_postgresql:sha256:", 0, 'a')]
+    [InlineData("safe-relational-model:v1:npgsql_postgresql:sha256:", 63, 'a')]
+    [InlineData("safe-relational-model:v1:npgsql_postgresql:sha256:", 65, 'a')]
+    [InlineData("safe-relational-model:v1:npgsql_postgresql:sha256:", 64, 'A')]
+    [InlineData("safe-relational-model:v1:npgsql_postgresql:sha256:", 64, 'g')]
+    public void RunOptions_RejectMalformedExpectedFingerprintsAtConstruction(
+        string prefix,
+        int digestLength,
+        char digestCharacter
+    )
+    {
+        var fingerprint = prefix + new string(digestCharacter, digestLength);
+
+        var exception = Assert.Throws<ArgumentException>(() => new SafeMigrationRunOptions(
+            "instance",
+            expectedModelFingerprint: fingerprint));
+
+        Assert.Equal("expectedModelFingerprint", exception.ParamName);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RunOptions_AcceptAnAbsentOrWellFormedExpectedFingerprint(
+        bool requireExpectedFingerprint
+    )
+    {
+        var fingerprint = requireExpectedFingerprint ? ModelFingerprint() : null;
+
+        var options = new SafeMigrationRunOptions("instance", expectedModelFingerprint: fingerprint);
+
+        Assert.Equal(fingerprint, options.ExpectedModelFingerprint);
     }
 
     [Fact]
