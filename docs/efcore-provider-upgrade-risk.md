@@ -7,7 +7,8 @@ dependency-profile gates pass; compilation alone is insufficient.
 ## MySQL and MariaDB boundary
 
 The `.MySql` package consumes the public
-`Doka.EntityFrameworkCore.MySql.Migrations` operation-handler SPI:
+`Doka.EntityFrameworkCore.MySql` operation-handler SPI. Its types use the root
+namespace, not a `.Migrations` namespace:
 
 - `IMySqlMigrationOperationHandler`;
 - `MySqlMigrationOperationContext`;
@@ -82,8 +83,9 @@ provider duration/allocation budgets.
 
 Central package declarations use bounded ranges. Lockfiles establish the Floor
 profile. `eng/verify-dependency-profile.sh` creates a fresh source snapshot,
-forces the current Latest patch profile, confirms exact resolved versions,
-builds, and runs all three suites without modifying committed Floor lockfiles.
+forces the configured Latest patch profile, explicitly checks EF Relational
+and Npgsql resolutions in the PostgreSQL test lockfile, builds, and runs all
+three suites without modifying committed Floor lockfiles.
 
 The declared range must never be widened beyond the profiles actually tested.
 Publishable SafeMigrations candidates and stable packages must depend on a

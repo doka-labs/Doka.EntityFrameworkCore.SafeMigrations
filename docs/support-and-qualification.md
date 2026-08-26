@@ -57,8 +57,9 @@ The current Latest profile is:
 
 `eng/verify-dependency-profile.sh` copies the repository to a clean canonical
 temporary path, restores the selected versions with lock updates confined to
-that copy, asserts exact resolutions, builds, and runs Core, MySQL/MariaDB, and
-PostgreSQL suites. This avoids falsely passing on stale build outputs or
+that copy, explicitly asserts EF Relational and Npgsql resolutions in the
+PostgreSQL test lockfile, builds, and runs Core, MySQL/MariaDB, and PostgreSQL
+suites. This avoids falsely passing on stale build outputs or
 silently modifying the Floor contract.
 
 ## Behavioral evidence
@@ -194,12 +195,13 @@ is linked at compile time; no benchmark assembly introduces a cross-provider
 runtime edge.
 
 Every provider engine cell additionally runs 20 complete pooled
-`SafeMigrationRunner` roundtrips against 100 expected tables, then repeats them
+`SafeMigrationRunner` invocations against 100 expected tables, then repeats them
 after adding 1,000 foreign tables with child objects. The cell stores p50/p95
 JSON evidence and fails unless assessments are unchanged, foreign child rows
 remain excluded by the expected-table scope, and noisy p95 is at most
-`2 * clean p95 + 250 ms`. This is a same-runner relative SLO; it is not an
-absolute cross-machine latency promise.
+`2 * clean p95 + 250 ms`. Each invocation can include multiple database
+roundtrips. This is a same-runner relative SLO; it is not an absolute
+cross-machine latency promise.
 
 After locked restore, the quality workflow rejects warning-level Roslyn style
 violations and unnecessary imports. Rider/ReSharper remains the repository

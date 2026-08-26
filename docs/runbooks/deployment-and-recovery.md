@@ -10,7 +10,8 @@ Core model, ordered Core migration sequence, and Core history-table contract.
 ## Required evidence before the window
 
 - immutable application and migration artifact digest;
-- target migration ID and SafeMigrations contract fingerprint;
+- target migration ID, execution-contract fingerprint, and the reviewed
+  final-state verification contract with its own fingerprint when different;
 - pseudonymous instance ID mapped in the protected deployment inventory;
 - successful restore drill for a recent backup or snapshot;
 - verified free space and provider health;
@@ -37,6 +38,11 @@ deployment output.
 5. Confirm provider ID, engine family, exact server version, model fingerprint,
    contract fingerprint, and target migration.
 6. Review every assessment and unexpected object.
+
+The contract fingerprint binds safe intent, definitions, policy, and order.
+Ordinary EF operations contribute only their CLR type names, not their SQL or
+other properties. Always retain and check the immutable migration artifact
+digest as well; equal contract hashes alone do not prove ordinary SQL identity.
 
 PostgreSQL preflight and postflight normally create their own read-only
 `RepeatableRead` transaction and hold one transaction-scoped advisory lock
@@ -81,14 +87,50 @@ Preflight is read-only and cannot reserve the catalog state. Before execution:
    code, operation ordinal, and timestamp without logging SQL payloads or
    connection data.
 
+### Externally executed SQL scripts
+
+Use a reviewed script generated for the exact analyzed migration range and
+bind its digest to the deployment record. Require an exclusive execution
+window and a client configured to stop on the first SQL error. External script
+execution does not inherit EF's runtime migration lock or Doka's finally-style
+command cleanup. After a failed MySQL/MariaDB script, discard the session
+before retry; do not return its temporary state to a pool.
+
+A PostgreSQL no-transaction script has no whole-migration rollback guarantee;
+earlier statements may already be committed. Normal transactional scripts and
+transaction-suppressed provider commands also require checking their actual
+boundaries. In every case, inspect catalog and history after failure and run
+the same reviewed final-state postflight before accepting the deployment.
+
 ## Postflight
 
-For the exact explicit operation contract used by the deployment, call
-`ISafeMigrationRunner.VerifyAsync` and retain the JSON report. Then verify:
+Call `ISafeMigrationRunner.VerifyAsync` with the final-state contract reviewed
+before the deployment, and retain the JSON report. This API independently
+checks every supplied postcondition against the live catalog; it does not
+apply preflight projection or infer the final state of a historical sequence.
 
-- report status is not `Blocked`;
+The execution operations can be reused when every postcondition remains true
+at the final target, such as a purely additive convergence baseline. They
+cannot be reused blindly for ensure-then-rename, ensure-then-drop, or successive
+definitions of one column. For example, after ensuring `legacy_users` and
+renaming it to `users`, verify the old name's absence and the final `users`
+definition, not the intermediate requirement that `legacy_users` exists.
+Retain removal checks and all owned final facets when composing this contract;
+do not omit a failed condition merely to obtain a green report. Verification
+operations are read-only inputs to `VerifyAsync`, not an additional migration
+to execute.
+
+Then verify:
+
+- a safe-only final-state contract returns `Ready`; `ReadyWithProviderOperations`
+  additionally requires the independent checks below, and `NoOperations` alone
+  proves no target conditions;
 - every safe operation has `postconditionSatisfied: true`;
-- model and contract fingerprints match preflight;
+- provider, instance, model fingerprint, and target migration match the
+  approved deployment identity;
+- the postflight contract fingerprint matches the independently approved
+  final-state contract; require equality with preflight only when both use the
+  identical operation list, including order and policy;
 - the exact expected Core history delta was added: one row for each applied
   migration in the analyzed range, with no unexpected migration IDs;
 - ordinary provider-owned operations have their own postconditions;
@@ -125,8 +167,11 @@ work.
 1. Leave the Core history row unchanged.
 2. Keep writes fenced.
 3. Re-run preflight against the still-pending migration.
-4. Confirm earlier successful operations now classify `matching` and the failed
-   operation has a stable actionable classification.
+4. Reconcile earlier committed operations with their reviewed retry contract:
+   an ensured object can be `matching`, while a completed drop or rename has a
+   `missing` target or source. Confirm the failed operation has a stable,
+   actionable classification. If later steps superseded an earlier transient
+   state, do not replay that state blindly; review the whole retry sequence.
 5. Correct only the underlying data, permission, capability, or reviewed
    migration defect.
 6. Re-run the same migration artifact. Do not create a fake history row.

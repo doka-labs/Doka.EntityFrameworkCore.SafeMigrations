@@ -118,7 +118,10 @@ window.
 The migration principal needs:
 
 - read access to the catalog views used by the provider;
+- `SELECT` on the dependent and principal tables read by data preconditions;
 - DDL privileges for the target objects in the migration;
+- the required create/read/write privileges for the owned Core EF history
+  table, plus separately reviewed privileges for ordinary data operations;
 - the provider migration-lock capabilities;
 - `CREATE TEMPORARY TABLES` where the guard plan requires temporary state.
 

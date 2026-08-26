@@ -6,18 +6,25 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
-## [10.0.0-rc.1] - 2026-08-24
+## [10.0.0-rc.1] - 2026-08-26
 
-First complete release candidate of the SafeMigrations Core,
-MySQL/MariaDB, and PostgreSQL package family for .NET 10 and EF Core 10.
-Install prerelease packages explicitly because NuGet excludes them from normal
-stable-version resolution:
+Prepared first feature-complete release candidate of the SafeMigrations Core,
+MySQL/MariaDB, and PostgreSQL package family for .NET 10 and EF Core 10. The
+candidate qualifies the complete intended 10.0.0 contract and publication
+workflow; it is not a reduced feature release.
 
-```bash
-dotnet add package Doka.EntityFrameworkCore.SafeMigrations --version 10.0.0-rc.1
-dotnet add package Doka.EntityFrameworkCore.SafeMigrations.MySql --version 10.0.0-rc.1
-dotnet add package Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version 10.0.0-rc.1
-```
+These notes do not establish publication. Require the successful release run
+and verified public package/symbol readback before installation. Follow the
+[installation guide](README.md#installation) with exact version `10.0.0-rc.1`;
+choose the required provider package, which brings Core transitively. All
+three package IDs use the same version. Changes and removals below are
+relative to the earlier proof of concept, not a previous supported release.
+
+Runtime dependencies are EF Core `[10.0.8,10.1.0)`, exact Doka `[10.0.0]` for
+MySQL/MariaDB, and Npgsql EF Core `[10.0.0,11.0.0)` for PostgreSQL. The release
+matrix covers MySQL 8.4/9.7, MariaDB 10.11/11.4/11.8/12.3, and PostgreSQL
+14-18. Exact images, dependency profiles, and capability limits are maintained
+in [Support and qualification](docs/support-and-qualification.md).
 
 ### Added
 
@@ -34,6 +41,8 @@ dotnet add package Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version 
 - Read-only `ISafeMigrationRunner` preflight and postflight, canonical derived-
   context model guard, SHA-256 model/contract fingerprints, unexpected-object
   inventory, versioned report JSON, packaged JSON Schema, and bounded telemetry.
+- Snapshot-free explicit analysis with an independently supplied expected
+  model fingerprint, and rejection of mismatches before catalog access.
 - MySQL and MariaDB integration through the public
   `Doka.EntityFrameworkCore.MySql` exact operation-handler SPI.
 - Session-local MySQL/MariaDB guard and prepared provider DDL without stored
@@ -41,6 +50,10 @@ dotnet add package Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version 
 - PostgreSQL composed migrations generator and parameterized catalog analyzer.
 - Real EF migration/history, provider-lock, least-privilege, partial-failure,
   pooled-session recovery, script, CLI, and Migration Bundle tests.
+- Testcontainers-owned provider fixtures with dynamic ports, readiness checks,
+  isolated databases, cancellation, and automatic cleanup.
+- PostgreSQL baseline-composition tests covering command order, generation
+  options, and rejection of transaction-suppressed guarded commands.
 - Deterministic pairwise legacy-state generator and live cross-provider matrix.
 - Identifier, SQL mode, default literal, generated column, advanced index,
   constraint drift, data blocker, and wrong-object-kind coverage.
@@ -50,13 +63,20 @@ dotnet add package Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version 
 - Pooled live full-runner p50/p95 evidence with 100 expected tables and 1,000
   foreign tables for every qualified engine cell.
 - Locked Floor and isolated Latest dependency profiles.
-- Deterministic double-pack, exact package-content validation, package-only
-  consumer, source/symbol packages, SPDX SBOM generation, and Public API gates.
+- Deterministic double-pack, exact package file-set and required-content
+  validation, isolated package-only consumers, Portable PDB/source-symbol
+  packages, XML API documentation, SPDX SBOM generation, and Public API gates.
 - Reusable full-engine CI/release qualification, pinned actions and container
   digests, OIDC NuGet Trusted Publishing, SLSA/SBOM attestations, exact partial-
   publish recovery, repository-signature readback, and verified GitHub Release.
-- Architecture, support, deployment/recovery, failure-code, release, and sample
-  documentation.
+- Task-oriented API, architecture, support, observability, deployment/recovery,
+  failure-code, release-publication, independent verification, and sample guides.
+- Governance, conduct, support and canonical root security policies, seven
+  implemented ADRs in Doka MADR Enterprise Profile 1.0 on MADR 4.0.0, and a
+  complete pinned OpenSSF Best Practices preparation inventory. No badge or
+  independent certification is claimed.
+- Dependency-free documentation and shell gates with positive/negative
+  regression coverage, structured contribution forms, and explicit ownership.
 
 ### Changed
 
@@ -71,8 +91,10 @@ dotnet add package Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version 
 - Replaced string/JSON default fallbacks with typed expected values and provider
   type mappings.
 - Replaced global MariaDB procedure guards with session-local temporary state.
-- Batched ordered preflight and postflight classifications into one
-  parameterized provider command per run.
+- Batched ordered preflight and postflight classifications into deterministic
+  parameterized chunks with operation, parameter, UTF-8 payload, and MySQL
+  packet limits. Values are shared within a chunk, global order is retained,
+  and a failed later chunk never produces a partial success report.
 - Isolated SBOM dependency detection in a canonical source snapshot with its
   own locked restore, excluding prior build and qualification artifacts.
 - Made the SBOM checksum envelope self-verifying and excluded `SHA256SUMS`
@@ -106,21 +128,22 @@ dotnet add package Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version 
   (`MySqlConnectionStringBuilder.AllowUserVariables`) before SafeMigrations
   command execution.
 - Updated the exact Doka dependency to the stable 10.0.0 release and moved each
-  guarded
-  MySQL/MariaDB operation to the provider-owned scoped command contract. The
-  adapter now consumes validated baseline fragments directly and receives
+  guarded MySQL/MariaDB operation to the provider-owned scoped command contract.
+  The adapter now consumes validated baseline fragments directly and receives
   failure- and cancellation-safe cleanup with pool eviction on cleanup failure.
 - Qualified Doka 10.0.0 temporal expression defaults on every supported
   MySQL/MariaDB line and enabled Binary16 Guid defaults only where catalog
   fidelity is proven: MariaDB 11.8 and 12.3. MySQL, MariaDB 10.11, and MariaDB
   11.4 continue to fail closed before target DDL.
-- Retained the scoped-command allocation correction introduced in Doka RC.12
-  through the stable 10.0.0 package, with unchanged MySQL generation budgets
-  at 1, 100, and 1,000 operations.
+- Retained the scoped-command allocation improvement through Doka 10.0.0,
+  with unchanged MySQL generation budgets at 1, 100, and 1,000 operations.
 - Made GitHub Release creation reconciling and rerunnable: the workflow verifies
   the tag target, resumes exact draft assets, rejects conflicting bytes or
-  metadata, stages the draft before NuGet mutation, and publishes only after
-  the complete asset set and signed NuGet readback are re-read.
+  metadata, and reads back the complete eleven-asset draft before NuGet mutation.
+  After NuGet submission it publishes and verifies the immutable GitHub Release,
+  then completes signed public package/content/symbol readback. Publication is
+  accepted only when the entire run succeeds; readback observations and failure
+  diagnostics remain separate attempt artifacts, never extra release assets.
 - Aligned the package family with .NET 10, EF Core 10, and Doka 10. The manually
   dispatched workflow qualifies and attests current `main` before a signed tag
   is created at its protected publication wait. It accepts a canonical package
@@ -130,9 +153,17 @@ dotnet add package Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version 
   changelog entry, canonical 64-character NuGet limit, and shell-safe
   environment-variable boundary.
 - Added repository-owned SSH signer authorization, pre-tag verification of the
-  exact waiting run and hosted signing key, downloaded provenance/SBOM bundle
-  verification, credential-free NuGet conflict preflight, and conditional
-  short-lived Trusted Publishing credentials with duplicate-tolerant recovery.
+  configured signing key, downloaded provenance/SBOM bundle verification,
+  credential-free NuGet conflict preflight, and conditional short-lived Trusted
+  Publishing credentials with duplicate-tolerant recovery. The normal operator
+  path uses the zero-argument preparation check, explicit waiting-run review,
+  and individually executable tag commands; an exact-run diagnostic is optional.
+- Preserved the qualified candidate while protected `main` advances and retained
+  each successful producer's artifact identity across failed-job retries.
+  Source removal, expired evidence, and content conflicts stop publication.
+- Clarified final-state postflight, independently approved execution/verification
+  fingerprints, ordinary-provider-operation fingerprint limits, snapshot-free
+  model guards, external SQL-script recovery, and migration-principal grants.
 - Moved every workflow value crossing into a shell through environment
   variables, documented privileged job permissions, and applied a seven-day
   Dependabot cooldown to non-security version updates.

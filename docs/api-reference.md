@@ -4,7 +4,8 @@ This guide explains the public inputs, outputs, and failure boundaries without
 requiring readers to study the implementation. The exact signatures, parameter
 documentation, and nullability annotations ship as XML documentation beside
 each `lib/net10.0` assembly. After installing the provider package, use IDE
-completion/Quick Documentation for the selected package version. The Core,
+completion/Quick Documentation for the selected package version. The
+[Core](../src/Doka.EntityFrameworkCore.SafeMigrations/PublicAPI.Unshipped.txt),
 [MySQL/MariaDB](../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/PublicAPI.Unshipped.txt),
 and [PostgreSQL](../src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/PublicAPI.Unshipped.txt)
 API baselines are review inventories, not substitutes for this guide or XML.
@@ -132,7 +133,7 @@ returns `Task<SafeMigrationRunReport>`:
 | --- | --- | --- |
 | `AnalyzePendingMigrationsAsync` | Pending sequence resolved through EF history and configured migration assembly | Preflight report |
 | `AnalyzeAsync` | Explicit ordered `IReadOnlyList<MigrationOperation>` | Preflight report including projected earlier safe operations |
-| `VerifyAsync` | The same explicit contract whose final conditions are required | Postflight report |
+| `VerifyAsync` | Explicit operations whose postconditions must all hold in the final live state | Postflight report; no preflight projection |
 
 `SafeMigrationRunOptions` requires a nonempty pseudonymous `instanceId` and
 optionally takes `targetMigrationId` and `expectedModelFingerprint`. The
@@ -151,6 +152,16 @@ assembly unchanged, and review ordinary provider operations separately.
 Calling EF migration with a null target means latest, which can exceed a
 specifically targeted preflight.
 
+`VerifyAsync` checks every supplied postcondition against the live catalog; it
+does not replay history or derive a final contract from an execution sequence.
+For a pure additive convergence baseline, the same operations can describe
+both execution and final verification. If a later operation renames, drops, or
+changes an earlier target, supply a separately reviewed final-state contract
+instead. Freeze it before execution and bind its fingerprint to the same
+artifact, target migration, and model as the execution contract. Require equal
+preflight/postflight contract fingerprints only when the lists are identical.
+See [postflight](runbooks/deployment-and-recovery.md#postflight).
+
 Pass your cancellation token, or `CancellationToken.None` when intentionally
 uncancellable. Do not use a `DbContext` concurrently. Analysis opens/closes a
 connection only when it owns that open; it does not assume ownership of a
@@ -165,10 +176,16 @@ fingerprints, ordered `SafeMigrationAssessment` entries, and unexpected objects.
 Collections are immutable. `SafeMigrationUnexpectedObject` identifies preserved
 objects; it is not an instruction to remove them.
 
+`SafeMigrationContractFingerprint.Create(operations)` fingerprints ordered
+safe intents, definitions, and policies. Ordinary provider operations contribute
+only their CLR type name, not their properties or SQL text. The fingerprint is
+therefore not a digest of the complete migration artifact. Keep that artifact's
+independent digest and review ordinary operations separately.
+
 | Status | Meaning |
 | --- | --- |
 | `NoOperations` | No operation was assessed; verify intended target/history separately |
-| `Ready` | Analyzed safe operations allow proceeding, subject to deployment fences |
+| `Ready` | Preflight permits the safe sequence subject to external gates; postflight confirms all supplied safe postconditions |
 | `ReadyWithProviderOperations` | Ordinary EF/provider operations need independent review and postconditions |
 | `Blocked` | One or more operations reject; do not execute/continue deployment |
 

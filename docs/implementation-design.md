@@ -96,8 +96,8 @@ operation. Without the matching adapter, the provider cannot silently execute
 the operation as normal DDL:
 
 - Doka rejects an unowned `SafeMigrationOperation`;
-- the PostgreSQL wrapper rejects a safe envelope when registration is absent or
-  conflicting;
+- Npgsql rejects the unknown safe envelope when its adapter is absent;
+  incompatible SafeMigrations generator registration also fails closed;
 - multiple owners for the same exact operation type are rejected;
 - provider-owned ordinary operations continue through the base provider.
 
@@ -212,9 +212,20 @@ Golden digests run in separate provider test processes and again under the
 Latest EF/Npgsql patch profile. The exact model-differ plus fingerprint path
 used by `SafeMigrationRunner` has provider-specific duration/allocation budgets.
 
-Postflight re-runs the live classifier and requires each final postcondition to
-hold. Reports are immutable and can be streamed through a caller-owned
+Postflight re-runs the live classifier without preflight projection and
+requires every supplied postcondition to hold simultaneously. The caller
+supplies an explicitly reviewed final-state contract; an execution sequence
+whose intermediate objects are later renamed, dropped, or altered is not
+automatically such a contract. Bind the final-state contract and its fingerprint
+to the same artifact, model, and target migration as execution. The
+[postflight runbook](runbooks/deployment-and-recovery.md#postflight) owns these
+checks. Reports are immutable and can be streamed through a caller-owned
 `Utf8JsonWriter` without reflection or an intermediate DTO graph.
+
+Operation-contract fingerprints include safe intent, expected definitions,
+policy, and ordering. Ordinary provider operations contribute only their CLR
+type marker. Their properties and SQL require separate review and the digest
+of the immutable deployment artifact; they are not fully bound by that hash.
 
 Each chunk contains at most 512 MySQL/MariaDB operations or 128 PostgreSQL
 operations, 16,000 bound parameters, and 4 MiB of UTF-8 SQL plus parameter
@@ -247,7 +258,11 @@ the scoped `IMigrationsAssembly`; the generic registration names the canonical
 context explicitly and affects runtime migration discovery, `IMigrator`,
 `dotnet ef`, scripts, and bundles. A derived runtime context is accepted only
 when its type is assignable to that canonical context and EF's relational
-model differ reports no difference from the canonical `ModelSnapshot`.
+model differ reports no difference from the canonical `ModelSnapshot`, when
+one is present. Without a snapshot, analysis still fingerprints the runtime
+model but cannot compare it to the canonical snapshot. An independently
+established `ExpectedModelFingerprint` can bind a snapshot-free analysis;
+keep the canonical snapshot for normal EF migration deployments.
 Schema-bearing instance extensions use a separate context and history.
 
 PostgreSQL composes a custom provider migrations generator only through the
@@ -276,12 +291,12 @@ heterogeneous convergence baseline has no destructive `Down`.
 
 The runtime path has:
 
-- one exact Doka registry lookup and one scoped handler instance per MySQL safe
-  operation;
+- one exact Doka registry lookup/dispatch and one guarded command scope per
+  MySQL/MariaDB safe operation, reusing the scoped handler instance;
 - no reflection, JSON intent serialization, type-name deserialization, or
   service-provider lookup per operation;
-- allocations proportional to immutable input snapshots and generated
-  commands;
+- input/model-, command-, assessment-, and catalog-inventory-dependent
+  allocations; individual request bounds are not a whole-run memory cap;
 - no database I/O during SQL generation;
 - bounded parameterized classification chunks plus a scoped unexpected-object
   inventory per preflight or postflight;

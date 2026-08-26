@@ -28,8 +28,14 @@ public interface ISafeMigrationRunner
     );
 
     /// <summary>Verifies final target conditions for an operation sequence.</summary>
+    /// <remarks>
+    /// Every supplied postcondition is checked independently against the live catalog,
+    /// without preflight projection. Reuse an execution sequence only when all of its
+    /// postconditions still describe the final state. Otherwise supply a reviewed
+    /// final-state contract and validate the report against that contract's fingerprint.
+    /// </remarks>
     /// <param name="context">The configured DbContext whose database is inspected.</param>
-    /// <param name="operations">The ordered migration operations.</param>
+    /// <param name="operations">The ordered operations whose postconditions must all hold in the final state.</param>
     /// <param name="options">The immutable metadata and validation options for the run.</param>
     /// <param name="cancellationToken">The token used to cancel the asynchronous operation.</param>
     /// <returns>The immutable postflight verification report.</returns>

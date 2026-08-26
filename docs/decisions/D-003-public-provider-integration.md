@@ -63,8 +63,9 @@ Absent or conflicting ownership is an error, never a fallback to unguarded
 standard DDL.
 
 For MySQL/MariaDB, one scoped handler owns the exact envelope type through
-Doka's public migrations namespace. `RenderStandardOperation` supplies the
-provider baseline. SafeMigrations consumes validated command fragments and
+Doka's public `Doka.EntityFrameworkCore.MySql` namespace.
+`RenderStandardOperation` supplies the provider baseline. SafeMigrations
+consumes validated command fragments and
 returns a scoped setup/body/cleanup command; it does not split provider SQL
 on semicolons or derive from the Doka generator.
 
@@ -180,6 +181,7 @@ being accepted through broad string normalization.
 - 2026-08-26: Maintainer designated @doka-labs/core-maintainers as the informed audience.
 - 2026-08-26: Status changed from proposed to accepted. Dominic Kalkbrenner confirmed the recorded decision and its existing implementation.
 - 2026-08-26: Status changed from accepted to implemented. The public Doka SPI integration and explicit Npgsql composition are implemented and verified by package-contract, composition, suppression-boundary, and provider tests.
+- 2026-08-26: Clarified the SPI's actual root namespace against the Doka 10.0.0 package API; integration and decision status are unchanged.
 
 ### Implementation References
 

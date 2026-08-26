@@ -71,9 +71,11 @@ D-004 preserves the applicable consistency window.
 Definitions snapshot enumerable inputs into owned read-only collections.
 Model fingerprints stream length-prefixed canonical relational metadata into
 a provider-bound, versioned SHA-256 representation. Operation-contract
-fingerprints preserve operation order, definitions, and policy. Unknown
-migration-relevant annotation value shapes fail closed instead of silently
-disappearing from identity.
+fingerprints preserve operation order and safe-operation definitions and
+policy. Ordinary provider operations contribute only their CLR type marker,
+not their properties or SQL; the immutable artifact digest and independent
+review cover that separate boundary. Unknown migration-relevant annotation
+value shapes fail closed instead of silently disappearing from identity.
 
 A fingerprint detects drift relative to a supplied expectation. It does not
 authenticate the report, its producer, or a deployment caller. Protected
@@ -179,6 +181,7 @@ window. Neither a hash nor a report proves the database server is honest.
 - 2026-08-26: Maintainer designated @doka-labs/core-maintainers as the informed audience.
 - 2026-08-26: Status changed from proposed to accepted. Dominic Kalkbrenner confirmed the recorded decision and its existing implementation.
 - 2026-08-26: Status changed from accepted to implemented. Bounded catalog work, immutable definitions, fingerprints, reports, and telemetry privacy are implemented with the referenced regression coverage and measurement boundaries.
+- 2026-08-26: Clarified the existing fingerprint boundary for ordinary provider operations; their content identity requires the deployment artifact digest and separate review.
 
 ### Implementation References
 

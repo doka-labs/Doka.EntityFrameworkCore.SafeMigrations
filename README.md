@@ -1,9 +1,9 @@
 # Doka.EntityFrameworkCore.SafeMigrations
 
 [![CI](https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/actions/workflows/ci.yml/badge.svg)](https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/actions/workflows/ci.yml)
-[![NuGet](https://img.shields.io/nuget/v/Doka.EntityFrameworkCore.SafeMigrations.svg)](https://www.nuget.org/packages/Doka.EntityFrameworkCore.SafeMigrations)
-[![NuGet MySQL](https://img.shields.io/nuget/v/Doka.EntityFrameworkCore.SafeMigrations.MySql.svg)](https://www.nuget.org/packages/Doka.EntityFrameworkCore.SafeMigrations.MySql)
-[![NuGet PostgreSQL](https://img.shields.io/nuget/v/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.svg)](https://www.nuget.org/packages/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql)
+[![NuGet](https://img.shields.io/nuget/vpre/Doka.EntityFrameworkCore.SafeMigrations.svg?label=NuGet)](https://www.nuget.org/packages/Doka.EntityFrameworkCore.SafeMigrations)
+[![NuGet MySQL](https://img.shields.io/nuget/vpre/Doka.EntityFrameworkCore.SafeMigrations.MySql.svg?label=NuGet)](https://www.nuget.org/packages/Doka.EntityFrameworkCore.SafeMigrations.MySql)
+[![NuGet PostgreSQL](https://img.shields.io/nuget/vpre/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.svg?label=NuGet)](https://www.nuget.org/packages/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 SafeMigrations is a fail-closed EF Core 10 migration library for databases whose
@@ -24,7 +24,7 @@ equivalent.
 - `Doka.EntityFrameworkCore.SafeMigrations`: provider-neutral intent,
   definitions, planning, reports, and `MigrationBuilder` extensions
 - `Doka.EntityFrameworkCore.SafeMigrations.MySql`: MySQL and MariaDB adapter on
-  the public `Doka.EntityFrameworkCore.MySql` operation-handler SPI
+  the public `Doka.EntityFrameworkCore.MySql` 10.0.0 operation-handler SPI
 - `Doka.EntityFrameworkCore.SafeMigrations.PostgreSql`: PostgreSQL adapter on
   Npgsql 10
 
@@ -37,6 +37,11 @@ The qualified engine matrix is:
 
 The CI and release workflows pin the exact patch tags and image digests used as
 release evidence. See [Support and qualification](docs/support-and-qualification.md).
+
+The first complete delivery targets 10.0.0; `10.0.0-rc.1` qualifies that same
+feature contract and its publication workflow. [Release notes](CHANGELOG.md)
+describe the prepared candidate. The badges include prereleases, but only a
+successful release run and verified public packages establish availability.
 
 ## Installation
 
@@ -233,11 +238,20 @@ preflight does not reserve database state. The
 and postflight. EF's [targeted migrator](https://learn.microsoft.com/en-us/dotnet/api/microsoft.entityframeworkcore.migrations.imigrator.migrateasync?view=efcore-10.0)
 uses a null target to mean latest, so the example rejects a missing target.
 
-For an explicit operation contract shared by a migration and deployment tool,
-use `AnalyzeAsync` before migration and `VerifyAsync` after migration. Reports
-include provider and engine identity, model and operation-contract SHA-256
-fingerprints, ordered assessments, preserved unexpected objects, and stable
-codes. Serialize with `SafeMigrationReportJson`; the package includes
+For an explicit execution contract, use `AnalyzeAsync` before migration. Use
+`VerifyAsync` afterwards with the reviewed final-state contract. Reuse the same
+operations only if every postcondition still describes the final target: an
+ensure followed by a rename or drop must not require the old object to remain.
+The [postflight procedure](docs/runbooks/deployment-and-recovery.md#postflight)
+binds each contract's fingerprint to the same deployment artifact and target.
+
+Reports include provider and engine identity, model and operation-contract
+SHA-256 fingerprints, ordered assessments, preserved unexpected objects, and
+stable codes. The contract fingerprint covers safe intents, definitions,
+policies, and order; ordinary provider operations contribute only their CLR
+type, not their SQL or other properties. Retain the immutable artifact digest
+and independent review for those operations. Serialize with
+`SafeMigrationReportJson`; the package includes
 `schemas/safe-migration-run-report-v1.schema.json`.
 
 Do not encode a preflight-only operation inside `Migration.Up`. EF would record
@@ -385,10 +399,13 @@ signed annotated tag on that qualified commit and approve publication. NuGet
 Trusted Publishing is requested only for missing content after a
 credential-free conflict check. Authorized tag-signature, provenance, SBOM,
 repository-signature, package-content, public-symbol, and GitHub Release
-readbacks fail closed. The exact release draft exists before NuGet is mutated
-and is published only after the signed NuGet readback is attached. Candidates
-are marked prerelease and never replace the latest stable release. See
-[Publication operations](docs/operations/release-publication.md) for the
+readbacks fail closed. The complete eleven-asset release draft exists before
+NuGet is mutated. After submission, the workflow publishes and verifies the
+immutable GitHub Release, then completes NuGet signature/content/symbol
+readback. A visible release alone is not completion. Readback observations
+remain separate publication-attempt evidence, not mutable release assets.
+Candidates are marked prerelease and never replace the latest stable release.
+See [Publication operations](docs/operations/release-publication.md) for the
 step-by-step maintainer guide and current readiness, and
 [Release process](docs/release-process.md) for the qualification contract.
 

@@ -121,10 +121,11 @@ The refactor must not add runtime feature registries, per-operation dependency
 injection, reflection, or dynamic dispatch. Partial classes are a source-level
 ownership mechanism only and compile into the same static or sealed runtime
 types. Catalog classification remains ordered across deterministic bounded
-chunks, and all allocations remain proportional to the operation and
-generated-command counts. Provider matrix tests retain same-runner live p95
-evidence for clean and 1,000-table noisy catalogs, including pooled connection
-open/reset/close costs.
+chunks. Whole-run allocations also depend on input/model size, generated
+commands, assessments, and returned catalog inventory; bounded requests do
+not imply constant memory or an operation-count-only bound. Provider matrix
+tests retain same-runner live p95 evidence for clean and 1,000-table noisy
+catalogs, including pooled connection open/reset/close costs.
 
 ## Verification
 
@@ -133,7 +134,8 @@ The vertical-slice refactor is complete only when:
 1. every operation kind is owned by exactly one core feature slice;
 2. both provider packages mirror all feature slices;
 3. central dispatchers contain routing but no feature-specific rules;
-4. public API baselines exactly match the reviewed shipped contracts;
+4. public API baselines match the reviewed contract, with shipped/unshipped
+   status maintained according to the release process;
 5. locked Release build and format checks pass;
 6. unit, provider live, EF tooling, package-consumer, and performance gates
    remain green;

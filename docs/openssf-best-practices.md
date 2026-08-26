@@ -49,10 +49,10 @@ contracts:
   [Settings](runbooks/repository-settings.md), [Governance](../GOVERNANCE.md),
   [Roadmap](../ROADMAP.md), [Changelog](../CHANGELOG.md).
 
-At preparation time, the expanded security-policy proposal still requires
-maintainer approval. The existing intake document remains authoritative until
-that approval and its application are recorded; preparation must not silently
-make an unapproved response commitment effective.
+The repository-root [security policy](../SECURITY.md) is the canonical policy
+and private intake procedure. Its presence does not establish that hosted
+reporting is enabled, the contact has been tested, or response targets have
+been met; those operational facts still need assessment evidence.
 
 ## Passing
 
@@ -150,7 +150,7 @@ make an unapproved response commitment effective.
 | `maintenance_or_update` | MUST | Prepared | [Support](../SUPPORT.md), [Roadmap](../ROADMAP.md) | Actual maintenance/update route and support-line handling | M |
 | `report_tracker` | MUST | External | Issue forms | Public working tracker and justification | M |
 | `vulnerability_report_credit` | MUST | Evidence | [Development](security/secure-development.md) credit process | Actual advisory credit/anonymity decisions or justified no-report case | M |
-| `vulnerability_response_process` | MUST | Prepared | [Development](security/secure-development.md), security intake | Review proposed policy expansion and private response ownership | M |
+| `vulnerability_response_process` | MUST | Prepared | [Development](security/secure-development.md), security intake | Confirm the responsible responder and evidence of the documented private response process | M |
 | `coding_standards` | MUST | Prepared | [Contributing](../CONTRIBUTING.md), [.editorconfig](../.editorconfig) | Review C#, Python, shell, JS, and documentation conventions | C |
 | `coding_standards_enforced` | MUST | Evidence | Build/style/import/doc gates | Verify enforced FLOSS-tool coverage; Rider-only layouts remain manually reviewed | C |
 | `build_standard_variables` | MUST | Assess | Managed SDK build and package outputs | Inspect native-binary scope and CC/CFLAGS/CXX/CXXFLAGS/LDFLAGS propagation; upstream permits N/A if no native binaries are generated | C |

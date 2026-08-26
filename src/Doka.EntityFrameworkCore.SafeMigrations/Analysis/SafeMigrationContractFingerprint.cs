@@ -7,6 +7,11 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 public static partial class SafeMigrationContractFingerprint
 {
     /// <summary>Creates the lowercase contract fingerprint.</summary>
+    /// <remarks>
+    /// Safe operations contribute their ordered intents, definitions, and policies.
+    /// Ordinary provider operations contribute only their CLR type name, not their
+    /// properties or SQL. Use an independent artifact digest to bind their full content.
+    /// </remarks>
     /// <param name="operations">The ordered migration operations.</param>
     /// <returns>The lowercase SHA-256 fingerprint.</returns>
     public static string Create(

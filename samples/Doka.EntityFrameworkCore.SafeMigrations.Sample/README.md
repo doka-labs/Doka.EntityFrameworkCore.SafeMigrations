@@ -1,6 +1,6 @@
 # SafeMigrations sample
 
-This compileable sample demonstrates the current .NET 10 API:
+This compilable sample demonstrates the current .NET 10 API:
 
 - a provider-neutral `SampleDbContext`;
 - a forward-only heterogeneous Core convergence baseline;
@@ -32,10 +32,11 @@ The initial migration's `Down` rejects destructive reconstruction because no
 single legacy origin exists. Deployment recovery is backup/restore or an
 explicit reviewed forward migration.
 
-Build with:
+Build and run without a database:
 
 ```bash
 dotnet build samples/Doka.EntityFrameworkCore.SafeMigrations.Sample/Doka.EntityFrameworkCore.SafeMigrations.Sample.csproj --configuration Release
+dotnet run --project samples/Doka.EntityFrameworkCore.SafeMigrations.Sample/Doka.EntityFrameworkCore.SafeMigrations.Sample.csproj --configuration Release --no-build --no-restore
 ```
 
 For preflight and operational sequencing, see the repository
