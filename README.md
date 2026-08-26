@@ -372,7 +372,6 @@ See [Deployment and recovery](docs/runbooks/deployment-and-recovery.md) and
 The SDK is fixed by `global.json`.
 
 ```bash
-eng/verify-vertical-slices.sh
 dotnet restore Doka.EntityFrameworkCore.SafeMigrations.slnx --locked-mode
 dotnet build Doka.EntityFrameworkCore.SafeMigrations.slnx --configuration Release --no-restore
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Doka.EntityFrameworkCore.SafeMigrations.Tests.csproj --configuration Release
@@ -381,9 +380,9 @@ dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.
 ```
 
 Docker is required for provider tests. CI additionally executes every supported
-engine profile, EF CLI/script/bundle paths, Floor and Latest dependency
-profiles, performance/allocation budgets, deterministic double-pack, an
-isolated package-only consumer, and SPDX SBOM validation.
+engine profile, EF CLI/script/bundle paths, merged coverage thresholds,
+performance/allocation budgets, deterministic double-pack, isolated
+package-only consumers, and SPDX SBOM validation.
 
 Each provider matrix cell also persists a live full-runner latency artifact.
 It measures 20 full-runner invocations after a warmup against 100 expected
@@ -395,15 +394,10 @@ inventory, and noisy p95 must remain within `2 * clean p95 + 250 ms`.
 Release candidates and stable releases use the same manually dispatched path.
 The workflow qualifies and attests exact bytes from current `main` before it
 waits at the protected NuGet environment. Only then does the operator create a
-signed annotated tag on that qualified commit and approve publication. NuGet
-Trusted Publishing is requested only for missing content after a
-credential-free conflict check. Authorized tag-signature, provenance, SBOM,
-repository-signature, package-content, public-symbol, and GitHub Release
-readbacks fail closed. The complete eleven-asset release draft exists before
-NuGet is mutated. After submission, the workflow publishes and verifies the
-immutable GitHub Release, then completes NuGet signature/content/symbol
-readback. A visible release alone is not completion. Readback observations
-remain separate publication-attempt evidence, not mutable release assets.
+signed annotated tag on that qualified commit and approve publication. The
+write-capable job uses NuGet Trusted Publishing, verifies public repository
+signatures and package content, and creates or verifies an immutable GitHub
+Release with the exact six package files, checksums, and SPDX manifest.
 Candidates are marked prerelease and never replace the latest stable release.
 See [Publication operations](docs/operations/release-publication.md) for the
 step-by-step maintainer guide and current readiness, and

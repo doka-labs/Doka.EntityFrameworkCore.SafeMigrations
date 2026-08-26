@@ -111,10 +111,10 @@ For every retrospective record, inspect the linked implementation and
 positive/negative tests. Distinguish a proposed explanation from implemented
 runtime behavior and from an actually executed confirmation run.
 
-Run `python3 eng/verify-documentation.py` and its regression suite for the
-general documentation contract. Inspect that no ADR-validator project,
-generated JSON index, external CLI install, or MCP call was added to the
-build/release graph.
+Review changed links, anchors, navigation, ASCII/LF encoding, decision
+relationships, and primary-source claims. Inspect that no ADR-validator
+project, generated JSON index, external CLI install, or MCP call was added to
+the build/release graph.
 
 Before adopting external generation/import, use a real Doka-format record
 with consequences, confirmation, relationships, and history and compare the
@@ -179,7 +179,7 @@ reduce the depth of the rationale.
 - 2026-08-26: Status changed from proposed to accepted.
 - 2026-08-26: Maintainer clarified that Doka's repository-specific validation infrastructure is not required; the record now separates the shared document contract from optional tooling.
 - 2026-08-26: Maintainer designated @doka-labs/core-maintainers as the informed audience.
-- 2026-08-26: Status changed from accepted to implemented. Dominic Kalkbrenner confirmed implementation; the adopted profile, ADR corpus, documentation ownership, and general documentation gate are in place and verified.
+- 2026-08-26: Status changed from accepted to implemented. Dominic Kalkbrenner confirmed implementation; the adopted profile, ADR corpus, and documentation ownership are in place and reviewed.
 
 ### Implementation References
 
@@ -189,8 +189,6 @@ reduce the depth of the rationale.
 - [Documentation ownership and navigation](../README.md)
 - [Contribution requirements](../../CONTRIBUTING.md)
 - [Governance](../../GOVERNANCE.md)
-- [General documentation gate](../../eng/verify-documentation.py)
-- [General documentation regression tests](../../eng/tests/test_verify_documentation.py)
 - [OpenSSF preparation, not achievement](../openssf-best-practices.md)
 
 ### Sources

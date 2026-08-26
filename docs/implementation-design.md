@@ -209,7 +209,7 @@ debug-string format; an unknown migration annotation value fails closed.
 
 Facet-isolation tests mutate every serialized relational family independently.
 Golden digests run in separate provider test processes and again under the
-Latest EF/Npgsql patch profile. The exact model-differ plus fingerprint path
+committed EF/Npgsql dependency graph. The exact model-differ plus fingerprint path
 used by `SafeMigrationRunner` has provider-specific duration/allocation budgets.
 
 Postflight re-runs the live classifier without preflight projection and
@@ -335,7 +335,7 @@ Release qualification covers:
 - a package-only consumer with no ProjectReference;
 - deterministic pairwise legacy states;
 - every supported PostgreSQL major, every qualified Doka engine profile, and
-  dependency Floor/Latest profiles;
+  locked dependency graph;
 - conservatively merged product line and branch coverage floors;
 - byte-identical packages, SBOM, provenance, and NuGet readback.
 

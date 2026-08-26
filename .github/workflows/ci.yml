@@ -26,4 +26,3 @@ jobs:
       package-version: 0.0.0-ci.${{ github.run_id }}.${{ github.run_attempt }}
       artifact-name: safe-migrations-ci-${{ github.run_id }}-${{ github.run_attempt }}
       artifact-retention-days: 14
-      require-stable-dependencies: false

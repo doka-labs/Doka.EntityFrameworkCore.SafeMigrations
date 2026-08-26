@@ -9,7 +9,6 @@
     <None Include="..\..\schemas\safe-migration-run-report-v1.schema.json"
           Link="schemas\safe-migration-run-report-v1.schema.json"
           CopyToOutputDirectory="PreserveNewest" />
-    <ProjectReference Include="..\..\eng\Doka.EntityFrameworkCore.SafeMigrations.NuGetSymbolReadback\Doka.EntityFrameworkCore.SafeMigrations.NuGetSymbolReadback.csproj" />
     <ProjectReference Include="..\..\src\Doka.EntityFrameworkCore.SafeMigrations\Doka.EntityFrameworkCore.SafeMigrations.csproj" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />

@@ -87,7 +87,7 @@ their provider semantics; composition does not make every provider command
 safe to embed.
 
 The current MySQL/MariaDB adapter consumes Doka 10.0.0 as an exact NuGet
-dependency. Core/provider ranges and Floor lockfiles remain repository-owned
+dependency. Core/provider ranges and committed lockfiles remain repository-owned
 inputs. Package qualification uses actual packages, not Doka ProjectReference
 or unpublished local source. Provider release approval is not a
 cross-repository prerequisite controlled by SafeMigrations.

@@ -1,8 +1,8 @@
 # EF Core and provider upgrade boundary
 
 SafeMigrations integrates with two different public provider boundaries. An
-upgrade is accepted only after the full package, engine, tooling, and
-dependency-profile gates pass; compilation alone is insufficient.
+upgrade is accepted only after the full locked restore, package, engine, and
+tooling gates pass; compilation alone is insufficient.
 
 ## MySQL and MariaDB boundary
 
@@ -74,18 +74,17 @@ format EF documents as debugging-only and unstable. Provider upgrades must
 test every migration-relevant annotation: unknown value shapes fail closed
 rather than disappearing from the digest.
 
-Facet-isolation tests and provider-specific golden digests run in the Floor and
-Latest profiles. The exact canonical snapshot initialization,
+Facet-isolation tests and provider-specific golden digests run against the
+committed locked dependency graph. The exact canonical snapshot initialization,
 `IMigrationsModelDiffer`, and fingerprint path used by the runner is covered by
 provider duration/allocation budgets.
 
 ## Qualified dependency ranges
 
-Central package declarations use bounded ranges. Lockfiles establish the Floor
-profile. `eng/verify-dependency-profile.sh` creates a fresh source snapshot,
-forces the configured Latest patch profile, explicitly checks EF Relational
-and Npgsql resolutions in the PostgreSQL test lockfile, builds, and runs all
-three suites without modifying committed Floor lockfiles.
+Central package declarations use bounded ranges. Lockfiles establish the exact
+qualified graph. Dependabot updates the declarations and lockfiles through a
+reviewed pull request, where the complete provider, tooling, package, coverage,
+and performance workflow runs against the proposed graph.
 
 The declared range must never be widened beyond the profiles actually tested.
 Publishable SafeMigrations candidates and stable packages must depend on a
@@ -96,8 +95,8 @@ dependency during every release qualification.
 
 Every EF, Doka, Npgsql, or supported database update requires:
 
-1. locked Floor restore and warning-free Release build;
-2. Latest profile restore with exact lockfile assertions;
+1. locked restore and warning-free Release build;
+2. review of the proposed declarations and exact lockfile resolutions;
 3. core planner, fingerprint, definition, report, and model-guard tests;
 4. all supported MySQL/MariaDB and PostgreSQL engine endpoints;
 5. missing, matching, different, unsupported, and data-blocked states;

@@ -139,17 +139,13 @@ The vertical-slice refactor is complete only when:
 5. locked Release build and format checks pass;
 6. unit, provider live, EF tooling, package-consumer, and performance gates
    remain green;
-7. an architecture check prevents the feature layout from collapsing back
-   into aggregate intent, extension, catalog-builder, or integration-test
-   files.
+7. project references, namespace ownership, focused tests, and code review keep
+   feature behavior out of aggregate dispatchers and shared fixtures.
 
-The executable architecture contract is `eng/verify-vertical-slices.sh`. It
-verifies mirrored directories, required ownership files, dispatcher-only
-central builders, fact-free shared integration fixtures, focused provider test
-slices, and the column benchmark workload. The reusable CI quality workflow
-runs it before restore and build. `eng/verify-project-boundaries.py` separately
-parses every relevant project file and fails when Core, test, benchmark, or
-package-consumer references cross a provider boundary.
+MSBuild project references are the executable package boundary. The Release
+build and package-only consumer tests reject missing or provider-crossing
+dependencies. Slice ownership remains visible in the directory structure and
+focused test projects without a second text parser for C# or project files.
 
 The repository uses MSBuild folder scoping deliberately. The root
 `Directory.Build.props` contains only repository-wide compiler, audit, lockfile,

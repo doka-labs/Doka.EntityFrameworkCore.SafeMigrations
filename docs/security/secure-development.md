@@ -35,9 +35,10 @@ style/import, architecture, coverage, performance, engineering, package, and
 SBOM checks. Record the SDK and enabled rules with analysis evidence; a build
 command name alone does not establish which analysis ran.
 
-The committed lockfiles define Floor dependencies; the isolated Latest profile
-tests supported patch updates without rewriting those lockfiles. Dependabot
-configuration proposes updates; it is not evidence that hosted alerts, code
+The committed lockfiles define the exact qualified dependency graph. Dependabot
+proposes declaration and lockfile updates through ordinary pull requests, where
+the complete quality workflow tests the proposed graph. Its configuration is
+not evidence that hosted alerts, code
 scanning, or automatic security updates are enabled. Review affected production,
 development, action, and container dependencies against primary advisories.
 Triage relevant alerts to resolution with release impact, never by treating a

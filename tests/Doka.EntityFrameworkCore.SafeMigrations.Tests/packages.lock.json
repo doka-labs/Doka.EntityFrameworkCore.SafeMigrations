@@ -182,9 +182,6 @@
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.11, 10.1.0)"
         }
       },
-      "doka.entityframeworkcore.safemigrations.nugetsymbolreadback": {
-        "type": "Project"
-      },
       "Microsoft.EntityFrameworkCore.Relational": {
         "type": "CentralTransitive",
         "requested": "[10.0.11, 10.1.0)",

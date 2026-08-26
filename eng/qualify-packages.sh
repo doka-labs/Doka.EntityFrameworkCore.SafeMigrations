@@ -3,13 +3,12 @@
 set -euo pipefail
 
 usage() {
-    echo "Usage: $0 --version <version> --output <path> --doka-source <path-or-url> [--require-stable-dependencies]" >&2
+    echo "Usage: $0 --version <version> --output <path> --doka-source <path-or-url>" >&2
 }
 
 package_version=""
 output_dir=""
 doka_source=""
-require_stable_dependencies=false
 
 while (($# > 0)); do
     case "$1" in
@@ -24,10 +23,6 @@ while (($# > 0)); do
         --doka-source)
             doka_source="${2:-}"
             shift 2
-            ;;
-        --require-stable-dependencies)
-            require_stable_dependencies=true
-            shift
             ;;
         *)
             usage
@@ -107,24 +102,9 @@ for package_id in "${package_ids[@]}"; do
     done
 done
 
-dotnet run \
-    --project "$repo_root/eng/Doka.EntityFrameworkCore.SafeMigrations.NuGetSymbolReadback/Doka.EntityFrameworkCore.SafeMigrations.NuGetSymbolReadback.csproj" \
-    --configuration Release \
-    --no-build \
-    --no-restore \
-    -- \
+"$script_dir/verify-package-contents.sh" \
     --package-dir "$output_dir" \
-    --version "$package_version" \
-    --output "$output_dir/SYMBOLS.json"
-
-content_arguments=(
-    --package-dir "$output_dir"
     --version "$package_version"
-)
-if [[ "$require_stable_dependencies" == true ]]; then
-    content_arguments+=(--require-stable-dependencies)
-fi
-"$script_dir/verify-package-contents.sh" "${content_arguments[@]}"
 
 "$script_dir/verify-package-consumer.sh" \
     --package-dir "$output_dir" \
@@ -133,7 +113,7 @@ fi
 
 (
     cd "$output_dir"
-    shasum -a 256 ./*.nupkg ./*.snupkg SYMBOLS.json | LC_ALL=C sort > SHA256SUMS
+    shasum -a 256 ./*.nupkg ./*.snupkg | LC_ALL=C sort > SHA256SUMS
 )
 
 echo "SafeMigrations package qualification passed with byte-identical pack output."

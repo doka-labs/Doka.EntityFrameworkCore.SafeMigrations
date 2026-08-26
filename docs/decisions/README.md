@@ -34,7 +34,6 @@ directions of changed relationships, and verify external claims against dated
 primary sources. Generated or imported records require the same review; an
 import is not approval.
 
-The general `python3 eng/verify-documentation.py` check includes these files
-for links, encoding, and navigation. It does not validate the Doka profile,
-approve decisions, or replace semantic review. No ADR-specific build tool,
-JSON index, or MCP/CLI dependency is required.
+Review changed records for links, encoding, navigation, profile structure, and
+semantic agreement with implementation. No ADR-specific build tool, JSON
+index, or MCP/CLI dependency is required.

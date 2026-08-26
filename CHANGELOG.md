@@ -23,7 +23,7 @@ relative to the earlier proof of concept, not a previous supported release.
 Runtime dependencies are EF Core `[10.0.11,10.1.0)`, exact Doka `[10.0.0]` for
 MySQL/MariaDB, and Npgsql EF Core `[10.0.3,11.0.0)` for PostgreSQL. The release
 matrix covers MySQL 8.4/9.7, MariaDB 10.11/11.4/11.8/12.3, and PostgreSQL
-14-18. Exact images, dependency profiles, and capability limits are maintained
+14-18. Exact images, dependency contracts, and capability limits are maintained
 in [Support and qualification](docs/support-and-qualification.md).
 
 ### Added
@@ -62,7 +62,7 @@ in [Support and qualification](docs/support-and-qualification.md).
   orphaned performance-budget measurements.
 - Pooled live full-runner p50/p95 evidence with 100 expected tables and 1,000
   foreign tables for every qualified engine cell.
-- Locked Floor and isolated Latest dependency profiles.
+- Centrally bounded dependencies with an exact committed lockfile graph.
 - Deterministic double-pack, exact package file-set and required-content
   validation, isolated package-only consumers, Portable PDB/source-symbol
   packages, XML API documentation, SPDX SBOM generation, and Public API gates.
@@ -137,13 +137,10 @@ in [Support and qualification](docs/support-and-qualification.md).
   11.4 continue to fail closed before target DDL.
 - Retained the scoped-command allocation improvement through Doka 10.0.0,
   with unchanged MySQL generation budgets at 1, 100, and 1,000 operations.
-- Made GitHub Release creation reconciling and rerunnable: the workflow verifies
-  the tag target, resumes exact draft assets, rejects conflicting bytes or
-  metadata, and reads back the complete eleven-asset draft before NuGet mutation.
-  After NuGet submission it publishes and verifies the immutable GitHub Release,
-  then completes signed public package/content/symbol readback. Publication is
-  accepted only when the entire run succeeds; readback observations and failure
-  diagnostics remain separate attempt artifacts, never extra release assets.
+- Made GitHub Release creation rerunnable with platform-native primitives: the
+  workflow verifies the signed tag target, qualified package bytes, signed
+  public NuGet content, and the exact immutable eight-asset Release. GitHub's
+  release-asset attestations replace a repository-owned reconciliation engine.
 - Aligned the package family with .NET 10, EF Core 10, and Doka 10. The manually
   dispatched workflow qualifies and attests current `main` before a signed tag
   is created at its protected publication wait. It accepts a canonical package
@@ -153,11 +150,11 @@ in [Support and qualification](docs/support-and-qualification.md).
   changelog entry, canonical 64-character NuGet limit, and shell-safe
   environment-variable boundary.
 - Added repository-owned SSH signer authorization, pre-tag verification of the
-  configured signing key, downloaded provenance/SBOM bundle verification,
-  credential-free NuGet conflict preflight, and conditional short-lived Trusted
-  Publishing credentials with duplicate-tolerant recovery. The normal operator
-  path uses the zero-argument preparation check, explicit waiting-run review,
-  and individually executable tag commands; an exact-run diagnostic is optional.
+  configured signing key, GitHub provenance/SBOM attestations, short-lived
+  Trusted Publishing credentials, duplicate-tolerant same-run recovery, and
+  signed package-content readback. The operator path uses the zero-argument
+  preparation check, explicit waiting-run review, and individually executable
+  tag commands.
 - Preserved the qualified candidate while protected `main` advances and retained
   each successful producer's artifact identity across failed-job retries.
   Source removal, expired evidence, and content conflicts stop publication.

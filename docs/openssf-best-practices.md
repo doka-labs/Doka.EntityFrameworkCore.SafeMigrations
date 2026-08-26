@@ -10,10 +10,10 @@ GitHub settings, or claim undocumented operational history.
 
 The tables cover all **67 Passing, 55 Silver, and 23 Gold** criteria in the
 [official snapshot](https://github.com/ossf/best-practices-badge/blob/27491e9c882d28612f1ca2d93a9d35263187e263/criteria/criteria.yml).
-The [offline inventory](../eng/openssf-criteria.json) records its source digest
-and requirement classes. The documentation gate checks each `(level, ID)` and
-class once. Repeated IDs at different levels are intentional; requirements
-may become stronger. Always re-read the live criteria before assessment.
+That immutable upstream revision is the inventory and review baseline; the
+repository does not duplicate it in a generated local snapshot or parser.
+Repeated IDs at different levels are intentional because requirements may
+become stronger. Always re-read the live criteria before assessment.
 
 Best Practices is a project self-assessment with evidence. Scorecard is a
 separate set of automated checks. The OSPS Baseline is another maturity-control
@@ -95,7 +95,7 @@ been met; those operational facts still need assessment evidence.
 | `vulnerability_report_private` | MUST | External | [Security intake](../SECURITY.md#reporting-a-vulnerability), [Settings](runbooks/repository-settings.md) | Enable/test private form and test the approved fallback contact | M |
 | `vulnerability_report_response` | MUST | Evidence | [Development](security/secure-development.md) private response record | Every report in the last six months receives an initial response within 14 days; upstream permits N/A if none were received | M |
 | `build` | MUST | Prepared | [Contributing](../CONTRIBUTING.md) locked SDK/build | Successful reproducible invocation from reviewed source | C |
-| `build_common_tools` | SUGGESTED | Prepared | .NET SDK/MSBuild, shell, Python, Node | Document required tools and execute build | C |
+| `build_common_tools` | SUGGESTED | Prepared | .NET SDK/MSBuild, shell, Python | Document required tools and execute build | C |
 | `build_floss_tools` | SHOULD | Prepared | SDK and repository-owned scripts | Verify tool licensing; Rider is not required to build | C |
 | `test` | MUST | Prepared | [Qualification](support-and-qualification.md) three suites | Complete results for the assessed commit/engine matrix | R |
 | `test_invocation` | SHOULD | Prepared | [Contributing](../CONTRIBUTING.md) test commands | New contributor reproduces documented invocation with Docker | C |
@@ -157,7 +157,7 @@ been met; those operational facts still need assessment evidence.
 | `report_tracker` | MUST | External | Issue forms | Public working tracker and justification | M |
 | `vulnerability_report_credit` | MUST | Evidence | [Development](security/secure-development.md) credit process | Actual advisory credit/anonymity decisions or justified no-report case | M |
 | `vulnerability_response_process` | MUST | Prepared | [Development](security/secure-development.md), security intake | Confirm the responsible responder and evidence of the documented private response process | M |
-| `coding_standards` | MUST | Prepared | [Contributing](../CONTRIBUTING.md), [.editorconfig](../.editorconfig) | Review C#, Python, shell, JS, and documentation conventions | C |
+| `coding_standards` | MUST | Prepared | [Contributing](../CONTRIBUTING.md), [.editorconfig](../.editorconfig) | Review C#, Python, shell, YAML, and documentation conventions | C |
 | `coding_standards_enforced` | MUST | Evidence | Build/style/import/doc gates | Verify enforced FLOSS-tool coverage; Rider-only layouts remain manually reviewed | C |
 | `build_standard_variables` | MUST | Assess | Managed SDK build and package outputs | Inspect native-binary scope and CC/CFLAGS/CXX/CXXFLAGS/LDFLAGS propagation; upstream permits N/A if no native binaries are generated | C |
 | `build_preserve_debug` | SHOULD | Prepared | Portable PDB/source-symbol packages | Qualified package and public symbol readback | R |
@@ -234,8 +234,9 @@ been met; those operational facts still need assessment evidence.
 5. Register and fill the chosen assessment after publication. Verify saved
    answers and public achievement state before adding an actual badge/link.
 6. Reassess on release, criteria change, relevant finding, role change, or hosted
-   configuration change. Refresh the pinned inventory only from the official
-   source; do not delete a difficult row to satisfy the validator.
+   configuration change. Update the pinned upstream revision only after a full
+   table reconciliation; do not delete a difficult row to make the assessment
+   appear more complete.
 
 No criterion is marked officially met here. `Open`, `External`, `People`, and
 `Evidence` are honest preparation outcomes, not planned missing product features

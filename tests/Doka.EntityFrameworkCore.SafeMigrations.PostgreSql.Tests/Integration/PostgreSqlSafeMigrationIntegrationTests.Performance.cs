@@ -4,6 +4,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
 {
     private const int ExpectedPerformanceTableCount = 100;
     private const int ForeignPerformanceTableCount = 1000;
+    private const int PerformanceFixtureCommandTimeoutSeconds = 180;
 
     [Fact]
     public async Task FullRunner_LiveCatalogP95RemainsBoundedWithForeignObjectsAndPooling()
@@ -15,9 +16,13 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             NoResetOnClose = false,
             MaxPoolSize = 4,
         }.ConnectionString;
+        var fixtureConnectionString = new NpgsqlConnectionStringBuilder(connectionString)
+        {
+            CommandTimeout = PerformanceFixtureCommandTimeoutSeconds,
+        }.ConnectionString;
 
         await ExecuteSqlAsync(
-            connectionString,
+            fixtureConnectionString,
             BuildPostgreSqlPerformanceTables("expected_perf_", ExpectedPerformanceTableCount, includeIndex: false));
 
         await using var context = CreateContext(connectionString);
@@ -27,7 +32,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         var clean = await LivePerformanceEvidence.MeasureAsync(() => runner.AnalyzeAsync(context, operations, options));
 
         await ExecuteSqlAsync(
-            connectionString,
+            fixtureConnectionString,
             BuildPostgreSqlPerformanceTables("foreign_perf_", ForeignPerformanceTableCount, includeIndex: true));
 
         var noisy = await LivePerformanceEvidence.MeasureAsync(() => runner.AnalyzeAsync(context, operations, options));

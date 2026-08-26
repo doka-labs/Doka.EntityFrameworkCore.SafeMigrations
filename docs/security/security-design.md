@@ -136,23 +136,18 @@ does not redact another component's sensitive-data logging.
 
 ### S6 - Release evidence identifies the released content
 
-The existing [release workflow](../../.github/workflows/release-candidate.yml)
-binds the qualified commit in protected main history, its artifact, authorized signed tag, provenance,
-SBOM, NuGet repository signatures, and package/symbol content readback.
-Credentials are requested only
-in protected publication when missing content requires them. Conflicting
-versions/assets fail closed. Publication does not rebuild packages.
-The complete immutable GitHub asset set is fixed before NuGet submission.
-Public readback observations remain separate workflow evidence, so retrying
-verification never requires changing an immutable release.
+The [release workflow](../../.github/workflows/release-candidate.yml) binds the
+qualified commit in protected main history, its exact package artifact,
+authorized signed tag, provenance, SBOM, NuGet repository signatures, and
+immutable GitHub Release assets. Credentials are requested only in the
+protected publication job, and publication never rebuilds packages.
 
-Evidence: [tag contract tests](../../eng/tests/test_release_tag_contract.py),
-[publication tests](../../eng/tests/test_nuget_publication.py),
-[readback tests](../../eng/tests/test_nuget_readback.py), and
-[release reconciliation tests](../../eng/tests/github-release.test.js).
-[Consumer verification](release-verification.md) and hosted run/settings
-evidence remain necessary. Tests with synthetic API responses cannot alone
-prove an external API schema or a configured approval boundary.
+Evidence comes from the shared quality workflow, package-content and consumer
+checks, Git's allowed-signers verification, GitHub attestations and immutable
+release-asset verification, and signed public NuGet content readback.
+[Consumer verification](release-verification.md) and actual hosted run/settings
+evidence remain necessary; local checks cannot establish configured protection
+or successful publication.
 
 ## Residual risks and response
 

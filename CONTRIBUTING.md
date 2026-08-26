@@ -10,7 +10,7 @@ unredacted migration reports in issues, pull requests, or test fixtures.
 - .NET SDK 10.0.400, selected by `global.json`
 - Docker for MySQL, MariaDB, and PostgreSQL tests
 - Bash, `jq`, `curl`, `unzip`, and `rsync` for engineering gates
-- Python 3 and Node.js for the existing engineering and documentation suites
+- Python 3 for the merged coverage threshold check
 - ripgrep (`rg`) for the vertical-slice gate
 - the exact locked `Doka.EntityFrameworkCore.MySql` 10.0.0 package from
   nuget.org
@@ -66,12 +66,9 @@ dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.
 dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks.csproj --configuration Release --no-build --no-restore
 dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks.csproj --configuration Release --no-build --no-restore
 dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks.csproj --configuration Release --no-build --no-restore
-eng/verify-vertical-slices.sh
-python3 eng/verify-project-boundaries.py
-python3 eng/verify-documentation.py
-python3 -m unittest discover -s eng/tests -p 'test_*.py' -v
-node --test eng/tests/github-release.test.js
-bash -e -c 'for script in eng/*.sh eng/release/*.sh; do bash -n "$script"; done'
+python3 -m unittest eng/tests/test_verify_coverage.py -v
+bash eng/tests/test-release-version.sh
+bash -e -c 'while IFS= read -r -d "" script; do bash -n "$script"; done < <(find eng -type f -name "*.sh" -print0)'
 dotnet format Doka.EntityFrameworkCore.SafeMigrations.slnx style --severity warn --verify-no-changes --no-restore
 dotnet format Doka.EntityFrameworkCore.SafeMigrations.slnx style --diagnostics IDE0005 --severity hidden --verify-no-changes --no-restore
 ```
@@ -94,9 +91,8 @@ eng/qualify-packages.sh \
   --doka-source https://api.nuget.org/v3/index.json
 ```
 
-The reusable CI workflow additionally runs all engine images, the merged
-coverage floor, EF CLI/script/bundle gates, the Latest dependency profile, and
-SBOM validation.
+The reusable CI workflow additionally runs all engine images, merged coverage
+thresholds, EF CLI/script/bundle gates, package consumers, and SBOM validation.
 
 ## Change requirements
 
@@ -143,11 +139,10 @@ Dominic Kalkbrenner as decision maker, and provide concrete alternatives,
 symmetric consequences, confirmation, history, implementation references, and
 sources. Record actual consultation and approval rather than assuming them.
 
-The general documentation gate checks Markdown integrity and navigation; it
-does not validate ADR governance or semantic quality. Review every ADR against
-the full profile. External MCP/CLI generation or import is optional, must
-preserve the document contract, and does not replace review or add a build
-dependency.
+Review changed Markdown integrity, navigation, and primary-source claims.
+Review every ADR against the full profile. External MCP/CLI generation or
+import is optional, must preserve the document contract, and does not replace
+review or add a build dependency.
 
 ## Pull requests
 

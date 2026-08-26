@@ -31,9 +31,6 @@
   <Folder Name="/benchmarks/PostgreSQL/">
     <Project Path="benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks.csproj" />
   </Folder>
-  <Folder Name="/eng/">
-    <Project Path="eng/Doka.EntityFrameworkCore.SafeMigrations.NuGetSymbolReadback/Doka.EntityFrameworkCore.SafeMigrations.NuGetSymbolReadback.csproj" />
-  </Folder>
   <Folder Name="/samples/CrossProvider/">
     <Project Path="samples/Doka.EntityFrameworkCore.SafeMigrations.Sample/Doka.EntityFrameworkCore.SafeMigrations.Sample.csproj" />
   </Folder>

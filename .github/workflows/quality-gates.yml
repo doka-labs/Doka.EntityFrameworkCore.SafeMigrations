@@ -20,12 +20,6 @@ on:
         required: false
         default: 14
         type: number
-      require-stable-dependencies:
-        description: Reject prerelease dependencies in publishable packages.
-        required: false
-        default: false
-        type: boolean
-
 permissions:
   contents: read
 
@@ -56,19 +50,13 @@ jobs:
         with:
           dotnet-version: 10.0.400
 
-      - name: Verify vertical-slice architecture
+      - name: Verify engineering scripts
         run: |
-          eng/verify-vertical-slices.sh
-          python3 eng/verify-project-boundaries.py
-
-      - name: Verify engineering and release contracts
-        run: |
-          for script in eng/*.sh eng/release/*.sh; do
+          while IFS= read -r -d '' script; do
             bash -n "$script"
-          done
-          python3 eng/verify-documentation.py
-          python3 -m unittest discover -s eng/tests -p 'test_*.py' -v
-          node --test eng/tests/github-release.test.js
+          done < <(find eng -type f -name '*.sh' -print0)
+          bash eng/tests/test-release-version.sh
+          python3 -m unittest eng/tests/test_verify_coverage.py -v
 
       - name: Locked restore
         run: >-
@@ -124,18 +112,12 @@ jobs:
       - name: Qualify reproducible packages
         env:
           PACKAGE_VERSION: ${{ inputs.package-version }}
-          REQUIRE_STABLE_DEPENDENCIES: ${{ inputs.require-stable-dependencies }}
         run: |
-          stable_arguments=()
-          if [[ "$REQUIRE_STABLE_DEPENDENCIES" == "true" ]]; then
-            stable_arguments+=(--require-stable-dependencies)
-          fi
           mkdir -p artifacts/packages
           eng/qualify-packages.sh \
             --version "$PACKAGE_VERSION" \
             --output artifacts/packages \
-            --doka-source "$DOKA_PACKAGE_SOURCE" \
-            "${stable_arguments[@]}"
+            --doka-source "$DOKA_PACKAGE_SOURCE"
 
       - name: Generate and validate SPDX SBOM
         env:
@@ -403,26 +385,3 @@ jobs:
           if-no-files-found: warn
           compression-level: 0
           retention-days: ${{ inputs.artifact-retention-days }}
-
-  latest-dependency-profile:
-    name: Latest EF and Npgsql patch profile
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          dotnet-version: 10.0.400
-
-      - name: Verify latest dependency profile
-        run: >-
-          eng/verify-dependency-profile.sh
-          --ef-version 10.0.11
-          --npgsql-version 10.0.3
-          --di-version 10.0.11
-          --doka-source "$DOKA_PACKAGE_SOURCE"

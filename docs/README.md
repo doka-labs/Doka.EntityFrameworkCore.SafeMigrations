@@ -62,16 +62,11 @@ the same review. Public XML documentation ships with each assembly for IDE
 help. Preserve published anchors when moving a section. Use English, ASCII,
 relative repository links, and dated primary sources for external claims.
 
-Run the dependency-free documentation gate from the repository root:
-
-```bash
-python3 eng/verify-documentation.py
-python3 -m unittest discover -s eng/tests -p 'test_*.py' -v
-```
-
-The gate checks local destinations/anchors, encoding, criterion coverage, and
-declared navigation. ADRs are included as Markdown; their format, history,
+Review changed documentation from the repository root with `git diff --check`
+and follow every changed local link. Check local destinations/anchors, ASCII/LF
+encoding, criterion evidence, and declared navigation. ADRs are included as
+Markdown; their format, history,
 relationships, and content are reviewed against the Doka profile, not a local
-ADR-specific validator. The gate does not certify the truth of prose, perform
+ADR-specific validator. This review does not certify the truth of prose, perform
 an external security assessment, or create hosted controls. Reviewers must
 trace claims to implementation and qualified execution evidence.

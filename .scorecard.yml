@@ -10,7 +10,8 @@ annotations:
       # deliberate patch ranges. Source and release builds remain reproducible
       # through Central Package Management, committed lock files, and locked
       # restore. Exact dependency versions would prevent consumers from taking
-      # compatible upstream correctness and security patches. Dependabot and
-      # the isolated latest-dependency profile verify updates, while GitHub
-      # Actions and container images remain pinned to immutable digests.
+      # compatible upstream correctness and security patches. Dependabot
+      # proposes declaration and lock-file updates, and the complete CI suite
+      # qualifies each accepted locked graph. GitHub Actions and container
+      # images remain pinned to immutable digests.
       - reason: not-applicable

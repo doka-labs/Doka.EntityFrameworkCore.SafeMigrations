@@ -77,14 +77,24 @@ if [[ "${engine}" == "postgres" ]]; then
     -e POSTGRES_PASSWORD=postgrespw \
     -e POSTGRES_DB=bootstrap \
     -p 0:5432 "${image}" >/dev/null
+  postgres_ready=false
   for _ in {1..90}; do
-    if docker exec "${container_name}" pg_isready -U postgres -d bootstrap >/dev/null 2>&1; then
+    if docker exec "${container_name}" pg_isready \
+      -h 127.0.0.1 -p 5432 -U postgres -d bootstrap -t 1 >/dev/null 2>&1; then
+      postgres_ready=true
       break
     fi
     sleep 1
   done
-  docker exec "${container_name}" createdb -U postgres tooling_cli
-  docker exec "${container_name}" createdb -U postgres tooling_bundle
+  if [[ "${postgres_ready}" != "true" ]]; then
+    echo "The postgres container did not become ready on TCP." >&2
+    docker logs "${container_name}" >&2 || true
+    exit 1
+  fi
+  docker exec -e PGPASSWORD=postgrespw "${container_name}" \
+    createdb -h 127.0.0.1 -p 5432 -U postgres tooling_cli
+  docker exec -e PGPASSWORD=postgrespw "${container_name}" \
+    createdb -h 127.0.0.1 -p 5432 -U postgres tooling_bundle
   port="$(docker port "${container_name}" 5432/tcp | head -n 1 | awk -F: '{print $NF}')"
   project="tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.csproj"
   cli_connection="Host=127.0.0.1;Port=${port};Username=postgres;Password=postgrespw;Database=tooling_cli"
@@ -141,9 +151,11 @@ dotnet ef migrations bundle --project "${project}" --context SafeMigrationDbCont
 "${artifacts_dir}/efbundle" --connection "${bundle_connection}"
 
 if [[ "${engine}" == "postgres" ]]; then
-  cli_count="$(docker exec "${container_name}" psql -U postgres -d tooling_cli -Atc \
+  cli_count="$(docker exec -e PGPASSWORD=postgrespw "${container_name}" \
+    psql -h 127.0.0.1 -p 5432 -U postgres -d tooling_cli -Atc \
     'SELECT COUNT(*) FROM "__CoreDbContextMigrationsHistory" WHERE "MigrationId" = '\''202608170001_CoreConvergence'\'';')"
-  bundle_count="$(docker exec "${container_name}" psql -U postgres -d tooling_bundle -Atc \
+  bundle_count="$(docker exec -e PGPASSWORD=postgrespw "${container_name}" \
+    psql -h 127.0.0.1 -p 5432 -U postgres -d tooling_bundle -Atc \
     'SELECT COUNT(*) FROM "__CoreDbContextMigrationsHistory" WHERE "MigrationId" = '\''202608170001_CoreConvergence'\'';')"
 else
   cli_count="$(docker exec "${container_name}" "${client}" -h127.0.0.1 -uroot -prootpw -N -B tooling_cli \

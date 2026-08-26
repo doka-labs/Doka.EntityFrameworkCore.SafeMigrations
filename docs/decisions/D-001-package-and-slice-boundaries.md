@@ -97,16 +97,13 @@ files. Package-only consumers verify the actual published package graph.
 
 ### Confirmation
 
-Run `eng/verify-vertical-slices.sh` and
-`python3 eng/verify-project-boundaries.py` from the repository root. Both must
-exit successfully. Inspect their checks when adding a slice or project:
-provider-crossing references, missing mirrored ownership, feature behavior in
-central dispatchers, and aggregate test ownership must remain rejected.
-
-Run `python3 -m unittest discover -s eng/tests -p 'test_*.py' -v` for the
-engineering-gate positive and negative controls. The package qualification
-procedure in CONTRIBUTING must build independent consumers from packages,
-not references to this repository's production projects.
+Build the complete solution and run all three test projects. Inspect changed
+project references and package graphs when adding a slice or project:
+provider-crossing dependencies, missing mirrored ownership, feature behavior
+in central dispatchers, and aggregate test ownership remain rejected in
+review. The package qualification procedure in CONTRIBUTING must build
+independent consumers from packages, not references to this repository's
+production projects.
 
 A provider feature change also requires the applicable engine matrix and
 performance budgets. The architecture checks prove structure and dependency
@@ -173,7 +170,7 @@ the folder layout itself is not performance evidence.
 - 2026-08-26: Record aligned with Doka MADR Enterprise Profile 1.0 and expanded with alternatives, boundaries, and confirmation evidence.
 - 2026-08-26: Maintainer designated @doka-labs/core-maintainers as the informed audience.
 - 2026-08-26: Status changed from proposed to accepted. Dominic Kalkbrenner confirmed the recorded decision and its existing implementation.
-- 2026-08-26: Status changed from accepted to implemented. Package boundaries and vertical slices are present and verified by the referenced architecture gates and provider tests.
+- 2026-08-26: Status changed from accepted to implemented. Package boundaries and vertical slices are present and verified by project references, package consumers, and provider tests.
 
 ### Implementation References
 
@@ -185,8 +182,6 @@ the folder layout itself is not performance evidence.
 - [Core features](../../src/Doka.EntityFrameworkCore.SafeMigrations/Features)
 - [MySQL/MariaDB features](../../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/Features)
 - [PostgreSQL features](../../src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/Features)
-- [Slice gate](../../eng/verify-vertical-slices.sh)
-- [Project boundary gate](../../eng/verify-project-boundaries.py)
 - [Package qualification](../../eng/qualify-packages.sh)
 - [Performance budgets](../../eng/performance-budgets.json)
 

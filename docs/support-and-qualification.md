@@ -11,11 +11,10 @@ with roll-forward disabled. SafeMigrations supports EF Core 10 only.
 | MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` exact `[10.0.0]` |
 | PostgreSQL | `Npgsql.EntityFrameworkCore.PostgreSQL` `[10.0.3,11.0.0)` |
 
-Release qualification passes `--require-stable-dependencies`; both candidate
-and stable package graphs must therefore resolve the exact stable Doka 10.0.0
-package. CI does not build Doka and never uses a cross-repository
-ProjectReference. A Doka update is accepted only after the complete package,
-engine, tooling, dependency-profile, and performance matrix passes again.
+The MySQL/MariaDB package resolves the exact stable Doka 10.0.0 package. CI
+does not build Doka and never uses a cross-repository ProjectReference. A Doka
+update is accepted only after the complete package, engine, tooling, coverage,
+and performance matrix passes again.
 
 ## Engine matrix
 
@@ -42,39 +41,27 @@ support spans major versions 14 through 18; every supported major is an
 independent release-gate cell. A new endpoint or removed upstream version
 requires a reviewed support-contract change and fresh evidence.
 
-## Dependency profiles
+## Dependency qualification
 
-The committed lockfiles are the Floor profile:
-
-- EF Core and Microsoft.Extensions.DependencyInjection 10.0.11;
-- Npgsql EF Core 10.0.3;
-- the exact committed Doka package.
-
-The current Latest profile is:
-
-- EF Core and Microsoft.Extensions.DependencyInjection 10.0.11;
-- Npgsql EF Core 10.0.3.
-
-`eng/verify-dependency-profile.sh` copies the repository to a clean canonical
-temporary path, restores the selected versions with lock updates confined to
-that copy, explicitly asserts EF Relational and Npgsql resolutions in the
-PostgreSQL test lockfile, builds, and runs Core, MySQL/MariaDB, and PostgreSQL
-suites. This avoids falsely passing on stale build outputs or
-silently modifying the Floor contract.
+Central package declarations define bounded compatible ranges; committed
+lockfiles define the exact graph qualified by the current revision. Dependabot
+proposes dependency and lockfile updates through ordinary pull requests. Every
+accepted update therefore runs the same complete CI workflow as product code,
+including all provider cells, package consumers, coverage, performance, and
+SBOM validation. There is no second dynamically restored dependency profile
+whose results can diverge from the committed graph.
 
 ## Behavioral evidence
 
 The executable test inventory consists of three independent xUnit assemblies
-and the repository engineering suites:
+and focused engineering checks:
 
 - [provider-neutral Core tests](../tests/Doka.EntityFrameworkCore.SafeMigrations.Tests);
 - [MySQL/MariaDB tests](../tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests);
 - [PostgreSQL tests](../tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests);
-- [Python engineering tests](../eng/tests) for coverage, project boundaries,
-  release versions, signed tags, workflow retry contracts, NuGet publication,
-  and package/symbol readback;
-- [Node.js release tests](../eng/tests/github-release.test.js) for draft and
-  final release reconciliation, recovery, assets, and signed annotated tags.
+- [coverage verifier tests](../eng/tests/test_verify_coverage.py);
+- package-content, package-only consumer, SBOM, EF tooling, and public NuGet
+  readback scripts exercised by the reusable quality and release workflows.
 
 Test results from the qualified commit are the authority for current case
 counts. Counts are not duplicated here because parameterized cases and the
@@ -227,9 +214,9 @@ Every release candidate and stable release adds GitHub/Sigstore build
 provenance and SBOM attestations, NuGet Trusted Publishing, NuGet
 repository-signature verification, and a content readback that differs from
 the qualified package only by NuGet's `.signature.p7s` entry. Publication
-re-verifies the downloaded attestation bundles, stages the exact GitHub Release
-draft before NuGet mutation, and obtains a short-lived NuGet credential only
-when credential-free readback proves that qualified content is missing.
+uses the protected environment to obtain a short-lived NuGet credential, then
+creates or verifies the exact immutable GitHub Release through GitHub's native
+release-asset verification.
 
 ## Primary references
 

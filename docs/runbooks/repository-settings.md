@@ -42,7 +42,7 @@ entries change, update protection using fresh check-run evidence.
 
 ## Before the first candidate
 
-Follow [one-time release configuration](../operations/release-publication.md#one-time-setup):
+Follow [one-time release configuration](../operations/release-publication.md#one-time-configuration):
 protected `nuget` environment on `main`, authorized reviewer, explicit bypass
 policy, `NUGET_USER`, NuGet Trusted Publishing scope, independently controlled
 signer policy, protected `v*` tags, artifact attestations, immutable releases,

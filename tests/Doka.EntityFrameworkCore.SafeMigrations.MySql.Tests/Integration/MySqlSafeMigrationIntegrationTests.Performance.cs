@@ -4,6 +4,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 {
     private const int ExpectedPerformanceTableCount = 100;
     private const int ForeignPerformanceTableCount = 1000;
+    private const int PerformanceFixtureCommandTimeoutSeconds = 180;
 
     [Fact]
     public async Task FullRunner_LiveCatalogP95RemainsBoundedWithForeignObjectsAndPooling()
@@ -15,9 +16,13 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             ConnectionReset = true,
             MaximumPoolSize = 4,
         }.ConnectionString;
+        var fixtureConnectionString = new MySqlConnectionStringBuilder(connectionString)
+        {
+            DefaultCommandTimeout = PerformanceFixtureCommandTimeoutSeconds,
+        }.ConnectionString;
 
         await ExecuteSqlAsync(
-            connectionString,
+            fixtureConnectionString,
             BuildMySqlPerformanceTables("expected_perf_", ExpectedPerformanceTableCount, includeIndex: false));
 
         await using var context = CreateContext(connectionString);
@@ -27,7 +32,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var clean = await LivePerformanceEvidence.MeasureAsync(() => runner.AnalyzeAsync(context, operations, options));
 
         await ExecuteSqlAsync(
-            connectionString,
+            fixtureConnectionString,
             BuildMySqlPerformanceTables("foreign_perf_", ForeignPerformanceTableCount, includeIndex: true));
 
         var noisy = await LivePerformanceEvidence.MeasureAsync(() => runner.AnalyzeAsync(context, operations, options));

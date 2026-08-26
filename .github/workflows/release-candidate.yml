@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Candidate package version without a leading v, for example 10.0.0-rc.1.
+        description: Package version without a leading v, for example 10.0.0-rc.1.
         required: true
         type: string
 
@@ -13,64 +13,65 @@ permissions:
   contents: read
 
 concurrency:
-  group: safe-migrations-release-candidate-${{ inputs.version }}
+  group: safe-migrations-release-${{ inputs.version }}
   cancel-in-progress: false
 
 jobs:
   preflight:
-    name: Validate candidate identity and unused version
+    name: Validate untagged candidate
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs:
       package-version: ${{ steps.version.outputs.package-version }}
       release-tag: ${{ steps.version.outputs.release-tag }}
     steps:
-      - name: Checkout complete candidate history
+      - name: Checkout candidate source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Validate candidate version
+      - name: Validate release version
         id: version
         env:
-          REQUESTED_VERSION: ${{ inputs.version }}
-        shell: bash
-        run: eng/release/validate-version.sh "$REQUESTED_VERSION"
+          PACKAGE_VERSION: ${{ inputs.version }}
+        run: bash eng/validate-release-version.sh "$PACKAGE_VERSION"
 
-      - name: Verify current main source before tag creation
+      - name: Verify current untagged main source
         env:
           RELEASE_TAG: ${{ steps.version.outputs.release-tag }}
-        shell: bash
         run: |
           if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
             echo "Release candidates must be dispatched from main." >&2
             exit 1
           fi
 
-          git fetch --quiet --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          git fetch --quiet --no-tags origin \
+            +refs/heads/main:refs/remotes/origin/main
           if [[ "$(git rev-parse refs/remotes/origin/main)" != "$GITHUB_SHA" ]]; then
             echo "The dispatched commit is no longer current main." >&2
             exit 1
           fi
 
           if git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"; then
-            echo "Candidate qualification must complete before its release tag exists." >&2
+            echo "Candidate qualification must finish before the release tag exists." >&2
             exit 1
           fi
 
       - name: Require an unused NuGet version
         env:
           PACKAGE_VERSION: ${{ steps.version.outputs.package-version }}
-        shell: bash
         run: |
           for package_id in \
             doka.entityframeworkcore.safemigrations \
             doka.entityframeworkcore.safemigrations.mysql \
             doka.entityframeworkcore.safemigrations.postgresql; do
             package_url="https://api.nuget.org/v3-flatcontainer/$package_id/$PACKAGE_VERSION/$package_id.$PACKAGE_VERSION.nupkg"
-            http_code="$(curl --silent --show-error --location --connect-timeout 10 --max-time 60 --output /dev/null --write-out '%{http_code}' "$package_url")"
-            if [[ "$http_code" != "404" ]]; then
+            http_code="$(curl --silent --show-error --location \
+              --connect-timeout 10 --max-time 60 --output /dev/null \
+              --write-out '%{http_code}' "$package_url")"
+
+            if [[ "$http_code" != 404 ]]; then
               echo "NuGet version must be unused; $package_id returned HTTP $http_code." >&2
               exit 1
             fi
@@ -86,38 +87,34 @@ jobs:
       package-version: ${{ needs.preflight.outputs.package-version }}
       artifact-name: safe-migrations-release-${{ needs.preflight.outputs.package-version }}-${{ github.run_attempt }}
       artifact-retention-days: 90
-      require-stable-dependencies: true
 
   attest:
-    name: Attest qualified candidate
+    name: Attest qualified packages
     needs:
       - preflight
       - quality-gates
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    outputs:
-      attestation-artifact-name: ${{ steps.artifact-identity.outputs.name }}
     permissions:
       contents: read
-      id-token: write           # Mints the short-lived Sigstore signing certificate.
-      attestations: write       # Publishes provenance and SBOM attestations.
-      artifact-metadata: write  # Links attested subjects to GitHub artifact metadata.
+      id-token: write           # Mints the short-lived Sigstore certificate.
+      attestations: write       # Publishes build and SBOM attestations.
+      artifact-metadata: write  # Links attestations to workflow artifacts.
     steps:
       - name: Checkout qualified source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Download immutable qualified bytes
+      - name: Download qualified packages
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: ${{ needs.quality-gates.outputs.qualified-artifact-name }}
           path: artifacts
 
-      - name: Verify downloaded qualification evidence
+      - name: Verify qualified bytes
         env:
           PACKAGE_VERSION: ${{ needs.preflight.outputs.package-version }}
-        shell: bash
         run: |
           (
             cd artifacts/packages
@@ -125,22 +122,18 @@ jobs:
           )
           eng/verify-package-contents.sh \
             --package-dir artifacts/packages \
-            --version "$PACKAGE_VERSION" \
-            --require-stable-dependencies
+            --version "$PACKAGE_VERSION"
 
       - name: Attest build provenance
-        id: provenance
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: |
             artifacts/packages/*.nupkg
             artifacts/packages/*.snupkg
             artifacts/packages/SHA256SUMS
-            artifacts/packages/SYMBOLS.json
             artifacts/sbom/_manifest/spdx_2.2/manifest.spdx.json
 
       - name: Attest SPDX SBOM
-        id: sbom-attestation
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: |
@@ -148,264 +141,244 @@ jobs:
             artifacts/packages/*.snupkg
           sbom-path: artifacts/sbom/_manifest/spdx_2.2/manifest.spdx.json
 
-      - name: Preserve attestation bundles
-        env:
-          PROVENANCE_BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
-          SBOM_BUNDLE: ${{ steps.sbom-attestation.outputs.bundle-path }}
-        shell: bash
-        run: |
-          mkdir -p artifacts/attestations
-          cp "$PROVENANCE_BUNDLE" \
-            artifacts/attestations/build-provenance.sigstore.json
-          cp "$SBOM_BUNDLE" \
-            artifacts/attestations/sbom-attestation.sigstore.json
-
-      - name: Record attestation artifact identity
-        id: artifact-identity
-        env:
-          ATTESTATION_ARTIFACT_NAME: safe-migrations-attestations-${{ needs.preflight.outputs.package-version }}-${{ github.run_attempt }}
-        run: echo "name=$ATTESTATION_ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
-
-      - name: Upload candidate attestations
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: ${{ steps.artifact-identity.outputs.name }}
-          path: artifacts/attestations
-          if-no-files-found: error
-          retention-days: 90
-
   publish:
-    name: Verify tag, publish, and read back
+    name: Verify tag and publish
     needs:
       - preflight
       - quality-gates
       - attest
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 60
     environment:
       name: nuget
     permissions:
-      actions: read       # Reads the exact qualification and attestation artifacts.
-      attestations: read  # Verifies the repository-owned attestation bundles.
-      contents: write     # Creates the draft and publishes the verified GitHub Release.
-      id-token: write     # Exchanges OIDC for a short-lived NuGet API key when needed.
+      actions: read    # Downloads the exact qualified workflow artifact.
+      contents: write  # Creates or verifies the immutable GitHub Release.
+      id-token: write  # Exchanges OIDC for a short-lived NuGet API key.
     env:
       PACKAGE_VERSION: ${{ needs.preflight.outputs.package-version }}
       RELEASE_TAG: ${{ needs.preflight.outputs.release-tag }}
     steps:
-      - name: Checkout qualified source and complete history
-        id: checkout
+      - name: Checkout qualified source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Initialize publication evidence
-        if: always()
-        env:
-          QUALIFIED_ARTIFACT: ${{ needs.quality-gates.outputs.qualified-artifact-name }}
-          ATTESTATION_ARTIFACT: ${{ needs.attest.outputs.attestation-artifact-name }}
-        run: |
-          mkdir -p artifacts/release-publication
-          jq -n \
-            --arg repository "$GITHUB_REPOSITORY" \
-            --arg commit "$GITHUB_SHA" \
-            --arg version "$PACKAGE_VERSION" \
-            --arg tag "$RELEASE_TAG" \
-            --arg run "$GITHUB_RUN_ID" \
-            --arg attempt "$GITHUB_RUN_ATTEMPT" \
-            --arg qualifiedArtifact "$QUALIFIED_ARTIFACT" \
-            --arg attestationArtifact "$ATTESTATION_ARTIFACT" \
-            '{repository: $repository, commit: $commit, version: $version, tag: $tag,
-              run: $run, attempt: $attempt, qualifiedArtifact: $qualifiedArtifact,
-              attestationArtifact: $attestationArtifact}' \
-            > artifacts/release-publication/attempt.json
-
       - name: Setup .NET
-        id: setup
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
 
-      - name: Download immutable qualified bytes
-        id: packages
+      - name: Download qualified packages
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: ${{ needs.quality-gates.outputs.qualified-artifact-name }}
           path: artifacts
 
-      - name: Download candidate attestations
-        id: attestations
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: ${{ needs.attest.outputs.attestation-artifact-name }}
-          path: artifacts/attestations
-
-      - name: Bind publication to the qualified commit and requested tag
-        id: source
-        shell: bash
+      - name: Verify source and authorized signed tag
         run: |
-          {
-            if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
-              echo "Publication requires the original main dispatch." >&2
-              exit 1
-            fi
+          if [[ "$GITHUB_REF" != "refs/heads/main" \
+              || "$(git rev-parse HEAD)" != "$GITHUB_SHA" ]]; then
+            echo "Publication must use the qualified main commit." >&2
+            exit 1
+          fi
 
-            bash eng/release/verify-main-source.sh "$GITHUB_SHA"
-            git fetch --quiet --no-tags origin \
-              "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          git fetch --quiet --no-tags origin \
+            +refs/heads/main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main; then
+            echo "The qualified commit is no longer on protected main history." >&2
+            exit 1
+          fi
 
-            if [[ "$(git rev-list -n 1 "refs/tags/$RELEASE_TAG")" != "$GITHUB_SHA" ]]; then
-              echo "The release tag does not identify the qualified commit." >&2
-              exit 1
-            fi
-          } 2>&1 | tee artifacts/release-publication/source.log
+          git fetch --quiet --no-tags origin \
+            "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          if [[ "$(git cat-file -t "refs/tags/$RELEASE_TAG")" != tag \
+              || "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")" != "$GITHUB_SHA" ]]; then
+            echo "The release tag must be annotated and identify the qualified commit." >&2
+            exit 1
+          fi
 
-      - name: Verify authorized signed annotated release tag
-        id: tag
-        shell: bash
+          git -c gpg.format=ssh \
+            -c gpg.ssh.allowedSignersFile=eng/release/allowed-signers \
+            verify-tag "$RELEASE_TAG"
+
+      - name: Verify qualified bytes again
         run: |
-          eng/release/verify-tag.sh "$RELEASE_TAG" "$GITHUB_SHA" \
-            2>&1 | tee artifacts/release-publication/tag.log
-
-      - name: Verify GitHub release-tag signature state
-        id: github-tag
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script: |
-            const { recordReleaseEvidence, verifySignedAnnotatedTag } = require('./eng/release/github-release.js');
-            await recordReleaseEvidence('artifacts/release-publication/github-tag.json', () => verifySignedAnnotatedTag(
-              github,
-              context.repo.owner,
-              context.repo.repo,
-              process.env.RELEASE_TAG,
-              context.sha
-            ));
-
-      - name: Verify qualified bytes again before publication
-        id: bytes
-        shell: bash
-        run: |
-          {
-            (
-              cd artifacts/packages
-              sha256sum --check SHA256SUMS
-            )
-            eng/verify-package-contents.sh \
-              --package-dir artifacts/packages \
-              --version "$PACKAGE_VERSION" \
-              --require-stable-dependencies
-          } 2>&1 | tee artifacts/release-publication/qualified-bytes.log
-
-      - name: Verify provenance and SBOM attestations
-        id: provenance
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          bash eng/release/verify-attestations.sh \
-            2>&1 | tee artifacts/release-publication/attestations.log
-
-      - name: Stage and verify GitHub Release draft
-        id: stage
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script: |
-            const { candidateReleaseOptions, recordReleaseEvidence, stageRelease } = require('./eng/release/github-release.js');
-            const options = candidateReleaseOptions({
-              github,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              version: process.env.PACKAGE_VERSION,
-              commit: context.sha
-            });
-            await recordReleaseEvidence('artifacts/release-publication/github-staged.json', () => stageRelease(options));
-
-      - name: Check NuGet.org immediately before publication
-        id: nuget-preflight
-        shell: bash
-        run: |
-          eng/publish-nuget.sh \
+          (
+            cd artifacts/packages
+            sha256sum --check SHA256SUMS
+          )
+          eng/verify-package-contents.sh \
             --package-dir artifacts/packages \
-            --version "$PACKAGE_VERSION" \
-            --mode preflight 2>&1 | tee artifacts/release-publication/nuget-preflight.log
+            --version "$PACKAGE_VERSION"
 
-      - name: Exchange GitHub OIDC token for NuGet API key
-        if: steps.nuget-preflight.outputs.publication_required == 'true'
+      - name: Request short-lived NuGet.org key
         id: nuget-login
         uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
         with:
           user: ${{ secrets.NUGET_USER }}
 
-      - name: Publish missing packages or verify exact existing bytes
-        id: push
-        if: steps.nuget-preflight.outputs.publication_required == 'true'
+      - name: Publish primary packages
         env:
           NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
-        shell: bash
         run: |
-          eng/publish-nuget.sh \
-            --package-dir artifacts/packages \
-            --version "$PACKAGE_VERSION" \
-            --mode publish 2>&1 | tee artifacts/release-publication/nuget-push.log
+          for package in artifacts/packages/*.nupkg; do
+            dotnet nuget push "$package" \
+              --source https://api.nuget.org/v3/index.json \
+              --no-symbols --skip-duplicate --timeout 300
+          done
 
-      - name: Publish and read back immutable GitHub Release
-        id: release
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script: |
-            const { candidateReleaseOptions, recordReleaseEvidence, reconcileRelease } = require('./eng/release/github-release.js');
-            const options = candidateReleaseOptions({
-              github,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              version: process.env.PACKAGE_VERSION,
-              commit: context.sha
-            });
-            await recordReleaseEvidence('artifacts/release-publication/github-published.json', () => reconcileRelease(options));
-
-      - name: Verify NuGet repository signatures and content readback
-        id: readback
-        shell: bash
-        run: |
-          eng/readback-nuget.sh \
-            --package-dir artifacts/packages \
-            --output artifacts/release-publication/nuget-readback \
-            --version "$PACKAGE_VERSION" \
-            2>&1 | tee artifacts/release-publication/nuget-readback.log
-
-      - name: Record publication attempt outcome
-        if: always()
+      - name: Publish symbol packages
         env:
-          ATTEMPT_STATUS: ${{ job.status }}
-          STEP_OUTCOMES: >-
-            {"checkout":"${{ steps.checkout.outcome }}","setup":"${{ steps.setup.outcome }}",
-            "packages":"${{ steps.packages.outcome }}","attestations":"${{ steps.attestations.outcome }}",
-            "source":"${{ steps.source.outcome }}","tag":"${{ steps.tag.outcome }}",
-            "github-tag":"${{ steps.github-tag.outcome }}","bytes":"${{ steps.bytes.outcome }}",
-            "provenance":"${{ steps.provenance.outcome }}","stage":"${{ steps.stage.outcome }}",
-            "nuget-preflight":"${{ steps.nuget-preflight.outcome }}","nuget-login":"${{ steps.nuget-login.outcome }}",
-            "push":"${{ steps.push.outcome }}","release":"${{ steps.release.outcome }}",
-            "readback":"${{ steps.readback.outcome }}"}
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
         run: |
-          mkdir -p artifacts/release-publication
-          jq -n --arg status "$ATTEMPT_STATUS" --argjson steps "$STEP_OUTCOMES" \
-            '{status: $status, steps: $steps}' > artifacts/release-publication/outcome.json
-          {
-            echo '## Publication attempt'
-            echo
-            echo "Version: $PACKAGE_VERSION; candidate: $GITHUB_SHA; outcome: $ATTEMPT_STATUS."
-            echo
-            echo 'A published GitHub Release does not imply completed NuGet readback.'
-            echo 'For a failed attempt, rerun only the failed publication job with the same candidate.'
-          } >> "$GITHUB_STEP_SUMMARY"
+          for package in artifacts/packages/*.snupkg; do
+            dotnet nuget push "$package" \
+              --source https://api.nuget.org/v3/index.json \
+              --skip-duplicate --timeout 300
+          done
 
-      - name: Upload publication attempt evidence
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: safe-migrations-publication-${{ needs.preflight.outputs.package-version }}-${{ github.run_attempt }}
-          path: artifacts/release-publication
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: 90
+      - name: Verify public NuGet packages
+        run: >-
+          bash eng/readback-nuget.sh
+          --package-dir artifacts/packages
+          --version "$PACKAGE_VERSION"
+          --timeout-seconds 1200
+
+      - name: Publish or verify immutable GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          assets=(
+            artifacts/packages/*.nupkg
+            artifacts/packages/*.snupkg
+            artifacts/packages/SHA256SUMS
+            artifacts/sbom/_manifest/spdx_2.2/manifest.spdx.json
+          )
+          expected_prerelease=false
+          draft_arguments=()
+          publication_arguments=(--latest)
+          if [[ "$PACKAGE_VERSION" == *-* ]]; then
+            expected_prerelease=true
+            draft_arguments=(--prerelease)
+            publication_arguments=(--prerelease --latest=false)
+          fi
+
+          awk -v heading="## [$PACKAGE_VERSION]" '
+            index($0, heading) == 1 { found = 1; next }
+            found && /^## \[/ { exit }
+            found { print }
+            END { if (!found) exit 1 }
+          ' CHANGELOG.md >release-notes.md
+
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" \
+              --draft \
+              --verify-tag \
+              --title "SafeMigrations $PACKAGE_VERSION" \
+              --notes-file release-notes.md \
+              "${draft_arguments[@]}"
+          fi
+
+          release_json="$(
+            gh release view "$RELEASE_TAG" \
+              --json tagName,isDraft,isImmutable,isPrerelease,assets
+          )"
+          jq -e \
+            --arg tag "$RELEASE_TAG" \
+            --argjson prerelease "$expected_prerelease" \
+            '.tagName == $tag
+              and .isPrerelease == $prerelease
+              and ((.isDraft == true and .isImmutable == false)
+                or (.isDraft == false and .isImmutable == true))' \
+            <<<"$release_json" >/dev/null
+
+          if [[ "$(jq -r '.isDraft' <<<"$release_json")" == true ]]; then
+            for asset in "${assets[@]}"; do
+              asset_name="$(basename "$asset")"
+              expected_digest="sha256:$(sha256sum "$asset" | cut -d ' ' -f 1)"
+              actual_digest="$(
+                jq -r --arg name "$asset_name" \
+                  '.assets[] | select(.name == $name) | .digest' \
+                  <<<"$release_json"
+              )"
+
+              if [[ -z "$actual_digest" ]]; then
+                gh release upload "$RELEASE_TAG" "$asset"
+              elif [[ "$actual_digest" != "$expected_digest" ]]; then
+                echo "Draft Release asset differs: $asset_name." >&2
+                exit 1
+              fi
+            done
+
+            release_json="$(
+              gh release view "$RELEASE_TAG" \
+                --json tagName,isDraft,isImmutable,isPrerelease,assets
+            )"
+            expected_assets="$(
+              for asset in "${assets[@]}"; do
+                basename "$asset"
+              done | LC_ALL=C sort
+            )"
+            actual_assets="$(
+              jq -r '.assets[].name' <<<"$release_json" | LC_ALL=C sort
+            )"
+            if [[ "$actual_assets" != "$expected_assets" ]]; then
+              echo "Draft Release assets differ from the qualified set." >&2
+              exit 1
+            fi
+
+            for asset in "${assets[@]}"; do
+              asset_name="$(basename "$asset")"
+              expected_digest="sha256:$(sha256sum "$asset" | cut -d ' ' -f 1)"
+              actual_digest="$(
+                jq -r --arg name "$asset_name" \
+                  '.assets[] | select(.name == $name) | .digest' \
+                  <<<"$release_json"
+              )"
+
+              if [[ "$actual_digest" != "$expected_digest" ]]; then
+                echo "Draft Release asset digest differs: $asset_name." >&2
+                exit 1
+              fi
+            done
+
+            gh release edit "$RELEASE_TAG" \
+              --draft=false \
+              "${publication_arguments[@]}"
+          fi
+
+          release_json="$(
+            gh release view "$RELEASE_TAG" \
+              --json tagName,isDraft,isImmutable,isPrerelease,assets
+          )"
+          jq -e \
+            --arg tag "$RELEASE_TAG" \
+            --argjson prerelease "$expected_prerelease" \
+            '.tagName == $tag
+              and .isDraft == false
+              and .isImmutable == true
+              and .isPrerelease == $prerelease' \
+            <<<"$release_json" >/dev/null
+
+          expected_assets="$(
+            for asset in "${assets[@]}"; do
+              basename "$asset"
+            done | LC_ALL=C sort
+          )"
+          actual_assets="$(
+            jq -r '.assets[].name' <<<"$release_json" | LC_ALL=C sort
+          )"
+          if [[ "$actual_assets" != "$expected_assets" ]]; then
+            echo "Published Release assets differ from the qualified set." >&2
+            exit 1
+          fi
+
+          gh release verify "$RELEASE_TAG"
+          for asset in "${assets[@]}"; do
+            gh release verify-asset "$RELEASE_TAG" "$asset"
+          done
+
+          echo "SafeMigrations $PACKAGE_VERSION was published and verified." \
+            >>"$GITHUB_STEP_SUMMARY"

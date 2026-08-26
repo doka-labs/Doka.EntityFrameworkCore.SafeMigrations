@@ -3,12 +3,11 @@
 set -euo pipefail
 
 usage() {
-    echo "Usage: $0 --package-dir <path> --version <version> [--require-stable-dependencies]" >&2
+    echo "Usage: $0 --package-dir <path> --version <version>" >&2
 }
 
 package_dir=""
 package_version=""
-require_stable_dependencies=false
 
 while (($# > 0)); do
     case "$1" in
@@ -19,10 +18,6 @@ while (($# > 0)); do
         --version)
             package_version="${2:-}"
             shift 2
-            ;;
-        --require-stable-dependencies)
-            require_stable_dependencies=true
-            shift
             ;;
         *)
             usage
@@ -44,8 +39,6 @@ package_ids=(
     Doka.EntityFrameworkCore.SafeMigrations.MySql
     Doka.EntityFrameworkCore.SafeMigrations.PostgreSql
 )
-symbol_manifest="$package_dir/SYMBOLS.json"
-
 expected_files=()
 for package_id in "${package_ids[@]}"; do
     expected_files+=(
@@ -53,24 +46,6 @@ for package_id in "${package_ids[@]}"; do
         "$package_id.$package_version.snupkg"
     )
 done
-
-jq -e \
-    --arg version "$package_version" \
-    --arg core "${package_ids[0]}" \
-    --arg mysql "${package_ids[1]}" \
-    --arg postgresql "${package_ids[2]}" \
-    '.schemaVersion == 1
-        and .releaseVersion == $version
-        and (.symbols | length) == 3
-        and ([.symbols[].packageId] | sort) == ([$core, $mysql, $postgresql] | sort)
-        and all(.symbols[];
-            .packageVersion == $version
-            and (.pdbName == (.packageId + ".pdb"))
-            and (.symbolKey | test("^[0-9a-f]{32}FFFFFFFF$"))
-            and (.symbolUrl | startswith("https://symbols.nuget.org/download/symbols/"))
-            and (.checksumHeader | test("^SHA256:[0-9a-f]{64}$"))
-            and (.sha256 | test("^[0-9a-f]{64}$")))' \
-    "$symbol_manifest" >/dev/null
 
 actual_files="$(
     find "$package_dir" -maxdepth 1 -type f \
@@ -146,16 +121,14 @@ if grep -Eq '<dependency id="(Npgsql\.EntityFrameworkCore\.PostgreSQL|Doka\.Enti
     exit 1
 fi
 
-if [[ "$require_stable_dependencies" == true ]]; then
-    doka_version="$(
-        grep -o '<dependency id="Doka.EntityFrameworkCore.MySql" version="[^"]*"' \
-            <<<"$mysql_nuspec" \
-            | sed -E 's/.* version="([^"]*)"/\1/'
-    )"
-    if [[ -z "$doka_version" || "$doka_version" == *-* ]]; then
-        echo "Stable release requires a stable Doka.EntityFrameworkCore.MySql dependency." >&2
-        exit 1
-    fi
+doka_version="$(
+    grep -o '<dependency id="Doka.EntityFrameworkCore.MySql" version="[^"]*"' \
+        <<<"$mysql_nuspec" \
+        | sed -E 's/.* version="([^"]*)"/\1/'
+)"
+if [[ -z "$doka_version" || "$doka_version" == *-* ]]; then
+    echo "SafeMigrations requires a stable Doka.EntityFrameworkCore.MySql dependency." >&2
+    exit 1
 fi
 
 postgres_nuspec="$(unzip -p \

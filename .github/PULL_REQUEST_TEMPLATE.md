@@ -51,7 +51,7 @@ For operation, policy, catalog, or execution changes, verify and record:
 - MySQL and MariaDB independently, plus PostgreSQL parity or explicit fail-closed rejection;
 - initial application, idempotent rerun, partial-failure recovery, cancellation, and relevant concurrency cases;
 - preflight/postflight, normal EF operations, migration history, and derived-context boundaries;
-- affected EF CLI/script/bundle, package-consumer, dependency-profile, coverage, and performance/allocation gates.
+- affected EF CLI/script/bundle, package-consumer, locked-dependency, coverage, and performance/allocation gates.
 
 For release or workflow changes, record positive and negative engineering tests,
 Action/schema compatibility, and local-versus-hosted evidence separately. Do not
