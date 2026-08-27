@@ -219,14 +219,11 @@ Then create and review the migration normally:
 dotnet ef migrations add CoreLegacyConvergence
 ```
 
-The generated source mapping is explicit and reviewable:
-
-| EF operation | `Strict` source | `LegacyConvergence` source |
-| --- | --- | --- |
-| `CreateTable` | `CreateTableIfNotExists` | `ConvergeTableFromModel` |
-| Single-column `CreateIndex` | `CreateIndexIfNotExistsFromModel` | Same |
-| Multi-column `CreateIndex` | `CreateCompositeIndexIfNotExistsFromModel` | Same |
-| Generated rollback of `CreateTable` | `DropTableIfExists` | Entire `Down` body rejects before DDL |
+Before selecting a mode, review the complete
+[migration authoring guide](docs/migration-authoring.md). It shows the actual
+generated `CreateTableIfNotExists` and `ConvergeTableFromModel` source as well
+as the supported hand-authored `ExpectedTableDefinition` plus `ConvergeTable`
+form, including their different rollback behavior.
 
 The generated `Up` method uses `ConvergeTableFromModel` plus safe index
 helpers. Its `Down` method throws before DDL because SafeMigrations cannot know
@@ -315,6 +312,8 @@ container alone never hides missing children.
 hand-authored contracts, for example when a reviewed migration needs a policy
 or expected definition that cannot be inferred from the current EF model. They
 are no longer required boilerplate for the normal first convergence migration.
+The [migration authoring guide](docs/migration-authoring.md) compares both
+convergence forms with the generated strict default.
 
 For an existing table, missing nullable or default-bearing columns can be
 added. Unsafe `NOT NULL` additions, conflicting definitions, duplicate unique

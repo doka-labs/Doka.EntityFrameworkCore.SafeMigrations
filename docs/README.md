@@ -9,6 +9,7 @@ OpenSSF achievement must be established separately from source documentation.
 | Task | Canonical guide |
 | --- | --- |
 | Install, register a provider, and scaffold strict or legacy-convergence migrations | [Project README](../README.md) and [runnable sample](../samples/Doka.EntityFrameworkCore.SafeMigrations.Sample/README.md) |
+| Compare generated strict, generated legacy-convergence, and hand-authored migration source | [Migration authoring paths](migration-authoring.md) |
 | Find public inputs, outputs, and failure boundaries | [API reference](api-reference.md) |
 | Check engines, dependency ranges, qualified boundaries, and evidence | [Support and qualification](support-and-qualification.md) |
 | Understand MySQL/MariaDB session guards and implicit commits | [MySQL and MariaDB DDL](mysql-mariadb-ddl-behavior.md) |

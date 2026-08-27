@@ -118,6 +118,11 @@ mapping is:
 | Multi-column `CreateIndex` | `CreateCompositeIndexIfNotExistsFromModel` | Same |
 | Generated rollback of `CreateTable` | `DropTableIfExists` | Entire `Down` body rejects before DDL |
 
+The [migration authoring guide](migration-authoring.md) contains complete
+generated strict and legacy-convergence migrations plus the equivalent
+hand-authored `ExpectedTableDefinition` form, including provider annotations,
+separate index calls, and rollback behavior.
+
 The provider package contributes a `buildTransitive` assembly attribute when
 the consuming project directly references `Microsoft.EntityFrameworkCore.Design`
 or `Microsoft.EntityFrameworkCore.Tools`. The latter supplies EF Design as a

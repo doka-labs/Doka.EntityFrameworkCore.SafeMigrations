@@ -47,6 +47,9 @@ options.UsePostgreSqlSafeMigrations(configuration =>
 read only while EF scaffolds a new C# migration; changing it does not modify or
 reinterpret migrations that already exist.
 
+For the complete generated `Up` and fail-closed `Down` shape, compare all three
+[migration authoring paths](../../docs/migration-authoring.md).
+
 Key files:
 
 - `SampleMigrationUsage.cs` builds the shared operation contracts.
