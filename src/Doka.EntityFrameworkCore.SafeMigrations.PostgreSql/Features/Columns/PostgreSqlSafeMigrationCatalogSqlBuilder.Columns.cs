@@ -2,6 +2,8 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 
 internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 {
+    private const string ValueGenerationStrategyAnnotation = "Npgsql:ValueGenerationStrategy";
+
     private string? GetUnsupportedColumnFeature(
         SafeMigrationIntent intent
     )
@@ -19,12 +21,25 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             return "column_type_mapping";
         }
 
+        if (definitions.Any(static definition => !SupportsProviderAnnotations(definition)))
+        {
+            return "provider_column_annotation";
+        }
+
         return definitions.Any(static definition =>
             (definition.ComputedColumnSql is not null || definition.ComputedExpression is not null)
             && definition.IsStored == false)
             ? "virtual_generated_column"
             : null;
     }
+
+    private static bool SupportsProviderAnnotations(
+        ExpectedColumnDefinition definition
+    ) => definition.ProviderAnnotations.All(static annotation =>
+        StringComparer.Ordinal.Equals(annotation.Name, ValueGenerationStrategyAnnotation)
+        && annotation.Value is NpgsqlValueGenerationStrategy.None
+            or NpgsqlValueGenerationStrategy.IdentityAlwaysColumn
+            or NpgsqlValueGenerationStrategy.IdentityByDefaultColumn);
 
     private PostgreSqlSafeMigrationRuntimePlan BuildEnsureColumn(
         EnsureColumnIntent intent
@@ -176,11 +191,25 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         RelationalTypeMapping mapping
     )
     {
+        var strategy = definition.ProviderAnnotations.SingleOrDefault(annotation =>
+                StringComparer.Ordinal.Equals(annotation.Name, ValueGenerationStrategyAnnotation))
+            ?.Value as NpgsqlValueGenerationStrategy?;
+
+        if (strategy == NpgsqlValueGenerationStrategy.IdentityAlwaysColumn)
+        {
+            return "a.attgenerated = '' AND a.attidentity = 'a'";
+        }
+
+        if (strategy == NpgsqlValueGenerationStrategy.IdentityByDefaultColumn)
+        {
+            return "a.attgenerated = '' AND a.attidentity = 'd'";
+        }
+
         if (definition.ComputedColumnSql is not null
             || definition.ComputedExpression is not null)
         {
             var generation = definition.IsStored == false ? "'v'" : "'s'";
-            return $"a.attgenerated = {generation} AND d.oid IS NOT NULL AND "
+            return $"a.attidentity = '' AND a.attgenerated = {generation} AND d.oid IS NOT NULL AND "
                 + (definition.ComputedExpression is not null
                     ? ExpressionMatches("pg_catalog.pg_get_expr(d.adbin, d.adrelid)", definition.ComputedExpression)
                     : ExpressionMatches("pg_catalog.pg_get_expr(d.adbin, d.adrelid)", definition.ComputedColumnSql!));
@@ -188,7 +217,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
         if (definition.DefaultValue.Kind == SafeMigrationDefaultValueKind.None)
         {
-            return "a.attgenerated = '' AND d.oid IS NULL";
+            return "a.attidentity = '' AND a.attgenerated = '' AND d.oid IS NULL";
         }
 
         var expected = definition.DefaultValue.Kind == SafeMigrationDefaultValueKind.Sql
@@ -207,7 +236,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                     definition.DefaultValue.StructuredExpression)
                 : ExpressionMatches("pg_catalog.pg_get_expr(d.adbin, d.adrelid)", expected);
 
-        return "a.attgenerated = '' AND d.oid IS NOT NULL AND " + expressionMatches;
+        return "a.attidentity = '' AND a.attgenerated = '' AND d.oid IS NOT NULL AND " + expressionMatches;
     }
 
     private bool CanMap(

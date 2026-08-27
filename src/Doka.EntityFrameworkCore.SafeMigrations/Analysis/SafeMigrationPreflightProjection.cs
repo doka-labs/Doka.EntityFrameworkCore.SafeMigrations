@@ -298,7 +298,10 @@ internal sealed partial class SafeMigrationPreflightProjection
             value.DefaultValue,
             replaceComputed ? computedColumnSql : computedColumnSql ?? value.ComputedColumnSql,
             value.IsStored,
-            replaceComputed ? computedExpression : computedExpression ?? value.ComputedExpression);
+            replaceComputed ? computedExpression : computedExpression ?? value.ComputedExpression)
+        {
+            ProviderAnnotations = value.ProviderAnnotations,
+        };
 
         private static ExpectedPrimaryKeyDefinition Copy(
             ExpectedPrimaryKeyDefinition value,

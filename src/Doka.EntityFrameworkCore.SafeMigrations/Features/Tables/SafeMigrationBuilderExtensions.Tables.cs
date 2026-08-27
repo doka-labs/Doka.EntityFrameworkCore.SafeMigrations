@@ -23,7 +23,7 @@ public static partial class SafeMigrationBuilderExtensions
     /// a fail-closed SafeMigrations operation.
     /// </summary>
     /// <param name="migrationBuilder">The EF Core migration builder that receives the operation.</param>
-    /// <param name="table">The table name.</param>
+    /// <param name="name">The table name.</param>
     /// <param name="columns">The callback that defines the typed EF Core table columns.</param>
     /// <param name="schema">The schema name, or null for the provider default.</param>
     /// <param name="constraints">The callback that configures table constraints.</param>
@@ -32,9 +32,15 @@ public static partial class SafeMigrationBuilderExtensions
     /// <param name="mode">The table-definition comparison mode.</param>
     /// <typeparam name="TColumns">The anonymous type that exposes the configured table columns.</typeparam>
     /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
+    /// <exception cref="ArgumentNullException">
+    /// <paramref name="migrationBuilder"/> or <paramref name="columns"/> is null.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// EF Core does not append exactly one table operation for the supplied definition.
+    /// </exception>
     public static OperationBuilder<SafeMigrationOperation> CreateTableIfNotExists<TColumns>(
         this MigrationBuilder migrationBuilder,
-        string table,
+        string name,
         Func<ColumnsBuilder, TColumns> columns,
         string? schema = null,
         Action<CreateTableBuilder<TColumns>>? constraints = null,
@@ -43,23 +49,50 @@ public static partial class SafeMigrationBuilderExtensions
         SafeMigrationTableMode mode = SafeMigrationTableMode.StrictDefinition
     )
     {
-        ArgumentNullException.ThrowIfNull(migrationBuilder);
-        ArgumentNullException.ThrowIfNull(columns);
+        var definition = CaptureTableDefinition(migrationBuilder, name, columns, schema, constraints, comment);
 
-        var operationCount = migrationBuilder.Operations.Count;
-        _ = migrationBuilder.CreateTable(table, columns, schema, constraints, comment);
-
-        if (migrationBuilder.Operations.Count != operationCount + 1
-            || migrationBuilder.Operations[^1] is not CreateTableOperation operation)
-        {
-            throw new InvalidOperationException("EF Core did not append exactly one CreateTableOperation.");
-        }
-
-        migrationBuilder.Operations.RemoveAt(operationCount);
         return Add(
             migrationBuilder,
-            new EnsureTableIntent(SafeMigrationExpectedDefinitionFactory.From(operation), mode),
+            new EnsureTableIntent(definition, mode),
             policy);
+    }
+
+    /// <summary>
+    /// Creates a typed EF table definition and emits an object-granular legacy
+    /// convergence baseline without requiring a hand-written expected model.
+    /// </summary>
+    /// <param name="migrationBuilder">The EF Core migration builder that receives the operations.</param>
+    /// <param name="name">The table name.</param>
+    /// <param name="columns">The callback that defines the typed EF Core table columns.</param>
+    /// <param name="schema">The schema name, or null for the provider default.</param>
+    /// <param name="constraints">The callback that configures table constraints.</param>
+    /// <param name="comment">The expected database comment, or null when unspecified.</param>
+    /// <param name="policy">The conflict policy for granular convergence operations.</param>
+    /// <typeparam name="TColumns">The anonymous type that exposes the configured table columns.</typeparam>
+    /// <returns>
+    /// A builder for annotations on the convergence-container operation.
+    /// Providers validate operation-level annotations and fail closed when an
+    /// annotation cannot be compared safely with live catalog state.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">
+    /// <paramref name="migrationBuilder"/> or <paramref name="columns"/> is null.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// EF Core does not append exactly one table operation for the supplied definition.
+    /// </exception>
+    public static OperationBuilder<SafeMigrationOperation> ConvergeTableFromModel<TColumns>(
+        this MigrationBuilder migrationBuilder,
+        string name,
+        Func<ColumnsBuilder, TColumns> columns,
+        string? schema = null,
+        Action<CreateTableBuilder<TColumns>>? constraints = null,
+        string? comment = null,
+        SafeMigrationPolicy policy = SafeMigrationPolicy.ThrowIfDifferent
+    )
+    {
+        var definition = CaptureTableDefinition(migrationBuilder, name, columns, schema, constraints, comment);
+
+        return AddConvergenceOperations(migrationBuilder, definition, [], policy);
     }
 
     /// <summary>
@@ -92,7 +125,19 @@ public static partial class SafeMigrationBuilderExtensions
                 nameof(indexes));
         }
 
-        _ = migrationBuilder.EnsureTable(
+        _ = AddConvergenceOperations(migrationBuilder, definition, indexSnapshot, policy);
+
+        return migrationBuilder;
+    }
+
+    private static OperationBuilder<SafeMigrationOperation> AddConvergenceOperations(
+        MigrationBuilder migrationBuilder,
+        ExpectedTableDefinition definition,
+        IReadOnlyList<ExpectedIndexDefinition> indexes,
+        SafeMigrationPolicy policy
+    )
+    {
+        var tableOperation = migrationBuilder.EnsureTable(
             definition,
             SafeMigrationTableMode.ConvergenceContainer,
             SafeMigrationPolicy.ExistenceOnly);
@@ -122,24 +167,52 @@ public static partial class SafeMigrationBuilderExtensions
             _ = migrationBuilder.EnsureForeignKey(constraint, policy);
         }
 
-        foreach (var index in indexSnapshot)
+        foreach (var index in indexes)
         {
             _ = migrationBuilder.EnsureIndex(index, policy);
         }
 
-        return migrationBuilder;
+        return tableOperation;
+    }
+
+    private static ExpectedTableDefinition CaptureTableDefinition<TColumns>(
+        MigrationBuilder migrationBuilder,
+        string table,
+        Func<ColumnsBuilder, TColumns> columns,
+        string? schema,
+        Action<CreateTableBuilder<TColumns>>? constraints,
+        string? comment
+    )
+    {
+        ArgumentNullException.ThrowIfNull(migrationBuilder);
+        ArgumentNullException.ThrowIfNull(columns);
+
+        // EF Core remains the authority for provider annotations and argument
+        // validation. SafeMigrations replaces only the resulting operation
+        // after it has captured that complete provider-owned definition.
+        var operationCount = migrationBuilder.Operations.Count;
+        _ = migrationBuilder.CreateTable(table, columns, schema, constraints, comment);
+
+        if (migrationBuilder.Operations.Count != operationCount + 1
+            || migrationBuilder.Operations[^1] is not CreateTableOperation operation)
+        {
+            throw new InvalidOperationException("EF Core did not append exactly one CreateTableOperation.");
+        }
+
+        migrationBuilder.Operations.RemoveAt(operationCount);
+        return SafeMigrationExpectedDefinitionFactory.From(operation);
     }
 
     /// <summary>Drops a table when it exists.</summary>
     /// <param name="migrationBuilder">The EF Core migration builder that receives the operation.</param>
-    /// <param name="table">The table name.</param>
+    /// <param name="name">The table name.</param>
     /// <param name="schema">The schema name, or null for the provider default.</param>
     /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
     public static OperationBuilder<SafeMigrationOperation> DropTableIfExists(
         this MigrationBuilder migrationBuilder,
-        string table,
+        string name,
         string? schema = null
-    ) => Add(migrationBuilder, new DropTableIntent(table, schema), SafeMigrationPolicy.ThrowIfDifferent);
+    ) => Add(migrationBuilder, new DropTableIntent(name, schema), SafeMigrationPolicy.ThrowIfDifferent);
 
     /// <summary>Renames a table when the source exists and the target is free.</summary>
     /// <param name="migrationBuilder">The EF Core migration builder that receives the operation.</param>

@@ -68,6 +68,126 @@ public static partial class SafeMigrationBuilderExtensions
         return EnsureIndex(migrationBuilder, definition, policy);
     }
 
+    /// <summary>
+    /// Captures a single-column EF Core index definition emitted by the
+    /// scaffolder and converts it to an immutable SafeMigrations operation.
+    /// </summary>
+    /// <param name="migrationBuilder">The EF Core migration builder that receives the operation.</param>
+    /// <param name="name">The database object name.</param>
+    /// <param name="table">The table name.</param>
+    /// <param name="column">The index key column.</param>
+    /// <param name="schema">The schema name, or null for the provider default.</param>
+    /// <param name="unique">Whether the index enforces uniqueness.</param>
+    /// <param name="descending">The key direction, or null for the provider default.</param>
+    /// <param name="filter">The index predicate, or null for an unfiltered index.</param>
+    /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="migrationBuilder"/> is null.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// EF Core does not append exactly one index operation for the supplied definition.
+    /// </exception>
+    public static OperationBuilder<SafeMigrationOperation> CreateIndexIfNotExistsFromModel(
+        this MigrationBuilder migrationBuilder,
+        string name,
+        string table,
+        string column,
+        string? schema = null,
+        bool unique = false,
+        bool[]? descending = null,
+        string? filter = null
+    ) => CaptureIndex(
+        migrationBuilder,
+        name,
+        table,
+        [column],
+        schema,
+        unique,
+        descending,
+        filter);
+
+    /// <summary>
+    /// Captures a multi-column EF Core index definition emitted by the
+    /// scaffolder and converts it to an immutable SafeMigrations operation.
+    /// </summary>
+    /// <param name="migrationBuilder">The EF Core migration builder that receives the operation.</param>
+    /// <param name="name">The database object name.</param>
+    /// <param name="table">The table name.</param>
+    /// <param name="columns">The ordered index key columns.</param>
+    /// <param name="schema">The schema name, or null for the provider default.</param>
+    /// <param name="unique">Whether the index enforces uniqueness.</param>
+    /// <param name="descending">The ordered key directions, or null for provider defaults.</param>
+    /// <param name="filter">The index predicate, or null for an unfiltered index.</param>
+    /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
+    /// <exception cref="ArgumentNullException">
+    /// <paramref name="migrationBuilder"/> or <paramref name="columns"/> is null.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// EF Core does not append exactly one index operation for the supplied definition.
+    /// </exception>
+    public static OperationBuilder<SafeMigrationOperation> CreateCompositeIndexIfNotExistsFromModel(
+        this MigrationBuilder migrationBuilder,
+        string name,
+        string table,
+        string[] columns,
+        string? schema = null,
+        bool unique = false,
+        bool[]? descending = null,
+        string? filter = null
+    ) => CaptureIndex(migrationBuilder, name, table, columns, schema, unique, descending, filter);
+
+    private static OperationBuilder<SafeMigrationOperation> CaptureIndex(
+        MigrationBuilder migrationBuilder,
+        string name,
+        string table,
+        string[] columns,
+        string? schema,
+        bool unique,
+        bool[]? descending,
+        string? filter
+    )
+    {
+        ArgumentNullException.ThrowIfNull(migrationBuilder);
+        ArgumentNullException.ThrowIfNull(columns);
+
+        // EF Core remains the authority for provider annotations and argument
+        // validation. SafeMigrations replaces only the resulting operation
+        // after it has captured that complete provider-owned definition.
+        var operationCount = migrationBuilder.Operations.Count;
+        _ = migrationBuilder.CreateIndex(
+            name: name,
+            table: table,
+            columns: columns,
+            schema: schema,
+            unique: unique,
+            descending: descending,
+            filter: filter);
+
+        if (migrationBuilder.Operations.Count != operationCount + 1
+            || migrationBuilder.Operations[^1] is not CreateIndexOperation operation)
+        {
+            throw new InvalidOperationException("EF Core did not append exactly one CreateIndexOperation.");
+        }
+
+        migrationBuilder.Operations.RemoveAt(operationCount);
+
+        var keys = operation.Columns.Select((column, index) => new ExpectedIndexKeyDefinition(
+            column,
+            sortOrder: operation.IsDescending is null
+                ? SafeMigrationIndexSortOrder.ProviderDefault
+                : operation.IsDescending[index]
+                    ? SafeMigrationIndexSortOrder.Descending
+                    : SafeMigrationIndexSortOrder.Ascending));
+
+        var definition = new ExpectedIndexDefinition(
+            operation.Name,
+            operation.Table,
+            keys,
+            operation.Schema,
+            operation.IsUnique,
+            operation.Filter);
+
+        return migrationBuilder.EnsureIndex(definition, SafeMigrationPolicy.ThrowIfDifferent);
+    }
+
     /// <summary>Drops an index when it exists.</summary>
     /// <param name="migrationBuilder">The EF Core migration builder that receives the operation.</param>
     /// <param name="name">The database object name.</param>

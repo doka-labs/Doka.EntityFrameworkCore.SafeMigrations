@@ -65,6 +65,29 @@ ordinary operations, standard baselines inside safe operations, custom index
 SQL, scripts, and transaction-suppression boundaries continue through that
 selected generator.
 
+## Design-time C# generation boundary
+
+SafeMigrations composes EF Core's public design-time service contracts, but the
+exact C# text emitted by EF's migration generators is not a compatibility
+contract. SafeMigrations validates the leading operation call, controlled array
+literals, outer namespace block, and indentation before substituting safe calls
+or file-scoped source. A missing, duplicated, or newly formatted shape stops
+scaffolding instead of emitting ambiguous migration code.
+
+Provider `buildTransitive` assets recognize both official EF tooling package
+layouts: a direct `Microsoft.EntityFrameworkCore.Design` reference and a direct
+`Microsoft.EntityFrameworkCore.Tools` reference whose package contract supplies
+Design transitively. A runtime-only project with neither package remains free
+of design-time attributes and warnings. Package qualification must prove all
+three layouts for both providers; the first two must scaffold safe source, and
+the runtime-only layout must be rejected by EF tooling before source is written.
+
+Every EF Core or EF Tools update must therefore rerun strict and legacy
+scaffolding, generated-source compilation, and the package-only dependency
+matrix. Compilation of SafeMigrations itself is not sufficient evidence because
+an upstream generator can retain the public service API while changing emitted
+source shape.
+
 ## Model fingerprint boundary
 
 The persisted fingerprint uses the versioned

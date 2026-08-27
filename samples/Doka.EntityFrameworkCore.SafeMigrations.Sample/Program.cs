@@ -4,8 +4,10 @@ internal static class Program
 {
     private static void Main()
     {
-        _ = new DbContextOptionsBuilder().UseMySqlSafeMigrations();
-        _ = new DbContextOptionsBuilder().UsePostgreSqlSafeMigrations();
+        _ = new DbContextOptionsBuilder().UseMySqlSafeMigrations(options =>
+            options.UseScaffoldingMode(SafeMigrationScaffoldingMode.LegacyConvergence));
+        _ = new DbContextOptionsBuilder().UsePostgreSqlSafeMigrations(options =>
+            options.UseScaffoldingMode(SafeMigrationScaffoldingMode.LegacyConvergence));
 
         var initialMigrationBuilder = new MigrationBuilder("Doka.Sample.Provider");
         SampleMigrationUsage.BuildUpOperations(initialMigrationBuilder);

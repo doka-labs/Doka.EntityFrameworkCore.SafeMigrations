@@ -39,7 +39,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         _parameterValues = [];
         try
         {
-            var featureFailure = GetUnsupportedFeature(operation.Intent, context.Features, context.ServerVersion);
+            var featureFailure = operation.GetAnnotations().Any()
+                ? "operation_annotation"
+                : GetUnsupportedFeature(operation.Intent, context.Features, context.ServerVersion);
 
             var plan = featureFailure is not null
                 ? Unsupported(featureFailure)

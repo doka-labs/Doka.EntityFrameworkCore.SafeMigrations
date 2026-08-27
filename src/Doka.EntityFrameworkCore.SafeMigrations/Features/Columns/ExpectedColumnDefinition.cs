@@ -5,6 +5,9 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// </summary>
 public sealed class ExpectedColumnDefinition
 {
+    /// <summary>Gets the immutable provider-owned facets captured for this column.</summary>
+    internal IReadOnlyList<SafeMigrationProviderAnnotation> ProviderAnnotations { get; init; } = [];
+
     /// <summary>Initializes a complete expected column definition.</summary>
     /// <param name="name">The database object name.</param>
     /// <param name="clrType">The CLR type used for provider type mapping.</param>

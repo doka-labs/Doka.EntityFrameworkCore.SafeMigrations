@@ -21,6 +21,7 @@ Decision History.
 | [D-005](D-005-bounded-evidence-and-privacy.md) | Bounded catalog work, immutable evidence, fingerprints, and telemetry privacy |
 | [D-006](D-006-package-qualification-and-release.md) | Untagged qualification, protected approval, and exact-byte publication |
 | [D-007](D-007-documentation-and-madr.md) | Shared Doka document standard without a repository-specific ADR toolchain |
+| [D-008](D-008-automatic-safe-migration-scaffolding.md) | Source-frozen automatic strict and legacy-convergence scaffolding through EF design-time services |
 
 ## Authoring and review
 

@@ -1,6 +1,6 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 
-internal sealed class MySqlSafeMigrationsOptionsExtension : IDbContextOptionsExtension
+internal sealed class MySqlSafeMigrationsOptionsExtension : IDbContextOptionsExtension, ISafeMigrationScaffoldingOptions
 {
     private DbContextOptionsExtensionInfo? _info;
 
@@ -8,15 +8,20 @@ internal sealed class MySqlSafeMigrationsOptionsExtension : IDbContextOptionsExt
 
     public Type? CanonicalContextType { get; private init; }
 
+    /// <summary>Gets the mode consumed by the SafeMigrations design-time scaffolder.</summary>
+    public SafeMigrationScaffoldingMode ScaffoldingMode { get; private init; }
+
     public void ApplyServices(
         IServiceCollection services
     ) => services.AddEntityFrameworkDokaMySqlSafeMigrations(CanonicalContextType);
 
     public static MySqlSafeMigrationsOptionsExtension WithCanonicalContext(
-        Type? canonicalContextType
+        Type? canonicalContextType,
+        SafeMigrationScaffoldingMode scaffoldingMode
     ) => new()
     {
         CanonicalContextType = canonicalContextType,
+        ScaffoldingMode = scaffoldingMode,
     };
 
     public void Validate(
@@ -55,6 +60,9 @@ internal sealed class MySqlSafeMigrationsOptionsExtension : IDbContextOptionsExt
         private new MySqlSafeMigrationsOptionsExtension Extension =>
             (MySqlSafeMigrationsOptionsExtension)base.Extension;
 
+        // Scaffolding mode changes generated source only. Excluding it avoids
+        // fragmenting EF's runtime service-provider cache without changing a
+        // runtime service registration.
         public override int GetServiceProviderHashCode() => Extension.CanonicalContextType?.GetHashCode() ?? 0;
 
         public override void PopulateDebugInfo(

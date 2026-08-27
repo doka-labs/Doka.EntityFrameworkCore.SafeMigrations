@@ -2,6 +2,8 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 
 internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 {
+    private const string ValueGenerationStrategyAnnotation = "Doka:MySql:ValueGenerationStrategy";
+
     private string? GetUnsupportedColumnFeature(
         SafeMigrationIntent intent,
         MySqlMigrationFeatureSet features,
@@ -30,6 +32,14 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         if (definitions.Any(definition => !CanRepresentLiteralDefault(definition, serverVersion)))
         {
             return "literal_default_catalog_representation";
+        }
+
+        if (definitions.Any(static definition => definition.ProviderAnnotations.Any(annotation =>
+                !StringComparer.Ordinal.Equals(annotation.Name, ValueGenerationStrategyAnnotation)
+                || annotation.Value is not (MySqlValueGenerationStrategy.None
+                    or MySqlValueGenerationStrategy.AutoIncrement))))
+        {
+            return "provider_column_annotation";
         }
 
         if (definitions.Any(definition =>
@@ -161,6 +171,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             $"COALESCE(c.COLUMN_COMMENT, '') = {Literal(definition.Comment ?? string.Empty)}",
             BuildDefaultMatches("c.COLUMN_DEFAULT", definition.DefaultValue, definition.IsNullable, mapping),
             BuildComputedMatches(definition, isMariaDb),
+            BuildValueGenerationMatches(definition),
         };
 
         if (ordinal is not null)
@@ -171,6 +182,20 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         return $"EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS c "
             + $"WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = {Literal(table)} "
             + $"AND c.COLUMN_NAME = {Literal(definition.Name)} AND {string.Join(" AND ", conditions)})";
+    }
+
+    private static string BuildValueGenerationMatches(
+        ExpectedColumnDefinition definition
+    )
+    {
+        var strategy = definition.ProviderAnnotations
+            .SingleOrDefault(annotation =>
+                StringComparer.Ordinal.Equals(annotation.Name, ValueGenerationStrategyAnnotation))
+            ?.Value as MySqlValueGenerationStrategy?;
+
+        return strategy == MySqlValueGenerationStrategy.AutoIncrement
+            ? "LOCATE('auto_increment', LOWER(c.EXTRA)) > 0"
+            : "LOCATE('auto_increment', LOWER(c.EXTRA)) = 0";
     }
 
     private string BuildCollationMatches(

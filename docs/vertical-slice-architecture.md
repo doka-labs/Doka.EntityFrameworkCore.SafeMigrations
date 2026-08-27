@@ -51,6 +51,13 @@ the core test tree contains `Lifecycle` for provider-neutral cross-slice
 contracts. Those areas verify behavior spanning more than one operation family
 and do not own product behavior.
 
+Design-time scaffolding is a cross-slice composition concern under Core's
+`Scaffolding` folder. It delegates provider-specific C# rendering to EF Core,
+then maps only the reviewed table/index boundaries to existing slice entry
+points. Provider `buildTransitive` assets own discovery. Provider column
+annotation comparison remains in each provider's `Columns` slice; scaffolding
+does not introduce a runtime feature registry or a fourth package.
+
 ## Slice ownership
 
 A feature slice owns all behavior specific to its operation family:

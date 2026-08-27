@@ -1,23 +1,73 @@
-using System;
-using Doka.EntityFrameworkCore.SafeMigrations;
-using Doka.EntityFrameworkCore.SafeMigrations.MySql;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Migrations;
-using Microsoft.Extensions.DependencyInjection;
+const string designTimeReferenceAttributeName =
+    "Microsoft.EntityFrameworkCore.Design.DesignTimeServicesReferenceAttribute";
+
+const string designTimeServicesTypeName = "Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDesignTimeServices, "
+    + "Doka.EntityFrameworkCore.SafeMigrations";
+
+const string providerName = "Doka.EntityFrameworkCore.MySql";
+
+var expectsDesignTimeReference = args switch
+{
+    [] => false,
+    ["--expect-design-reference"] => true,
+    _ => throw new ArgumentException("Usage: PackageConsumer [--expect-design-reference]"),
+};
 
 var migrationBuilder = new MigrationBuilder("PackageConsumer");
 migrationBuilder.EnsureSchemaExists("consumer_schema");
 
-if (migrationBuilder.Operations.Count != 1
-    || migrationBuilder.Operations[0] is not SafeMigrationOperation)
+if (migrationBuilder.Operations is not [SafeMigrationOperation])
 {
     return 1;
 }
 
 _ = new DbContextOptionsBuilder().UseMySqlSafeMigrations();
 
+var designTimeReferences = Assembly
+    .GetExecutingAssembly()
+    .GetCustomAttributesData()
+    .Where(attribute => attribute.AttributeType.FullName == designTimeReferenceAttributeName)
+    .ToArray();
+
+var hasExpectedDesignTimeReference = designTimeReferences is [{ ConstructorArguments.Count: 2 }]
+    && designTimeReferences[0].ConstructorArguments[0].Value is string typeName
+    && designTimeReferences[0].ConstructorArguments[1].Value is string referencedProvider
+    && typeName == designTimeServicesTypeName
+    && referencedProvider == providerName;
+
+if (hasExpectedDesignTimeReference != expectsDesignTimeReference)
+{
+    return 2;
+}
+
 IServiceCollection services = new ServiceCollection();
 services.AddEntityFrameworkDokaMySqlSafeMigrations();
 
-Console.WriteLine("SafeMigrations MySQL/MariaDB package consumer verified.");
+Console.WriteLine(
+    expectsDesignTimeReference
+        ? "SafeMigrations MySQL/MariaDB design-time package consumer verified."
+        : "SafeMigrations MySQL/MariaDB consumer without a design-service attribute verified.");
+
 return 0;
+
+internal sealed class PackageScaffoldingDbContext : DbContext
+{
+    public DbSet<PackageScaffoldingEntity> Entities => Set<PackageScaffoldingEntity>();
+
+    protected override void OnConfiguring(
+        DbContextOptionsBuilder optionsBuilder
+    )
+    {
+        optionsBuilder.UseMySql(
+            "Server=127.0.0.1;User ID=package;Password=package;Database=package;Allow User Variables=true",
+            MySqlServerVersion.MySql(new Version(8, 4, 0)));
+        optionsBuilder.UseMySqlSafeMigrations();
+    }
+}
+
+internal sealed class PackageScaffoldingEntity
+{
+    public int Id { get; set; }
+
+    public string Name { get; set; } = string.Empty;
+}

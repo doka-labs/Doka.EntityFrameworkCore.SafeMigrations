@@ -38,6 +38,16 @@ in [Support and qualification](docs/support-and-qualification.md).
   allowlisted `RepairIfSafe` behavior.
 - Granular `ConvergeTable` baseline for heterogeneous legacy schemas, including
   copied empty or partial tables.
+- EF Core design-time integration that automatically scaffolds strict safe
+  table/index operations by default and object-granular legacy convergence
+  when selected through the provider registration options.
+- Source-frozen `Strict` and `LegacyConvergence` scaffolding modes, including a
+  fail-closed legacy rollback body, analyzer-compatible generated source, and
+  package-transitive design-service discovery for direct EF Design and EF Tools
+  consumers of both provider packages.
+- Immutable provider column-annotation capture, fingerprinting, DDL restoration,
+  and live identity comparison for Doka MySQL/MariaDB `AUTO_INCREMENT` and
+  supported Npgsql PostgreSQL identity strategies.
 - Read-only `ISafeMigrationRunner` preflight and postflight, canonical derived-
   context model guard, SHA-256 model/contract fingerprints, unexpected-object
   inventory, versioned report JSON, packaged JSON Schema, and bounded telemetry.
@@ -71,7 +81,7 @@ in [Support and qualification](docs/support-and-qualification.md).
   publish recovery, repository-signature readback, and verified GitHub Release.
 - Task-oriented API, architecture, support, observability, deployment/recovery,
   failure-code, release-publication, independent verification, and sample guides.
-- Governance, conduct, support and canonical root security policies, seven
+- Governance, conduct, support and canonical root security policies, eight
   implemented ADRs in Doka MADR Enterprise Profile 1.0 on MADR 4.0.0, and a
   complete pinned OpenSSF Best Practices preparation inventory. No badge or
   independent certification is claimed.
@@ -86,6 +96,8 @@ in [Support and qualification](docs/support-and-qualification.md).
 - Replaced Pomelo and generator inheritance with the packaged Doka provider SPI.
 - Replaced annotation-based safe operations and migration-embedded preflight
   with a fail-closed envelope and separate read-only runner.
+- Unknown provider annotations now classify as unsupported before target DDL
+  instead of being silently omitted from a safe expected definition.
 - Changed PostgreSQL integration from subclassing provider internals to
   composition and delegation of ordinary Npgsql operations.
 - Replaced string/JSON default fallbacks with typed expected values and provider

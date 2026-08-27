@@ -113,6 +113,9 @@ fi
 mysql_nuspec="$(unzip -p \
     "$package_dir/Doka.EntityFrameworkCore.SafeMigrations.MySql.$package_version.nupkg" \
     Doka.EntityFrameworkCore.SafeMigrations.MySql.nuspec)"
+mysql_entries="$(unzip -Z1 \
+    "$package_dir/Doka.EntityFrameworkCore.SafeMigrations.MySql.$package_version.nupkg")"
+grep -Fxq 'buildTransitive/Doka.EntityFrameworkCore.SafeMigrations.MySql.props' <<<"$mysql_entries"
 grep -Fq '<dependency id="Doka.EntityFrameworkCore.MySql"' <<<"$mysql_nuspec"
 grep -Fq '<dependency id="Doka.EntityFrameworkCore.SafeMigrations"' <<<"$mysql_nuspec"
 if grep -Eq '<dependency id="(Npgsql\.EntityFrameworkCore\.PostgreSQL|Doka\.EntityFrameworkCore\.SafeMigrations\.PostgreSql)"' \
@@ -134,6 +137,9 @@ fi
 postgres_nuspec="$(unzip -p \
     "$package_dir/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.$package_version.nupkg" \
     Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.nuspec)"
+postgres_entries="$(unzip -Z1 \
+    "$package_dir/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.$package_version.nupkg")"
+grep -Fxq 'buildTransitive/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.props' <<<"$postgres_entries"
 grep -Fq '<dependency id="Npgsql.EntityFrameworkCore.PostgreSQL"' <<<"$postgres_nuspec"
 grep -Fq '<dependency id="Doka.EntityFrameworkCore.SafeMigrations"' <<<"$postgres_nuspec"
 if grep -Eq '<dependency id="(Doka\.EntityFrameworkCore\.MySql|Doka\.EntityFrameworkCore\.SafeMigrations\.MySql)"' \

@@ -68,6 +68,9 @@ internal static partial class SafeMigrationStandardOperationFactory
         };
 
         ApplyDefault(operation, target.DefaultValue, renderExpression);
+        ApplyProviderAnnotations(operation, target.ProviderAnnotations);
+        ApplyProviderAnnotations(operation.OldColumn, intent.OldDefinition?.ProviderAnnotations ?? []);
+
         return operation;
     }
 
@@ -103,7 +106,19 @@ internal static partial class SafeMigrationStandardOperationFactory
         };
 
         ApplyDefault(operation, definition.DefaultValue, renderExpression);
+        ApplyProviderAnnotations(operation, definition.ProviderAnnotations);
         return operation;
+    }
+
+    private static void ApplyProviderAnnotations(
+        MigrationOperation operation,
+        IReadOnlyList<SafeMigrationProviderAnnotation> annotations
+    )
+    {
+        foreach (var annotation in annotations)
+        {
+            operation[annotation.Name] = annotation.CreateValueSnapshot();
+        }
     }
 
     private static void ApplyDefault(

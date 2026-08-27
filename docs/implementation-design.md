@@ -150,6 +150,36 @@ engine families retain negative value-, operator-, and identifier-drift tests.
 
 ## Table modes and convergence
 
+EF Core's design-time service pipeline supplies the provider model differ and
+C# migration generator. SafeMigrations replaces only the public C# generator
+services at design time, delegates operation rendering to EF Core, validates
+the expected generated call shape, and substitutes the safe table/index method
+name. This preserves provider-rendered arguments and annotations without
+forking EF Core's generator implementation. An unexpected upstream output
+shape stops scaffolding instead of producing ambiguous source.
+
+Provider package `buildTransitive` assets add EF's
+`DesignTimeServicesReferenceAttribute` to a consuming startup assembly that
+directly references the EF Design package or the EF Tools package that supplies
+Design transitively. A project with neither package is intentionally treated as
+runtime-only and receives no design-service attribute or warning. Runtime
+service-provider identity excludes scaffolding mode because the mode changes
+generated source only and does not alter runtime service registration. The
+selected mode is read from that context's options by the design-time service
+provider and becomes literal method calls in the generated migration.
+
+`Strict` rewrites table creation, index creation, and table removal.
+`LegacyConvergence` rewrites the same forward table/index operations but
+replaces `Down` with a deterministic exception: adopted legacy objects have no
+provable destructive inverse. Other EF operations are delegated unchanged so
+their policy cannot be guessed by the scaffolder.
+
+The typed table callback creates EF operations in memory and immediately
+converts them to immutable expected definitions. Provider column annotations
+are snapshotted, fingerprinted, restored to baseline DDL, and compared through
+the provider catalog. Unsupported annotation value types fail during capture;
+unmodeled operation annotations classify unsupported before DDL.
+
 `StrictDefinition` compares the complete owned table shape: ordered columns,
 primary key, unique constraints, checks, and foreign keys. Unexpected owned
 members reject the strict operation.
@@ -332,7 +362,8 @@ Release qualification covers:
 - normal, idempotent, and no-transaction scripts;
 - `dotnet ef database update` and Migration Bundle;
 - external internal-service-provider registration;
-- a package-only consumer with no ProjectReference;
+- package-only consumers with no ProjectReference for direct Design,
+  Tools-only, and runtime-only dependency layouts;
 - deterministic pairwise legacy states;
 - every supported PostgreSQL major, every qualified Doka engine profile, and
   locked dependency graph;

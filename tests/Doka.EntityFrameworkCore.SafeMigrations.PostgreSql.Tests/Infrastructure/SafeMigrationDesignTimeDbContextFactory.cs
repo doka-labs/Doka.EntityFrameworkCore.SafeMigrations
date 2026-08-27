@@ -8,12 +8,6 @@ public sealed class SafeMigrationDesignTimeDbContextFactory : IDesignTimeDbConte
     {
         ArgumentNullException.ThrowIfNull(args);
 
-        var connectionString = Environment.GetEnvironmentVariable("SAFE_MIGRATIONS_CONNECTION_STRING");
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            throw new InvalidOperationException("SAFE_MIGRATIONS_CONNECTION_STRING is required for EF tooling.");
-        }
-
-        return new SafeMigrationDbContext(connectionString);
+        return new SafeMigrationDbContext(PostgreSqlDesignTimeContextConfiguration.ConnectionString());
     }
 }

@@ -32,7 +32,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     {
         ArgumentNullException.ThrowIfNull(operation);
 
-        var unsupported = GetUnsupportedFeature(operation.Intent);
+        var unsupported = operation.GetAnnotations().Any()
+            ? "operation_annotation"
+            : GetUnsupportedFeature(operation.Intent);
+
         if (unsupported is not null)
         {
             return Unsupported(unsupported);

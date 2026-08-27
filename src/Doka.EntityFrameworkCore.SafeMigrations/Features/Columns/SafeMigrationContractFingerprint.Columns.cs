@@ -67,6 +67,13 @@ public static partial class SafeMigrationContractFingerprint
         writer.Add(definition.ComputedColumnSql);
         SafeMigrationSqlExpressionContract.Write(writer, definition.ComputedExpression);
         writer.Add(definition.IsStored);
+
+        writer.Add(definition.ProviderAnnotations.Count);
+        foreach (var annotation in definition.ProviderAnnotations)
+        {
+            writer.Add(annotation.Name);
+            writer.Add(annotation.Fingerprint);
+        }
     }
 
     private static void WriteCollation(

@@ -19,5 +19,6 @@ global using Microsoft.EntityFrameworkCore.Migrations.Operations;
 global using Microsoft.EntityFrameworkCore.Storage;
 global using Microsoft.Extensions.DependencyInjection;
 global using Npgsql;
+global using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 global using Testcontainers.PostgreSql;
 global using Xunit;

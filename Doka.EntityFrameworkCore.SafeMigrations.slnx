@@ -13,6 +13,12 @@
   <Folder Name="/Config/benchmarks/">
     <File Path="benchmarks/Directory.Build.props" />
   </Folder>
+  <Folder Name="/Config/eng/">
+    <File Path="eng/Directory.Build.props" />
+  </Folder>
+  <Folder Name="/Config/eng/package-consumer/">
+    <File Path="eng/package-consumer/Directory.Build.props" />
+  </Folder>
   <Folder Name="/Config/samples/">
     <File Path="samples/Directory.Build.props" />
   </Folder>
@@ -21,6 +27,12 @@
   </Folder>
   <Folder Name="/Config/tests/">
     <File Path="tests/Directory.Build.props" />
+  </Folder>
+  <Folder Name="/eng/package-consumer/MySQL-MariaDB/">
+    <Project Path="eng/package-consumer/MySql/Doka.EntityFrameworkCore.SafeMigrations.MySql.PackageConsumer.csproj" />
+  </Folder>
+  <Folder Name="/eng/package-consumer/PostgreSQL/">
+    <Project Path="eng/package-consumer/PostgreSql/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.PackageConsumer.csproj" />
   </Folder>
   <Folder Name="/benchmarks/Core/">
     <Project Path="benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks.csproj" />

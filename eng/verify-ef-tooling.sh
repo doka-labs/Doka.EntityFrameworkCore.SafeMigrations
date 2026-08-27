@@ -134,6 +134,97 @@ dotnet build "${project}" \
 dotnet tool restore --tool-manifest "${repository_root}/.config/dotnet-tools.json" \
   --disable-parallel
 export SAFE_MIGRATIONS_CONNECTION_STRING="${cli_connection}"
+
+project_directory="$(dirname "${project}")"
+strict_output="ScaffoldingProbes/${engine}/Strict"
+legacy_output="ScaffoldingProbes/${engine}/Legacy"
+
+dotnet ef migrations add StrictScaffoldingProbe \
+  --project "${project}" \
+  --context StrictSafeMigrationScaffoldingDbContext \
+  --output-dir "${strict_output}" \
+  --configuration Release \
+  --no-build
+dotnet ef migrations add LegacyScaffoldingProbe \
+  --project "${project}" \
+  --context LegacySafeMigrationScaffoldingDbContext \
+  --output-dir "${legacy_output}" \
+  --configuration Release \
+  --no-build
+
+strict_migration="$(find "${project_directory}/${strict_output}" -type f -name '*_StrictScaffoldingProbe.cs' -print -quit)"
+legacy_migration="$(find "${project_directory}/${legacy_output}" -type f -name '*_LegacyScaffoldingProbe.cs' -print -quit)"
+
+if [[ -z "${strict_migration}" || -z "${legacy_migration}" ]]; then
+  echo "EF tooling did not create both SafeMigrations scaffolding probes." >&2
+  exit 1
+fi
+
+for expected in \
+  'migrationBuilder.CreateTableIfNotExists(' \
+  'migrationBuilder.CreateIndexIfNotExistsFromModel(' \
+  'migrationBuilder.CreateCompositeIndexIfNotExistsFromModel(' \
+  'migrationBuilder.DropTableIfExists('; do
+  if ! grep -Fq "${expected}" "${strict_migration}"; then
+    echo "Strict scaffolding output is missing: ${expected}" >&2
+    exit 1
+  fi
+done
+
+for expected in \
+  'migrationBuilder.ConvergeTableFromModel(' \
+  'migrationBuilder.CreateIndexIfNotExistsFromModel(' \
+  'migrationBuilder.CreateCompositeIndexIfNotExistsFromModel(' \
+  'throw new global::System.NotSupportedException('; do
+  if ! grep -Fq "${expected}" "${legacy_migration}"; then
+    echo "Legacy scaffolding output is missing: ${expected}" >&2
+    exit 1
+  fi
+done
+
+if grep -Fq 'migrationBuilder.CreateTable(' "${strict_migration}"; then
+  echo "Strict scaffolding output contains an unsafe CreateTable call." >&2
+  exit 1
+fi
+
+if grep -Fq 'migrationBuilder.DropTable' "${legacy_migration}"; then
+  echo "Legacy scaffolding output contains a destructive rollback." >&2
+  exit 1
+fi
+
+if [[ "${engine}" == "postgres" ]]; then
+  identity_annotation='Npgsql:ValueGenerationStrategy'
+  identity_strategy='NpgsqlValueGenerationStrategy.IdentityByDefaultColumn'
+else
+  identity_annotation='Doka:MySql:ValueGenerationStrategy'
+  identity_strategy='MySqlValueGenerationStrategy.AutoIncrement'
+fi
+
+for migration in "${strict_migration}" "${legacy_migration}"; do
+  if ! grep -Eq '^namespace .+;$' "${migration}"; then
+    echo "Scaffolding output does not use an analyzer-compatible file-scoped namespace." >&2
+    exit 1
+  fi
+
+  if grep -Fq 'new[] {' "${migration}"; then
+    echo "Scaffolding output contains an analyzer-incompatible constant array argument." >&2
+    exit 1
+  fi
+
+  if ! grep -Fq "${identity_annotation}" "${migration}"; then
+    echo "Scaffolding output is missing provider identity annotation: ${identity_annotation}" >&2
+    exit 1
+  fi
+
+  if ! grep -Fq "${identity_strategy}" "${migration}"; then
+    echo "Scaffolding output is missing provider identity strategy: ${identity_strategy}" >&2
+    exit 1
+  fi
+done
+
+dotnet build "${project}" \
+  --configuration Release --no-restore --disable-build-servers -m:1 /nodeReuse:false
+
 dotnet ef database update --project "${project}" --context SafeMigrationDbContext \
   --configuration Release --no-build
 dotnet ef database update --project "${project}" --context SafeMigrationDbContext \

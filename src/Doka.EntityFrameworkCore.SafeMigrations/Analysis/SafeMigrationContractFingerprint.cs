@@ -8,7 +8,8 @@ public static partial class SafeMigrationContractFingerprint
 {
     /// <summary>Creates the lowercase contract fingerprint.</summary>
     /// <remarks>
-    /// Safe operations contribute their ordered intents, definitions, and policies.
+    /// Safe operations contribute their ordered intents, definitions, policies,
+    /// and operation annotations.
     /// Ordinary provider operations contribute only their CLR type name, not their
     /// properties or SQL. Use an independent artifact digest to bind their full content.
     /// </remarks>
@@ -35,6 +36,14 @@ public static partial class SafeMigrationContractFingerprint
                 writer.Add("safe");
                 writer.Add((int)safeOperation.Policy);
                 WriteIntent(writer, safeOperation.Intent);
+
+                var annotations = SafeMigrationProviderAnnotation.Capture(safeOperation);
+                writer.Add(annotations.Count);
+                foreach (var annotation in annotations)
+                {
+                    writer.Add(annotation.Name);
+                    writer.Add(annotation.Fingerprint);
+                }
             }
             else
             {

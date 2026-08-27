@@ -9,7 +9,7 @@ scope: "Convergence of heterogeneous legacy schemas into one canonical Core migr
 supersedes: []
 superseded-by: []
 amends: []
-amended-by: []
+amended-by: [D-008]
 madr-version: "4.0.0"
 doka-profile-version: "1.0"
 ---
@@ -100,8 +100,9 @@ inverse: recovery uses an explicit forward fix or a tested restore.
   automatically owned or destructively synchronized.
 - Bad, because conflicting definitions and incompatible existing rows require
   a reviewed transformation; a safe tool cannot infer their business meaning.
-- Bad, because authors must specify expected facets, ordering, and ownership
-  and maintain a canonical target independently of the legacy starting states.
+- Bad, because authors must review expected facets, ordering, and ownership in
+  the generated migration and maintain a canonical target independently of the
+  legacy starting states.
 
 ### Confirmation
 
@@ -162,6 +163,10 @@ D-001 defines package ownership; D-004 defines when analysis is trustworthy
 and why runtime guards and postflight are still needed. This record does not
 claim that preflight alone freezes a database.
 
+D-008 automates construction of this explicit contract from EF Core's current
+model. It changes authoring mechanics, not catalog ownership, comparison, or
+the requirement to review the generated migration.
+
 A future explicit drop or rename in the shared path is still possible when
 authored and reviewed as such. Preserving unknown objects means that
 convergence does not infer destructive cleanup; it does not mean all explicit
@@ -184,6 +189,7 @@ destructive migrations are silently turned into no-ops.
 - 2026-08-26: Maintainer designated @doka-labs/core-maintainers as the informed audience.
 - 2026-08-26: Status changed from proposed to accepted. Dominic Kalkbrenner confirmed the recorded decision and its existing implementation.
 - 2026-08-26: Status changed from accepted to implemented. Explicit convergence, canonical-context ownership, and model guards are implemented and covered by the referenced Core and provider lifecycle tests.
+- 2026-08-27: D-008 amended authoring ergonomics with source-frozen automatic scaffolding while retaining this record's explicit generated contract.
 
 ### Implementation References
 

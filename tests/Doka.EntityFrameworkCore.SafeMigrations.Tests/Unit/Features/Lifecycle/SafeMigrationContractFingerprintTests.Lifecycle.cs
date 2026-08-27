@@ -79,4 +79,23 @@ public sealed partial class SafeMigrationContractFingerprintTests
             SafeMigrationContractFingerprint.Create([new SqlOperation { Sql = "SELECT 1" }]),
             SafeMigrationContractFingerprint.Create([new AddColumnOperation()]));
     }
+
+    [Fact]
+    public void Fingerprint_BindsSafeOperationAnnotations()
+    {
+        var first = new SafeMigrationOperation(
+            new EnsureSchemaIntent("app"),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var second = new SafeMigrationOperation(
+            new EnsureSchemaIntent("app"),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        first["Test:Facet"] = "first";
+        second["Test:Facet"] = "second";
+
+        Assert.NotEqual(
+            SafeMigrationContractFingerprint.Create([first]),
+            SafeMigrationContractFingerprint.Create([second]));
+    }
 }

@@ -53,7 +53,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
                 "safe_catalog_plan_capture");
         }
 
-        var baseline = RenderBaseline(operation.Intent, runtimePlan, context);
+        var baseline = RenderBaseline(operation, runtimePlan, context);
         var baselineCommand = GetSingleBaselineCommand(baseline);
         var baselineFragments = GetBaselineFragments(baselineCommand);
         var defaultSuppression = baselineCommand.TransactionSuppressed;
@@ -244,7 +244,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         + "DROP TEMPORARY TABLE IF EXISTS `__doka_sm_assert`;";
 
     private IReadOnlyList<MySqlMigrationCommandSpec> RenderBaseline(
-        SafeMigrationIntent intent,
+        SafeMigrationOperation operation,
         MySqlSafeMigrationRuntimePlan runtimePlan,
         MySqlMigrationOperationContext context
     )
@@ -254,7 +254,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             return [Command("DO 0;", transactionSuppressed: true)];
         }
 
-        if (intent is EnsureIndexIntent index
+        if (operation.Intent is EnsureIndexIntent index
             && (index.Definition.Keys.Any(static key =>
                     key.Expression is not null || key.StructuredExpression is not null || key.PrefixLength is not null)
                 || index.Definition.Method is not null))
@@ -262,11 +262,12 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             return [Command(BuildCustomCreateIndexSql(index.Definition), transactionSuppressed: true)];
         }
 
-        return context.RenderStandardOperation(
-            SafeMigrationStandardOperationFactory.Create(
-                intent,
-                _expressionRenderer.Render,
-                static collation => collation.Schema is null ? collation.Name : null));
+        var standardOperation = SafeMigrationStandardOperationFactory.Create(
+            operation.Intent,
+            _expressionRenderer.Render,
+            static collation => collation.Schema is null ? collation.Name : null);
+
+        return context.RenderStandardOperation(standardOperation);
     }
 
     private static string BuildActionAssignment(

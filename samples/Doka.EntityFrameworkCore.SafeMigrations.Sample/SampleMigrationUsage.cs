@@ -2,63 +2,70 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Sample;
 
 internal static class SampleMigrationUsage
 {
+    /// <summary>
+    /// Builds an initial legacy-convergence migration that can repair incomplete
+    /// table shapes across existing application instances.
+    /// </summary>
+    /// <param name="migrationBuilder">The migration builder that receives the operations.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="migrationBuilder"/> is null.</exception>
     public static void BuildUpOperations(
         MigrationBuilder migrationBuilder
     )
     {
         ArgumentNullException.ThrowIfNull(migrationBuilder);
 
-        var users = new ExpectedTableDefinition(
+        migrationBuilder.ConvergeTableFromModel(
             "users",
-            [
-                new ExpectedColumnDefinition("id", typeof(Guid), isNullable: false),
-                new ExpectedColumnDefinition("email", typeof(string), isNullable: false, maxLength: 320),
-                new ExpectedColumnDefinition("display_name", typeof(string), isNullable: true, maxLength: 200),
-            ],
-            primaryKey: new ExpectedPrimaryKeyDefinition("pk_users", "users", ["id"]),
-            uniqueConstraints: [new ExpectedUniqueConstraintDefinition("ux_users_email", "users", ["email"]),]);
+            table => new
+            {
+                id = table.Column<Guid>(nullable: false),
+                email = table.Column<string>(maxLength: 320, nullable: false),
+                display_name = table.Column<string>(maxLength: 200, nullable: true),
+            },
+            constraints: table =>
+            {
+                table.PrimaryKey("pk_users", value => value.id);
+                table.UniqueConstraint("ux_users_email", value => value.email);
+            });
 
-        migrationBuilder.ConvergeTable(users);
-
-        var orders = new ExpectedTableDefinition(
+        migrationBuilder.ConvergeTableFromModel(
             "orders",
-            [
-                new ExpectedColumnDefinition("id", typeof(Guid), isNullable: false),
-                new ExpectedColumnDefinition("user_id", typeof(Guid), isNullable: false),
-                new ExpectedColumnDefinition("total", typeof(decimal), isNullable: false, precision: 18, scale: 2),
-            ],
-            primaryKey: new ExpectedPrimaryKeyDefinition("pk_orders", "orders", ["id"]),
-            checkConstraints:
-            [
-                ExpectedCheckConstraintDefinition.FromExpression(
-                    "ck_orders_total_non_negative",
-                    "orders",
-                    SafeMigrationSql.Binary(
-                        SafeMigrationSql.Identifier("total"),
-                        SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
-                        SafeMigrationSql.Literal(0))),
-            ],
-            foreignKeys:
-            [
-                new ExpectedForeignKeyDefinition(
+            table => new
+            {
+                id = table.Column<Guid>(nullable: false),
+                user_id = table.Column<Guid>(nullable: false),
+                total = table.Column<decimal>(precision: 18, scale: 2, nullable: false),
+            },
+            constraints: table =>
+            {
+                table.PrimaryKey("pk_orders", value => value.id);
+                table.ForeignKey(
                     "fk_orders_users_user_id",
-                    "orders",
-                    ["user_id"],
-                    "users",
-                    ["id"],
-                    onDelete: ReferentialAction.Cascade),
-            ]);
+                    value => value.user_id,
+                    principalTable: "users",
+                    principalColumn: "id",
+                    onDelete: ReferentialAction.Cascade);
+            });
 
-        migrationBuilder.ConvergeTable(
-            orders,
-            [
-                new ExpectedIndexDefinition(
-                    "ix_orders_user_id",
-                    "orders",
-                    [new ExpectedIndexKeyDefinition(column: "user_id")]),
-            ]);
+        migrationBuilder.EnsureCheckConstraint(
+            ExpectedCheckConstraintDefinition.FromExpression(
+                "ck_orders_total_non_negative",
+                "orders",
+                SafeMigrationSql.Binary(
+                    SafeMigrationSql.Identifier("total"),
+                    SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
+                    SafeMigrationSql.Literal(0))),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        migrationBuilder.CreateIndexIfNotExists(
+            "ix_orders_user_id",
+            "orders",
+            ["user_id"]);
     }
 
+    /// <summary>Builds representative PostgreSQL maintenance operations.</summary>
+    /// <param name="migrationBuilder">The migration builder that receives the operations.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="migrationBuilder"/> is null.</exception>
     public static void BuildPostgreSqlMaintenanceOperations(
         MigrationBuilder migrationBuilder
     )

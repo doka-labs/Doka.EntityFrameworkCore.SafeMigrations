@@ -205,6 +205,16 @@ formatter for layout rules that Roslyn cannot represent.
 4. builds and runs an isolated consumer using packages only;
 5. emits sorted SHA-256 checksums.
 
+The two package-consumer fixtures are normal Solution projects in local
+`Source` mode so Rider loads their complete C# and MSBuild models. That mode
+uses the matching provider `ProjectReference` and participates in locked
+Solution restore, formatting, and build gates. Package qualification copies
+the fixtures into a temporary root and explicitly selects `Package` mode. That
+mode removes every `ProjectReference`, consumes the generated packages, and
+fails if the restored asset graph contains a project dependency. The local IDE
+path therefore remains maintainable without weakening package-boundary
+evidence.
+
 The Microsoft SBOM Tool binary is downloaded at version 4.1.5 and verified
 against the platform-specific release digest before execution. The generated
 SPDX 2.2 manifest must validate all six packages plus the checksum file and

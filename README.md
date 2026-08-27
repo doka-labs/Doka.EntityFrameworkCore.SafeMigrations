@@ -135,6 +135,71 @@ applications with a custom migrations generator must compose it explicitly:
 options.UsePostgreSqlSafeMigrations<CustomNpgsqlMigrationsSqlGenerator, CoreDbContext>();
 ```
 
+## Automatic safe migration scaffolding
+
+SafeMigrations integrates with EF Core's design-time service pipeline. With the
+normal direct `Microsoft.EntityFrameworkCore.Design` reference used by
+`dotnet ef`, or a direct `Microsoft.EntityFrameworkCore.Tools` reference used
+by Visual Studio's Package Manager Console, migration scaffolding automatically
+writes safe table and index calls. The Tools package supplies EF Design
+transitively; SafeMigrations recognizes both official package layouts. Do not
+copy a generated `CreateTable` body into `ExpectedTableDefinition` by hand.
+
+A runtime-only project may reference a SafeMigrations provider without either
+design-time package. It builds without a design-service attribute or warning;
+EF's tooling rejects scaffolding until a supported design-time package is added.
+
+The default is `Strict`. A scaffolded table becomes
+`CreateTableIfNotExists`, its indexes become the matching safe single- or
+multi-column helpers, and its rollback uses `DropTableIfExists`:
+
+```csharp
+options.UseMySqlSafeMigrations();
+// or: options.UsePostgreSqlSafeMigrations();
+```
+
+For each migration that deliberately adopts heterogeneous legacy
+installations, select `LegacyConvergence` before scaffolding:
+
+```csharp
+options.UseMySqlSafeMigrations(safe =>
+    safe.UseScaffoldingMode(SafeMigrationScaffoldingMode.LegacyConvergence));
+```
+
+or:
+
+```csharp
+options.UsePostgreSqlSafeMigrations(safe =>
+    safe.UseScaffoldingMode(SafeMigrationScaffoldingMode.LegacyConvergence));
+```
+
+Then create and review the migration normally:
+
+```bash
+dotnet ef migrations add CoreLegacyConvergence
+```
+
+The generated `Up` method uses `ConvergeTableFromModel` plus safe index
+helpers. Its `Down` method throws before DDL because SafeMigrations cannot know
+which objects predated that migration. After the legacy baseline sequence has
+been scaffolded, return registration to the no-argument strict default for
+newly created tables. The selected behavior is frozen in each generated C#
+migration; changing the option never reinterprets an existing migration.
+
+Automatic rewriting is deliberately bounded to scaffolded `CreateTable`,
+`CreateIndex`, and `DropTable` operations. Other EF operations remain ordinary
+EF migration operations. When a later migration needs catalog-aware idempotent
+handling for a column, constraint, rename, or schema operation, use the
+corresponding SafeMigrations builder API and review the resulting contract.
+This boundary prevents the design-time layer from silently assigning policies
+to operations whose repair or ownership semantics require an explicit choice.
+
+Provider identity annotations on scaffolded columns are captured immutably and
+participate in fingerprints, live-catalog comparison, and final DDL. This
+preserves MySQL/MariaDB `AUTO_INCREMENT` and PostgreSQL identity semantics.
+An operation-level provider annotation that SafeMigrations cannot compare is
+classified `Unsupported` before target DDL instead of being ignored.
+
 ## Policies
 
 Preflight is not a migration policy. It is a separate read-only runner outside
@@ -151,43 +216,18 @@ baseline. It is not a complete table-definition check.
 
 ## Heterogeneous legacy convergence
 
-`ConvergeTable` solves the case where one instance has no table, another has an
-empty copied table, and a third has only some columns or constraints. It emits
-one existence-only table-container operation followed by granular operations
-for every owned column, constraint, and supplied index. Those children use the
-selected policy, which defaults to `ThrowIfDifferent`; selecting another policy
-does not omit the child operations.
+The automatically scaffolded `ConvergeTableFromModel` call solves the case
+where one instance has no table, another has an empty copied table, and a third
+has only some columns or constraints. It snapshots EF's typed table definition
+and emits one existence-only table-container operation followed by granular
+operations for every owned column and constraint. Scaffolded indexes follow as
+their own safe operations. Those children use `ThrowIfDifferent`; the table
+container alone never hides missing children.
 
-```csharp
-protected override void Up(MigrationBuilder migrationBuilder)
-{
-    var users = new ExpectedTableDefinition(
-        "users",
-        [
-            new ExpectedColumnDefinition("id", typeof(Guid), isNullable: false),
-            new ExpectedColumnDefinition(
-                "email",
-                typeof(string),
-                isNullable: false,
-                maxLength: 320),
-            new ExpectedColumnDefinition(
-                "display_name",
-                typeof(string),
-                isNullable: true,
-                maxLength: 200),
-        ],
-        primaryKey: new ExpectedPrimaryKeyDefinition("pk_users", "users", ["id"]),
-        uniqueConstraints:
-        [
-            new ExpectedUniqueConstraintDefinition(
-                "uq_users_email",
-                "users",
-                ["email"]),
-        ]);
-
-    migrationBuilder.ConvergeTable(users);
-}
-```
+`ExpectedTableDefinition` and `ConvergeTable` remain available for advanced
+hand-authored contracts, for example when a reviewed migration needs a policy
+or expected definition that cannot be inferred from the current EF model. They
+are no longer required boilerplate for the normal first convergence migration.
 
 For an existing table, missing nullable or default-bearing columns can be
 added. Unsafe `NOT NULL` additions, conflicting definitions, duplicate unique
@@ -248,9 +288,9 @@ binds each contract's fingerprint to the same deployment artifact and target.
 Reports include provider and engine identity, model and operation-contract
 SHA-256 fingerprints, ordered assessments, preserved unexpected objects, and
 stable codes. The contract fingerprint covers safe intents, definitions,
-policies, and order; ordinary provider operations contribute only their CLR
-type, not their SQL or other properties. Retain the immutable artifact digest
-and independent review for those operations. Serialize with
+policies, operation annotations, and order; ordinary provider operations
+contribute only their CLR type, not their SQL or other properties. Retain the
+immutable artifact digest and independent review for those operations. Serialize with
 `SafeMigrationReportJson`; the package includes
 `schemas/safe-migration-run-report-v1.schema.json`.
 

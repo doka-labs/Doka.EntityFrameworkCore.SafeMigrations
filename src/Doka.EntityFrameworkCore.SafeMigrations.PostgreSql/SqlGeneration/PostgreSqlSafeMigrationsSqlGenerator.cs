@@ -52,7 +52,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             }
 
             var runtimePlan = _catalogSqlBuilder.Build(safeOperation);
-            var baseline = RenderBaseline(safeOperation.Intent, runtimePlan, model, options);
+            var baseline = RenderBaseline(safeOperation, runtimePlan, model, options);
             if (baseline.Any(static command => command.TransactionSuppressed))
             {
                 throw new NotSupportedException(
@@ -68,7 +68,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
     }
 
     private IReadOnlyList<MigrationCommand> RenderBaseline(
-        SafeMigrationIntent intent,
+        SafeMigrationOperation operation,
         PostgreSqlSafeMigrationRuntimePlan runtimePlan,
         IModel? model,
         MigrationsSqlGenerationOptions options
@@ -79,20 +79,20 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             return [];
         }
 
-        if (intent is EnsureIndexIntent index
+        if (operation.Intent is EnsureIndexIntent index
             && RequiresCustomIndexSql(index.Definition))
         {
-            var operation = new SqlOperation { Sql = BuildCustomCreateIndexSql(index.Definition) };
-            return _baselineGenerator.Generate([operation], model, options);
+            var sqlOperation = new SqlOperation { Sql = BuildCustomCreateIndexSql(index.Definition) };
+            return _baselineGenerator.Generate([sqlOperation], model, options);
         }
 
         var standardOperation = SafeMigrationStandardOperationFactory.Create(
-            intent,
+            operation.Intent,
             _expressionRenderer.Render,
             static collation => collation.Schema is null ? collation.Name : null);
 
         var operations = new List<MigrationOperation> { standardOperation };
-        foreach (var (table, schema, definition) in QualifiedColumnCollations(intent))
+        foreach (var (table, schema, definition) in QualifiedColumnCollations(operation.Intent))
         {
             operations.Add(
                 new SqlOperation
@@ -142,6 +142,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
                 precision: definition.Precision,
                 scale: definition.Scale)
             ?? throw new NotSupportedException($"PostgreSQL has no type mapping for column '{definition.Name}'.");
+
         var storeType = definition.StoreType ?? mapping.StoreType;
 
         return "ALTER TABLE "

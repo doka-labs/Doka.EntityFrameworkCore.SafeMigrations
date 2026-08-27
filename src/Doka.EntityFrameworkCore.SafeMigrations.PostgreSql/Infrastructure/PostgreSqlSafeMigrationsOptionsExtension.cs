@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 
-internal sealed class PostgreSqlSafeMigrationsOptionsExtension : IDbContextOptionsExtension
+internal sealed class PostgreSqlSafeMigrationsOptionsExtension
+    : IDbContextOptionsExtension, ISafeMigrationScaffoldingOptions
 {
     private DbContextOptionsExtensionInfo? _info;
 
@@ -10,17 +11,22 @@ internal sealed class PostgreSqlSafeMigrationsOptionsExtension : IDbContextOptio
 
     public Type? CanonicalContextType { get; private init; }
 
+    /// <summary>Gets the mode consumed by the SafeMigrations design-time scaffolder.</summary>
+    public SafeMigrationScaffoldingMode ScaffoldingMode { get; private init; }
+
     public void ApplyServices(
         IServiceCollection services
     ) => services.AddPostgreSqlSafeMigrations(BaselineGeneratorType, CanonicalContextType);
 
     public static PostgreSqlSafeMigrationsOptionsExtension WithConfiguration(
         Type baselineGeneratorType,
-        Type? canonicalContextType
+        Type? canonicalContextType,
+        SafeMigrationScaffoldingMode scaffoldingMode
     ) => new()
     {
         BaselineGeneratorType = baselineGeneratorType,
         CanonicalContextType = canonicalContextType,
+        ScaffoldingMode = scaffoldingMode,
     };
 
     public void Validate(
@@ -52,6 +58,9 @@ internal sealed class PostgreSqlSafeMigrationsOptionsExtension : IDbContextOptio
         private new PostgreSqlSafeMigrationsOptionsExtension Extension =>
             (PostgreSqlSafeMigrationsOptionsExtension)base.Extension;
 
+        // Scaffolding mode changes generated source only. Excluding it avoids
+        // fragmenting EF's runtime service-provider cache without changing a
+        // runtime service registration.
         public override int GetServiceProviderHashCode() => HashCode.Combine(
             Extension.BaselineGeneratorType,
             Extension.CanonicalContextType);

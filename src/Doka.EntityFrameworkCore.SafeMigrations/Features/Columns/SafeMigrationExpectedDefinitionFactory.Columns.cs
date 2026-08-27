@@ -2,6 +2,9 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 internal static partial class SafeMigrationExpectedDefinitionFactory
 {
+    /// <summary>Captures an immutable expected column definition from an EF operation.</summary>
+    /// <param name="operation">The EF Core column operation to snapshot.</param>
+    /// <returns>The complete SafeMigrations column definition.</returns>
     public static ExpectedColumnDefinition From(
         ColumnOperation operation
     )
@@ -23,7 +26,10 @@ internal static partial class SafeMigrationExpectedDefinitionFactory
             operation.Comment,
             CaptureDefault(operation),
             operation.ComputedColumnSql,
-            operation.IsStored);
+            operation.IsStored)
+        {
+            ProviderAnnotations = SafeMigrationProviderAnnotation.Capture(operation),
+        };
     }
 
     private static SafeMigrationDefaultValue CaptureDefault(

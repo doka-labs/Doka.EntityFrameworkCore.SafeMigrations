@@ -19,6 +19,8 @@ registration namespaces append `.MySql` or `.PostgreSql`.
 | --- | --- | --- |
 | `UseMySqlSafeMigrations()` | Configured EF options builder; returns the builder | Add after Doka `UseMySql`; supports both MySQL and MariaDB |
 | `UsePostgreSqlSafeMigrations()` | Configured EF options builder; returns the builder | Add after `UseNpgsql` |
+| `UseMySqlSafeMigrations(configure)` | Safe scaffolding mode plus normal MySQL/MariaDB registration | `Strict` is the builder default; selection is written into new migration source |
+| `UsePostgreSqlSafeMigrations(configure)` | Safe scaffolding mode plus normal PostgreSQL registration | Same source-frozen design-time contract |
 | `UseMySqlSafeMigrations<TCanonicalMigrationContext>()` | Canonical context type on the non-generic options builder | Derived runtime type must be assignable and preserve the canonical model |
 | `UsePostgreSqlSafeMigrations<TCanonicalMigrationContext>()` | Canonical context type | Same model/assembly/history boundary |
 | `UsePostgreSqlSafeMigrations<TBaselineGenerator, TCanonicalMigrationContext>()` | Selected Npgsql-compatible generator and canonical context | Composes ordinary and safe baseline generation explicitly |
@@ -36,6 +38,35 @@ requires `Allow User Variables=true` on the actual connection. Missing or
 conflicting adapter ownership fails closed. See
 [registration examples](../README.md#provider-registration).
 
+## Design-time scaffolding
+
+`SafeMigrationScaffoldingMode.Strict` is the default. EF Core scaffolding maps
+`CreateTable`, single- and multi-column `CreateIndex`, and `DropTable` to
+`CreateTableIfNotExists`, the generated-model index helpers, and
+`DropTableIfExists`. `LegacyConvergence` maps table creation to
+`ConvergeTableFromModel` and emits a fail-closed `Down` body.
+
+The provider package contributes a `buildTransitive` assembly attribute when
+the consuming project directly references `Microsoft.EntityFrameworkCore.Design`
+or `Microsoft.EntityFrameworkCore.Tools`. The latter supplies EF Design as a
+transitive dependency. EF Core then discovers the SafeMigrations
+`IDesignTimeServices` implementation and composes its C# migration generator
+after the selected database provider's design services. A runtime-only project
+with neither package receives no attribute or warning. Changing the mode later
+affects only future scaffolding; existing C# migration files retain their
+original method calls.
+
+Generated migration bodies use file-scoped namespaces and collection
+expressions for the array arguments SafeMigrations controls. This keeps normal
+EF output compatible with the repository's warning-level namespace and
+constant-array analyzers without marking reviewable migration source as
+auto-generated or suppressing diagnostics.
+
+The design-time replacement does not rewrite add/alter/drop column, constraint,
+rename, or schema operations. Those retain EF behavior unless the migration
+author selects an explicit SafeMigrations API. This is an intentional policy
+boundary, not a partial interpretation of those operations.
+
 ## MigrationBuilder operations
 
 These extensions append sealed `SafeMigrationOperation` envelopes; they do
@@ -48,7 +79,7 @@ operations and returns the original `MigrationBuilder`.
 | Schema | `EnsureSchemaExists` | `DropSchemaIfExists` |
 | Table | `EnsureTable`, `ConvergeTable` | `CreateTableIfNotExists<TColumns>`, `DropTableIfExists`, `RenameTableIfExists` |
 | Column | `EnsureColumn`, `AlterColumnIfDifferent` | `AddColumnIfNotExists<T>`, `DropColumnIfExists`, `RenameColumnIfExists` |
-| Index | `EnsureIndex` | `CreateIndexIfNotExists`, `DropIndexIfExists`, `RenameIndexIfExists` |
+| Index | `EnsureIndex` | `CreateIndexIfNotExists`, generated-model single/composite helpers, `DropIndexIfExists`, `RenameIndexIfExists` |
 | Primary key | `EnsurePrimaryKey` | `AddPrimaryKeyIfNotExists`, `DropPrimaryKeyIfExists` |
 | Unique constraint | `EnsureUniqueConstraint` | `AddUniqueConstraintIfNotExists`, `DropUniqueConstraintIfExists` |
 | Check constraint | `EnsureCheckConstraint` | `AddCheckConstraintIfNotExists`, `DropCheckConstraintIfExists` |
@@ -95,6 +126,14 @@ Collections are snapshotted by the definitions. Invalid names, enum values,
 contradictory facets, or incompatible literal values fail construction. A
 representable definition may still be unsupported by the selected engine;
 construction success does not imply runtime support.
+
+Column annotations captured from EF's typed table callback are immutable,
+ordered, and included in definition equivalence and contract fingerprints.
+The MySQL/MariaDB adapter accepts Doka `None` and `AutoIncrement` generation
+and compares `AUTO_INCREMENT`; PostgreSQL accepts `None`, identity-always, and
+identity-by-default strategies and compares `pg_attribute.attidentity`.
+Unknown or malformed provider column annotations and all unmodeled
+operation-level annotations are classified `Unsupported` before target DDL.
 
 `SafeMigrationDefaultValue` distinguishes no default, typed literal (including
 literal `null`), and SQL/expression defaults. The familiar
@@ -177,10 +216,11 @@ Collections are immutable. `SafeMigrationUnexpectedObject` identifies preserved
 objects; it is not an instruction to remove them.
 
 `SafeMigrationContractFingerprint.Create(operations)` fingerprints ordered
-safe intents, definitions, and policies. Ordinary provider operations contribute
-only their CLR type name, not their properties or SQL text. The fingerprint is
-therefore not a digest of the complete migration artifact. Keep that artifact's
-independent digest and review ordinary operations separately.
+safe intents, definitions, policies, and operation annotations. Ordinary
+provider operations contribute only their CLR type name, not their properties
+or SQL text. The fingerprint is therefore not a digest of the complete
+migration artifact. Keep that artifact's independent digest and review ordinary
+operations separately.
 
 | Status | Meaning |
 | --- | --- |

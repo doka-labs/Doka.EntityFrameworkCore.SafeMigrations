@@ -15,10 +15,12 @@ internal sealed partial class SafeMigrationPreflightProjection
     private static void Observe(
         EnsureSchemaIntent intent,
         SafeMigrationDecision decision
-    ) { }
+    )
+    { }
 
     private static void Observe(
         DropSchemaIntent intent,
         SafeMigrationDecision decision
-    ) { }
+    )
+    { }
 }

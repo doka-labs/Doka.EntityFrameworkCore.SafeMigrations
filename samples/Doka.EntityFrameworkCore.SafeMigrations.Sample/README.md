@@ -4,13 +4,19 @@ This compilable sample demonstrates the current .NET 10 API:
 
 - a provider-neutral `SampleDbContext`;
 - a forward-only heterogeneous Core convergence baseline;
-- complete `ExpectedTableDefinition` instances for users and orders;
+- generated-model-style `ConvergeTableFromModel` calls for users and orders;
 - granular convergence of missing columns, keys, constraints, foreign keys,
   and indexes even when a table container already exists;
 - PostgreSQL schema and rename operations;
 - an allowlisted `RepairIfSafe` column metadata transition whose structural
   type facets exactly match the declared old definition;
 - MySQL/MariaDB and PostgreSQL adapter registration touchpoints.
+
+The normal authoring path is `dotnet ef migrations add` with
+`LegacyConvergence` selected in provider registration; the design-time
+generator writes the calls represented by this sample. `SampleMigrationUsage`
+keeps them as executable source so the repository can compile and inspect the
+result without requiring a database during the sample build.
 
 Key files:
 

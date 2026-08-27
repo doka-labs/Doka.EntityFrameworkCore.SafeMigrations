@@ -10,8 +10,13 @@
   </PropertyGroup>
 
   <ItemGroup Label="Production">
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="$(EfCorePackageVersion)" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="$(EfCorePackageVersion)" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="$(DependencyInjectionPackageVersion)" />
+  </ItemGroup>
+
+  <ItemGroup Label="Engineering">
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Tools" Version="$(EfCorePackageVersion)" />
   </ItemGroup>
 
   <ItemGroup Label="Production - MySQL/MariaDB">
@@ -27,7 +32,6 @@
   </ItemGroup>
 
   <ItemGroup Label="Tests">
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="$(EfCorePackageVersion)" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
     <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0" />

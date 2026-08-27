@@ -6,6 +6,71 @@ public sealed class PostgreSqlServiceCompositionTests
         "Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationCanonicalContextConfiguration";
 
     [Fact]
+    public void ScaffoldingConfigurationDefaultsToStrictAndAcceptsLegacyConvergence()
+    {
+        var strict = new DbContextOptionsBuilder();
+        strict.UsePostgreSqlSafeMigrations();
+
+        var legacy = new DbContextOptionsBuilder();
+        legacy.UsePostgreSqlSafeMigrations(options =>
+            options.UseScaffoldingMode(SafeMigrationScaffoldingMode.LegacyConvergence));
+
+        var strictInfo = strict.Options.FindExtension<PostgreSqlSafeMigrationsOptionsExtension>()!.Info;
+        var legacyInfo = legacy.Options.FindExtension<PostgreSqlSafeMigrationsOptionsExtension>()!.Info;
+
+        Assert.Equal(
+            SafeMigrationScaffoldingMode.Strict,
+            strict.Options.FindExtension<PostgreSqlSafeMigrationsOptionsExtension>()!.ScaffoldingMode);
+        Assert.Equal(
+            SafeMigrationScaffoldingMode.LegacyConvergence,
+            legacy.Options.FindExtension<PostgreSqlSafeMigrationsOptionsExtension>()!.ScaffoldingMode);
+        Assert.Equal(strictInfo.GetServiceProviderHashCode(), legacyInfo.GetServiceProviderHashCode());
+        Assert.True(strictInfo.ShouldUseSameServiceProvider(legacyInfo));
+    }
+
+    [Fact]
+    public void NullScaffoldingConfigurationIsRejectedBeforeOptionsMutation()
+    {
+        var options = new DbContextOptionsBuilder();
+
+        Assert.Throws<ArgumentNullException>(() =>
+            options.UsePostgreSqlSafeMigrations(configure: null!));
+        Assert.Null(options.Options.FindExtension<PostgreSqlSafeMigrationsOptionsExtension>());
+    }
+
+    [Fact]
+    public void ConfiguredOverloadFamiliesPersistLegacyModeAndComposition()
+    {
+        var canonical = new DbContextOptionsBuilder();
+        canonical.UsePostgreSqlSafeMigrations<SafeMigrationDbContext>(ConfigureLegacy);
+
+        var custom = new DbContextOptionsBuilder();
+        custom.UsePostgreSqlSafeMigrations<RecordingNpgsqlMigrationsSqlGenerator, SafeMigrationDbContext>(
+            ConfigureLegacy);
+
+        var typed = new DbContextOptionsBuilder<SafeMigrationDbContext>();
+        typed.UsePostgreSqlSafeMigrations(ConfigureLegacy);
+
+        var typedCustom = new DbContextOptionsBuilder<SafeMigrationDbContext>();
+        typedCustom.UsePostgreSqlSafeMigrations<SafeMigrationDbContext, RecordingNpgsqlMigrationsSqlGenerator,
+            SafeMigrationDbContext>(ConfigureLegacy);
+
+        var canonicalExtension = canonical.Options.FindExtension<PostgreSqlSafeMigrationsOptionsExtension>()!;
+        var customExtension = custom.Options.FindExtension<PostgreSqlSafeMigrationsOptionsExtension>()!;
+        var typedExtension = typed.Options.FindExtension<PostgreSqlSafeMigrationsOptionsExtension>()!;
+        var typedCustomExtension = typedCustom.Options.FindExtension<PostgreSqlSafeMigrationsOptionsExtension>()!;
+
+        Assert.Equal(SafeMigrationScaffoldingMode.LegacyConvergence, canonicalExtension.ScaffoldingMode);
+        Assert.Equal(typeof(SafeMigrationDbContext), canonicalExtension.CanonicalContextType);
+        Assert.Equal(typeof(RecordingNpgsqlMigrationsSqlGenerator), customExtension.BaselineGeneratorType);
+        Assert.Equal(SafeMigrationScaffoldingMode.LegacyConvergence, customExtension.ScaffoldingMode);
+        Assert.Equal(SafeMigrationScaffoldingMode.LegacyConvergence, typedExtension.ScaffoldingMode);
+        Assert.Equal(typeof(RecordingNpgsqlMigrationsSqlGenerator), typedCustomExtension.BaselineGeneratorType);
+        Assert.Equal(typeof(SafeMigrationDbContext), typedCustomExtension.CanonicalContextType);
+        Assert.Equal(SafeMigrationScaffoldingMode.LegacyConvergence, typedCustomExtension.ScaffoldingMode);
+    }
+
+    [Fact]
     public void RegistrationWithoutNpgsqlFailsWithProviderSpecificMessage()
     {
         var options = new DbContextOptionsBuilder();
@@ -114,6 +179,10 @@ public sealed class PostgreSqlServiceCompositionTests
         IServiceCollection services
     ) => services.Where(static descriptor => descriptor.ServiceType.FullName == CanonicalConfigurationTypeName);
 
+    private static void ConfigureLegacy(
+        SafeMigrationOptionsBuilder options
+    ) => options.UseScaffoldingMode(SafeMigrationScaffoldingMode.LegacyConvergence);
+
     private sealed class UnrelatedContext : DbContext;
 
     private sealed class RecordingNpgsqlMigrationsSqlGenerator : IMigrationsSqlGenerator
@@ -146,6 +215,7 @@ public sealed class PostgreSqlServiceCompositionTests
                     var sql = operation is SqlOperation sqlOperation
                         ? sqlOperation.Sql
                         : $"-- custom baseline: {operation.GetType().Name}";
+
                     var command = _dependencies
                         .CommandBuilderFactory
                         .Create()
