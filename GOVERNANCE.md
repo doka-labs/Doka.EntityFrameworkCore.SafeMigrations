@@ -85,5 +85,5 @@ Reconcile it with the [roadmap](ROADMAP.md), security policy, and
 [repository-settings handoff](docs/runbooks/repository-settings.md).
 
 OpenSSF status is maintained separately in the
-[preparation matrix](docs/openssf-best-practices.md). Policies describe required
+[evidence matrix](docs/openssf-best-practices.md). Policies describe required
 practice; operational history supplies evidence that the practice occurred.

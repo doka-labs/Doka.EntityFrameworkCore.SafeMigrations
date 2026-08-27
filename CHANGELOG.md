@@ -6,7 +6,7 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
-## [10.0.0-rc.1] - 2026-08-26
+## [10.0.0-rc.1] - 2026-08-28
 
 Prepared first feature-complete release candidate of the SafeMigrations Core,
 MySQL/MariaDB, and PostgreSQL package family for .NET 10 and EF Core 10. The
@@ -76,15 +76,16 @@ in [Support and qualification](docs/support-and-qualification.md).
 - Deterministic double-pack, exact package file-set and required-content
   validation, isolated package-only consumers, Portable PDB/source-symbol
   packages, XML API documentation, SPDX SBOM generation, and Public API gates.
-- Reusable full-engine CI/release qualification, pinned actions and container
-  digests, OIDC NuGet Trusted Publishing, SLSA/SBOM attestations, exact partial-
-  publish recovery, repository-signature readback, and verified GitHub Release.
+- Reusable full-engine CI/release qualification with one stable fail-closed
+  aggregation check, pinned actions and container digests, OIDC NuGet Trusted
+  Publishing, SLSA/SBOM attestations, exact partial-publish recovery,
+  repository-signature readback, and verified GitHub Release.
 - Task-oriented API, architecture, support, observability, deployment/recovery,
   failure-code, release-publication, independent verification, and sample guides.
 - Governance, conduct, support and canonical root security policies, eight
   implemented ADRs in Doka MADR Enterprise Profile 1.0 on MADR 4.0.0, and a
-  complete pinned OpenSSF Best Practices preparation inventory. No badge or
-  independent certification is claimed.
+  complete pinned OpenSSF Best Practices evidence inventory with a public
+  Passing self-assessment. No independent security certification is claimed.
 - Task-oriented documentation, dependency-free shell gates with positive and
   negative regression coverage, structured contribution forms, and explicit
   ownership.

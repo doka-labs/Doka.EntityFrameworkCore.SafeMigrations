@@ -1,10 +1,12 @@
 # Doka.EntityFrameworkCore.SafeMigrations
 
-[![CI](https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/actions/workflows/ci.yml/badge.svg)](https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/actions/workflows/ci.yml)
+[![CI](https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/actions/workflows/ci.yml/badge.svg?event=pull_request)](https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/actions/workflows/ci.yml)
 [![NuGet Core](https://img.shields.io/nuget/vpre/Doka.EntityFrameworkCore.SafeMigrations.svg?label=NuGet%20Core)](https://www.nuget.org/packages/Doka.EntityFrameworkCore.SafeMigrations)
 [![NuGet MySQL / MariaDB](https://img.shields.io/nuget/vpre/Doka.EntityFrameworkCore.SafeMigrations.MySql.svg?label=NuGet%20MySQL%20%2F%20MariaDB)](https://www.nuget.org/packages/Doka.EntityFrameworkCore.SafeMigrations.MySql)
 [![NuGet PostgreSQL](https://img.shields.io/nuget/vpre/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.svg?label=NuGet%20PostgreSQL)](https://www.nuget.org/packages/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/badge)](https://scorecard.dev/viewer/?uri=github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/14265/badge)](https://www.bestpractices.dev/projects/14265)
 
 SafeMigrations is a fail-closed EF Core 10 migration library for databases whose
 starting schema may differ between application instances. It supports one
@@ -555,7 +557,7 @@ Further documentation:
 - [Security policy and private vulnerability reporting](SECURITY.md)
 - [Governance and responsibilities](GOVERNANCE.md)
 - [Project direction](ROADMAP.md)
-- [OpenSSF documentation and evidence preparation](docs/openssf-best-practices.md)
+- [OpenSSF Best Practices evidence mapping](docs/openssf-best-practices.md)
 
 ## License
 

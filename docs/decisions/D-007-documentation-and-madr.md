@@ -153,10 +153,10 @@ do not treat an untested future tool as current confirmation evidence.
 
 ## More Information
 
-This ADR selects the document standard, not a security policy or a badge
-status. OpenSSF documentation remains preparation only. Enrollment,
-criterion answers, public evidence, and any awarded badge are separate
-maintainer actions after the repository becomes public.
+This ADR selects the document standard, not a security policy or badge status.
+OpenSSF documentation remains an evidence and external-status mapping only.
+Enrollment, criterion answers, public evidence, and any awarded badge are
+separate maintainer actions that can change without altering this decision.
 
 Operational details remain in canonical guides; ADRs explain choices and
 link their implementation evidence. The absence of an ADR-specific build gate
@@ -180,6 +180,7 @@ reduce the depth of the rationale.
 - 2026-08-26: Maintainer clarified that Doka's repository-specific validation infrastructure is not required; the record now separates the shared document contract from optional tooling.
 - 2026-08-26: Maintainer designated @doka-labs/core-maintainers as the informed audience.
 - 2026-08-26: Status changed from accepted to implemented. Dominic Kalkbrenner confirmed implementation; the adopted profile, ADR corpus, and documentation ownership are in place and reviewed.
+- 2026-08-28: OpenSSF Best Practices reported Passing; status wording was aligned without changing this documentation-format decision.
 
 ### Implementation References
 
@@ -189,7 +190,7 @@ reduce the depth of the rationale.
 - [Documentation ownership and navigation](../README.md)
 - [Contribution requirements](../../CONTRIBUTING.md)
 - [Governance](../../GOVERNANCE.md)
-- [OpenSSF preparation, not achievement](../openssf-best-practices.md)
+- [OpenSSF evidence and external status](../openssf-best-practices.md)
 
 ### Sources
 

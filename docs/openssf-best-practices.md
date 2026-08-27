@@ -1,16 +1,18 @@
-# OpenSSF Best Practices preparation
+# OpenSSF Best Practices evidence
 
 ## Status and scope
 
-Preparation date: 2026-08-26; repository evidence reviewed 2026-08-27. **No
-OpenSSF badge, project registration,
-achievement percentage, or independent certification is claimed.** The
-maintainer will handle registration and assessment after the repository is
-public. This document prepares evidence; it does not submit answers, change
-GitHub settings, or claim undocumented operational history.
+Preparation date: 2026-08-26; repository, hosted-control, and external-status
+evidence reviewed 2026-08-28. The repository is public. The official
+[OpenSSF Best Practices project 14265](https://www.bestpractices.dev/projects/14265)
+reports **Passing**, and the repository README links its live badge. Passing is
+a project self-assessment, not an independent security audit or certification.
+The maintainer owns every saved answer and the truth of private operational
+evidence. This document maps and maintains evidence; it does not submit answers,
+change GitHub settings, or turn a badge into proof beyond its stated criteria.
 
 The tables cover all **67 Passing, 55 Silver, and 23 Gold** criteria in the
-[official snapshot](https://github.com/ossf/best-practices-badge/blob/27491e9c882d28612f1ca2d93a9d35263187e263/criteria/criteria.yml).
+[official snapshot](https://github.com/ossf/best-practices-badge/blob/51a7988bba5ccb0398c452d8d7f609395b101311/criteria/criteria.yml).
 That immutable upstream revision is the inventory and review baseline; the
 repository does not duplicate it in a generated local snapshot or parser.
 Repeated IDs at different levels are intentional because requirements may
@@ -20,14 +22,28 @@ Best Practices is a project self-assessment with evidence. Scorecard is a
 separate set of automated checks. The OSPS Baseline is another maturity-control
 framework (current release checked: 2026.02.19). The BadgeApp can host different
 assessment series; a Passing/Silver/Gold answer does not establish Baseline
-compliance or a Scorecard result. This page prepares the Best Practices series,
-not a second full Baseline assessment or a claim of SLSA certification.
+compliance or a Scorecard result. This page maintains the achieved Passing
+evidence and the not-yet-assessed Silver/Gold inventory; it is not a second full
+Baseline assessment or a claim of SLSA certification.
 
-The repository-root [Scorecard annotations](../.scorecard.yml) document why
-library dependency patch ranges are not applicable to the pinned-dependency
-finding. They do not alter the published Scorecard score. Central Package
-Management, committed lock files, locked restore, SHA-pinned Actions, and
-digest-pinned container images remain the enforceable build controls.
+The independent [Scorecard workflow](../.github/workflows/scorecard.yml) is
+configured to run weekly and on explicit default-branch maintainer dispatch,
+publish its authenticated result to the Scorecard API, upload SARIF to GitHub
+code scanning, and retain the same SARIF as a short-lived workflow artifact.
+The repository-root [Scorecard
+annotations](../.scorecard.yml) document why library dependency patch ranges
+are not applicable to the pinned-dependency check. An annotation adds visible
+maintainer context and can suppress the annotated check's code-scanning alert;
+it does not change the published numeric score. Central Package Management,
+committed lock files, locked restore, SHA-pinned Actions, and digest-pinned
+container images remain the enforceable build controls.
+
+The README exposes live links for both external systems. Best Practices project
+14265 was verified as Passing on 2026-08-28. At that review, the Scorecard API
+had no published SafeMigrations result and its badge reported `invalid repo
+path`; the repository-owned workflow had not yet executed from public `main`.
+Badge placement is not a Scorecard result. Cite a score only after the workflow,
+published API result, viewer, artifact, and code-scanning import agree.
 
 ## Reading the tables
 
@@ -61,13 +77,18 @@ and private intake procedure. Its presence does not establish that hosted
 reporting is enabled, the contact has been tested, or response targets have
 been met; those operational facts still need assessment evidence.
 
-## Passing
+## Passing (achieved)
+
+The official project entry is the authority for submitted form values and
+current badge state. The table remains an evidence-maintenance inventory: its
+readiness labels identify evidence that must remain reviewable and do not
+override the externally reported Passing result.
 
 | Criterion | Class | Readiness | Repository evidence | Remaining assessment evidence | Owner |
 | --- | --- | --- | --- | --- | --- |
-| `description_good` | MUST | Prepared | [README](../README.md) problem and package overview | Confirm anonymous public readability | M |
-| `interact` | MUST | Prepared | [Guide](README.md), installation and support links | Confirm actual download and feedback routes after publication | M |
-| `contribution` | MUST | Prepared | [Contributing](../CONTRIBUTING.md) PR process | Public URL to accepted process | M |
+| `description_good` | MUST | External | Public [README](../README.md) problem and package overview | Record the exact public evidence URL in the assessment | M |
+| `interact` | MUST | External | Public [guide](README.md), issue tracker, installation, and support links | Confirm the package download route after the first publication | M |
+| `contribution` | MUST | External | Public [Contributing](../CONTRIBUTING.md) PR process | Demonstrate use of the accepted process | M |
 | `contribution_requirements` | SHOULD | Prepared | [Contributing](../CONTRIBUTING.md) tests/style/API rules | Public URL and review use | C |
 | `floss_license` | MUST | External | [MIT license](../LICENSE), package metadata | Actual public release under stated license | R |
 | `floss_license_osi` | SUGGESTED | Prepared | [MIT license](../LICENSE) | Check code license separately from attributed documentation | M |
@@ -78,30 +99,30 @@ been met; those operational facts still need assessment evidence.
 | `discussion` | MUST | External | [Support](../SUPPORT.md) issue/PR channels | Anonymous searchable archive and public participation | M |
 | `english` | SHOULD | Prepared | English docs and issue forms | Accept reports/reviews in English | M |
 | `maintained` | MUST | People | [Governance](../GOVERNANCE.md), [Roadmap](../ROADMAP.md) | Actual maintenance and response activity | M |
-| `repo_public` | MUST | External | Repository is prepared for public visibility | Maintainer changes visibility and verifies anonymous source access | M |
-| `repo_track` | MUST | Evidence | Git history | Public attribution/time/change history for the assessed revision | M |
-| `repo_interim` | MUST | Evidence | Development commits and PR process | Public interim revisions, not only final archives | M |
-| `repo_distributed` | SUGGESTED | Prepared | Git repository | Public clone access | M |
+| `repo_public` | MUST | External | Public source repository with anonymous read access | Record the exact repository URL in the assessment | M |
+| `repo_track` | MUST | External | Public Git history preserves attribution, time, and changes | Review the assessed revision's reachable history | M |
+| `repo_interim` | MUST | External | Public development commits and PR process | Confirm the public history contains interim revisions for the assessed work | M |
+| `repo_distributed` | SUGGESTED | External | Public Git clone and history access | Record the clone URL in the assessment | M |
 | `version_unique` | MUST | Prepared | [Release](release-process.md), version contract tests | Completed unique immutable release identities | R |
 | `version_semver` | SUGGESTED | Prepared | [Changelog](../CHANGELOG.md), version parser | Actual released version/compatibility record | R |
 | `version_tags` | SUGGESTED | External | [Release](release-process.md) signed tag procedure | Real tag after successful qualification, never before | R |
 | `release_notes` | MUST | Prepared | [Changelog](../CHANGELOG.md) and release assets | Published version-specific human-readable notes | R |
 | `release_notes_vulns` | MUST | Assess | [Development](security/secure-development.md) advisory handling | Check known CVE/GHSA fixes; justify no-applicable-fix case only from actual history | M |
-| `report_process` | MUST | Prepared | [Support](../SUPPORT.md), issue forms | Public reporting URL and working form | M |
-| `report_tracker` | SHOULD | External | Repository issue templates | Enabled accessible issue tracker | M |
+| `report_process` | MUST | External | Public [Support](../SUPPORT.md) process and issue forms | Verify the selected form end to end without creating a false report | M |
+| `report_tracker` | SHOULD | External | Enabled public issue tracker and repository issue forms | Record the tracker URL in the assessment | M |
 | `report_responses` | MUST | Evidence | [Support](../SUPPORT.md) handling process | Acknowledge a majority of bug reports in the inclusive 2-12-month window; no invented N/A | M |
 | `enhancement_responses` | SHOULD | Evidence | [Support](../SUPPORT.md) enhancement routing | Respond to more than half of qualifying requests in the inclusive 2-12-month window; no invented N/A | M |
 | `report_archive` | MUST | External | Issue/PR archive design | Public URL and accessible historical reports | M |
-| `vulnerability_report_process` | MUST | Prepared | [Security intake](../SECURITY.md#reporting-a-vulnerability) | Verify public discoverability and reporting instructions after publication | M |
-| `vulnerability_report_private` | MUST | External | [Security intake](../SECURITY.md#reporting-a-vulnerability), [Settings](runbooks/repository-settings.md) | Enable/test private form and test the approved fallback contact | M |
+| `vulnerability_report_process` | MUST | External | Public [Security intake](../SECURITY.md#reporting-a-vulnerability) | Record the policy URL and review it against the official criterion | M |
+| `vulnerability_report_private` | MUST | External | Enabled GitHub private vulnerability reporting, [security intake](../SECURITY.md#reporting-a-vulnerability), and [settings](runbooks/repository-settings.md) | Test only through an approved non-disruptive exercise and retain private evidence | M |
 | `vulnerability_report_response` | MUST | Evidence | [Development](security/secure-development.md) private response record | Every report in the last six months receives an initial response within 14 days; upstream permits N/A if none were received | M |
 | `build` | MUST | Prepared | [Contributing](../CONTRIBUTING.md) locked SDK/build | Successful reproducible invocation from reviewed source | C |
 | `build_common_tools` | SUGGESTED | Prepared | .NET SDK/MSBuild, shell, Python | Document required tools and execute build | C |
 | `build_floss_tools` | SHOULD | Prepared | SDK and repository-owned scripts | Verify tool licensing; Rider is not required to build | C |
 | `test` | MUST | Prepared | [Qualification](support-and-qualification.md) three suites | Complete results for the assessed commit/engine matrix | R |
 | `test_invocation` | SHOULD | Prepared | [Contributing](../CONTRIBUTING.md) test commands | New contributor reproduces documented invocation with Docker | C |
-| `test_most` | SUGGESTED | Evidence | [Coverage](support-and-qualification.md#coverage-gate), behavioral matrix | Actual scoped coverage and boundary tests | R |
-| `test_continuous_integration` | SUGGESTED | External | [CI](../.github/workflows/ci.yml) | Enabled hosted runs on real proposed changes | M |
+| `test_most` | SUGGESTED | Evidence | [Coverage](support-and-qualification.md#coverage-gate), behavioral matrix, and [assessed run](https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/actions/runs/33079411038) | Preserve scoped coverage and boundary-test evidence for the assessed revision | R |
+| `test_continuous_integration` | SUGGESTED | External | Enabled [CI](../.github/workflows/ci.yml), protected pull requests, and public hosted run history | Preserve successful execution for every proposed change before merge | M |
 | `test_policy` | MUST | Prepared | [Contributing](../CONTRIBUTING.md) positive/negative tests | Review enforces test additions | C |
 | `tests_are_added` | MUST | Evidence | [Development](security/secure-development.md) regression process | Recent changes demonstrate tests were added in practice | C |
 | `tests_documented_added` | SUGGESTED | Prepared | [Contributing](../CONTRIBUTING.md#change-requirements) requires tests for major new functionality | Publish the change-proposal test policy and verify its use | C |
@@ -123,17 +144,21 @@ been met; those operational facts still need assessment evidence.
 | `delivery_unsigned` | MUST | Prepared | Checksums plus signed identity/attestations | Confirm no HTTP-only hash trust path | R |
 | `vulnerabilities_fixed_60_days` | MUST | Evidence | [Development](security/secure-development.md) advisory dates | Current public vulnerability inventory and actual patched release dates | M |
 | `vulnerabilities_critical_fixed` | SHOULD | Evidence | Private escalation process | Demonstrate prompt critical-fix handling, not a generic 90-day target | M |
-| `no_leaked_credentials` | MUST | Evidence | [Development](security/secure-development.md) secret handling | Controlled scan of current reachable history/tree plus triage and revocation if needed | M |
-| `static_analysis` | MUST | Evidence | SDK .NET analyzers beyond compiler warnings | Record enabled rules, SDK, assessed commit and successful analysis; justify coverage | C |
-| `static_analysis_common_vulnerabilities` | SUGGESTED | Evidence | [Development](security/secure-development.md) analysis review | Prove relevant security rules actually enabled; no assumed CodeQL coverage | C |
+| `no_leaked_credentials` | MUST | Evidence | Secret scanning and push protection are enabled; [Development](security/secure-development.md) defines handling | Review current reachable history/tree results plus triage and revocation if needed | M |
+| `static_analysis` | MUST | Evidence | SDK .NET analyzers and successful [CodeQL run](https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/actions/runs/33116946605) | Preserve enabled rules, SDK, assessed commit, and successful analysis; justify coverage | C |
+| `static_analysis_common_vulnerabilities` | SUGGESTED | Evidence | CodeQL C#/Python/Actions analysis and [Development](security/secure-development.md) analysis review | Preserve actual language/query coverage and results; do not infer complete weakness coverage | C |
 | `static_analysis_fixed` | MUST | Evidence | Analysis findings and review records | Close applicable medium/high findings before release | C |
-| `static_analysis_often` | SUGGESTED | External | Shared quality workflow | Actual run frequency and triggers | M |
-| `dynamic_analysis` | SUGGESTED | Evidence | [Dynamic evidence](security/secure-development.md#dynamic-and-coverage-evidence) | Measured qualifying analysis; 75% MySQL branch floor alone is insufficient | R |
+| `static_analysis_often` | SUGGESTED | External | Hosted CI and CodeQL default setup | Record actual run frequency, triggers, and retained results | M |
+| `dynamic_analysis` | SUGGESTED | Evidence | [Dynamic evidence](security/secure-development.md#dynamic-and-coverage-evidence) measured 84.29% Core, 85.34% MySQL/MariaDB, and 86.88% PostgreSQL branch coverage | Preserve the exact qualifying run; configured floors alone are insufficient | R |
 | `dynamic_analysis_unsafe` | SUGGESTED | Assess | Managed product source; provider/runtime boundaries | Inspect memory-unsafe/native scope and applicable analysis tools | C |
 | `dynamic_analysis_enable_assertions` | SUGGESTED | Evidence | Release-mode tests and explicit runtime guards | Check required assertions/guards remain active during analysis | C |
 | `dynamic_analysis_fixed` | MUST | Evidence | [Development](security/secure-development.md) regression discipline | Resolve relevant dynamic-analysis findings with tests | C |
 
-## Silver
+## Silver (not assessed)
+
+The project does not claim Silver. These rows preserve the full criterion
+inventory for a future explicit assessment; Passing does not satisfy them
+automatically.
 
 | Criterion | Class | Readiness | Repository evidence | Remaining assessment evidence | Owner |
 | --- | --- | --- | --- | --- | --- |
@@ -155,7 +180,7 @@ been met; those operational facts still need assessment evidence.
 | `internationalization` | SHOULD | Assess | English diagnostic codes/docs, Unicode identifier tests | Assess relevant user-facing localization requirements | M |
 | `sites_password_security` | MUST | External | No project-owned login website; GitHub/NuGet hosting | Assess host authentication controls for applicable sites | M |
 | `maintenance_or_update` | MUST | Prepared | [Support](../SUPPORT.md), [Roadmap](../ROADMAP.md) | Actual maintenance/update route and support-line handling | M |
-| `report_tracker` | MUST | External | Issue forms | Public working tracker and justification | M |
+| `report_tracker` | MUST | External | Enabled public issue tracker and issue forms | Record the tracker URL and criterion justification | M |
 | `vulnerability_report_credit` | MUST | Evidence | [Development](security/secure-development.md) credit process | Actual advisory credit/anonymity decisions or justified no-report case | M |
 | `vulnerability_response_process` | MUST | Prepared | [Development](security/secure-development.md), security intake | Confirm the responsible responder and evidence of the documented private response process | M |
 | `coding_standards` | MUST | Prepared | [Contributing](../CONTRIBUTING.md), [.editorconfig](../.editorconfig) | Review C#, Python, shell, YAML, and documentation conventions | C |
@@ -168,10 +193,10 @@ been met; those operational facts still need assessment evidence.
 | `installation_standard_variables` | MUST | Prepared | NuGet/.NET standard restore mechanisms | Verify applicable SDK package-cache/source configuration | C |
 | `installation_development_quick` | MUST | Evidence | [Contributing](../CONTRIBUTING.md) setup | Timed clean developer setup; Docker/image downloads accounted for | C |
 | `external_dependencies` | MUST | Prepared | [Support](support-and-qualification.md), locks, SBOM | Exact release dependency graph including tool dependencies | R |
-| `dependency_monitoring` | MUST | External | NuGet audit and Dependabot configuration | Enabled alert monitoring, responsible owner and actual triage | M |
+| `dependency_monitoring` | MUST | External | NuGet audit, Dependabot configuration, alerts, and security updates are enabled | Record the responsible owner and actual triage history | M |
 | `updateable_reused_components` | MUST | Prepared | [Upgrade contract](efcore-provider-upgrade-risk.md) | Demonstrated reviewed dependency update with required evidence | C |
 | `interfaces_current` | SHOULD | Evidence | PublicAPI baselines and public provider boundaries | Review deprecations/support for current released dependencies | C |
-| `automated_integration_testing` | MUST | External | [CI](../.github/workflows/ci.yml) main-push trigger and automated suite | Prove tests and success/failure reporting for each check-in on at least one shared branch; one matrix run is insufficient | R |
+| `automated_integration_testing` | MUST | External | [CI](../.github/workflows/ci.yml) runs the automated suite on every pull-request update | Preserve public success/failure reporting and required acceptance for every shared pull request | R |
 | `regression_tests_added50` | MUST | Evidence | Regression policy and test corpus | Demonstrate regression tests for at least 50% of bugs fixed in the last six months | M |
 | `test_statement_coverage80` | MUST | Evidence | [Coverage](support-and-qualification.md#coverage-gate) | Actual statement coverage or justified line-to-statement measure, not only configured floors | R |
 | `test_policy_mandated` | MUST | Prepared | [Contributing](../CONTRIBUTING.md) acceptance requirements | Review enforcement | M |
@@ -193,7 +218,11 @@ been met; those operational facts still need assessment evidence.
 | `static_analysis_common_vulnerabilities` | MUST | Evidence | SDK analyzers and analysis policy | Actual enabled security-rule coverage and results | C |
 | `dynamic_analysis_unsafe` | MUST | Assess | Managed source with external runtime/connector dependencies | Document applicable unsafe-code boundary and analysis evidence | C |
 
-## Gold
+## Gold (not assessed)
+
+The project does not claim Gold. In particular, documentation or two team
+accounts do not establish the required bus factor, independent contributors,
+or two-person review history.
 
 | Criterion | Class | Readiness | Repository evidence | Remaining assessment evidence | Owner |
 | --- | --- | --- | --- | --- | --- |
@@ -210,7 +239,7 @@ been met; those operational facts still need assessment evidence.
 | `two_person_review` | MUST | People | Review process | Measured independent human review of at least half of changes before release; bots/AI do not supply independence | M |
 | `build_reproducible` | MUST | Evidence | Deterministic settings and double-pack | Independent clean-environment bit-for-bit rebuild; same-build double-pack is insufficient | R |
 | `test_invocation` | MUST | Prepared | [Contributing](../CONTRIBUTING.md) | Reproducible test invocation by a new contributor | C |
-| `test_continuous_integration` | MUST | External | Shared CI workflow | Actual continuous execution and protected acceptance | M |
+| `test_continuous_integration` | MUST | External | Enabled shared CI workflow and public run history | Evidence that protected acceptance continuously requires the complete intended gate | M |
 | `test_statement_coverage90` | MUST | Evidence | Product line floors above 90% | Measured statement evidence or justified mapping; exclude only legitimate non-product scope | R |
 | `test_branch_coverage80` | MUST | Evidence | Core 80%, MySQL/MariaDB 75%, PostgreSQL 84% floors | Actual applicable branch coverage; current floor cannot guarantee this criterion | R |
 | `crypto_used_network` | MUST | Assess | Hosting/connector transport boundaries | Actual required production transport evidence | M |
@@ -223,34 +252,39 @@ been met; those operational facts still need assessment evidence.
 
 ## Assessment handoff and maintenance
 
-1. Make source and documentation publicly readable through a separate approved
-   action. Run the [settings checklist](runbooks/repository-settings.md).
+1. Keep project 14265 linked from the README and verify that its live status
+   still reports Passing after material repository or criteria changes.
 2. Re-read the live criterion wording and permitted dispositions. Do not infer
    N/A merely because evidence is absent; some response criteria do not permit it.
-3. For every intended answer collect the exact public URL, commit/release,
-   tool/run identity, measurement window, and responsible reviewer. Private
-   evidence must be summarized without disclosing reports or credentials.
+3. Preserve the exact public URL, commit/release, tool/run identity, measurement
+   window, and responsible reviewer behind every saved answer. Summarize private
+   evidence without disclosing reports or credentials.
 4. Review security-policy commitments, continuity, developer knowledge, and
    human-review claims with the actual owner. Documentation cannot create people.
-5. Register and fill the chosen assessment after publication. Verify saved
-   answers and public achievement state before adding an actual badge/link.
-6. Reassess on release, criteria change, relevant finding, role change, or hosted
+5. After the Scorecard workflow reaches public `main`, run it once and verify
+   its Actions result, artifact, code-scanning import, API record, and viewer
+   before treating the displayed score as evidence.
+6. Do not present Silver or Gold as assessed until their complete inventories
+   are answered and the official project entry reports the corresponding state.
+7. Reassess on release, criteria change, relevant finding, role change, or hosted
    configuration change. Update the pinned upstream revision only after a full
-   table reconciliation; do not delete a difficult row to make the assessment
-   appear more complete.
+   table reconciliation; do not delete a difficult row to preserve a badge.
 
-No criterion is marked officially met here. `Open`, `External`, `People`, and
-`Evidence` are honest preparation outcomes, not planned missing product features
-or permission to waive a release/security requirement.
+The official entry marks Passing. `Open`, `External`, `People`, and `Evidence`
+in these tables are ongoing evidence-maintenance classifications, not official
+form values, accepted risks, or permission to waive a security requirement.
 
 ## Primary sources
 
 - [Passing criteria](https://www.bestpractices.dev/en/criteria/0),
   [Silver criteria](https://www.bestpractices.dev/en/criteria/1), and
-  [Gold criteria](https://www.bestpractices.dev/en/criteria/2), retrieved 2026-08-26.
-- [Official criterion snapshot](https://github.com/ossf/best-practices-badge/blob/27491e9c882d28612f1ca2d93a9d35263187e263/criteria/criteria.yml),
-  retrieved 2026-08-26; IDs/classes were extracted independently of these tables.
+  [Gold criteria](https://www.bestpractices.dev/en/criteria/2), retrieved 2026-08-28.
+- [Official criterion snapshot](https://github.com/ossf/best-practices-badge/blob/51a7988bba5ccb0398c452d8d7f609395b101311/criteria/criteria.yml),
+  retrieved 2026-08-28; IDs/classes were extracted independently of these tables.
 - [Scorecard checks](https://github.com/ossf/scorecard/blob/main/docs/checks.md),
-  retrieved 2026-08-26; automated signals are a distinct assessment.
+  retrieved 2026-08-28; automated signals are a distinct assessment.
+- [Scorecard Action workflow and publication contract](https://github.com/ossf/scorecard-action/blob/main/README.md)
+  and [maintainer annotations](https://github.com/ossf/scorecard/blob/main/config/README.md),
+  retrieved 2026-08-28.
 - [OSPS Baseline release index](https://baseline.openssf.org/), retrieved
-  2026-08-26; a separate baseline assessment is not implied by this mapping.
+  2026-08-28; a separate baseline assessment is not implied by this mapping.
