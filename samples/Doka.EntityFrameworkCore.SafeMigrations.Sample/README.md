@@ -23,6 +23,30 @@ convergence only while generating a migration that intentionally adopts
 heterogeneous existing tables, then review the source and return registration
 to the strict default for subsequent scaffolding.
 
+The explicit design-time configuration is identical for both providers:
+
+```csharp
+using Doka.EntityFrameworkCore.SafeMigrations;
+using Doka.EntityFrameworkCore.SafeMigrations.MySql;
+using Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
+
+options.UseMySqlSafeMigrations(configuration =>
+{
+    configuration.UseScaffoldingMode(
+        SafeMigrationScaffoldingMode.LegacyConvergence);
+});
+
+options.UsePostgreSqlSafeMigrations(configuration =>
+{
+    configuration.UseScaffoldingMode(
+        SafeMigrationScaffoldingMode.LegacyConvergence);
+});
+```
+
+`SafeMigrationScaffoldingMode.Strict` is the no-argument default. The enum is
+read only while EF scaffolds a new C# migration; changing it does not modify or
+reinterpret migrations that already exist.
+
 Key files:
 
 - `SampleMigrationUsage.cs` builds the shared operation contracts.

@@ -76,6 +76,7 @@ profile determines the active engine capabilities.
 
 ```csharp
 using Doka.EntityFrameworkCore.MySql;
+using Doka.EntityFrameworkCore.SafeMigrations;
 using Doka.EntityFrameworkCore.SafeMigrations.MySql;
 
 services.AddDbContext<AppDbContext>(options =>
@@ -93,6 +94,7 @@ command execution without exposing the connection string.
 PostgreSQL registration is additive to `UseNpgsql`:
 
 ```csharp
+using Doka.EntityFrameworkCore.SafeMigrations;
 using Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 
 services.AddDbContext<AppDbContext>(options =>
@@ -151,28 +153,64 @@ A runtime-only project may reference a SafeMigrations provider without either
 design-time package. It builds without a design-service attribute or warning;
 EF's tooling rejects scaffolding until a supported design-time package is added.
 
-The default is `Strict`. A scaffolded table becomes
-`CreateTableIfNotExists`, its indexes become the matching safe single- or
-multi-column helpers, and its rollback uses `DropTableIfExists`:
+### Configure the scaffolding mode
+
+`SafeMigrationScaffoldingMode` is the design-time switch used by both provider
+registrations:
+
+| Value | Selection | Generated table behavior | Generated rollback |
+| --- | --- | --- | --- |
+| `Strict` | Default; use for normal migrations | `CreateTableIfNotExists` requires an existing table to match the complete generated definition | `DropTableIfExists` |
+| `LegacyConvergence` | Select only while scaffolding a reviewed legacy baseline | `ConvergeTableFromModel` adds missing table children and rejects incompatible existing definitions | Entire `Down` body throws before DDL |
+
+The no-argument registration selects `Strict`:
 
 ```csharp
 options.UseMySqlSafeMigrations();
 // or: options.UsePostgreSqlSafeMigrations();
 ```
 
-For each migration that deliberately adopts heterogeneous legacy
-installations, select `LegacyConvergence` before scaffolding:
+This is equivalent to the explicit MySQL/MariaDB configuration:
 
 ```csharp
-options.UseMySqlSafeMigrations(safe =>
-    safe.UseScaffoldingMode(SafeMigrationScaffoldingMode.LegacyConvergence));
+using Doka.EntityFrameworkCore.SafeMigrations;
+
+options.UseMySqlSafeMigrations(safeMigrations =>
+{
+    safeMigrations.UseScaffoldingMode(SafeMigrationScaffoldingMode.Strict);
+});
+```
+
+PostgreSQL uses the same options contract:
+
+```csharp
+using Doka.EntityFrameworkCore.SafeMigrations;
+
+options.UsePostgreSqlSafeMigrations(safeMigrations =>
+{
+    safeMigrations.UseScaffoldingMode(SafeMigrationScaffoldingMode.Strict);
+});
+```
+
+For each migration that deliberately adopts heterogeneous legacy
+installations, change only the enum value before scaffolding:
+
+```csharp
+options.UseMySqlSafeMigrations(safeMigrations =>
+{
+    safeMigrations.UseScaffoldingMode(
+        SafeMigrationScaffoldingMode.LegacyConvergence);
+});
 ```
 
 or:
 
 ```csharp
-options.UsePostgreSqlSafeMigrations(safe =>
-    safe.UseScaffoldingMode(SafeMigrationScaffoldingMode.LegacyConvergence));
+options.UsePostgreSqlSafeMigrations(safeMigrations =>
+{
+    safeMigrations.UseScaffoldingMode(
+        SafeMigrationScaffoldingMode.LegacyConvergence);
+});
 ```
 
 Then create and review the migration normally:
@@ -196,6 +234,39 @@ which objects predated that migration. After the legacy baseline sequence has
 been scaffolded, return registration to the no-argument strict default for
 newly created tables. The selected behavior is frozen in each generated C#
 migration; changing the option never reinterprets an existing migration.
+
+The configure callback is available on the canonical-context overloads too:
+
+```csharp
+options.UseMySqlSafeMigrations<CoreDbContext>(safeMigrations =>
+{
+    safeMigrations.UseScaffoldingMode(
+        SafeMigrationScaffoldingMode.LegacyConvergence);
+});
+
+options.UsePostgreSqlSafeMigrations<CoreDbContext>(safeMigrations =>
+{
+    safeMigrations.UseScaffoldingMode(
+        SafeMigrationScaffoldingMode.LegacyConvergence);
+});
+```
+
+An application that composes a custom PostgreSQL baseline generator can select
+the mode on that overload as well:
+
+```csharp
+options.UsePostgreSqlSafeMigrations<CustomNpgsqlMigrationsSqlGenerator, CoreDbContext>(
+    safeMigrations =>
+    {
+        safeMigrations.UseScaffoldingMode(
+            SafeMigrationScaffoldingMode.LegacyConvergence);
+    });
+```
+
+`UseScaffoldingMode` configures generated source only. It does not change how
+an already generated migration executes and is not a runtime switch for
+existing migration files. Passing an undefined enum value fails immediately
+during options configuration.
 
 Automatic rewriting is deliberately bounded to scaffolded `CreateTable`,
 `CreateIndex`, and `DropTable` operations. Other EF operations remain ordinary

@@ -36,15 +36,75 @@ signature help, rather than interpreting `TContext` as the canonical context.
 The external-service-provider overloads can explicitly select canonical
 context/generator configuration as documented in their XML reference.
 
-The configure callback receives `SafeMigrationOptionsBuilder`. Its current
-public setting is `UseScaffoldingMode(SafeMigrationScaffoldingMode)`, which
-returns the same builder for fluent composition. The default is `Strict`; an
-undefined enum value is rejected while options are configured.
-
 Registration does not create a database or execute migrations. MySQL/MariaDB
 requires `Allow User Variables=true` on the actual connection. Missing or
 conflicting adapter ownership fails closed. See
 [registration examples](../README.md#provider-registration).
+
+## Scaffolding configuration
+
+Import the provider namespace for the registration extension and the Core
+namespace for its shared configuration types:
+
+```csharp
+using Doka.EntityFrameworkCore.SafeMigrations;
+using Doka.EntityFrameworkCore.SafeMigrations.MySql;
+// or: using Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
+```
+
+The configure callback receives `SafeMigrationOptionsBuilder`. Its complete
+current public configuration surface is:
+
+| Member | Contract |
+| --- | --- |
+| `UseScaffoldingMode(SafeMigrationScaffoldingMode.Strict)` | Explicitly selects the default strict generated table contract |
+| `UseScaffoldingMode(SafeMigrationScaffoldingMode.LegacyConvergence)` | Selects object-granular generated convergence for a reviewed legacy baseline |
+
+The method returns the same builder for fluent composition. A null configure
+callback or an undefined enum value is rejected during options configuration.
+The selected value is written into new migration source; it is not consulted
+when an existing migration executes.
+
+The callback is available on every registration shape that can select a
+scaffolding mode:
+
+```csharp
+options.UseMySqlSafeMigrations(configuration =>
+{
+    configuration.UseScaffoldingMode(
+        SafeMigrationScaffoldingMode.LegacyConvergence);
+});
+
+options.UseMySqlSafeMigrations<CoreDbContext>(configuration =>
+{
+    configuration.UseScaffoldingMode(
+        SafeMigrationScaffoldingMode.LegacyConvergence);
+});
+
+options.UsePostgreSqlSafeMigrations(configuration =>
+{
+    configuration.UseScaffoldingMode(
+        SafeMigrationScaffoldingMode.LegacyConvergence);
+});
+
+options.UsePostgreSqlSafeMigrations<CoreDbContext>(configuration =>
+{
+    configuration.UseScaffoldingMode(
+        SafeMigrationScaffoldingMode.LegacyConvergence);
+});
+
+options.UsePostgreSqlSafeMigrations<CustomNpgsqlMigrationsSqlGenerator, CoreDbContext>(
+    configuration =>
+    {
+        configuration.UseScaffoldingMode(
+            SafeMigrationScaffoldingMode.LegacyConvergence);
+    });
+```
+
+Typed `DbContextOptionsBuilder<TContext>` overloads expose the same callback.
+Their first generic type argument is the runtime context because it cannot be
+inferred when an extension method supplies additional generic arguments; use
+IDE signature help for the exact typed overload.
 
 ## Design-time scaffolding
 
