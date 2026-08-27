@@ -385,3 +385,37 @@ jobs:
           if-no-files-found: warn
           compression-level: 0
           retention-days: ${{ inputs.artifact-retention-days }}
+
+  # A failed dependency would skip this job without always(), leaving branch
+  # protection without the single fail-closed result it is intended to trust.
+  required:
+    name: Required
+    if: ${{ always() }}
+    needs:
+      - package-and-core
+      - coverage
+      - mysql-engine
+      - postgresql-engine
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Require successful qualification
+        env:
+          PACKAGE_AND_CORE_RESULT: ${{ needs.package-and-core.result }}
+          COVERAGE_RESULT: ${{ needs.coverage.result }}
+          MYSQL_ENGINE_RESULT: ${{ needs.mysql-engine.result }}
+          POSTGRESQL_ENGINE_RESULT: ${{ needs.postgresql-engine.result }}
+        run: |
+          printf 'package-and-core=%s\n' "$PACKAGE_AND_CORE_RESULT"
+          printf 'coverage=%s\n' "$COVERAGE_RESULT"
+          printf 'mysql-engine=%s\n' "$MYSQL_ENGINE_RESULT"
+          printf 'postgresql-engine=%s\n' "$POSTGRESQL_ENGINE_RESULT"
+
+          if [[ "$PACKAGE_AND_CORE_RESULT" != 'success' ||
+                "$COVERAGE_RESULT" != 'success' ||
+                "$MYSQL_ENGINE_RESULT" != 'success' ||
+                "$POSTGRESQL_ENGINE_RESULT" != 'success' ]]; then
+            printf 'One or more required qualification jobs did not succeed.\n' >&2
+            exit 1
+          fi

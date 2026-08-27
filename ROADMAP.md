@@ -36,10 +36,11 @@ integrity, and resource-use contracts. Correctness or security takes priority
 over a planned calendar date. Record compatibility implications and any
 necessary servicing release in the changelog and release notes.
 
-After the repository becomes public, the maintainer intends to assess it
-against OpenSSF Best Practices using the
-[prepared evidence](docs/openssf-best-practices.md). Registration and answers
-are separate from this documentation; no badge is currently claimed.
+The public [OpenSSF Best Practices project](https://www.bestpractices.dev/projects/14265)
+reports Passing. Maintain that self-assessment using the
+[evidence mapping](docs/openssf-best-practices.md). Silver and Gold are not
+claimed, and the separate automated Scorecard result is not established until
+its repository workflow publishes a readable result.
 
 ## Explicit non-goals
 

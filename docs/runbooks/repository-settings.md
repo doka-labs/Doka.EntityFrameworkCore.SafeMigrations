@@ -26,7 +26,7 @@ through an explicitly authorized administration task and read back the result.
 | Source and discussions | Public default `main`; anonymous README/source/issues access; working issue forms and support links |
 | Ownership | Visible `@doka-labs/core-maintainers` team with explicit repository write access; no CODEOWNERS parse errors |
 | Main protection | Reviewed pull requests, applicable required checks, resolved conversations, stale approval handling, restricted force-push/deletion and bypass |
-| Check identity | Copy exact check-run contexts/app identities from a real green hosted run; do not invent a composite check name |
+| Check identity | Require `Full qualification / Required` only after a real green CI run submitted it through GitHub Actions |
 | Review independence | Reviewer distinct from author where claimed; record actual available roles, not just required-review count |
 | Actions permissions | Read-only default token, no workflow PR approval, approved actions, fork approval policy, no privileged execution of untrusted PR code |
 | Private vulnerability reporting | Enabled, external form reachable, responder subscribed to security alerts, fallback private channel tested |
@@ -34,11 +34,19 @@ through an explicitly authorized administration task and read back the result.
 | Analysis | Existing .NET analysis and engineering gate actually run; any additional code scanning selected explicitly, not assumed from this document |
 | Account access | Maintainer/release access reviewed, MFA enforced at the appropriate organization/account scope, recovery and succession assessed |
 
-The reusable workflow emits separate jobs. Requiring a guessed name such as a
-workflow title may leave a permanently pending check or protect the wrong
-surface. Record all mandatory contexts from the first full run, including
-matrix cells, coverage, and dependency qualification. When job names or matrix
-entries change, update protection using fresh check-run evidence.
+The reusable workflow emits detailed jobs plus one fail-closed `Required`
+aggregation job. It runs after package/Core, merged coverage, every MySQL and
+MariaDB matrix cell, and every PostgreSQL matrix cell. `always()` ensures that
+the aggregation job still reports a result after a dependency fails, is
+cancelled, or is skipped; only four aggregate `success` results pass it.
+
+The CI caller exposes this job as `Full qualification / Required`. Do not type
+that context into the ruleset before GitHub Actions has submitted it. Keep the
+existing required check during the transition, run CI once, select the new
+context with GitHub Actions as its expected source, then remove the obsolete
+partial check. Do not select `Any source`. A matrix-version change does not
+rename this stable context, but every new qualification job must be added to
+the aggregation job's `needs` and result check in the same change.
 
 ## Before the first candidate
 
@@ -98,12 +106,17 @@ audited configuration is established; do not copy historical status forward.
 
 ## OpenSSF handoff
 
-Once public, the maintainer may register the project and use the
-[preparation matrix](../openssf-best-practices.md). Recheck current criteria,
-anonymous evidence URLs, operational history, and applicable exclusions. Save
-only justified answers, then verify the public entry. Add an achievement link
-only to an actual project entry and badge state. Documentation readiness is
-not a substitute for missing controls, people, or measured results.
+The public [OpenSSF Best Practices project](https://www.bestpractices.dev/projects/14265)
+reports Passing and is linked from the README. Maintain its answers with the
+[evidence matrix](../openssf-best-practices.md): recheck current criteria,
+anonymous evidence URLs, operational history, and applicable exclusions, then
+verify the public entry after every material update.
+
+Treat OpenSSF Scorecard as a separate automated assessment. After its workflow
+first runs on public `main`, verify the workflow conclusion, uploaded SARIF,
+GitHub code-scanning result, Scorecard API response, and public viewer before
+citing a score. Documentation or badge placement is not a substitute for
+missing controls, people, or measured results.
 
 ## Primary sources
 

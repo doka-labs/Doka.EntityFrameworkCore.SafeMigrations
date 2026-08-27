@@ -65,11 +65,13 @@ not automatically a fuzzing campaign. Read the
 per-release results; a percentage alone does not prove the security boundary.
 
 OpenSSF's ordinary-test-suite alternative for dynamic analysis needs at least
-80% branch coverage. The MySQL/MariaDB gate currently permits 75%, so the gate
-alone does not establish that alternative. Use actual measured, scoped evidence
-or an appropriately qualified input-varying analysis run; otherwise leave the
-criterion unresolved. Memory-safe C# does not eliminate SQL injection, logic,
-availability, lifecycle, or supply-chain risks.
+80% branch coverage. The Passing assessment uses the actual scoped results from
+[CI run 33079411038](https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/actions/runs/33079411038):
+84.29% for Core, 85.34% for MySQL/MariaDB, and 86.88% for PostgreSQL. The
+configured 75% MySQL/MariaDB floor alone does not preserve that evidence;
+reassess a measured qualified run after relevant changes. Memory-safe C# does
+not eliminate SQL injection, logic, availability, lifecycle, or supply-chain
+risks.
 
 ## Private report workflow
 
@@ -108,7 +110,7 @@ Restoring repository access is distinct from restoring a consumer database.
 - [.NET code analysis](https://learn.microsoft.com/en-us/dotnet/fundamentals/code-analysis/overview),
   retrieved 2026-08-26.
 - [OpenSSF Passing criteria](https://www.bestpractices.dev/en/criteria/0),
-  retrieved 2026-08-26; analysis and response evidence must be measured.
+  retrieved 2026-08-28; analysis and response evidence must be measured.
 - [GitHub private vulnerability reporting](https://docs.github.com/en/code-security/how-tos/report-and-fix-vulnerabilities/configure-vulnerability-reporting/configure-for-a-repository),
   retrieved 2026-08-26; enabling the feature and responder notifications is
   an operator action, not a property created by this document.

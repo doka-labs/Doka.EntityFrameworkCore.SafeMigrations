@@ -82,9 +82,11 @@ a write fence, current backups with a restore drill, and per-instance
 postflight/history checks. These limits do not excuse a broken guard within
 the supported contract.
 
-No blanket security certification, independent audit, badge, globally bounded
-catalog size, or enabled hosted control is asserted. Review this policy when
-the API, provider, SQL, resource, diagnostic, or release trust boundary changes.
+The OpenSSF Best Practices Passing badge is a project self-assessment, not a
+blanket security certification or independent audit. No globally bounded
+catalog size or undocumented hosted control is asserted. Review this policy
+when the API, provider, SQL, resource, diagnostic, or release trust boundary
+changes.
 
 ## Supported Versions
 

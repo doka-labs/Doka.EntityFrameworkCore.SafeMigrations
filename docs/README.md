@@ -2,7 +2,8 @@
 
 This is the task-oriented entry point for SafeMigrations documentation. The
 repository prepares one complete 10.0.0 delivery; package availability and
-OpenSSF achievement must be established separately from source documentation.
+OpenSSF status are established by their linked external registries, not by
+source documentation alone.
 
 ## Use and deploy
 
@@ -46,8 +47,9 @@ OpenSSF achievement must be established separately from source documentation.
   scope, integrity requirements, and acceptance contract.
 - [Repository settings](runbooks/repository-settings.md): operator-owned
   post-publication controls and read-only confirmation commands.
-- [OpenSSF preparation](openssf-best-practices.md): criterion-to-evidence
-  mapping, with unknown and external prerequisites kept visible.
+- [OpenSSF Best Practices evidence](openssf-best-practices.md):
+  maintenance evidence for the achieved Passing self-assessment, unassessed
+  Silver/Gold criteria, and the separate automated Scorecard assessment.
 - [Changelog](../CHANGELOG.md): human-readable package changes.
 
 ## Ownership and evidence discipline
@@ -55,8 +57,9 @@ OpenSSF achievement must be established separately from source documentation.
 The README owns onboarding; the API guide owns the input/output overview;
 support owns the matrix; architecture owns implementation structure; ADRs own
 decision rationale; runbooks own procedures; security documents own assurance
-arguments; OpenSSF owns only the mapping to external criteria. Link to the
-owner instead of maintaining another copy of its contract.
+arguments; the OpenSSF document owns evidence mapping and links to externally
+hosted status. Link to the owner instead of maintaining another copy of its
+contract.
 
 The author of a behavior change updates its canonical document and tests in
 the same review. Public XML documentation ships with each assembly for IDE

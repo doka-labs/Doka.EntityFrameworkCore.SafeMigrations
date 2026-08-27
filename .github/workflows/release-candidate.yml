@@ -86,7 +86,7 @@ jobs:
     with:
       package-version: ${{ needs.preflight.outputs.package-version }}
       artifact-name: safe-migrations-release-${{ needs.preflight.outputs.package-version }}-${{ github.run_attempt }}
-      artifact-retention-days: 90
+      artifact-retention-days: 30
 
   attest:
     name: Attest qualified packages
