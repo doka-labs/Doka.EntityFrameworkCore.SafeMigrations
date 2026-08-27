@@ -7,7 +7,7 @@ agreement, a response-time guarantee, or an emergency incident-response service.
 ## Choose the Correct Channel
 
 | Request | Channel | Public? |
-|---|---|---|
+| --- | --- | --- |
 | Suspected security vulnerability | Follow [SECURITY.md](SECURITY.md#reporting-a-vulnerability) | No |
 | Harassment or other conduct concern | Follow [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | No |
 | Reproducible SafeMigrations defect | [Bug report][bug] | Yes |

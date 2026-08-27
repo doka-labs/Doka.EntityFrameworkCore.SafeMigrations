@@ -28,20 +28,22 @@ equivalent.
 - `Doka.EntityFrameworkCore.SafeMigrations.PostgreSql`: PostgreSQL adapter on
   Npgsql 10
 
-The qualified engine matrix is:
+The declared release-qualification matrix is:
 
 | Provider package | Engines |
-|---|---|
+| --- | --- |
 | `.MySql` | MySQL 8.4 and 9.7; MariaDB 10.11, 11.4, 11.8, and 12.3 |
 | `.PostgreSql` | PostgreSQL 14 through 18, with one release-gate cell per supported major |
 
-The CI and release workflows pin the exact patch tags and image digests used as
-release evidence. See [Support and qualification](docs/support-and-qualification.md).
+The CI and release workflows pin the exact patch tags and image digests used
+when that matrix executes. The exact successful run, not this table, is release
+evidence. See [Support and qualification](docs/support-and-qualification.md).
 
-The first complete delivery targets 10.0.0; `10.0.0-rc.1` qualifies that same
-feature contract and its publication workflow. [Release notes](CHANGELOG.md)
-describe the prepared candidate. The badges include prereleases, but only a
-successful release run and verified public packages establish availability.
+The first complete delivery targets 10.0.0. The source tree is prepared for
+`10.0.0-rc.1` to qualify that same feature contract and its publication
+workflow. [Release notes](CHANGELOG.md) describe the prepared candidate. The
+badges include prereleases, but only a successful release run and verified
+public packages establish availability or qualification.
 
 ## Installation
 
@@ -179,6 +181,15 @@ Then create and review the migration normally:
 dotnet ef migrations add CoreLegacyConvergence
 ```
 
+The generated source mapping is explicit and reviewable:
+
+| EF operation | `Strict` source | `LegacyConvergence` source |
+| --- | --- | --- |
+| `CreateTable` | `CreateTableIfNotExists` | `ConvergeTableFromModel` |
+| Single-column `CreateIndex` | `CreateIndexIfNotExistsFromModel` | Same |
+| Multi-column `CreateIndex` | `CreateCompositeIndexIfNotExistsFromModel` | Same |
+| Generated rollback of `CreateTable` | `DropTableIfExists` | Entire `Down` body rejects before DDL |
+
 The generated `Up` method uses `ConvergeTableFromModel` plus safe index
 helpers. Its `Down` method throws before DDL because SafeMigrations cannot know
 which objects predated that migration. After the legacy baseline sequence has
@@ -200,13 +211,18 @@ preserves MySQL/MariaDB `AUTO_INCREMENT` and PostgreSQL identity semantics.
 An operation-level provider annotation that SafeMigrations cannot compare is
 classified `Unsupported` before target DDL instead of being ignored.
 
+The `*FromModel` helpers are public because generated migrations must compile
+against a stable package API. They are scaffolder targets, not required
+hand-written boilerplate. For a manually authored index contract, use
+`CreateIndexIfNotExists` or `EnsureIndex` instead.
+
 ## Policies
 
 Preflight is not a migration policy. It is a separate read-only runner outside
 `IMigrator` and EF migration history.
 
 | Policy | Existing matching object | Existing different object |
-|---|---|---|
+| --- | --- | --- |
 | `ExistenceOnly` | No-op | No-op only where existence semantics are explicit |
 | `ThrowIfDifferent` | No-op | Reject |
 | `RepairIfSafe` | No-op | Apply a proven allowlisted repair, otherwise reject |
@@ -290,8 +306,8 @@ SHA-256 fingerprints, ordered assessments, preserved unexpected objects, and
 stable codes. The contract fingerprint covers safe intents, definitions,
 policies, operation annotations, and order; ordinary provider operations
 contribute only their CLR type, not their SQL or other properties. Retain the
-immutable artifact digest and independent review for those operations. Serialize with
-`SafeMigrationReportJson`; the package includes
+immutable artifact digest and independent review for those operations.
+Serialize with `SafeMigrationReportJson`; the package includes
 `schemas/safe-migration-run-report-v1.schema.json`.
 
 Do not encode a preflight-only operation inside `Migration.Up`. EF would record
@@ -452,7 +468,8 @@ classified rejection is part of the complete product contract.
 
 Further documentation:
 
-- [Documentation index and API reference](docs/README.md)
+- [Documentation index](docs/README.md)
+- [Public API reference](docs/api-reference.md)
 - [Implementation design](docs/implementation-design.md)
 - [Vertical-slice architecture](docs/vertical-slice-architecture.md)
 - [Support and qualification](docs/support-and-qualification.md)

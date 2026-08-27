@@ -174,6 +174,17 @@ replaces `Down` with a deterministic exception: adopted legacy objects have no
 provable destructive inverse. Other EF operations are delegated unchanged so
 their policy cannot be guessed by the scaffolder.
 
+| EF operation | `Strict` source | `LegacyConvergence` source |
+| --- | --- | --- |
+| `CreateTable` | `CreateTableIfNotExists` | `ConvergeTableFromModel` |
+| Single-column `CreateIndex` | `CreateIndexIfNotExistsFromModel` | Same |
+| Multi-column `CreateIndex` | `CreateCompositeIndexIfNotExistsFromModel` | Same |
+| Generated rollback of `CreateTable` | `DropTableIfExists` | Entire `Down` body rejects before DDL |
+
+The `*FromModel` methods are stable public targets for generated migration
+source. They capture EF's provider-rendered operation into immutable expected
+definitions; they are not a second runtime discovery layer.
+
 The typed table callback creates EF operations in memory and immediately
 converts them to immutable expected definitions. Provider column annotations
 are snapshotted, fingerprinted, restored to baseline DDL, and compared through
@@ -197,7 +208,7 @@ objects.
 Each provider must classify exactly one state:
 
 | State | Meaning |
-|---|---|
+| --- | --- |
 | `Missing` | The operation target or source does not exist. |
 | `Matching` | The relevant live definition satisfies the expected contract. |
 | `Different` | The target name exists but the definition or rename target conflicts. |
@@ -372,6 +383,8 @@ Release qualification covers:
 
 Primary boundaries are based on the public contracts documented by
 [EF Core migrations](https://learn.microsoft.com/ef/core/managing-schemas/migrations/),
+[EF Core design-time tools architecture](https://learn.microsoft.com/en-us/ef/core/miscellaneous/internals/tools),
 [Doka.EntityFrameworkCore.MySql](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql),
-[Npgsql EF Core](https://www.npgsql.org/efcore/), and the database catalog and
-DDL documentation linked from the operational guides.
+and [Npgsql EF Core](https://www.npgsql.org/efcore/), retrieved 2026-08-27,
+plus the database catalog and DDL documentation linked from the operational
+guides.

@@ -44,6 +44,12 @@ development, action, and container dependencies against primary advisories.
 Triage relevant alerts to resolution with release impact, never by treating a
 successful restore as proof that no vulnerability exists.
 
+An EF Design or Tools update also crosses the source-generation trust boundary.
+Re-run strict and legacy scaffolding for both providers, compile the generated
+source, exercise the direct-Design, Tools-only, and runtime-only package
+profiles, and retain negative tests for unexpected generator shapes and
+unmodeled provider annotations.
+
 Do not add a library, GitHub Action, scanner, or documentation tool merely to
 improve a badge signal. New dependencies require review of purpose, authority,
 license, maintenance, supply-chain exposure, and versioned verification. Use

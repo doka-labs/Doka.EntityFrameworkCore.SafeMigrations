@@ -6,7 +6,7 @@ All publishable projects target `net10.0`. The repository pins SDK 10.0.400
 with roll-forward disabled. SafeMigrations supports EF Core 10 only.
 
 | Package | Runtime dependency contract |
-|---|---|
+| --- | --- |
 | Core | `Microsoft.EntityFrameworkCore.Relational` `[10.0.11,10.1.0)` |
 | MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` exact `[10.0.0]` |
 | PostgreSQL | `Npgsql.EntityFrameworkCore.PostgreSQL` `[10.0.3,11.0.0)` |
@@ -16,14 +16,19 @@ does not build Doka and never uses a cross-repository ProjectReference. A Doka
 update is accepted only after the complete package, engine, tooling, coverage,
 and performance matrix passes again.
 
+The declared dependency graph was rechecked against the NuGet V3 package
+registrations and the .NET 10 release metadata on 2026-08-27. Bounded package
+ranges describe compatibility; the committed lockfiles identify the exact
+graph selected by a particular revision.
+
 ## Engine matrix
 
-The reusable workflow `.github/workflows/quality-gates.yml` is invoked by both
-CI, release candidates, and stable releases. It pins these exact qualification
+The reusable workflow `.github/workflows/quality-gates.yml` is invoked by CI,
+release candidates, and stable releases. It declares these exact qualification
 images:
 
 | Engine | Image |
-|---|---|
+| --- | --- |
 | MySQL 8.4 | `mysql:8.4.11@sha256:b3b90af2a6552ae30c266fdb7d5dd55f3afb72404bb78d37fe8a23eb857fd3fb` |
 | MySQL 9.7 | `mysql:9.7.2@sha256:257388edf9c84dbc04c763625446d5f3fa6ed60d1b0873bc552c614ba0a7ab4e` |
 | MariaDB 10.11 | `mariadb:10.11.18@sha256:de61fed4a40d3842f3ee09944ba52792156cfd9adf489b2cc670fc6ded28df8d` |
@@ -41,10 +46,20 @@ support spans major versions 14 through 18; every supported major is an
 independent release-gate cell. A new endpoint or removed upstream version
 requires a reviewed support-contract change and fresh evidence.
 
+At the 2026-08-27 source review, PostgreSQL 14 through 18 are the upstream
+supported majors and the pinned versions above are their current minor
+releases. PostgreSQL 14 reaches upstream end of life on 2026-11-12. Release
+qualification performed after that boundary must re-evaluate the declared
+matrix instead of inheriting this dated support conclusion.
+
+The table records the matrix configured in source. Only a successful workflow
+run for the exact commit/package version establishes executed qualification;
+the presence of a tag or image digest in this document does not.
+
 ## Dependency qualification
 
 Central package declarations define bounded compatible ranges; committed
-lockfiles define the exact graph qualified by the current revision. Dependabot
+lockfiles define the exact graph selected by the current revision. Dependabot
 proposes dependency and lockfile updates through ordinary pull requests. Every
 accepted update therefore runs the same complete CI workflow as product code,
 including all provider cells, package consumers, coverage, performance, and
@@ -91,7 +106,7 @@ Provider tests use real Docker servers and cover:
 - normal EF operations mixed with safe operations;
 - EF history success/failure and derived-context model-snapshot guards;
 - read-only preflight, unexpected-object inventory, positive and negative
-  postflight, and cancellation before and during catalog access.
+  postflight, and cancellation before and during catalog access;
 - PostgreSQL-owned and caller-owned analysis transactions, including accepted
   read-only `RepeatableRead`/`Serializable` scopes and fail-closed rejection of
   read-write or weaker-isolation caller transactions.
@@ -147,7 +162,7 @@ assemblies by exact package name.
 `eng/coverage-thresholds.json` is a blocking floor, not a quality target:
 
 | Product assembly | Line floor | Branch floor |
-|---|---:|---:|
+| --- | ---: | ---: |
 | Core | 92% | 80% |
 | MySQL/MariaDB adapter | 92% | 75% |
 | PostgreSQL adapter | 94% | 84% |
@@ -230,14 +245,24 @@ release-asset verification.
 
 ## Primary references
 
-- [.NET support policy](https://dotnet.microsoft.com/platform/support/policy)
-- [EF Core supported releases](https://learn.microsoft.com/ef/core/what-is-new/)
+- [.NET 10 release metadata](https://dotnetcli.blob.core.windows.net/dotnet/release-metadata/10.0/releases.json),
+  retrieved 2026-08-27.
+- [EF Core Relational 10.0.11 package](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.Relational/10.0.11),
+  [Doka 10.0.0 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.0.0),
+  and [Npgsql EF Core 10.0.3 package](https://www.nuget.org/packages/Npgsql.EntityFrameworkCore.PostgreSQL/10.0.3),
+  retrieved 2026-08-27.
 - [PostgreSQL versioning policy](https://www.postgresql.org/support/versioning/)
-- [PostgreSQL 18.6, 14.24 release announcement](https://www.postgresql.org/about/news/postgresql-186-1711-1615-1519-1424-and-19-beta-3-released-3365/)
-- [MySQL supported platforms and lifecycle](https://www.mysql.com/support/supportedplatforms/database.html)
-- [MySQL 8.4 release notes](https://dev.mysql.com/doc/relnotes/mysql/8.4/en/)
-- [MySQL 9.7 release notes](https://dev.mysql.com/doc/relnotes/mysql/9.7/en/)
-- [MariaDB release model](https://mariadb.org/about/release-model/)
-- [GitHub artifact attestations](https://docs.github.com/actions/security-for-github-actions/using-artifact-attestations/using-artifact-attestations-to-establish-provenance-for-builds)
-- [NuGet Trusted Publishing](https://learn.microsoft.com/nuget/nuget-org/trusted-publishing)
-- [Microsoft SBOM Tool](https://github.com/microsoft/sbom-tool)
+  and [18.6/17.11/16.15/15.19/14.24 announcement](https://www.postgresql.org/about/news/postgresql-186-1711-1615-1519-1424-and-19-beta-3-released-3365/),
+  retrieved 2026-08-27.
+- [MySQL supported platforms and lifecycle](https://www.mysql.com/support/supportedplatforms/database.html),
+  [MySQL 8.4.11 release notes](https://dev.mysql.com/doc/relnotes/mysql/8.4/en/news-8-4-11.html),
+  and [MySQL 9.7.2 release notes](https://dev.mysql.com/doc/relnotes/mysql/9.7/en/news-9-7-2.html),
+  retrieved 2026-08-27.
+- [MariaDB 10.11.18, 11.4.12, and 11.8.8 release announcement](https://mariadb.com/resources/blog/mariadb-community-server-q2-2026-corrective-releases/),
+  [MariaDB 12.3 release inventory](https://mariadb.org/mariadb/all-releases/),
+  and [MariaDB release model](https://mariadb.com/docs/release-notes/community-server/about/release-model),
+  retrieved 2026-08-27.
+- [GitHub artifact attestations](https://docs.github.com/actions/security-for-github-actions/using-artifact-attestations/using-artifact-attestations-to-establish-provenance-for-builds),
+  [NuGet Trusted Publishing](https://learn.microsoft.com/nuget/nuget-org/trusted-publishing),
+  and [Microsoft SBOM Tool](https://github.com/microsoft/sbom-tool), retrieved
+  2026-08-27.

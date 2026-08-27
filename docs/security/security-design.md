@@ -1,6 +1,6 @@
 # Security design and assurance
 
-Recorded 2026-08-26 against the repository implementation. This is a design
+Recorded 2026-08-27 against the repository implementation. This is a design
 and evidence map for review, not a performed independent security audit or a
 claim that every supported combination is vulnerability-free. The
 [security policy](../../SECURITY.md) owns security scope, invariants, and
@@ -28,6 +28,7 @@ because some operations use SafeMigrations.
 | Boundary | Potentially hostile input | Required treatment |
 | --- | --- | --- |
 | Migration author to Core | Definitions, enum values, collections, custom SQL, context configuration | Validate the closed contract and snapshot inputs; do not turn raw SQL into proven equivalence |
+| EF/provider generator to scaffolder | Version-sensitive generated C# shape, provider annotations, selected design-time mode | Delegate rendering, validate one bounded source shape, freeze mode into source, reject unknown annotations |
 | Database to classifier | Names, defaults, computed/check expressions, catalog shape, conflicting rows | Parameterized catalog filters, typed comparisons, explicit unsupported/data-blocked results |
 | Classifier/planner to DDL | Observed state, old/new definitions, capabilities | Exact policy and repair allowlist; prerequisite and postcondition checks |
 | Analysis to execution | Time and concurrent database changes | No claim that preflight reserves future state; external write/DDL fence and runtime guards |
@@ -148,6 +149,25 @@ release-asset verification, and signed public NuGet content readback.
 [Consumer verification](release-verification.md) and actual hosted run/settings
 evidence remain necessary; local checks cannot establish configured protection
 or successful publication.
+
+### S7 - Scaffolding cannot silently widen migration policy
+
+The design-time extension delegates C# argument and annotation rendering to EF
+Core, then substitutes only the documented table/index operation calls after
+validating one exact generated shape. Strict mode is the default. Legacy mode
+is explicitly selected and frozen into the generated C# file; its rollback
+body rejects before DDL. Column, constraint, rename, and schema operations are
+not reinterpreted automatically. Unknown output shapes and unmodeled provider
+annotations fail closed.
+
+Controls: [operation generator](../../src/Doka.EntityFrameworkCore.SafeMigrations/Scaffolding/SafeMigrationCSharpMigrationOperationGenerator.cs),
+[migration generator](../../src/Doka.EntityFrameworkCore.SafeMigrations/Scaffolding/SafeMigrationCSharpMigrationsGenerator.cs),
+and provider `buildTransitive` discovery assets. Evidence:
+[scaffolding unit tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Unit/Scaffolding/SafeMigrationScaffoldingTests.cs),
+[real EF tooling qualification](../../eng/verify-ef-tooling.sh), provider
+identity tests, and package-only Design/Tools/runtime consumer profiles. A
+generated migration remains privileged reviewed source; scaffolding is not an
+authorization boundary for an untrusted migration author.
 
 ## Residual risks and response
 

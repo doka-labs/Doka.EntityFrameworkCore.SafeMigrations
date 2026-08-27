@@ -78,7 +78,7 @@ not by itself establish decision authority.
 
 SafeMigrations does not copy Doka's ADR validator project, generated JSON
 index, or mandatory local-build ADR validation. Its Markdown index remains
-reviewed navigation. The general documentation gate checks links, encoding,
+reviewed navigation. General documentation review checks links, encoding,
 navigation, API coverage, and the criterion inventory, not ADR status history
 or semantic quality.
 

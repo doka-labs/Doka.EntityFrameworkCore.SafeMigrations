@@ -54,7 +54,7 @@ transactions without disposing, committing, or rolling them back.
 Gate interpretation:
 
 | Status | Operator action |
-|---|---|
+| --- | --- |
 | `NoOperations` | Confirm the intended migration is already present; do not assume success from status alone. |
 | `Ready` | Continue if all external deployment gates are also satisfied. |
 | `ReadyWithProviderOperations` | Review ordinary EF operations manually; SafeMigrations cannot read-only classify them. |
@@ -144,7 +144,7 @@ Only then release the write fence and mark the instance complete.
 ## Failure decision table
 
 | Failure point | Database assumption | Response |
-|---|---|---|
+| --- | --- | --- |
 | Preflight blocked | Target DDL was not executed by SafeMigrations | Correct drift/data/unsupported intent; review a forward migration; rerun preflight. |
 | MySQL/MariaDB runtime guard | Earlier DDL in the migration may be committed | Keep writer fenced, inspect catalog/history, correct the classified cause, rerun the same pending migration. |
 | PostgreSQL transactional command | Current migration transaction normally rolled back | Confirm history and catalog; correct the cause; rerun. Account for explicitly transaction-suppressed provider operations. |

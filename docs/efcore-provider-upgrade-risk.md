@@ -140,16 +140,18 @@ identifier case, ordering, and provider semantics have been checked.
 ## Version research
 
 Version pins and support statements are fast-stale. Update them from primary
-sources at author time:
+sources at author time. The following references were rechecked on 2026-08-27:
 
 - [.NET and .NET SDK support policy](https://dotnet.microsoft.com/platform/support/policy)
 - [EF Core releases and planning](https://learn.microsoft.com/ef/core/what-is-new/)
+- [EF Core design-time tools architecture](https://learn.microsoft.com/en-us/ef/core/miscellaneous/internals/tools)
+- [EF Core `DesignTimeServicesReferenceAttribute`](https://learn.microsoft.com/en-us/dotnet/api/microsoft.entityframeworkcore.design.designtimeservicesreferenceattribute?view=efcore-10.0)
 - [NuGet package versioning](https://learn.microsoft.com/nuget/concepts/package-versioning)
-- [Npgsql EF Core release notes](https://www.npgsql.org/efcore/release-notes/)
+- [Npgsql EF Core 10.0 release notes](https://www.npgsql.org/efcore/release-notes/10.0.html)
 - [PostgreSQL versioning policy](https://www.postgresql.org/support/versioning/)
 - [PostgreSQL system information functions](https://www.postgresql.org/docs/current/functions-info.html)
 - [MySQL supported platforms and lifecycle](https://www.mysql.com/support/supportedplatforms/database.html)
-- [MariaDB release criteria](https://mariadb.org/about/release-criteria/)
+- [MariaDB release criteria](https://mariadb.com/docs/release-notes/mariadb-release-criteria)
 - [Doka.EntityFrameworkCore.MySql repository](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql)
 
 The exact release evidence belongs in the workflow run, lockfiles, package

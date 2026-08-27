@@ -9,8 +9,9 @@ The initial corpus was recorded on 2026-08-26. D-001 through D-006 describe
 existing implementation retrospectively; they do not invent earlier approval
 dates. Dominic Kalkbrenner has confirmed their recorded rationale and existing
 implementation. D-007 records the maintainer's explicit choice of documentation
-format and tooling boundary. The dated transitions are retained in each record's
-Decision History.
+format and tooling boundary. D-008 records the implemented automatic
+scaffolding contract selected on 2026-08-27. The dated transitions are retained
+in each record's Decision History.
 
 | Record | Bounded decision |
 | --- | --- |

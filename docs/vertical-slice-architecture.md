@@ -124,7 +124,7 @@ is an ownership boundary and does not create an API namespace migration.
 
 ## Performance constraints
 
-The refactor must not add runtime feature registries, per-operation dependency
+The architecture adds no runtime feature registries, per-operation dependency
 injection, reflection, or dynamic dispatch. Partial classes are a source-level
 ownership mechanism only and compile into the same static or sealed runtime
 types. Catalog classification remains ordered across deterministic bounded
@@ -136,7 +136,7 @@ catalogs, including pooled connection open/reset/close costs.
 
 ## Verification
 
-The vertical-slice refactor is complete only when:
+The vertical-slice architecture remains conformant only while:
 
 1. every operation kind is owned by exactly one core feature slice;
 2. both provider packages mirror all feature slices;

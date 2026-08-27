@@ -2,7 +2,8 @@
 
 ## Status and scope
 
-Preparation date: 2026-08-26. **No OpenSSF badge, project registration,
+Preparation date: 2026-08-26; repository evidence reviewed 2026-08-27. **No
+OpenSSF badge, project registration,
 achievement percentage, or independent certification is claimed.** The
 maintainer will handle registration and assessment after the repository is
 public. This document prepares evidence; it does not submit answers, change
@@ -148,7 +149,7 @@ been met; those operational facts still need assessment evidence.
 | `documentation_architecture` | MUST | Prepared | [Implementation](implementation-design.md), [ADRs](decisions/README.md) | Reconcile accepted decisions and implemented behavior | C |
 | `documentation_security` | MUST | Prepared | [Design](security/security-design.md) | Complete policy review and publish supported security requirements | M |
 | `documentation_quick_start` | MUST | Prepared | [README](../README.md), [sample](../samples/Doka.EntityFrameworkCore.SafeMigrations.Sample/README.md) | Reproduce with published package graph | C |
-| `documentation_current` | MUST | Prepared | [Guide ownership](README.md#ownership-and-evidence-discipline), doc gate | Per-change semantic review, not link validation alone | C |
+| `documentation_current` | MUST | Prepared | [Guide ownership and review](README.md#ownership-and-evidence-discipline) | Per-change semantic review and local-link validation | C |
 | `documentation_achievements` | MUST | External | No achievement link is invented | Link actual achievements within 48 hours of public recognition; do not show an unearned badge | M |
 | `accessibility_best_practices` | SHOULD | Evidence | Text-first docs, headings and named links | Review rendered public documentation accessibility | C |
 | `internationalization` | SHOULD | Assess | English diagnostic codes/docs, Unicode identifier tests | Assess relevant user-facing localization requirements | M |
@@ -158,7 +159,7 @@ been met; those operational facts still need assessment evidence.
 | `vulnerability_report_credit` | MUST | Evidence | [Development](security/secure-development.md) credit process | Actual advisory credit/anonymity decisions or justified no-report case | M |
 | `vulnerability_response_process` | MUST | Prepared | [Development](security/secure-development.md), security intake | Confirm the responsible responder and evidence of the documented private response process | M |
 | `coding_standards` | MUST | Prepared | [Contributing](../CONTRIBUTING.md), [.editorconfig](../.editorconfig) | Review C#, Python, shell, YAML, and documentation conventions | C |
-| `coding_standards_enforced` | MUST | Evidence | Build/style/import/doc gates | Verify enforced FLOSS-tool coverage; Rider-only layouts remain manually reviewed | C |
+| `coding_standards_enforced` | MUST | Evidence | Build/style/import gates plus required documentation review | Verify enforced FLOSS-tool coverage; Rider-only layouts and documentation remain manually reviewed | C |
 | `build_standard_variables` | MUST | Assess | Managed SDK build and package outputs | Inspect native-binary scope and CC/CFLAGS/CXX/CXXFLAGS/LDFLAGS propagation; upstream permits N/A if no native binaries are generated | C |
 | `build_preserve_debug` | SHOULD | Prepared | Portable PDB/source-symbol packages | Qualified package and public symbol readback | R |
 | `build_non_recursive` | MUST | Prepared | Solution/project-reference MSBuild graph | Inspect actual build graph and absence of recursive source-build misuse | C |

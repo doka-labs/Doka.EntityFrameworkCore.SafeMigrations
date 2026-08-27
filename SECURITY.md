@@ -47,6 +47,9 @@ it is protected deployment evidence, not a public or inherently redacted log.
   cleanup must preserve their documented bounds and failure semantics.
 - SafeMigrations-owned telemetry must exclude credentials, SQL, raw object or
   database names, row values, exception payloads, and caller instance IDs.
+- Design-time scaffolding must rewrite only its documented table/index boundary,
+  freeze the selected mode into source, and stop on an unrecognized generator
+  shape or provider annotation instead of emitting ambiguous migration code.
 - Release identity, authorized signing, provenance, qualified package content,
   and NuGet readback must agree before a release is accepted. A checksum alone
   is not proof of origin, and a model fingerprint is not authentication.
@@ -90,7 +93,7 @@ release is being prepared; a dated changelog entry is not proof of publication.
 
 | Release state | Security support |
 | --- | --- |
-| Current 10.0.0 release candidate, once published | Report defects against the latest candidate; superseded candidates are not independently serviced |
+| 10.0.0 release-candidate line, once published | Report defects against the latest candidate; superseded candidates are not independently serviced |
 | Stable 10.0.x, once published | Supported release line; fixes may require updating to its latest patch |
 | Earlier proof-of-concept or other release lines | No separate servicing promise; reports are still triaged for impact on the supported contract |
 

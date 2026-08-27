@@ -9,6 +9,9 @@ completion/Quick Documentation for the selected package version. The
 [MySQL/MariaDB](../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/PublicAPI.Unshipped.txt),
 and [PostgreSQL](../src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/PublicAPI.Unshipped.txt)
 API baselines are review inventories, not substitutes for this guide or XML.
+This page describes the source contract prepared for `10.0.0-rc.1`. A
+successful release run and exact-version public package readback remain the
+authority for a published API.
 
 ## Packages and registration
 
@@ -33,6 +36,11 @@ signature help, rather than interpreting `TContext` as the canonical context.
 The external-service-provider overloads can explicitly select canonical
 context/generator configuration as documented in their XML reference.
 
+The configure callback receives `SafeMigrationOptionsBuilder`. Its current
+public setting is `UseScaffoldingMode(SafeMigrationScaffoldingMode)`, which
+returns the same builder for fluent composition. The default is `Strict`; an
+undefined enum value is rejected while options are configured.
+
 Registration does not create a database or execute migrations. MySQL/MariaDB
 requires `Allow User Variables=true` on the actual connection. Missing or
 conflicting adapter ownership fails closed. See
@@ -40,11 +48,15 @@ conflicting adapter ownership fails closed. See
 
 ## Design-time scaffolding
 
-`SafeMigrationScaffoldingMode.Strict` is the default. EF Core scaffolding maps
-`CreateTable`, single- and multi-column `CreateIndex`, and `DropTable` to
-`CreateTableIfNotExists`, the generated-model index helpers, and
-`DropTableIfExists`. `LegacyConvergence` maps table creation to
-`ConvergeTableFromModel` and emits a fail-closed `Down` body.
+`SafeMigrationScaffoldingMode.Strict` is the default. The generated operation
+mapping is:
+
+| EF operation | `Strict` source | `LegacyConvergence` source |
+| --- | --- | --- |
+| `CreateTable` | `CreateTableIfNotExists` | `ConvergeTableFromModel` |
+| Single-column `CreateIndex` | `CreateIndexIfNotExistsFromModel` | Same |
+| Multi-column `CreateIndex` | `CreateCompositeIndexIfNotExistsFromModel` | Same |
+| Generated rollback of `CreateTable` | `DropTableIfExists` | Entire `Down` body rejects before DDL |
 
 The provider package contributes a `buildTransitive` assembly attribute when
 the consuming project directly references `Microsoft.EntityFrameworkCore.Design`
@@ -77,9 +89,9 @@ operations and returns the original `MigrationBuilder`.
 | Family | Explicit definition API | Familiar builder API and other operations |
 | --- | --- | --- |
 | Schema | `EnsureSchemaExists` | `DropSchemaIfExists` |
-| Table | `EnsureTable`, `ConvergeTable` | `CreateTableIfNotExists<TColumns>`, `DropTableIfExists`, `RenameTableIfExists` |
+| Table | `EnsureTable`, `ConvergeTable` | `CreateTableIfNotExists<TColumns>`, `ConvergeTableFromModel<TColumns>`, `DropTableIfExists`, `RenameTableIfExists` |
 | Column | `EnsureColumn`, `AlterColumnIfDifferent` | `AddColumnIfNotExists<T>`, `DropColumnIfExists`, `RenameColumnIfExists` |
-| Index | `EnsureIndex` | `CreateIndexIfNotExists`, generated-model single/composite helpers, `DropIndexIfExists`, `RenameIndexIfExists` |
+| Index | `EnsureIndex` | `CreateIndexIfNotExists`, `CreateIndexIfNotExistsFromModel`, `CreateCompositeIndexIfNotExistsFromModel`, `DropIndexIfExists`, `RenameIndexIfExists` |
 | Primary key | `EnsurePrimaryKey` | `AddPrimaryKeyIfNotExists`, `DropPrimaryKeyIfExists` |
 | Unique constraint | `EnsureUniqueConstraint` | `AddUniqueConstraintIfNotExists`, `DropUniqueConstraintIfExists` |
 | Check constraint | `EnsureCheckConstraint` | `AddCheckConstraintIfNotExists`, `DropCheckConstraintIfExists` |
@@ -97,6 +109,13 @@ existence-only container followed by granular children under the supplied
 policy, defaulting to strict comparison. A separate index sequence must target
 the same table/schema. It does not discover which legacy objects you intended
 to own. Follow the [legacy convergence example](../README.md#heterogeneous-legacy-convergence).
+
+`ConvergeTableFromModel` captures the typed EF table callback and emits the
+same object-granular contract without a hand-authored
+`ExpectedTableDefinition`. The two `*FromModel` index helpers similarly capture
+EF's generated single- or multi-column index call. They remain public so
+scaffolded migration source has a stable package target. Hand-written
+migrations normally use `CreateIndexIfNotExists` or `EnsureIndex` for indexes.
 
 `Drop*IfExists` operations are explicitly destructive when the target exists;
 the name means idempotent absence, not recovery or undo. Rename methods require

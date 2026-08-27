@@ -28,7 +28,7 @@ returns a separate `SafeMigrationDecision.Code`.
 ## Blocking decision codes
 
 | Code | Meaning | Required response |
-|---|---|---|
+| --- | --- | --- |
 | `unsupported` | The active engine cannot represent the operation or requested facet. | Stop. Remove the unsupported intent or change the reviewed support contract; do not emit provider-specific ad-hoc SQL as a bypass. |
 | `data_blocked` | Existing rows violate a uniqueness, nullability, check, or foreign-key precondition. | Keep target DDL unapplied. Repair data through an audited, idempotent transformation, rerun preflight, then migrate. |
 | `prerequisite_missing` | A required table does not exist, so dependent state or data checks cannot be evaluated safely. | Add or converge the prerequisite first. Do not reinterpret the result as an empty table or a data violation. |
@@ -54,7 +54,7 @@ it does not prove that every earlier migration command completed.
 Runtime guards preserve the same categories at the database boundary:
 
 | MySQL/MariaDB constraint identity | PostgreSQL SQLSTATE/message | Meaning |
-|---|---|---|
+| --- | --- | --- |
 | `doka_sm_different` | `P1001` / `doka_sm_different` | Definition mismatch or unapproved repair. |
 | `doka_sm_unsupported` | `P1002` / `doka_sm_unsupported` | Active engine capability rejects the operation. |
 | `doka_sm_data_blocked` | `P1003` / `doka_sm_data_blocked` | Existing data violates a precondition. |
@@ -79,7 +79,7 @@ selection follows the mapping above. In particular, a blocked preflight
 data/prerequisite result uses its planner rejection code.
 
 | Code | Meaning |
-|---|---|
+| --- | --- |
 | `classified_missing` | Live analyzer observed absence. |
 | `classified_matching` | Live analyzer observed the target definition. |
 | `classified_different` | Live analyzer observed drift; the policy determines whether this blocks. |
@@ -184,7 +184,7 @@ runner regions emit it; not every preflight rejection is a failure metric.
 <a id="unexpected_failure"></a>
 
 | Code | Source | Response |
-|---|---|---|
+| --- | --- | --- |
 | `model_contract_mismatch` | Derived runtime model differs from canonical migration snapshot/fingerprint. | Stop before catalog analysis; move instance-specific mappings to a separate context or restore the canonical model. |
 | `provider_command_failed` | Provider catalog or command returned a `DbException`. | Inspect protected provider error code, permissions, availability, lock state, and exact server version. |
 | `input_contract_invalid` | A definition, option, enum, or identifier violated construction rules. | Correct migration source; do not retry unchanged. |

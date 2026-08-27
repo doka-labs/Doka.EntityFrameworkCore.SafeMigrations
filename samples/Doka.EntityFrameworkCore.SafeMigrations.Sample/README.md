@@ -18,6 +18,11 @@ generator writes the calls represented by this sample. `SampleMigrationUsage`
 keeps them as executable source so the repository can compile and inspect the
 result without requiring a database during the sample build.
 
+The no-argument provider registration uses strict scaffolding. Select legacy
+convergence only while generating a migration that intentionally adopts
+heterogeneous existing tables, then review the source and return registration
+to the strict default for subsequent scaffolding.
+
 Key files:
 
 - `SampleMigrationUsage.cs` builds the shared operation contracts.

@@ -10,8 +10,8 @@ All notable changes are documented here. The format follows
 
 Prepared first feature-complete release candidate of the SafeMigrations Core,
 MySQL/MariaDB, and PostgreSQL package family for .NET 10 and EF Core 10. The
-candidate qualifies the complete intended 10.0.0 contract and publication
-workflow; it is not a reduced feature release.
+source prepared for this candidate covers the complete intended 10.0.0 contract
+and publication workflow; it is not a reduced feature release.
 
 These notes do not establish publication. Require the successful release run
 and verified public package/symbol readback before installation. Follow the
@@ -85,8 +85,9 @@ in [Support and qualification](docs/support-and-qualification.md).
   implemented ADRs in Doka MADR Enterprise Profile 1.0 on MADR 4.0.0, and a
   complete pinned OpenSSF Best Practices preparation inventory. No badge or
   independent certification is claimed.
-- Dependency-free documentation and shell gates with positive/negative
-  regression coverage, structured contribution forms, and explicit ownership.
+- Task-oriented documentation, dependency-free shell gates with positive and
+  negative regression coverage, structured contribution forms, and explicit
+  ownership.
 
 ### Changed
 

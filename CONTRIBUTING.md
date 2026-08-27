@@ -11,7 +11,6 @@ unredacted migration reports in issues, pull requests, or test fixtures.
 - Docker for MySQL, MariaDB, and PostgreSQL tests
 - Bash, `jq`, `curl`, `unzip`, and `rsync` for engineering gates
 - Python 3 for the merged coverage threshold check
-- ripgrep (`rg`) for the vertical-slice gate
 - the exact locked `Doka.EntityFrameworkCore.MySql` 10.0.0 package from
   nuget.org
 
@@ -124,6 +123,11 @@ Every operation or facet change requires:
 - preflight and postflight behavior;
 - idempotent second run and failure recovery;
 - package consumer and Public API review when surface changes.
+
+Design-time scaffolding changes additionally require strict and legacy source
+generation for both providers, generated-source compilation, direct Design,
+Tools-only, and runtime-only package-consumer profiles, and fail-closed
+negative coverage for unexpected generated shapes or annotations.
 
 ## Documentation and architecture decisions
 

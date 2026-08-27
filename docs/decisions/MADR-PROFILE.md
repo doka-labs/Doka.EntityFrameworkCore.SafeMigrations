@@ -175,7 +175,7 @@ their history together for a real relationship change.
 External URLs MUST appear only under Sources. Every external entry MUST use:
 
 ```text
-- [Source title](https://authoritative.example/path) (primary source; retrieved YYYY-MM-DD)
+- Source title (`PRIMARY_SOURCE_URL`; primary source; retrieved YYYY-MM-DD)
 ```
 
 Use vendor documentation, official specifications, source repositories, or
@@ -217,8 +217,8 @@ The [template](adr-template.md) is the authoring contract. The
 [index](README.md) is a reviewed navigation table, not a second metadata store.
 
 SafeMigrations does not copy Doka's `AdrValidator`, `eng/validate-adrs.sh`,
-generated `decision-index.json`, or mandatory local-build ADR gate. The general
-documentation check verifies links, navigation, encoding, and the OpenSSF
+generated `decision-index.json`, or mandatory local-build ADR gate. General
+documentation review checks links, navigation, encoding, and the OpenSSF
 inventory; it does not validate ADR metadata, history, or semantic quality.
 
 The maintainer's external MCP/CLI tooling may generate or import these
