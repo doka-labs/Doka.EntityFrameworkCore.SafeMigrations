@@ -15,7 +15,8 @@ if [[ "$(git branch --show-current)" != main ]]; then
     exit 1
 fi
 
-if [[ -n "$(git status --short)" ]]; then
+# Porcelain output is stable for scripts and omits optional branch headers.
+if [[ -n "$(git status --porcelain --untracked-files=all)" ]]; then
     echo "Release preparation requires a clean working tree." >&2
     exit 1
 fi

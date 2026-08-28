@@ -37,14 +37,16 @@ support documentation. Then run:
 git fetch origin main --tags
 git switch main
 git merge --ff-only origin/main
-git status --short
+git status --porcelain --untracked-files=all
 
 release_commit="$(git rev-parse HEAD)"
 test "${release_commit}" = "$(git rev-parse origin/main)"
 ```
 
-`git status --short` must print nothing. Keep this terminal and checkout
-unchanged until the tag is pushed.
+`git status --porcelain --untracked-files=all` must print nothing. Its stable
+machine-readable output is unaffected by optional branch-status display
+configuration. Keep this terminal and checkout unchanged until the tag is
+pushed.
 
 ### 2. Verify local pre-tag readiness
 
