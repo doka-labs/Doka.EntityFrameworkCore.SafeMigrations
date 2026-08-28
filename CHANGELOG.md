@@ -6,16 +6,6 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
-### Added
-
-- FsCheck property-based testing for provider-neutral contract fingerprints,
-  structured-expression equivalence and identifier rewriting, plus generated
-  MySQL/MariaDB and PostgreSQL identifier, catalog, and foreign-fragment cases.
-- A read-only, SHA-pinned GitHub Dependency Review gate for pull requests to
-  `main`, with high-severity vulnerability rejection, an explicit SPDX license
-  allowlist, bounded automatic-submission snapshot retries, and no write-capable
-  pull-request token.
-
 ## [10.0.0-rc.1] - 2026-08-28
 
 Prepared first feature-complete release candidate of the SafeMigrations Core,
@@ -75,6 +65,9 @@ in [Support and qualification](docs/support-and-qualification.md).
 - PostgreSQL baseline-composition tests covering command order, generation
   options, and rejection of transaction-suppressed guarded commands.
 - Deterministic pairwise legacy-state generator and live cross-provider matrix.
+- FsCheck property-based testing for provider-neutral contract fingerprints,
+  structured-expression equivalence and identifier rewriting, plus generated
+  MySQL/MariaDB and PostgreSQL identifier, catalog, and foreign-fragment cases.
 - Identifier, SQL mode, default literal, generated column, advanced index,
   constraint drift, data blocker, and wrong-object-kind coverage.
 - Dependency-free duration/allocation gate at 1, 100, and 1000 operations.
@@ -90,6 +83,10 @@ in [Support and qualification](docs/support-and-qualification.md).
   aggregation check, pinned actions and container digests, OIDC NuGet Trusted
   Publishing, SLSA/SBOM attestations, exact partial-publish recovery,
   repository-signature readback, and verified GitHub Release.
+- A read-only, SHA-pinned GitHub Dependency Review gate for pull requests to
+  `main`, with high-severity vulnerability rejection, an explicit SPDX license
+  allowlist, bounded automatic-submission snapshot retries, and no write-capable
+  pull-request token.
 - Task-oriented API, architecture, support, observability, deployment/recovery,
   failure-code, release-publication, independent verification, and sample guides.
 - Governance, conduct, support and canonical root security policies, eight
@@ -174,11 +171,11 @@ in [Support and qualification](docs/support-and-qualification.md).
   changelog entry, canonical 64-character NuGet limit, and shell-safe
   environment-variable boundary.
 - Added repository-owned SSH signer authorization, pre-tag verification of the
-  configured signing key, GitHub provenance/SBOM attestations, short-lived
-  Trusted Publishing credentials, duplicate-tolerant same-run recovery, and
-  signed package-content readback. The operator path uses the zero-argument
-  preparation check, explicit waiting-run review, and individually executable
-  tag commands.
+  configured signing key and configuration-independent working-tree state,
+  GitHub provenance/SBOM attestations, short-lived Trusted Publishing
+  credentials, duplicate-tolerant same-run recovery, and signed package-content
+  readback. The operator path uses the zero-argument preparation check, explicit
+  waiting-run review, and individually executable tag commands.
 - Preserved the qualified candidate while protected `main` advances and retained
   each successful producer's artifact identity across failed-job retries.
   Source removal, expired evidence, and content conflicts stop publication.
