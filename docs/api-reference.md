@@ -9,7 +9,8 @@ completion/Quick Documentation for the selected package version. The
 [MySQL/MariaDB](../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/PublicAPI.Unshipped.txt),
 and [PostgreSQL](../src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/PublicAPI.Unshipped.txt)
 API baselines are review inventories, not substitutes for this guide or XML.
-This page describes the source contract prepared for `10.0.0-rc.1`. A
+The public surface shipped by `10.0.0-rc.1`; the source prepared for
+`10.0.0-rc.2` retains that API while updating its exact Doka dependency. A
 successful release run and exact-version public package readback remain the
 authority for a published API.
 

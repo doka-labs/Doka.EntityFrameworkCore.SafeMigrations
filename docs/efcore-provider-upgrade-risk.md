@@ -26,7 +26,7 @@ failure behavior.
 The read-only analyzer captures SafeMigrations' typed runtime plan while Doka
 invokes the registered handler with the real server-version, feature, and
 operation-ordinal context. It does not parse generated commands. The exact
-Doka 10.0.0 package exposes provider-validated `Setup`, `Body`, and `Cleanup`
+Doka 10.1.0 package exposes provider-validated `Setup`, `Body`, and `Cleanup`
 fragments and a bounded `CreateScoped` command contract. SafeMigrations uses
 those fragments directly and returns one provider-executed scope per guarded
 operation. Doka runs cleanup after success, failure, or cancellation with an
@@ -140,7 +140,8 @@ identifier case, ordering, and provider semantics have been checked.
 ## Version research
 
 Version pins and support statements are fast-stale. Update them from primary
-sources at author time. The following references were rechecked on 2026-08-27:
+sources at author time. The following references were rechecked on 2026-08-27
+unless the entry records a later date:
 
 - [.NET and .NET SDK support policy](https://dotnet.microsoft.com/platform/support/policy)
 - [EF Core releases and planning](https://learn.microsoft.com/ef/core/what-is-new/)
@@ -152,7 +153,10 @@ sources at author time. The following references were rechecked on 2026-08-27:
 - [PostgreSQL system information functions](https://www.postgresql.org/docs/current/functions-info.html)
 - [MySQL supported platforms and lifecycle](https://www.mysql.com/support/supportedplatforms/database.html)
 - [MariaDB release criteria](https://mariadb.com/docs/release-notes/mariadb-release-criteria)
-- [Doka.EntityFrameworkCore.MySql repository](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql)
+- [Doka.EntityFrameworkCore.MySql 10.1.0](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.1.0)
+  (rechecked 2026-08-28)
+- [Doka 10.1.0 migration-operation handler contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.0/docs/migration-operation-handlers.md)
+  (rechecked 2026-08-28)
 
 The exact release evidence belongs in the workflow run, lockfiles, package
 SBOM, and final plan-to-ship reconciliation, not in an unchecked comment.

@@ -56,7 +56,11 @@ pushed.
 
 This confirms a clean current `main`, no existing semantic release tag on the
 candidate, and usable SSH tag-signing configuration. It creates no tag and
-does not request publication credentials.
+does not request publication credentials. A successful run prints one
+`[PASS]` row for the branch, working tree, source commit, release tag, and tag
+signing before it says that the Release candidate workflow can be started. A
+`[FAIL]` row identifies the condition to correct; stop there and do not start
+the workflow.
 
 ### 3. Start the untagged candidate and wait
 

@@ -321,7 +321,7 @@ global lock or mutable static cache.
 Every multi-command provider plan is idempotent at command boundaries. Tests
 cover failure after earlier standard DDL, same-session recovery after a guard
 failure, cancellation during blocked DDL, cleanup failure with pool eviction,
-and repeat execution. Doka 10.0.0 executes every handler-authored guard as one
+and repeat execution. Doka 10.1.0 executes every handler-authored guard as one
 bounded scope with ordered setup, one body, and reverse-order cleanup. Cleanup
 runs after success, failure, or cancellation with an independent cancellation
 token. A cleanup failure closes the connection and evicts its physical session

@@ -26,7 +26,7 @@ equivalent.
 - `Doka.EntityFrameworkCore.SafeMigrations`: provider-neutral intent,
   definitions, planning, reports, and `MigrationBuilder` extensions
 - `Doka.EntityFrameworkCore.SafeMigrations.MySql`: MySQL and MariaDB adapter on
-  the public `Doka.EntityFrameworkCore.MySql` 10.0.0 operation-handler SPI
+  the public `Doka.EntityFrameworkCore.MySql` 10.1.0 operation-handler SPI
 - `Doka.EntityFrameworkCore.SafeMigrations.PostgreSql`: PostgreSQL adapter on
   Npgsql 10
 
@@ -41,11 +41,12 @@ The CI and release workflows pin the exact patch tags and image digests used
 when that matrix executes. The exact successful run, not this table, is release
 evidence. See [Support and qualification](docs/support-and-qualification.md).
 
-The first complete delivery targets 10.0.0. The source tree is prepared for
-`10.0.0-rc.1` to qualify that same feature contract and its publication
-workflow. [Release notes](CHANGELOG.md) describe the prepared candidate. The
-badges include prereleases, but only a successful release run and verified
-public packages establish availability or qualification.
+The first complete delivery targets 10.0.0. The published `10.0.0-rc.1`
+qualified that feature contract and the complete publication workflow. The
+source tree prepares `10.0.0-rc.2` to requalify the same SafeMigrations API
+against stable Doka 10.1.0. [Release notes](CHANGELOG.md) describe both
+candidates. The badges include prereleases, but only a successful release run
+and verified public packages establish availability or qualification.
 
 ## Installation
 

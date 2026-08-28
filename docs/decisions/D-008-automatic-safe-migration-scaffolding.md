@@ -219,7 +219,7 @@ snapshots already required for catalog comparison and hashing.
 - [NuGet MSBuild props and targets](https://learn.microsoft.com/en-us/nuget/concepts/msbuild-props-and-targets) (primary source; retrieved 2026-08-27)
 - [NuGet package build assets](https://learn.microsoft.com/en-us/nuget/create-packages/creating-a-package) (primary source; retrieved 2026-08-27)
 - [Microsoft.EntityFrameworkCore.Tools 10.0.11 package contract](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.Tools/10.0.11) (primary package metadata; retrieved 2026-08-27)
-- [Doka MySQL value-generation strategies](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.0.0/src/Doka.EntityFrameworkCore.MySql/MySqlValueGenerationStrategy.cs) (primary source; retrieved 2026-08-27)
+- [Doka MySQL value-generation strategies](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.0/src/Doka.EntityFrameworkCore.MySql/MySqlValueGenerationStrategy.cs) (primary source; retrieved 2026-08-28)
 - [MySQL `INFORMATION_SCHEMA.COLUMNS`](https://dev.mysql.com/doc/refman/en/information-schema-columns-table.html) (primary source; retrieved 2026-08-27)
 - [MariaDB `INFORMATION_SCHEMA.COLUMNS`](https://mariadb.com/docs/server/reference/system-tables/information-schema/information-schema-tables/information-schema-columns-table) (primary source; retrieved 2026-08-27)
 - [Npgsql value-generation strategies](https://www.npgsql.org/efcore/api/Npgsql.EntityFrameworkCore.PostgreSQL.Metadata.NpgsqlValueGenerationStrategy.html) (primary source; retrieved 2026-08-27)

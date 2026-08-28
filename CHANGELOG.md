@@ -6,6 +6,29 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+## [10.0.0-rc.2] - 2026-08-28
+
+Second release candidate for the complete SafeMigrations 10.0.0 contract. It
+retains the rc.1 public API and migration behavior while qualifying the stable
+Doka 10.1.0 provider package and improving the local release-readiness output.
+
+These notes do not establish publication. Require the successful release run
+and verified public package and symbol readback before selecting rc.2.
+
+### Changed
+
+- Update the exact `Doka.EntityFrameworkCore.MySql` dependency from `[10.0.0]`
+  to `[10.1.0]`. Doka 10.1.0 adds connection-string server discovery and
+  generic scalar `LIKE` support while preserving the migration-operation
+  handler SPI used by SafeMigrations.
+- Refresh every affected committed lockfile and require the complete package,
+  engine, EF tooling, coverage, performance, and SBOM qualification against the
+  published Doka 10.1.0 package.
+- Replace the opaque pre-tag success line and routine fetch output with named
+  branch, working-tree, source-commit, release-tag, and SSH-signing results plus
+  an explicit next-step message. Positive and negative fixture coverage keeps
+  the output and failure boundary executable.
+
 ## [10.0.0-rc.1] - 2026-08-28
 
 Prepared first feature-complete release candidate of the SafeMigrations Core,
@@ -195,5 +218,6 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.0.0-rc.1...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.0.0-rc.2...HEAD
+[10.0.0-rc.2]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.0.0-rc.1...v10.0.0-rc.2
 [10.0.0-rc.1]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/releases/tag/v10.0.0-rc.1

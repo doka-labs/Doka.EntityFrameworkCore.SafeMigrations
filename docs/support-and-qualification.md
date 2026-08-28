@@ -8,10 +8,10 @@ with roll-forward disabled. SafeMigrations supports EF Core 10 only.
 | Package | Runtime dependency contract |
 | --- | --- |
 | Core | `Microsoft.EntityFrameworkCore.Relational` `[10.0.11,10.1.0)` |
-| MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` exact `[10.0.0]` |
+| MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` exact `[10.1.0]` |
 | PostgreSQL | `Npgsql.EntityFrameworkCore.PostgreSQL` `[10.0.3,11.0.0)` |
 
-The MySQL/MariaDB package resolves the exact stable Doka 10.0.0 package. CI
+The MySQL/MariaDB package resolves the exact stable Doka 10.1.0 package. CI
 does not build Doka and never uses a cross-repository ProjectReference. A Doka
 update is accepted only after the complete package, engine, tooling, coverage,
 and performance matrix passes again.
@@ -148,7 +148,7 @@ cases stop before target DDL instead of being compared or applied heuristically:
 
 - PostgreSQL 14 rejects `NULLS NOT DISTINCT`; PostgreSQL introduced that
   `CREATE INDEX` clause in version 15.
-- Doka 10.0.0 parenthesizes `DateOnly` and `TimeOnly` typed literals in column
+- Doka 10.1.0 parenthesizes `DateOnly` and `TimeOnly` typed literals in column
   defaults. The complete MySQL and MariaDB matrix qualifies the resulting DDL
   and each engine's catalog display form.
 - MySQL, MariaDB 10.11, and MariaDB 11.4 reject a `Guid` literal default stored
@@ -258,10 +258,11 @@ release-asset verification.
 
 - [.NET 10 release metadata](https://dotnetcli.blob.core.windows.net/dotnet/release-metadata/10.0/releases.json),
   retrieved 2026-08-27.
-- [EF Core Relational 10.0.11 package](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.Relational/10.0.11),
-  [Doka 10.0.0 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.0.0),
+- [EF Core Relational 10.0.11 package](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.Relational/10.0.11)
   and [Npgsql EF Core 10.0.3 package](https://www.nuget.org/packages/Npgsql.EntityFrameworkCore.PostgreSQL/10.0.3),
   retrieved 2026-08-27.
+- [Doka 10.1.0 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.1.0),
+  retrieved 2026-08-28.
 - [PostgreSQL versioning policy](https://www.postgresql.org/support/versioning/)
   and [18.6/17.11/16.15/15.19/14.24 announcement](https://www.postgresql.org/about/news/postgresql-186-1711-1615-1519-1424-and-19-beta-3-released-3365/),
   retrieved 2026-08-27.
