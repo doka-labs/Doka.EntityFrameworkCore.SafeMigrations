@@ -39,17 +39,16 @@ committed lock files, locked restore, SHA-pinned Actions, and digest-pinned
 container images remain the enforceable build controls.
 
 The README exposes live links for both external systems. Best Practices project
-14265 was verified as Passing on 2026-08-28. The first public-main Scorecard
-workflow run 33126605102 completed successfully for commit `a3f20e0181cd`,
-uploaded its SARIF artifact, and submitted code-scanning results. The public
-Scorecard API still returned HTTP 404 during the 2026-08-28 readback, so no
-numeric score is asserted here. That first result also recorded the repository's
-historical untested pull requests and absence of a recognized property-testing
-integration. Current source adds FsCheck properties and a pull-request
-Dependency Review gate; a subsequent default-branch run must verify their
-hosted recognition. Badge placement or a successful workflow alone is not a
-published Scorecard result. Cite a score only after the workflow, API result,
-viewer, artifact, and code-scanning import agree.
+14265 was verified as Passing on 2026-08-28. The Scorecard workflow has produced
+authenticated public results, SARIF artifacts, and code-scanning submissions.
+The live API and viewer are authoritative for the current score and individual
+check values; this maintained document deliberately does not duplicate those
+regularly changing numbers or a commit-specific result. Source changes are
+represented only after a subsequent default-branch run. Badge rendering can
+also lag the published API result because it passes through an external badge
+service. For review or release evidence, bind the workflow result, API result,
+viewer, artifact, and code-scanning import to the exact reviewed revision
+instead of treating a badge image as evidence.
 
 ## Reading the tables
 
