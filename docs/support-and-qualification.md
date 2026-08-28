@@ -63,8 +63,17 @@ lockfiles define the exact graph selected by the current revision. Dependabot
 proposes dependency and lockfile updates through ordinary pull requests. Every
 accepted update therefore runs the same complete CI workflow as product code,
 including all provider cells, package consumers, coverage, performance, and
-SBOM validation. There is no second dynamically restored dependency profile
-whose results can diverge from the committed graph.
+SBOM validation. GitHub Automatic Dependency Submission publishes resolved
+base and head snapshots to the Dependency Graph. The independent, read-only
+Dependency Review workflow compares those snapshots, rejects newly introduced
+high-or-critical vulnerabilities and licenses outside the approved SPDX set,
+and runs the official bounded retry. Because action v5.0.0 proceeds after that
+timeout even when GitHub still reports a snapshot warning, a final comparison
+header check requires the warning to be present and empty. The public REST
+reference did not specify this header on 2026-08-28; its verified contract comes
+from the immutable action source, and absence fails closed. There is no second
+repository-owned polling state machine or dynamically restored dependency
+profile whose results can diverge from the committed graph.
 
 ## Behavioral evidence
 
@@ -74,6 +83,8 @@ and focused engineering checks:
 - [provider-neutral Core tests](../tests/Doka.EntityFrameworkCore.SafeMigrations.Tests);
 - [MySQL/MariaDB tests](../tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests);
 - [PostgreSQL tests](../tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests);
+- FsCheck properties in all three assemblies for generated Core-contract,
+  identifier-rendering, catalog-normalization, and provider-boundary inputs;
 - [coverage verifier tests](../eng/tests/test_verify_coverage.py);
 - package-content, package-only consumer, SBOM, EF tooling, and public NuGet
   readback scripts exercised by the reusable quality and release workflows.

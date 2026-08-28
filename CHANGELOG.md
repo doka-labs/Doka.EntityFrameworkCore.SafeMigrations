@@ -6,6 +6,16 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- FsCheck property-based testing for provider-neutral contract fingerprints,
+  structured-expression equivalence and identifier rewriting, plus generated
+  MySQL/MariaDB and PostgreSQL identifier, catalog, and foreign-fragment cases.
+- A read-only, SHA-pinned GitHub Dependency Review gate for pull requests to
+  `main`, with high-severity vulnerability rejection, an explicit SPDX license
+  allowlist, bounded automatic-submission snapshot retries, and no write-capable
+  pull-request token.
+
 ## [10.0.0-rc.1] - 2026-08-28
 
 Prepared first feature-complete release candidate of the SafeMigrations Core,

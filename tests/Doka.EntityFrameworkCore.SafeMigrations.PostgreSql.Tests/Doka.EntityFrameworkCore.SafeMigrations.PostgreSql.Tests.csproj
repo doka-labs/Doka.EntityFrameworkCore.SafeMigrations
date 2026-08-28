@@ -8,6 +8,7 @@
              Link="Infrastructure\LivePerformanceEvidence.cs" />
     <ProjectReference Include="..\..\src\Doka.EntityFrameworkCore.SafeMigrations\Doka.EntityFrameworkCore.SafeMigrations.csproj" />
     <ProjectReference Include="..\..\src\Doka.EntityFrameworkCore.SafeMigrations.PostgreSql\Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.csproj" />
+    <PackageReference Include="FsCheck.Xunit" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

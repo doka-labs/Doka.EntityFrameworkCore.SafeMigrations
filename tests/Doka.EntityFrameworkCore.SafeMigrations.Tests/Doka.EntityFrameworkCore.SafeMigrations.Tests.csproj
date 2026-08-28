@@ -10,6 +10,7 @@
           Link="schemas\safe-migration-run-report-v1.schema.json"
           CopyToOutputDirectory="PreserveNewest" />
     <ProjectReference Include="..\..\src\Doka.EntityFrameworkCore.SafeMigrations\Doka.EntityFrameworkCore.SafeMigrations.csproj" />
+    <PackageReference Include="FsCheck.Xunit" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design"
                       PrivateAssets="all"
                       IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive; compile" />
