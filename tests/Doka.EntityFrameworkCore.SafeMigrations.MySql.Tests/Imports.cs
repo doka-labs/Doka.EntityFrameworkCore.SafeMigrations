@@ -10,6 +10,7 @@ global using System.Threading.Tasks;
 global using Doka.EntityFrameworkCore.MySql;
 global using Doka.EntityFrameworkCore.SafeMigrations.Testing;
 global using DotNet.Testcontainers.Builders;
+global using FsCheck.Xunit;
 global using Microsoft.EntityFrameworkCore;
 global using Microsoft.EntityFrameworkCore.Design;
 global using Microsoft.EntityFrameworkCore.Infrastructure;

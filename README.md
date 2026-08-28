@@ -510,7 +510,10 @@ dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.
 Docker is required for provider tests. CI additionally executes every supported
 engine profile, EF CLI/script/bundle paths, merged coverage thresholds,
 performance/allocation budgets, deterministic double-pack, isolated
-package-only consumers, and SPDX SBOM validation.
+package-only consumers, and SPDX SBOM validation. FsCheck exercises generated
+Core and provider invariants with shrunk counterexamples, while the separate
+Dependency Review gate rejects newly introduced high-severity vulnerabilities
+and dependencies outside the approved license policy before merge.
 
 Each provider matrix cell also persists a live full-runner latency artifact.
 It measures 20 full-runner invocations after a warmup against 100 expected

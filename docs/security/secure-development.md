@@ -37,12 +37,24 @@ command name alone does not establish which analysis ran.
 
 The committed lockfiles define the exact qualified dependency graph. Dependabot
 proposes declaration and lockfile updates through ordinary pull requests, where
-the complete quality workflow tests the proposed graph. Its configuration is
-not evidence that hosted alerts, code
-scanning, or automatic security updates are enabled. Review affected production,
-development, action, and container dependencies against primary advisories.
-Triage relevant alerts to resolution with release impact, never by treating a
-successful restore as proof that no vulnerability exists.
+the complete quality workflow tests the proposed graph. GitHub Automatic
+Dependency Submission supplies resolved base and head snapshots to the hosted
+Dependency Graph. The separate Dependency Review workflow compares the
+pull-request delta with the official action, rejects new high-or-critical
+vulnerabilities and dependencies outside the approved SPDX license set, and
+runs its bounded snapshot retry. The pinned action proceeds after its timeout
+even if a warning remains, so the workflow then checks the same GitHub compare
+endpoint and requires the snapshot-warning header to be present and empty.
+GitHub's public REST reference did not specify that response header when
+retrieved on 2026-08-28; the immutable action source is the primary evidence
+for its name and base64 encoding. A missing header deliberately blocks the
+pull request until the vendor contract is reverified and any workflow change is
+reviewed. Configuration alone is not evidence that hosted alerts, code
+scanning, automatic submission, or security updates actually ran. Review
+affected production, development, action, and container dependencies against
+primary advisories. Triage relevant alerts to resolution with release impact,
+never by treating a successful restore or empty delta as proof that no
+vulnerability exists.
 
 An EF Design or Tools update also crosses the source-generation trust boundary.
 Re-run strict and legacy scaffolding for both providers, compile the generated
@@ -59,8 +71,13 @@ the [upgrade contract](../efcore-provider-upgrade-risk.md).
 
 Provider tests execute real Testcontainers databases and cover hostile
 identifiers, conflicting definitions/data, partial failures, retries, and
-cancellation. Fixed-seed generated state cases remain deterministic tests,
-not automatically a fuzzing campaign. Read the
+cancellation. FsCheck adds generated and automatically shrunk properties for
+Core fingerprint ordering and canonical form, structured-expression
+equivalence and identifier rewriting, provider identifier rendering, catalog
+normalization, and fail-closed rejection of foreign provider fragments. These
+properties run as part of the ordinary test assemblies and do not claim
+coverage-guided or continuous fuzzing. Fixed-seed generated state cases remain
+separate deterministic matrix tests. Read the
 [coverage policy](../support-and-qualification.md#coverage-gate) and preserve
 per-release results; a percentage alone does not prove the security boundary.
 
@@ -109,6 +126,20 @@ Restoring repository access is distinct from restoring a consumer database.
 
 - [.NET code analysis](https://learn.microsoft.com/en-us/dotnet/fundamentals/code-analysis/overview),
   retrieved 2026-08-26.
+- [FsCheck running tests](https://fscheck.github.io/FsCheck/RunningTests.html),
+  retrieved 2026-08-28; properties generate and shrink arguments, and an
+  exhausted property fails rather than silently passing.
+- [GitHub Automatic Dependency Submission](https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/secure-your-dependencies/submit-dependencies-automatically),
+  retrieved 2026-08-28.
+- [GitHub Dependency Review](https://docs.github.com/en/code-security/concepts/supply-chain-security/dependency-review),
+  retrieved 2026-08-28.
+- [GitHub dependency-review REST endpoint](https://docs.github.com/en/rest/dependency-graph/dependency-review#get-a-diff-of-the-dependencies-between-commits),
+  retrieved 2026-08-28; the published response contract does not specify the
+  snapshot-warning header consumed by the official action.
+- [Dependency Review Action v5.0.0](https://github.com/actions/dependency-review-action/tree/a1d282b36b6f3519aa1f3fc636f609c47dddb294),
+  retrieved 2026-08-28; the workflow uses the exact tagged commit and checks
+  the comparison warning header read in the pinned
+  `src/dependency-graph.ts` implementation after its bounded retry.
 - [OpenSSF Passing criteria](https://www.bestpractices.dev/en/criteria/0),
   retrieved 2026-08-28; analysis and response evidence must be measured.
 - [GitHub private vulnerability reporting](https://docs.github.com/en/code-security/how-tos/report-and-fix-vulnerabilities/configure-vulnerability-reporting/configure-for-a-repository),

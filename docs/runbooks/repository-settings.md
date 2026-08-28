@@ -26,7 +26,7 @@ through an explicitly authorized administration task and read back the result.
 | Source and discussions | Public default `main`; anonymous README/source/issues access; working issue forms and support links |
 | Ownership | Visible `@doka-labs/core-maintainers` team with explicit repository write access; no CODEOWNERS parse errors |
 | Main protection | Reviewed pull requests, applicable required checks, resolved conversations, stale approval handling, restricted force-push/deletion and bypass |
-| Check identity | Require `Full qualification / Required` only after a real green CI run submitted it through GitHub Actions |
+| Check identity | Require `Full qualification / Required` and `dependency-review` only after each real green pull-request run submitted that exact context through GitHub Actions |
 | Review independence | Reviewer distinct from author where claimed; record actual available roles, not just required-review count |
 | Actions permissions | Read-only default token, no workflow PR approval, approved actions, fork approval policy, no privileged execution of untrusted PR code |
 | Private vulnerability reporting | Enabled, external form reachable, responder subscribed to security alerts, fallback private channel tested |
@@ -47,6 +47,21 @@ context with GitHub Actions as its expected source, then remove the obsolete
 partial check. Do not select `Any source`. A matrix-version change does not
 rename this stable context, but every new qualification job must be added to
 the aggregation job's `needs` and result check in the same change.
+
+Dependency Review is a separate supply-chain decision rather than another
+product matrix cell. GitHub Automatic Dependency Submission owns the resolved
+NuGet snapshots. The read-only `dependency-review` workflow uses the official
+action's bounded retry and rejects new high-or-critical vulnerabilities and
+dependencies outside the approved license set. Action v5.0.0 itself proceeds
+after its retry timeout when snapshot warnings remain; the following header
+verification therefore requires GitHub's warning header to be present and
+empty. The public REST reference did not specify this header on 2026-08-28;
+the immutable action source supplies its verified name and encoding. A missing
+header intentionally fails closed and requires vendor-contract review rather
+than a bypass. After its first real green pull-request run, add
+`dependency-review` to the `main` ruleset with GitHub Actions as the expected
+source. Keep `Full qualification / Required` and `dependency-review` required
+together; neither result substitutes for the other.
 
 ## Before the first candidate
 
@@ -80,6 +95,7 @@ gh api --method GET "repos/$repo/branches/main/protection"
 gh api --method GET "repos/$repo/environments/nuget"
 gh api --method GET "repos/$repo/private-vulnerability-reporting"
 gh api --method GET "repos/$repo/codeowners/errors"
+gh api --method GET "repos/$repo/dependency-graph/sbom"
 gh api --method GET "orgs/doka-labs/teams/core-maintainers/repos/$repo" \
   --jq '{full_name,permissions}'
 ```
@@ -128,3 +144,7 @@ missing controls, people, or measured results.
   retrieved 2026-08-26.
 - [GitHub private reporting configuration](https://docs.github.com/en/code-security/how-tos/report-and-fix-vulnerabilities/configure-vulnerability-reporting/configure-for-a-repository),
   retrieved 2026-08-26.
+- [GitHub Automatic Dependency Submission](https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/secure-your-dependencies/submit-dependencies-automatically),
+  retrieved 2026-08-28.
+- [GitHub Dependency Review](https://docs.github.com/en/code-security/concepts/supply-chain-security/dependency-review),
+  retrieved 2026-08-28.

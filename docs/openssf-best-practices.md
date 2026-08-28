@@ -39,11 +39,17 @@ committed lock files, locked restore, SHA-pinned Actions, and digest-pinned
 container images remain the enforceable build controls.
 
 The README exposes live links for both external systems. Best Practices project
-14265 was verified as Passing on 2026-08-28. At that review, the Scorecard API
-had no published SafeMigrations result and its badge reported `invalid repo
-path`; the repository-owned workflow had not yet executed from public `main`.
-Badge placement is not a Scorecard result. Cite a score only after the workflow,
-published API result, viewer, artifact, and code-scanning import agree.
+14265 was verified as Passing on 2026-08-28. The first public-main Scorecard
+workflow run 33126605102 completed successfully for commit `a3f20e0181cd`,
+uploaded its SARIF artifact, and submitted code-scanning results. The public
+Scorecard API still returned HTTP 404 during the 2026-08-28 readback, so no
+numeric score is asserted here. That first result also recorded the repository's
+historical untested pull requests and absence of a recognized property-testing
+integration. Current source adds FsCheck properties and a pull-request
+Dependency Review gate; a subsequent default-branch run must verify their
+hosted recognition. Badge placement or a successful workflow alone is not a
+published Scorecard result. Cite a score only after the workflow, API result,
+viewer, artifact, and code-scanning import agree.
 
 ## Reading the tables
 
@@ -193,7 +199,7 @@ automatically.
 | `installation_standard_variables` | MUST | Prepared | NuGet/.NET standard restore mechanisms | Verify applicable SDK package-cache/source configuration | C |
 | `installation_development_quick` | MUST | Evidence | [Contributing](../CONTRIBUTING.md) setup | Timed clean developer setup; Docker/image downloads accounted for | C |
 | `external_dependencies` | MUST | Prepared | [Support](support-and-qualification.md), locks, SBOM | Exact release dependency graph including tool dependencies | R |
-| `dependency_monitoring` | MUST | External | NuGet audit, Dependabot configuration, alerts, and security updates are enabled | Record the responsible owner and actual triage history | M |
+| `dependency_monitoring` | MUST | External | NuGet audit, Dependabot, automatic dependency submission, pull-request Dependency Review, alerts, and security updates | Record successful hosted snapshots/reviews, responsible owner, and actual triage history | M |
 | `updateable_reused_components` | MUST | Prepared | [Upgrade contract](efcore-provider-upgrade-risk.md) | Demonstrated reviewed dependency update with required evidence | C |
 | `interfaces_current` | SHOULD | Evidence | PublicAPI baselines and public provider boundaries | Review deprecations/support for current released dependencies | C |
 | `automated_integration_testing` | MUST | External | [CI](../.github/workflows/ci.yml) runs the automated suite on every pull-request update | Preserve public success/failure reporting and required acceptance for every shared pull request | R |
