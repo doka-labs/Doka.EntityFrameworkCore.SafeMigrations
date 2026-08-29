@@ -9,12 +9,13 @@ completion/Quick Documentation for the selected package version. The
 [MySQL/MariaDB](../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/PublicAPI.Unshipped.txt),
 and [PostgreSQL](../src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/PublicAPI.Unshipped.txt)
 API baselines are review inventories, not substitutes for this guide or XML.
-The initial public surface shipped with `10.0.0-rc.1`. The source prepared for
-`10.0.0-rc.2` adds source-frozen legacy-convergence policy selection and
-provider-context validation while preserving existing migration-source
-compatibility and the strict scaffolding default. It also updates the exact
-Doka dependency to 10.1.1. A successful release run and exact-version public
-package readback remain the authority for a published API.
+The initial public surface shipped with `10.0.0-rc.1`; `10.0.0-rc.2` added
+source-frozen legacy-convergence policy selection and provider-context
+validation. The source prepared for `10.0.0-rc.3` preserves that public API and
+existing migration-source compatibility while adding exact native Doka 10.1.1
+Guid-format analysis and ordered mixed-migration preflight. Strict scaffolding
+remains the default. A successful release run and exact-version public package
+readback remain the authority for a published API.
 
 ## Packages and registration
 

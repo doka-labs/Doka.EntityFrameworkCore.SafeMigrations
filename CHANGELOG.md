@@ -6,6 +6,25 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+## [10.0.0-rc.3] - 2026-08-29
+
+Prepared third feature-complete release candidate of the SafeMigrations
+10.0.0 contract. It preserves the rc.2 public API and migration-source
+compatibility while correcting native Doka Guid-format analysis, ordered
+mixed-migration preflight, and retry-safe publication reconciliation.
+
+Compared with rc.2, rc.3 accepts the exact native Doka 10.1.1 Guid storage
+contracts throughout strict and legacy-convergence relationship graphs. It
+also projects bounded structural postconditions of recognized ordinary EF
+operations into later safe prerequisites without classifying those ordinary
+operations as safe. Unknown provider effects continue to invalidate projected
+state fail-closed.
+
+These notes do not establish publication. Require the successful release run,
+the authorized signed tag, and verified public package, symbol, GitHub Release,
+and attestation readback before selecting rc.3. All three package IDs must be
+published at the exact same version.
+
 ### Fixed
 
 - Stage and verify the complete GitHub Release draft before requesting a NuGet
@@ -289,6 +308,7 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.0.0-rc.2...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.0.0-rc.3...HEAD
+[10.0.0-rc.3]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.0.0-rc.2...v10.0.0-rc.3
 [10.0.0-rc.2]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.0.0-rc.1...v10.0.0-rc.2
 [10.0.0-rc.1]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/releases/tag/v10.0.0-rc.1

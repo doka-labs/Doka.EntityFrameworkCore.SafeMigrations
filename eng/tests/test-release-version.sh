@@ -21,6 +21,7 @@ expect_failure() {
 
 expect_success 10.0.0-rc.1
 expect_success 10.0.0-rc.2
+expect_success 10.0.0-rc.3
 
 expect_failure v10.0.0-rc.1
 expect_failure 10.0.0-RC.1
@@ -28,6 +29,6 @@ expect_failure 10.0.0+build.1
 expect_failure 10.0.0-rc.01
 expect_failure 10.0.0--rc
 expect_failure 10.0.1-rc.1
-expect_failure 10.0.0-rc.3
+expect_failure 10.0.0-rc.4
 
 echo "Release version positive and negative cases passed."
