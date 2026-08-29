@@ -128,6 +128,50 @@ internal sealed partial class SafeMigrationPreflightProjection
         }
     }
 
+    /// <summary>
+    /// Projects deterministic structural postconditions of an ordered ordinary
+    /// EF operation without claiming that SafeMigrations analyzed the operation.
+    /// </summary>
+    /// <param name="operation">The provider-owned operation that precedes later safe operations.</param>
+    public void ObserveProviderPostcondition(
+        MigrationOperation operation
+    )
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+
+        switch (operation)
+        {
+            case CreateTableOperation value:
+                ObserveProviderPostcondition(value);
+                break;
+            case AddColumnOperation value:
+                ObserveProviderPostcondition(value);
+                break;
+            case AlterColumnOperation value:
+                ObserveProviderPostcondition(value);
+                break;
+            case DropColumnOperation value:
+                ObserveProviderPostcondition(value);
+                break;
+            case RenameColumnOperation value:
+                ObserveProviderPostcondition(value);
+                break;
+            case DropTableOperation value:
+                ObserveProviderPostcondition(value);
+                break;
+            case RenameTableOperation value:
+                ObserveProviderPostcondition(value);
+                break;
+            default:
+                // An unrecognized provider operation may contain arbitrary DDL
+                // or data changes. Retaining inferred state across that boundary
+                // would turn an unknown effect into a false readiness claim.
+                _tables.Clear();
+                _prerequisites.Clear();
+                break;
+        }
+    }
+
     private bool Contains(
         string table,
         string? schema
@@ -204,9 +248,36 @@ internal sealed partial class SafeMigrationPreflightProjection
     }
 
     private sealed record ProjectedColumn(
-        ExpectedColumnDefinition Definition,
+        bool IsNullable,
+        bool PreservesNullForExistingRows,
+        bool IsComputed,
         bool AddedToExistingTable
-    );
+    )
+    {
+        public static ProjectedColumn From(
+            ExpectedColumnDefinition definition,
+            bool addedToExistingTable
+        ) => new(
+            definition.IsNullable,
+            SafeMigrationPreflightProjection.PreservesNullForExistingRows(definition.DefaultValue),
+            definition.ComputedColumnSql is not null || definition.ComputedExpression is not null,
+            addedToExistingTable);
+
+        public static ProjectedColumn From(
+            ColumnOperation operation,
+            bool addedToExistingTable
+        ) => new(
+            operation.IsNullable,
+            operation.DefaultValue is null && operation.DefaultValueSql is null,
+            operation.ComputedColumnSql is not null,
+            addedToExistingTable);
+
+        public static ProjectedColumn Unknown { get; } = new(
+            IsNullable: false,
+            PreservesNullForExistingRows: false,
+            IsComputed: true,
+            AddedToExistingTable: false);
+    }
 
     private sealed partial class ProjectedTable
     {

@@ -264,13 +264,27 @@ the Doka provider's complete `MODIFY COLUMN` definition; PostgreSQL uses its
 provider-generated `SET`/`DROP DEFAULT`, `SET`/`DROP NOT NULL`, and comment
 statements.
 
-Ordered preflight also understands one important additive sequence: after an
-existing table gains a nullable, non-computed column without a non-null default,
-a following default null-distinct unique index can be projected as missing and
-applied safely. The projection requires every referenced column to be proven.
-It does not authorize a unique index through an unknown column, a non-null
-default, a computed value, or `NULLS NOT DISTINCT`; those sequences remain
-`prerequisite_missing` until separately reviewed and represented.
+Ordered preflight projects deterministic structural postconditions of preceding
+ordinary EF table and column operations into later safe prerequisites. For
+example, an ordinary `AddColumnOperation` followed by a safe index can produce
+`projected_missing` rather than the catalog's historical
+`prerequisite_missing`. The ordinary operation remains
+`provider_owned_not_analyzed`, the overall result remains
+`ReadyWithProviderOperations`, and deployment approval still requires an
+independent review and postcondition for that operation. Projection describes
+the state only if the earlier provider operation succeeds; it does not convert
+ordinary DDL into a SafeMigrations operation.
+An unrecognized provider operation or raw SQL between that prerequisite and a
+later safe operation invalidates the in-memory projection facts; represent the
+required state explicitly or reorder the safe operation after a separately
+reviewed boundary.
+
+For unique indexes on an existing table, projection applies a stricter data
+safety proof. A newly added key column must be nullable, non-computed, and have
+no non-null default, while the index must retain default null-distinct
+semantics. Unknown columns, non-null defaults, computed values, and
+`NULLS NOT DISTINCT` remain `prerequisite_missing`. Runtime guards and
+postflight remain authoritative for the actual database state.
 
 The generated `Down` body applies to the entire migration. It throws before any
 destructive DDL because the migration cannot prove which table, column,

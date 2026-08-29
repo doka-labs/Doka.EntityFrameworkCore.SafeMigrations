@@ -33,12 +33,16 @@ operation. Doka runs cleanup after success, failure, or cancellation with an
 independent cancellation token; a cleanup failure closes the connection and
 evicts its physical session from the MySqlConnector pool.
 
-Doka 10.1.1 also preserves application-owned Guid converters through
-relationship chains. Its generated key column retains the provider CLR type,
-has no provider-owned `GuidFormat`, and may carry `ClientGuid`. SafeMigrations
-therefore treats only that value-generation annotation as catalog-neutral; it
-does not generalize the exception to HiLo, storage-format, or unknown provider
-facets.
+Doka 10.1.1 supports two distinct Guid contracts. Application-owned converters
+are preserved through relationship chains; their generated key columns retain
+the provider CLR type, carry no provider-owned `GuidFormat`, and may carry
+`ClientGuid`. Native Doka Guid mappings instead emit
+`Doka:MySql:GuidFormat` with `Binary16` plus `binary(16)` or `Char36` plus
+`char(36)`. SafeMigrations accepts only those exact Guid CLR/store-type pairs.
+Undefined enum values, contradictory store types, non-Guid CLR types, HiLo,
+and unknown provider facets remain unsupported before target DDL. Both accepted
+Guid formats remain part of immutable operation snapshots, fingerprints,
+provider DDL replay, and catalog-shape comparison.
 
 ## PostgreSQL boundary
 
@@ -165,6 +169,10 @@ unless the entry records a later date:
 - [Doka 10.1.1 migration-operation handler contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.1/docs/migration-operation-handlers.md)
   (rechecked 2026-08-29)
 - [Doka 10.1.1 release notes](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.1/CHANGELOG.md)
+  (rechecked 2026-08-29)
+- [Doka 10.1.1 Guid-format contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.1/src/Doka.EntityFrameworkCore.MySql/MySqlGuidFormat.cs)
+  (rechecked 2026-08-29)
+- [Doka 10.1.1 Guid property configuration](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.1/src/Doka.EntityFrameworkCore.MySql/MySqlPropertyBuilderExtensions.cs)
   (rechecked 2026-08-29)
 
 The exact release evidence belongs in the workflow run, lockfiles, package

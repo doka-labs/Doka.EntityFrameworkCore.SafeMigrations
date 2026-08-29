@@ -60,7 +60,13 @@ The runner exposes pending-migration analysis, explicit-operation preflight,
 and postflight verification separately from EF execution. It validates the
 canonical model, obtains provider observations in bounded batches, and
 projects accepted earlier safe operations into later preflight assessments.
-Ordinary provider-owned operations remain explicitly not analyzed.
+Recognized ordinary EF table and column operations may contribute only their
+deterministic structural postconditions to a later safe prerequisite. They
+remain explicitly `provider_owned_not_analyzed`, keep the report at
+`ReadyWithProviderOperations`, and require independent review and postcondition
+evidence. Provider-owned effects invalidate complete projected shapes that may
+have become stale; an unrecognized operation invalidates all accumulated
+projection facts rather than carrying an unknown effect forward.
 
 The runner opens and closes a connection only when it owns that opening.
 Provider analysis scopes own resources they create; caller-owned transactions
@@ -187,6 +193,9 @@ installations.
 - 2026-08-26: Maintainer designated @doka-labs/core-maintainers as the informed audience.
 - 2026-08-26: Status changed from proposed to accepted. Dominic Kalkbrenner confirmed the recorded decision and its existing implementation.
 - 2026-08-26: Status changed from accepted to implemented. Analysis, guarded execution, model validation, and connection ownership are implemented and verified by the referenced provider lifecycle tests.
+- 2026-08-29: Preflight retained the provider-operation boundary while adding
+  ordered conditional projection for deterministic ordinary table and column
+  postconditions required by later safe operations.
 
 ### Implementation References
 

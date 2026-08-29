@@ -284,7 +284,7 @@ returns `Task<SafeMigrationRunReport>`:
 | Method | Additional input | Result |
 | --- | --- | --- |
 | `AnalyzePendingMigrationsAsync` | Pending sequence resolved through EF history and configured migration assembly | Preflight report |
-| `AnalyzeAsync` | Explicit ordered `IReadOnlyList<MigrationOperation>` | Preflight report including projected earlier safe operations |
+| `AnalyzeAsync` | Explicit ordered `IReadOnlyList<MigrationOperation>` | Preflight report including earlier safe operations and conditional structural postconditions of recognized ordinary EF operations |
 | `VerifyAsync` | Explicit operations whose postconditions must all hold in the final live state | Postflight report; no preflight projection |
 
 `SafeMigrationRunOptions` requires a nonempty pseudonymous `instanceId` and
@@ -301,6 +301,10 @@ is required. Omitting both leaves no external target-model comparison.
 
 Bind execution to the non-null target actually analyzed, keep the migration
 assembly unchanged, and review ordinary provider operations separately.
+Recognized ordinary table/column operations may satisfy a later safe
+prerequisite in the ordered projection, but remain
+`provider_owned_not_analyzed`; this conditional projection is not an analysis
+or approval of their DDL.
 Calling EF migration with a null target means latest, which can exceed a
 specifically targeted preflight.
 

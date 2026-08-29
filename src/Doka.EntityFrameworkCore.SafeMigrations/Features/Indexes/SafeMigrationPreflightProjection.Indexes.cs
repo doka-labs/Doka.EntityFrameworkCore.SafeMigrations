@@ -130,10 +130,13 @@ internal sealed partial class SafeMigrationPreflightProjection
         return intent.Definition.Keys
             .Where(static key => key.Column is not null)
             .Select(key => prerequisites.Columns[key.Column!])
-            .Any(static column => column is { AddedToExistingTable: true, Definition.IsNullable: true }
-                && PreservesNullForExistingRows(column.Definition.DefaultValue)
-                && column.Definition.ComputedColumnSql is null
-                && column.Definition.ComputedExpression is null);
+            .Any(static column => column is
+            {
+                AddedToExistingTable: true,
+                IsNullable: true,
+                PreservesNullForExistingRows: true,
+                IsComputed: false,
+            });
     }
 
     private static bool PreservesNullForExistingRows(

@@ -13,6 +13,16 @@ All notable changes are documented here. The format follows
   attestation readback now uses bounded retries, so GitHub's asynchronous
   attestation availability cannot turn an otherwise complete publication into
   a false-negative run without first exhausting the explicit recovery window.
+- Accept Doka 10.1.1 native Guid storage annotations for the exact
+  `Binary16`/`binary(16)` and `Char36`/`char(36)` contracts across strict and
+  legacy-convergence tables, keys, and relationship chains. Undefined values,
+  contradictory store types, non-Guid CLR columns, and unknown annotations
+  remain fail-closed before target DDL.
+- Project deterministic structural postconditions of ordered ordinary EF table
+  and column operations into later safe prerequisites. Mixed relationship
+  migrations can now preflight an ordinary required-column addition followed by
+  a safe index, backfill/default cleanup, and foreign key while every ordinary
+  operation remains explicitly `provider_owned_not_analyzed`.
 
 ## [10.0.0-rc.2] - 2026-08-29
 
