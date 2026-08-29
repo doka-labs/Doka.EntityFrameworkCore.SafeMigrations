@@ -13,6 +13,10 @@ session-local, but MySQL-family DDL is not an atomic migration transaction.
 - Prepared SQL contains provider-rendered DDL, not caller-provided SQL text.
 - The connection string must set `Allow User Variables=true`, corresponding to
   `MySqlConnectionStringBuilder.AllowUserVariables`.
+- The runner validates the actual current `DbConnection` before pending EF
+  history, model, environment, lock, catalog access, or connection opening.
+  Replacing a connection cannot inherit validation from an EF-cached service
+  provider.
 - A failure can occur after earlier DDL committed; retry must converge from the
   observed partial state.
 
@@ -38,7 +42,7 @@ cleanup inside one provider-executed command scope.
 The provider handler emits a plan equivalent to:
 
 1. create the session-local assertion table;
-2. evaluate catalog-only table prerequisites;
+2. evaluate catalog-only table and referenced-column prerequisites;
 3. prepare and execute the data-reading state query only when prerequisites
    exist;
 4. run a non-DDL assertion that fails for a rejected state;
@@ -55,14 +59,46 @@ server-version and feature context. The analyzer renders those plans directly
 with interned `DbParameter` values. It does not parse command text. Preflight
 does not run target DDL, create an EF history row, or create a stored routine.
 
-Every safe operation returns exactly one Doka 10.0.0 scoped migration command.
+The same capture records expected unique-index names by table. MySQL and
+MariaDB publish each unique index through both `INFORMATION_SCHEMA.STATISTICS`
+and `TABLE_CONSTRAINTS`; strict table classification accepts that duplicate
+catalog identity only for an expected index in the current batch. Unknown
+unique keys still classify the strict table as different and remain visible in
+the unexpected-object inventory. Outside analysis, EF passes its target
+relational model to runtime generation; the scoped handler caches the unique
+index names from that model so a completed strict batch remains idempotent.
+When neither batch nor target-model evidence is available, the alias is not
+accepted.
+
+Every safe operation returns exactly one Doka 10.1.1 scoped migration command.
 Its bounded fragment list contains ordered setup, one body, and reverse-order
 cleanup. A data-reading classifier adds setup fragments for lazy state
 evaluation without adding EF command boundaries. This shape reduces executor
 dispatch while retaining independent SQL commands inside the provider-owned
 scope.
 
-## Scoped cleanup in Doka 10.0.0
+## Automatic legacy column repair
+
+A generated legacy-convergence migration retains `ThrowIfDifferent` unless its
+source explicitly selects `RepairIfSafe`. That policy can repair only
+nullability, default, and comment drift on an ordinary existing column. Store
+type, collation, generated-value state, row-version state, and provider
+annotations must already match. Existing `NULL` values block a repair to `NOT
+NULL` before target DDL.
+
+MySQL and MariaDB require `MODIFY COLUMN` to carry the complete target column
+definition. SafeMigrations therefore asks Doka to render that complete
+definition and separately proves that no unmodeled `EXTRA` modifier would be
+erased. `ON UPDATE`, `INVISIBLE`, generated-column, auto-increment, and unknown
+modifiers reject the repair. MySQL's catalog-only `DEFAULT_GENERATED` marker is
+accepted because the modeled default still participates in the target
+postcondition. The add and repair statements remain separate guarded branches,
+and both must satisfy the same full catalog postcondition. A session-local
+prepared classifier reads column data only after a catalog-only guard has
+proved that the target exists. Missing safe additions remain `Missing`; an
+unsafe missing `NOT NULL` addition to a populated table remains `DataBlocked`.
+
+## Scoped cleanup in Doka 10.1.1
 
 `RenderStandardOperation` exposes provider-validated `Setup`, `Body`, and
 `Cleanup` fragments. SafeMigrations embeds the exact body as UTF-8 hexadecimal
@@ -70,6 +106,15 @@ prepared SQL and carries provider setup and cleanup into its outer scope; it no
 longer lexes or rewrites provider command text. The scope uses one transaction-
 suppression value, matching the single baseline command boundary required by a
 safe intent.
+
+For column value generation, `AutoIncrement` is compared against `c.EXTRA`.
+`None` and `ClientGuid` both require the absence of `auto_increment`; the
+latter is a client-side EF value generator and is therefore not a database
+column facet. SafeMigrations still retains the exact annotation in its
+immutable definition, contract fingerprint, and provider operation replay.
+HiLo, Guid storage-format, spatial, invisible, and unknown column annotations
+remain unsupported until their complete observable database contracts are
+modeled.
 
 Doka attempts cleanup after setup or body failure and after caller
 cancellation. Asynchronous cleanup uses an independent cancellation token.
@@ -159,8 +204,12 @@ unqualified future engine line is admitted implicitly.
 
 - [MySQL implicit commit statements](https://dev.mysql.com/doc/refman/8.4/en/implicit-commit.html)
 - [MySQL prepared statement restrictions](https://dev.mysql.com/doc/refman/8.4/en/sql-prepared-statements.html)
+- [MySQL ALTER TABLE](https://dev.mysql.com/doc/refman/8.4/en/alter-table.html)
+- [MySQL INFORMATION_SCHEMA.COLUMNS](https://dev.mysql.com/doc/refman/en/information-schema-columns-table.html)
 - [MySQL temporary table privileges](https://dev.mysql.com/doc/refman/8.4/en/create-temporary-table.html)
 - [MariaDB SQL statements causing implicit commit](https://mariadb.com/docs/server/reference/sql-statements/transactions/sql-statements-that-cause-an-implicit-commit)
+- [MariaDB ALTER TABLE](https://mariadb.com/docs/server/reference/sql-statements/data-definition/alter/alter-table)
+- [MariaDB INFORMATION_SCHEMA.COLUMNS](https://mariadb.com/docs/server/reference/system-tables/information-schema/information-schema-tables/information-schema-columns-table)
 - [MariaDB PREPARE statement](https://mariadb.com/docs/server/reference/sql-statements/prepared-statements/prepare-statement)
 - [Doka.EntityFrameworkCore.MySql](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql)
 

@@ -8,18 +8,19 @@ with roll-forward disabled. SafeMigrations supports EF Core 10 only.
 | Package | Runtime dependency contract |
 | --- | --- |
 | Core | `Microsoft.EntityFrameworkCore.Relational` `[10.0.11,10.1.0)` |
-| MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` exact `[10.0.0]` |
+| MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` exact `[10.1.1]` |
 | PostgreSQL | `Npgsql.EntityFrameworkCore.PostgreSQL` `[10.0.3,11.0.0)` |
 
-The MySQL/MariaDB package resolves the exact stable Doka 10.0.0 package. CI
+The MySQL/MariaDB package resolves the exact stable Doka 10.1.1 package. CI
 does not build Doka and never uses a cross-repository ProjectReference. A Doka
 update is accepted only after the complete package, engine, tooling, coverage,
 and performance matrix passes again.
 
-The declared dependency graph was rechecked against the NuGet V3 package
-registrations and the .NET 10 release metadata on 2026-08-27. Bounded package
-ranges describe compatibility; the committed lockfiles identify the exact
-graph selected by a particular revision.
+The Doka 10.1.1 registration was rechecked against the NuGet V3 package
+registration on 2026-08-29. The remaining declared dependency graph and .NET
+10 release metadata were rechecked on 2026-08-27. Bounded package ranges
+describe compatibility; the committed lockfiles identify the exact graph
+selected by a particular revision.
 
 ## Engine matrix
 
@@ -101,6 +102,9 @@ Provider tests use real Docker servers and cover:
 - missing, matching, different, unsupported, data-blocked, and
   prerequisite-missing states;
 - `ExistenceOnly`, `ThrowIfDifferent`, and `RepairIfSafe`;
+- source-frozen legacy convergence policy selection, mutable column repair,
+  matching rerun, null-data blocking, invariant-drift rejection, and
+  MySQL/MariaDB preservation of unmodeled `EXTRA` modifiers;
 - granular heterogeneous table convergence and pairwise legacy-state
   generation with a fixed seed;
 - exact expected column, index, primary-key, unique, check, and foreign-key
@@ -123,7 +127,8 @@ Provider tests use real Docker servers and cover:
   read-write or weaker-isolation caller transactions.
 
 The provider-analyzer contract accepts the ordered safe-operation batch. Each
-provider first classifies table prerequisites, then executes classification in
+provider first classifies table and referenced-column prerequisites, then
+executes classification in
 deterministic parameterized chunks bounded by operation count, parameter
 count, and UTF-8 payload. The unexpected-object inventory remains scoped to
 the expected table set for child objects while retaining complete table
@@ -148,9 +153,15 @@ cases stop before target DDL instead of being compared or applied heuristically:
 
 - PostgreSQL 14 rejects `NULLS NOT DISTINCT`; PostgreSQL introduced that
   `CREATE INDEX` clause in version 15.
-- Doka 10.0.0 parenthesizes `DateOnly` and `TimeOnly` typed literals in column
+- Doka 10.1.1 parenthesizes `DateOnly` and `TimeOnly` typed literals in column
   defaults. The complete MySQL and MariaDB matrix qualifies the resulting DDL
   and each engine's catalog display form.
+- Doka 10.1.1 emits `ClientGuid` for client-generated Guid keys, including
+  application-converted relationship chains. SafeMigrations retains that
+  annotation in operation identity and provider replay while comparing its
+  live column as non-`AUTO_INCREMENT`. HiLo and unknown column annotations
+  remain unsupported because their complete database prerequisites are not
+  represented by the column catalog contract.
 - MySQL, MariaDB 10.11, and MariaDB 11.4 reject a `Guid` literal default stored
   as `BINARY` because `INFORMATION_SCHEMA.COLUMNS.COLUMN_DEFAULT` does not
   preserve a complete value for repeatable semantic comparison. MariaDB 11.8
@@ -185,10 +196,10 @@ used to hide an uncovered regression.
 ## Performance and memory
 
 `eng/performance-budgets.json` defines explicit Core, MySQL/MariaDB, and
-PostgreSQL benchmark sets with duration, regression tolerance,
-and allocation ceilings at 1, 100, and 1000 operations. Three independently
-restored and executed benchmark projects enforce the Core, MySQL/MariaDB, and
-PostgreSQL dependency boundaries for:
+PostgreSQL benchmark sets with duration baselines, coarse hosted-runner
+ceilings, and strict allocation ceilings at 1, 100, and 1000 operations. Three
+independently restored and executed benchmark projects enforce the Core,
+MySQL/MariaDB, and PostgreSQL dependency boundaries for:
 
 - intent construction;
 - decision planning;
@@ -197,10 +208,12 @@ PostgreSQL dependency boundaries for:
 - canonical snapshot initialization, relational model differ, and fingerprint;
 - report JSON serialization.
 
-The benchmark is a deterministic gate, not a throughput claim. Changes to a
-budget require captured before/after evidence on the same runner class and a
-review of asymptotic behavior; a budget must not be raised merely to make CI
-green.
+Allocation ceilings are deterministic blocking gates. Wall-clock measurements
+on shared GitHub-hosted runners are not deterministic, so their three-times-
+baseline ceilings only catch gross regressions and are not throughput claims.
+Changes to a baseline or ceiling require captured before/after evidence on the
+same runner class and a review of asymptotic behavior; a budget must not be
+raised merely to make CI green.
 
 The MySQL/MariaDB benchmark has no Npgsql dependency, and the PostgreSQL
 benchmark has no Doka MySQL dependency. Shared measurement and workload source
@@ -258,10 +271,15 @@ release-asset verification.
 
 - [.NET 10 release metadata](https://dotnetcli.blob.core.windows.net/dotnet/release-metadata/10.0/releases.json),
   retrieved 2026-08-27.
-- [EF Core Relational 10.0.11 package](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.Relational/10.0.11),
-  [Doka 10.0.0 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.0.0),
+- [EF Core Relational 10.0.11 package](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.Relational/10.0.11)
   and [Npgsql EF Core 10.0.3 package](https://www.nuget.org/packages/Npgsql.EntityFrameworkCore.PostgreSQL/10.0.3),
   retrieved 2026-08-27.
+- [Doka 10.1.1 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.1.1),
+  [value-generation strategies](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.1/src/Doka.EntityFrameworkCore.MySql/MySqlValueGenerationStrategy.cs),
+  and [migration-operation handler contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.1/docs/migration-operation-handlers.md),
+  retrieved 2026-08-29.
+- [EF Core generated values](https://learn.microsoft.com/en-us/ef/core/modeling/generated-properties),
+  retrieved 2026-08-29.
 - [PostgreSQL versioning policy](https://www.postgresql.org/support/versioning/)
   and [18.6/17.11/16.15/15.19/14.24 announcement](https://www.postgresql.org/about/news/postgresql-186-1711-1615-1519-1424-and-19-beta-3-released-3365/),
   retrieved 2026-08-27.

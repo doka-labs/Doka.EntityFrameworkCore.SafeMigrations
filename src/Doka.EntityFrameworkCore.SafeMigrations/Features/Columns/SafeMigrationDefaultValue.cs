@@ -107,6 +107,8 @@ public sealed class SafeMigrationDefaultValue
 
     internal object? GetLiteralValue() => CloneLiteral(_literalValue);
 
+    internal bool IsNullLiteral => Kind == SafeMigrationDefaultValueKind.Literal && _literalValue is null;
+
     private static bool IsSupportedLiteral(
         object? value
     ) => value is null

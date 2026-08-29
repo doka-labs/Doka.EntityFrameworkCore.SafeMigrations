@@ -1,5 +1,6 @@
 #nullable enable
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOptionsBuilder
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOptionsBuilder.UseLegacyConvergencePolicy(Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationPolicy policy) -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOptionsBuilder!
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOptionsBuilder.SafeMigrationOptionsBuilder() -> void
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOptionsBuilder.UseScaffoldingMode(Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationScaffoldingMode mode) -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOptionsBuilder!
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationScaffoldingMode
@@ -164,6 +165,7 @@ Doka.EntityFrameworkCore.SafeMigrations.ISafeMigrationProviderAnalyzer.AnalyzeAs
 Doka.EntityFrameworkCore.SafeMigrations.ISafeMigrationProviderAnalyzer.FindUnexpectedObjectsAsync(Microsoft.EntityFrameworkCore.DbContext! context, System.Collections.Generic.IReadOnlyList<Microsoft.EntityFrameworkCore.Migrations.Operations.MigrationOperation!>! operations, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationUnexpectedObject!>!>!
 Doka.EntityFrameworkCore.SafeMigrations.ISafeMigrationProviderAnalyzer.GetEnvironmentAsync(Microsoft.EntityFrameworkCore.DbContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationProviderEnvironment!>!
 Doka.EntityFrameworkCore.SafeMigrations.ISafeMigrationProviderAnalyzer.ProviderId.get -> string!
+Doka.EntityFrameworkCore.SafeMigrations.ISafeMigrationProviderAnalyzer.ValidateContext(Microsoft.EntityFrameworkCore.DbContext! context) -> void
 Doka.EntityFrameworkCore.SafeMigrations.ISafeMigrationRunner
 Doka.EntityFrameworkCore.SafeMigrations.ISafeMigrationRunner.AnalyzeAsync(Microsoft.EntityFrameworkCore.DbContext! context, System.Collections.Generic.IReadOnlyList<Microsoft.EntityFrameworkCore.Migrations.Operations.MigrationOperation!>! operations, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationRunOptions! options, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationRunReport!>!
 Doka.EntityFrameworkCore.SafeMigrations.ISafeMigrationRunner.AnalyzePendingMigrationsAsync(Microsoft.EntityFrameworkCore.DbContext! context, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationRunOptions! options, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationRunReport!>!

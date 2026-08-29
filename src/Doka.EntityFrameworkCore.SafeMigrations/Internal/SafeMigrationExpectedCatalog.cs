@@ -7,6 +7,7 @@ internal sealed class SafeMigrationExpectedTableInventory
         string? schema,
         IEnumerable<string> columns,
         IEnumerable<string> indexes,
+        IEnumerable<string> uniqueIndexes,
         IEnumerable<KeyValuePair<string, SafeMigrationDatabaseObjectKind>> constraints
     )
     {
@@ -15,6 +16,7 @@ internal sealed class SafeMigrationExpectedTableInventory
 
         Columns = columns.ToHashSet(StringComparer.Ordinal);
         Indexes = indexes.ToHashSet(StringComparer.Ordinal);
+        UniqueIndexes = uniqueIndexes.ToHashSet(StringComparer.Ordinal);
         Constraints = constraints.ToDictionary(
             static value => value.Key,
             static value => value.Value,
@@ -28,6 +30,8 @@ internal sealed class SafeMigrationExpectedTableInventory
     public IReadOnlySet<string> Columns { get; }
 
     public IReadOnlySet<string> Indexes { get; }
+
+    public IReadOnlySet<string> UniqueIndexes { get; }
 
     public IReadOnlyDictionary<string, SafeMigrationDatabaseObjectKind> Constraints { get; }
 }
@@ -166,6 +170,8 @@ internal static partial class SafeMigrationExpectedCatalog
 
         public HashSet<string> Indexes { get; } = new(StringComparer.Ordinal);
 
+        public HashSet<string> UniqueIndexes { get; } = new(StringComparer.Ordinal);
+
         public Dictionary<string, SafeMigrationDatabaseObjectKind> Constraints { get; } = new(StringComparer.Ordinal);
 
         public static MutableTable From(
@@ -195,7 +201,13 @@ internal static partial class SafeMigrationExpectedCatalog
             return table;
         }
 
-        public SafeMigrationExpectedTableInventory Snapshot() => new(Table, Schema, Columns, Indexes, Constraints);
+        public SafeMigrationExpectedTableInventory Snapshot() => new(
+            Table,
+            Schema,
+            Columns,
+            Indexes,
+            UniqueIndexes,
+            Constraints);
 
         private static void AddConstraints(
             MutableTable table,

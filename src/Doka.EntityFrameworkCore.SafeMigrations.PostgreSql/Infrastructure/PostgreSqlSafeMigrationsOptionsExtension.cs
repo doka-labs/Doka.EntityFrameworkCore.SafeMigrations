@@ -14,6 +14,9 @@ internal sealed class PostgreSqlSafeMigrationsOptionsExtension
     /// <summary>Gets the mode consumed by the SafeMigrations design-time scaffolder.</summary>
     public SafeMigrationScaffoldingMode ScaffoldingMode { get; private init; }
 
+    /// <summary>Gets the policy consumed by legacy-convergence scaffolding.</summary>
+    public SafeMigrationPolicy LegacyConvergencePolicy { get; private init; } = SafeMigrationPolicy.ThrowIfDifferent;
+
     public void ApplyServices(
         IServiceCollection services
     ) => services.AddPostgreSqlSafeMigrations(BaselineGeneratorType, CanonicalContextType);
@@ -21,12 +24,14 @@ internal sealed class PostgreSqlSafeMigrationsOptionsExtension
     public static PostgreSqlSafeMigrationsOptionsExtension WithConfiguration(
         Type baselineGeneratorType,
         Type? canonicalContextType,
-        SafeMigrationScaffoldingMode scaffoldingMode
+        SafeMigrationScaffoldingMode scaffoldingMode,
+        SafeMigrationPolicy legacyConvergencePolicy = SafeMigrationPolicy.ThrowIfDifferent
     ) => new()
     {
         BaselineGeneratorType = baselineGeneratorType,
         CanonicalContextType = canonicalContextType,
         ScaffoldingMode = scaffoldingMode,
+        LegacyConvergencePolicy = legacyConvergencePolicy,
     };
 
     public void Validate(
@@ -58,9 +63,9 @@ internal sealed class PostgreSqlSafeMigrationsOptionsExtension
         private new PostgreSqlSafeMigrationsOptionsExtension Extension =>
             (PostgreSqlSafeMigrationsOptionsExtension)base.Extension;
 
-        // Scaffolding mode changes generated source only. Excluding it avoids
-        // fragmenting EF's runtime service-provider cache without changing a
-        // runtime service registration.
+        // Scaffolding settings change generated source only. Excluding them
+        // avoids fragmenting EF's runtime service-provider cache without
+        // changing a runtime service registration.
         public override int GetServiceProviderHashCode() => HashCode.Combine(
             Extension.BaselineGeneratorType,
             Extension.CanonicalContextType);

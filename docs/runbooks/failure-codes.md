@@ -31,7 +31,7 @@ returns a separate `SafeMigrationDecision.Code`.
 | --- | --- | --- |
 | `unsupported` | The active engine cannot represent the operation or requested facet. | Stop. Remove the unsupported intent or change the reviewed support contract; do not emit provider-specific ad-hoc SQL as a bypass. |
 | `data_blocked` | Existing rows violate a uniqueness, nullability, check, or foreign-key precondition. | Keep target DDL unapplied. Repair data through an audited, idempotent transformation, rerun preflight, then migrate. |
-| `prerequisite_missing` | A required table does not exist, so dependent state or data checks cannot be evaluated safely. | Add or converge the prerequisite first. Do not reinterpret the result as an empty table or a data violation. |
+| `prerequisite_missing` | A required table or referenced column does not exist, so dependent state or data checks cannot be evaluated safely. | Add or converge the prerequisite first. Do not reinterpret the result as an empty table or a data violation. |
 | `different_reject` | An ensure target exists with a different definition under `ThrowIfDifferent`. | Compare each expected/live facet. Correct drift or author an explicit safe transition. |
 | `different_no_safe_repair` | `RepairIfSafe` was requested but no allowlisted repair passed. | Do not widen the allowlist for this instance. Author a reviewed migration/backfill or restore the expected definition. |
 | `wrong_object_kind` | A drop target has a conflicting kind or ownership, such as an index belonging to another table. | Stop and identify ownership. Never drop it by name alone. |
@@ -58,7 +58,7 @@ Runtime guards preserve the same categories at the database boundary:
 | `doka_sm_different` | `P1001` / `doka_sm_different` | Definition mismatch or unapproved repair. |
 | `doka_sm_unsupported` | `P1002` / `doka_sm_unsupported` | Active engine capability rejects the operation. |
 | `doka_sm_data_blocked` | `P1003` / `doka_sm_data_blocked` | Existing data violates a precondition. |
-| `doka_sm_prerequisite_missing` | `P1004` / `doka_sm_prerequisite_missing` | A required table is absent; dependent expressions were not evaluated. |
+| `doka_sm_prerequisite_missing` | `P1004` / `doka_sm_prerequisite_missing` | A required table or referenced column is absent; dependent expressions were not evaluated. |
 | `doka_sm_postcondition` | `P1005` / `doka_sm_postcondition` | Target DDL ran but final catalog condition is false. |
 
 MySQL/MariaDB uses unique constraints on a session-local temporary assertion
@@ -85,7 +85,7 @@ data/prerequisite result uses its planner rejection code.
 | `classified_different` | Live analyzer observed drift; the policy determines whether this blocks. |
 | `classified_unsupported` | Provider classified unsupported without a more specific static reason; remains the blocked preflight report code. |
 | `classified_data_blocked` | Provider classified a data precondition failure; a blocked preflight report uses `data_blocked`. |
-| `classified_prerequisite_missing` | Provider proved a required table is absent without evaluating dependent table SQL. |
+| `classified_prerequisite_missing` | Provider proved a required table or referenced column is absent without evaluating dependent SQL. |
 | `projected_missing` | Preflight projection observes absence after applying earlier accepted operations virtually. |
 | `projected_matching` | Preflight projection observes a match after earlier accepted operations virtually. |
 | `projected_different` | Preflight projection observes a conflict between ordered operations. |

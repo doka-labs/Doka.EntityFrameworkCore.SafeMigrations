@@ -4,11 +4,15 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
 {
     private const string HandlerIdentifier = "Doka.EntityFrameworkCore.SafeMigrations.MySql.SafeMigrationOperation";
     private const string PreparedStatementName = "doka_sm_statement";
+    private static readonly IReadOnlySet<string> s_emptyUniqueIndexes = new HashSet<string>(StringComparer.Ordinal);
+
     private readonly MySqlSafeMigrationCatalogSqlBuilder _catalogSqlBuilder;
     private readonly MySqlSafeMigrationPlanCapture _planCapture;
     private readonly ISqlGenerationHelper _sqlGenerationHelper;
     private readonly MySqlSafeMigrationSqlExpressionRenderer _expressionRenderer;
     private readonly RelationalTypeMapping _stringMapping;
+    private Dictionary<ModelTableKey, IReadOnlySet<string>>? _modelUniqueIndexes;
+    private IModel? _modelUniqueIndexSource;
 
     public MySqlSafeMigrationOperationHandler(
         IRelationalTypeMappingSource typeMappingSource,
@@ -43,7 +47,11 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
                 "The MySQL SafeMigrations handler received an unexpected operation type.",
                 nameof(context));
 
-        var runtimePlan = _catalogSqlBuilder.Build(operation, context);
+        var expectedUniqueIndexes = operation.Intent is EnsureTableIntent table
+            ? GetExpectedUniqueIndexes(table, context.Model)
+            : null;
+
+        var runtimePlan = _catalogSqlBuilder.Build(operation, context, expectedUniqueIndexes);
         if (_planCapture.IsActive)
         {
             _planCapture.Record(context.OperationOrdinal, operation, runtimePlan);
@@ -57,6 +65,13 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         var baselineCommand = GetSingleBaselineCommand(baseline);
         var baselineFragments = GetBaselineFragments(baselineCommand);
         var defaultSuppression = baselineCommand.TransactionSuppressed;
+        var repairFragments = RenderRepairBaseline(
+            operation,
+            runtimePlan,
+            context,
+            baselineFragments,
+            defaultSuppression);
+
         var renderedParameterValues = runtimePlan
             .ParameterValues
             .Select(Literal)
@@ -75,9 +90,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             setupCommands.Add(
                 $"SET @doka_sm_prerequisite_ok = COALESCE(("
                 + $"{runtimePlan.RenderPreparedPrerequisiteExpression(renderedParameterValues)}), FALSE);");
-            setupCommands.Add(
-                "SET @doka_sm_state = CASE WHEN @doka_sm_prerequisite_ok "
-                + "THEN NULL ELSE 'prerequisite_missing' END, @doka_sm_repair_ok = FALSE;");
+            setupCommands.Add(BuildInitialLazyStateAssignment(runtimePlan, renderedParameterValues));
             setupCommands.Add(BuildStateEvaluationAssignment(runtimePlan, renderedParameterValues));
             setupCommands.Add($"PREPARE {PreparedStatementName} FROM @doka_sm_sql;");
             setupCommands.Add($"EXECUTE {PreparedStatementName};");
@@ -96,7 +109,18 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
 
         // PREPARE selects the real DDL only for apply or repair; every no-op
         // path executes the harmless placeholder on the same guarded path.
-        setupCommands.Add(BuildPreparedSqlAssignment(baselineFragments.BodyCommand));
+        // AlterColumn already renders its reviewed transition as the baseline;
+        // EnsureColumn needs the separately rendered full-definition repair.
+        var repairBody = repairFragments?.BodyCommand
+            ?? (operation is { Policy: SafeMigrationPolicy.RepairIfSafe, Intent: AlterColumnIntent }
+                && runtimePlan.RepairCapability == SafeMigrationRepairCapability.Safe
+                ? baselineFragments.BodyCommand
+                : null);
+
+        setupCommands.Add(
+            BuildPreparedSqlAssignment(
+                baselineFragments.BodyCommand,
+                repairBody));
         setupCommands.Add($"PREPARE {PreparedStatementName} FROM @doka_sm_sql;");
 
         var bodyCommand = $"EXECUTE {PreparedStatementName};\n"
@@ -133,6 +157,62 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         return MySqlMigrationOperationResult.Generated([scopedCommand], "safe_guarded_operation");
     }
 
+    private IReadOnlySet<string> GetExpectedUniqueIndexes(
+        EnsureTableIntent intent,
+        IModel? model
+    )
+    {
+        // Analysis owns an exact operation-batch catalog. Runtime generation
+        // receives operations one at a time, so EF's target relational model is
+        // the authoritative fallback for indexes emitted beside the table.
+        if (_planCapture.IsActive)
+        {
+            return _planCapture.GetExpectedUniqueIndexes(intent.Definition.Table);
+        }
+
+        if (model is null)
+        {
+            return s_emptyUniqueIndexes;
+        }
+
+        if (!ReferenceEquals(model, _modelUniqueIndexSource))
+        {
+            _modelUniqueIndexes = BuildModelUniqueIndexes(model);
+            _modelUniqueIndexSource = model;
+        }
+
+        return _modelUniqueIndexes!.GetValueOrDefault(
+                new ModelTableKey(intent.Definition.Table, intent.Definition.Schema))
+            ?? s_emptyUniqueIndexes;
+    }
+
+    private static Dictionary<ModelTableKey, IReadOnlySet<string>> BuildModelUniqueIndexes(
+        IModel model
+    )
+    {
+        var result = new Dictionary<ModelTableKey, IReadOnlySet<string>>();
+        foreach (var table in model.GetRelationalModel().Tables)
+        {
+            var names = table
+                .Indexes
+                .Where(static index => index.IsUnique)
+                .Select(static index => index.Name)
+                .ToHashSet(StringComparer.Ordinal);
+
+            if (names.Count > 0)
+            {
+                result.Add(new ModelTableKey(table.Name, table.Schema), names);
+            }
+        }
+
+        return result;
+    }
+
+    private readonly record struct ModelTableKey(
+        string Table,
+        string? Schema
+    );
+
     private static string BuildStateEvaluationAssignment(
         MySqlSafeMigrationRuntimePlan runtimePlan,
         IReadOnlyList<string> renderedParameterValues
@@ -144,16 +224,40 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             + runtimePlan.RenderPreparedRepairPrecondition(renderedParameterValues)
             + "), FALSE) INTO @doka_sm_state, @doka_sm_repair_ok";
 
-        return "SET @doka_sm_sql = CASE WHEN @doka_sm_prerequisite_ok "
+        return "SET @doka_sm_sql = CASE WHEN @doka_sm_state IS NULL "
             + $"THEN CONVERT(0x{Convert.ToHexString(Encoding.UTF8.GetBytes(statement))} USING utf8mb4) "
             + "ELSE 'DO 0' END;";
     }
 
+    private static string BuildInitialLazyStateAssignment(
+        MySqlSafeMigrationRuntimePlan runtimePlan,
+        IReadOnlyList<string> renderedParameterValues
+    )
+    {
+        var guardBranch = runtimePlan.StateEvaluationGuardFailureExpression is null
+            ? string.Empty
+            : "WHEN NOT COALESCE(("
+            + runtimePlan.RenderPreparedStateEvaluationGuardExpression(renderedParameterValues)
+            + "), FALSE) THEN ("
+            + runtimePlan.RenderPreparedStateEvaluationGuardFailureExpression(renderedParameterValues)
+            + ") ";
+
+        return "SET @doka_sm_state = CASE "
+            + "WHEN NOT @doka_sm_prerequisite_ok THEN 'prerequisite_missing' "
+            + guardBranch
+            + "ELSE NULL END, @doka_sm_repair_ok = FALSE;";
+    }
+
     private static string BuildPreparedSqlAssignment(
-        string ddl
+        string applyDdl,
+        string? repairDdl
     ) => "SET @doka_sm_sql = CASE "
-        + "WHEN @doka_sm_action IN ('apply', 'repair') "
-        + $"THEN CONVERT(0x{Convert.ToHexString(Encoding.UTF8.GetBytes(ddl))} USING utf8mb4) "
+        + "WHEN @doka_sm_action = 'apply' "
+        + $"THEN CONVERT(0x{Convert.ToHexString(Encoding.UTF8.GetBytes(applyDdl))} USING utf8mb4) "
+        + (repairDdl is null
+            ? string.Empty
+            : "WHEN @doka_sm_action = 'repair' "
+            + $"THEN CONVERT(0x{Convert.ToHexString(Encoding.UTF8.GetBytes(repairDdl))} USING utf8mb4) ")
         + "ELSE 'DO 0' END;";
 
     private static MySqlMigrationCommandSpec GetSingleBaselineCommand(
@@ -268,6 +372,44 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             static collation => collation.Schema is null ? collation.Name : null);
 
         return context.RenderStandardOperation(standardOperation);
+    }
+
+    private BaselineFragments? RenderRepairBaseline(
+        SafeMigrationOperation operation,
+        MySqlSafeMigrationRuntimePlan runtimePlan,
+        MySqlMigrationOperationContext context,
+        BaselineFragments applyFragments,
+        bool applyTransactionSuppressed
+    )
+    {
+        if (operation.Policy != SafeMigrationPolicy.RepairIfSafe
+            || runtimePlan.RepairCapability != SafeMigrationRepairCapability.Safe
+            || operation.Intent is not EnsureColumnIntent intent)
+        {
+            return null;
+        }
+
+        // MySQL and MariaDB MODIFY COLUMN replace the complete column
+        // definition. Keeping old nullability equal avoids Doka's data-backfill
+        // command; the catalog guard has already proved that no backfill is
+        // required before the complete target definition is applied.
+        var repairOperation = SafeMigrationStandardOperationFactory.CreateFullDefinitionRepair(
+            intent,
+            _expressionRenderer.Render,
+            static collation => collation.Schema is null ? collation.Name : null);
+
+        var repairCommand = GetSingleBaselineCommand(context.RenderStandardOperation(repairOperation));
+        var repairFragments = GetBaselineFragments(repairCommand);
+
+        if (repairCommand.TransactionSuppressed != applyTransactionSuppressed
+            || !applyFragments.SetupCommands.SequenceEqual(repairFragments.SetupCommands, StringComparer.Ordinal)
+            || !applyFragments.CleanupCommands.SequenceEqual(repairFragments.CleanupCommands, StringComparer.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "Provider-rendered apply and repair commands require incompatible MySQL command scopes.");
+        }
+
+        return repairFragments;
     }
 
     private static string BuildActionAssignment(

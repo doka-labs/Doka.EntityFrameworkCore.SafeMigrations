@@ -69,11 +69,218 @@ internal sealed class SafeMigrationCSharpMigrationOperationGenerator : CSharpMig
             _ => throw new InvalidOperationException("The SafeMigrations scaffolding mode is invalid."),
         };
 
+        ValidateCheckConstraints(operation);
+
         var baseline = CreateScratchBuilder(builder);
         base.Generate(operation, baseline);
 
         var source = ReplaceCompositePrincipalColumnArrays(operation, baseline.ToString());
+        if (_configuration.Mode == SafeMigrationScaffoldingMode.LegacyConvergence)
+        {
+            source = AppendLegacyConvergencePolicy(source);
+        }
+
         AppendReplaced(builder, source, ".CreateTable(", replacement);
+    }
+
+    private string AppendLegacyConvergencePolicy(
+        string source
+    )
+    {
+        const string method = ".CreateTable(";
+
+        var methodIndex = source.IndexOf(method, StringComparison.Ordinal);
+        if (methodIndex < 0
+            || source.IndexOf(method, methodIndex + method.Length, StringComparison.Ordinal) >= 0)
+        {
+            throw new InvalidOperationException(
+                "The EF Core C# operation generator emitted an unexpected CreateTable shape. "
+                + "SafeMigrations stopped instead of generating an ambiguous policy argument.");
+        }
+
+        var openParenthesis = methodIndex + method.Length - 1;
+        var closeParenthesis = FindMatchingParenthesis(source, openParenthesis);
+        var argumentIndent = FindArgumentIndent(source, openParenthesis, closeParenthesis);
+        var policy = _configuration.LegacyConvergencePolicy switch
+        {
+            SafeMigrationPolicy.ThrowIfDifferent => nameof(SafeMigrationPolicy.ThrowIfDifferent),
+            SafeMigrationPolicy.RepairIfSafe => nameof(SafeMigrationPolicy.RepairIfSafe),
+            _ => throw new InvalidOperationException("The legacy-convergence policy is invalid."),
+        };
+
+        // Freeze the policy into generated source. Runtime option changes must
+        // never reinterpret a migration that was already reviewed.
+        return source.Insert(
+            closeParenthesis,
+            string.Concat(
+                ",\n",
+                argumentIndent,
+                "policy: global::Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationPolicy.",
+                policy));
+    }
+
+    private static int FindMatchingParenthesis(
+        string source,
+        int openParenthesis
+    )
+    {
+        var depth = 1;
+        var inString = false;
+        var inCharacter = false;
+        var verbatimString = false;
+        var escaped = false;
+
+        for (var index = openParenthesis + 1; index < source.Length; index++)
+        {
+            var current = source[index];
+            if (inString)
+            {
+                if (verbatimString)
+                {
+                    if (current != '"')
+                    {
+                        continue;
+                    }
+
+                    if (index + 1 < source.Length && source[index + 1] == '"')
+                    {
+                        index++;
+                        continue;
+                    }
+
+                    inString = false;
+                    continue;
+                }
+
+                if (escaped)
+                {
+                    escaped = false;
+                    continue;
+                }
+
+                if (current == '\\')
+                {
+                    escaped = true;
+                }
+                else if (current == '"')
+                {
+                    inString = false;
+                }
+
+                continue;
+            }
+
+            if (inCharacter)
+            {
+                if (escaped)
+                {
+                    escaped = false;
+                    continue;
+                }
+
+                if (current == '\\')
+                {
+                    escaped = true;
+                }
+                else if (current == '\'')
+                {
+                    inCharacter = false;
+                }
+
+                continue;
+            }
+
+            if (current == '"')
+            {
+                inString = true;
+                verbatimString = index > 0 && source[index - 1] == '@';
+                continue;
+            }
+
+            if (current == '\'')
+            {
+                inCharacter = true;
+                continue;
+            }
+
+            if (current == '(')
+            {
+                depth++;
+            }
+            else if (current == ')' && --depth == 0)
+            {
+                return index;
+            }
+        }
+
+        throw new InvalidOperationException(
+            "The EF Core C# operation generator emitted an unterminated CreateTable call. "
+            + "SafeMigrations stopped instead of generating an ambiguous policy argument.");
+    }
+
+    private static string FindArgumentIndent(
+        string source,
+        int openParenthesis,
+        int closeParenthesis
+    )
+    {
+        var index = openParenthesis + 1;
+        if (index >= closeParenthesis)
+        {
+            throw new InvalidOperationException(
+                "The EF Core C# operation generator emitted an unexpected single-line CreateTable call.");
+        }
+
+        if (source[index] == '\r'
+            && index + 1 < closeParenthesis
+            && source[index + 1] == '\n')
+        {
+            index += 2;
+        }
+        else if (source[index] == '\n')
+        {
+            index++;
+        }
+        else
+        {
+            throw new InvalidOperationException(
+                "The EF Core C# operation generator emitted an unexpected single-line CreateTable call.");
+        }
+
+        var indentStart = index;
+        while (index < closeParenthesis && source[index] is ' ' or '\t')
+        {
+            index++;
+        }
+
+        if (index == indentStart || index >= closeParenthesis)
+        {
+            throw new InvalidOperationException(
+                "The EF Core C# operation generator emitted an unexpected CreateTable argument layout.");
+        }
+
+        return source[indentStart..index];
+    }
+
+    private static void ValidateCheckConstraints(
+        CreateTableOperation operation
+    )
+    {
+        foreach (var constraint in operation.CheckConstraints)
+        {
+            if (SafeMigrationSqlExpressionParser.TryParse(
+                    constraint.Sql,
+                    out _,
+                    out var failureCode))
+            {
+                continue;
+            }
+
+            throw new InvalidOperationException(
+                $"Check constraint '{constraint.Name}' uses SQL that SafeMigrations cannot compare structurally "
+                + $"('{failureCode}'). Replace the generated table operation with an explicit "
+                + $"ExpectedCheckConstraintDefinition.FromExpression definition before applying the migration.");
+        }
     }
 
     /// <inheritdoc />

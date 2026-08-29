@@ -26,7 +26,7 @@ equivalent.
 - `Doka.EntityFrameworkCore.SafeMigrations`: provider-neutral intent,
   definitions, planning, reports, and `MigrationBuilder` extensions
 - `Doka.EntityFrameworkCore.SafeMigrations.MySql`: MySQL and MariaDB adapter on
-  the public `Doka.EntityFrameworkCore.MySql` 10.0.0 operation-handler SPI
+  the public `Doka.EntityFrameworkCore.MySql` 10.1.1 operation-handler SPI
 - `Doka.EntityFrameworkCore.SafeMigrations.PostgreSql`: PostgreSQL adapter on
   Npgsql 10
 
@@ -41,11 +41,15 @@ The CI and release workflows pin the exact patch tags and image digests used
 when that matrix executes. The exact successful run, not this table, is release
 evidence. See [Support and qualification](docs/support-and-qualification.md).
 
-The first complete delivery targets 10.0.0. The source tree is prepared for
-`10.0.0-rc.1` to qualify that same feature contract and its publication
-workflow. [Release notes](CHANGELOG.md) describe the prepared candidate. The
-badges include prereleases, but only a successful release run and verified
-public packages establish availability or qualification.
+The first complete delivery targets 10.0.0. The published `10.0.0-rc.1`
+qualified that feature contract and the complete publication workflow. The
+source tree prepares `10.0.0-rc.2` with source-frozen legacy repair selection,
+bounded check-constraint expression parsing, prerequisite-safe provider
+analysis, and the exact stable Doka 10.1.1 dependency. Existing rc.1 migration
+source remains compatible, while the strict scaffolding default is unchanged.
+[Release notes](CHANGELOG.md) distinguish the published candidate from the
+prepared one. The badges include prereleases, but only a successful release run
+and verified public packages establish availability or qualification.
 
 ## Installation
 
@@ -163,7 +167,7 @@ registrations:
 | Value | Selection | Generated table behavior | Generated rollback |
 | --- | --- | --- | --- |
 | `Strict` | Default; use for normal migrations | `CreateTableIfNotExists` requires an existing table to match the complete generated definition | `DropTableIfExists` |
-| `LegacyConvergence` | Select only while scaffolding a reviewed legacy baseline | `ConvergeTableFromModel` adds missing table children and rejects incompatible existing definitions | Entire `Down` body throws before DDL |
+| `LegacyConvergence` | Select only while scaffolding a reviewed legacy baseline | `ConvergeTableFromModel` adds missing table children; its source-frozen policy rejects drift by default or repairs the documented safe allowlist | Entire `Down` body throws before DDL |
 
 The no-argument registration selects `Strict`:
 
@@ -195,13 +199,18 @@ options.UsePostgreSqlSafeMigrations(safeMigrations =>
 ```
 
 For each migration that deliberately adopts heterogeneous legacy
-installations, change only the enum value before scaffolding:
+installations, select the mode and policy before scaffolding. Omit
+`UseLegacyConvergencePolicy` to retain the fail-closed
+`ThrowIfDifferent` default:
 
 ```csharp
 options.UseMySqlSafeMigrations(safeMigrations =>
 {
-    safeMigrations.UseScaffoldingMode(
-        SafeMigrationScaffoldingMode.LegacyConvergence);
+    safeMigrations
+        .UseScaffoldingMode(
+            SafeMigrationScaffoldingMode.LegacyConvergence)
+        .UseLegacyConvergencePolicy(
+            SafeMigrationPolicy.RepairIfSafe);
 });
 ```
 
@@ -210,8 +219,11 @@ or:
 ```csharp
 options.UsePostgreSqlSafeMigrations(safeMigrations =>
 {
-    safeMigrations.UseScaffoldingMode(
-        SafeMigrationScaffoldingMode.LegacyConvergence);
+    safeMigrations
+        .UseScaffoldingMode(
+            SafeMigrationScaffoldingMode.LegacyConvergence)
+        .UseLegacyConvergencePolicy(
+            SafeMigrationPolicy.RepairIfSafe);
 });
 ```
 
@@ -227,26 +239,31 @@ generated `CreateTableIfNotExists` and `ConvergeTableFromModel` source as well
 as the supported hand-authored `ExpectedTableDefinition` plus `ConvergeTable`
 form, including their different rollback behavior.
 
-The generated `Up` method uses `ConvergeTableFromModel` plus safe index
-helpers. Its `Down` method throws before DDL because SafeMigrations cannot know
-which objects predated that migration. After the legacy baseline sequence has
-been scaffolded, return registration to the no-argument strict default for
-newly created tables. The selected behavior is frozen in each generated C#
-migration; changing the option never reinterprets an existing migration.
+The generated `Up` method uses `ConvergeTableFromModel` plus safe index helpers
+and writes the selected policy as an explicit named argument. Its `Down` method
+throws before DDL because SafeMigrations cannot know which objects predated that
+migration. After the legacy baseline sequence has been scaffolded, return
+registration to the no-argument strict default for newly created tables. The
+selected behavior is frozen in each generated C# migration; changing either
+option never reinterprets an existing migration.
 
 The configure callback is available on the canonical-context overloads too:
 
 ```csharp
 options.UseMySqlSafeMigrations<CoreDbContext>(safeMigrations =>
 {
-    safeMigrations.UseScaffoldingMode(
-        SafeMigrationScaffoldingMode.LegacyConvergence);
+    safeMigrations
+        .UseScaffoldingMode(
+            SafeMigrationScaffoldingMode.LegacyConvergence)
+        .UseLegacyConvergencePolicy(SafeMigrationPolicy.RepairIfSafe);
 });
 
 options.UsePostgreSqlSafeMigrations<CoreDbContext>(safeMigrations =>
 {
-    safeMigrations.UseScaffoldingMode(
-        SafeMigrationScaffoldingMode.LegacyConvergence);
+    safeMigrations
+        .UseScaffoldingMode(
+            SafeMigrationScaffoldingMode.LegacyConvergence)
+        .UseLegacyConvergencePolicy(SafeMigrationPolicy.RepairIfSafe);
 });
 ```
 
@@ -257,15 +274,19 @@ the mode on that overload as well:
 options.UsePostgreSqlSafeMigrations<CustomNpgsqlMigrationsSqlGenerator, CoreDbContext>(
     safeMigrations =>
     {
-        safeMigrations.UseScaffoldingMode(
-            SafeMigrationScaffoldingMode.LegacyConvergence);
+        safeMigrations
+            .UseScaffoldingMode(
+                SafeMigrationScaffoldingMode.LegacyConvergence)
+            .UseLegacyConvergencePolicy(SafeMigrationPolicy.RepairIfSafe);
     });
 ```
 
-`UseScaffoldingMode` configures generated source only. It does not change how
-an already generated migration executes and is not a runtime switch for
-existing migration files. Passing an undefined enum value fails immediately
-during options configuration.
+`UseScaffoldingMode` and `UseLegacyConvergencePolicy` configure generated source
+only. They do not change how an already generated migration executes and are
+not runtime switches for existing migration files. The policy accepts only
+`ThrowIfDifferent` and `RepairIfSafe`; `ExistenceOnly`, undefined enum values,
+and a non-default legacy policy without `LegacyConvergence` fail during options
+configuration.
 
 Automatic rewriting is deliberately bounded to scaffolded `CreateTable`,
 `CreateIndex`, and `DropTable` operations. Other EF operations remain ordinary
@@ -278,8 +299,11 @@ to operations whose repair or ownership semantics require an explicit choice.
 Provider identity annotations on scaffolded columns are captured immutably and
 participate in fingerprints, live-catalog comparison, and final DDL. This
 preserves MySQL/MariaDB `AUTO_INCREMENT` and PostgreSQL identity semantics.
-An operation-level provider annotation that SafeMigrations cannot compare is
-classified `Unsupported` before target DDL instead of being ignored.
+Doka's `ClientGuid` strategy is retained for replay and hashing but compared as
+non-`AUTO_INCREMENT` catalog state because it generates values in the client,
+not in the database. HiLo, storage-format, unknown column, and unsupported
+operation-level annotations remain `Unsupported` before target DDL instead of
+being ignored.
 
 The `*FromModel` helpers are public because generated migrations must compile
 against a stable package API. They are scaffolder targets, not required
@@ -307,8 +331,15 @@ where one instance has no table, another has an empty copied table, and a third
 has only some columns or constraints. It snapshots EF's typed table definition
 and emits one existence-only table-container operation followed by granular
 operations for every owned column and constraint. Scaffolded indexes follow as
-their own safe operations. Those children use `ThrowIfDifferent`; the table
-container alone never hides missing children.
+their own safe operations. Those children use the policy written into the
+generated call; the default is `ThrowIfDifferent`. With explicit
+`RepairIfSafe`, an ordinary existing column is repaired only when its resolved
+store type, collation, generated/identity state, row-version state, and provider
+annotations already match. The allowlist is limited to nullability, default,
+and comment. Tightening nullability is `DataBlocked` when any row contains
+`NULL`. Type, collation, computed/generated, identity, row-version, and
+provider-annotation drift rejects without mutation. The table container alone
+never hides missing children.
 
 `ExpectedTableDefinition` and `ConvergeTable` remain available for advanced
 hand-authored contracts, for example when a reviewed migration needs a policy
@@ -418,6 +449,13 @@ var nonNegative = ExpectedCheckConstraintDefinition.FromExpression(
         SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
         SafeMigrationSql.Literal(0)));
 ```
+
+EF-scaffolded check constraints using this bounded grammar are converted to
+the same structured tree automatically. Unsupported SQL stops scaffolding
+before a migration file is accepted; use an explicit `FromExpression`
+definition for a reviewed equivalent. The complete authoring behavior and
+failure boundary are documented in
+[Migration authoring paths](docs/migration-authoring.md#generated-check-constraints).
 
 Legacy raw SQL remains representable as opaque input, but opaque expressions
 cannot authorize `Matching`; they are classified with

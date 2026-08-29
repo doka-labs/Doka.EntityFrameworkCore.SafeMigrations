@@ -182,14 +182,28 @@ public static class MySqlSafeMigrationOptionsBuilderExtensions
     private static void AddOptionsExtension(
         DbContextOptionsBuilder optionsBuilder,
         Type? canonicalContextType,
-        SafeMigrationScaffoldingMode scaffoldingMode
+        SafeMigrationScaffoldingMode scaffoldingMode,
+        SafeMigrationPolicy legacyConvergencePolicy = SafeMigrationPolicy.ThrowIfDifferent
     )
     {
         ((IDbContextOptionsBuilderInfrastructure)optionsBuilder).AddOrUpdateExtension(
-            MySqlSafeMigrationsOptionsExtension.WithCanonicalContext(canonicalContextType, scaffoldingMode));
+            MySqlSafeMigrationsOptionsExtension.WithCanonicalContext(
+                canonicalContextType,
+                scaffoldingMode,
+                legacyConvergencePolicy));
     }
 
-    private static SafeMigrationScaffoldingMode Configure(
+    private static void AddOptionsExtension(
+        DbContextOptionsBuilder optionsBuilder,
+        Type? canonicalContextType,
+        SafeMigrationOptionsBuilder configuration
+    ) => AddOptionsExtension(
+        optionsBuilder,
+        canonicalContextType,
+        configuration.Mode,
+        configuration.LegacyConvergencePolicy);
+
+    private static SafeMigrationOptionsBuilder Configure(
         Action<SafeMigrationOptionsBuilder> configure
     )
     {
@@ -197,7 +211,8 @@ public static class MySqlSafeMigrationOptionsBuilderExtensions
 
         var builder = new SafeMigrationOptionsBuilder();
         configure(builder);
+        builder.Validate();
 
-        return builder.Mode;
+        return builder;
     }
 }

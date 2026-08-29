@@ -35,6 +35,8 @@ ordinary migration operation.
 - Strict table creation must be the default; heterogeneous legacy adoption must
   be an explicit design-time selection.
 - Existing generated migrations must never change meaning when options change.
+- Legacy repair must be an explicit source-frozen choice with a conservative,
+  provider-verified allowlist.
 - Provider arguments and column annotations must survive generation, catalog
   comparison, fingerprints, and baseline DDL.
 - Unsupported generator shapes and unmodeled annotations must fail closed.
@@ -65,6 +67,19 @@ multi-column index helpers, and `DropTableIfExists`. `LegacyConvergence` writes
 method throws before DDL because the migration cannot prove which objects
 predated it. The selected calls are literal C# source, so later option changes
 affect only future migrations.
+
+`UseLegacyConvergencePolicy` selects the policy written into every newly
+generated `ConvergeTableFromModel` call. `ThrowIfDifferent` remains the default.
+`RepairIfSafe` is accepted only with `LegacyConvergence`; `ExistenceOnly` is not
+a valid generated child policy because it would hide definition drift.
+
+Automatic column repair is limited to nullability, default, and comment on an
+ordinary column whose invariant catalog shape already matches. Store type,
+collation, generated/identity state, row-version state, and provider annotations
+are invariants. Existing nulls block nullability tightening. MySQL and MariaDB
+use Doka's complete-definition `MODIFY COLUMN` rendering; PostgreSQL uses
+Npgsql's facet-specific `ALTER TABLE` rendering. Apply and repair remain
+separate guarded branches with a shared target postcondition.
 
 SafeMigrations registers `IDesignTimeServices` through EF's
 `DesignTimeServicesReferenceAttribute`. Provider-package `buildTransitive`
@@ -97,9 +112,10 @@ PostgreSQL compares `None`, identity-always, and identity-by-default with `pg_at
 Unknown value types fail capture. Unmodeled operation annotations classify
 unsupported before target DDL.
 
-Scaffolding mode is intentionally absent from runtime service-provider hash and
-equality because it changes no runtime service registration. EF's design-time
-provider reads the active context options and freezes that value into source.
+Scaffolding mode and legacy policy are intentionally absent from runtime
+service-provider hash and equality because they change no runtime service
+registration. EF's design-time provider reads the active context options and
+freezes both values into source.
 
 ### Consequences
 
@@ -109,6 +125,8 @@ provider reads the active context options and freezes that value into source.
   same provider-neutral runtime operation contracts.
 - Good, because provider identity facets are proven end to end rather than
   preserved only as C# text.
+- Good, because a reviewed legacy baseline can repair common mutable column
+  drift without giving type or generated-value drift implicit authority.
 - Bad, because migration authors must still select explicit safe APIs for later
   non-table operations that require catalog-aware behavior.
 - Bad, because a newly emitted provider operation annotation remains blocked
@@ -131,6 +149,9 @@ Run both provider integration suites. Missing identity tables must be created,
 accept generated values, and remain matching on a second execution. Existing
 non-identity columns must classify `Different`; unknown operation annotations
 must classify `Unsupported`; neither negative case may execute target DDL.
+Repair qualification must additionally prove mutable drift, matching rerun,
+null-data blocking, and invariant type-drift rejection on every supported
+MySQL, MariaDB, and PostgreSQL server cell.
 
 Pack all three packages and run package-only consumers. Each provider package
 must contain its `buildTransitive` asset, inject the correct EF design-service
@@ -196,6 +217,9 @@ snapshots already required for catalog comparison and hashing.
 - 2026-08-27: Dominic Kalkbrenner selected automatic strict-by-default scaffolding with explicit legacy convergence and source-frozen behavior.
 - 2026-08-27: Status changed from proposed to accepted.
 - 2026-08-27: Status changed from accepted to implemented after Core, provider, tooling, and package qualification surfaces were added.
+- 2026-08-29: Doka 10.1.1 `ClientGuid` annotations were classified as catalog-neutral while remaining part of immutable definitions, fingerprints, and provider replay; unsupported provider annotations remain fail-closed.
+- 2026-08-29: Added source-frozen legacy `RepairIfSafe` selection and the
+  provider-verified mutable column repair allowlist.
 
 ### Implementation References
 
@@ -219,7 +243,12 @@ snapshots already required for catalog comparison and hashing.
 - [NuGet MSBuild props and targets](https://learn.microsoft.com/en-us/nuget/concepts/msbuild-props-and-targets) (primary source; retrieved 2026-08-27)
 - [NuGet package build assets](https://learn.microsoft.com/en-us/nuget/create-packages/creating-a-package) (primary source; retrieved 2026-08-27)
 - [Microsoft.EntityFrameworkCore.Tools 10.0.11 package contract](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.Tools/10.0.11) (primary package metadata; retrieved 2026-08-27)
-- [Doka MySQL value-generation strategies](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.0.0/src/Doka.EntityFrameworkCore.MySql/MySqlValueGenerationStrategy.cs) (primary source; retrieved 2026-08-27)
+- [Doka 10.1.1 MySQL value-generation strategies](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.1/src/Doka.EntityFrameworkCore.MySql/MySqlValueGenerationStrategy.cs) (primary source; retrieved 2026-08-29)
+- [EF Core custom migration operations](https://learn.microsoft.com/en-us/ef/core/managing-schemas/migrations/operations) (primary source; retrieved 2026-08-29)
+- [MySQL 8.4 `ALTER TABLE`](https://dev.mysql.com/doc/refman/8.4/en/alter-table.html) (primary source; retrieved 2026-08-29)
+- [MariaDB `ALTER TABLE`](https://mariadb.com/docs/server/reference/sql-statements/data-definition/alter/alter-table) (primary source; retrieved 2026-08-29)
+- [PostgreSQL `ALTER TABLE`](https://www.postgresql.org/docs/current/sql-altertable.html) (primary source; retrieved 2026-08-29)
+- [EF Core generated values](https://learn.microsoft.com/en-us/ef/core/modeling/generated-properties) (primary source; retrieved 2026-08-29)
 - [MySQL `INFORMATION_SCHEMA.COLUMNS`](https://dev.mysql.com/doc/refman/en/information-schema-columns-table.html) (primary source; retrieved 2026-08-27)
 - [MariaDB `INFORMATION_SCHEMA.COLUMNS`](https://mariadb.com/docs/server/reference/system-tables/information-schema/information-schema-tables/information-schema-columns-table) (primary source; retrieved 2026-08-27)
 - [Npgsql value-generation strategies](https://www.npgsql.org/efcore/api/Npgsql.EntityFrameworkCore.PostgreSQL.Metadata.NpgsqlValueGenerationStrategy.html) (primary source; retrieved 2026-08-27)

@@ -103,6 +103,26 @@ public sealed class SafeMigrationContractPropertyTests
         }
     }
 
+    [Property(MaxTest = 2000)]
+    public bool SqlExpressionParser_ArbitraryInputPreservesTheTryParseContract(
+        string? input
+    )
+    {
+        // Null is outside TryParse's SQL-text contract. Map FsCheck's null case
+        // to the valid empty-input rejection path so every generated case still
+        // verifies the parser's success-or-failure output invariant.
+        var parsed = SafeMigrationSqlExpressionParser.TryParse(
+            input ?? string.Empty,
+            out var expression,
+            out var failureCode);
+
+        return parsed
+            ? expression is not null
+                && failureCode.Length == 0
+                && SafeMigrationSqlExpressionInspector.IsStructurallyComparable(expression)
+            : expression is null && failureCode.Length > 0;
+    }
+
     private static string Identifier(
         string? value,
         string prefix

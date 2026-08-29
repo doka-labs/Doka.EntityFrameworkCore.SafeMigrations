@@ -24,6 +24,10 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
 
     public string ProviderId => "npgsql_postgresql";
 
+    public void ValidateContext(
+        DbContext context
+    ) => ArgumentNullException.ThrowIfNull(context);
+
     public async Task<SafeMigrationProviderEnvironment> GetEnvironmentAsync(
         DbContext context,
         CancellationToken cancellationToken = default
@@ -151,7 +155,7 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
 
         try
         {
-            var prerequisiteMissing = await FindMissingPrerequisitesAsync(connection, operations, cancellationToken);
+            var shortCircuitStates = await FindShortCircuitStatesAsync(connection, operations, cancellationToken);
             var results = new List<SafeMigrationProviderAnalysis>(operations.Count);
             var unsupportedCodes = new string?[operations.Count];
             var ordinal = 0;
@@ -162,9 +166,9 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
                 cancellationToken.ThrowIfCancellationRequested();
 
                 while (ordinal < operations.Count
-                       && prerequisiteMissing[ordinal])
+                       && shortCircuitStates[ordinal] is { } shortCircuitState)
                 {
-                    results.Add(PrerequisiteMissingAnalysis());
+                    results.Add(ShortCircuitAnalysis(shortCircuitState));
                     ordinal++;
                 }
 
@@ -187,7 +191,7 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
                 while (ordinal < operations.Count
                        && selections.Count < SafeMigrationCatalogQueryLimits.MaximumPostgreSqlOperations)
                 {
-                    if (prerequisiteMissing[ordinal])
+                    if (shortCircuitStates[ordinal] is not null)
                     {
                         break;
                     }
@@ -254,13 +258,13 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
         }
     }
 
-    private async Task<bool[]> FindMissingPrerequisitesAsync(
+    private async Task<SafeMigrationObservedState?[]> FindShortCircuitStatesAsync(
         DbConnection connection,
         IReadOnlyList<SafeMigrationOperation> operations,
         CancellationToken cancellationToken
     )
     {
-        var missing = new bool[operations.Count];
+        var states = new SafeMigrationObservedState?[operations.Count];
         var rowsRead = 0;
         var ordinal = 0;
         var separatorBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Separator);
@@ -288,12 +292,21 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
                         nameof(operations));
 
                 var checkpoint = parameters.Capture();
-                var prerequisite = builder.BuildPrerequisiteExpression(operation.Intent);
-                var selection = $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, "
-                    + $"NOT COALESCE(({prerequisite}), FALSE)";
+                var plan = builder.Build(operation);
+                var stateEvaluationGuardBranch = plan.StateEvaluationGuardFailureExpression is null
+                    ? string.Empty
+                    : $"WHEN NOT COALESCE(({plan.StateEvaluationGuardExpression}), FALSE) THEN "
+                    + $"({plan.StateEvaluationGuardFailureExpression}) ";
+
+                var selection = $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, CASE "
+                    + $"WHEN NOT COALESCE(({plan.PrerequisiteExpression}), FALSE) "
+                    + "THEN 'prerequisite_missing' "
+                    + stateEvaluationGuardBranch
+                    + "ELSE NULL END";
 
                 var selectionBytes = Encoding.UTF8.GetByteCount(selection)
                     + (selections.Count == 0 ? 0 : separatorBytes);
+
                 var prospectivePayload = sqlBytes + selectionBytes + parameters.Utf8PayloadBytes;
                 if (SafeMigrationCatalogQueryLimits.Exceeded(
                         parameters.Count,
@@ -331,7 +344,9 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
                         "The PostgreSQL SafeMigrations prerequisite classifier returned an invalid ordinal.");
                 }
 
-                missing[resultOrdinal] = reader.GetBoolean(1);
+                states[resultOrdinal] = reader.IsDBNull(1)
+                    ? null
+                    : ParseState(reader.GetString(1));
                 rowsRead++;
             }
         }
@@ -342,14 +357,16 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
                 "The PostgreSQL SafeMigrations prerequisite classifier returned an inconsistent row count.");
         }
 
-        return missing;
+        return states;
     }
 
-    private static SafeMigrationProviderAnalysis PrerequisiteMissingAnalysis() => new(
-        SafeMigrationObservedState.PrerequisiteMissing,
+    private static SafeMigrationProviderAnalysis ShortCircuitAnalysis(
+        SafeMigrationObservedState state
+    ) => new(
+        state,
         SafeMigrationRepairCapability.None,
         false,
-        "classified_prerequisite_missing");
+        $"classified_{StateCode(state)}");
 
     private static async Task ReadAnalysisAsync(
         DbCommand command,

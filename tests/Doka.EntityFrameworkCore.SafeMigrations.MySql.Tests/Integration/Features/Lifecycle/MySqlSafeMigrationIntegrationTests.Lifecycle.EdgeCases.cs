@@ -3,6 +3,60 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 public sealed partial class MySqlSafeMigrationIntegrationTests
 {
     [Fact]
+    public async Task PendingAnalysis_ValidatesReplacementConnectionBeforeMigrationHistoryQuery()
+    {
+        var validConnectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var invalidConnectionString = new MySqlConnectionStringBuilder(validConnectionString)
+        {
+            AllowUserVariables = false,
+        }.ConnectionString;
+
+        var interceptor = new HistoryCommandInterceptor();
+
+        await using var validConnection = new MySqlConnection(validConnectionString);
+        var validOptions = new DbContextOptionsBuilder<SafeMigrationDbContext>()
+            .UseMySql(
+                validConnection,
+                Fixture.ServerVersion,
+                provider => provider
+                    .MigrationsAssembly(typeof(SafeMigrationDbContext).Assembly.FullName)
+                    .MigrationsHistoryTable("__CoreDbContextMigrationsHistory"))
+            .AddInterceptors(interceptor)
+            .UseMySqlSafeMigrations<SafeMigrationDbContext>()
+            .Options;
+
+        await using (var warmContext = new SafeMigrationDbContext(validOptions))
+        {
+            _ = warmContext.GetService<ISafeMigrationRunner>();
+        }
+
+        await using var invalidConnection = new MySqlConnection(invalidConnectionString);
+        var invalidOptions = new DbContextOptionsBuilder<SafeMigrationDbContext>()
+            .UseMySql(
+                invalidConnection,
+                Fixture.ServerVersion,
+                provider => provider
+                    .MigrationsAssembly(typeof(SafeMigrationDbContext).Assembly.FullName)
+                    .MigrationsHistoryTable("__CoreDbContextMigrationsHistory"))
+            .AddInterceptors(interceptor)
+            .UseMySqlSafeMigrations<SafeMigrationDbContext>()
+            .Options;
+
+        await using var invalidContext = new SafeMigrationDbContext(invalidOptions);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => invalidContext
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzePendingMigrationsAsync(
+                invalidContext,
+                new SafeMigrationRunOptions("invalid-replacement-connection"),
+                CancellationToken.None));
+
+        Assert.Contains("AllowUserVariables=true", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(0, interceptor.CommandCount);
+        Assert.Equal(System.Data.ConnectionState.Closed, invalidConnection.State);
+    }
+
+    [Fact]
     public async Task MissingParentTable_IsReportedAsPrerequisiteFailureAcrossChildFamilies()
     {
         var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
@@ -50,6 +104,164 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 connectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'missing_parent';"));
+    }
+
+    [Fact]
+    public async Task MissingReferencedColumns_AreClassifiedBeforeAnyDataProbe()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `column_prerequisite_child` (`id` int NOT NULL); "
+            + "CREATE TABLE `column_prerequisite_parent` (`id` int NOT NULL);");
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureIndex(
+            new ExpectedIndexDefinition(
+                "ux_column_prerequisite_code",
+                "column_prerequisite_child",
+                [new ExpectedIndexKeyDefinition(column: "missing_code")],
+                unique: true),
+            SafeMigrationPolicy.ThrowIfDifferent);
+        builder.AddPrimaryKeyIfNotExists(
+            "pk_column_prerequisite_child",
+            "column_prerequisite_child",
+            ["missing_primary"]);
+        builder.AddUniqueConstraintIfNotExists(
+            "uq_column_prerequisite_child",
+            "column_prerequisite_child",
+            ["missing_unique"]);
+        builder.EnsureCheckConstraint(
+            ExpectedCheckConstraintDefinition.FromExpression(
+                "ck_column_prerequisite_child",
+                "column_prerequisite_child",
+                SqlColumnAndInt("missing_check", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0)),
+            SafeMigrationPolicy.ThrowIfDifferent);
+        builder.AddForeignKeyIfNotExists(
+            "fk_column_prerequisite_child",
+            "column_prerequisite_child",
+            ["missing_foreign"],
+            "column_prerequisite_parent",
+            ["missing_principal"]);
+
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("missing-column-prerequisites"));
+
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(5, report.Assessments.Count);
+        Assert.All(
+            report.Assessments,
+            static assessment =>
+            {
+                Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, assessment.ObservedState);
+                Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, assessment.Action);
+            });
+    }
+
+    [Fact]
+    public async Task LegacyConvergence_AddsNullableColumnBeforeUniqueIndexAndRemainsIdempotent()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `legacy_unique_users` (`id` int NOT NULL); "
+            + "INSERT INTO `legacy_unique_users` (`id`) VALUES (1), (2);");
+        await using var context = CreateContext(connectionString);
+        var definition = new ExpectedTableDefinition(
+            "legacy_unique_users",
+            [
+                new ExpectedColumnDefinition("id", typeof(int), false, "int"),
+                new ExpectedColumnDefinition("email", typeof(string), true, "varchar(200)", maxLength: 200),
+            ]);
+
+        var index = new ExpectedIndexDefinition(
+            "ux_legacy_unique_users_email",
+            "legacy_unique_users",
+            [new ExpectedIndexKeyDefinition(column: "email")],
+            unique: true);
+
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.ConvergeTable(definition, [index]);
+        var runner = context.GetService<ISafeMigrationRunner>();
+
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("legacy-unique-users-preflight"));
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
+        Assert.Equal(SafeMigrationObservedState.Missing, preflight.Assessments[^1].ObservedState);
+        Assert.Equal("projected_missing", preflight.Assessments[^1].Code);
+
+        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations);
+
+        var postflight = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("legacy-unique-users-postflight"));
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
+        Assert.All(postflight.Assessments, static assessment => Assert.True(assessment.PostconditionSatisfied));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'legacy_unique_users' "
+                + "AND INDEX_NAME = 'ux_legacy_unique_users_email';"));
+    }
+
+    [Fact]
+    public async Task LegacyConvergence_DoesNotProjectUniqueSafetyThroughNonNullDefault()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `legacy_default_users` (`id` int NOT NULL); "
+            + "INSERT INTO `legacy_default_users` (`id`) VALUES (1), (2);");
+        await using var context = CreateContext(connectionString);
+        var definition = new ExpectedTableDefinition(
+            "legacy_default_users",
+            [
+                new ExpectedColumnDefinition("id", typeof(int), false, "int"),
+                new ExpectedColumnDefinition(
+                    "tenant_id",
+                    typeof(int),
+                    true,
+                    "int",
+                    defaultValue: SafeMigrationDefaultValue.Literal(0)),
+            ]);
+
+        var index = new ExpectedIndexDefinition(
+            "ux_legacy_default_users_tenant",
+            "legacy_default_users",
+            [new ExpectedIndexKeyDefinition(column: "tenant_id")],
+            unique: true);
+
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.ConvergeTable(definition, [index]);
+
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("legacy-default-users"));
+
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, report.Assessments[^1].ObservedState);
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'legacy_default_users' "
+                + "AND COLUMN_NAME = 'tenant_id';"));
     }
 
     [Fact]
@@ -431,6 +643,84 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         MySqlServerVersion serverVersion
     ) : SafeMigrationDbContext(connectionString, serverVersion);
 
+    private sealed class HistoryCommandInterceptor : DbCommandInterceptor
+    {
+        private int _commandCount;
+
+        public int CommandCount => Volatile.Read(ref _commandCount);
+
+        public override InterceptionResult<int> NonQueryExecuting(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<int> result
+        )
+        {
+            Increment();
+
+            return result;
+        }
+
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default
+        )
+        {
+            Increment();
+
+            return ValueTask.FromResult(result);
+        }
+
+        public override InterceptionResult<DbDataReader> ReaderExecuting(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result
+        )
+        {
+            Increment();
+
+            return result;
+        }
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default
+        )
+        {
+            Increment();
+
+            return ValueTask.FromResult(result);
+        }
+
+        public override InterceptionResult<object> ScalarExecuting(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<object> result
+        )
+        {
+            Increment();
+
+            return result;
+        }
+
+        public override ValueTask<InterceptionResult<object>> ScalarExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<object> result,
+            CancellationToken cancellationToken = default
+        )
+        {
+            Increment();
+
+            return ValueTask.FromResult(result);
+        }
+
+        private void Increment() => Interlocked.Increment(ref _commandCount);
+    }
+
     private sealed class BlockingProviderAnalyzer(string providerId) : ISafeMigrationProviderAnalyzer
     {
         private readonly TaskCompletionSource _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -438,6 +728,13 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         public string ProviderId { get; } = providerId;
 
         public Task Started => _started.Task;
+
+        public void ValidateContext(
+            DbContext context
+        )
+        {
+            ArgumentNullException.ThrowIfNull(context);
+        }
 
         public Task<IAsyncDisposable> AcquireAnalysisScopeAsync(
             DbContext context,

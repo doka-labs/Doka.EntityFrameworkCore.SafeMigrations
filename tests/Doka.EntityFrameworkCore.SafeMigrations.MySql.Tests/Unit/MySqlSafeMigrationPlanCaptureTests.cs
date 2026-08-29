@@ -58,6 +58,44 @@ public sealed class MySqlSafeMigrationPlanCaptureTests
         Assert.Single(recovered.Complete());
     }
 
+    [Fact]
+    public void Capture_ProjectsOnlyExpectedUniqueIndexesByTable()
+    {
+        var capture = new MySqlSafeMigrationPlanCapture();
+        var table = new SafeMigrationOperation(
+            new EnsureTableIntent(
+                new ExpectedTableDefinition(
+                    "users",
+                    [new ExpectedColumnDefinition("email", typeof(string), isNullable: true)]),
+                SafeMigrationTableMode.StrictDefinition),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var unique = new SafeMigrationOperation(
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "ux_users_email",
+                    "users",
+                    [new ExpectedIndexKeyDefinition(column: "email")],
+                    unique: true)),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var nonUnique = new SafeMigrationOperation(
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "ix_users_name",
+                    "users",
+                    [new ExpectedIndexKeyDefinition(column: "name")])),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        using (capture.Begin([table, unique, nonUnique]))
+        {
+            Assert.Equal(["ux_users_email"], capture.GetExpectedUniqueIndexes("users"));
+            Assert.Empty(capture.GetExpectedUniqueIndexes("other"));
+        }
+
+        Assert.Throws<InvalidOperationException>(() => capture.GetExpectedUniqueIndexes("users"));
+    }
+
     private static SafeMigrationOperation Operation(
         string name
     ) => new(new EnsureSchemaIntent(name), SafeMigrationPolicy.ThrowIfDifferent);

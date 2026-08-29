@@ -173,6 +173,7 @@ done
 
 for expected in \
   'migrationBuilder.ConvergeTableFromModel(' \
+  'policy: global::Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationPolicy.RepairIfSafe' \
   'migrationBuilder.CreateIndexIfNotExistsFromModel(' \
   'migrationBuilder.CreateCompositeIndexIfNotExistsFromModel(' \
   'throw new global::System.NotSupportedException('; do

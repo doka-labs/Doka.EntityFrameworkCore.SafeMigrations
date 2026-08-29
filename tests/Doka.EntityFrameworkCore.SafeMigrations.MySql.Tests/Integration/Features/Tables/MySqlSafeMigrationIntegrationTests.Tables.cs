@@ -3,6 +3,47 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 public sealed partial class MySqlSafeMigrationIntegrationTests
 {
     [Fact]
+    public async Task GeneratedCheckConstraint_IsAcceptedByPreflightRuntimeAndPostflight()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.CreateTableIfNotExists(
+            "generated_check_orders",
+            table => new
+            {
+                amount = table.Column<int>(type: "int", nullable: false),
+            },
+            constraints: table => table.CheckConstraint(
+                "ck_generated_check_orders_amount",
+                "`amount` >= 0"));
+        var runner = context.GetService<ISafeMigrationRunner>();
+
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("generated-check-preflight"));
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
+
+        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations);
+
+        var postflight = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("generated-check-postflight"));
+
+        var exception = await Assert.ThrowsAsync<MySqlException>(() => ExecuteSqlAsync(
+            connectionString,
+            "INSERT INTO `generated_check_orders` (`amount`) VALUES (-1);"));
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
+        Assert.True(Assert.Single(postflight.Assessments).PostconditionSatisfied);
+        Assert.Contains("ck_generated_check_orders_amount", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task GranularConvergence_CompletesExistingPartialTableAndIsIdempotent()
     {
         var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
@@ -266,5 +307,162 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             SafeMigrationObservedState.Different,
             Assert.Single(report.Assessments)
                 .ObservedState);
+    }
+
+    [Fact]
+    public async Task StrictTableDefinition_NormalizesExpectedUniqueIndexWithoutAcceptingUnknownUniqueKeys()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var options = new DbContextOptionsBuilder<StrictUniqueIndexContext>()
+            .UseMySql(connectionString, Fixture.ServerVersion)
+            .UseMySqlSafeMigrations<StrictUniqueIndexContext>()
+            .Options;
+
+        await using var context = new StrictUniqueIndexContext(options);
+        var definition = new ExpectedTableDefinition(
+            "strict_unique_index",
+            [
+                new ExpectedColumnDefinition("id", typeof(int), false, "int"),
+                new ExpectedColumnDefinition("email", typeof(string), true, "varchar(200)", maxLength: 200),
+            ],
+            primaryKey: new ExpectedPrimaryKeyDefinition("PRIMARY", "strict_unique_index", ["id"]));
+
+        var expectedIndex = new ExpectedIndexDefinition(
+            "ux_strict_unique_index_email",
+            "strict_unique_index",
+            [new ExpectedIndexKeyDefinition(column: "email")],
+            unique: true);
+
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureTable(definition, SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureIndex(expectedIndex, SafeMigrationPolicy.ThrowIfDifferent);
+
+        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations);
+
+        var runner = context.GetService<ISafeMigrationRunner>();
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("strict-unique-index-preflight"));
+
+        var postflight = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("strict-unique-index-postflight"));
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
+        Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
+        Assert.All(preflight.Assessments, static assessment =>
+            Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState));
+        Assert.Empty(preflight.UnexpectedObjects);
+        Assert.Empty(postflight.UnexpectedObjects);
+
+        await ExecuteSqlAsync(
+            connectionString,
+            "ALTER TABLE `strict_unique_index` "
+            + "ADD CONSTRAINT `uq_strict_unique_index_unknown` UNIQUE (`id`, `email`);");
+
+        var runtimeException = await Assert.ThrowsAsync<MySqlException>(() =>
+            ExecuteOperationsAsync(context, builder.Operations));
+
+        var drift = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("strict-unique-index-drift"));
+
+        Assert.Contains("doka_sm_different", runtimeException.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(SafeMigrationReportStatus.Blocked, drift.Status);
+        Assert.Equal(
+            SafeMigrationObservedState.Different,
+            drift.Assessments[0].ObservedState);
+        Assert.Contains(
+            drift.UnexpectedObjects,
+            static value => value is
+            {
+                ObjectKind: SafeMigrationDatabaseObjectKind.UniqueConstraint,
+                Table: "strict_unique_index",
+                Name: "uq_strict_unique_index_unknown",
+            });
+    }
+
+    [Fact]
+    public async Task UnexpectedObjectInventory_DoesNotAliasUniqueConstraintToExpectedNonUniqueIndex()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `non_unique_alias` ("
+            + "`id` int NOT NULL, `code` varchar(30) NULL, "
+            + "CONSTRAINT `ix_non_unique_alias_code` UNIQUE (`code`));");
+        await using var context = CreateContext(connectionString);
+        var definition = new ExpectedTableDefinition(
+            "non_unique_alias",
+            [
+                new ExpectedColumnDefinition("id", typeof(int), false, "int"),
+                new ExpectedColumnDefinition("code", typeof(string), true, "varchar(30)", maxLength: 30),
+            ]);
+
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureTable(
+            definition,
+            SafeMigrationTableMode.ConvergenceContainer,
+            SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureIndex(
+            new ExpectedIndexDefinition(
+                "ix_non_unique_alias_code",
+                "non_unique_alias",
+                [new ExpectedIndexKeyDefinition(column: "code")]),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("non-unique-alias"));
+
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(SafeMigrationObservedState.Different, report.Assessments[^1].ObservedState);
+        Assert.Contains(
+            report.UnexpectedObjects,
+            static value => value is
+            {
+                ObjectKind: SafeMigrationDatabaseObjectKind.UniqueConstraint,
+                Table: "non_unique_alias",
+                Name: "ix_non_unique_alias_code",
+            });
+    }
+
+    private sealed class StrictUniqueIndexContext(
+        DbContextOptions<StrictUniqueIndexContext> options
+    ) : DbContext(options)
+    {
+        protected override void OnModelCreating(
+            ModelBuilder modelBuilder
+        )
+        {
+            modelBuilder.Entity<StrictUniqueIndexEntry>(entity =>
+            {
+                entity.ToTable("strict_unique_index");
+                entity.HasKey(entry => entry.Id)
+                    .HasName("PRIMARY");
+                entity.Property(entry => entry.Id)
+                    .HasColumnName("id")
+                    .HasColumnType("int")
+                    .ValueGeneratedNever();
+                entity.Property(entry => entry.Email)
+                    .HasColumnName("email")
+                    .HasColumnType("varchar(200)")
+                    .HasMaxLength(200);
+                entity.HasIndex(entry => entry.Email)
+                    .IsUnique()
+                    .HasDatabaseName("ux_strict_unique_index_email");
+            });
+        }
+    }
+
+    private sealed class StrictUniqueIndexEntry
+    {
+        public int Id { get; init; }
+
+        public string? Email { get; init; }
     }
 }

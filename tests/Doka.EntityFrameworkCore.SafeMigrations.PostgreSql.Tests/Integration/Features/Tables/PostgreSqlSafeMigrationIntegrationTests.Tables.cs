@@ -3,6 +3,47 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 public sealed partial class PostgreSqlSafeMigrationIntegrationTests
 {
     [Fact]
+    public async Task GeneratedCheckConstraint_IsAcceptedByPreflightRuntimeAndPostflight()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.CreateTableIfNotExists(
+            "generated_check_orders",
+            table => new
+            {
+                amount = table.Column<int>(type: "integer", nullable: false),
+            },
+            constraints: table => table.CheckConstraint(
+                "ck_generated_check_orders_amount",
+                "\"amount\" >= 0"));
+        var runner = context.GetService<ISafeMigrationRunner>();
+
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("generated-check-preflight"));
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
+
+        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations);
+
+        var postflight = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("generated-check-postflight"));
+
+        var exception = await Assert.ThrowsAsync<PostgresException>(() => ExecuteSqlAsync(
+            connectionString,
+            "INSERT INTO generated_check_orders (amount) VALUES (-1);"));
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
+        Assert.True(Assert.Single(postflight.Assessments).PostconditionSatisfied);
+        Assert.Equal(PostgresErrorCodes.CheckViolation, exception.SqlState);
+    }
+
+    [Fact]
     public async Task GranularConvergence_CompletesExistingPartialTableAndIsIdempotent()
     {
         var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);

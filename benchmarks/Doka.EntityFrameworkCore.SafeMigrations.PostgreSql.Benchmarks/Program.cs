@@ -32,6 +32,16 @@ runner.Measure(
 var analyzerOperations = ColumnBenchmarkWorkload.CreateOperations(512);
 runner.Measure("postgresql_analyzer_build_512", () => BuildPlans(catalogBuilder, analyzerOperations));
 
+var repairOperations = ColumnBenchmarkWorkload.CreateRepairOperations(1000);
+runner.Measure(
+    "postgresql_repair_generation_1000",
+    () => generator.Generate(repairOperations, context.Model)
+        .Count);
+
+runner.Measure(
+    "postgresql_repair_analyzer_build_1000",
+    () => BuildPlans(catalogBuilder, repairOperations));
+
 return runner.Complete();
 
 static int BuildPlans(

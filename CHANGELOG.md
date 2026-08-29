@@ -6,6 +6,82 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+## [10.0.0-rc.2] - 2026-08-29
+
+Prepared second feature-complete release candidate of the SafeMigrations
+10.0.0 contract. It keeps strict scaffolding as the default while completing
+the reviewed legacy-convergence repair, expression-parsing, prerequisite, and
+provider-validation boundaries across MySQL, MariaDB, and PostgreSQL.
+
+Compared with rc.1, rc.2 adds source-frozen legacy-convergence policy selection
+and provider-context validation to the public contract. Existing rc.1 migration
+source remains compatible, and no existing migration is reinterpreted by the
+new configuration. The candidate updates the exact Doka dependency from
+`[10.0.0]` to `[10.1.1]` while retaining the public operation-handler SPI.
+
+These notes do not establish publication. Require the successful release run
+and verified public package and symbol readback before selecting rc.2. All three
+package IDs must be published at the exact same version.
+
+### Added
+
+- Add source-frozen legacy-convergence policy configuration. Generated
+  `ConvergeTableFromModel` calls retain `ThrowIfDifferent` by default and can
+  explicitly select `RepairIfSafe`. The repair path converges only nullability,
+  default, and comment drift on invariant-compatible ordinary columns across
+  MySQL, MariaDB, and PostgreSQL; existing nulls and type, collation,
+  generated/identity, row-version, or provider-annotation drift remain
+  fail-closed before mutation.
+- Translate the bounded provider-neutral subset of EF-scaffolded check-
+  constraint SQL into the structured `SafeMigrationSql` expression contract.
+  Unsupported, ambiguous, commented, parameterized, provider-escape-dependent,
+  oversized, or malformed expressions now stop scaffolding with the constraint
+  name and a stable parse-failure code instead of producing a migration that
+  can never pass live structural comparison.
+- Add provider-context validation to `ISafeMigrationProviderAnalyzer` so an
+  adapter can reject invalid live connection configuration before EF migration
+  history, model, environment, lock, catalog access, or connection opening.
+
+### Changed
+
+- Update the exact `Doka.EntityFrameworkCore.MySql` dependency and every
+  affected lockfile from rc.1's `[10.0.0]` to `[10.1.1]`. The provider update
+  adds connection-string server discovery and generic scalar `LIKE` support,
+  repairs application-owned Guid conversion across relationship chains, and
+  preserves its public migration-operation handler SPI.
+- Require the complete package, engine, EF tooling, coverage, property,
+  performance, and SBOM qualification against the published Doka 10.1.1
+  package before rc.2 publication.
+- Replace the opaque pre-tag success line and routine fetch output with named
+  branch, working-tree, source-commit, release-tag, and SSH-signing results plus
+  an explicit next-step message. Positive and negative fixture coverage keeps
+  the output and failure boundary executable.
+
+### Fixed
+
+- Treat Doka's `ClientGuid` column annotation as catalog-neutral while retaining
+  it in immutable operation snapshots, fingerprints, and replayed provider DDL.
+  Strict and legacy-convergence scaffolding now accept application-converted
+  Guid keys and relationships; HiLo and unknown column annotations remain
+  fail-closed before target DDL.
+- Validate the actual MySQL/MariaDB `DbConnection` before pending-history
+  discovery, including when EF reuses an internal service provider and the
+  application supplies a replacement connection with
+  `AllowUserVariables=false`.
+- Classify missing referenced columns as `prerequisite_missing` before index,
+  key, check, foreign-key, computed-column, or default-expression analysis can
+  issue an unsafe data probe or target DDL.
+- Project ordered legacy convergence through a newly added nullable column
+  without a non-null default so a following unique index can be analyzed and
+  applied.
+  Unknown columns, non-null defaults, computed values, and nulls-not-distinct
+  contracts remain fail-closed.
+- Normalize the MySQL/MariaDB catalog alias between expected unique indexes and
+  `TABLE_CONSTRAINTS.UNIQUE` during strict table analysis, runtime reruns, and
+  unexpected-object inventory. Analysis uses the exact operation batch;
+  runtime generation uses EF's target relational model. Unrelated unique keys
+  still reject `StrictDefinition` and remain reported.
+
 ## [10.0.0-rc.1] - 2026-08-28
 
 Prepared first feature-complete release candidate of the SafeMigrations Core,
@@ -195,5 +271,6 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.0.0-rc.1...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.0.0-rc.2...HEAD
+[10.0.0-rc.2]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.0.0-rc.1...v10.0.0-rc.2
 [10.0.0-rc.1]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/releases/tag/v10.0.0-rc.1

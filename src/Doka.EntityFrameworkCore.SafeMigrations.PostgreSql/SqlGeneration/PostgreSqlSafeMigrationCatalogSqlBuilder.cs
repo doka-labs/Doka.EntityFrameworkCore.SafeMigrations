@@ -48,7 +48,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             EnsureTableIntent value => BuildEnsureTable(value),
             DropTableIntent value => BuildDropTable(value),
             RenameTableIntent value => BuildRenameTable(value),
-            EnsureColumnIntent value => BuildEnsureColumn(value),
+            EnsureColumnIntent value => BuildEnsureColumn(
+                value,
+                operation.Policy == SafeMigrationPolicy.RepairIfSafe),
             DropColumnIntent value => BuildDropColumn(value),
             RenameColumnIntent value => BuildRenameColumn(value),
             AlterColumnIntent value => BuildAlterColumn(value),
@@ -86,16 +88,60 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
         return intent switch
         {
-            EnsureColumnIntent value => TableExists(value.Table, value.Schema),
-            AlterColumnIntent value => TableExists(value.Table, value.Schema),
-            EnsureIndexIntent value => TableExists(value.Definition.Table, value.Definition.Schema),
-            EnsurePrimaryKeyIntent value => TableExists(value.Definition.Table, value.Definition.Schema),
-            EnsureUniqueConstraintIntent value => TableExists(value.Definition.Table, value.Definition.Schema),
-            EnsureCheckConstraintIntent value => TableExists(value.Definition.Table, value.Definition.Schema),
-            EnsureForeignKeyIntent value => $"({TableExists(value.Definition.Table, value.Definition.Schema)}) "
-                + $"AND ({TableExists(value.Definition.PrincipalTable, value.Definition.PrincipalSchema)})",
+            EnsureColumnIntent value => TableAndColumnsExist(
+                value.Table,
+                value.Schema,
+                SafeMigrationPrerequisiteColumns.Local(value)),
+            AlterColumnIntent value => TableAndColumnsExist(
+                value.Table,
+                value.Schema,
+                SafeMigrationPrerequisiteColumns.Local(value)),
+            EnsureIndexIntent value => TableAndColumnsExist(
+                value.Definition.Table,
+                value.Definition.Schema,
+                SafeMigrationPrerequisiteColumns.Local(value)),
+            EnsurePrimaryKeyIntent value => TableAndColumnsExist(
+                value.Definition.Table,
+                value.Definition.Schema,
+                SafeMigrationPrerequisiteColumns.Local(value)),
+            EnsureUniqueConstraintIntent value => TableAndColumnsExist(
+                value.Definition.Table,
+                value.Definition.Schema,
+                SafeMigrationPrerequisiteColumns.Local(value)),
+            EnsureCheckConstraintIntent value => TableAndColumnsExist(
+                value.Definition.Table,
+                value.Definition.Schema,
+                SafeMigrationPrerequisiteColumns.Local(value)),
+            EnsureForeignKeyIntent value => $"({TableAndColumnsExist(
+                value.Definition.Table,
+                value.Definition.Schema,
+                SafeMigrationPrerequisiteColumns.Local(value))}) "
+                + $"AND ({TableAndColumnsExist(
+                    value.Definition.PrincipalTable,
+                    value.Definition.PrincipalSchema,
+                    SafeMigrationPrerequisiteColumns.Principal(value))})",
             _ => "TRUE",
         };
+    }
+
+    private string TableAndColumnsExist(
+        string table,
+        string? schema,
+        IReadOnlyList<string> columns
+    )
+    {
+        var tableExists = TableExists(table, schema);
+        if (columns.Count == 0)
+        {
+            return tableExists;
+        }
+
+        return $"({tableExists}) AND ((SELECT COUNT(DISTINCT a.attname) "
+            + "FROM pg_catalog.pg_attribute a "
+            + $"WHERE a.attrelid = {QualifiedRegclass(table, schema)} "
+            + "AND a.attnum > 0 AND NOT a.attisdropped "
+            + $"AND a.attname IN ({string.Join(", ", columns.Select(Literal))})) "
+            + $"= {columns.Count.ToString(CultureInfo.InvariantCulture)})";
     }
 
     private string? GetUnsupportedFeature(

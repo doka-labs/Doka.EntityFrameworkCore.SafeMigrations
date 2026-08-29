@@ -38,6 +38,24 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         Assert.Equal(SafeMigrationObservedState.Matching, analysis.ObservedState);
     }
 
+    private static void ObserveAccepted(
+        SafeMigrationPreflightProjection projection,
+        SafeMigrationIntent intent,
+        SafeMigrationObservedState liveState
+    )
+    {
+        var operation = new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent);
+        var analysis = projection.Project(operation, Live(liveState));
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            intent.Kind,
+            analysis.ObservedState,
+            operation.Policy,
+            analysis.RepairCapability);
+
+        Assert.Contains(decision.Action, new[] { SafeMigrationAction.Apply, SafeMigrationAction.NoOp, });
+        projection.Observe(operation, analysis, decision);
+    }
+
     private static SafeMigrationProviderAnalysis Live(
         SafeMigrationObservedState state
     ) => new(state, SafeMigrationRepairCapability.None, postconditionSatisfied: false, "test_live");

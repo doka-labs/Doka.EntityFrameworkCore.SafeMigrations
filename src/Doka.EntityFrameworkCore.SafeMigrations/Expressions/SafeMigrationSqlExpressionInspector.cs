@@ -1,7 +1,84 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
+/// <summary>
+/// Inspects and transforms provider-neutral SQL expression trees without
+/// rendering provider SQL.
+/// </summary>
 internal static class SafeMigrationSqlExpressionInspector
 {
+    /// <summary>Collects the terminal identifier parts referenced by an expression.</summary>
+    /// <param name="expression">The expression tree to inspect.</param>
+    /// <param name="identifiers">The destination set for distinct identifier names.</param>
+    public static void CollectIdentifiers(
+        SafeMigrationSqlExpression expression,
+        ISet<string> identifiers
+    )
+    {
+        ArgumentNullException.ThrowIfNull(expression);
+        ArgumentNullException.ThrowIfNull(identifiers);
+
+        // Advance through single-child and final branches iteratively. The
+        // bounded parser still limits authored depth, while this shape avoids
+        // adding one recursive frame for every right-associated binary node.
+        while (true)
+        {
+            switch (expression)
+            {
+                case SafeMigrationSqlIdentifierExpression value:
+                    identifiers.Add(value.Parts[^1]);
+                    break;
+                case SafeMigrationSqlLiteralExpression:
+                case SafeMigrationSqlCurrentValueExpression:
+                case SafeMigrationSqlProviderFragmentExpression:
+                case SafeMigrationSqlOpaqueExpression:
+                    break;
+                case SafeMigrationSqlUnaryExpression value:
+                    expression = value.Operand;
+                    continue;
+                case SafeMigrationSqlBinaryExpression value:
+                    CollectIdentifiers(value.Left, identifiers);
+                    expression = value.Right;
+                    continue;
+                case SafeMigrationSqlNullTestExpression value:
+                    expression = value.Operand;
+                    continue;
+                case SafeMigrationSqlBetweenExpression value:
+                    CollectIdentifiers(value.Operand, identifiers);
+                    CollectIdentifiers(value.Lower, identifiers);
+                    expression = value.Upper;
+                    continue;
+                case SafeMigrationSqlInExpression value:
+                    CollectIdentifiers(value.Operand, identifiers);
+                    foreach (var candidate in value.Values)
+                    {
+                        CollectIdentifiers(candidate, identifiers);
+                    }
+
+                    break;
+                case SafeMigrationSqlFunctionExpression value:
+                    foreach (var argument in value.Arguments)
+                    {
+                        CollectIdentifiers(argument, identifiers);
+                    }
+
+                    break;
+                case SafeMigrationSqlCastExpression value:
+                    expression = value.Operand;
+                    continue;
+                case SafeMigrationSqlCollateExpression value:
+                    expression = value.Operand;
+                    continue;
+                default:
+                    throw new UnreachableException();
+            }
+
+            break;
+        }
+    }
+
+    /// <summary>Determines whether every node has provider-neutral structural semantics.</summary>
+    /// <param name="expression">The expression tree to inspect.</param>
+    /// <returns><see langword="true" /> when structural comparison is safe.</returns>
     public static bool IsStructurallyComparable(
         SafeMigrationSqlExpression expression
     ) => expression switch
@@ -27,6 +104,11 @@ internal static class SafeMigrationSqlExpressionInspector
         _ => throw new UnreachableException(),
     };
 
+    /// <summary>Renames matching identifier parts throughout a structural expression.</summary>
+    /// <param name="expression">The expression tree to transform.</param>
+    /// <param name="source">The exact identifier part to replace.</param>
+    /// <param name="target">The replacement identifier part.</param>
+    /// <returns>The transformed expression tree.</returns>
     public static SafeMigrationSqlExpression RenameIdentifier(
         SafeMigrationSqlExpression expression,
         string source,

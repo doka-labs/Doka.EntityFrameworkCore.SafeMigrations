@@ -86,7 +86,7 @@ adapter's guarded DO block and is rejected. Ordinary delegated commands retain
 their provider semantics; composition does not make every provider command
 safe to embed.
 
-The current MySQL/MariaDB adapter consumes Doka 10.0.0 as an exact NuGet
+The current MySQL/MariaDB adapter consumes Doka 10.1.1 as an exact NuGet
 dependency. Core/provider ranges and committed lockfiles remain repository-owned
 inputs. Package qualification uses actual packages, not Doka ProjectReference
 or unpublished local source. Provider release approval is not a
@@ -182,6 +182,8 @@ being accepted through broad string normalization.
 - 2026-08-26: Status changed from proposed to accepted. Dominic Kalkbrenner confirmed the recorded decision and its existing implementation.
 - 2026-08-26: Status changed from accepted to implemented. The public Doka SPI integration and explicit Npgsql composition are implemented and verified by package-contract, composition, suppression-boundary, and provider tests.
 - 2026-08-26: Clarified the SPI's actual root namespace against the Doka 10.0.0 package API; integration and decision status are unchanged.
+- 2026-08-28: Updated the exact dependency to stable Doka 10.1.0 after confirming that its additive provider APIs leave the migration-operation handler SPI unchanged; the decision remains implemented and requires fresh SafeMigrations qualification.
+- 2026-08-29: Updated the exact dependency to stable Doka 10.1.1 after verifying its unchanged handler SPI and corrected application-owned Guid relationship contract; the decision remains implemented and requires fresh SafeMigrations qualification.
 
 ### Implementation References
 
@@ -200,4 +202,8 @@ being accepted through broad string normalization.
 ### Sources
 
 - [Doka 10.0.0 migration-operation handler contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.0.0/docs/migration-operation-handlers.md) (primary source; retrieved 2026-08-26)
+- [Doka 10.1.0 migration-operation handler contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.0/docs/migration-operation-handlers.md) (primary source; retrieved 2026-08-28)
+- [Doka.EntityFrameworkCore.MySql 10.1.0 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.1.0) (primary package metadata; retrieved 2026-08-28)
+- [Doka 10.1.1 migration-operation handler contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.1/docs/migration-operation-handlers.md) (primary source; retrieved 2026-08-29)
+- [Doka.EntityFrameworkCore.MySql 10.1.1 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.1.1) (primary package metadata; retrieved 2026-08-29)
 - [Npgsql EF Core provider and configuration](https://www.npgsql.org/efcore/) (primary source; retrieved 2026-08-26)

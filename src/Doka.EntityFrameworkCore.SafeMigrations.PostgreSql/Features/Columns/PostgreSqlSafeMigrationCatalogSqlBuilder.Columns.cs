@@ -42,24 +42,59 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             or NpgsqlValueGenerationStrategy.IdentityByDefaultColumn);
 
     private PostgreSqlSafeMigrationRuntimePlan BuildEnsureColumn(
-        EnsureColumnIntent intent
+        EnsureColumnIntent intent,
+        bool repairRequested
     )
     {
         var table = TableExists(intent.Table, intent.Schema);
         var exists = ColumnExists(intent.Table, intent.Schema, intent.Definition.Name);
         var matching = ColumnMatches(intent.Table, intent.Schema, intent.Definition);
         var unsafeAdd = !SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(intent.Definition);
+        var repairCapability = repairRequested
+            && SafeMigrationColumnRepairHelper.CanSafelyConvergeExistingColumn(intent.Definition)
+            ? SafeMigrationRepairCapability.Safe
+            : SafeMigrationRepairCapability.None;
+
+        var repairInvariant = repairCapability == SafeMigrationRepairCapability.Safe
+            ? ColumnRepairInvariantMatches(intent.Table, intent.Schema, intent.Definition)
+            : "FALSE";
 
         var dataBlocked = unsafeAdd
             ? $"EXISTS (SELECT 1 FROM {Qualified(intent.Table, intent.Schema)} LIMIT 1)"
             : "FALSE";
 
-        return Plan(
+        var nullBlocked = repairCapability == SafeMigrationRepairCapability.Safe
+            && !intent.Definition.IsNullable
+                ? $"({repairInvariant}) AND EXISTS (SELECT 1 FROM {Qualified(intent.Table, intent.Schema)} WHERE "
+                + $"{_sqlGenerationHelper.DelimitIdentifier(intent.Definition.Name)} IS NULL LIMIT 1)"
+                : "FALSE";
+
+        var repairPrecondition = repairCapability == SafeMigrationRepairCapability.Safe
+            ? $"({repairInvariant}) AND NOT ({nullBlocked})"
+            : "FALSE";
+
+        var plan = Plan(
             $"CASE WHEN NOT {table} THEN 'prerequisite_missing' "
             + $"WHEN NOT {exists} AND {dataBlocked} THEN 'data_blocked' "
             + $"WHEN NOT {exists} THEN 'missing' WHEN {matching} THEN 'matching' "
-            + "ELSE 'different' END",
-            matching);
+            + $"WHEN {nullBlocked} THEN 'data_blocked' ELSE 'different' END",
+            matching,
+            repairCapability,
+            repairPrecondition);
+
+        // PostgreSQL resolves column names when the data-reading statement is
+        // first executed. Keep that statement behind a catalog-only guard so
+        // a missing target remains a valid Missing/DataBlocked classification.
+        return repairCapability == SafeMigrationRepairCapability.Safe
+            && !intent.Definition.IsNullable
+                ? plan with
+                {
+                    StateEvaluationGuardExpression = exists,
+                    StateEvaluationGuardFailureExpression = unsafeAdd
+                        ? $"CASE WHEN {dataBlocked} THEN 'data_blocked' ELSE 'missing' END"
+                        : "'missing'",
+                }
+                : plan;
     }
 
     private PostgreSqlSafeMigrationRuntimePlan BuildDropColumn(
@@ -125,7 +160,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         string table,
         string? schema,
         ExpectedColumnDefinition definition,
-        int? ordinal = null
+        int? ordinal = null,
+        bool includeRepairableFacets = true
     )
     {
         var mapping = _typeMappingSource.FindMapping(
@@ -145,12 +181,21 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         var conditions = new List<string>
         {
             $"pg_catalog.format_type(a.atttypid, a.atttypmod) = {Literal(storeType)}",
-            $"a.attnotnull = {(!definition.IsNullable).ToString().ToUpperInvariant()}",
             CollationMatches(definition),
-            $"pg_catalog.col_description(c.oid, a.attnum) IS NOT DISTINCT FROM "
-            + (definition.Comment is null ? "NULL" : Literal(definition.Comment)),
-            DefaultAndGenerationMatches(definition, mapping),
         };
+
+        if (includeRepairableFacets)
+        {
+            conditions.Add($"a.attnotnull = {(!definition.IsNullable).ToString().ToUpperInvariant()}");
+            conditions.Add(
+                $"pg_catalog.col_description(c.oid, a.attnum) IS NOT DISTINCT FROM "
+                + (definition.Comment is null ? "NULL" : Literal(definition.Comment)));
+            conditions.Add(DefaultAndGenerationMatches(definition, mapping));
+        }
+        else
+        {
+            conditions.Add(GenerationMatches(definition));
+        }
 
         if (ordinal is not null)
         {
@@ -166,6 +211,20 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             + $"AND a.attname = {Literal(definition.Name)} AND a.attnum > 0 AND NOT a.attisdropped "
             + $"AND {string.Join(" AND ", conditions)})";
     }
+
+    private string ColumnRepairInvariantMatches(
+        string table,
+        string? schema,
+        ExpectedColumnDefinition definition
+    ) => ColumnMatches(table, schema, definition, includeRepairableFacets: false);
+
+    private static string GenerationMatches(
+        ExpectedColumnDefinition definition
+    ) => definition.ComputedColumnSql is null
+        && definition.ComputedExpression is null
+        && definition.ProviderAnnotations.Count == 0
+            ? "a.attgenerated = '' AND a.attidentity = ''"
+            : "FALSE";
 
     private string CollationMatches(
         ExpectedColumnDefinition definition

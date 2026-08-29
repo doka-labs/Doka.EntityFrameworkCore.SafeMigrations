@@ -274,17 +274,31 @@ public static class PostgreSqlSafeMigrationOptionsBuilderExtensions
         DbContextOptionsBuilder optionsBuilder,
         Type baselineGeneratorType,
         Type? canonicalContextType,
-        SafeMigrationScaffoldingMode scaffoldingMode
+        SafeMigrationScaffoldingMode scaffoldingMode,
+        SafeMigrationPolicy legacyConvergencePolicy = SafeMigrationPolicy.ThrowIfDifferent
     )
     {
         ((IDbContextOptionsBuilderInfrastructure)optionsBuilder).AddOrUpdateExtension(
             PostgreSqlSafeMigrationsOptionsExtension.WithConfiguration(
                 baselineGeneratorType,
                 canonicalContextType,
-                scaffoldingMode));
+                scaffoldingMode,
+                legacyConvergencePolicy));
     }
 
-    private static SafeMigrationScaffoldingMode Configure(
+    private static void AddOptionsExtension(
+        DbContextOptionsBuilder optionsBuilder,
+        Type baselineGeneratorType,
+        Type? canonicalContextType,
+        SafeMigrationOptionsBuilder configuration
+    ) => AddOptionsExtension(
+        optionsBuilder,
+        baselineGeneratorType,
+        canonicalContextType,
+        configuration.Mode,
+        configuration.LegacyConvergencePolicy);
+
+    private static SafeMigrationOptionsBuilder Configure(
         Action<SafeMigrationOptionsBuilder> configure
     )
     {
@@ -292,7 +306,8 @@ public static class PostgreSqlSafeMigrationOptionsBuilderExtensions
 
         var builder = new SafeMigrationOptionsBuilder();
         configure(builder);
+        builder.Validate();
 
-        return builder.Mode;
+        return builder;
     }
 }

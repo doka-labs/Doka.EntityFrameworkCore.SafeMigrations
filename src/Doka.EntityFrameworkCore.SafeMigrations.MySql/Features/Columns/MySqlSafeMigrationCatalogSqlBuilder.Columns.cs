@@ -34,10 +34,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             return "literal_default_catalog_representation";
         }
 
-        if (definitions.Any(static definition => definition.ProviderAnnotations.Any(annotation =>
-                !StringComparer.Ordinal.Equals(annotation.Name, ValueGenerationStrategyAnnotation)
-                || annotation.Value is not (MySqlValueGenerationStrategy.None
-                    or MySqlValueGenerationStrategy.AutoIncrement))))
+        if (definitions.Any(HasUnsupportedProviderColumnAnnotation))
         {
             return "provider_column_annotation";
         }
@@ -59,24 +56,84 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 : null;
     }
 
+    private static bool HasUnsupportedProviderColumnAnnotation(
+        ExpectedColumnDefinition definition
+    )
+    {
+        foreach (var annotation in definition.ProviderAnnotations)
+        {
+            if (!StringComparer.Ordinal.Equals(annotation.Name, ValueGenerationStrategyAnnotation))
+            {
+                return true;
+            }
+
+            // ClientGuid is executed by EF before INSERT and Doka emits no
+            // column DDL for it. Preserve the annotation for operation replay
+            // and fingerprints, but compare its catalog state like None.
+            if (annotation.Value is not (MySqlValueGenerationStrategy.None
+                or MySqlValueGenerationStrategy.AutoIncrement
+                or MySqlValueGenerationStrategy.ClientGuid))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private MySqlSafeMigrationRuntimePlan BuildEnsureColumn(
         EnsureColumnIntent intent,
-        bool isMariaDb
+        bool isMariaDb,
+        bool repairRequested
     )
     {
         var tableExists = BaseTableExists(intent.Table);
         var columnExists = ColumnExists(intent.Table, intent.Definition.Name);
         var matching = BuildColumnMatches(intent.Table, intent.Definition, isMariaDb);
         var unsafeAdd = !SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(intent.Definition);
+        var repairCapability = repairRequested
+            && SafeMigrationColumnRepairHelper.CanSafelyConvergeExistingColumn(intent.Definition)
+            ? SafeMigrationRepairCapability.Safe
+            : SafeMigrationRepairCapability.None;
+
+        var repairInvariant = repairCapability == SafeMigrationRepairCapability.Safe
+            ? BuildColumnRepairInvariantMatches(intent.Table, intent.Definition, isMariaDb)
+            : "FALSE";
 
         var dataBlocked = unsafeAdd ? $"EXISTS (SELECT 1 FROM {Delimited(intent.Table)} LIMIT 1)" : "FALSE";
+        var nullBlocked = repairCapability == SafeMigrationRepairCapability.Safe
+            && !intent.Definition.IsNullable
+                ? $"({repairInvariant}) AND EXISTS (SELECT 1 FROM {Delimited(intent.Table)} WHERE "
+                + $"{Delimited(intent.Definition.Name)} IS NULL LIMIT 1)"
+                : "FALSE";
 
-        return Plan(
+        var repairPrecondition = repairCapability == SafeMigrationRepairCapability.Safe
+            ? $"({repairInvariant}) AND NOT ({nullBlocked})"
+            : "FALSE";
+
+        var plan = Plan(
             $"CASE WHEN NOT {tableExists} THEN 'prerequisite_missing' "
             + $"WHEN NOT {columnExists} AND {dataBlocked} THEN 'data_blocked' "
             + $"WHEN NOT {columnExists} THEN 'missing' "
-            + $"WHEN {matching} THEN 'matching' ELSE 'different' END",
-            matching);
+            + $"WHEN {matching} THEN 'matching' "
+            + $"WHEN {nullBlocked} THEN 'data_blocked' ELSE 'different' END",
+            matching,
+            repairCapability,
+            repairPrecondition);
+
+        // The data probe for nullability tightening can mention the target
+        // column only after the catalog proves that the column exists. Missing
+        // remains an applicable state rather than a missing prerequisite.
+        return repairCapability == SafeMigrationRepairCapability.Safe
+            && !intent.Definition.IsNullable
+                ? plan with
+                {
+                    StateEvaluationGuardExpression = columnExists,
+                    StateEvaluationGuardFailureExpression = unsafeAdd
+                        ? $"CASE WHEN {dataBlocked} THEN 'data_blocked' ELSE 'missing' END"
+                        : "'missing'",
+                }
+                : plan;
     }
 
     private MySqlSafeMigrationRuntimePlan BuildDropColumn(
@@ -146,7 +203,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         string table,
         ExpectedColumnDefinition definition,
         bool isMariaDb,
-        int? ordinal = null
+        int? ordinal = null,
+        bool includeRepairableFacets = true,
+        bool requireRepairSafeExtra = false
     )
     {
         var mapping = _typeMappingSource.FindMapping(
@@ -166,13 +225,23 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var conditions = new List<string>
         {
             BuildStoreTypeMatches(storeType, isMariaDb),
-            $"c.IS_NULLABLE = {(definition.IsNullable ? "'YES'" : "'NO'")}",
             BuildCollationMatches(table, definition.Collation),
-            $"COALESCE(c.COLUMN_COMMENT, '') = {Literal(definition.Comment ?? string.Empty)}",
-            BuildDefaultMatches("c.COLUMN_DEFAULT", definition.DefaultValue, definition.IsNullable, mapping),
             BuildComputedMatches(definition, isMariaDb),
             BuildValueGenerationMatches(definition),
         };
+
+        if (includeRepairableFacets)
+        {
+            conditions.Add($"c.IS_NULLABLE = {(definition.IsNullable ? "'YES'" : "'NO'")}");
+            conditions.Add($"COALESCE(c.COLUMN_COMMENT, '') = {Literal(definition.Comment ?? string.Empty)}");
+            conditions.Add(
+                BuildDefaultMatches("c.COLUMN_DEFAULT", definition.DefaultValue, definition.IsNullable, mapping));
+        }
+
+        if (requireRepairSafeExtra)
+        {
+            conditions.Add(OrdinaryColumnExtraMatches());
+        }
 
         if (ordinal is not null)
         {
@@ -183,6 +252,24 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             + $"WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = {Literal(table)} "
             + $"AND c.COLUMN_NAME = {Literal(definition.Name)} AND {string.Join(" AND ", conditions)})";
     }
+
+    private string BuildColumnRepairInvariantMatches(
+        string table,
+        ExpectedColumnDefinition definition,
+        bool isMariaDb
+    ) => BuildColumnMatches(
+        table,
+        definition,
+        isMariaDb,
+        includeRepairableFacets: false,
+        requireRepairSafeExtra: true);
+
+    private static string OrdinaryColumnExtraMatches() =>
+        // MySQL and MariaDB require the complete column definition for MODIFY
+        // COLUMN. Reject unmodeled EXTRA metadata because omitting ON UPDATE,
+        // INVISIBLE, or a similar modifier would silently erase it. MySQL may
+        // expose DEFAULT_GENERATED for an otherwise modeled expression default.
+        "TRIM(REPLACE(LOWER(COALESCE(c.EXTRA, '')), 'default_generated', '')) = ''";
 
     private static string BuildValueGenerationMatches(
         ExpectedColumnDefinition definition

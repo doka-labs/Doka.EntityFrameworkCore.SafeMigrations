@@ -53,13 +53,26 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
 
             var runtimePlan = _catalogSqlBuilder.Build(safeOperation);
             var baseline = RenderBaseline(safeOperation, runtimePlan, model, options);
-            if (baseline.Any(static command => command.TransactionSuppressed))
+            var repairBaseline = RenderRepairBaseline(safeOperation, runtimePlan, model, options);
+
+            // AlterColumn already carries a reviewed old definition and uses
+            // its baseline for both apply and repair. EnsureColumn requires the
+            // separately synthesized repair operation for existing drift.
+            var effectiveRepairBaseline = repairBaseline.Count > 0
+                ? repairBaseline
+                : safeOperation is { Policy: SafeMigrationPolicy.RepairIfSafe, Intent: AlterColumnIntent }
+                && runtimePlan.RepairCapability == SafeMigrationRepairCapability.Safe
+                    ? baseline
+                    : [];
+
+            if (baseline.Any(static command => command.TransactionSuppressed)
+                || effectiveRepairBaseline.Any(static command => command.TransactionSuppressed))
             {
                 throw new NotSupportedException(
                     "A transaction-suppressed PostgreSQL baseline cannot be guarded inside a DO block.");
             }
 
-            var guardedSql = BuildGuardedSql(safeOperation, runtimePlan, baseline);
+            var guardedSql = BuildGuardedSql(safeOperation, runtimePlan, baseline, effectiveRepairBaseline);
             var sqlOperation = new SqlOperation { Sql = guardedSql };
             commands.AddRange(_baselineGenerator.Generate([sqlOperation], model, options));
         }
@@ -102,6 +115,28 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         }
 
         return _baselineGenerator.Generate(operations, model, options);
+    }
+
+    private IReadOnlyList<MigrationCommand> RenderRepairBaseline(
+        SafeMigrationOperation operation,
+        PostgreSqlSafeMigrationRuntimePlan runtimePlan,
+        IModel? model,
+        MigrationsSqlGenerationOptions options
+    )
+    {
+        if (operation.Policy != SafeMigrationPolicy.RepairIfSafe
+            || runtimePlan.RepairCapability != SafeMigrationRepairCapability.Safe
+            || operation.Intent is not EnsureColumnIntent intent)
+        {
+            return [];
+        }
+
+        var repairOperation = SafeMigrationStandardOperationFactory.CreateRepair(
+            intent,
+            _expressionRenderer.Render,
+            static collation => collation.Schema is null ? collation.Name : null);
+
+        return _baselineGenerator.Generate([repairOperation], model, options);
     }
 
     private static IEnumerable<(string Table, string? Schema, ExpectedColumnDefinition Definition)>
@@ -159,25 +194,28 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
     private static string BuildGuardedSql(
         SafeMigrationOperation operation,
         PostgreSqlSafeMigrationRuntimePlan runtimePlan,
-        IReadOnlyList<MigrationCommand> baseline
+        IReadOnlyList<MigrationCommand> baseline,
+        IReadOnlyList<MigrationCommand> repairBaseline
     )
     {
-        var baselineBuilder = new StringBuilder();
-        for (var index = 0; index < baseline.Count; index++)
-        {
-            if (index > 0)
-            {
-                baselineBuilder.Append('\n');
-            }
-
-            baselineBuilder.Append(EnsureTerminated(baseline[index].CommandText));
-        }
-
-        var baselineSql = baselineBuilder.ToString();
+        var baselineSql = BuildBaselineSql(baseline);
+        var repairSql = BuildBaselineSql(repairBaseline);
+        var stateEvaluationGuardBranch = runtimePlan.StateEvaluationGuardFailureExpression is null
+            ? string.Empty
+            : "    ELSIF NOT COALESCE(("
+            + runtimePlan.StateEvaluationGuardExpression
+            + "), FALSE) THEN\n"
+            + "        doka_state := ("
+            + runtimePlan.StateEvaluationGuardFailureExpression
+            + ");\n"
+            + "        doka_repair_ok := FALSE;\n";
 
         var tag = SelectDollarTag(
             baselineSql,
+            repairSql,
             runtimePlan.PrerequisiteExpression,
+            runtimePlan.StateEvaluationGuardExpression,
+            runtimePlan.StateEvaluationGuardFailureExpression ?? string.Empty,
             runtimePlan.StateExpression,
             runtimePlan.RepairPrecondition,
             runtimePlan.Postcondition);
@@ -197,6 +235,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             .Append("), FALSE) THEN\n")
             .Append("        doka_state := 'prerequisite_missing';\n")
             .Append("        doka_repair_ok := FALSE;\n")
+            .Append(stateEvaluationGuardBranch)
             .Append("    ELSE\n")
             .Append("        doka_state := (")
             .Append(runtimePlan.StateExpression)
@@ -216,18 +255,16 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             .Append("        RAISE EXCEPTION USING ERRCODE = 'P1003', MESSAGE = 'doka_sm_data_blocked';\n")
             .Append("    ELSIF doka_action = 'reject_prerequisite_missing' THEN\n")
             .Append("        RAISE EXCEPTION USING ERRCODE = 'P1004', MESSAGE = 'doka_sm_prerequisite_missing';\n")
-            .Append("    ELSIF doka_action IN ('apply', 'repair') THEN\n");
+            .Append("    ELSIF doka_action IN ('apply', 'repair') THEN\n")
+            .Append("        IF doka_action = 'apply' THEN\n");
 
-        if (baseline.Count == 0)
-        {
-            builder.Append("        NULL;\n");
-        }
-        else
-        {
-            AppendIndentedLines(builder, baselineSql);
-        }
+        AppendActionSql(builder, baselineSql, indentation: "            ");
+
+        builder.Append("        ELSE\n");
+        AppendActionSql(builder, repairSql, indentation: "            ");
 
         builder
+            .Append("        END IF;\n")
             .Append("        IF NOT COALESCE((\n")
             .Append("            ")
             .Append(runtimePlan.Postcondition)
@@ -241,6 +278,42 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             .Append(';');
 
         return builder.ToString();
+    }
+
+    private static string BuildBaselineSql(
+        IReadOnlyList<MigrationCommand> baseline
+    )
+    {
+        var builder = new StringBuilder();
+        for (var index = 0; index < baseline.Count; index++)
+        {
+            if (index > 0)
+            {
+                builder.Append('\n');
+            }
+
+            builder.Append(EnsureTerminated(baseline[index].CommandText));
+        }
+
+        return builder.ToString();
+    }
+
+    private static void AppendActionSql(
+        StringBuilder builder,
+        string sql,
+        string indentation
+    )
+    {
+        if (sql.Length == 0)
+        {
+            builder
+                .Append(indentation)
+                .Append("NULL;\n");
+
+            return;
+        }
+
+        AppendIndentedLines(builder, sql, indentation);
     }
 
     private static string BuildActionCase(
@@ -343,7 +416,8 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
 
     private static void AppendIndentedLines(
         StringBuilder builder,
-        string sql
+        string sql,
+        string indentation
     )
     {
         var start = 0;
@@ -353,7 +427,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             var length = newline < 0 ? sql.Length - start : newline - start;
 
             builder
-                .Append("        ")
+                .Append(indentation)
                 .Append(sql, start, length)
                 .Append('\n');
 

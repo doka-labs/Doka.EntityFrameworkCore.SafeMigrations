@@ -21,7 +21,14 @@ public abstract class SafeMigrationScaffoldingDbContext : DbContext
     )
     {
         optionsBuilder.UseNpgsql(_connectionString);
-        optionsBuilder.UsePostgreSqlSafeMigrations(options => options.UseScaffoldingMode(_mode));
+        optionsBuilder.UsePostgreSqlSafeMigrations(options =>
+        {
+            options.UseScaffoldingMode(_mode);
+            if (_mode == SafeMigrationScaffoldingMode.LegacyConvergence)
+            {
+                options.UseLegacyConvergencePolicy(SafeMigrationPolicy.RepairIfSafe);
+            }
+        });
     }
 
     protected override void OnModelCreating(
