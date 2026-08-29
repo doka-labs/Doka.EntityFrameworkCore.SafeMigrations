@@ -109,12 +109,16 @@ environment `nuget`. The job then:
 1. verifies the tag is annotated, identifies the qualified SHA, and has an
    authorized SSH signature;
 2. verifies the downloaded package checksums and package contract again;
-3. obtains a short-lived NuGet key through Trusted Publishing;
-4. publishes the three primary and three symbol packages;
-5. reads all primary packages back from NuGet.org, verifies their repository
+3. creates or resumes a metadata-matching GitHub Release draft, uploads the
+   exact eight qualified assets, and verifies every asset name and SHA-256
+   digest;
+4. obtains a short-lived NuGet key through Trusted Publishing only after the
+   complete draft has been read back;
+5. publishes the three primary and three symbol packages;
+6. reads all primary packages back from NuGet.org, verifies their repository
    signatures, and compares their content with the qualified packages; and
-6. completes or resumes a GitHub Release draft, verifies every asset digest,
-   publishes it, and verifies the resulting immutable Release.
+7. publishes the prepared draft and waits for the immutable Release plus every
+   Release-asset attestation through a bounded five-minute readback window.
 
 No package is rebuilt after qualification. Duplicate-tolerant pushes support a
 same-run retry after a lost response; the subsequent signed-content readback is
@@ -147,6 +151,8 @@ but the workflow's bounded signed-package readback must already have passed.
   new candidate run. No release identity has been consumed.
 - After the tag exists, never move or delete it to hide a failure. Rerun only
   the failed publication job in the same workflow run.
+- If draft staging fails, no NuGet credential has been requested and no package
+  has been pushed. The same job may resume only matching draft assets.
 - The publish job accepts matching already-published packages through
   `--skip-duplicate`, then verifies their signed content. A conflicting public
   package or immutable Release asset fails closed.
@@ -155,6 +161,12 @@ but the workflow's bounded signed-package readback must already have passed.
   digests. It uploads missing assets and never overwrites a mismatch. The
   separately verified signed tag remains the commit identity; GitHub's
   `targetCommitish` metadata is not used as a second identity.
+- GitHub generates an immutable-release attestation when the draft is
+  published, but its verification readback can lag the publish response. The
+  job retries the complete Release-and-asset verification set up to 30 times
+  at ten-second intervals. Exhaustion leaves the run red and requires a
+  same-job retry; it does not invalidate matching public NuGet bytes or permit
+  verification to be skipped.
 - If qualification artifacts expired or the original run can no longer be
   rerun, stop for maintainer recovery. Do not rebuild under the same tag.
 
@@ -166,6 +178,8 @@ package.
 
 - [GitHub environments and required reviewers](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments), retrieved 2026-08-26.
 - [GitHub artifact attestations](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/use-artifact-attestations), retrieved 2026-08-26.
+- [GitHub immutable Releases](https://docs.github.com/en/enterprise-cloud@latest/code-security/concepts/supply-chain-security/immutable-releases), retrieved 2026-08-29.
+- [GitHub REST release inventory](https://docs.github.com/en/rest/releases/releases?apiVersion=2022-11-28#list-releases), retrieved 2026-08-29.
 - [GitHub immutable Releases and `gh release create`](https://cli.github.com/manual/gh_release_create), retrieved 2026-08-26.
 - [GitHub Release asset upload](https://cli.github.com/manual/gh_release_upload), retrieved 2026-08-26.
 - [GitHub Release verification](https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/secure-your-dependencies/verify-release-integrity), retrieved 2026-08-26.

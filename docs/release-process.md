@@ -62,29 +62,41 @@ same-run recovery. Completion requires downloading each public primary package,
 verifying its NuGet repository signature, and comparing every archive entry
 with the qualified package after excluding only NuGet's `.signature.p7s`.
 
-The GitHub Release starts as a draft. On a same-run retry, matching uploaded
-assets are retained and missing assets are added; any unexpected name or
-SHA-256 digest fails closed. Only the exact six qualified package files,
-`SHA256SUMS`, and `manifest.spdx.json` are published. The workflow then uses
-GitHub's immutable-release and release-asset verification instead of a
-repository-owned Release reconciliation engine. Prereleases are not marked
-latest; stable releases are. The signed tag is the commit identity;
-`targetCommitish` is not treated as one after the tag already exists.
+Before the NuGet credential is requested, the GitHub Release starts as a draft
+with the expected title, Changelog-derived notes, classification, exact six
+qualified package files, `SHA256SUMS`, and `manifest.spdx.json`. On a same-run
+retry, matching uploaded assets are retained and missing assets are added; any
+metadata, unexpected name, or SHA-256 digest conflict fails closed. Draft
+discovery uses the authenticated, paginated Release inventory because GitHub's
+tag endpoint returns published Releases only. The complete draft is read back
+before the first NuGet push.
+
+After signed NuGet content has been read back, the workflow publishes the
+verified draft. It then waits for the published immutable state and GitHub's
+automatically generated Release and asset attestations with a bounded retry
+window. Prereleases are not marked latest; stable releases are. The signed tag
+is the commit identity; `targetCommitish` is not treated as one after the tag
+already exists.
 
 ## Recovery semantics
 
 NuGet cannot publish three package IDs atomically. A network failure can occur
 after one or more uploads are accepted. The supported recovery is rerunning the
 failed `publish` job in the original run. Duplicate pushes are tolerated, but
-signed public content and a resumed GitHub Release draft must still match
-exactly. Missing draft assets can be uploaded; conflicting assets are never
-overwritten. A conflict is terminal. Tags and published versions are never
-moved, replaced, or reused.
+signed public content and the staged or immutable GitHub Release must still
+match exactly. Missing draft assets can be uploaded; conflicting assets are
+never overwritten. A conflict is terminal. A timeout while waiting for the
+platform-generated Release attestation is retryable only through the same
+failed job; it never authorizes ignoring verification. Tags and published
+versions are never moved, replaced, or reused.
 
 ## Evidence boundary
 
 Actions logs, retained qualification artifacts, GitHub attestations, the
 authorized tag, NuGet repository signatures, and immutable Release assets are
-the evidence. The repository does not maintain a second event-sourced release
-state machine or tests that copy GitHub API fixtures. Hosted configuration and
-an actual successful RC remain necessary evidence before a stable release.
+the evidence. The focused reconciliation script has no persisted release state;
+it reads GitHub's current draft or immutable state on every invocation and has
+command-contract tests for positive, conflict, retry, and timeout paths. The
+repository does not maintain a second event-sourced release database. Hosted
+configuration and an actual successful RC remain necessary evidence before a
+stable release.

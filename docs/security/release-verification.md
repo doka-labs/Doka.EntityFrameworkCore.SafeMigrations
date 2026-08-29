@@ -38,6 +38,12 @@ gh release download "$release_tag" --repo "$release_repo" \
   --dir "$verification_dir"
 ```
 
+GitHub creates the immutable-release attestation during publication. Its API
+readback can become visible after the publish response, so the repository
+publication workflow uses a bounded retry. An independent verifier may repeat
+the same command for the same immutable tag; never treat a missing attestation
+as success or disable verification.
+
 Require exactly three `.nupkg`, three `.snupkg`, `SHA256SUMS`, and
 `manifest.spdx.json`. Then verify each downloaded asset against the immutable
 Release:
@@ -109,6 +115,7 @@ symbol validation. Do not weaken a verification option to make a release pass.
 
 - [GitHub release asset verification](https://cli.github.com/manual/gh_release_verify-asset), retrieved 2026-08-26.
 - [GitHub immutable Release verification](https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/secure-your-dependencies/verify-release-integrity), retrieved 2026-08-26.
+- [GitHub immutable Releases](https://docs.github.com/en/enterprise-cloud@latest/code-security/concepts/supply-chain-security/immutable-releases), retrieved 2026-08-29.
 - [GitHub attestation verification](https://cli.github.com/manual/gh_attestation_verify), retrieved 2026-08-26.
 - [`dotnet nuget verify`](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-nuget-verify), retrieved 2026-08-26.
 - [NuGet signed-package verification](https://learn.microsoft.com/en-us/dotnet/core/tools/nuget-signed-package-verification), retrieved 2026-08-26.

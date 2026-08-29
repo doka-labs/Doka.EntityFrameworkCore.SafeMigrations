@@ -6,6 +6,14 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Stage and verify the complete GitHub Release draft before requesting a NuGet
+  credential or pushing the first package. Immutable Release and asset
+  attestation readback now uses bounded retries, so GitHub's asynchronous
+  attestation availability cannot turn an otherwise complete publication into
+  a false-negative run without first exhausting the explicit recovery window.
+
 ## [10.0.0-rc.2] - 2026-08-29
 
 Prepared second feature-complete release candidate of the SafeMigrations
