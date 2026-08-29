@@ -110,9 +110,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             return false;
         }
 
-        // Doka 10.1.1 emits the storage-format annotation together with the
-        // effective store type. Requiring both prevents a hand-authored,
-        // contradictory annotation from bypassing catalog-shape validation.
+        // Doka emits the storage-format annotation together with the effective
+        // store type. Requiring both prevents a hand-authored, contradictory
+        // annotation from bypassing catalog-shape validation.
         return value switch
         {
             DokaMySqlGuidFormat.Binary16 => StringComparer.OrdinalIgnoreCase.Equals(

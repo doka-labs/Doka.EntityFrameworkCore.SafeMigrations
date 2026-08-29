@@ -44,9 +44,9 @@ publication workflow uses a bounded retry. An independent verifier may repeat
 the same command for the same immutable tag; never treat a missing attestation
 as success or disable verification.
 
-Require exactly three `.nupkg`, three `.snupkg`, `SHA256SUMS`, and
-`manifest.spdx.json`. Then verify each downloaded asset against the immutable
-Release:
+Require exactly three `.nupkg`, three `.snupkg`, `SHA256SUMS`,
+`manifest.spdx.json`, and `release-provenance.intoto.jsonl`. Then verify each
+downloaded asset against the immutable Release:
 
 ```bash
 for asset in "$verification_dir"/*; do
@@ -63,24 +63,61 @@ sha256sum --check SHA256SUMS
 
 On macOS, use `shasum -a 256 --check SHA256SUMS` instead.
 
-## Verify build provenance and SBOM attestations
+## Verify portable build provenance
 
-For every downloaded package and the SBOM, run from a GitHub CLI version with
-attestation support:
+The portable bundle must bind the six packages, `SHA256SUMS`, and the SPDX
+manifest. Verify each subject while pinning the repository, signer workflow,
+workflow commit, source ref, source commit, and hosted-runner requirement:
 
 ```bash
-artifact='/absolute/path/to/downloaded-asset'
-gh attestation verify "$artifact" \
-  --repo "$release_repo" \
-  --signer-workflow "$release_repo/.github/workflows/release-candidate.yml" \
-  --source-ref refs/heads/main \
-  --source-digest "$expected_commit" \
-  --deny-self-hosted-runners
+provenance_bundle="$verification_dir/release-provenance.intoto.jsonl"
+
+for artifact in \
+  "$verification_dir"/*.nupkg \
+  "$verification_dir"/*.snupkg \
+  "$verification_dir/SHA256SUMS" \
+  "$verification_dir/manifest.spdx.json"; do
+  gh attestation verify "$artifact" \
+    --bundle "$provenance_bundle" \
+    --repo "$release_repo" \
+    --signer-workflow "$release_repo/.github/workflows/release-candidate.yml" \
+    --signer-digest "$expected_commit" \
+    --source-ref refs/heads/main \
+    --source-digest "$expected_commit" \
+    --deny-self-hosted-runners
+done
 ```
 
-The default predicate verifies build provenance. For each package's SBOM
-attestation, repeat with
-`--predicate-type https://spdx.dev/Document/v2.2`.
+`--repo` alone is insufficient because it would accept another authorized
+workflow in the same repository. The additional signer and source constraints
+bind the bundle to the reviewed release workflow and signed commit. The bundle
+is portable, but an independently protected trusted root is still required for
+fully offline verification; obtain it separately with
+`gh attestation trusted-root` and provide it through `--custom-trusted-root`.
+
+The repository validator intentionally accepts only
+`application/vnd.dev.sigstore.bundle.v0.3+json`, the exact media type emitted
+by the pinned `actions/attest` producer. The Sigstore bundle schema also
+requires clients to understand older parameterized media types. This release
+gate is deliberately narrower: a producer-format change fails closed and
+requires an explicit review instead of silently broadening accepted evidence.
+
+For each package's separately published SBOM attestation, repeat the online
+verification without `--bundle` and select the SPDX predicate while retaining
+every signer and source constraint:
+
+```bash
+for artifact in "$verification_dir"/*.nupkg "$verification_dir"/*.snupkg; do
+  gh attestation verify "$artifact" \
+    --repo "$release_repo" \
+    --signer-workflow "$release_repo/.github/workflows/release-candidate.yml" \
+    --signer-digest "$expected_commit" \
+    --source-ref refs/heads/main \
+    --source-digest "$expected_commit" \
+    --predicate-type https://spdx.dev/Document/v2.2 \
+    --deny-self-hosted-runners
+done
+```
 
 ## Verify NuGet repository signatures and content
 
@@ -117,6 +154,10 @@ symbol validation. Do not weaken a verification option to make a release pass.
 - [GitHub immutable Release verification](https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/secure-your-dependencies/verify-release-integrity), retrieved 2026-08-26.
 - [GitHub immutable Releases](https://docs.github.com/en/enterprise-cloud@latest/code-security/concepts/supply-chain-security/immutable-releases), retrieved 2026-08-29.
 - [GitHub attestation verification](https://cli.github.com/manual/gh_attestation_verify), retrieved 2026-08-26.
+- [GitHub offline attestation verification](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/verify-attestations-offline), retrieved 2026-08-29.
+- [`actions/attest` bundle output](https://github.com/actions/attest#outputs), retrieved 2026-08-29.
+- [Sigstore bundle media-type contract](https://github.com/sigstore/protobuf-specs/blob/main/protos/sigstore_bundle.proto), retrieved 2026-08-30.
+- [OpenSSF Signed-Releases check](https://github.com/ossf/scorecard/blob/main/docs/checks.md#signed-releases), retrieved 2026-08-29.
 - [`dotnet nuget verify`](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-nuget-verify), retrieved 2026-08-26.
 - [NuGet signed-package verification](https://learn.microsoft.com/en-us/dotnet/core/tools/nuget-signed-package-verification), retrieved 2026-08-26.
 - [NuGet symbol package validation](https://learn.microsoft.com/en-us/nuget/create-packages/symbol-packages-snupkg), retrieved 2026-08-26.

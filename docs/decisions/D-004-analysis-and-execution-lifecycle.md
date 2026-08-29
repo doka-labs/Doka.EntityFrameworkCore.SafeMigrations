@@ -215,4 +215,4 @@ installations.
 - [MySQL 8.4 implicit-commit statements](https://dev.mysql.com/doc/refman/8.4/en/implicit-commit.html) (primary source; retrieved 2026-08-26)
 - [MariaDB implicit-commit statements](https://mariadb.com/docs/server/reference/sql-statements/transactions/sql-statements-that-cause-an-implicit-commit) (primary source; retrieved 2026-08-26)
 - [PostgreSQL 18 transaction isolation](https://www.postgresql.org/docs/18/transaction-iso.html) (primary source; retrieved 2026-08-26)
-- [Doka 10.1.1 scoped-command cleanup contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.1/docs/migration-operation-handlers.md) (primary source; retrieved 2026-08-29)
+- [Doka 10.1.2 scoped-command cleanup contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.2/docs/migration-operation-handlers.md) (primary source; retrieved 2026-08-30)

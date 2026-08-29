@@ -29,6 +29,8 @@ without a repository-owned release orchestration framework.
 - Complete reversible qualification must precede the release tag.
 - One protected job must own all irreversible writes.
 - Publication must use qualified bytes without rebuilding.
+- Consumers must receive portable, cryptographically verifiable provenance for
+  every immutable Release asset selected as a build subject.
 - Credentials must be short-lived and scoped to the exact workflow/environment.
 - Partial multi-package publication must have a fail-closed recovery path.
 - GitHub, Git, .NET, and NuGet platform contracts should replace duplicated
@@ -50,7 +52,9 @@ The operator dispatches `release-candidate.yml` from `main` with a version.
 Preflight validates the source release line, changelog, current SHA, tag
 absence, and unused NuGet identities. The shared quality workflow performs all
 build, test, provider, tooling, coverage, performance, package, consumer, and
-SBOM gates. GitHub attests those exact artifacts.
+SBOM gates. GitHub attests those exact artifacts. The attestation job validates
+the resulting Sigstore bundle and retains it as the canonical single-record
+`release-provenance.intoto.jsonl` workflow artifact.
 
 The only write-capable job waits at environment `nuget`. After the operator
 creates the authorized signed annotated tag on the qualified SHA and approves
@@ -60,19 +64,23 @@ push` publishes the primary and symbol packages. Public primary packages must
 then have valid NuGet repository signatures and match every qualified archive
 entry except NuGet's added `.signature.p7s`.
 
-Before requesting the NuGet credential, the job creates a GitHub Release draft
-with the expected title, Changelog-derived notes, classification, exact six
-package files, `SHA256SUMS`, and the SPDX manifest. A retry retains
-digest-matching assets, uploads missing assets, and rejects every mismatch.
-Only a completely read-back draft permits the first NuGet push.
+Before requesting the NuGet credential, the protected job downloads the exact
+same-run provenance artifact, validates its SLSA v1 envelope and complete
+eight-subject name/digest inventory, and verifies every subject with
+`gh attestation verify --bundle` pinned to the repository, release workflow,
+workflow commit, source ref, source commit, and hosted-runner boundary. It then
+creates a GitHub Release draft with the expected title, Changelog-derived
+notes, classification, exact six package files, `SHA256SUMS`, the SPDX
+manifest, and `release-provenance.intoto.jsonl`. A retry retains digest-matching
+assets, uploads missing assets, and rejects every mismatch. Only a completely
+read-back nine-asset draft permits the first NuGet push.
 
 After signed public NuGet content matches the qualified packages, the job
 publishes the draft. GitHub's immutable-release and release-asset verification
 then supply the release association and digest checks. Because GitHub generates
 the Release attestation asynchronously, verification uses a bounded readback
 window and fails closed after exhaustion. The focused adapter persists no
-parallel release state and does not transport attestation bundles or parse the
-symbol server.
+parallel release state and does not parse the symbol server.
 
 ### Consequences
 
@@ -84,6 +92,8 @@ symbol server.
   draft without overwriting conflicting public evidence.
 - Good, because the complete Release draft exists before the first irreversible
   NuGet write and attestation visibility is handled as a bounded readback.
+- Good, because consumers can verify the exact SLSA provenance bundle shipped
+  inside the immutable Release instead of depending only on GitHub API state.
 - Good, because the engineering surface is smaller and has fewer contracts
   that can disagree with GitHub or NuGet.
 - Bad, because three NuGet package IDs cannot be published atomically.
@@ -96,16 +106,18 @@ symbol server.
 
 ### Confirmation
 
-Require local shell syntax checks, GitHub Release reconciliation
-positive/negative cases, version-validator positive/negative cases,
-locked restore, format, Release build, all test suites, coverage thresholds,
-performance budgets, deterministic package qualification, package-only
-consumers, SBOM validation, and every supported live provider/tooling cell.
+Require local shell syntax checks, portable-provenance and GitHub Release
+reconciliation positive/negative cases, version-validator positive/negative
+cases, locked restore, format, Release build, all test suites, coverage
+thresholds, performance budgets, deterministic package qualification,
+package-only consumers, SBOM validation, and every supported live
+provider/tooling cell.
 
 The first actual RC must additionally prove the hosted protected wait, OIDC
 exchange, authorized tag verification, public signed-package readback,
-successful symbol validation, exact immutable Release assets, and artifact
-attestations. Local fixtures do not substitute for that hosted evidence.
+successful symbol validation, exact immutable Release assets, portable
+provenance readback, and artifact attestations. Local fixtures do not substitute
+for that hosted evidence.
 
 ## Pros and Cons of the Options
 
@@ -155,6 +167,10 @@ owns independent consumer readback.
 - 2026-08-29: The rc.2 run exposed delayed immutable-release attestation
   visibility after NuGet and GitHub publication. Draft staging now precedes the
   first NuGet write, and Release plus asset verification uses bounded retry.
+- 2026-08-29: Review of the published 10.0.0 line exposed that API-hosted
+  attestations were not retained as a portable Release asset. Future releases
+  now publish and independently verify the exact `actions/attest` Sigstore
+  bundle as `release-provenance.intoto.jsonl` before requesting NuGet OIDC.
 
 ### Implementation References
 
@@ -163,6 +179,7 @@ owns independent consumer readback.
 - [Version validation](../../eng/validate-release-version.sh)
 - [Package qualification](../../eng/qualify-packages.sh)
 - [NuGet readback](../../eng/readback-nuget.sh)
+- [Portable provenance](../../eng/release-provenance.sh)
 - [GitHub Release reconciliation](../../eng/reconcile-github-release.sh)
 - [Allowed signers](../../eng/release/allowed-signers)
 - [Publication operations](../operations/release-publication.md)
@@ -171,8 +188,11 @@ owns independent consumer readback.
 
 - [GitHub deployments and environments](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments) (primary source; retrieved 2026-08-26)
 - [GitHub artifact attestations](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/use-artifact-attestations) (primary source; retrieved 2026-08-26)
+- [`actions/attest` bundle output](https://github.com/actions/attest#outputs) (primary source; retrieved 2026-08-29)
+- [GitHub offline attestation verification](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/verify-attestations-offline) (primary source; retrieved 2026-08-29)
 - [GitHub immutable Releases](https://cli.github.com/manual/gh_release_create) (primary source; retrieved 2026-08-26)
 - [GitHub immutable Release concepts](https://docs.github.com/en/enterprise-cloud@latest/code-security/concepts/supply-chain-security/immutable-releases) (primary source; retrieved 2026-08-29)
 - [GitHub REST release inventory](https://docs.github.com/en/rest/releases/releases?apiVersion=2022-11-28#list-releases) (primary source; retrieved 2026-08-29)
+- [OpenSSF Signed-Releases check](https://github.com/ossf/scorecard/blob/main/docs/checks.md#signed-releases) (primary source; retrieved 2026-08-29)
 - [NuGet Trusted Publishing](https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing) (primary source; retrieved 2026-08-26)
 - [`dotnet nuget push`](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-nuget-push) (primary source; retrieved 2026-08-26)

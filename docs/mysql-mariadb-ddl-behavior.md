@@ -70,7 +70,7 @@ index names from that model so a completed strict batch remains idempotent.
 When neither batch nor target-model evidence is available, the alias is not
 accepted.
 
-Every safe operation returns exactly one Doka 10.1.1 scoped migration command.
+Every safe operation returns exactly one Doka 10.1.2 scoped migration command.
 Its bounded fragment list contains ordered setup, one body, and reverse-order
 cleanup. A data-reading classifier adds setup fragments for lazy state
 evaluation without adding EF command boundaries. This shape reduces executor
@@ -98,7 +98,7 @@ prepared classifier reads column data only after a catalog-only guard has
 proved that the target exists. Missing safe additions remain `Missing`; an
 unsafe missing `NOT NULL` addition to a populated table remains `DataBlocked`.
 
-## Scoped cleanup in Doka 10.1.1
+## Scoped cleanup in Doka 10.1.2
 
 `RenderStandardOperation` exposes provider-validated `Setup`, `Body`, and
 `Cleanup` fragments. SafeMigrations embeds the exact body as UTF-8 hexadecimal

@@ -362,7 +362,7 @@ hand-authored definition inputs. Use `ConvergeTableFromModel` when those facets
 must come from provider scaffolding; do not manually translate generated EF
 table source into expected-definition constructors.
 
-Doka 10.1.1 may attach `ClientGuid` to a scaffolded application-converted Guid
+Doka 10.1.2 may attach `ClientGuid` to a scaffolded application-converted Guid
 key. SafeMigrations preserves it but compares the column as non-
 `AUTO_INCREMENT`, so both strict and legacy-convergence preflight can apply a
 missing relationship graph and recognize its idempotent replay. HiLo and

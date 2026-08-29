@@ -146,7 +146,7 @@ override the externally reported Passing result.
 | `crypto_password_storage` | MUST | Assess | No inbound user-authentication/password store | Distinguish outgoing DB credentials; justify applicability in the form | M |
 | `crypto_random` | MUST | Assess | No product secret/key generation API | Inspect any security-sensitive randomness in dependencies/tooling before answering | C |
 | `delivery_mitm` | MUST | Prepared | HTTPS sources, [Verification](security/release-verification.md) | Public download/signature/provenance verification | R |
-| `delivery_unsigned` | MUST | Prepared | Checksums plus signed identity/attestations | Confirm no HTTP-only hash trust path | R |
+| `delivery_unsigned` | MUST | Prepared | Checksums, signed identity, and [portable provenance](security/release-verification.md) | Confirm the immutable Release contains and cryptographically verifies `release-provenance.intoto.jsonl`; no HTTP-only hash trust path | R |
 | `vulnerabilities_fixed_60_days` | MUST | Evidence | [Development](security/secure-development.md) advisory dates | Current public vulnerability inventory and actual patched release dates | M |
 | `vulnerabilities_critical_fixed` | SHOULD | Evidence | Private escalation process | Demonstrate prompt critical-fix handling, not a generic 90-day target | M |
 | `no_leaked_credentials` | MUST | Evidence | Secret scanning and push protection are enabled; [Development](security/secure-development.md) defines handling | Review current reachable history/tree results plus triage and revocation if needed | M |

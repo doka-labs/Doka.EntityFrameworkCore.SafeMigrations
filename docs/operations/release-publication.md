@@ -75,7 +75,8 @@ green:
 
 1. `Validate untagged candidate`;
 2. every job below `Full reversible qualification`; and
-3. `Attest qualified packages`.
+3. `Attest qualified packages`, including portable SLSA provenance
+   materialization and artifact upload.
 
 The final `Verify tag and publish` job must show **Waiting** for approval on
 environment `nuget`. Confirm that the run SHA equals `release_commit`. Do not
@@ -109,15 +110,18 @@ environment `nuget`. The job then:
 1. verifies the tag is annotated, identifies the qualified SHA, and has an
    authorized SSH signature;
 2. verifies the downloaded package checksums and package contract again;
-3. creates or resumes a metadata-matching GitHub Release draft, uploads the
-   exact eight qualified assets, and verifies every asset name and SHA-256
+3. validates the portable Sigstore envelope, SLSA v1 predicate, and exact
+   eight-subject inventory, then cryptographically verifies every subject
+   against the release workflow and qualified commit;
+4. creates or resumes a metadata-matching GitHub Release draft, uploads the
+   exact nine release assets, and verifies every asset name and SHA-256
    digest;
-4. obtains a short-lived NuGet key through Trusted Publishing only after the
+5. obtains a short-lived NuGet key through Trusted Publishing only after the
    complete draft has been read back;
-5. publishes the three primary and three symbol packages;
-6. reads all primary packages back from NuGet.org, verifies their repository
+6. publishes the three primary and three symbol packages;
+7. reads all primary packages back from NuGet.org, verifies their repository
    signatures, and compares their content with the qualified packages; and
-7. publishes the prepared draft and waits for the immutable Release plus every
+8. publishes the prepared draft and waits for the immutable Release plus every
    Release-asset attestation through a bounded five-minute readback window.
 
 No package is rebuilt after qualification. Duplicate-tolerant pushes support a
@@ -139,7 +143,14 @@ correct prerelease state, and contain exactly:
 - three `.nupkg` files;
 - three `.snupkg` files;
 - `SHA256SUMS`; and
-- `manifest.spdx.json`.
+- `manifest.spdx.json`; and
+- `release-provenance.intoto.jsonl`.
+
+Download the Release into an empty directory and verify every selected subject
+against the portable bundle using the exact repository, signer-workflow,
+signer-digest, source-ref, source-digest, and hosted-runner restrictions in
+[Release verification](../security/release-verification.md). A matching
+filename without successful cryptographic verification is not evidence.
 
 Confirm all three package pages and symbol validation status on NuGet.org.
 Indexing can lag after the upload; a pending package is not a failed upload,
@@ -153,6 +164,10 @@ but the workflow's bounded signed-package readback must already have passed.
   the failed publication job in the same workflow run.
 - If draft staging fails, no NuGet credential has been requested and no package
   has been pushed. The same job may resume only matching draft assets.
+- Missing, malformed, ambiguous, or cryptographically invalid portable
+  provenance fails before draft creation and NuGet credential exchange. Rerun
+  the failed job only after the reviewed workflow or source correction; never
+  fabricate or manually attach a replacement bundle.
 - The publish job accepts matching already-published packages through
   `--skip-duplicate`, then verifies their signed content. A conflicting public
   package or immutable Release asset fails closed.
@@ -178,6 +193,9 @@ package.
 
 - [GitHub environments and required reviewers](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments), retrieved 2026-08-26.
 - [GitHub artifact attestations](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/use-artifact-attestations), retrieved 2026-08-26.
+- [`actions/attest` bundle output](https://github.com/actions/attest#outputs), retrieved 2026-08-29.
+- [GitHub offline attestation verification](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/verify-attestations-offline), retrieved 2026-08-29.
+- [OpenSSF Signed-Releases check](https://github.com/ossf/scorecard/blob/main/docs/checks.md#signed-releases), retrieved 2026-08-29.
 - [GitHub immutable Releases](https://docs.github.com/en/enterprise-cloud@latest/code-security/concepts/supply-chain-security/immutable-releases), retrieved 2026-08-29.
 - [GitHub REST release inventory](https://docs.github.com/en/rest/releases/releases?apiVersion=2022-11-28#list-releases), retrieved 2026-08-29.
 - [GitHub immutable Releases and `gh release create`](https://cli.github.com/manual/gh_release_create), retrieved 2026-08-26.

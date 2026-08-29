@@ -8,19 +8,23 @@ with roll-forward disabled. SafeMigrations supports EF Core 10 only.
 | Package | Runtime dependency contract |
 | --- | --- |
 | Core | `Microsoft.EntityFrameworkCore.Relational` `[10.0.11,10.1.0)` |
-| MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` exact `[10.1.1]` |
+| MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` `[10.1.2,10.2.0)` |
 | PostgreSQL | `Npgsql.EntityFrameworkCore.PostgreSQL` `[10.0.3,11.0.0)` |
 
-The MySQL/MariaDB package resolves the exact stable Doka 10.1.1 package. CI
-does not build Doka and never uses a cross-repository ProjectReference. A Doka
-update is accepted only after the complete package, engine, tooling, coverage,
-and performance matrix passes again.
+The MySQL/MariaDB package requires Doka 10.1.2 or a compatible later 10.1 patch
+release and rejects the next minor line. This boundary avoids an exact
+transitive pin without claiming compatibility across an unqualified behavioral
+SPI revision. The committed lockfiles and CI resolve the exact stable Doka
+10.1.2 package. CI does not build Doka and never uses a cross-repository
+ProjectReference. A lockfile update is accepted only after the complete
+package, engine, tooling, coverage, and performance matrix passes again.
 
-The Doka 10.1.1 registration was rechecked against the NuGet V3 package
-registration on 2026-08-29. The remaining declared dependency graph and .NET
-10 release metadata were rechecked on 2026-08-27. Bounded package ranges
-describe compatibility; the committed lockfiles identify the exact graph
-selected by a particular revision.
+The Doka 10.1.2 package metadata and unchanged migration-operation handler SPI
+were rechecked against the published package and tagged source on 2026-08-30.
+The remaining declared dependency graph and .NET 10 release metadata were
+rechecked on 2026-08-27. Bounded package ranges describe compatibility; the
+committed lockfiles identify the exact graph selected by a particular
+revision.
 
 ## Engine matrix
 
@@ -153,10 +157,10 @@ cases stop before target DDL instead of being compared or applied heuristically:
 
 - PostgreSQL 14 rejects `NULLS NOT DISTINCT`; PostgreSQL introduced that
   `CREATE INDEX` clause in version 15.
-- Doka 10.1.1 parenthesizes `DateOnly` and `TimeOnly` typed literals in column
+- Doka 10.1.2 parenthesizes `DateOnly` and `TimeOnly` typed literals in column
   defaults. The complete MySQL and MariaDB matrix qualifies the resulting DDL
   and each engine's catalog display form.
-- Doka 10.1.1 emits `ClientGuid` for client-generated Guid keys, including
+- Doka 10.1.2 emits `ClientGuid` for client-generated Guid keys, including
   application-converted relationship chains. SafeMigrations retains that
   annotation in operation identity and provider replay while comparing its
   live column as non-`AUTO_INCREMENT`. HiLo and unknown column annotations
@@ -259,13 +263,15 @@ against the platform-specific release digest before execution. The generated
 SPDX 2.2 manifest must validate all six packages plus the checksum file and
 contain the required resolved package graph.
 
-Every release candidate and stable release adds GitHub/Sigstore build
-provenance and SBOM attestations, NuGet Trusted Publishing, NuGet
-repository-signature verification, and a content readback that differs from
-the qualified package only by NuGet's `.signature.p7s` entry. Publication
-uses the protected environment to obtain a short-lived NuGet credential, then
-creates or verifies the exact immutable GitHub Release through GitHub's native
-release-asset verification.
+Every future release adds GitHub/Sigstore build provenance and SBOM
+attestations, a portable `release-provenance.intoto.jsonl` asset, NuGet Trusted
+Publishing, NuGet repository-signature verification, and a content readback
+that differs from the qualified package only by NuGet's `.signature.p7s`
+entry. Publication validates the exact SLSA subject inventory and verifies the
+portable bundle against the release workflow and qualified commit before the
+protected environment obtains a short-lived NuGet credential. The final
+nine-asset immutable GitHub Release is then covered by GitHub's native Release
+and release-asset verification.
 
 ## Primary references
 
@@ -274,10 +280,11 @@ release-asset verification.
 - [EF Core Relational 10.0.11 package](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.Relational/10.0.11)
   and [Npgsql EF Core 10.0.3 package](https://www.nuget.org/packages/Npgsql.EntityFrameworkCore.PostgreSQL/10.0.3),
   retrieved 2026-08-27.
-- [Doka 10.1.1 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.1.1),
-  [value-generation strategies](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.1/src/Doka.EntityFrameworkCore.MySql/MySqlValueGenerationStrategy.cs),
-  and [migration-operation handler contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.1/docs/migration-operation-handlers.md),
-  retrieved 2026-08-29.
+- [Doka 10.1.2 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.1.2),
+  [release notes](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.2/CHANGELOG.md),
+  [value-generation strategies](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.2/src/Doka.EntityFrameworkCore.MySql/MySqlValueGenerationStrategy.cs),
+  and [migration-operation handler contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.2/docs/migration-operation-handlers.md),
+  retrieved 2026-08-30.
 - [EF Core generated values](https://learn.microsoft.com/en-us/ef/core/modeling/generated-properties),
   retrieved 2026-08-29.
 - [PostgreSQL versioning policy](https://www.postgresql.org/support/versioning/)

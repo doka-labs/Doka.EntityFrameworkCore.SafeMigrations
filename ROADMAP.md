@@ -5,11 +5,11 @@ intended work and explicit non-goals, not promised publication dates.
 
 ## One complete delivery
 
-The complete release line is **10.0.0**, aligned with .NET 10, EF Core 10, and
-Doka 10. The three published release candidates qualified successive revisions
-of that same complete contract and the publication workflow. They are not
-reduced feature releases or a plan to move unfinished functionality into a
-later version.
+The initial complete stable delivery is **10.0.0**, aligned with .NET 10,
+EF Core 10, and Doka 10. The three published release candidates qualified
+successive revisions of that same complete contract and the publication
+workflow. They were not reduced feature releases or a plan to move unfinished
+functionality into a later version.
 
 - Prepare the repository for public contribution and auditable maintenance.
 - Qualify all three packages together: Core, MySQL/MariaDB, and PostgreSQL.
@@ -18,8 +18,8 @@ later version.
 - Validate heterogeneous legacy convergence, runtime/history semantics,
   provider-specific failure paths, and operational recovery over the full
   [qualification matrix](docs/support-and-qualification.md).
-- Promote the verified rc.3 contract to stable 10.0.0 without a feature delta,
-  and qualify the exact stable package bytes independently before publication.
+- The verified rc.3 contract was promoted to stable 10.0.0 without a feature
+  delta, and the exact stable package bytes were independently qualified.
 
 Prepared release notes and workflow files do not prove a package is published.
 The actual [release record](https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/releases)
@@ -31,6 +31,11 @@ After the complete delivery, respond to defects, security reports, supported
 dependency updates, and changed external conditions. A confirmed defect is a
 changed condition requiring assessment; an incomplete initial feature is not
 a maintenance strategy. There is no scheduled second feature version.
+
+The current maintenance source prepares 10.0.1 in response to such changed
+conditions: Doka 10.1.2 supplies a compatible provider fix, and portable
+release provenance closes an observed publication-assurance gap. Neither item
+introduces a new SafeMigrations feature line.
 
 Requalify affected behavior before adopting a provider, EF Core, database,
 SDK, action, or tooling update. Preserve public API, report, migration, data
