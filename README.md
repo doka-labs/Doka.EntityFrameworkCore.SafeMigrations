@@ -1,9 +1,9 @@
 # Doka.EntityFrameworkCore.SafeMigrations
 
 [![CI](https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/actions/workflows/ci.yml/badge.svg?event=pull_request)](https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/actions/workflows/ci.yml)
-[![NuGet Core](https://img.shields.io/nuget/vpre/Doka.EntityFrameworkCore.SafeMigrations.svg?label=NuGet%20Core)](https://www.nuget.org/packages/Doka.EntityFrameworkCore.SafeMigrations)
-[![NuGet MySQL / MariaDB](https://img.shields.io/nuget/vpre/Doka.EntityFrameworkCore.SafeMigrations.MySql.svg?label=NuGet%20MySQL%20%2F%20MariaDB)](https://www.nuget.org/packages/Doka.EntityFrameworkCore.SafeMigrations.MySql)
-[![NuGet PostgreSQL](https://img.shields.io/nuget/vpre/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.svg?label=NuGet%20PostgreSQL)](https://www.nuget.org/packages/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql)
+[![NuGet Core](https://img.shields.io/nuget/v/Doka.EntityFrameworkCore.SafeMigrations.svg?label=NuGet%20Core)](https://www.nuget.org/packages/Doka.EntityFrameworkCore.SafeMigrations)
+[![NuGet MySQL / MariaDB](https://img.shields.io/nuget/v/Doka.EntityFrameworkCore.SafeMigrations.MySql.svg?label=NuGet%20MySQL%20%2F%20MariaDB)](https://www.nuget.org/packages/Doka.EntityFrameworkCore.SafeMigrations.MySql)
+[![NuGet PostgreSQL](https://img.shields.io/nuget/v/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.svg?label=NuGet%20PostgreSQL)](https://www.nuget.org/packages/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/badge)](https://scorecard.dev/viewer/?uri=github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/14265/badge)](https://www.bestpractices.dev/projects/14265)
@@ -41,33 +41,33 @@ The CI and release workflows pin the exact patch tags and image digests used
 when that matrix executes. The exact successful run, not this table, is release
 evidence. See [Support and qualification](docs/support-and-qualification.md).
 
-The first complete delivery targets 10.0.0. The published `10.0.0-rc.1` and
-`10.0.0-rc.2` candidates qualified successive revisions of that feature
-contract. The source tree prepares `10.0.0-rc.3` with exact native Doka 10.1.1
-Guid-format analysis, ordered mixed-migration preflight, and retry-safe GitHub
-Release reconciliation. Existing rc.2 migration source and the public API
-remain compatible, while strict scaffolding stays the default. [Release
-notes](CHANGELOG.md) distinguish published candidates from prepared source. The
-badges include prereleases, but only a successful release run and verified
-public packages establish availability or qualification.
+The complete stable delivery is 10.0.0. The published `10.0.0-rc.1`,
+`10.0.0-rc.2`, and `10.0.0-rc.3` releases qualified successive revisions of
+that feature contract. The 10.0.0 source promotes the exact rc.3 public API,
+generated migration-source compatibility, SQL behavior, report contracts, and
+strict-by-default scaffolding without a feature or runtime-behavior delta. The
+stable package is nevertheless rebuilt and independently qualified at its own
+version; an RC archive is never renamed or reused. [Release notes](CHANGELOG.md)
+distinguish published releases from prepared source. Only a successful release
+run and verified public packages establish availability or qualification.
 
 ## Installation
 
-Install one provider package. The core package is included transitively.
-Choose an exact version from the published release record and NuGet; replace
-the placeholder below before running either command. Release candidates need
-their complete prerelease version. Source or changelog entries alone do not
-mean that a version is available on NuGet.
+Install one provider package. The core package is included transitively. The
+commands select the first stable release exactly so restore does not move to a
+different package version implicitly. Confirm the matching published release
+and all three NuGet package pages before installation; source or changelog
+entries alone do not establish package availability.
 
 ```bash
-package_version='YOUR_APPROVED_PUBLISHED_VERSION'
+package_version='10.0.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.MySql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='YOUR_APPROVED_PUBLISHED_VERSION'
+package_version='10.0.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version "$package_version"
 ```
 

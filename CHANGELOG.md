@@ -6,6 +6,35 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+## [10.0.0] - 2026-08-29
+
+Prepared the first stable release of the complete SafeMigrations contract for
+.NET 10 and EF Core 10 across MySQL, MariaDB, and PostgreSQL. It promotes the
+exact rc.3 product contract without changing the public API, generated
+migration source, SQL behavior, report schema, migration-history semantics, or
+runtime policy.
+
+The stable version is independently rebuilt and qualified from the reviewed
+source commit. No rc.3 package archive is renamed, republished, or treated as
+evidence for the stable package bytes.
+
+These notes do not establish publication. Require the successful stable
+release run, the authorized signed `v10.0.0` tag, and verified public package,
+symbol, GitHub Release, and attestation readback before selecting 10.0.0. All
+three package IDs must be published at the exact same version.
+
+### Changed
+
+- Promote the fully qualified rc.3 contract to the first stable release line
+  while retaining strict-by-default scaffolding, source-frozen legacy
+  convergence, fail-closed planning, and the complete provider matrix.
+- Select stable NuGet badge endpoints and provide copyable exact-version
+  installation commands for all provider consumers.
+- Promote all three reviewed public API inventories from unshipped to shipped
+  baselines without changing any signature.
+- Add positive release-version coverage for the stable identity while
+  preserving every published RC as immutable release history.
+
 ## [10.0.0-rc.3] - 2026-08-29
 
 Prepared third feature-complete release candidate of the SafeMigrations
@@ -308,7 +337,8 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.0.0-rc.3...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.0.0...HEAD
+[10.0.0]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.0.0-rc.3...v10.0.0
 [10.0.0-rc.3]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.0.0-rc.2...v10.0.0-rc.3
 [10.0.0-rc.2]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.0.0-rc.1...v10.0.0-rc.2
 [10.0.0-rc.1]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/releases/tag/v10.0.0-rc.1
