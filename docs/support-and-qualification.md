@@ -196,10 +196,10 @@ used to hide an uncovered regression.
 ## Performance and memory
 
 `eng/performance-budgets.json` defines explicit Core, MySQL/MariaDB, and
-PostgreSQL benchmark sets with duration, regression tolerance,
-and allocation ceilings at 1, 100, and 1000 operations. Three independently
-restored and executed benchmark projects enforce the Core, MySQL/MariaDB, and
-PostgreSQL dependency boundaries for:
+PostgreSQL benchmark sets with duration baselines, coarse hosted-runner
+ceilings, and strict allocation ceilings at 1, 100, and 1000 operations. Three
+independently restored and executed benchmark projects enforce the Core,
+MySQL/MariaDB, and PostgreSQL dependency boundaries for:
 
 - intent construction;
 - decision planning;
@@ -208,10 +208,12 @@ PostgreSQL dependency boundaries for:
 - canonical snapshot initialization, relational model differ, and fingerprint;
 - report JSON serialization.
 
-The benchmark is a deterministic gate, not a throughput claim. Changes to a
-budget require captured before/after evidence on the same runner class and a
-review of asymptotic behavior; a budget must not be raised merely to make CI
-green.
+Allocation ceilings are deterministic blocking gates. Wall-clock measurements
+on shared GitHub-hosted runners are not deterministic, so their three-times-
+baseline ceilings only catch gross regressions and are not throughput claims.
+Changes to a baseline or ceiling require captured before/after evidence on the
+same runner class and a review of asymptotic behavior; a budget must not be
+raised merely to make CI green.
 
 The MySQL/MariaDB benchmark has no Npgsql dependency, and the PostgreSQL
 benchmark has no Doka MySQL dependency. Shared measurement and workload source

@@ -387,10 +387,12 @@ The runtime path has:
 - bounded telemetry tags without object names or connection data.
 
 The repository gates construction, planning, both provider generators, and
-report serialization at 1, 100, and 1000 operations against explicit duration
-and allocation budgets in schema-versioned Core, MySQL/MariaDB, and PostgreSQL
-sets in `eng/performance-budgets.json`; missing, duplicate, unknown, and
-orphaned measurements fail the run. It separately gates
+report serialization at 1, 100, and 1000 operations against strict allocation
+ceilings and coarse wall-clock ceilings in schema-versioned Core,
+MySQL/MariaDB, and PostgreSQL sets in `eng/performance-budgets.json`; missing,
+duplicate, unknown, and orphaned measurements fail the run. The broad duration
+ceilings account for shared hosted-runner CPU variance and only detect gross
+regressions. It separately gates
 the canonical snapshot initialization, `IMigrationsModelDiffer` comparison,
 and model fingerprint path used by the runner.
 
