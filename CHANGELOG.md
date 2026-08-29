@@ -6,6 +6,23 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+## [10.0.0-rc.2] - 2026-08-29
+
+Prepared second feature-complete release candidate of the SafeMigrations
+10.0.0 contract. It keeps strict scaffolding as the default while completing
+the reviewed legacy-convergence repair, expression-parsing, prerequisite, and
+provider-validation boundaries across MySQL, MariaDB, and PostgreSQL.
+
+Compared with rc.1, rc.2 adds source-frozen legacy-convergence policy selection
+and provider-context validation to the public contract. Existing rc.1 migration
+source remains compatible, and no existing migration is reinterpreted by the
+new configuration. The candidate updates the exact Doka dependency from
+`[10.0.0]` to `[10.1.1]` while retaining the public operation-handler SPI.
+
+These notes do not establish publication. Require the successful release run
+and verified public package and symbol readback before selecting rc.2. All three
+package IDs must be published at the exact same version.
+
 ### Added
 
 - Add source-frozen legacy-convergence policy configuration. Generated
@@ -28,9 +45,17 @@ All notable changes are documented here. The format follows
 ### Changed
 
 - Update the exact `Doka.EntityFrameworkCore.MySql` dependency and every
-  affected lockfile from `[10.1.0]` to `[10.1.1]`. The provider update repairs
-  application-owned Guid conversion across relationship chains and preserves
-  its public migration-operation handler SPI.
+  affected lockfile from rc.1's `[10.0.0]` to `[10.1.1]`. The provider update
+  adds connection-string server discovery and generic scalar `LIKE` support,
+  repairs application-owned Guid conversion across relationship chains, and
+  preserves its public migration-operation handler SPI.
+- Require the complete package, engine, EF tooling, coverage, property,
+  performance, and SBOM qualification against the published Doka 10.1.1
+  package before rc.2 publication.
+- Replace the opaque pre-tag success line and routine fetch output with named
+  branch, working-tree, source-commit, release-tag, and SSH-signing results plus
+  an explicit next-step message. Positive and negative fixture coverage keeps
+  the output and failure boundary executable.
 
 ### Fixed
 
@@ -47,7 +72,8 @@ All notable changes are documented here. The format follows
   key, check, foreign-key, computed-column, or default-expression analysis can
   issue an unsafe data probe or target DDL.
 - Project ordered legacy convergence through a newly added nullable column
-  without a non-null default so a following unique index can be analyzed and applied.
+  without a non-null default so a following unique index can be analyzed and
+  applied.
   Unknown columns, non-null defaults, computed values, and nulls-not-distinct
   contracts remain fail-closed.
 - Normalize the MySQL/MariaDB catalog alias between expected unique indexes and
@@ -55,29 +81,6 @@ All notable changes are documented here. The format follows
   unexpected-object inventory. Analysis uses the exact operation batch;
   runtime generation uses EF's target relational model. Unrelated unique keys
   still reject `StrictDefinition` and remain reported.
-
-## [10.0.0-rc.2] - 2026-08-28
-
-Second release candidate for the complete SafeMigrations 10.0.0 contract. It
-retains the rc.1 public API and migration behavior while qualifying the stable
-Doka 10.1.0 provider package and improving the local release-readiness output.
-
-These notes do not establish publication. Require the successful release run
-and verified public package and symbol readback before selecting rc.2.
-
-### Changed
-
-- Update the exact `Doka.EntityFrameworkCore.MySql` dependency from `[10.0.0]`
-  to `[10.1.0]`. Doka 10.1.0 adds connection-string server discovery and
-  generic scalar `LIKE` support while preserving the migration-operation
-  handler SPI used by SafeMigrations.
-- Refresh every affected committed lockfile and require the complete package,
-  engine, EF tooling, coverage, performance, and SBOM qualification against the
-  published Doka 10.1.0 package.
-- Replace the opaque pre-tag success line and routine fetch output with named
-  branch, working-tree, source-commit, release-tag, and SSH-signing results plus
-  an explicit next-step message. Positive and negative fixture coverage keeps
-  the output and failure boundary executable.
 
 ## [10.0.0-rc.1] - 2026-08-28
 

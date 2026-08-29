@@ -43,12 +43,13 @@ evidence. See [Support and qualification](docs/support-and-qualification.md).
 
 The first complete delivery targets 10.0.0. The published `10.0.0-rc.1`
 qualified that feature contract and the complete publication workflow. The
-unreleased source retains the same SafeMigrations API while updating its exact
-provider dependency to stable Doka 10.1.1 and closing the documented
-RelationalLab findings. [Release notes](CHANGELOG.md) distinguish published
-packages from unreleased source. The badges include prereleases, but only a
-successful release run and verified public packages establish availability or
-qualification.
+source tree prepares `10.0.0-rc.2` with source-frozen legacy repair selection,
+bounded check-constraint expression parsing, prerequisite-safe provider
+analysis, and the exact stable Doka 10.1.1 dependency. Existing rc.1 migration
+source remains compatible, while the strict scaffolding default is unchanged.
+[Release notes](CHANGELOG.md) distinguish the published candidate from the
+prepared one. The badges include prereleases, but only a successful release run
+and verified public packages establish availability or qualification.
 
 ## Installation
 

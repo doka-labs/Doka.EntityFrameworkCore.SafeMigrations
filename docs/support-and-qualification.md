@@ -16,10 +16,11 @@ does not build Doka and never uses a cross-repository ProjectReference. A Doka
 update is accepted only after the complete package, engine, tooling, coverage,
 and performance matrix passes again.
 
-The declared dependency graph was rechecked against the NuGet V3 package
-registrations and the .NET 10 release metadata on 2026-08-27. Bounded package
-ranges describe compatibility; the committed lockfiles identify the exact
-graph selected by a particular revision.
+The Doka 10.1.1 registration was rechecked against the NuGet V3 package
+registration on 2026-08-29. The remaining declared dependency graph and .NET
+10 release metadata were rechecked on 2026-08-27. Bounded package ranges
+describe compatibility; the committed lockfiles identify the exact graph
+selected by a particular revision.
 
 ## Engine matrix
 
