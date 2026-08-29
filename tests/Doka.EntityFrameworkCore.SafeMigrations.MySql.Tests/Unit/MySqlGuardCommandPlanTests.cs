@@ -114,6 +114,46 @@ public sealed class MySqlGuardCommandPlanTests
         Assert.True(guardCleanupIndex > cleanupIndex);
     }
 
+    [Fact]
+    public void RepairableEnsureColumn_EmbedsDistinctProviderApplyAndRepairDdl()
+    {
+        var options = new DbContextOptionsBuilder<DbContext>();
+        options.UseMySql(
+            "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
+            MySqlServerVersion.MySql(new Version(8, 4, 11)));
+        ((DbContextOptionsBuilder)options).UseMySqlSafeMigrations();
+
+        using var context = new DbContext(options.Options);
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "items",
+                new ExpectedColumnDefinition(
+                    "value",
+                    typeof(string),
+                    isNullable: false,
+                    storeType: "varchar(40)",
+                    maxLength: 40,
+                    comment: "canonical",
+                    defaultValue: SafeMigrationDefaultValue.Literal("canonical"))),
+            SafeMigrationPolicy.RepairIfSafe);
+
+        var command = Assert.Single(
+            context
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate([operation], context.Model));
+
+        var payloads = DecodeHexPayloads(command.CommandText);
+
+        Assert.Contains("WHEN @doka_sm_action = 'apply'", command.CommandText, StringComparison.Ordinal);
+        Assert.Contains("WHEN @doka_sm_action = 'repair'", command.CommandText, StringComparison.Ordinal);
+        Assert.Contains("THEN ('missing') ELSE NULL END", command.CommandText, StringComparison.Ordinal);
+        Assert.Contains("CASE WHEN @doka_sm_state IS NULL", command.CommandText, StringComparison.Ordinal);
+        Assert.Contains(
+            payloads,
+            payload => payload.StartsWith("ALTER TABLE `items` ADD ", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(payloads, payload => payload.Contains("MODIFY COLUMN", StringComparison.OrdinalIgnoreCase));
+    }
+
     private static int Count(
         string value,
         string search
@@ -129,5 +169,30 @@ public sealed class MySqlGuardCommandPlanTests
         }
 
         return count;
+    }
+
+    private static List<string> DecodeHexPayloads(
+        string sql
+    )
+    {
+        const string prefix = "CONVERT(0x";
+        const string suffix = " USING utf8mb4)";
+
+        var result = new List<string>();
+        var offset = 0;
+        while ((offset = sql.IndexOf(prefix, offset, StringComparison.Ordinal)) >= 0)
+        {
+            var valueStart = offset + prefix.Length;
+            var valueEnd = sql.IndexOf(suffix, valueStart, StringComparison.Ordinal);
+            if (valueEnd < 0)
+            {
+                throw new InvalidOperationException("A generated hexadecimal SQL payload is unterminated.");
+            }
+
+            result.Add(Encoding.UTF8.GetString(Convert.FromHexString(sql[valueStart..valueEnd])));
+            offset = valueEnd + suffix.Length;
+        }
+
+        return result;
     }
 }

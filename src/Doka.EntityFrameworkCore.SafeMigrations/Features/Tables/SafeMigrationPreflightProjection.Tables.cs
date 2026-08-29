@@ -46,10 +46,27 @@ internal sealed partial class SafeMigrationPreflightProjection
         SafeMigrationDecision decision
     )
     {
+        var key = new TableKey(intent.Definition.Table, intent.Definition.Schema);
         if (analysis.ObservedState == SafeMigrationObservedState.Missing)
         {
-            _tables[new TableKey(intent.Definition.Table, intent.Definition.Schema)] =
-                new ProjectedTable(intent.Definition);
+            _tables[key] = new ProjectedTable(intent.Definition);
+
+            var prerequisites = new ProjectedPrerequisites(newlyCreated: true);
+            foreach (var column in intent.Definition.Columns)
+            {
+                prerequisites.Columns[column.Name] = new ProjectedColumn(
+                    column,
+                    AddedToExistingTable: false);
+            }
+
+            _prerequisites[key] = prerequisites;
+            return;
+        }
+
+        if (intent.Mode == SafeMigrationTableMode.ConvergenceContainer
+            && analysis.ObservedState == SafeMigrationObservedState.Matching)
+        {
+            _prerequisites.TryAdd(key, new ProjectedPrerequisites(newlyCreated: false));
         }
     }
 
@@ -60,7 +77,9 @@ internal sealed partial class SafeMigrationPreflightProjection
     {
         if (decision.Action == SafeMigrationAction.Apply)
         {
-            _tables.Remove(new TableKey(intent.Table, intent.Schema));
+            var key = new TableKey(intent.Table, intent.Schema);
+            _tables.Remove(key);
+            _prerequisites.Remove(key);
         }
     }
 
@@ -75,20 +94,26 @@ internal sealed partial class SafeMigrationPreflightProjection
         }
 
         var source = new TableKey(intent.Name, intent.Schema);
+        var targetTable = intent.NewName ?? intent.Name;
+        var targetSchema = intent.NewSchema ?? intent.Schema;
+        var target = new TableKey(targetTable, targetSchema);
+        if (_prerequisites.Remove(source, out var prerequisites))
+        {
+            _prerequisites[target] = prerequisites;
+        }
+
         if (!_tables.Remove(source, out var table))
         {
             return;
         }
 
-        var targetTable = intent.NewName ?? intent.Name;
-        var targetSchema = intent.NewSchema ?? intent.Schema;
         table.RenameTable(targetTable, targetSchema);
         foreach (var projection in _tables.Values)
         {
             projection.RenamePrincipalTable(intent.Name, intent.Schema, targetTable, targetSchema);
         }
 
-        _tables[new TableKey(targetTable, targetSchema)] = table;
+        _tables[target] = table;
     }
 
     private sealed partial class ProjectedTable

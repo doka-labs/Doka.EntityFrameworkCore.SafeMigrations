@@ -5,22 +5,42 @@ internal static partial class SafeMigrationExpectedCatalog
     private static void Apply(
         Dictionary<TableKey, MutableTable> tables,
         EnsureIndexIntent intent
-    ) => Find(tables, intent.Definition.Schema, intent.Definition.Table)
-        ?.Indexes
-        .Add(intent.Definition.Name);
+    )
+    {
+        var table = Find(tables, intent.Definition.Schema, intent.Definition.Table);
+        if (table is null)
+        {
+            return;
+        }
+
+        table.Indexes.Add(intent.Definition.Name);
+        if (intent.Definition.Unique)
+        {
+            table.UniqueIndexes.Add(intent.Definition.Name);
+        }
+        else
+        {
+            table.UniqueIndexes.Remove(intent.Definition.Name);
+        }
+    }
 
     private static void Apply(
         Dictionary<TableKey, MutableTable> tables,
         DropIndexIntent intent
-    ) => Find(tables, intent.Schema, intent.Table)
-        ?.Indexes
-        .Remove(intent.Name);
+    )
+    {
+        var table = Find(tables, intent.Schema, intent.Table);
+        table?.Indexes.Remove(intent.Name);
+        table?.UniqueIndexes.Remove(intent.Name);
+    }
 
     private static void Apply(
         Dictionary<TableKey, MutableTable> tables,
         RenameIndexIntent intent
-    ) => Rename(
-        Find(tables, intent.Schema, intent.Table)?.Indexes,
-        intent.Name,
-        intent.NewName);
+    )
+    {
+        var table = Find(tables, intent.Schema, intent.Table);
+        Rename(table?.Indexes, intent.Name, intent.NewName);
+        Rename(table?.UniqueIndexes, intent.Name, intent.NewName);
+    }
 }

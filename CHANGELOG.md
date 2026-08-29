@@ -6,6 +6,56 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Add source-frozen legacy-convergence policy configuration. Generated
+  `ConvergeTableFromModel` calls retain `ThrowIfDifferent` by default and can
+  explicitly select `RepairIfSafe`. The repair path converges only nullability,
+  default, and comment drift on invariant-compatible ordinary columns across
+  MySQL, MariaDB, and PostgreSQL; existing nulls and type, collation,
+  generated/identity, row-version, or provider-annotation drift remain
+  fail-closed before mutation.
+- Translate the bounded provider-neutral subset of EF-scaffolded check-
+  constraint SQL into the structured `SafeMigrationSql` expression contract.
+  Unsupported, ambiguous, commented, parameterized, provider-escape-dependent,
+  oversized, or malformed expressions now stop scaffolding with the constraint
+  name and a stable parse-failure code instead of producing a migration that
+  can never pass live structural comparison.
+- Add provider-context validation to `ISafeMigrationProviderAnalyzer` so an
+  adapter can reject invalid live connection configuration before EF migration
+  history, model, environment, lock, catalog access, or connection opening.
+
+### Changed
+
+- Update the exact `Doka.EntityFrameworkCore.MySql` dependency and every
+  affected lockfile from `[10.1.0]` to `[10.1.1]`. The provider update repairs
+  application-owned Guid conversion across relationship chains and preserves
+  its public migration-operation handler SPI.
+
+### Fixed
+
+- Treat Doka's `ClientGuid` column annotation as catalog-neutral while retaining
+  it in immutable operation snapshots, fingerprints, and replayed provider DDL.
+  Strict and legacy-convergence scaffolding now accept application-converted
+  Guid keys and relationships; HiLo and unknown column annotations remain
+  fail-closed before target DDL.
+- Validate the actual MySQL/MariaDB `DbConnection` before pending-history
+  discovery, including when EF reuses an internal service provider and the
+  application supplies a replacement connection with
+  `AllowUserVariables=false`.
+- Classify missing referenced columns as `prerequisite_missing` before index,
+  key, check, foreign-key, computed-column, or default-expression analysis can
+  issue an unsafe data probe or target DDL.
+- Project ordered legacy convergence through a newly added nullable column
+  without a non-null default so a following unique index can be analyzed and applied.
+  Unknown columns, non-null defaults, computed values, and nulls-not-distinct
+  contracts remain fail-closed.
+- Normalize the MySQL/MariaDB catalog alias between expected unique indexes and
+  `TABLE_CONSTRAINTS.UNIQUE` during strict table analysis, runtime reruns, and
+  unexpected-object inventory. Analysis uses the exact operation batch;
+  runtime generation uses EF's target relational model. Unrelated unique keys
+  still reject `StrictDefinition` and remain reported.
+
 ## [10.0.0-rc.2] - 2026-08-28
 
 Second release candidate for the complete SafeMigrations 10.0.0 contract. It

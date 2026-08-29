@@ -150,6 +150,198 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     }
 
     [Fact]
+    public async Task LegacyConvergenceRepair_RepairsMutableColumnDriftAndIsIdempotent()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE legacy_repair (value character varying(40) NULL DEFAULT 'legacy'); "
+            + "COMMENT ON COLUMN legacy_repair.value IS 'legacy'; "
+            + "INSERT INTO legacy_repair (value) VALUES ('existing');");
+
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureColumn(
+            "legacy_repair",
+            new ExpectedColumnDefinition(
+                "value",
+                typeof(string),
+                isNullable: false,
+                storeType: "character varying(40)",
+                maxLength: 40,
+                comment: "canonical",
+                defaultValue: SafeMigrationDefaultValue.Literal("canonical")),
+            SafeMigrationPolicy.RepairIfSafe);
+
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("legacy-repair"),
+                CancellationToken.None);
+
+        var assessment = Assert.Single(report.Assessments);
+        Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
+        Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.Repair, assessment.Action);
+
+        await ExecuteOperationsAsync(context, builder.Operations);
+
+        var rerun = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("legacy-repair-rerun"),
+                CancellationToken.None);
+
+        var rerunAssessment = Assert.Single(rerun.Assessments);
+
+        Assert.Equal(SafeMigrationObservedState.Matching, rerunAssessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.NoOp, rerunAssessment.Action);
+
+        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteSqlAsync(connectionString, "INSERT INTO legacy_repair DEFAULT VALUES;");
+
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM information_schema.columns "
+                + "WHERE table_schema = current_schema() AND table_name = 'legacy_repair' "
+                + "AND column_name = 'value' AND is_nullable = 'NO';"));
+        Assert.Equal(
+            "canonical",
+            await ScalarStringAsync(
+                connectionString,
+                "SELECT pg_catalog.col_description(c.oid, a.attnum) "
+                + "FROM pg_catalog.pg_class c "
+                + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
+                + "JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid "
+                + "WHERE n.nspname = current_schema() AND c.relname = 'legacy_repair' "
+                + "AND a.attname = 'value';"));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM legacy_repair WHERE value = 'canonical';"));
+    }
+
+    [Fact]
+    public async Task LegacyConvergenceRepair_NullabilityTighteningWithNullRowsIsDataBlocked()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE legacy_nulls (value character varying(40) NULL); "
+            + "COMMENT ON COLUMN legacy_nulls.value IS 'legacy'; "
+            + "INSERT INTO legacy_nulls (value) VALUES (NULL);");
+
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureColumn(
+            "legacy_nulls",
+            new ExpectedColumnDefinition(
+                "value",
+                typeof(string),
+                isNullable: false,
+                storeType: "character varying(40)",
+                maxLength: 40,
+                comment: "must not land"),
+            SafeMigrationPolicy.RepairIfSafe);
+
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("legacy-null-block"),
+                CancellationToken.None);
+
+        var exception = await Assert.ThrowsAsync<PostgresException>(() =>
+            ExecuteOperationsAsync(context, builder.Operations));
+
+        var assessment = Assert.Single(report.Assessments);
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(SafeMigrationObservedState.DataBlocked, assessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.RejectDataBlocked, assessment.Action);
+        Assert.Equal("P1003", exception.SqlState);
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM information_schema.columns "
+                + "WHERE table_schema = current_schema() AND table_name = 'legacy_nulls' "
+                + "AND column_name = 'value' AND is_nullable = 'YES';"));
+        Assert.Equal(
+            "legacy",
+            await ScalarStringAsync(
+                connectionString,
+                "SELECT pg_catalog.col_description(c.oid, a.attnum) "
+                + "FROM pg_catalog.pg_class c "
+                + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
+                + "JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid "
+                + "WHERE n.nspname = current_schema() AND c.relname = 'legacy_nulls' "
+                + "AND a.attname = 'value';"));
+    }
+
+    [Fact]
+    public async Task LegacyConvergenceRepair_InvariantTypeDriftRejectsWithoutMutation()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE legacy_type_drift (value character varying(30) NULL); "
+            + "COMMENT ON COLUMN legacy_type_drift.value IS 'legacy';");
+
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureColumn(
+            "legacy_type_drift",
+            new ExpectedColumnDefinition(
+                "value",
+                typeof(string),
+                isNullable: true,
+                storeType: "character varying(40)",
+                maxLength: 40,
+                comment: "must not land"),
+            SafeMigrationPolicy.RepairIfSafe);
+
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("legacy-type-drift"),
+                CancellationToken.None);
+
+        var exception = await Assert.ThrowsAsync<PostgresException>(() =>
+            ExecuteOperationsAsync(context, builder.Operations));
+
+        var assessment = Assert.Single(report.Assessments);
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
+        Assert.Equal("P1001", exception.SqlState);
+        Assert.Equal(
+            30,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT character_maximum_length FROM information_schema.columns "
+                + "WHERE table_schema = current_schema() AND table_name = 'legacy_type_drift' "
+                + "AND column_name = 'value';"));
+        Assert.Equal(
+            "legacy",
+            await ScalarStringAsync(
+                connectionString,
+                "SELECT pg_catalog.col_description(c.oid, a.attnum) "
+                + "FROM pg_catalog.pg_class c "
+                + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
+                + "JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid "
+                + "WHERE n.nspname = current_schema() AND c.relname = 'legacy_type_drift' "
+                + "AND a.attname = 'value';"));
+    }
+
+    [Fact]
     public async Task UnmappedClrType_IsClassifiedUnsupportedBeforeDdl()
     {
         var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);

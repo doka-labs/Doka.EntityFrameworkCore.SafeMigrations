@@ -25,6 +25,31 @@ internal static class ColumnBenchmarkWorkload
         return operations;
     }
 
+    public static IReadOnlyList<MigrationOperation> CreateRepairOperations(
+        int count
+    )
+    {
+        var operations = new List<MigrationOperation>(count);
+        for (var index = 0; index < count; index++)
+        {
+            var definition = new ExpectedColumnDefinition(
+                $"value_{index.ToString(CultureInfo.InvariantCulture)}",
+                typeof(string),
+                isNullable: false,
+                storeType: "varchar(80)",
+                maxLength: 80,
+                comment: "canonical",
+                defaultValue: SafeMigrationDefaultValue.Literal("canonical"));
+
+            operations.Add(
+                new SafeMigrationOperation(
+                    new EnsureColumnIntent("benchmark_items", definition),
+                    SafeMigrationPolicy.RepairIfSafe));
+        }
+
+        return operations;
+    }
+
     public static int RunPlanner(
         int count
     )

@@ -52,6 +52,164 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     }
 
     [Fact]
+    public async Task MissingReferencedColumns_AreClassifiedBeforeAnyDataProbe()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE column_prerequisite_child (id integer NOT NULL); "
+            + "CREATE TABLE column_prerequisite_parent (id integer NOT NULL);");
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureIndex(
+            new ExpectedIndexDefinition(
+                "ux_column_prerequisite_code",
+                "column_prerequisite_child",
+                [new ExpectedIndexKeyDefinition(column: "missing_code")],
+                unique: true),
+            SafeMigrationPolicy.ThrowIfDifferent);
+        builder.AddPrimaryKeyIfNotExists(
+            "pk_column_prerequisite_child",
+            "column_prerequisite_child",
+            ["missing_primary"]);
+        builder.AddUniqueConstraintIfNotExists(
+            "uq_column_prerequisite_child",
+            "column_prerequisite_child",
+            ["missing_unique"]);
+        builder.EnsureCheckConstraint(
+            ExpectedCheckConstraintDefinition.FromExpression(
+                "ck_column_prerequisite_child",
+                "column_prerequisite_child",
+                SqlColumnAndInt("missing_check", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0)),
+            SafeMigrationPolicy.ThrowIfDifferent);
+        builder.AddForeignKeyIfNotExists(
+            "fk_column_prerequisite_child",
+            "column_prerequisite_child",
+            ["missing_foreign"],
+            "column_prerequisite_parent",
+            ["missing_principal"]);
+
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("missing-column-prerequisites"));
+
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(5, report.Assessments.Count);
+        Assert.All(
+            report.Assessments,
+            static assessment =>
+            {
+                Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, assessment.ObservedState);
+                Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, assessment.Action);
+            });
+    }
+
+    [Fact]
+    public async Task LegacyConvergence_AddsNullableColumnBeforeUniqueIndexAndRemainsIdempotent()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE legacy_unique_users (id integer NOT NULL); "
+            + "INSERT INTO legacy_unique_users (id) VALUES (1), (2);");
+        await using var context = CreateContext(connectionString);
+        var definition = new ExpectedTableDefinition(
+            "legacy_unique_users",
+            [
+                new ExpectedColumnDefinition("id", typeof(int), false, "integer"),
+                new ExpectedColumnDefinition("email", typeof(string), true, "text"),
+            ]);
+
+        var index = new ExpectedIndexDefinition(
+            "ux_legacy_unique_users_email",
+            "legacy_unique_users",
+            [new ExpectedIndexKeyDefinition(column: "email")],
+            unique: true);
+
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.ConvergeTable(definition, [index]);
+        var runner = context.GetService<ISafeMigrationRunner>();
+
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("legacy-unique-users-preflight"));
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
+        Assert.Equal(SafeMigrationObservedState.Missing, preflight.Assessments[^1].ObservedState);
+        Assert.Equal("projected_missing", preflight.Assessments[^1].Code);
+
+        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations);
+
+        var postflight = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("legacy-unique-users-postflight"));
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
+        Assert.All(postflight.Assessments, static assessment => Assert.True(assessment.PostconditionSatisfied));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM pg_catalog.pg_indexes "
+                + "WHERE schemaname = current_schema() AND tablename = 'legacy_unique_users' "
+                + "AND indexname = 'ux_legacy_unique_users_email';"));
+    }
+
+    [Fact]
+    public async Task LegacyConvergence_DoesNotProjectUniqueSafetyThroughNonNullDefault()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE legacy_default_users (id integer NOT NULL); "
+            + "INSERT INTO legacy_default_users (id) VALUES (1), (2);");
+        await using var context = CreateContext(connectionString);
+        var definition = new ExpectedTableDefinition(
+            "legacy_default_users",
+            [
+                new ExpectedColumnDefinition("id", typeof(int), false, "integer"),
+                new ExpectedColumnDefinition(
+                    "tenant_id",
+                    typeof(int),
+                    true,
+                    "integer",
+                    defaultValue: SafeMigrationDefaultValue.Literal(0)),
+            ]);
+
+        var index = new ExpectedIndexDefinition(
+            "ux_legacy_default_users_tenant",
+            "legacy_default_users",
+            [new ExpectedIndexKeyDefinition(column: "tenant_id")],
+            unique: true);
+
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.ConvergeTable(definition, [index]);
+
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("legacy-default-users"));
+
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, report.Assessments[^1].ObservedState);
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM information_schema.columns "
+                + "WHERE table_schema = current_schema() AND table_name = 'legacy_default_users' "
+                + "AND column_name = 'tenant_id';"));
+    }
+
+    [Fact]
     public async Task Analyzer_ProcessesMoreThanOneBoundedClassificationChunkInGlobalOrder()
     {
         const int operationCount = 513;
@@ -559,6 +717,13 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         public string ProviderId { get; } = providerId;
 
         public Task Started => _started.Task;
+
+        public void ValidateContext(
+            DbContext context
+        )
+        {
+            ArgumentNullException.ThrowIfNull(context);
+        }
 
         public Task<IAsyncDisposable> AcquireAnalysisScopeAsync(
             DbContext context,

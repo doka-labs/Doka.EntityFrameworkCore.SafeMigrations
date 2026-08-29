@@ -4,5 +4,11 @@ internal static partial class SafeMigrationExpectedDefinitionFactory
 {
     public static ExpectedCheckConstraintDefinition From(
         AddCheckConstraintOperation operation
-    ) => new(operation.Name, operation.Table, operation.Sql, operation.Schema);
+    ) => SafeMigrationSqlExpressionParser.TryParse(operation.Sql, out var expression)
+        ? ExpectedCheckConstraintDefinition.FromExpression(
+            operation.Name,
+            operation.Table,
+            expression,
+            operation.Schema)
+        : new ExpectedCheckConstraintDefinition(operation.Name, operation.Table, operation.Sql, operation.Schema);
 }

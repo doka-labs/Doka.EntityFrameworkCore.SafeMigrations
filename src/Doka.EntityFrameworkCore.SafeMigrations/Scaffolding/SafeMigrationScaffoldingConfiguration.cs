@@ -6,9 +6,11 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// </summary>
 /// <param name="IsEnabled">Whether SafeMigrations scaffolding is active.</param>
 /// <param name="Mode">The mode written into newly scaffolded migrations.</param>
+/// <param name="LegacyConvergencePolicy">The policy written into legacy-convergence table operations.</param>
 internal sealed record SafeMigrationScaffoldingConfiguration(
     bool IsEnabled,
-    SafeMigrationScaffoldingMode Mode)
+    SafeMigrationScaffoldingMode Mode,
+    SafeMigrationPolicy LegacyConvergencePolicy = SafeMigrationPolicy.ThrowIfDifferent)
 {
     /// <summary>Creates a configuration snapshot from EF Core context options.</summary>
     /// <param name="options">The active context options, or null when unavailable.</param>
@@ -21,6 +23,9 @@ internal sealed record SafeMigrationScaffoldingConfiguration(
 
         return extension is null
             ? new SafeMigrationScaffoldingConfiguration(false, SafeMigrationScaffoldingMode.Strict)
-            : new SafeMigrationScaffoldingConfiguration(true, extension.ScaffoldingMode);
+            : new SafeMigrationScaffoldingConfiguration(
+                true,
+                extension.ScaffoldingMode,
+                extension.LegacyConvergencePolicy);
     }
 }

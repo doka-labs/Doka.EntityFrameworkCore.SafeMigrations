@@ -34,11 +34,72 @@ internal static partial class SafeMigrationStandardOperationFactory
     )
     {
         var target = intent.Definition;
+        var oldColumn = intent.OldDefinition is null
+            ? new AddColumnOperation
+            {
+                Name = target.Name,
+                Table = intent.Table,
+                Schema = intent.Schema,
+                ClrType = target.ClrType,
+                ColumnType = target.StoreType,
+                IsNullable = target.IsNullable,
+            }
+            : CreateColumn(intent.Table, intent.Schema, intent.OldDefinition, renderExpression, renderCollation);
+
+        var operation = CreateAlterColumn(
+            intent.Table,
+            intent.Schema,
+            target,
+            oldColumn,
+            renderExpression,
+            renderCollation);
+
+        ApplyProviderAnnotations(operation.OldColumn, intent.OldDefinition?.ProviderAnnotations ?? []);
+
+        return operation;
+    }
+
+    private static AlterColumnOperation CreateRepairOperation(
+        EnsureColumnIntent intent,
+        Func<SafeMigrationSqlExpression, string>? renderExpression,
+        Func<SafeMigrationCollationIdentifier, string?>? renderCollation,
+        bool declareNullabilityDifference
+    )
+    {
+        var target = intent.Definition;
+        var oldColumn = CreateColumn(intent.Table, intent.Schema, target, renderExpression, renderCollation);
+
+        // Provider SQL generators compare target and old metadata to decide
+        // which ALTER clauses to emit. Make every permitted mutable facet
+        // observably different while preserving all invariant facets.
+        oldColumn.IsNullable = declareNullabilityDifference ? !target.IsNullable : target.IsNullable;
+        oldColumn.Comment = target.Comment is null ? "doka_sm_previous_comment" : null;
+        oldColumn.DefaultValue = null;
+        oldColumn.DefaultValueSql = target.DefaultValue.Kind == SafeMigrationDefaultValueKind.None ? "NULL" : null;
+
+        return CreateAlterColumn(
+            intent.Table,
+            intent.Schema,
+            target,
+            oldColumn,
+            renderExpression,
+            renderCollation);
+    }
+
+    private static AlterColumnOperation CreateAlterColumn(
+        string table,
+        string? schema,
+        ExpectedColumnDefinition target,
+        AddColumnOperation oldColumn,
+        Func<SafeMigrationSqlExpression, string>? renderExpression,
+        Func<SafeMigrationCollationIdentifier, string?>? renderCollation
+    )
+    {
         var operation = new AlterColumnOperation
         {
             Name = target.Name,
-            Table = intent.Table,
-            Schema = intent.Schema,
+            Table = table,
+            Schema = schema,
             ClrType = target.ClrType,
             ColumnType = target.StoreType,
             IsUnicode = target.IsUnicode,
@@ -54,22 +115,11 @@ internal static partial class SafeMigrationStandardOperationFactory
                 target.ComputedColumnSql
                 ?? (target.ComputedExpression is null ? null : Render(target.ComputedExpression, renderExpression)),
             IsStored = target.IsStored,
-            OldColumn = intent.OldDefinition is null
-                ? new AddColumnOperation
-                {
-                    Name = target.Name,
-                    Table = intent.Table,
-                    Schema = intent.Schema,
-                    ClrType = target.ClrType,
-                    ColumnType = target.StoreType,
-                    IsNullable = target.IsNullable,
-                }
-                : CreateColumn(intent.Table, intent.Schema, intent.OldDefinition, renderExpression, renderCollation),
+            OldColumn = oldColumn,
         };
 
         ApplyDefault(operation, target.DefaultValue, renderExpression);
         ApplyProviderAnnotations(operation, target.ProviderAnnotations);
-        ApplyProviderAnnotations(operation.OldColumn, intent.OldDefinition?.ProviderAnnotations ?? []);
 
         return operation;
     }

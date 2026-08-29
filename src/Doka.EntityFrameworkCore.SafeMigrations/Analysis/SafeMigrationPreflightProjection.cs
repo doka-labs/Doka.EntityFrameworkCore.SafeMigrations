@@ -4,6 +4,11 @@ internal sealed partial class SafeMigrationPreflightProjection
 {
     private readonly Dictionary<TableKey, ProjectedTable> _tables = [];
 
+    // Strict table projections retain complete definitions. This second view
+    // records only prerequisites proven by earlier convergence operations, so
+    // a later operation cannot infer safety from an object that was rejected.
+    private readonly Dictionary<TableKey, ProjectedPrerequisites> _prerequisites = [];
+
     public SafeMigrationProviderAnalysis Project(
         SafeMigrationOperation operation,
         SafeMigrationProviderAnalysis liveAnalysis
@@ -187,6 +192,20 @@ internal sealed partial class SafeMigrationPreflightProjection
     private readonly record struct TableKey(
         string Table,
         string? Schema
+    );
+
+    private sealed class ProjectedPrerequisites(
+        bool newlyCreated
+    )
+    {
+        public Dictionary<string, ProjectedColumn> Columns { get; } = new(StringComparer.Ordinal);
+
+        public bool NewlyCreated { get; } = newlyCreated;
+    }
+
+    private sealed record ProjectedColumn(
+        ExpectedColumnDefinition Definition,
+        bool AddedToExistingTable
     );
 
     private sealed partial class ProjectedTable

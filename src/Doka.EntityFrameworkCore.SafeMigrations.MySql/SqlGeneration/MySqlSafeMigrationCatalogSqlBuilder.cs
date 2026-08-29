@@ -23,7 +23,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
     public MySqlSafeMigrationRuntimePlan Build(
         SafeMigrationOperation operation,
-        MySqlMigrationOperationContext context
+        MySqlMigrationOperationContext context,
+        IReadOnlySet<string>? expectedUniqueIndexes = null
     )
     {
         ArgumentNullException.ThrowIfNull(operation);
@@ -49,10 +50,16 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 {
                     EnsureSchemaIntent value => BuildEnsureSchema(value),
                     DropSchemaIntent value => BuildDropSchema(value),
-                    EnsureTableIntent value => BuildEnsureTable(value, context.ServerVersion.IsMariaDb),
+                    EnsureTableIntent value => BuildEnsureTable(
+                        value,
+                        context.ServerVersion.IsMariaDb,
+                        expectedUniqueIndexes),
                     DropTableIntent value => BuildDropTable(value),
                     RenameTableIntent value => BuildRenameTable(value),
-                    EnsureColumnIntent value => BuildEnsureColumn(value, context.ServerVersion.IsMariaDb),
+                    EnsureColumnIntent value => BuildEnsureColumn(
+                        value,
+                        context.ServerVersion.IsMariaDb,
+                        operation.Policy == SafeMigrationPolicy.RepairIfSafe),
                     DropColumnIntent value => BuildDropColumn(value),
                     RenameColumnIntent value => BuildRenameColumn(value),
                     AlterColumnIntent value => BuildAlterColumn(value, context.ServerVersion.IsMariaDb),
@@ -81,7 +88,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 plan = plan with
                 {
                     PrerequisiteExpression = BuildPrerequisiteExpression(operation.Intent),
-                    RequiresLazyStateEvaluation = RequiresLazyStateEvaluation(operation.Intent),
+                    RequiresLazyStateEvaluation = RequiresLazyStateEvaluation(
+                        operation.Intent,
+                        plan.RepairCapability),
                 };
             }
 
@@ -98,22 +107,53 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         SafeMigrationIntent intent
     ) => intent switch
     {
-        EnsureColumnIntent value => BaseTableExists(value.Table),
-        AlterColumnIntent value => BaseTableExists(value.Table),
-        EnsureIndexIntent value => BaseTableExists(value.Definition.Table),
-        EnsurePrimaryKeyIntent value => BaseTableExists(value.Definition.Table),
-        EnsureUniqueConstraintIntent value => BaseTableExists(value.Definition.Table),
-        EnsureCheckConstraintIntent value => BaseTableExists(value.Definition.Table),
-        EnsureForeignKeyIntent value => $"({BaseTableExists(value.Definition.Table)}) "
-            + $"AND ({BaseTableExists(value.Definition.PrincipalTable)})",
+        EnsureColumnIntent value => TableAndColumnsExist(value.Table, SafeMigrationPrerequisiteColumns.Local(value)),
+        AlterColumnIntent value => TableAndColumnsExist(value.Table, SafeMigrationPrerequisiteColumns.Local(value)),
+        EnsureIndexIntent value =>
+            TableAndColumnsExist(value.Definition.Table, SafeMigrationPrerequisiteColumns.Local(value)),
+        EnsurePrimaryKeyIntent value => TableAndColumnsExist(
+            value.Definition.Table,
+            SafeMigrationPrerequisiteColumns.Local(value)),
+        EnsureUniqueConstraintIntent value => TableAndColumnsExist(
+            value.Definition.Table,
+            SafeMigrationPrerequisiteColumns.Local(value)),
+        EnsureCheckConstraintIntent value => TableAndColumnsExist(
+            value.Definition.Table,
+            SafeMigrationPrerequisiteColumns.Local(value)),
+        EnsureForeignKeyIntent value => $"({TableAndColumnsExist(
+            value.Definition.Table,
+            SafeMigrationPrerequisiteColumns.Local(value))}) "
+            + $"AND ({TableAndColumnsExist(
+                value.Definition.PrincipalTable,
+                SafeMigrationPrerequisiteColumns.Principal(value))})",
         _ => "TRUE",
     };
 
+    private string TableAndColumnsExist(
+        string table,
+        IReadOnlyList<string> columns
+    )
+    {
+        var tableExists = BaseTableExists(table);
+        if (columns.Count == 0)
+        {
+            return tableExists;
+        }
+
+        return $"({tableExists}) AND ((SELECT COUNT(DISTINCT c.COLUMN_NAME) "
+            + "FROM INFORMATION_SCHEMA.COLUMNS c "
+            + $"WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = {Literal(table)} "
+            + $"AND c.COLUMN_NAME IN ({string.Join(", ", columns.Select(Literal))})) "
+            + $"= {columns.Count.ToString(CultureInfo.InvariantCulture)})";
+    }
+
     private static bool RequiresLazyStateEvaluation(
-        SafeMigrationIntent intent
+        SafeMigrationIntent intent,
+        SafeMigrationRepairCapability repairCapability
     ) => intent switch
     {
-        EnsureColumnIntent value => !SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(value.Definition),
+        EnsureColumnIntent value => !SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(value.Definition)
+            || (repairCapability == SafeMigrationRepairCapability.Safe && !value.Definition.IsNullable),
         AlterColumnIntent value => value.OldDefinition is not null
             && SafeMigrationColumnRepairHelper.CanSafelyAlterColumn(value.OldDefinition, value.Definition)
             && value.OldDefinition.IsNullable

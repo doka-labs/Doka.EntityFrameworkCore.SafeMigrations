@@ -33,6 +33,16 @@ runner.Measure(
     "mysql_analyzer_build_512",
     () => CapturePlans(generator, planCapture, context.Model, analyzerOperations));
 
+var repairOperations = ColumnBenchmarkWorkload.CreateRepairOperations(1000);
+runner.Measure(
+    "mysql_repair_generation_1000",
+    () => generator.Generate(repairOperations, context.Model)
+        .Count);
+
+runner.Measure(
+    "mysql_repair_analyzer_build_1000",
+    () => CapturePlans(generator, planCapture, context.Model, repairOperations));
+
 using var fingerprint10 = new MySqlFingerprintContext<Fingerprint10>(10);
 using var fingerprint100 = new MySqlFingerprintContext<Fingerprint100>(100);
 using var fingerprint1000 = new MySqlFingerprintContext<Fingerprint1000>(1000);

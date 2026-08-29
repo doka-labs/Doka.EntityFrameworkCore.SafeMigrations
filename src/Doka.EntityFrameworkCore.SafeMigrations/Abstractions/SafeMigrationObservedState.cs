@@ -21,6 +21,6 @@ public enum SafeMigrationObservedState
     /// <summary>Existing data prevents the requested safe transition.</summary>
     DataBlocked = 4,
 
-    /// <summary>A parent object required by the operation is absent.</summary>
+    /// <summary>A parent table or referenced column required by the operation is absent.</summary>
     PrerequisiteMissing = 5,
 }

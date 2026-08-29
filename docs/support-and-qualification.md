@@ -8,10 +8,10 @@ with roll-forward disabled. SafeMigrations supports EF Core 10 only.
 | Package | Runtime dependency contract |
 | --- | --- |
 | Core | `Microsoft.EntityFrameworkCore.Relational` `[10.0.11,10.1.0)` |
-| MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` exact `[10.1.0]` |
+| MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` exact `[10.1.1]` |
 | PostgreSQL | `Npgsql.EntityFrameworkCore.PostgreSQL` `[10.0.3,11.0.0)` |
 
-The MySQL/MariaDB package resolves the exact stable Doka 10.1.0 package. CI
+The MySQL/MariaDB package resolves the exact stable Doka 10.1.1 package. CI
 does not build Doka and never uses a cross-repository ProjectReference. A Doka
 update is accepted only after the complete package, engine, tooling, coverage,
 and performance matrix passes again.
@@ -101,6 +101,9 @@ Provider tests use real Docker servers and cover:
 - missing, matching, different, unsupported, data-blocked, and
   prerequisite-missing states;
 - `ExistenceOnly`, `ThrowIfDifferent`, and `RepairIfSafe`;
+- source-frozen legacy convergence policy selection, mutable column repair,
+  matching rerun, null-data blocking, invariant-drift rejection, and
+  MySQL/MariaDB preservation of unmodeled `EXTRA` modifiers;
 - granular heterogeneous table convergence and pairwise legacy-state
   generation with a fixed seed;
 - exact expected column, index, primary-key, unique, check, and foreign-key
@@ -123,7 +126,8 @@ Provider tests use real Docker servers and cover:
   read-write or weaker-isolation caller transactions.
 
 The provider-analyzer contract accepts the ordered safe-operation batch. Each
-provider first classifies table prerequisites, then executes classification in
+provider first classifies table and referenced-column prerequisites, then
+executes classification in
 deterministic parameterized chunks bounded by operation count, parameter
 count, and UTF-8 payload. The unexpected-object inventory remains scoped to
 the expected table set for child objects while retaining complete table
@@ -148,9 +152,15 @@ cases stop before target DDL instead of being compared or applied heuristically:
 
 - PostgreSQL 14 rejects `NULLS NOT DISTINCT`; PostgreSQL introduced that
   `CREATE INDEX` clause in version 15.
-- Doka 10.1.0 parenthesizes `DateOnly` and `TimeOnly` typed literals in column
+- Doka 10.1.1 parenthesizes `DateOnly` and `TimeOnly` typed literals in column
   defaults. The complete MySQL and MariaDB matrix qualifies the resulting DDL
   and each engine's catalog display form.
+- Doka 10.1.1 emits `ClientGuid` for client-generated Guid keys, including
+  application-converted relationship chains. SafeMigrations retains that
+  annotation in operation identity and provider replay while comparing its
+  live column as non-`AUTO_INCREMENT`. HiLo and unknown column annotations
+  remain unsupported because their complete database prerequisites are not
+  represented by the column catalog contract.
 - MySQL, MariaDB 10.11, and MariaDB 11.4 reject a `Guid` literal default stored
   as `BINARY` because `INFORMATION_SCHEMA.COLUMNS.COLUMN_DEFAULT` does not
   preserve a complete value for repeatable semantic comparison. MariaDB 11.8
@@ -261,8 +271,12 @@ release-asset verification.
 - [EF Core Relational 10.0.11 package](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.Relational/10.0.11)
   and [Npgsql EF Core 10.0.3 package](https://www.nuget.org/packages/Npgsql.EntityFrameworkCore.PostgreSQL/10.0.3),
   retrieved 2026-08-27.
-- [Doka 10.1.0 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.1.0),
-  retrieved 2026-08-28.
+- [Doka 10.1.1 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.1.1),
+  [value-generation strategies](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.1/src/Doka.EntityFrameworkCore.MySql/MySqlValueGenerationStrategy.cs),
+  and [migration-operation handler contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.1/docs/migration-operation-handlers.md),
+  retrieved 2026-08-29.
+- [EF Core generated values](https://learn.microsoft.com/en-us/ef/core/modeling/generated-properties),
+  retrieved 2026-08-29.
 - [PostgreSQL versioning policy](https://www.postgresql.org/support/versioning/)
   and [18.6/17.11/16.15/15.19/14.24 announcement](https://www.postgresql.org/about/news/postgresql-186-1711-1615-1519-1424-and-19-beta-3-released-3365/),
   retrieved 2026-08-27.

@@ -22,15 +22,31 @@ public sealed partial class SafeMigrationExpectedCatalogTests
                     new ExpectedIndexDefinition(
                         "ix_old",
                         "items",
-                        [new ExpectedIndexKeyDefinition(column: "name")]))),
+                        [new ExpectedIndexKeyDefinition(column: "name")],
+                        unique: true))),
             Envelope(new RenameIndexIntent("ix_old", "items", "ix_name")),
+            Envelope(
+                new EnsureIndexIntent(
+                    new ExpectedIndexDefinition(
+                        "ix_non_unique",
+                        "items",
+                        [new ExpectedIndexKeyDefinition(column: "id")]))),
+            Envelope(
+                new EnsureIndexIntent(
+                    new ExpectedIndexDefinition(
+                        "ux_removed",
+                        "items",
+                        [new ExpectedIndexKeyDefinition(column: "id")],
+                        unique: true))),
+            Envelope(new DropIndexIntent("ux_removed", "items")),
             Envelope(new DropUniqueConstraintIntent("uq_items_id", "items")),
         ];
 
         var inventory = Assert.Single(SafeMigrationExpectedCatalog.Create(operations));
 
         Assert.Equal(["id", "name"], inventory.Columns.Order());
-        Assert.Equal(["ix_name"], inventory.Indexes);
+        Assert.Equal(["ix_name", "ix_non_unique"], inventory.Indexes.Order());
+        Assert.Equal(["ix_name"], inventory.UniqueIndexes);
         Assert.Equal(
             SafeMigrationDatabaseObjectKind.PrimaryKey,
             Assert.Single(inventory.Constraints)

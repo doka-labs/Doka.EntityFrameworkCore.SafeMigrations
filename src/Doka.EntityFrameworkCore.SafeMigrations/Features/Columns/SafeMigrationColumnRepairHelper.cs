@@ -38,4 +38,23 @@ internal static class SafeMigrationColumnRepairHelper
                 targetDefinition.ComputedExpression)
             && oldDefinition.IsStored == targetDefinition.IsStored;
     }
+
+    public static bool CanSafelyConvergeExistingColumn(
+        ExpectedColumnDefinition targetDefinition
+    )
+    {
+        ArgumentNullException.ThrowIfNull(targetDefinition);
+
+        // Inferred provider facets cannot be reconstructed safely by a generic
+        // convergence operation. Their changes remain explicit migrations with
+        // a reviewed old definition.
+        return targetDefinition is
+        {
+            IsRowVersion: false,
+            ComputedColumnSql: null,
+            ComputedExpression: null,
+            IsStored: null,
+            ProviderAnnotations.Count: 0,
+        };
+    }
 }

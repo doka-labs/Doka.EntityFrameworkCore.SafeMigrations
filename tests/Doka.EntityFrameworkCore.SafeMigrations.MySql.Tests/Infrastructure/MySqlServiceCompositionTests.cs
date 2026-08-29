@@ -22,10 +22,26 @@ public sealed class MySqlServiceCompositionTests
             SafeMigrationScaffoldingMode.Strict,
             strict.Options.FindExtension<MySqlSafeMigrationsOptionsExtension>()!.ScaffoldingMode);
         Assert.Equal(
+            SafeMigrationPolicy.ThrowIfDifferent,
+            strict.Options.FindExtension<MySqlSafeMigrationsOptionsExtension>()!.LegacyConvergencePolicy);
+        Assert.Equal(
             SafeMigrationScaffoldingMode.LegacyConvergence,
             legacy.Options.FindExtension<MySqlSafeMigrationsOptionsExtension>()!.ScaffoldingMode);
         Assert.Equal(strictInfo.GetServiceProviderHashCode(), legacyInfo.GetServiceProviderHashCode());
         Assert.True(strictInfo.ShouldUseSameServiceProvider(legacyInfo));
+    }
+
+    [Fact]
+    public void RepairPolicyWithoutLegacyModeIsRejectedBeforeOptionsMutation()
+    {
+        var options = new DbContextOptionsBuilder();
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            options.UseMySqlSafeMigrations(configuration =>
+                configuration.UseLegacyConvergencePolicy(SafeMigrationPolicy.RepairIfSafe)));
+
+        Assert.Contains("requires LegacyConvergence", exception.Message, StringComparison.Ordinal);
+        Assert.Null(options.Options.FindExtension<MySqlSafeMigrationsOptionsExtension>());
     }
 
     [Fact]
@@ -55,10 +71,12 @@ public sealed class MySqlServiceCompositionTests
         var typedCanonicalExtension = typedCanonical.Options.FindExtension<MySqlSafeMigrationsOptionsExtension>()!;
 
         Assert.Equal(SafeMigrationScaffoldingMode.LegacyConvergence, canonicalExtension.ScaffoldingMode);
+        Assert.Equal(SafeMigrationPolicy.RepairIfSafe, canonicalExtension.LegacyConvergencePolicy);
         Assert.Equal(typeof(SafeMigrationDbContext), canonicalExtension.CanonicalContextType);
         Assert.Equal(SafeMigrationScaffoldingMode.LegacyConvergence, typedExtension.ScaffoldingMode);
         Assert.Equal(typeof(SafeMigrationDbContext), typedCanonicalExtension.CanonicalContextType);
         Assert.Equal(SafeMigrationScaffoldingMode.LegacyConvergence, typedCanonicalExtension.ScaffoldingMode);
+        Assert.Equal(SafeMigrationPolicy.RepairIfSafe, typedCanonicalExtension.LegacyConvergencePolicy);
     }
 
     [Fact]
@@ -94,5 +112,7 @@ public sealed class MySqlServiceCompositionTests
 
     private static void ConfigureLegacy(
         SafeMigrationOptionsBuilder options
-    ) => options.UseScaffoldingMode(SafeMigrationScaffoldingMode.LegacyConvergence);
+    ) => options
+        .UseScaffoldingMode(SafeMigrationScaffoldingMode.LegacyConvergence)
+        .UseLegacyConvergencePolicy(SafeMigrationPolicy.RepairIfSafe);
 }

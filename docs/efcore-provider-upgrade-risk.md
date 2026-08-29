@@ -26,12 +26,19 @@ failure behavior.
 The read-only analyzer captures SafeMigrations' typed runtime plan while Doka
 invokes the registered handler with the real server-version, feature, and
 operation-ordinal context. It does not parse generated commands. The exact
-Doka 10.1.0 package exposes provider-validated `Setup`, `Body`, and `Cleanup`
+Doka 10.1.1 package exposes provider-validated `Setup`, `Body`, and `Cleanup`
 fragments and a bounded `CreateScoped` command contract. SafeMigrations uses
 those fragments directly and returns one provider-executed scope per guarded
 operation. Doka runs cleanup after success, failure, or cancellation with an
 independent cancellation token; a cleanup failure closes the connection and
 evicts its physical session from the MySqlConnector pool.
+
+Doka 10.1.1 also preserves application-owned Guid converters through
+relationship chains. Its generated key column retains the provider CLR type,
+has no provider-owned `GuidFormat`, and may carry `ClientGuid`. SafeMigrations
+therefore treats only that value-generation annotation as catalog-neutral; it
+does not generalize the exception to HiLo, storage-format, or unknown provider
+facets.
 
 ## PostgreSQL boundary
 
@@ -153,10 +160,12 @@ unless the entry records a later date:
 - [PostgreSQL system information functions](https://www.postgresql.org/docs/current/functions-info.html)
 - [MySQL supported platforms and lifecycle](https://www.mysql.com/support/supportedplatforms/database.html)
 - [MariaDB release criteria](https://mariadb.com/docs/release-notes/mariadb-release-criteria)
-- [Doka.EntityFrameworkCore.MySql 10.1.0](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.1.0)
-  (rechecked 2026-08-28)
-- [Doka 10.1.0 migration-operation handler contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.0/docs/migration-operation-handlers.md)
-  (rechecked 2026-08-28)
+- [Doka.EntityFrameworkCore.MySql 10.1.1](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.1.1)
+  (rechecked 2026-08-29)
+- [Doka 10.1.1 migration-operation handler contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.1/docs/migration-operation-handlers.md)
+  (rechecked 2026-08-29)
+- [Doka 10.1.1 release notes](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.1/CHANGELOG.md)
+  (rechecked 2026-08-29)
 
 The exact release evidence belongs in the workflow run, lockfiles, package
 SBOM, and final plan-to-ship reconciliation, not in an unchecked comment.

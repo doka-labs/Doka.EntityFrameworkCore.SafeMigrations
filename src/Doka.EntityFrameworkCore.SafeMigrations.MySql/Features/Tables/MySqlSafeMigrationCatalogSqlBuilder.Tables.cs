@@ -12,7 +12,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
     private MySqlSafeMigrationRuntimePlan BuildEnsureTable(
         EnsureTableIntent intent,
-        bool isMariaDb
+        bool isMariaDb,
+        IReadOnlySet<string>? expectedUniqueIndexes
     )
     {
         var definition = intent.Definition;
@@ -20,7 +21,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var baseTable = BaseTableExists(definition.Table);
         var matching = intent.Mode == SafeMigrationTableMode.ConvergenceContainer
             ? baseTable
-            : BuildTableMatches(definition, isMariaDb);
+            : BuildTableMatches(definition, isMariaDb, expectedUniqueIndexes);
 
         return Plan(
             $"CASE WHEN NOT {exists} THEN 'missing' "
@@ -54,19 +55,30 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
     private string BuildTableMatches(
         ExpectedTableDefinition definition,
-        bool isMariaDb
+        bool isMariaDb,
+        IReadOnlySet<string>? expectedUniqueIndexes
     )
     {
+        var expectedUniqueNames = definition
+            .UniqueConstraints
+            .Select(static constraint => constraint.Name)
+            .Concat(expectedUniqueIndexes ?? Enumerable.Empty<string>())
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
         var conditions = new List<string>
         {
             BaseTableExists(definition.Table),
             $"(SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS c "
             + $"WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = {Literal(definition.Table)}) "
             + $"= {definition.Columns.Count.ToString(CultureInfo.InvariantCulture)}",
-            $"(SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc "
+            $"NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc "
             + $"WHERE tc.CONSTRAINT_SCHEMA = DATABASE() AND tc.TABLE_NAME = {Literal(definition.Table)} "
-            + "AND tc.CONSTRAINT_TYPE = 'UNIQUE') "
-            + $"= {definition.UniqueConstraints.Count.ToString(CultureInfo.InvariantCulture)}",
+            + "AND tc.CONSTRAINT_TYPE = 'UNIQUE'"
+            + (expectedUniqueNames.Length == 0
+                ? ")"
+                : $" AND tc.CONSTRAINT_NAME NOT IN ({string.Join(", ", expectedUniqueNames.Select(Literal))}))"),
             $"(SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc "
             + $"WHERE tc.CONSTRAINT_SCHEMA = DATABASE() AND tc.TABLE_NAME = {Literal(definition.Table)} "
             + "AND tc.CONSTRAINT_TYPE = 'CHECK') "

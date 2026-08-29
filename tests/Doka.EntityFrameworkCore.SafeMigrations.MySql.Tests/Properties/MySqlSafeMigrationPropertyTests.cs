@@ -47,6 +47,40 @@ public sealed class MySqlSafeMigrationPropertyTests : IDisposable
         return candidates.Contains($"{quoted} is null", StringComparer.Ordinal);
     }
 
+    [Property(MaxTest = 1000)]
+    public bool RenderedStructuredExpressions_ParseToAnEquivalentStableForm(
+        string? rawIdentifier,
+        int rawLiteral,
+        int shapeSelector,
+        byte depthSelector
+    )
+    {
+        var expression = SafeMigrationSqlExpressionPropertyCases.Create(
+            rawIdentifier,
+            rawLiteral,
+            shapeSelector,
+            depthSelector);
+
+        return SafeMigrationSqlExpressionPropertyCases.PreservesStableRoundTrip(expression, _renderer.Render);
+    }
+
+    [Property(MaxTest = 1000)]
+    public bool RenderedStructuredExpressions_RejectAnAppendedStatement(
+        string? rawIdentifier,
+        int rawLiteral,
+        int shapeSelector,
+        byte depthSelector
+    )
+    {
+        var expression = SafeMigrationSqlExpressionPropertyCases.Create(
+            rawIdentifier,
+            rawLiteral,
+            shapeSelector,
+            depthSelector);
+
+        return SafeMigrationSqlExpressionPropertyCases.RejectsAppendedStatement(expression, _renderer.Render);
+    }
+
     [Property(MaxTest = 500)]
     public bool Render_RejectsEveryForeignProviderFragment(
         string? rawSql

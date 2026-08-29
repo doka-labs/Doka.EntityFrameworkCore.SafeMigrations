@@ -59,6 +59,29 @@ public sealed partial class SafeMigrationDefinitionTests
         var virtualTarget = RepairColumn(computedColumnSql: "1 + 1", isStored: false);
 
         Assert.False(SafeMigrationColumnRepairHelper.CanSafelyAlterColumn(computedBaseline, virtualTarget));
+
+        Assert.Throws<ArgumentNullException>(() =>
+            SafeMigrationColumnRepairHelper.CanSafelyConvergeExistingColumn(null!));
+        Assert.True(SafeMigrationColumnRepairHelper.CanSafelyConvergeExistingColumn(losslessTarget));
+        Assert.False(
+            SafeMigrationColumnRepairHelper.CanSafelyConvergeExistingColumn(
+                RepairColumn(isRowVersion: true)));
+        Assert.False(
+            SafeMigrationColumnRepairHelper.CanSafelyConvergeExistingColumn(
+                RepairColumn(computedColumnSql: "1 + 1", isStored: true)));
+
+        var providerOperation = new AddColumnOperation
+        {
+            Name = "id",
+            Table = "items",
+            ClrType = typeof(int),
+            IsNullable = false,
+        };
+
+        providerOperation["Test:Identity"] = "identity";
+        var providerOwned = SafeMigrationExpectedDefinitionFactory.From(providerOperation);
+
+        Assert.False(SafeMigrationColumnRepairHelper.CanSafelyConvergeExistingColumn(providerOwned));
     }
 
     private static ExpectedColumnDefinition RepairColumn(

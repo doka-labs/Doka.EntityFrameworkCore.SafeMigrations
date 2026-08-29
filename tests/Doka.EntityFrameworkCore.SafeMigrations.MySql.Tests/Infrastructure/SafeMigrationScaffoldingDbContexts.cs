@@ -24,7 +24,14 @@ public abstract class SafeMigrationScaffoldingDbContext : DbContext
     )
     {
         optionsBuilder.UseMySql(_connectionString, _serverVersion);
-        optionsBuilder.UseMySqlSafeMigrations(options => options.UseScaffoldingMode(_mode));
+        optionsBuilder.UseMySqlSafeMigrations(options =>
+        {
+            options.UseScaffoldingMode(_mode);
+            if (_mode == SafeMigrationScaffoldingMode.LegacyConvergence)
+            {
+                options.UseLegacyConvergencePolicy(SafeMigrationPolicy.RepairIfSafe);
+            }
+        });
     }
 
     protected override void OnModelCreating(

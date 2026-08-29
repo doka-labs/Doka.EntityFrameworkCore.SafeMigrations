@@ -91,27 +91,125 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'unsupported_scaffolded_annotation';"));
     }
 
-    [Fact]
-    public async Task UnobservableClientGuidStrategy_IsRejectedBeforeDdl()
+    [Theory]
+    [InlineData(SafeMigrationScaffoldingMode.Strict)]
+    [InlineData(SafeMigrationScaffoldingMode.LegacyConvergence)]
+    public async Task ScaffoldedClientGuidRelationship_IsSupportedAndIdempotent(
+        SafeMigrationScaffoldingMode mode
+    )
     {
         var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        _ = builder.CreateTableIfNotExists(
-            name: "unsupported_client_guid",
+
+        _ = AddScaffoldedTable(
+            builder,
+            mode,
+            name: "client_guid_roots",
             columns: table => new
             {
                 id = table
-                    .Column<Guid>(type: "char(36)", nullable: false)
+                    .Column<string>(type: "varchar(36)", maxLength: 36, nullable: false)
                     .Annotation(
                         "Doka:MySql:ValueGenerationStrategy",
                         MySqlValueGenerationStrategy.ClientGuid),
             },
-            constraints: table => table.PrimaryKey("pk_unsupported_client_guid", value => value.id));
+            constraints: table => table.PrimaryKey("pk_client_guid_roots", value => value.id));
+
+        _ = AddScaffoldedTable(
+            builder,
+            mode,
+            name: "client_guid_leaves",
+            columns: table => new
+            {
+                id = table
+                    .Column<int>(type: "int", nullable: false)
+                    .Annotation(
+                        "Doka:MySql:ValueGenerationStrategy",
+                        MySqlValueGenerationStrategy.AutoIncrement),
+                root_id = table
+                    .Column<string>(type: "varchar(36)", maxLength: 36, nullable: false)
+                    .Annotation(
+                        "Doka:MySql:ValueGenerationStrategy",
+                        MySqlValueGenerationStrategy.None),
+            },
+            constraints: table =>
+            {
+                table.PrimaryKey("pk_client_guid_leaves", value => value.id);
+                table.ForeignKey(
+                    "fk_client_guid_leaves_roots",
+                    value => value.root_id,
+                    "client_guid_roots",
+                    "id",
+                    onDelete: ReferentialAction.Cascade);
+            });
+
+        _ = builder.CreateIndexIfNotExistsFromModel(
+            "ix_client_guid_leaves_root_id",
+            "client_guid_leaves",
+            "root_id");
+
+        var preflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("client-guid-relationship"));
+
+        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteSqlAsync(
+            connectionString,
+            "INSERT INTO `client_guid_roots` (`id`) VALUES ('9ca407b5-d320-442f-9b52-a41448759585');"
+            + "INSERT INTO `client_guid_leaves` (`root_id`) "
+            + "VALUES ('9ca407b5-d320-442f-9b52-a41448759585');");
+        await ExecuteOperationsAsync(context, builder.Operations);
+
+        var postflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("client-guid-relationship"));
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
+        Assert.All(
+            preflight.Assessments,
+            assessment => Assert.True(
+                assessment.Action is SafeMigrationAction.Apply or SafeMigrationAction.NoOp,
+                $"Unexpected preflight action: {assessment.Action}."));
+        Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
+        Assert.All(
+            postflight.Assessments,
+            assessment => Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState));
+        Assert.Equal(1, await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `client_guid_roots`;"));
+        Assert.Equal(1, await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `client_guid_leaves`;"));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ScaffoldedUnsupportedColumnAnnotation_IsRejectedBeforeDdl(
+        bool useUnknownAnnotation
+    )
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        var tableName = useUnknownAnnotation ? "unsupported_unknown" : "unsupported_hilo";
+
+        _ = builder.CreateTableIfNotExists(
+            name: tableName,
+            columns: table => new
+            {
+                id = useUnknownAnnotation
+                    ? table
+                        .Column<long>(type: "bigint", nullable: false)
+                        .Annotation("Test:UnknownColumnFacet", true)
+                    : table
+                        .Column<long>(type: "bigint", nullable: false)
+                        .Annotation(
+                            "Doka:MySql:ValueGenerationStrategy",
+                            MySqlValueGenerationStrategy.HiLo),
+            },
+            constraints: table => table.PrimaryKey($"pk_{tableName}", value => value.id));
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("unsupported-client-guid"));
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions(tableName));
 
         var exception = await Assert.ThrowsAsync<MySqlException>(() =>
             ExecuteOperationsAsync(context, builder.Operations));
@@ -124,7 +222,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'unsupported_client_guid';"));
+                + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{tableName}';"));
     }
 
     private static SafeMigrationOperation AddScaffoldedAutoIncrementTable(
@@ -147,4 +245,23 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         return Assert.IsType<SafeMigrationOperation>(Assert.Single(builder.Operations));
     }
+
+    private static OperationBuilder<SafeMigrationOperation> AddScaffoldedTable<TColumns>(
+        MigrationBuilder builder,
+        SafeMigrationScaffoldingMode mode,
+        string name,
+        Func<ColumnsBuilder, TColumns> columns,
+        Action<CreateTableBuilder<TColumns>> constraints
+    ) => mode switch
+    {
+        SafeMigrationScaffoldingMode.Strict => builder.CreateTableIfNotExists(
+            name,
+            columns,
+            constraints: constraints),
+        SafeMigrationScaffoldingMode.LegacyConvergence => builder.ConvergeTableFromModel(
+            name,
+            columns,
+            constraints: constraints),
+        _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unsupported scaffolding mode."),
+    };
 }

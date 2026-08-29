@@ -3,6 +3,262 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 public sealed partial class SafeMigrationPreflightProjectionTests
 {
     [Fact]
+    public void ProjectionAllowsUniqueIndexAfterNullableColumnConvergence()
+    {
+        var projection = new SafeMigrationPreflightProjection();
+        var id = Column("id");
+        var email = new ExpectedColumnDefinition("email", typeof(string), isNullable: true, storeType: "text");
+        var table = new ExpectedTableDefinition("users", [id, email]);
+
+        ObserveAccepted(
+            projection,
+            new EnsureTableIntent(table, SafeMigrationTableMode.ConvergenceContainer),
+            SafeMigrationObservedState.Matching);
+        ObserveAccepted(
+            projection,
+            new EnsureColumnIntent("users", id),
+            SafeMigrationObservedState.Matching);
+        ObserveAccepted(
+            projection,
+            new EnsureColumnIntent("users", email),
+            SafeMigrationObservedState.Missing);
+
+        var index = new EnsureIndexIntent(
+            new ExpectedIndexDefinition(
+                "ux_users_email",
+                "users",
+                [new ExpectedIndexKeyDefinition(column: "email")],
+                unique: true));
+
+        var operation = new SafeMigrationOperation(index, SafeMigrationPolicy.ThrowIfDifferent);
+        var analysis = projection.Project(operation, Live(SafeMigrationObservedState.PrerequisiteMissing));
+
+        Assert.Equal(SafeMigrationObservedState.Missing, analysis.ObservedState);
+        Assert.Equal("projected_missing", analysis.Code);
+    }
+
+    [Fact]
+    public void ProjectionAllowsNonUniqueIndexAfterRequiredColumnsConverge()
+    {
+        var projection = new SafeMigrationPreflightProjection();
+        var id = Column("id");
+        var table = new ExpectedTableDefinition("items", [id]);
+
+        ObserveAccepted(
+            projection,
+            new EnsureTableIntent(table, SafeMigrationTableMode.ConvergenceContainer),
+            SafeMigrationObservedState.Matching);
+        ObserveAccepted(
+            projection,
+            new EnsureColumnIntent("items", id),
+            SafeMigrationObservedState.Missing);
+
+        var index = new EnsureIndexIntent(
+            new ExpectedIndexDefinition(
+                "ix_items_id",
+                "items",
+                [new ExpectedIndexKeyDefinition(column: "id")]));
+
+        var operation = new SafeMigrationOperation(index, SafeMigrationPolicy.ThrowIfDifferent);
+        var analysis = projection.Project(operation, Live(SafeMigrationObservedState.PrerequisiteMissing));
+
+        Assert.Equal(SafeMigrationObservedState.Missing, analysis.ObservedState);
+    }
+
+    [Fact]
+    public void ProjectionCarriesSuccessfulColumnRepairIntoFollowingOperations()
+    {
+        var projection = new SafeMigrationPreflightProjection();
+        var value = new ExpectedColumnDefinition("value", typeof(string), isNullable: true, storeType: "text");
+        var table = new ExpectedTableDefinition("items", [value]);
+
+        ObserveAccepted(
+            projection,
+            new EnsureTableIntent(table, SafeMigrationTableMode.ConvergenceContainer),
+            SafeMigrationObservedState.Matching);
+
+        var ensure = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", value),
+            SafeMigrationPolicy.RepairIfSafe);
+
+        var ensureAnalysis = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.Safe,
+            postconditionSatisfied: false,
+            "test_repair");
+
+        var ensureDecision = SafeMigrationDecisionPlanner.Plan(
+            ensure.Intent.Kind,
+            ensureAnalysis.ObservedState,
+            ensure.Policy,
+            ensureAnalysis.RepairCapability);
+
+        projection.Observe(ensure, ensureAnalysis, ensureDecision);
+
+        var index = new SafeMigrationOperation(
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "ix_items_value",
+                    "items",
+                    [new ExpectedIndexKeyDefinition(column: "value")])),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var indexAnalysis = projection.Project(index, Live(SafeMigrationObservedState.PrerequisiteMissing));
+
+        Assert.Equal(SafeMigrationAction.Repair, ensureDecision.Action);
+        Assert.Equal(SafeMigrationObservedState.Missing, indexAnalysis.ObservedState);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ProjectionAllowsUniqueIndexAfterProvableNullDefault(
+        bool structuredDefault
+    )
+    {
+        var projection = new SafeMigrationPreflightProjection();
+        var externalId = new ExpectedColumnDefinition(
+            "external_id",
+            typeof(int),
+            isNullable: true,
+            storeType: "integer",
+            defaultValue: structuredDefault
+                ? SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal(null))
+                : SafeMigrationDefaultValue.Literal(null));
+
+        var table = new ExpectedTableDefinition("items", [externalId]);
+
+        ObserveAccepted(
+            projection,
+            new EnsureTableIntent(table, SafeMigrationTableMode.ConvergenceContainer),
+            SafeMigrationObservedState.Matching);
+        ObserveAccepted(
+            projection,
+            new EnsureColumnIntent("items", externalId),
+            SafeMigrationObservedState.Missing);
+
+        var index = new EnsureIndexIntent(
+            new ExpectedIndexDefinition(
+                "ux_items_external_id",
+                "items",
+                [new ExpectedIndexKeyDefinition(column: "external_id")],
+                unique: true));
+
+        var operation = new SafeMigrationOperation(index, SafeMigrationPolicy.ThrowIfDifferent);
+        var analysis = projection.Project(operation, Live(SafeMigrationObservedState.PrerequisiteMissing));
+
+        Assert.Equal(SafeMigrationObservedState.Missing, analysis.ObservedState);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    public void ProjectionKeepsUnprovenUniqueIndexPrerequisiteBlocked(
+        bool nullable,
+        bool hasDefault
+    )
+    {
+        var projection = new SafeMigrationPreflightProjection();
+        var key = new ExpectedColumnDefinition(
+            "external_id",
+            typeof(int),
+            nullable,
+            "integer",
+            defaultValue: hasDefault ? SafeMigrationDefaultValue.Literal(0) : null);
+
+        var table = new ExpectedTableDefinition("items", [key]);
+
+        ObserveAccepted(
+            projection,
+            new EnsureTableIntent(table, SafeMigrationTableMode.ConvergenceContainer),
+            SafeMigrationObservedState.Matching);
+        ObserveAccepted(
+            projection,
+            new EnsureColumnIntent("items", key),
+            SafeMigrationObservedState.Missing);
+
+        var index = new EnsureIndexIntent(
+            new ExpectedIndexDefinition(
+                "ux_items_external_id",
+                "items",
+                [new ExpectedIndexKeyDefinition(column: "external_id")],
+                unique: true));
+
+        var operation = new SafeMigrationOperation(index, SafeMigrationPolicy.ThrowIfDifferent);
+        var live = Live(SafeMigrationObservedState.PrerequisiteMissing);
+        var analysis = projection.Project(operation, live);
+
+        Assert.Same(live, analysis);
+        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
+    }
+
+    [Fact]
+    public void ProjectionKeepsUnknownIndexColumnPrerequisiteBlocked()
+    {
+        var projection = new SafeMigrationPreflightProjection();
+        var table = new ExpectedTableDefinition("items", [Column("id")]);
+
+        ObserveAccepted(
+            projection,
+            new EnsureTableIntent(table, SafeMigrationTableMode.ConvergenceContainer),
+            SafeMigrationObservedState.Matching);
+
+        var index = new EnsureIndexIntent(
+            new ExpectedIndexDefinition(
+                "ix_items_unknown",
+                "items",
+                [new ExpectedIndexKeyDefinition(column: "unknown")]));
+
+        var operation = new SafeMigrationOperation(index, SafeMigrationPolicy.ThrowIfDifferent);
+        var live = Live(SafeMigrationObservedState.PrerequisiteMissing);
+        var analysis = projection.Project(operation, live);
+
+        Assert.Same(live, analysis);
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void ProjectionKeepsComputedOrNullsNotDistinctUniqueIndexBlocked(
+        bool computed,
+        bool nullsNotDistinct
+    )
+    {
+        var projection = new SafeMigrationPreflightProjection();
+        var externalId = new ExpectedColumnDefinition(
+            "external_id",
+            typeof(int),
+            isNullable: true,
+            storeType: "integer",
+            computedExpression: computed ? SafeMigrationSql.Literal(0) : null);
+
+        var table = new ExpectedTableDefinition("items", [externalId]);
+
+        ObserveAccepted(
+            projection,
+            new EnsureTableIntent(table, SafeMigrationTableMode.ConvergenceContainer),
+            SafeMigrationObservedState.Matching);
+        ObserveAccepted(
+            projection,
+            new EnsureColumnIntent("items", externalId),
+            SafeMigrationObservedState.Missing);
+
+        var index = new EnsureIndexIntent(
+            new ExpectedIndexDefinition(
+                "ux_items_external_id",
+                "items",
+                [new ExpectedIndexKeyDefinition(column: "external_id")],
+                unique: true,
+                nullsDistinct: nullsNotDistinct ? false : null));
+
+        var operation = new SafeMigrationOperation(index, SafeMigrationPolicy.ThrowIfDifferent);
+        var live = Live(SafeMigrationObservedState.PrerequisiteMissing);
+        var analysis = projection.Project(operation, live);
+
+        Assert.Same(live, analysis);
+    }
+
+    [Fact]
     public void ProjectionCarriesImmutableDefinitionsAcrossRenameSequences()
     {
         var projection = new SafeMigrationPreflightProjection();

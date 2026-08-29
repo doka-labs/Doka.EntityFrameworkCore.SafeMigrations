@@ -3,13 +3,58 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 public sealed class SafeMigrationScaffoldingTests
 {
     [Fact]
-    public void OptionsBuilderDefaultsToStrictAndRejectsUndefinedModes()
+    public void OptionsBuilderDefaultsToStrictFailClosedConfiguration()
     {
         var builder = new SafeMigrationOptionsBuilder();
 
         Assert.Equal(SafeMigrationScaffoldingMode.Strict, builder.Mode);
+        Assert.Equal(SafeMigrationPolicy.ThrowIfDifferent, builder.LegacyConvergencePolicy);
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             builder.UseScaffoldingMode((SafeMigrationScaffoldingMode)int.MaxValue));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            builder.UseLegacyConvergencePolicy(SafeMigrationPolicy.ExistenceOnly));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            builder.UseLegacyConvergencePolicy((SafeMigrationPolicy)int.MaxValue));
+    }
+
+    [Fact]
+    public void RepairPolicyRequiresLegacyConvergenceRegardlessOfCallOrder()
+    {
+        var invalid = new SafeMigrationOptionsBuilder()
+            .UseLegacyConvergencePolicy(SafeMigrationPolicy.RepairIfSafe);
+
+        var valid = new SafeMigrationOptionsBuilder()
+            .UseLegacyConvergencePolicy(SafeMigrationPolicy.RepairIfSafe)
+            .UseScaffoldingMode(SafeMigrationScaffoldingMode.LegacyConvergence);
+
+        var exception = Assert.Throws<InvalidOperationException>(invalid.Validate);
+        valid.Validate();
+
+        Assert.Contains("requires LegacyConvergence", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(SafeMigrationPolicy.RepairIfSafe, valid.LegacyConvergencePolicy);
+    }
+
+    [Theory]
+    [InlineData(SafeMigrationPolicy.ThrowIfDifferent, "SafeMigrationPolicy.ThrowIfDifferent")]
+    [InlineData(SafeMigrationPolicy.RepairIfSafe, "SafeMigrationPolicy.RepairIfSafe")]
+    public void LegacyConvergenceGenerationFreezesSelectedPolicyInSource(
+        SafeMigrationPolicy policy,
+        string expectedPolicy
+    )
+    {
+        var generator = CreateOperationGenerator(
+            SafeMigrationScaffoldingMode.LegacyConvergence,
+            legacyConvergencePolicy: policy);
+
+        var builder = new IndentedStringBuilder();
+
+        generator.Generate("migrationBuilder", [CreateTable()], builder);
+        var source = builder.ToString();
+
+        Assert.Contains(".ConvergeTableFromModel(", source, StringComparison.Ordinal);
+        Assert.Contains("policy: global::Doka.EntityFrameworkCore.SafeMigrations." + expectedPolicy, source,
+            StringComparison.Ordinal);
+        Assert.EndsWith(");", source, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -39,6 +84,50 @@ public sealed class SafeMigrationScaffoldingTests
 
         Assert.Contains("migrationBuilder.CreateTable(", builder.ToString(), StringComparison.Ordinal);
         Assert.DoesNotContain("CreateTableIfNotExists", builder.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CreateTableGenerationAcceptsStructurallyComparableCheckConstraints()
+    {
+        var generator = CreateOperationGenerator(SafeMigrationScaffoldingMode.Strict);
+        var builder = new IndentedStringBuilder();
+        var operation = CreateTable();
+        operation.CheckConstraints.Add(
+            new AddCheckConstraintOperation
+            {
+                Name = "ck_users_id",
+                Table = "users",
+                Sql = "`id` >= 0",
+            });
+
+        generator.Generate("migrationBuilder", [operation], builder);
+        var source = builder.ToString();
+
+        Assert.Contains(".CreateTableIfNotExists(", source, StringComparison.Ordinal);
+        Assert.Contains("table.CheckConstraint(\"ck_users_id\", \"`id` >= 0\")", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CreateTableGenerationRejectsOpaqueCheckConstraintBeforeEmittingSource()
+    {
+        var generator = CreateOperationGenerator(SafeMigrationScaffoldingMode.Strict);
+        var builder = new IndentedStringBuilder();
+        var operation = CreateTable();
+        operation.CheckConstraints.Add(
+            new AddCheckConstraintOperation
+            {
+                Name = "ck_users_reference",
+                Table = "users",
+                Sql = "reference LIKE 'USR-%'",
+            });
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            generator.Generate("migrationBuilder", [operation], builder));
+
+        Assert.DoesNotContain("CreateTable", builder.ToString(), StringComparison.Ordinal);
+        Assert.Contains("ck_users_reference", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("trailing_token", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("FromExpression", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -351,7 +440,8 @@ public sealed class SafeMigrationScaffoldingTests
 
     private static SafeMigrationCSharpMigrationOperationGenerator CreateOperationGenerator(
         SafeMigrationScaffoldingMode mode,
-        bool isEnabled = true
+        bool isEnabled = true,
+        SafeMigrationPolicy legacyConvergencePolicy = SafeMigrationPolicy.ThrowIfDifferent
     )
     {
         var services = new ServiceCollection();
@@ -363,7 +453,7 @@ public sealed class SafeMigrationScaffoldingTests
 
         return new SafeMigrationCSharpMigrationOperationGenerator(
             dependencies,
-            new SafeMigrationScaffoldingConfiguration(isEnabled, mode));
+            new SafeMigrationScaffoldingConfiguration(isEnabled, mode, legacyConvergencePolicy));
     }
 
     private static CreateTableOperation CreateTable()

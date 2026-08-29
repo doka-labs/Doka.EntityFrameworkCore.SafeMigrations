@@ -60,11 +60,14 @@ current public configuration surface is:
 | --- | --- |
 | `UseScaffoldingMode(SafeMigrationScaffoldingMode.Strict)` | Explicitly selects the default strict generated table contract |
 | `UseScaffoldingMode(SafeMigrationScaffoldingMode.LegacyConvergence)` | Selects object-granular generated convergence for a reviewed legacy baseline |
+| `UseLegacyConvergencePolicy(SafeMigrationPolicy.ThrowIfDifferent)` | Explicitly selects the fail-closed default for generated legacy child operations |
+| `UseLegacyConvergencePolicy(SafeMigrationPolicy.RepairIfSafe)` | Allows generated legacy child operations to apply only provider-proven allowlisted repairs |
 
-The method returns the same builder for fluent composition. A null configure
-callback or an undefined enum value is rejected during options configuration.
-The selected value is written into new migration source; it is not consulted
-when an existing migration executes.
+Both methods return the same builder for fluent composition. A null configure
+callback, undefined enum value, `ExistenceOnly` as the legacy policy, or a
+non-default legacy policy without `LegacyConvergence` is rejected during options
+configuration. Both selected values are written into new migration source; they
+are not consulted when an existing migration executes.
 
 The callback is available on every registration shape that can select a
 scaffolding mode:
@@ -72,33 +75,43 @@ scaffolding mode:
 ```csharp
 options.UseMySqlSafeMigrations(configuration =>
 {
-    configuration.UseScaffoldingMode(
-        SafeMigrationScaffoldingMode.LegacyConvergence);
+    configuration
+        .UseScaffoldingMode(
+            SafeMigrationScaffoldingMode.LegacyConvergence)
+        .UseLegacyConvergencePolicy(SafeMigrationPolicy.RepairIfSafe);
 });
 
 options.UseMySqlSafeMigrations<CoreDbContext>(configuration =>
 {
-    configuration.UseScaffoldingMode(
-        SafeMigrationScaffoldingMode.LegacyConvergence);
+    configuration
+        .UseScaffoldingMode(
+            SafeMigrationScaffoldingMode.LegacyConvergence)
+        .UseLegacyConvergencePolicy(SafeMigrationPolicy.RepairIfSafe);
 });
 
 options.UsePostgreSqlSafeMigrations(configuration =>
 {
-    configuration.UseScaffoldingMode(
-        SafeMigrationScaffoldingMode.LegacyConvergence);
+    configuration
+        .UseScaffoldingMode(
+            SafeMigrationScaffoldingMode.LegacyConvergence)
+        .UseLegacyConvergencePolicy(SafeMigrationPolicy.RepairIfSafe);
 });
 
 options.UsePostgreSqlSafeMigrations<CoreDbContext>(configuration =>
 {
-    configuration.UseScaffoldingMode(
-        SafeMigrationScaffoldingMode.LegacyConvergence);
+    configuration
+        .UseScaffoldingMode(
+            SafeMigrationScaffoldingMode.LegacyConvergence)
+        .UseLegacyConvergencePolicy(SafeMigrationPolicy.RepairIfSafe);
 });
 
 options.UsePostgreSqlSafeMigrations<CustomNpgsqlMigrationsSqlGenerator, CoreDbContext>(
     configuration =>
     {
-        configuration.UseScaffoldingMode(
-            SafeMigrationScaffoldingMode.LegacyConvergence);
+        configuration
+            .UseScaffoldingMode(
+                SafeMigrationScaffoldingMode.LegacyConvergence)
+            .UseLegacyConvergencePolicy(SafeMigrationPolicy.RepairIfSafe);
     });
 ```
 
@@ -119,10 +132,23 @@ mapping is:
 | Multi-column `CreateIndex` | `CreateCompositeIndexIfNotExistsFromModel` | Same |
 | Generated rollback of `CreateTable` | `DropTableIfExists` | Entire `Down` body rejects before DDL |
 
+Every generated `ConvergeTableFromModel` call contains an explicit `policy`
+argument. The compatibility default is `ThrowIfDifferent`. `RepairIfSafe`
+allows only nullability, default, and comment changes on an ordinary column
+whose invariant provider catalog shape already matches. Nullability tightening
+with existing `NULL` values is `DataBlocked`; type, collation, generated,
+identity, row-version, provider-annotation, and unsupported drift remains
+fail-closed.
+
 The [migration authoring guide](migration-authoring.md) contains complete
 generated strict and legacy-convergence migrations plus the equivalent
 hand-authored `ExpectedTableDefinition` form, including provider annotations,
 separate index calls, and rollback behavior.
+
+Doka `ClientGuid` remains in the captured column contract but compares like
+non-`AUTO_INCREMENT` state because generation occurs in the EF client. HiLo,
+storage-format, unknown column, and unsupported operation-level annotations are
+classified `Unsupported` before target DDL instead of being ignored.
 
 The provider package contributes a `buildTransitive` assembly attribute when
 the consuming project directly references `Microsoft.EntityFrameworkCore.Design`
@@ -291,6 +317,18 @@ uncancellable. Do not use a `DbContext` concurrently. Analysis opens/closes a
 connection only when it owns that open; it does not assume ownership of a
 caller transaction. PostgreSQL caller transactions must be read-only and use
 `RepeatableRead` or `Serializable`. Analysis never calls `Migrate` for you.
+
+## Provider analyzer SPI
+
+Provider packages implement `ISafeMigrationProviderAnalyzer`. Before any
+runner method reads pending history, resolves model/environment state, acquires
+a lock, opens a connection, or queries a catalog, it calls
+`ValidateContext(DbContext)`. The method is synchronous and side-effect free:
+it validates already configured provider state but performs no database I/O.
+MySQL/MariaDB uses it to inspect the actual current connection's
+`AllowUserVariables` setting, including replacement connections that share an
+EF internal service provider. PostgreSQL currently validates only the non-null
+context contract because it has no equivalent connection-string prerequisite.
 
 ## Reports, serialization, and failure
 

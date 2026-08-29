@@ -45,7 +45,16 @@ internal sealed partial class SafeMigrationPreflightProjection
         SafeMigrationDecision decision
     )
     {
-        if (decision.Action == SafeMigrationAction.Apply
+        var key = new TableKey(intent.Table, intent.Schema);
+        if (_prerequisites.TryGetValue(key, out var prerequisites)
+            && decision.Action is SafeMigrationAction.Apply or SafeMigrationAction.NoOp or SafeMigrationAction.Repair)
+        {
+            prerequisites.Columns[intent.Definition.Name] = new ProjectedColumn(
+                intent.Definition,
+                AddedToExistingTable: decision.Action == SafeMigrationAction.Apply && !prerequisites.NewlyCreated);
+        }
+
+        if (decision.Action is SafeMigrationAction.Apply or SafeMigrationAction.Repair
             && TryGet(intent.Table, intent.Schema, out var table))
         {
             table.AddColumn(intent.Definition);
@@ -57,6 +66,14 @@ internal sealed partial class SafeMigrationPreflightProjection
         SafeMigrationDecision decision
     )
     {
+        if (decision.Action == SafeMigrationAction.Repair
+            && _prerequisites.TryGetValue(new TableKey(intent.Table, intent.Schema), out var prerequisites))
+        {
+            prerequisites.Columns[intent.Definition.Name] = new ProjectedColumn(
+                intent.Definition,
+                AddedToExistingTable: false);
+        }
+
         if (decision.Action == SafeMigrationAction.Repair
             && TryGet(intent.Table, intent.Schema, out var table))
         {
@@ -70,6 +87,12 @@ internal sealed partial class SafeMigrationPreflightProjection
     )
     {
         if (decision.Action == SafeMigrationAction.Apply
+            && _prerequisites.TryGetValue(new TableKey(intent.Table, intent.Schema), out var prerequisites))
+        {
+            prerequisites.Columns.Remove(intent.Name);
+        }
+
+        if (decision.Action == SafeMigrationAction.Apply
             && TryGet(intent.Table, intent.Schema, out var table))
         {
             table.RemoveColumn(intent.Name);
@@ -81,8 +104,20 @@ internal sealed partial class SafeMigrationPreflightProjection
         SafeMigrationDecision decision
     )
     {
-        if (decision.Action != SafeMigrationAction.Apply
-            || !TryGet(intent.Table, intent.Schema, out var table))
+        if (decision.Action != SafeMigrationAction.Apply)
+        {
+            return;
+        }
+
+        if (_prerequisites.TryGetValue(new TableKey(intent.Table, intent.Schema), out var prerequisites)
+            && prerequisites.Columns.Remove(intent.Name, out var prerequisite))
+        {
+            prerequisites.Columns[intent.NewName] = new ProjectedColumn(
+                prerequisite.Definition,
+                prerequisite.AddedToExistingTable);
+        }
+
+        if (!TryGet(intent.Table, intent.Schema, out var table))
         {
             return;
         }

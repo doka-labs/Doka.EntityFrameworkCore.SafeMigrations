@@ -3,6 +3,45 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 public sealed class DokaPackageContractTests
 {
     [Fact]
+    public void ApplicationConvertedGuidRelationship_EmitsCatalogNeutralClientGuidAnnotation()
+    {
+        using var context = CreateApplicationConvertedGuidContext();
+        var model = context.GetService<IDesignTimeModel>().Model.GetRelationalModel();
+        var operations = context
+            .GetService<IMigrationsModelDiffer>()
+            .GetDifferences(null, model);
+
+        var root = Assert.Single(
+            operations.OfType<CreateTableOperation>(),
+            operation => operation.Name == "application_guid_roots");
+
+        var branch = Assert.Single(
+            operations.OfType<CreateTableOperation>(),
+            operation => operation.Name == "application_guid_branches");
+
+        var leaf = Assert.Single(
+            operations.OfType<CreateTableOperation>(),
+            operation => operation.Name == "application_guid_leaves");
+
+        var columns = new[]
+        {
+            Assert.Single(root.Columns, column => column.Name == "id"),
+            Assert.Single(branch.Columns, column => column.Name == "id"),
+            Assert.Single(leaf.Columns, column => column.Name == "branch_id"),
+        };
+
+        Assert.All(columns, column =>
+        {
+            Assert.Equal(typeof(string), column.ClrType);
+            Assert.Equal("varchar(36)", column.ColumnType);
+            Assert.Null(column["Doka:MySql:GuidFormat"]);
+        });
+        Assert.Equal(
+            MySqlValueGenerationStrategy.ClientGuid,
+            columns[0]["Doka:MySql:ValueGenerationStrategy"]);
+    }
+
+    [Fact]
     public void ScopedCommand_SnapshotsInputsAndExposesExecutionOrder()
     {
         string[] setup = ["SET @first = 1;", "SET @second = 2;"];
@@ -118,6 +157,16 @@ public sealed class DokaPackageContractTests
         return new DbContext(options);
     }
 
+    private static ApplicationConvertedGuidContext CreateApplicationConvertedGuidContext()
+    {
+        var options = new DbContextOptionsBuilder<ApplicationConvertedGuidContext>().UseMySql(
+                "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test",
+                MySqlServerVersion.MySql(new Version(8, 4, 11)))
+            .Options;
+
+        return new ApplicationConvertedGuidContext(options);
+    }
+
     private static MySqlServerVersion CreateServerVersion(
         bool isMariaDb
     ) => isMariaDb
@@ -185,5 +234,74 @@ public sealed class DokaPackageContractTests
     {
         Assert.Equal(expectedKind, fragment.Kind);
         Assert.Equal(expectedCommandText, fragment.CommandText.ToString());
+    }
+
+    private sealed class ApplicationConvertedGuidContext(
+        DbContextOptions<ApplicationConvertedGuidContext> options
+    ) : DbContext(options)
+    {
+        protected override void OnModelCreating(
+            ModelBuilder modelBuilder
+        )
+        {
+            modelBuilder.Entity<ApplicationGuidRoot>(entity =>
+            {
+                entity.ToTable("application_guid_roots");
+                entity.HasKey(value => value.Id);
+
+                entity
+                    .Property(value => value.Id)
+                    .HasColumnName("id")
+                    .HasColumnType("varchar(36)")
+                    .HasMaxLength(36)
+                    .HasConversion<string>();
+            });
+
+            modelBuilder.Entity<ApplicationGuidBranch>(entity =>
+            {
+                entity.ToTable("application_guid_branches");
+                entity.HasKey(value => value.Id);
+                entity.Property(value => value.Id).HasColumnName("id");
+
+                entity
+                    .HasOne(value => value.Root)
+                    .WithOne()
+                    .HasForeignKey<ApplicationGuidBranch>(value => value.Id);
+            });
+
+            modelBuilder.Entity<ApplicationGuidLeaf>(entity =>
+            {
+                entity.ToTable("application_guid_leaves");
+                entity.HasKey(value => value.Id);
+                entity.Property(value => value.Id).HasColumnName("id");
+                entity.Property(value => value.BranchId).HasColumnName("branch_id");
+
+                entity
+                    .HasOne(value => value.Branch)
+                    .WithMany()
+                    .HasForeignKey(value => value.BranchId);
+            });
+        }
+    }
+
+    private sealed class ApplicationGuidRoot
+    {
+        public Guid Id { get; set; }
+    }
+
+    private sealed class ApplicationGuidBranch
+    {
+        public Guid Id { get; set; }
+
+        public ApplicationGuidRoot Root { get; set; } = null!;
+    }
+
+    private sealed class ApplicationGuidLeaf
+    {
+        public int Id { get; set; }
+
+        public Guid BranchId { get; set; }
+
+        public ApplicationGuidBranch Branch { get; set; } = null!;
     }
 }

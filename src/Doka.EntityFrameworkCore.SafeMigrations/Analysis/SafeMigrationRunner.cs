@@ -30,6 +30,8 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(options);
 
+        _providerAnalyzer.ValidateContext(context);
+
         var migrationsAssembly = context.GetService<IMigrationsAssembly>();
         var historyRepository = context.GetService<IHistoryRepository>();
         var applied = (await historyRepository.GetAppliedMigrationsAsync(cancellationToken))
@@ -118,6 +120,8 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
         ArgumentNullException.ThrowIfNull(options);
 
         cancellationToken.ThrowIfCancellationRequested();
+
+        _providerAnalyzer.ValidateContext(context);
 
         // Validate the canonical Core model before trusting any catalog result
         // produced for an instance-specific derived DbContext.

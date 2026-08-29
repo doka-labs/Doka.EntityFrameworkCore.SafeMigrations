@@ -9,6 +9,20 @@ public interface ISafeMigrationProviderAnalyzer
     /// <summary>Gets the stable provider identifier.</summary>
     string ProviderId { get; }
 
+    /// <summary>
+    /// Validates provider-owned context prerequisites without accessing the
+    /// database or changing context state.
+    /// </summary>
+    /// <param name="context">The configured DbContext that will be inspected.</param>
+    /// <remarks>
+    /// The runner invokes this method before migration history, model,
+    /// environment, lock, catalog access, or connection opening.
+    /// Implementations must therefore remain synchronous and side-effect free.
+    /// </remarks>
+    void ValidateContext(
+        DbContext context
+    );
+
     /// <summary>Reads the live provider and server metadata without changing database state.</summary>
     /// <param name="context">The configured DbContext whose database is inspected.</param>
     /// <param name="cancellationToken">The token used to cancel the asynchronous operation.</param>

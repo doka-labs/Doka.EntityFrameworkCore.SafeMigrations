@@ -19,6 +19,19 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
 
     public string ProviderId => "doka_mysql";
 
+    public void ValidateContext(
+        DbContext context
+    )
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        // Validate the current connection instance rather than the immutable
+        // options snapshot. EF may reuse an internal service provider after a
+        // consumer replaces the relational connection for the same context
+        // type, but no SafeMigrations SQL may escape under invalid settings.
+        MySqlSafeMigrationConnectionValidator.Validate(context.Database.GetDbConnection());
+    }
+
     public async Task<SafeMigrationProviderEnvironment> GetEnvironmentAsync(
         DbContext context,
         CancellationToken cancellationToken = default
@@ -100,7 +113,7 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
             }
 
             var maximumPayloadBytes = await GetMaximumPayloadBytesAsync(connection, cancellationToken);
-            var prerequisiteMissing = await FindMissingPrerequisitesAsync(
+            var shortCircuitStates = await FindShortCircuitStatesAsync(
                 connection,
                 plans,
                 maximumPayloadBytes,
@@ -115,9 +128,9 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
                 cancellationToken.ThrowIfCancellationRequested();
 
                 while (ordinal < operations.Count
-                       && prerequisiteMissing[ordinal])
+                       && shortCircuitStates[ordinal] is { } shortCircuitState)
                 {
-                    results.Add(PrerequisiteMissingAnalysis());
+                    results.Add(ShortCircuitAnalysis(shortCircuitState));
                     ordinal++;
                 }
 
@@ -135,7 +148,7 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
                 while (ordinal < operations.Count
                        && selections.Count < SafeMigrationCatalogQueryLimits.MaximumMySqlOperations)
                 {
-                    if (prerequisiteMissing[ordinal])
+                    if (shortCircuitStates[ordinal] is not null)
                     {
                         break;
                     }
@@ -198,14 +211,14 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
         }
     }
 
-    private static async Task<bool[]> FindMissingPrerequisitesAsync(
+    private static async Task<SafeMigrationObservedState?[]> FindShortCircuitStatesAsync(
         DbConnection connection,
         MySqlSafeMigrationRuntimePlan[] plans,
         int maximumPayloadBytes,
         CancellationToken cancellationToken
     )
     {
-        var missing = new bool[plans.Length];
+        var states = new SafeMigrationObservedState?[plans.Length];
         var rowsRead = 0;
         var ordinal = 0;
         var separatorBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Separator);
@@ -224,10 +237,27 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
                    && selections.Count < SafeMigrationCatalogQueryLimits.MaximumMySqlOperations)
             {
                 var checkpoint = parameterizer.Capture();
-                var prerequisite = plans[ordinal]
+                var plan = plans[ordinal];
+                var prerequisite = plan
                     .RenderPrerequisiteExpression(parameterizer.AddString);
-                var selection = $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, "
-                    + $"NOT COALESCE(({prerequisite}), FALSE)";
+
+                var stateEvaluationGuardBranch = string.Empty;
+                if (plan.StateEvaluationGuardFailureExpression is not null)
+                {
+                    var stateEvaluationGuard = plan
+                        .RenderStateEvaluationGuardExpression(parameterizer.AddString);
+
+                    var guardFailure = plan
+                        .RenderStateEvaluationGuardFailureExpression(parameterizer.AddString);
+
+                    stateEvaluationGuardBranch = $"WHEN NOT COALESCE(({stateEvaluationGuard}), FALSE) THEN "
+                        + $"({guardFailure}) ";
+                }
+
+                var selection = $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, CASE "
+                    + $"WHEN NOT COALESCE(({prerequisite}), FALSE) THEN 'prerequisite_missing' "
+                    + stateEvaluationGuardBranch
+                    + "ELSE NULL END";
 
                 var selectionBytes = Encoding.UTF8.GetByteCount(selection)
                     + (selections.Count == 0 ? 0 : separatorBytes);
@@ -268,7 +298,9 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
                         "The MySQL SafeMigrations prerequisite classifier returned an invalid ordinal.");
                 }
 
-                missing[resultOrdinal] = reader.GetBoolean(1);
+                states[resultOrdinal] = reader.IsDBNull(1)
+                    ? null
+                    : ParseState(reader.GetString(1));
                 rowsRead++;
             }
         }
@@ -279,14 +311,16 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
                 "The MySQL SafeMigrations prerequisite classifier returned an inconsistent row count.");
         }
 
-        return missing;
+        return states;
     }
 
-    private static SafeMigrationProviderAnalysis PrerequisiteMissingAnalysis() => new(
-        SafeMigrationObservedState.PrerequisiteMissing,
+    private static SafeMigrationProviderAnalysis ShortCircuitAnalysis(
+        SafeMigrationObservedState state
+    ) => new(
+        state,
         SafeMigrationRepairCapability.None,
         false,
-        "classified_prerequisite_missing");
+        $"classified_{StateCode(state)}");
 
     private static async Task<int> GetMaximumPayloadBytesAsync(
         DbConnection connection,
@@ -473,6 +507,7 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
         SafeMigrationDatabaseObjectKind.Index => table.Indexes.Contains(name),
         SafeMigrationDatabaseObjectKind.PrimaryKey => table.Constraints.Values.Contains(
             SafeMigrationDatabaseObjectKind.PrimaryKey),
+        SafeMigrationDatabaseObjectKind.UniqueConstraint when table.UniqueIndexes.Contains(name) => true,
         _ => table.Constraints.TryGetValue(name, out var expectedKind) && expectedKind == kind
     };
 

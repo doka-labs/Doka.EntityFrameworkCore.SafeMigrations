@@ -104,6 +104,47 @@ The generated index calls are evaluated independently under the same
 missing/matching/different contract. `DropTableIfExists` makes only absence
 idempotent; it is still destructive when the table exists.
 
+## Generated check constraints
+
+EF Core supplies check constraints to a migration generator as provider SQL.
+SafeMigrations accepts generated SQL only when it can translate the complete
+expression into the provider-neutral `SafeMigrationSql` tree. The bounded
+grammar covers quoted or unquoted identifiers, typed string/numeric/Boolean/
+null literals, parentheses, unary arithmetic and `NOT`, arithmetic and
+comparison operators, `AND`/`OR`, `IS NULL`, `BETWEEN`, `IN`, function calls,
+`CAST`, `COLLATE`, and current date/time values.
+
+Comments, parameters, multiple statements, subqueries, opaque provider
+operators, provider-dependent backslash escapes, malformed input, excessive
+nesting, oversized lists, and expressions larger than the documented parser
+bound fail during scaffolding. Delimited identifiers and strings use only SQL
+delimiter doubling. The exception identifies the check constraint and stable
+parse-failure category. It never emits a migration that would later fail solely
+because the generated check remained opaque.
+
+For SQL outside the bounded grammar, express the reviewed semantics explicitly:
+
+```csharp
+var check = ExpectedCheckConstraintDefinition.FromExpression(
+    "ck_orders_amount",
+    "orders",
+    SafeMigrationSql.Binary(
+        SafeMigrationSql.Identifier("amount"),
+        SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
+        SafeMigrationSql.Literal(0)));
+
+migrationBuilder.EnsureCheckConstraint(
+    check,
+    SafeMigrationPolicy.ThrowIfDifferent);
+```
+
+EF Core's `HasCheckConstraint` contract intentionally accepts provider SQL;
+therefore SafeMigrations, rather than EF, owns this stricter structural
+translation boundary. See the official
+[EF Core check-constraint documentation](https://learn.microsoft.com/en-us/ef/core/modeling/indexes#check-constraints),
+[MySQL string-literal contract](https://dev.mysql.com/doc/refman/8.4/en/string-literals.html),
+and [PostgreSQL lexical contract](https://www.postgresql.org/docs/current/sql-syntax-lexical.html).
+
 ## Generated legacy convergence
 
 Select legacy convergence only while scaffolding a reviewed baseline for
@@ -112,8 +153,11 @@ heterogeneous existing installations:
 ```csharp
 options.UseMySqlSafeMigrations(safeMigrations =>
 {
-    safeMigrations.UseScaffoldingMode(
-        SafeMigrationScaffoldingMode.LegacyConvergence);
+    safeMigrations
+        .UseScaffoldingMode(
+            SafeMigrationScaffoldingMode.LegacyConvergence)
+        .UseLegacyConvergencePolicy(
+            SafeMigrationPolicy.RepairIfSafe);
 });
 ```
 
@@ -122,8 +166,11 @@ PostgreSQL uses the same option:
 ```csharp
 options.UsePostgreSqlSafeMigrations(safeMigrations =>
 {
-    safeMigrations.UseScaffoldingMode(
-        SafeMigrationScaffoldingMode.LegacyConvergence);
+    safeMigrations
+        .UseScaffoldingMode(
+            SafeMigrationScaffoldingMode.LegacyConvergence)
+        .UseLegacyConvergencePolicy(
+            SafeMigrationPolicy.RepairIfSafe);
 });
 ```
 
@@ -168,7 +215,8 @@ public partial class CoreLegacyConvergence : Migration
             constraints: table =>
             {
                 table.PrimaryKey("PK_users", value => value.Id);
-            });
+            },
+            policy: SafeMigrationPolicy.RepairIfSafe);
 
         migrationBuilder.CreateIndexIfNotExistsFromModel(
             name: "IX_users_Email",
@@ -203,6 +251,26 @@ proven-safe missing children, and an incompatible existing child blocks before
 its target DDL. Unknown extra objects are preserved and reported. An unsafe
 `NOT NULL` addition without a usable default remains blocked rather than being
 forced onto existing rows.
+
+The policy is a literal part of the generated migration. Without
+`UseLegacyConvergencePolicy`, the generated argument is
+`SafeMigrationPolicy.ThrowIfDifferent`. With the explicit `RepairIfSafe`
+configuration above, ordinary existing columns can converge only nullability,
+default, and comment drift. The live catalog must already prove identical store
+type, collation, generated/identity state, row-version state, and provider
+annotations. Existing `NULL` rows make a `NOT NULL` repair `DataBlocked`.
+Invariant or unsupported drift rejects before target DDL. MySQL and MariaDB use
+the Doka provider's complete `MODIFY COLUMN` definition; PostgreSQL uses its
+provider-generated `SET`/`DROP DEFAULT`, `SET`/`DROP NOT NULL`, and comment
+statements.
+
+Ordered preflight also understands one important additive sequence: after an
+existing table gains a nullable, non-computed column without a non-null default,
+a following default null-distinct unique index can be projected as missing and
+applied safely. The projection requires every referenced column to be proven.
+It does not authorize a unique index through an unknown column, a non-null
+default, a computed value, or `NULLS NOT DISTINCT`; those sequences remain
+`prerequisite_missing` until separately reviewed and represented.
 
 The generated `Down` body applies to the entire migration. It throws before any
 destructive DDL because the migration cannot prove which table, column,
@@ -279,6 +347,12 @@ are captured automatically by the generated model path but are not public
 hand-authored definition inputs. Use `ConvergeTableFromModel` when those facets
 must come from provider scaffolding; do not manually translate generated EF
 table source into expected-definition constructors.
+
+Doka 10.1.1 may attach `ClientGuid` to a scaffolded application-converted Guid
+key. SafeMigrations preserves it but compares the column as non-
+`AUTO_INCREMENT`, so both strict and legacy-convergence preflight can apply a
+missing relationship graph and recognize its idempotent replay. HiLo and
+unmodeled provider column facets remain unsupported before target DDL.
 
 `ConvergeTable` and `ConvergeTableFromModel` reach the same object-granular
 convergence implementation. Their difference is how the immutable expected

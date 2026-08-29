@@ -245,6 +245,224 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     }
 
     [Fact]
+    public async Task LegacyConvergenceRepair_RepairsMutableColumnDriftAndIsIdempotent()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `legacy_repair` ("
+            + "`value` varchar(40) NULL DEFAULT 'legacy' COMMENT 'legacy'); "
+            + "INSERT INTO `legacy_repair` (`value`) VALUES ('existing');");
+
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureColumn(
+            "legacy_repair",
+            new ExpectedColumnDefinition(
+                "value",
+                typeof(string),
+                isNullable: false,
+                storeType: "varchar(40)",
+                maxLength: 40,
+                comment: "canonical",
+                defaultValue: SafeMigrationDefaultValue.Literal("canonical")),
+            SafeMigrationPolicy.RepairIfSafe);
+
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("legacy-repair"),
+                CancellationToken.None);
+
+        var assessment = Assert.Single(report.Assessments);
+        Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
+        Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.Repair, assessment.Action);
+
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+
+        var rerun = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("legacy-repair-rerun"),
+                CancellationToken.None);
+
+        var rerunAssessment = Assert.Single(rerun.Assessments);
+
+        Assert.Equal(SafeMigrationObservedState.Matching, rerunAssessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.NoOp, rerunAssessment.Action);
+
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, "INSERT INTO `legacy_repair` () VALUES ();");
+
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'legacy_repair' "
+                + "AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO' AND COLUMN_COMMENT = 'canonical';"));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM `legacy_repair` WHERE `value` = 'canonical';"));
+    }
+
+    [Fact]
+    public async Task LegacyConvergenceRepair_NullabilityTighteningWithNullRowsIsDataBlocked()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `legacy_nulls` (`value` varchar(40) NULL COMMENT 'legacy'); "
+            + "INSERT INTO `legacy_nulls` (`value`) VALUES (NULL);");
+
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureColumn(
+            "legacy_nulls",
+            new ExpectedColumnDefinition(
+                "value",
+                typeof(string),
+                isNullable: false,
+                storeType: "varchar(40)",
+                maxLength: 40,
+                comment: "must not land"),
+            SafeMigrationPolicy.RepairIfSafe);
+
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("legacy-null-block"),
+                CancellationToken.None);
+
+        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+            ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
+
+        var assessment = Assert.Single(report.Assessments);
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(SafeMigrationObservedState.DataBlocked, assessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.RejectDataBlocked, assessment.Action);
+        Assert.Contains("doka_sm_data_blocked", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'legacy_nulls' "
+                + "AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'YES' AND COLUMN_COMMENT = 'legacy';"));
+    }
+
+    [Fact]
+    public async Task LegacyConvergenceRepair_InvariantTypeDriftRejectsWithoutMutation()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `legacy_type_drift` (`value` varchar(30) NULL COMMENT 'legacy');");
+
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureColumn(
+            "legacy_type_drift",
+            new ExpectedColumnDefinition(
+                "value",
+                typeof(string),
+                isNullable: true,
+                storeType: "varchar(40)",
+                maxLength: 40,
+                comment: "must not land"),
+            SafeMigrationPolicy.RepairIfSafe);
+
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("legacy-type-drift"),
+                CancellationToken.None);
+
+        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+            ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
+
+        var assessment = Assert.Single(report.Assessments);
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
+        Assert.Contains("doka_sm_different", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'legacy_type_drift' "
+                + "AND COLUMN_NAME = 'value' AND CHARACTER_MAXIMUM_LENGTH = 30 AND COLUMN_COMMENT = 'legacy';"));
+    }
+
+    [Fact]
+    public async Task LegacyConvergenceRepair_UnmodeledOnUpdateModifierRejectsWithoutMutation()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `legacy_on_update` ("
+            + "`value` timestamp(6) NULL DEFAULT CURRENT_TIMESTAMP(6) "
+            + "ON UPDATE CURRENT_TIMESTAMP(6) COMMENT 'legacy');");
+
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureColumn(
+            "legacy_on_update",
+            new ExpectedColumnDefinition(
+                "value",
+                typeof(DateTime),
+                isNullable: true,
+                storeType: "timestamp(6)",
+                comment: "must not land"),
+            SafeMigrationPolicy.RepairIfSafe);
+
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("legacy-on-update"),
+                CancellationToken.None);
+
+        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+            ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
+
+        var assessment = Assert.Single(report.Assessments);
+
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
+        Assert.Contains("doka_sm_different", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            "on update",
+            await ScalarStringAsync(
+                connectionString,
+                "SELECT LOWER(EXTRA) FROM INFORMATION_SCHEMA.COLUMNS "
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'legacy_on_update' "
+                + "AND COLUMN_NAME = 'value';"),
+            StringComparison.Ordinal);
+        Assert.Equal(
+            "legacy",
+            await ScalarStringAsync(
+                connectionString,
+                "SELECT COLUMN_COMMENT FROM INFORMATION_SCHEMA.COLUMNS "
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'legacy_on_update' "
+                + "AND COLUMN_NAME = 'value';"));
+    }
+
+    [Fact]
     public async Task LiteralDefaultMatrix_ConvergesAndIsIdempotent()
     {
         var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
