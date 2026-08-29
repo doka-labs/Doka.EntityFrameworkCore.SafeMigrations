@@ -5,17 +5,19 @@ requiring readers to study the implementation. The exact signatures, parameter
 documentation, and nullability annotations ship as XML documentation beside
 each `lib/net10.0` assembly. After installing the provider package, use IDE
 completion/Quick Documentation for the selected package version. The
-[Core](../src/Doka.EntityFrameworkCore.SafeMigrations/PublicAPI.Unshipped.txt),
-[MySQL/MariaDB](../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/PublicAPI.Unshipped.txt),
-and [PostgreSQL](../src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/PublicAPI.Unshipped.txt)
+[Core](../src/Doka.EntityFrameworkCore.SafeMigrations/PublicAPI.Shipped.txt),
+[MySQL/MariaDB](../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/PublicAPI.Shipped.txt),
+and [PostgreSQL](../src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/PublicAPI.Shipped.txt)
 API baselines are review inventories, not substitutes for this guide or XML.
 The initial public surface shipped with `10.0.0-rc.1`; `10.0.0-rc.2` added
 source-frozen legacy-convergence policy selection and provider-context
-validation. The source prepared for `10.0.0-rc.3` preserves that public API and
-existing migration-source compatibility while adding exact native Doka 10.1.1
-Guid-format analysis and ordered mixed-migration preflight. Strict scaffolding
-remains the default. A successful release run and exact-version public package
-readback remain the authority for a published API.
+validation. `10.0.0-rc.3` preserved that public API and existing
+migration-source compatibility while adding exact native Doka 10.1.1
+Guid-format analysis and ordered mixed-migration preflight. The 10.0.0 stable
+source promotes that exact public contract without a public API or generated
+migration-source delta. Strict scaffolding remains the default. A successful
+release run and exact-version public package readback remain the authority for
+a published API.
 
 ## Packages and registration
 

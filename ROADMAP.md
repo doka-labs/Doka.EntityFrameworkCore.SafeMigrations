@@ -5,10 +5,11 @@ intended work and explicit non-goals, not promised publication dates.
 
 ## One complete delivery
 
-The planned complete release is **10.0.0**, aligned with .NET 10, EF Core 10,
-and Doka 10. Release candidates qualify that same complete contract and the
-publication workflow. They are not reduced feature releases or a plan to move
-unfinished functionality into a later version.
+The complete release line is **10.0.0**, aligned with .NET 10, EF Core 10, and
+Doka 10. The three published release candidates qualified successive revisions
+of that same complete contract and the publication workflow. They are not
+reduced feature releases or a plan to move unfinished functionality into a
+later version.
 
 - Prepare the repository for public contribution and auditable maintenance.
 - Qualify all three packages together: Core, MySQL/MariaDB, and PostgreSQL.
@@ -17,7 +18,8 @@ unfinished functionality into a later version.
 - Validate heterogeneous legacy convergence, runtime/history semantics,
   provider-specific failure paths, and operational recovery over the full
   [qualification matrix](docs/support-and-qualification.md).
-- Publish stable 10.0.0 only after the complete contract is satisfied.
+- Promote the verified rc.3 contract to stable 10.0.0 without a feature delta,
+  and qualify the exact stable package bytes independently before publication.
 
 Prepared release notes and workflow files do not prove a package is published.
 The actual [release record](https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/releases)
