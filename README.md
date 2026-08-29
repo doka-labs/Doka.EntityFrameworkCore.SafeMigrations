@@ -26,7 +26,7 @@ equivalent.
 - `Doka.EntityFrameworkCore.SafeMigrations`: provider-neutral intent,
   definitions, planning, reports, and `MigrationBuilder` extensions
 - `Doka.EntityFrameworkCore.SafeMigrations.MySql`: MySQL and MariaDB adapter on
-  the public `Doka.EntityFrameworkCore.MySql` 10.1.1 operation-handler SPI
+  the public `Doka.EntityFrameworkCore.MySql` 10.1.2 operation-handler SPI
 - `Doka.EntityFrameworkCore.SafeMigrations.PostgreSql`: PostgreSQL adapter on
   Npgsql 10
 
@@ -41,33 +41,31 @@ The CI and release workflows pin the exact patch tags and image digests used
 when that matrix executes. The exact successful run, not this table, is release
 evidence. See [Support and qualification](docs/support-and-qualification.md).
 
-The complete stable delivery is 10.0.0. The published `10.0.0-rc.1`,
-`10.0.0-rc.2`, and `10.0.0-rc.3` releases qualified successive revisions of
-that feature contract. The 10.0.0 source promotes the exact rc.3 public API,
-generated migration-source compatibility, SQL behavior, report contracts, and
-strict-by-default scaffolding without a feature or runtime-behavior delta. The
-stable package is nevertheless rebuilt and independently qualified at its own
-version; an RC archive is never renamed or reused. [Release notes](CHANGELOG.md)
-distinguish published releases from prepared source. Only a successful release
-run and verified public packages establish availability or qualification.
+The initial complete stable delivery is 10.0.0. This source prepares the stable
+10.0.1 maintenance release with the same public API, generated migration-source
+compatibility, SQL behavior, report contracts, and strict-by-default
+scaffolding. It advances the qualified Doka dependency and completes portable
+release-provenance verification. [Release notes](CHANGELOG.md) distinguish
+published releases from prepared source. Only a successful release run and
+verified public packages establish availability or qualification.
 
 ## Installation
 
 Install one provider package. The core package is included transitively. The
-commands select the first stable release exactly so restore does not move to a
-different package version implicitly. Confirm the matching published release
-and all three NuGet package pages before installation; source or changelog
-entries alone do not establish package availability.
+commands select the prepared stable maintenance release exactly so restore does
+not move to a different package version implicitly. Confirm the matching
+published release and all three NuGet package pages before installation; source
+or changelog entries alone do not establish package availability.
 
 ```bash
-package_version='10.0.0'
+package_version='10.0.1'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.MySql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.0.0'
+package_version='10.0.1'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version "$package_version"
 ```
 
@@ -564,10 +562,12 @@ Release candidates and stable releases use the same manually dispatched path.
 The workflow qualifies and attests exact bytes from current `main` before it
 waits at the protected NuGet environment. Only then does the operator create a
 signed annotated tag on that qualified commit and approve publication. The
-write-capable job uses NuGet Trusted Publishing, verifies public repository
+write-capable job validates and cryptographically verifies the portable SLSA
+bundle before using NuGet Trusted Publishing, verifies public repository
 signatures and package content, and creates or verifies an immutable GitHub
-Release with the exact six package files, checksums, and SPDX manifest.
-Candidates are marked prerelease and never replace the latest stable release.
+Release with the exact six package files, checksums, SPDX manifest, and
+`release-provenance.intoto.jsonl`. Candidates are marked prerelease and never
+replace the latest stable release.
 See [Publication operations](docs/operations/release-publication.md) for the
 step-by-step maintainer guide and current readiness, and
 [Release process](docs/release-process.md) for the qualification contract.

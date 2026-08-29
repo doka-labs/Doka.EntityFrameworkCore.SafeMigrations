@@ -40,8 +40,12 @@ continues to use its normal configured timeout.
 
 The qualified workflow artifact contains the six package archives,
 `SHA256SUMS`, performance evidence, and the SPDX manifest. GitHub creates build
-provenance and SBOM attestations for those exact bytes before publication can
-reach the protected environment.
+provenance and SBOM attestations for those exact bytes. The attestation job
+validates the build-provenance Sigstore bundle against all six packages,
+`SHA256SUMS`, and `manifest.spdx.json`, materializes exactly one canonical
+`release-provenance.intoto.jsonl` record, and uploads it under a run- and
+attempt-qualified artifact name before publication can reach the protected
+environment.
 
 ## Irreversible publication boundary
 
@@ -62,14 +66,23 @@ same-run recovery. Completion requires downloading each public primary package,
 verifying its NuGet repository signature, and comparing every archive entry
 with the qualified package after excluding only NuGet's `.signature.p7s`.
 
+Before draft creation or credential exchange, publication validates the
+portable bundle's Sigstore envelope, SLSA v1 predicate, unique subject names,
+and exact subject SHA-256 digests. It then verifies every selected subject with
+`gh attestation verify --bundle`, pinned to the repository, release workflow,
+workflow commit, protected-main source ref and commit, and hosted-runner
+boundary. An API-hosted attestation without the downloaded bundle cannot satisfy
+this gate.
+
 Before the NuGet credential is requested, the GitHub Release starts as a draft
 with the expected title, Changelog-derived notes, classification, exact six
-qualified package files, `SHA256SUMS`, and `manifest.spdx.json`. On a same-run
-retry, matching uploaded assets are retained and missing assets are added; any
-metadata, unexpected name, or SHA-256 digest conflict fails closed. Draft
-discovery uses the authenticated, paginated Release inventory because GitHub's
-tag endpoint returns published Releases only. The complete draft is read back
-before the first NuGet push.
+qualified package files, `SHA256SUMS`, `manifest.spdx.json`, and
+`release-provenance.intoto.jsonl`. On a same-run retry, matching uploaded assets
+are retained and missing assets are added; any metadata, unexpected name, or
+SHA-256 digest conflict fails closed. Draft discovery uses the authenticated,
+paginated Release inventory because GitHub's tag endpoint returns published
+Releases only. The complete nine-asset draft is read back before the first
+NuGet push.
 
 After signed NuGet content has been read back, the workflow publishes the
 verified draft. It then waits for the published immutable state and GitHub's
@@ -85,18 +98,21 @@ after one or more uploads are accepted. The supported recovery is rerunning the
 failed `publish` job in the original run. Duplicate pushes are tolerated, but
 signed public content and the staged or immutable GitHub Release must still
 match exactly. Missing draft assets can be uploaded; conflicting assets are
-never overwritten. A conflict is terminal. A timeout while waiting for the
-platform-generated Release attestation is retryable only through the same
-failed job; it never authorizes ignoring verification. Tags and published
+never overwritten. The successful attestation job supplies the same immutable
+attempt-qualified provenance artifact to a publish-only retry; rerunning the
+attestation job produces a new attempt-qualified artifact instead of
+overwriting earlier evidence. A conflict is terminal. A timeout while waiting
+for the platform-generated Release attestation is retryable only through the
+same failed job; it never authorizes ignoring verification. Tags and published
 versions are never moved, replaced, or reused.
 
 ## Evidence boundary
 
-Actions logs, retained qualification artifacts, GitHub attestations, the
-authorized tag, NuGet repository signatures, and immutable Release assets are
-the evidence. The focused reconciliation script has no persisted release state;
-it reads GitHub's current draft or immutable state on every invocation and has
-command-contract tests for positive, conflict, retry, and timeout paths. The
-repository does not maintain a second event-sourced release database. Hosted
-configuration and an actual successful RC remain necessary evidence before a
-stable release.
+Actions logs, retained qualification and portable-provenance artifacts, GitHub
+attestations, the authorized tag, NuGet repository signatures, and immutable
+Release assets are the evidence. The focused provenance validator and Release
+reconciliation script have no persisted release state. They enforce malformed,
+missing, duplicate, extra, digest-conflicting, retry, and timeout paths through
+executable positive and negative tests. The repository does not maintain a
+second event-sourced release database. Hosted configuration and an actual
+successful release remain necessary evidence.

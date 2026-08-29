@@ -55,6 +55,7 @@ assets=(
 assets+=(
     artifacts/packages/SHA256SUMS
     artifacts/sbom/_manifest/spdx_2.2/manifest.spdx.json
+    artifacts/release-provenance/release-provenance.intoto.jsonl
 )
 
 for asset in "${assets[@]}"; do

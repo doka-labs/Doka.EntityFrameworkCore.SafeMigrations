@@ -86,11 +86,18 @@ adapter's guarded DO block and is rejected. Ordinary delegated commands retain
 their provider semantics; composition does not make every provider command
 safe to embed.
 
-The current MySQL/MariaDB adapter consumes Doka 10.1.1 as an exact NuGet
-dependency. Core/provider ranges and committed lockfiles remain repository-owned
-inputs. Package qualification uses actual packages, not Doka ProjectReference
-or unpublished local source. Provider release approval is not a
-cross-repository prerequisite controlled by SafeMigrations.
+The current MySQL/MariaDB adapter consumes Doka through the bounded
+`[10.1.2,10.2.0)` NuGet dependency range. Committed lockfiles select the exact
+qualified 10.1.2 graph. Core/provider ranges and lockfiles remain
+repository-owned inputs. Package qualification uses actual packages, not a
+Doka ProjectReference or unpublished local source. Provider release approval
+is not a cross-repository prerequisite controlled by SafeMigrations.
+
+The upper bound is the next Doka minor rather than the next major because the
+operation-handler SPI is both a binary and behavioral dependency. Patch
+releases within the qualified 10.1 line remain consumable without creating a
+diamond conflict through an exact transitive pin. A Doka 10.2 or later line
+requires a reviewed range change and fresh SafeMigrations qualification.
 
 ### Consequences
 
@@ -184,6 +191,7 @@ being accepted through broad string normalization.
 - 2026-08-26: Clarified the SPI's actual root namespace against the Doka 10.0.0 package API; integration and decision status are unchanged.
 - 2026-08-28: Updated the exact dependency to stable Doka 10.1.0 after confirming that its additive provider APIs leave the migration-operation handler SPI unchanged; the decision remains implemented and requires fresh SafeMigrations qualification.
 - 2026-08-29: Updated the exact dependency to stable Doka 10.1.1 after verifying its unchanged handler SPI and corrected application-owned Guid relationship contract; the decision remains implemented and requires fresh SafeMigrations qualification.
+- 2026-08-30: Raised the minimum dependency to stable Doka 10.1.2 and replaced the public exact pin with the bounded `[10.1.2,10.2.0)` patch-line range after verifying its unchanged handler SPI, generated SQL, database behavior, supported-engine policy, and package ranges. The provider patch corrects `JsonElement` ownership; committed lockfiles retain the exact qualified 10.1.2 graph, and the next Doka minor requires fresh qualification.
 
 ### Implementation References
 
@@ -206,4 +214,7 @@ being accepted through broad string normalization.
 - [Doka.EntityFrameworkCore.MySql 10.1.0 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.1.0) (primary package metadata; retrieved 2026-08-28)
 - [Doka 10.1.1 migration-operation handler contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.1/docs/migration-operation-handlers.md) (primary source; retrieved 2026-08-29)
 - [Doka.EntityFrameworkCore.MySql 10.1.1 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.1.1) (primary package metadata; retrieved 2026-08-29)
+- [Doka 10.1.2 migration-operation handler contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.2/docs/migration-operation-handlers.md) (primary source; retrieved 2026-08-30)
+- [Doka 10.1.2 release notes](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.2/CHANGELOG.md) (primary source; retrieved 2026-08-30)
+- [Doka.EntityFrameworkCore.MySql 10.1.2 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.1.2) (primary package metadata; retrieved 2026-08-30)
 - [Npgsql EF Core provider and configuration](https://www.npgsql.org/efcore/) (primary source; retrieved 2026-08-26)

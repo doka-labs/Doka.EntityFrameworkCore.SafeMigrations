@@ -15,9 +15,10 @@ validation. `10.0.0-rc.3` preserved that public API and existing
 migration-source compatibility while adding exact native Doka 10.1.1
 Guid-format analysis and ordered mixed-migration preflight. The 10.0.0 stable
 source promotes that exact public contract without a public API or generated
-migration-source delta. Strict scaffolding remains the default. A successful
-release run and exact-version public package readback remain the authority for
-a published API.
+migration-source delta. The 10.0.1 maintenance source preserves the same public
+API and generated migration-source contract. Strict scaffolding remains the
+default. A successful release run and exact-version public package readback
+remain the authority for a published API.
 
 ## Packages and registration
 

@@ -200,6 +200,7 @@ create_case() {
 
     mkdir -p \
         "$case_root/artifacts/packages" \
+        "$case_root/artifacts/release-provenance" \
         "$case_root/artifacts/sbom/_manifest/spdx_2.2" \
         "$case_root/state"
 
@@ -216,6 +217,8 @@ create_case() {
     printf 'checksums\n' >"$case_root/artifacts/packages/SHA256SUMS"
     printf '{"spdxVersion":"SPDX-2.2"}\n' \
         >"$case_root/artifacts/sbom/_manifest/spdx_2.2/manifest.spdx.json"
+    printf '{"mediaType":"application/vnd.dev.sigstore.bundle.v0.3+json"}\n' \
+        >"$case_root/artifacts/release-provenance/release-provenance.intoto.jsonl"
     printf '# Changelog\n\n## [%s] - 2026-08-29\n\nRelease notes.\n\n## [10.0.0-rc.2]\n' \
         "$fixture_version" >"$case_root/CHANGELOG.md"
     printf '\nRelease notes.\n' >"$case_root/release-notes.md"
@@ -317,11 +320,11 @@ jq -e \
     '.isDraft == true
       and .isImmutable == false
       and .isPrerelease == true
-      and (.assets | length) == 8' \
+      and (.assets | length) == 9' \
     "$fresh_case/state/release.json" >/dev/null
 grep -Fxq "GitHub Release draft is complete and verified." "$fresh_case/stage.stdout"
 assert_empty "$fresh_case/stage.stderr"
-test "$(grep -c '^release upload ' "$fresh_case/state/commands.log")" -eq 8
+test "$(grep -c '^release upload ' "$fresh_case/state/commands.log")" -eq 9
 test "$(grep -c '^release edit ' "$fresh_case/state/commands.log" || true)" -eq 0
 test "$(grep -c '^api --paginate ' "$fresh_case/state/commands.log")" -ge 2
 grep -Fq "$release_inventory_command" "$fresh_case/state/commands.log"
@@ -334,7 +337,7 @@ jq -e \
     '.isDraft == false
       and .isImmutable == true
       and .isPrerelease == true
-      and (.assets | length) == 8' \
+      and (.assets | length) == 9' \
     "$fresh_case/state/release.json" >/dev/null
 grep -Fxq "3" "$fresh_case/state/release-verify-count"
 grep -Fq "Waiting for GitHub Release and asset attestations (1/3)..." \
@@ -371,7 +374,7 @@ jq -e \
     '.isDraft == true
       and .isImmutable == false
       and .isPrerelease == false
-      and (.assets | length) == 8' \
+      and (.assets | length) == 9' \
     "$stable_case/state/release.json" >/dev/null
 if grep -Fq -- "--prerelease" "$stable_case/state/commands.log"; then
     echo "Stable draft was incorrectly classified as a prerelease." >&2
@@ -397,7 +400,7 @@ create_remote_draft "$partial_case"
 run_reconciler "$partial_case" stage \
     >"$partial_case/stage.stdout" \
     2>"$partial_case/stage.stderr"
-test "$(grep -c '^release upload ' "$partial_case/state/commands.log")" -eq 7
+test "$(grep -c '^release upload ' "$partial_case/state/commands.log")" -eq 8
 test "$(grep -c '^release create ' "$partial_case/state/commands.log" || true)" -eq 0
 assert_empty "$partial_case/stage.stderr"
 
@@ -409,7 +412,7 @@ run_reconciler \
     2>"$asset_visibility_case/publish.stderr"
 grep -Fxq "3" "$asset_visibility_case/state/release-verify-count"
 test "$(grep -c '^release verify-asset ' \
-    "$asset_visibility_case/state/commands.log")" -eq 10
+    "$asset_visibility_case/state/commands.log")" -eq 11
 grep -Fq "Waiting for GitHub Release and asset attestations (2/3)..." \
     "$asset_visibility_case/publish.stderr"
 grep -Fxq "Immutable GitHub Release and every asset attestation are verified." \
@@ -465,6 +468,19 @@ grep -Fxq "Expected exactly three primary packages and three symbol packages." \
     "$package_shape_case/stage.stderr"
 test ! -f "$package_shape_case/state/commands.log"
 
+missing_provenance_case="$(create_case missing-provenance)"
+rm "$missing_provenance_case/artifacts/release-provenance/release-provenance.intoto.jsonl"
+if run_reconciler "$missing_provenance_case" stage \
+    >"$missing_provenance_case/stage.stdout" \
+    2>"$missing_provenance_case/stage.stderr"; then
+    echo "Missing portable provenance unexpectedly passed." >&2
+    exit 1
+fi
+grep -Fxq \
+    "Release asset does not exist: artifacts/release-provenance/release-provenance.intoto.jsonl" \
+    "$missing_provenance_case/stage.stderr"
+test ! -f "$missing_provenance_case/state/commands.log"
+
 mismatch_case="$(create_case mismatch)"
 create_remote_draft "$mismatch_case"
 (
@@ -485,6 +501,27 @@ fi
 grep -Fxq \
     "GitHub Release asset digest differs: Doka.EntityFrameworkCore.SafeMigrations.$package_version.nupkg." \
     "$mismatch_case/stage.stderr"
+
+provenance_mismatch_case="$(create_case provenance-mismatch)"
+create_remote_draft "$provenance_mismatch_case"
+(
+    cd "$provenance_mismatch_case"
+    PATH="$fake_bin:$PATH" FAKE_GH_STATE="$provenance_mismatch_case/state" \
+        gh release upload "$release_tag" \
+        "artifacts/release-provenance/release-provenance.intoto.jsonl" \
+        >/dev/null
+    printf '{"different":"bundle"}\n' \
+        >"artifacts/release-provenance/release-provenance.intoto.jsonl"
+)
+if run_reconciler "$provenance_mismatch_case" stage \
+    >"$provenance_mismatch_case/stage.stdout" \
+    2>"$provenance_mismatch_case/stage.stderr"; then
+    echo "Mismatched portable provenance unexpectedly passed." >&2
+    exit 1
+fi
+grep -Fxq \
+    "GitHub Release asset digest differs: release-provenance.intoto.jsonl." \
+    "$provenance_mismatch_case/stage.stderr"
 
 unexpected_case="$(create_case unexpected)"
 create_remote_draft "$unexpected_case"
@@ -567,6 +604,10 @@ if run_reconciler "$missing_notes_case" stage \
 fi
 test ! -f "$missing_notes_case/state/release.json"
 
+assert_command_order \
+    "$workflow" \
+    "- name: Verify portable SLSA provenance" \
+    "- name: Prepare verified GitHub Release draft"
 assert_command_order \
     "$workflow" \
     "- name: Prepare verified GitHub Release draft" \

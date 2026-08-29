@@ -144,7 +144,8 @@ immutable GitHub Release assets. Credentials are requested only in the
 protected publication job, and publication never rebuilds packages.
 
 Evidence comes from the shared quality workflow, package-content and consumer
-checks, Git's allowed-signers verification, GitHub attestations and immutable
+checks, Git's allowed-signers verification, structurally and cryptographically
+verified portable SLSA provenance, GitHub attestations and immutable
 release-asset verification, and signed public NuGet content readback.
 [Consumer verification](release-verification.md) and actual hosted run/settings
 evidence remain necessary; local checks cannot establish configured protection

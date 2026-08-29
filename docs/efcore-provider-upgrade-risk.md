@@ -25,15 +25,15 @@ failure behavior.
 
 The read-only analyzer captures SafeMigrations' typed runtime plan while Doka
 invokes the registered handler with the real server-version, feature, and
-operation-ordinal context. It does not parse generated commands. The exact
-Doka 10.1.1 package exposes provider-validated `Setup`, `Body`, and `Cleanup`
+operation-ordinal context. It does not parse generated commands. The locked
+Doka 10.1.2 package exposes provider-validated `Setup`, `Body`, and `Cleanup`
 fragments and a bounded `CreateScoped` command contract. SafeMigrations uses
 those fragments directly and returns one provider-executed scope per guarded
 operation. Doka runs cleanup after success, failure, or cancellation with an
 independent cancellation token; a cleanup failure closes the connection and
 evicts its physical session from the MySqlConnector pool.
 
-Doka 10.1.1 supports two distinct Guid contracts. Application-owned converters
+Doka 10.1.2 supports two distinct Guid contracts. Application-owned converters
 are preserved through relationship chains; their generated key columns retain
 the provider CLR type, carry no provider-owned `GuidFormat`, and may carry
 `ClientGuid`. Native Doka Guid mappings instead emit
@@ -125,6 +125,12 @@ Publishable SafeMigrations candidates and stable packages must depend on a
 stable Doka package; the package content gate rejects a prerelease Doka
 dependency during every release qualification.
 
+The Doka boundary therefore stops at the next minor rather than the next major.
+Patch releases within the qualified minor line follow Doka's compatible-fix
+contract, while a new minor may revise the binary or behavioral SPI and requires
+an explicit range change plus the complete upgrade evidence below. Committed
+lockfiles keep repository builds reproducible at the exact qualified patch.
+
 ## Required upgrade evidence
 
 Every EF, Doka, Npgsql, or supported database update requires:
@@ -164,16 +170,16 @@ unless the entry records a later date:
 - [PostgreSQL system information functions](https://www.postgresql.org/docs/current/functions-info.html)
 - [MySQL supported platforms and lifecycle](https://www.mysql.com/support/supportedplatforms/database.html)
 - [MariaDB release criteria](https://mariadb.com/docs/release-notes/mariadb-release-criteria)
-- [Doka.EntityFrameworkCore.MySql 10.1.1](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.1.1)
-  (rechecked 2026-08-29)
-- [Doka 10.1.1 migration-operation handler contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.1/docs/migration-operation-handlers.md)
-  (rechecked 2026-08-29)
-- [Doka 10.1.1 release notes](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.1/CHANGELOG.md)
-  (rechecked 2026-08-29)
-- [Doka 10.1.1 Guid-format contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.1/src/Doka.EntityFrameworkCore.MySql/MySqlGuidFormat.cs)
-  (rechecked 2026-08-29)
-- [Doka 10.1.1 Guid property configuration](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.1/src/Doka.EntityFrameworkCore.MySql/MySqlPropertyBuilderExtensions.cs)
-  (rechecked 2026-08-29)
+- [Doka.EntityFrameworkCore.MySql 10.1.2](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.1.2)
+  (rechecked 2026-08-30)
+- [Doka 10.1.2 migration-operation handler contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.2/docs/migration-operation-handlers.md)
+  (rechecked 2026-08-30)
+- [Doka 10.1.2 release notes](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.2/CHANGELOG.md)
+  (rechecked 2026-08-30)
+- [Doka 10.1.2 Guid-format contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.2/src/Doka.EntityFrameworkCore.MySql/MySqlGuidFormat.cs)
+  (rechecked 2026-08-30)
+- [Doka 10.1.2 Guid property configuration](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.2/src/Doka.EntityFrameworkCore.MySql/MySqlPropertyBuilderExtensions.cs)
+  (rechecked 2026-08-30)
 
 The exact release evidence belongs in the workflow run, lockfiles, package
 SBOM, and final plan-to-ship reconciliation, not in an unchecked comment.
