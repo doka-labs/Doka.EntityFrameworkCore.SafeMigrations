@@ -293,6 +293,8 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
                         postconditionSatisfied: null,
                         "provider_owned_not_analyzed"));
 
+                projection?.ObserveProviderPostcondition(operation);
+
                 continue;
             }
 

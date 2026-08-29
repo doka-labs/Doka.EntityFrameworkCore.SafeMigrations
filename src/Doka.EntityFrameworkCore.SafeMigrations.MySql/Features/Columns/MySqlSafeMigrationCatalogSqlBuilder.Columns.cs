@@ -2,6 +2,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 
 internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 {
+    private const string GuidFormatAnnotation = "Doka:MySql:GuidFormat";
     private const string ValueGenerationStrategyAnnotation = "Doka:MySql:ValueGenerationStrategy";
 
     private string? GetUnsupportedColumnFeature(
@@ -56,29 +57,72 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 : null;
     }
 
-    private static bool HasUnsupportedProviderColumnAnnotation(
+    /// <summary>
+    /// Determines whether a captured provider annotation cannot be represented
+    /// by the current MySQL/MariaDB catalog comparison contract.
+    /// </summary>
+    /// <param name="definition">The immutable expected column definition.</param>
+    /// <returns><see langword="true" /> when the annotation must fail closed.</returns>
+    internal static bool HasUnsupportedProviderColumnAnnotation(
         ExpectedColumnDefinition definition
     )
     {
         foreach (var annotation in definition.ProviderAnnotations)
         {
-            if (!StringComparer.Ordinal.Equals(annotation.Name, ValueGenerationStrategyAnnotation))
+            if (StringComparer.Ordinal.Equals(annotation.Name, GuidFormatAnnotation))
             {
-                return true;
+                if (!IsSupportedGuidFormat(definition, annotation.Value))
+                {
+                    return true;
+                }
+
+                continue;
             }
 
-            // ClientGuid is executed by EF before INSERT and Doka emits no
-            // column DDL for it. Preserve the annotation for operation replay
-            // and fingerprints, but compare its catalog state like None.
-            if (annotation.Value is not (MySqlValueGenerationStrategy.None
-                or MySqlValueGenerationStrategy.AutoIncrement
-                or MySqlValueGenerationStrategy.ClientGuid))
+            if (StringComparer.Ordinal.Equals(annotation.Name, ValueGenerationStrategyAnnotation))
             {
-                return true;
+                // ClientGuid is executed by EF before INSERT and Doka emits no
+                // column DDL for it. Preserve the annotation for operation replay
+                // and fingerprints, but compare its catalog state like None.
+                if (annotation.Value is not (MySqlValueGenerationStrategy.None
+                    or MySqlValueGenerationStrategy.AutoIncrement
+                    or MySqlValueGenerationStrategy.ClientGuid))
+                {
+                    return true;
+                }
+
+                continue;
             }
+
+            return true;
         }
 
         return false;
+    }
+
+    private static bool IsSupportedGuidFormat(
+        ExpectedColumnDefinition definition,
+        object? value
+    )
+    {
+        if (definition.ClrType != typeof(Guid))
+        {
+            return false;
+        }
+
+        // Doka 10.1.1 emits the storage-format annotation together with the
+        // effective store type. Requiring both prevents a hand-authored,
+        // contradictory annotation from bypassing catalog-shape validation.
+        return value switch
+        {
+            DokaMySqlGuidFormat.Binary16 => StringComparer.OrdinalIgnoreCase.Equals(
+                definition.StoreType,
+                "binary(16)"),
+            DokaMySqlGuidFormat.Char36 => StringComparer.OrdinalIgnoreCase.Equals(
+                definition.StoreType,
+                "char(36)"),
+            _ => false,
+        };
     }
 
     private MySqlSafeMigrationRuntimePlan BuildEnsureColumn(

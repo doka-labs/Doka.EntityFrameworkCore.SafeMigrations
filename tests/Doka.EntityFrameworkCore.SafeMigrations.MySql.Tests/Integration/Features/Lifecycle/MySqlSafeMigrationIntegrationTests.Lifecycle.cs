@@ -479,6 +479,98 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     }
 
     [Fact]
+    public async Task PreflightProjectsProviderAddColumnForFollowingSafeIndex()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `mixed_customers` ("
+            + "`id` int NOT NULL, CONSTRAINT `pk_mixed_customers` PRIMARY KEY (`id`));"
+            + "CREATE TABLE `mixed_evolution` ("
+            + "`id` int NOT NULL, CONSTRAINT `pk_mixed_evolution` PRIMARY KEY (`id`));"
+            + "INSERT INTO `mixed_customers` (`id`) VALUES (7);"
+            + "INSERT INTO `mixed_evolution` (`id`) VALUES (1);");
+
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        _ = builder.AddColumn<int>(
+            name: "customer_id",
+            table: "mixed_evolution",
+            type: "int",
+            nullable: false,
+            defaultValue: 0);
+        _ = builder.CreateIndexIfNotExistsFromModel(
+            "ix_mixed_evolution_customer_id",
+            "mixed_evolution",
+            "customer_id");
+        _ = builder.Sql("UPDATE `mixed_evolution` SET `customer_id` = 7;");
+        _ = builder.Sql("ALTER TABLE `mixed_evolution` ALTER COLUMN `customer_id` DROP DEFAULT;");
+        _ = builder.AddForeignKey(
+            name: "fk_mixed_evolution_customers_customer_id",
+            table: "mixed_evolution",
+            column: "customer_id",
+            principalTable: "mixed_customers",
+            principalColumn: "id",
+            onDelete: ReferentialAction.Cascade);
+
+        var runner = context.GetService<ISafeMigrationRunner>();
+        var options = new SafeMigrationRunOptions("mixed-provider-safe-operations");
+        var preflight = await runner.AnalyzeAsync(context, builder.Operations, options);
+        var projectedIndex = preflight.Assessments.Single(static assessment => assessment.IsSafeOperation);
+
+        Assert.Equal(SafeMigrationReportStatus.ReadyWithProviderOperations, preflight.Status);
+        Assert.Equal(5, preflight.Assessments.Count);
+        Assert.All(
+            preflight.Assessments.Where(static assessment => !assessment.IsSafeOperation),
+            static assessment => Assert.Equal("provider_owned_not_analyzed", assessment.Code));
+        Assert.Equal(SafeMigrationObservedState.Missing, projectedIndex.ObservedState);
+        Assert.Equal(SafeMigrationAction.Apply, projectedIndex.Action);
+        Assert.Equal("projected_missing", projectedIndex.Code);
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'mixed_evolution' "
+                + "AND COLUMN_NAME = 'customer_id';"));
+
+        await ExecuteOperationsAsync(context, builder.Operations);
+
+        var postflight = await runner.VerifyAsync(context, builder.Operations, options);
+        var replay = await runner.AnalyzeAsync(context, builder.Operations, options);
+        var postflightIndex = postflight.Assessments.Single(static assessment => assessment.IsSafeOperation);
+        var replayIndex = replay.Assessments.Single(static assessment => assessment.IsSafeOperation);
+
+        Assert.Equal(SafeMigrationReportStatus.ReadyWithProviderOperations, postflight.Status);
+        Assert.Equal(SafeMigrationObservedState.Matching, postflightIndex.ObservedState);
+        Assert.True(postflightIndex.PostconditionSatisfied);
+        Assert.Equal(SafeMigrationReportStatus.ReadyWithProviderOperations, replay.Status);
+        Assert.Equal(SafeMigrationAction.NoOp, replayIndex.Action);
+        Assert.Equal(7, await ScalarIntAsync(connectionString, "SELECT `customer_id` FROM `mixed_evolution`;"));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
+                + "WHERE CONSTRAINT_SCHEMA = DATABASE() "
+                + "AND CONSTRAINT_NAME = 'fk_mixed_evolution_customers_customer_id';"));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'mixed_evolution' "
+                + "AND COLUMN_NAME = 'customer_id' AND COLUMN_DEFAULT IS NULL;"));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'mixed_evolution' "
+                + "AND INDEX_NAME = 'ix_mixed_evolution_customer_id';"));
+    }
+
+    [Fact]
     public async Task Preflight_RejectsWrongCanonicalModelFingerprintBeforeCatalogAccess()
     {
         var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);

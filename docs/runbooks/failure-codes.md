@@ -89,11 +89,16 @@ data/prerequisite result uses its planner rejection code.
 | `projected_missing` | Preflight projection observes absence after applying earlier accepted operations virtually. |
 | `projected_matching` | Preflight projection observes a match after earlier accepted operations virtually. |
 | `projected_different` | Preflight projection observes a conflict between ordered operations. |
-| `provider_owned_not_analyzed` | Ordinary EF/provider operation is present; SafeMigrations cannot classify it read-only. |
+| `provider_owned_not_analyzed` | Ordinary EF/provider operation is present and is not classified as safe. A recognized deterministic table/column postcondition may be projected conditionally into a later safe prerequisite, but the provider operation itself remains unanalyzed. |
 
 When a report is `ReadyWithProviderOperations`, supply independent
 postconditions for every `provider_owned_not_analyzed` operation before
-deployment approval.
+deployment approval. A later `projected_missing` result proves only that its
+safe prerequisite follows if the preceding provider operation succeeds; it
+does not waive that independent evidence.
+If an unrecognized provider operation or raw SQL separates the prerequisite
+from the safe operation, projection facts are discarded and the later operation
+uses the live analyzer result.
 
 ## Accepting planner decision codes
 

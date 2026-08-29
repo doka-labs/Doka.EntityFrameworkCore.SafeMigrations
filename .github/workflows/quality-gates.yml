@@ -56,6 +56,7 @@ jobs:
             bash -n "$script"
           done < <(find eng -type f -name '*.sh' -print0)
           bash eng/tests/test-dependency-snapshot-headers.sh
+          bash eng/tests/test-github-release-reconciliation.sh
           bash eng/tests/test-pre-tag-check.sh
           bash eng/tests/test-release-version.sh
           python3 -m unittest eng/tests/test_verify_coverage.py -v

@@ -18,3 +18,4 @@ global using Microsoft.EntityFrameworkCore.Storage;
 global using Microsoft.Extensions.DependencyInjection;
 global using Microsoft.Extensions.DependencyInjection.Extensions;
 global using MySqlConnector;
+global using DokaMySqlGuidFormat = Doka.EntityFrameworkCore.MySql.MySqlGuidFormat;

@@ -25,3 +25,4 @@ global using Microsoft.Extensions.DependencyInjection;
 global using MySqlConnector;
 global using Testcontainers.MySql;
 global using Xunit;
+global using DokaMySqlGuidFormat = Doka.EntityFrameworkCore.MySql.MySqlGuidFormat;

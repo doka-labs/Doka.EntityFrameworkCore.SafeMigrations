@@ -213,6 +213,13 @@ jobs:
             --package-dir artifacts/packages \
             --version "$PACKAGE_VERSION"
 
+      - name: Prepare verified GitHub Release draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          bash eng/reconcile-github-release.sh
+          stage "$PACKAGE_VERSION" "$RELEASE_TAG"
+
       - name: Request short-lived NuGet.org key
         id: nuget-login
         uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
@@ -250,135 +257,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          assets=(
-            artifacts/packages/*.nupkg
-            artifacts/packages/*.snupkg
-            artifacts/packages/SHA256SUMS
-            artifacts/sbom/_manifest/spdx_2.2/manifest.spdx.json
-          )
-          expected_prerelease=false
-          draft_arguments=()
-          publication_arguments=(--latest)
-          if [[ "$PACKAGE_VERSION" == *-* ]]; then
-            expected_prerelease=true
-            draft_arguments=(--prerelease)
-            publication_arguments=(--prerelease --latest=false)
-          fi
-
-          awk -v heading="## [$PACKAGE_VERSION]" '
-            index($0, heading) == 1 { found = 1; next }
-            found && /^## \[/ { exit }
-            found { print }
-            END { if (!found) exit 1 }
-          ' CHANGELOG.md >release-notes.md
-
-          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release create "$RELEASE_TAG" \
-              --draft \
-              --verify-tag \
-              --title "SafeMigrations $PACKAGE_VERSION" \
-              --notes-file release-notes.md \
-              "${draft_arguments[@]}"
-          fi
-
-          release_json="$(
-            gh release view "$RELEASE_TAG" \
-              --json tagName,isDraft,isImmutable,isPrerelease,assets
-          )"
-          jq -e \
-            --arg tag "$RELEASE_TAG" \
-            --argjson prerelease "$expected_prerelease" \
-            '.tagName == $tag
-              and .isPrerelease == $prerelease
-              and ((.isDraft == true and .isImmutable == false)
-                or (.isDraft == false and .isImmutable == true))' \
-            <<<"$release_json" >/dev/null
-
-          if [[ "$(jq -r '.isDraft' <<<"$release_json")" == true ]]; then
-            for asset in "${assets[@]}"; do
-              asset_name="$(basename "$asset")"
-              expected_digest="sha256:$(sha256sum "$asset" | cut -d ' ' -f 1)"
-              actual_digest="$(
-                jq -r --arg name "$asset_name" \
-                  '.assets[] | select(.name == $name) | .digest' \
-                  <<<"$release_json"
-              )"
-
-              if [[ -z "$actual_digest" ]]; then
-                gh release upload "$RELEASE_TAG" "$asset"
-              elif [[ "$actual_digest" != "$expected_digest" ]]; then
-                echo "Draft Release asset differs: $asset_name." >&2
-                exit 1
-              fi
-            done
-
-            release_json="$(
-              gh release view "$RELEASE_TAG" \
-                --json tagName,isDraft,isImmutable,isPrerelease,assets
-            )"
-            expected_assets="$(
-              for asset in "${assets[@]}"; do
-                basename "$asset"
-              done | LC_ALL=C sort
-            )"
-            actual_assets="$(
-              jq -r '.assets[].name' <<<"$release_json" | LC_ALL=C sort
-            )"
-            if [[ "$actual_assets" != "$expected_assets" ]]; then
-              echo "Draft Release assets differ from the qualified set." >&2
-              exit 1
-            fi
-
-            for asset in "${assets[@]}"; do
-              asset_name="$(basename "$asset")"
-              expected_digest="sha256:$(sha256sum "$asset" | cut -d ' ' -f 1)"
-              actual_digest="$(
-                jq -r --arg name "$asset_name" \
-                  '.assets[] | select(.name == $name) | .digest' \
-                  <<<"$release_json"
-              )"
-
-              if [[ "$actual_digest" != "$expected_digest" ]]; then
-                echo "Draft Release asset digest differs: $asset_name." >&2
-                exit 1
-              fi
-            done
-
-            gh release edit "$RELEASE_TAG" \
-              --draft=false \
-              "${publication_arguments[@]}"
-          fi
-
-          release_json="$(
-            gh release view "$RELEASE_TAG" \
-              --json tagName,isDraft,isImmutable,isPrerelease,assets
-          )"
-          jq -e \
-            --arg tag "$RELEASE_TAG" \
-            --argjson prerelease "$expected_prerelease" \
-            '.tagName == $tag
-              and .isDraft == false
-              and .isImmutable == true
-              and .isPrerelease == $prerelease' \
-            <<<"$release_json" >/dev/null
-
-          expected_assets="$(
-            for asset in "${assets[@]}"; do
-              basename "$asset"
-            done | LC_ALL=C sort
-          )"
-          actual_assets="$(
-            jq -r '.assets[].name' <<<"$release_json" | LC_ALL=C sort
-          )"
-          if [[ "$actual_assets" != "$expected_assets" ]]; then
-            echo "Published Release assets differ from the qualified set." >&2
-            exit 1
-          fi
-
-          gh release verify "$RELEASE_TAG"
-          for asset in "${assets[@]}"; do
-            gh release verify-asset "$RELEASE_TAG" "$asset"
-          done
-
+          bash eng/reconcile-github-release.sh \
+            publish "$PACKAGE_VERSION" "$RELEASE_TAG"
           echo "SafeMigrations $PACKAGE_VERSION was published and verified." \
             >>"$GITHUB_STEP_SUMMARY"

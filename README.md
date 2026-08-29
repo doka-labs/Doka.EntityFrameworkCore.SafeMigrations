@@ -41,15 +41,15 @@ The CI and release workflows pin the exact patch tags and image digests used
 when that matrix executes. The exact successful run, not this table, is release
 evidence. See [Support and qualification](docs/support-and-qualification.md).
 
-The first complete delivery targets 10.0.0. The published `10.0.0-rc.1`
-qualified that feature contract and the complete publication workflow. The
-source tree prepares `10.0.0-rc.2` with source-frozen legacy repair selection,
-bounded check-constraint expression parsing, prerequisite-safe provider
-analysis, and the exact stable Doka 10.1.1 dependency. Existing rc.1 migration
-source remains compatible, while the strict scaffolding default is unchanged.
-[Release notes](CHANGELOG.md) distinguish the published candidate from the
-prepared one. The badges include prereleases, but only a successful release run
-and verified public packages establish availability or qualification.
+The first complete delivery targets 10.0.0. The published `10.0.0-rc.1` and
+`10.0.0-rc.2` candidates qualified successive revisions of that feature
+contract. The source tree prepares `10.0.0-rc.3` with exact native Doka 10.1.1
+Guid-format analysis, ordered mixed-migration preflight, and retry-safe GitHub
+Release reconciliation. Existing rc.2 migration source and the public API
+remain compatible, while strict scaffolding stays the default. [Release
+notes](CHANGELOG.md) distinguish published candidates from prepared source. The
+badges include prereleases, but only a successful release run and verified
+public packages establish availability or qualification.
 
 ## Installation
 

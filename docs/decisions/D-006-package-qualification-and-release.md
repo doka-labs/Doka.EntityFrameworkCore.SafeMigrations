@@ -60,13 +60,19 @@ push` publishes the primary and symbol packages. Public primary packages must
 then have valid NuGet repository signatures and match every qualified archive
 entry except NuGet's added `.signature.p7s`.
 
-The job creates a GitHub Release draft with the exact six package files,
-`SHA256SUMS`, and the SPDX manifest. A retry retains digest-matching assets,
-uploads missing assets, and rejects every mismatch before publishing the
-draft. GitHub's immutable-release and release-asset verification then supply
-the release association and digest checks. The repository does not implement a
-parallel GitHub Release state machine, attestation bundle transport,
-symbol-server parser, or tests that duplicate workflow/runbook text.
+Before requesting the NuGet credential, the job creates a GitHub Release draft
+with the expected title, Changelog-derived notes, classification, exact six
+package files, `SHA256SUMS`, and the SPDX manifest. A retry retains
+digest-matching assets, uploads missing assets, and rejects every mismatch.
+Only a completely read-back draft permits the first NuGet push.
+
+After signed public NuGet content matches the qualified packages, the job
+publishes the draft. GitHub's immutable-release and release-asset verification
+then supply the release association and digest checks. Because GitHub generates
+the Release attestation asynchronously, verification uses a bounded readback
+window and fails closed after exhaustion. The focused adapter persists no
+parallel release state and does not transport attestation bundles or parse the
+symbol server.
 
 ### Consequences
 
@@ -76,17 +82,22 @@ symbol-server parser, or tests that duplicate workflow/runbook text.
   implemented by their owning platforms.
 - Good, because an interrupted GitHub asset upload resumes from a verified
   draft without overwriting conflicting public evidence.
+- Good, because the complete Release draft exists before the first irreversible
+  NuGet write and attestation visibility is handled as a bounded readback.
 - Good, because the engineering surface is smaller and has fewer contracts
   that can disagree with GitHub or NuGet.
 - Bad, because three NuGet package IDs cannot be published atomically.
 - Bad, because symbol indexing is asynchronous and remains a NuGet-hosted
   validation state after upload.
+- Bad, because GitHub and NuGet still cannot commit atomically; recovery after
+  the first NuGet write remains an idempotent same-job reconciliation.
 - Bad, because hosted environment, ruleset, immutable-release, and NuGet policy
   settings cannot be proven by local tests.
 
 ### Confirmation
 
-Require local shell syntax checks, version-validator positive/negative cases,
+Require local shell syntax checks, GitHub Release reconciliation
+positive/negative cases, version-validator positive/negative cases,
 locked restore, format, Release build, all test suites, coverage thresholds,
 performance budgets, deterministic package qualification, package-only
 consumers, SBOM validation, and every supported live provider/tooling cell.
@@ -141,6 +152,9 @@ owns independent consumer readback.
 - 2026-08-26: Implementation simplified to platform-native publication while
   preserving untagged qualification, exact-byte publication, and protected
   approval.
+- 2026-08-29: The rc.2 run exposed delayed immutable-release attestation
+  visibility after NuGet and GitHub publication. Draft staging now precedes the
+  first NuGet write, and Release plus asset verification uses bounded retry.
 
 ### Implementation References
 
@@ -149,6 +163,7 @@ owns independent consumer readback.
 - [Version validation](../../eng/validate-release-version.sh)
 - [Package qualification](../../eng/qualify-packages.sh)
 - [NuGet readback](../../eng/readback-nuget.sh)
+- [GitHub Release reconciliation](../../eng/reconcile-github-release.sh)
 - [Allowed signers](../../eng/release/allowed-signers)
 - [Publication operations](../operations/release-publication.md)
 
@@ -157,5 +172,7 @@ owns independent consumer readback.
 - [GitHub deployments and environments](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments) (primary source; retrieved 2026-08-26)
 - [GitHub artifact attestations](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/use-artifact-attestations) (primary source; retrieved 2026-08-26)
 - [GitHub immutable Releases](https://cli.github.com/manual/gh_release_create) (primary source; retrieved 2026-08-26)
+- [GitHub immutable Release concepts](https://docs.github.com/en/enterprise-cloud@latest/code-security/concepts/supply-chain-security/immutable-releases) (primary source; retrieved 2026-08-29)
+- [GitHub REST release inventory](https://docs.github.com/en/rest/releases/releases?apiVersion=2022-11-28#list-releases) (primary source; retrieved 2026-08-29)
 - [NuGet Trusted Publishing](https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing) (primary source; retrieved 2026-08-26)
 - [`dotnet nuget push`](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-nuget-push) (primary source; retrieved 2026-08-26)

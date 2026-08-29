@@ -266,7 +266,9 @@ Preflight is a separate API. `ISafeMigrationRunner`:
   canonical migration model;
 - reads provider/engine/server identity;
 - runs ordered safe-operation classification in bounded parameterized chunks;
-- projects earlier accepted operations into later preflight observations;
+- projects earlier accepted safe operations and recognized deterministic
+  structural postconditions of ordered ordinary EF operations into later
+  preflight observations;
 - reports ordinary provider-owned operations as not analyzable;
 - inventories unexpected additive objects without deleting them;
 - emits model and operation-contract fingerprints.
@@ -297,6 +299,10 @@ Operation-contract fingerprints include safe intent, expected definitions,
 policy, and ordering. Ordinary provider operations contribute only their CLR
 type marker. Their properties and SQL require separate review and the digest
 of the immutable deployment artifact; they are not fully bound by that hash.
+Recognized ordinary create/add/alter/drop/rename table and column operations may
+contribute a conditional structural postcondition to later prerequisite
+projection. Their assessment remains `provider_owned_not_analyzed`, and no
+facet or data-safety claim is inferred beyond the bounded projection facts.
 
 Each chunk contains at most 512 MySQL/MariaDB operations or 128 PostgreSQL
 operations, 16,000 bound parameters, and 4 MiB of UTF-8 SQL plus parameter
@@ -316,12 +322,21 @@ Preflight cannot eliminate time-of-check/time-of-use drift. Deployment must
 prevent out-of-band DDL and data writes that invalidate checked constraints.
 Runtime guards and postflight remain authoritative.
 
-The projection tracks only prerequisites established by accepted earlier
-operations. For a unique index on an existing table, it may convert a live
-`PrerequisiteMissing` result to projected `Missing` only when every referenced
-column is known and a newly added key column is nullable, non-computed, has no
-default, and uses default null-distinct semantics. This proves existing rows
-receive non-conflicting nulls. Other unique transitions remain blocked.
+The projection tracks only prerequisites established by accepted earlier safe
+operations or deterministic structural postconditions of recognized earlier
+ordinary EF operations. Add/create/alter/drop/rename table and column operations
+update compact presence and unique-index safety facts in operation order; they
+do not create complete projected table definitions. For a unique index on an
+existing table, a live `PrerequisiteMissing` result becomes projected `Missing`
+only when every referenced column is known and a newly added key column is
+nullable, non-computed, has no non-null default, and uses default null-distinct
+semantics. Other unique transitions remain blocked. Unrecognized provider
+operations do not invent projection facts, and every ordinary operation still
+requires independent review and postcondition evidence. A recognized ordinary
+operation invalidates any complete projected table image that its provider-owned
+side effects could make stale. An unrecognized operation discards all projection
+facts, because arbitrary DDL or data changes cannot safely carry earlier
+inferences forward.
 
 `AnalyzePendingMigrationsAsync` calls provider validation before EF's
 `IHistoryRepository.GetAppliedMigrationsAsync` path. This ordering is required

@@ -107,10 +107,13 @@ repair, or destructive semantics cannot be inferred from the current model.
 The typed table callback captures EF's column and constraint operations into
 immutable definitions. Provider column annotations use a closed snapshot value
 set, deterministic order, and fingerprints. MySQL/MariaDB compares Doka's
-`None` and auto-increment strategies with `INFORMATION_SCHEMA.COLUMNS.EXTRA`;
-PostgreSQL compares `None`, identity-always, and identity-by-default with `pg_attribute.attidentity`.
-Unknown value types fail capture. Unmodeled operation annotations classify
-unsupported before target DDL.
+`None` and auto-increment strategies with `INFORMATION_SCHEMA.COLUMNS.EXTRA`.
+It accepts native Guid-format annotations only for Doka's defined
+`Binary16`/`binary(16)` and `Char36`/`char(36)` pairs on Guid CLR columns.
+PostgreSQL compares `None`, identity-always, and identity-by-default with
+`pg_attribute.attidentity`. Unknown value types fail capture. Undefined,
+contradictory, or unmodeled operation annotations classify unsupported before
+target DDL.
 
 Scaffolding mode and legacy policy are intentionally absent from runtime
 service-provider hash and equality because they change no runtime service
@@ -220,6 +223,9 @@ snapshots already required for catalog comparison and hashing.
 - 2026-08-29: Doka 10.1.1 `ClientGuid` annotations were classified as catalog-neutral while remaining part of immutable definitions, fingerprints, and provider replay; unsupported provider annotations remain fail-closed.
 - 2026-08-29: Added source-frozen legacy `RepairIfSafe` selection and the
   provider-verified mutable column repair allowlist.
+- 2026-08-29: Added exact native Doka `Binary16` and `Char36` Guid-format
+  catalog contracts while retaining fail-closed rejection for contradictory or
+  unknown provider annotations.
 
 ### Implementation References
 

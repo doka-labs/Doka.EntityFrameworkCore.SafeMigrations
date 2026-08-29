@@ -54,9 +54,9 @@ internal sealed partial class SafeMigrationPreflightProjection
             var prerequisites = new ProjectedPrerequisites(newlyCreated: true);
             foreach (var column in intent.Definition.Columns)
             {
-                prerequisites.Columns[column.Name] = new ProjectedColumn(
+                prerequisites.Columns[column.Name] = ProjectedColumn.From(
                     column,
-                    AddedToExistingTable: false);
+                    addedToExistingTable: false);
             }
 
             _prerequisites[key] = prerequisites;
