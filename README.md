@@ -43,12 +43,12 @@ when that matrix executes. The exact successful run, not this table, is release
 evidence. See [Support and qualification](docs/support-and-qualification.md).
 
 The initial complete stable delivery is 10.0.0, followed by the published
-10.0.1 maintenance release. Current source contains unreleased maintenance
-changes that qualify Doka 10.2.0, delegate required connection capabilities to
-its ownership-aware contract, and make generated migration namespace imports
-self-contained. [Release notes](CHANGELOG.md) distinguish published releases
-from unreleased source. Only a successful release run and verified public
-packages establish availability or qualification.
+10.0.1 maintenance release. This source prepares the stable 10.0.2 maintenance
+release, which qualifies Doka 10.2.0, delegates required connection
+capabilities to its ownership-aware contract, and makes generated migration
+namespace imports self-contained. [Release notes](CHANGELOG.md) distinguish
+prepared source from published releases. Only a successful release run and
+verified public packages establish availability or qualification.
 
 ## Installation
 
@@ -59,14 +59,14 @@ published release and all three NuGet package pages before installation; source
 or changelog entries alone do not establish package availability.
 
 ```bash
-package_version='10.0.1'
+package_version='10.0.2'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.MySql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.0.1'
+package_version='10.0.2'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version "$package_version"
 ```
 

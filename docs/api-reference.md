@@ -16,10 +16,10 @@ migration-source compatibility while adding exact native Doka 10.1.1
 Guid-format analysis and ordered mixed-migration preflight. The 10.0.0 stable
 source promotes that exact public contract without a public API or generated
 migration-source delta. The published 10.0.1 maintenance release preserves that
-public API. Current unreleased source retains the same API while qualifying
-Doka 10.2.0's ownership-aware connection contract and repairing the generated
-migration namespace import. Strict scaffolding remains the default. A
-successful release run and exact-version public package readback remain the
+public API. The prepared 10.0.2 maintenance source retains the same API while
+qualifying Doka 10.2.0's ownership-aware connection contract and repairing the
+generated migration namespace import. Strict scaffolding remains the default.
+A successful release run and exact-version public package readback remain the
 authority for a published API.
 
 ## Packages and registration
