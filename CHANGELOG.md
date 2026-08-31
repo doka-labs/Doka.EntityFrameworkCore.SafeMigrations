@@ -6,6 +6,39 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+## [10.0.2] - 2026-08-31
+
+Prepared the stable maintenance release that qualifies Doka 10.2.0's
+ownership-aware connection contract and repairs generated migration namespace
+imports. It preserves the SafeMigrations public API, operation definitions,
+SQL behavior, report schema, migration-history semantics, and runtime policy.
+
+These notes do not establish publication. Require the successful stable
+release run, the authorized signed `v10.0.2` tag, and verified public package,
+symbol, GitHub Release, provenance, SBOM, and attestation readback before
+selecting 10.0.2. All three package IDs must be published at the exact same
+version.
+
+### Changed
+
+- Advance the MySQL/MariaDB adapter and every affected locked consumer graph
+  to Doka 10.2.0 with the bounded `[10.2.0,10.3.0)` compatibility range.
+  SafeMigrations now declares its server-side user-variable requirement through
+  Doka's ownership-aware connection contract. Provider-owned strings that omit
+  `AllowUserVariables` are normalized safely; contradictory owned strings and
+  incompatible borrowed connections or data sources fail before database I/O.
+- Qualify Doka's unconditional matched-row and `GuidFormat=Binary16` transport
+  invariants while retaining Doka's per-property `Binary16` and `Char36` column
+  contracts. SafeMigrations adds no duplicate public connection option and
+  keeps its command-boundary validation as defense in depth.
+
+### Fixed
+
+- Make every SafeMigrations-generated C# migration explicitly import
+  `Doka.EntityFrameworkCore.SafeMigrations`, independently of application
+  global usings. Unit, EF tooling, and package-only consumer gates now reject a
+  missing import before incomplete migration source can ship.
+
 ## [10.0.1] - 2026-08-30
 
 Prepared the first stable maintenance release of the complete SafeMigrations
@@ -374,7 +407,8 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.0.1...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.0.2...HEAD
+[10.0.2]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.0.1...v10.0.2
 [10.0.1]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.0.0...v10.0.1
 [10.0.0]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.0.0-rc.3...v10.0.0
 [10.0.0-rc.3]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.0.0-rc.2...v10.0.0-rc.3

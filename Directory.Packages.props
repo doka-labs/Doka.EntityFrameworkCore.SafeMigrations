@@ -3,7 +3,7 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
     <EfCorePackageVersion Condition="'$(EfCorePackageVersion)' == ''">[10.0.11,10.1.0)</EfCorePackageVersion>
-    <DokaMySqlPackageVersion Condition="'$(DokaMySqlPackageVersion)' == ''">[10.1.2,10.2.0)</DokaMySqlPackageVersion>
+    <DokaMySqlPackageVersion Condition="'$(DokaMySqlPackageVersion)' == ''">[10.2.0,10.3.0)</DokaMySqlPackageVersion>
     <NpgsqlPackageVersion Condition="'$(NpgsqlPackageVersion)' == ''">[10.0.3,11.0.0)</NpgsqlPackageVersion>
     <DependencyInjectionPackageVersion Condition="'$(DependencyInjectionPackageVersion)' == ''">[10.0.11,10.1.0)</DependencyInjectionPackageVersion>
     <TestcontainersPackageVersion Condition="'$(TestcontainersPackageVersion)' == ''">[4.14.0]</TestcontainersPackageVersion>

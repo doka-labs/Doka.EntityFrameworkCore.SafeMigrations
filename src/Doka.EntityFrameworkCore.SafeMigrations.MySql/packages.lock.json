@@ -4,9 +4,9 @@
     "net10.0": {
       "Doka.EntityFrameworkCore.MySql": {
         "type": "Direct",
-        "requested": "[10.1.2, 10.2.0)",
-        "resolved": "10.1.2",
-        "contentHash": "fJHRH4VisZoP5Kvl+HNQXROkvqz33AsBwo0jYJY0W5NA5CY7dCXoRpp14RfpafdSwzFogLZaVKMY++YAgjmHcA==",
+        "requested": "[10.2.0, 10.3.0)",
+        "resolved": "10.2.0",
+        "contentHash": "9s8MnglfEHVtgtEH44a3nyK+MKj7k7lGTJnNh85ha1oiPHP4U6fdqCaslZAG6cPbCVIQ1pFai17W8qYER40K9g==",
         "dependencies": {
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.8, 10.1.0)",
           "MySqlConnector": "[2.5.0, 3.0.0)",

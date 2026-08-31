@@ -15,10 +15,12 @@ validation. `10.0.0-rc.3` preserved that public API and existing
 migration-source compatibility while adding exact native Doka 10.1.1
 Guid-format analysis and ordered mixed-migration preflight. The 10.0.0 stable
 source promotes that exact public contract without a public API or generated
-migration-source delta. The 10.0.1 maintenance source preserves the same public
-API and generated migration-source contract. Strict scaffolding remains the
-default. A successful release run and exact-version public package readback
-remain the authority for a published API.
+migration-source delta. The published 10.0.1 maintenance release preserves that
+public API. The prepared 10.0.2 maintenance source retains the same API while
+qualifying Doka 10.2.0's ownership-aware connection contract and repairing the
+generated migration namespace import. Strict scaffolding remains the default.
+A successful release run and exact-version public package readback remain the
+authority for a published API.
 
 ## Packages and registration
 
@@ -27,7 +29,7 @@ registration namespaces append `.MySql` or `.PostgreSql`.
 
 | Entry point | Inputs and result | Boundary |
 | --- | --- | --- |
-| `UseMySqlSafeMigrations()` | Configured EF options builder; returns the builder | Add after Doka `UseMySql`; supports both MySQL and MariaDB |
+| `UseMySqlSafeMigrations()` | Configured EF options builder; returns the builder | Supports both call orders with Doka `UseMySql`; declares the required user-variable capability for MySQL and MariaDB |
 | `UsePostgreSqlSafeMigrations()` | Configured EF options builder; returns the builder | Add after `UseNpgsql` |
 | `UseMySqlSafeMigrations(configure)` | Safe scaffolding mode plus normal MySQL/MariaDB registration | `Strict` is the builder default; selection is written into new migration source |
 | `UsePostgreSqlSafeMigrations(configure)` | Safe scaffolding mode plus normal PostgreSQL registration | Same source-frozen design-time contract |
@@ -44,8 +46,13 @@ The external-service-provider overloads can explicitly select canonical
 context/generator configuration as documented in their XML reference.
 
 Registration does not create a database or execute migrations. MySQL/MariaDB
-requires `Allow User Variables=true` on the actual connection. Missing or
-conflicting adapter ownership fails closed. See
+registration calls Doka 10.2.0's `RequireUserVariables()`. Doka supplies
+`AllowUserVariables=true` when a provider-owned connection string omitted the
+option and rejects an explicit contradiction. Caller-owned `DbConnection` and
+`MySqlDataSource` instances are never mutated; they must already specify
+`AllowUserVariables=true` and `GuidFormat=Binary16`. Every connection path must
+use matched-row semantics (`UseAffectedRows=false`). SafeMigrations validates
+its command connection again before guarded execution. See
 [registration examples](../README.md#provider-registration).
 
 ## Scaffolding configuration
@@ -165,6 +172,15 @@ after the selected database provider's design services. A runtime-only project
 with neither package receives no attribute or warning. Changing the mode later
 affects only future scaffolding; existing C# migration files retain their
 original method calls.
+
+Every generated migration contains an explicit
+`using Doka.EntityFrameworkCore.SafeMigrations;` directive. Generated source
+therefore resolves SafeMigrations extension methods and policy types without a
+consumer-owned global using. Generation fails closed if EF emits an unexpected
+using-directive shape instead of producing source whose dependencies are
+implicit. SafeMigrations does not rewrite existing migration files; add the
+explicit import when adopting an older generated or hand-authored migration
+that lacks it.
 
 Generated migration bodies use file-scoped namespaces and collection
 expressions for the array arguments SafeMigrations controls. This keeps normal

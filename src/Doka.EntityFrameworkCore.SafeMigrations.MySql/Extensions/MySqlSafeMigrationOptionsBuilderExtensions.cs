@@ -5,6 +5,12 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 /// internal EF Core service provider and selects the canonical migrations
 /// assembly used by runtime migration discovery and tooling.
 /// </summary>
+/// <remarks>
+/// Registration declares Doka's required user-variable capability. Doka may
+/// supply an omitted option for a provider-owned connection string; it never
+/// mutates a caller-owned connection or data source. Every connection path
+/// must also satisfy Doka's matched-row and Binary16 wire-transport invariants.
+/// </remarks>
 public static class MySqlSafeMigrationOptionsBuilderExtensions
 {
     /// <summary>
@@ -14,6 +20,9 @@ public static class MySqlSafeMigrationOptionsBuilderExtensions
     /// <param name="optionsBuilder">The EF Core options builder to configure.</param>
     /// <returns>The same options builder so additional calls can be chained.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder"/> is null.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// A configured caller-owned connection does not satisfy Doka's required connection contract.
+    /// </exception>
     public static DbContextOptionsBuilder UseMySqlSafeMigrations(
         this DbContextOptionsBuilder optionsBuilder
     )
@@ -34,6 +43,9 @@ public static class MySqlSafeMigrationOptionsBuilderExtensions
     /// <exception cref="ArgumentNullException">
     /// <paramref name="optionsBuilder"/> or <paramref name="configure"/> is null.
     /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// A configured caller-owned connection does not satisfy Doka's required connection contract.
+    /// </exception>
     public static DbContextOptionsBuilder UseMySqlSafeMigrations(
         this DbContextOptionsBuilder optionsBuilder,
         Action<SafeMigrationOptionsBuilder> configure
@@ -53,6 +65,9 @@ public static class MySqlSafeMigrationOptionsBuilderExtensions
     /// <typeparam name="TCanonicalMigrationContext">The canonical migration context.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder"/> is null.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// A configured caller-owned connection does not satisfy Doka's required connection contract.
+    /// </exception>
     public static DbContextOptionsBuilder UseMySqlSafeMigrations<TCanonicalMigrationContext>(
         this DbContextOptionsBuilder optionsBuilder
     )
@@ -78,6 +93,9 @@ public static class MySqlSafeMigrationOptionsBuilderExtensions
     /// <exception cref="ArgumentNullException">
     /// <paramref name="optionsBuilder"/> or <paramref name="configure"/> is null.
     /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// A configured caller-owned connection does not satisfy Doka's required connection contract.
+    /// </exception>
     public static DbContextOptionsBuilder UseMySqlSafeMigrations<TCanonicalMigrationContext>(
         this DbContextOptionsBuilder optionsBuilder,
         Action<SafeMigrationOptionsBuilder> configure
@@ -99,6 +117,9 @@ public static class MySqlSafeMigrationOptionsBuilderExtensions
     /// <typeparam name="TContext">The DbContext type being configured.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder"/> is null.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// A configured caller-owned connection does not satisfy Doka's required connection contract.
+    /// </exception>
     public static DbContextOptionsBuilder<TContext> UseMySqlSafeMigrations<TContext>(
         this DbContextOptionsBuilder<TContext> optionsBuilder
     )
@@ -119,6 +140,9 @@ public static class MySqlSafeMigrationOptionsBuilderExtensions
     /// <exception cref="ArgumentNullException">
     /// <paramref name="optionsBuilder"/> or <paramref name="configure"/> is null.
     /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// A configured caller-owned connection does not satisfy Doka's required connection contract.
+    /// </exception>
     public static DbContextOptionsBuilder<TContext> UseMySqlSafeMigrations<TContext>(
         this DbContextOptionsBuilder<TContext> optionsBuilder,
         Action<SafeMigrationOptionsBuilder> configure
@@ -138,6 +162,9 @@ public static class MySqlSafeMigrationOptionsBuilderExtensions
     /// <typeparam name="TCanonicalMigrationContext">The canonical migration context.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder"/> is null.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// A configured caller-owned connection does not satisfy Doka's required connection contract.
+    /// </exception>
     public static DbContextOptionsBuilder<TContext> UseMySqlSafeMigrations<TContext, TCanonicalMigrationContext>(
         this DbContextOptionsBuilder<TContext> optionsBuilder
     )
@@ -165,6 +192,9 @@ public static class MySqlSafeMigrationOptionsBuilderExtensions
     /// <exception cref="ArgumentNullException">
     /// <paramref name="optionsBuilder"/> or <paramref name="configure"/> is null.
     /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// A configured caller-owned connection does not satisfy Doka's required connection contract.
+    /// </exception>
     public static DbContextOptionsBuilder<TContext> UseMySqlSafeMigrations<TContext, TCanonicalMigrationContext>(
         this DbContextOptionsBuilder<TContext> optionsBuilder,
         Action<SafeMigrationOptionsBuilder> configure
@@ -186,6 +216,11 @@ public static class MySqlSafeMigrationOptionsBuilderExtensions
         SafeMigrationPolicy legacyConvergencePolicy = SafeMigrationPolicy.ThrowIfDifferent
     )
     {
+        // SafeMigrations owns the requirement for connection-local user
+        // variables. Doka 10.2.0 applies it to provider-owned strings and
+        // validates borrowed objects without transferring their ownership.
+        new MySqlDbContextOptionsBuilder(optionsBuilder).RequireUserVariables();
+
         ((IDbContextOptionsBuilderInfrastructure)optionsBuilder).AddOrUpdateExtension(
             MySqlSafeMigrationsOptionsExtension.WithCanonicalContext(
                 canonicalContextType,

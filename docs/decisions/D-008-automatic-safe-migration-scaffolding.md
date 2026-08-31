@@ -226,6 +226,7 @@ snapshots already required for catalog comparison and hashing.
 - 2026-08-29: Added exact native Doka `Binary16` and `Char36` Guid-format
   catalog contracts while retaining fail-closed rejection for contradictory or
   unknown provider annotations.
+- 2026-08-31: Required every generated migration to contain an explicit `Doka.EntityFrameworkCore.SafeMigrations` using directive. The generator now fails closed on a missing EF namespace anchor or duplicate SafeMigrations directive, and package-only plus provider tooling gates verify the generated import without a masking global using.
 
 ### Implementation References
 

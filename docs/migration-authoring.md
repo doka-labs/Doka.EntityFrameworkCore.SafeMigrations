@@ -23,6 +23,12 @@ own store types and Npgsql provider annotations. Names, store types, defaults,
 constraints, and annotations always come from the consuming application's EF
 model.
 
+Every generated migration explicitly imports
+`Doka.EntityFrameworkCore.SafeMigrations`. The source therefore resolves its
+SafeMigrations extension methods and policy types without relying on project-
+level global usings. Existing migration files remain source-frozen and are not
+retrofitted; add the explicit import during review if an older file lacks it.
+
 ## Generated strict migration
 
 Strict scaffolding is the default:
@@ -362,7 +368,7 @@ hand-authored definition inputs. Use `ConvergeTableFromModel` when those facets
 must come from provider scaffolding; do not manually translate generated EF
 table source into expected-definition constructors.
 
-Doka 10.1.2 may attach `ClientGuid` to a scaffolded application-converted Guid
+Doka 10.2.0 may attach `ClientGuid` to a scaffolded application-converted Guid
 key. SafeMigrations preserves it but compares the column as non-
 `AUTO_INCREMENT`, so both strict and legacy-convergence preflight can apply a
 missing relationship graph and recognize its idempotent replay. HiLo and

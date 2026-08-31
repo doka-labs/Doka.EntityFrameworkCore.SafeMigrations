@@ -40,16 +40,6 @@ internal sealed class MySqlSafeMigrationsOptionsExtension : IDbContextOptionsExt
         {
             throw new InvalidOperationException("MySQL safe migrations require Doka.EntityFrameworkCore.MySql.");
         }
-
-        if (providerOptions.ConnectionString is not null)
-        {
-            MySqlSafeMigrationConnectionValidator.Validate(providerOptions.ConnectionString);
-        }
-
-        if (providerOptions.Connection is not null)
-        {
-            MySqlSafeMigrationConnectionValidator.Validate(providerOptions.Connection);
-        }
     }
 
     private sealed class ExtensionInfo : DbContextOptionsExtensionInfo

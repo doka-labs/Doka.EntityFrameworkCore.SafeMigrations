@@ -202,6 +202,11 @@ else
 fi
 
 for migration in "${strict_migration}" "${legacy_migration}"; do
+  if ! grep -Fq 'using Doka.EntityFrameworkCore.SafeMigrations;' "${migration}"; then
+    echo "Scaffolding output is missing the SafeMigrations namespace import." >&2
+    exit 1
+  fi
+
   if ! grep -Eq '^namespace .+;$' "${migration}"; then
     echo "Scaffolding output does not use an analyzer-compatible file-scoped namespace." >&2
     exit 1

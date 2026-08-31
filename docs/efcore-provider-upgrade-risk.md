@@ -26,14 +26,14 @@ failure behavior.
 The read-only analyzer captures SafeMigrations' typed runtime plan while Doka
 invokes the registered handler with the real server-version, feature, and
 operation-ordinal context. It does not parse generated commands. The locked
-Doka 10.1.2 package exposes provider-validated `Setup`, `Body`, and `Cleanup`
+Doka 10.2.0 package exposes provider-validated `Setup`, `Body`, and `Cleanup`
 fragments and a bounded `CreateScoped` command contract. SafeMigrations uses
 those fragments directly and returns one provider-executed scope per guarded
 operation. Doka runs cleanup after success, failure, or cancellation with an
 independent cancellation token; a cleanup failure closes the connection and
 evicts its physical session from the MySqlConnector pool.
 
-Doka 10.1.2 supports two distinct Guid contracts. Application-owned converters
+Doka 10.2.0 supports two distinct model-level Guid contracts. Application-owned converters
 are preserved through relationship chains; their generated key columns retain
 the provider CLR type, carry no provider-owned `GuidFormat`, and may carry
 `ClientGuid`. Native Doka Guid mappings instead emit
@@ -43,6 +43,15 @@ Undefined enum values, contradictory store types, non-Guid CLR types, HiLo,
 and unknown provider facets remain unsupported before target DDL. Both accepted
 Guid formats remain part of immutable operation snapshots, fingerprints,
 provider DDL replay, and catalog-shape comparison.
+
+Doka 10.2.0 additionally centralizes three connector invariants across
+provider-owned strings, caller-owned connections, and caller-owned data
+sources. SafeMigrations declares `RequireUserVariables()` during registration.
+Doka supplies an omitted `AllowUserVariables=true` option only on the owned
+string path and validates borrowed inputs without mutation. Doka also requires
+`UseAffectedRows=false` and `GuidFormat=Binary16` on every connection path.
+The latter is a low-level wire contract and does not replace the independently
+configurable model-level `Binary16` or `Char36` storage contract.
 
 ## PostgreSQL boundary
 
@@ -84,6 +93,12 @@ contract. SafeMigrations validates the leading operation call, controlled array
 literals, outer namespace block, and indentation before substituting safe calls
 or file-scoped source. A missing, duplicated, or newly formatted shape stops
 scaffolding instead of emitting ambiguous migration code.
+
+The finalized migration source contains exactly one explicit
+`using Doka.EntityFrameworkCore.SafeMigrations;` directive. Unit tests reject a
+missing EF namespace anchor and duplicate directives; EF tooling and package-
+only consumer gates verify that generated source compiles without a masking
+global SafeMigrations using.
 
 Provider `buildTransitive` assets recognize both official EF tooling package
 layouts: a direct `Microsoft.EntityFrameworkCore.Design` reference and a direct
@@ -170,16 +185,18 @@ unless the entry records a later date:
 - [PostgreSQL system information functions](https://www.postgresql.org/docs/current/functions-info.html)
 - [MySQL supported platforms and lifecycle](https://www.mysql.com/support/supportedplatforms/database.html)
 - [MariaDB release criteria](https://mariadb.com/docs/release-notes/mariadb-release-criteria)
-- [Doka.EntityFrameworkCore.MySql 10.1.2](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.1.2)
-  (rechecked 2026-08-30)
-- [Doka 10.1.2 migration-operation handler contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.2/docs/migration-operation-handlers.md)
-  (rechecked 2026-08-30)
-- [Doka 10.1.2 release notes](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.2/CHANGELOG.md)
-  (rechecked 2026-08-30)
-- [Doka 10.1.2 Guid-format contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.2/src/Doka.EntityFrameworkCore.MySql/MySqlGuidFormat.cs)
-  (rechecked 2026-08-30)
-- [Doka 10.1.2 Guid property configuration](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.2/src/Doka.EntityFrameworkCore.MySql/MySqlPropertyBuilderExtensions.cs)
-  (rechecked 2026-08-30)
+- [Doka.EntityFrameworkCore.MySql 10.2.0](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.2.0)
+  (rechecked 2026-08-31)
+- [Doka 10.2.0 migration-operation handler contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.2.0/docs/migration-operation-handlers.md)
+  (rechecked 2026-08-31)
+- [Doka 10.2.0 provider configuration](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.2.0/docs/provider-configuration.md)
+  (rechecked 2026-08-31)
+- [Doka D-029 ownership-aware connection invariants](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.2.0/docs/decisions/D-029-ownership-aware-connection-invariants.md)
+  (rechecked 2026-08-31)
+- [Doka 10.2.0 Guid-format contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.2.0/src/Doka.EntityFrameworkCore.MySql/MySqlGuidFormat.cs)
+  (rechecked 2026-08-31)
+- [Doka 10.2.0 Guid property configuration](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.2.0/src/Doka.EntityFrameworkCore.MySql/MySqlPropertyBuilderExtensions.cs)
+  (rechecked 2026-08-31)
 
 The exact release evidence belongs in the workflow run, lockfiles, package
 SBOM, and final plan-to-ship reconciliation, not in an unchecked comment.

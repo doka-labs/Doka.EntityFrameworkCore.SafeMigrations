@@ -236,6 +236,99 @@ public sealed class SafeMigrationScaffoldingTests
     }
 
     [Fact]
+    public void MigrationGenerationAddsMissingSafeMigrationsNamespaceImportExactlyOnce()
+    {
+        var newline = Environment.NewLine;
+        var source = string.Concat(
+            "using Doka.EntityFrameworkCore.MySql;",
+            newline,
+            "using Microsoft.EntityFrameworkCore.Migrations;",
+            newline,
+            newline,
+            "#nullable disable",
+            newline);
+
+        var withImport = SafeMigrationCSharpMigrationsGenerator
+            .EnsureSafeMigrationsUsingDirective(source);
+        var repeated = SafeMigrationCSharpMigrationsGenerator
+            .EnsureSafeMigrationsUsingDirective(withImport);
+
+        Assert.Contains(
+            string.Concat(
+                "using Doka.EntityFrameworkCore.MySql;",
+                newline,
+                "using Doka.EntityFrameworkCore.SafeMigrations;",
+                newline,
+                "using Microsoft.EntityFrameworkCore.Migrations;"),
+            withImport,
+            StringComparison.Ordinal);
+        Assert.Equal(withImport, repeated);
+
+        const string directive = "using Doka.EntityFrameworkCore.SafeMigrations;";
+        var directiveIndex = repeated.IndexOf(directive, StringComparison.Ordinal);
+
+        Assert.True(directiveIndex >= 0);
+        Assert.DoesNotContain(
+            directive,
+            repeated[(directiveIndex + directive.Length)..],
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MigrationGenerationRejectsSourceWithoutEfCoreNamespaceAnchor()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            SafeMigrationCSharpMigrationsGenerator.EnsureSafeMigrationsUsingDirective(
+                "#nullable disable"));
+
+        Assert.Contains("namespace directive", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("unresolved extension method", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MigrationGenerationRejectsDuplicateSafeMigrationsNamespaceDirective()
+    {
+        var newline = Environment.NewLine;
+        var source = string.Join(
+            newline,
+            "using Doka.EntityFrameworkCore.SafeMigrations;",
+            "using Doka.EntityFrameworkCore.SafeMigrations;",
+            "using Microsoft.EntityFrameworkCore.Migrations;",
+            string.Empty);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            SafeMigrationCSharpMigrationsGenerator.EnsureSafeMigrationsUsingDirective(source));
+
+        Assert.Contains(
+            "more than one SafeMigrations namespace directive",
+            exception.Message,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MigrationGenerationDoesNotMistakeLiteralTextForUsingDirective()
+    {
+        var newline = Environment.NewLine;
+        var source = string.Join(
+            newline,
+            "using Microsoft.EntityFrameworkCore.Migrations;",
+            string.Empty,
+            "var text = \"using Doka.EntityFrameworkCore.SafeMigrations;\";",
+            string.Empty);
+
+        var result = SafeMigrationCSharpMigrationsGenerator
+            .EnsureSafeMigrationsUsingDirective(source);
+
+        Assert.StartsWith(
+            string.Concat(
+                "using Doka.EntityFrameworkCore.SafeMigrations;",
+                newline,
+                "using Microsoft.EntityFrameworkCore.Migrations;"),
+            result,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void UnexpectedMigrationNamespaceShapeIsRejected()
     {
         var exception = Assert.Throws<InvalidOperationException>(() =>

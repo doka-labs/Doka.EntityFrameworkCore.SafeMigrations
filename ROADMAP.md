@@ -32,10 +32,12 @@ dependency updates, and changed external conditions. A confirmed defect is a
 changed condition requiring assessment; an incomplete initial feature is not
 a maintenance strategy. There is no scheduled second feature version.
 
-The current maintenance source prepares 10.0.1 in response to such changed
-conditions: Doka 10.1.2 supplies a compatible provider fix, and portable
-release provenance closes an observed publication-assurance gap. Neither item
-introduces a new SafeMigrations feature line.
+The published 10.0.1 maintenance release responded to Doka 10.1.2 and an
+observed publication-assurance gap. The current maintenance source prepares
+10.0.2 in response to Doka 10.2.0's ownership-aware connection invariants and
+to a confirmed generated-migration namespace defect. These are changed
+dependency conditions and a correctness repair, not an incomplete initial
+feature line.
 
 Requalify affected behavior before adopting a provider, EF Core, database,
 SDK, action, or tooling update. Preserve public API, report, migration, data
