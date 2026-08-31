@@ -87,17 +87,26 @@ their provider semantics; composition does not make every provider command
 safe to embed.
 
 The current MySQL/MariaDB adapter consumes Doka through the bounded
-`[10.1.2,10.2.0)` NuGet dependency range. Committed lockfiles select the exact
-qualified 10.1.2 graph. Core/provider ranges and lockfiles remain
+`[10.2.0,10.3.0)` NuGet dependency range. Committed lockfiles select the exact
+qualified 10.2.0 graph. Core/provider ranges and lockfiles remain
 repository-owned inputs. Package qualification uses actual packages, not a
 Doka ProjectReference or unpublished local source. Provider release approval
 is not a cross-repository prerequisite controlled by SafeMigrations.
 
 The upper bound is the next Doka minor rather than the next major because the
 operation-handler SPI is both a binary and behavioral dependency. Patch
-releases within the qualified 10.1 line remain consumable without creating a
-diamond conflict through an exact transitive pin. A Doka 10.2 or later line
+releases within the qualified 10.2 line remain consumable without creating a
+diamond conflict through an exact transitive pin. A Doka 10.3 or later line
 requires a reviewed range change and fresh SafeMigrations qualification.
+
+SafeMigrations also declares its server-side user-variable requirement through
+Doka 10.2.0's public `RequireUserVariables()` contract. Doka may normalize an
+omitted option only for its provider-owned connection string. Explicitly
+contradictory owned strings and incompatible caller-owned connections or data
+sources fail closed without ownership transfer. Doka independently enforces
+matched-row semantics and `GuidFormat=Binary16` as connector invariants;
+SafeMigrations retains its command-boundary user-variable check as defense in
+depth.
 
 ### Consequences
 
@@ -192,12 +201,15 @@ being accepted through broad string normalization.
 - 2026-08-28: Updated the exact dependency to stable Doka 10.1.0 after confirming that its additive provider APIs leave the migration-operation handler SPI unchanged; the decision remains implemented and requires fresh SafeMigrations qualification.
 - 2026-08-29: Updated the exact dependency to stable Doka 10.1.1 after verifying its unchanged handler SPI and corrected application-owned Guid relationship contract; the decision remains implemented and requires fresh SafeMigrations qualification.
 - 2026-08-30: Raised the minimum dependency to stable Doka 10.1.2 and replaced the public exact pin with the bounded `[10.1.2,10.2.0)` patch-line range after verifying its unchanged handler SPI, generated SQL, database behavior, supported-engine policy, and package ranges. The provider patch corrects `JsonElement` ownership; committed lockfiles retain the exact qualified 10.1.2 graph, and the next Doka minor requires fresh qualification.
+- 2026-08-31: Raised the minimum dependency to stable Doka 10.2.0 with the bounded `[10.2.0,10.3.0)` patch-line range after verifying its unchanged handler SPI and new ownership-aware connection contract. SafeMigrations now declares the user-variable capability through Doka, qualifies its unconditional matched-row and `GuidFormat=Binary16` connector invariants, and retains exact 10.2.0 lockfile resolution.
 
 ### Implementation References
 
 - [Exact Doka handler](../../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/SqlGeneration/MySqlSafeMigrationOperationHandler.cs)
 - [Typed plan capture](../../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/Analysis/MySqlSafeMigrationPlanCapture.cs)
+- [MySQL/MariaDB options registration](../../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/Extensions/MySqlSafeMigrationOptionsBuilderExtensions.cs)
 - [MySQL/MariaDB registration](../../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/Extensions/MySqlServiceCollectionExtensions.cs)
+- [Doka connection-contract tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Unit/MySqlSafeMigrationOptionsBuilderExtensionsTests.cs)
 - [PostgreSQL composed generator](../../src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/SqlGeneration/PostgreSqlSafeMigrationsSqlGenerator.cs)
 - [PostgreSQL registration](../../src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/Extensions/PostgreSqlServiceCollectionExtensions.cs)
 - [Doka package-contract tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Unit/DokaPackageContractTests.cs)
@@ -217,4 +229,8 @@ being accepted through broad string normalization.
 - [Doka 10.1.2 migration-operation handler contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.2/docs/migration-operation-handlers.md) (primary source; retrieved 2026-08-30)
 - [Doka 10.1.2 release notes](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.2/CHANGELOG.md) (primary source; retrieved 2026-08-30)
 - [Doka.EntityFrameworkCore.MySql 10.1.2 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.1.2) (primary package metadata; retrieved 2026-08-30)
+- [Doka 10.2.0 migration-operation handler contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.2.0/docs/migration-operation-handlers.md) (primary source; retrieved 2026-08-31)
+- [Doka 10.2.0 provider configuration](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.2.0/docs/provider-configuration.md) (primary source; retrieved 2026-08-31)
+- [Doka D-029 ownership-aware connection invariants](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.2.0/docs/decisions/D-029-ownership-aware-connection-invariants.md) (primary source; retrieved 2026-08-31)
+- [Doka.EntityFrameworkCore.MySql 10.2.0 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.2.0) (primary package metadata; retrieved 2026-08-31)
 - [Npgsql EF Core provider and configuration](https://www.npgsql.org/efcore/) (primary source; retrieved 2026-08-26)

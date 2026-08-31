@@ -3,12 +3,13 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 public sealed partial class MySqlSafeMigrationIntegrationTests
 {
     [Fact]
-    public async Task PendingAnalysis_ValidatesReplacementConnectionBeforeMigrationHistoryQuery()
+    public async Task ConnectionReplacement_ValidatesRequiredCapabilityBeforeMigrationHistoryQuery()
     {
         var validConnectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         var invalidConnectionString = new MySqlConnectionStringBuilder(validConnectionString)
         {
             AllowUserVariables = false,
+            GuidFormat = MySqlConnector.MySqlGuidFormat.Binary16,
         }.ConnectionString;
 
         var interceptor = new HistoryCommandInterceptor();
@@ -25,31 +26,15 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             .UseMySqlSafeMigrations<SafeMigrationDbContext>()
             .Options;
 
-        await using (var warmContext = new SafeMigrationDbContext(validOptions))
-        {
-            _ = warmContext.GetService<ISafeMigrationRunner>();
-        }
-
+        await using var context = new SafeMigrationDbContext(validOptions);
+        _ = context.GetService<ISafeMigrationRunner>();
         await using var invalidConnection = new MySqlConnection(invalidConnectionString);
-        var invalidOptions = new DbContextOptionsBuilder<SafeMigrationDbContext>()
-            .UseMySql(
-                invalidConnection,
-                Fixture.ServerVersion,
-                provider => provider
-                    .MigrationsAssembly(typeof(SafeMigrationDbContext).Assembly.FullName)
-                    .MigrationsHistoryTable("__CoreDbContextMigrationsHistory"))
-            .AddInterceptors(interceptor)
-            .UseMySqlSafeMigrations<SafeMigrationDbContext>()
-            .Options;
 
-        await using var invalidContext = new SafeMigrationDbContext(invalidOptions);
-
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => invalidContext
-            .GetService<ISafeMigrationRunner>()
-            .AnalyzePendingMigrationsAsync(
-                invalidContext,
-                new SafeMigrationRunOptions("invalid-replacement-connection"),
-                CancellationToken.None));
+        // A replacement is caller-owned even when the original connection was
+        // compatible. Doka validates it during assignment so it cannot inherit
+        // the original connection's capability proof.
+        var exception = Assert.ThrowsAny<InvalidOperationException>(() =>
+            context.Database.SetDbConnection(invalidConnection, contextOwnsConnection: false));
 
         Assert.Contains("AllowUserVariables=true", exception.Message, StringComparison.Ordinal);
         Assert.Equal(0, interceptor.CommandCount);

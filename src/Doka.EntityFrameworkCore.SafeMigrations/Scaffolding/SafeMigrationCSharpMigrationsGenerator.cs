@@ -6,6 +6,8 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// </summary>
 internal sealed class SafeMigrationCSharpMigrationsGenerator : CSharpMigrationsGenerator
 {
+    private const string SafeMigrationsNamespace = "Doka.EntityFrameworkCore.SafeMigrations";
+
     private readonly SafeMigrationScaffoldingConfiguration _configuration;
 
     /// <summary>Initializes the SafeMigrations migration-file generator.</summary>
@@ -51,6 +53,11 @@ internal sealed class SafeMigrationCSharpMigrationsGenerator : CSharpMigrationsG
             upOperations,
             effectiveDownOperations);
 
+        if (_configuration.IsEnabled)
+        {
+            source = EnsureSafeMigrationsUsingDirective(source);
+        }
+
         return _configuration.IsEnabled && migrationNamespace is not null
             ? UseFileScopedNamespace(
                 source,
@@ -66,8 +73,86 @@ internal sealed class SafeMigrationCSharpMigrationsGenerator : CSharpMigrationsG
         var namespaces = base.GetNamespaces(operations);
 
         return _configuration.IsEnabled
-            ? namespaces.Append(typeof(SafeMigrationBuilderExtensions).Namespace!)
+            ? namespaces.Append(SafeMigrationsNamespace)
             : namespaces;
+    }
+
+    /// <summary>
+    /// Ensures that a generated migration can resolve SafeMigrations extension
+    /// methods independently of consumer-owned global usings.
+    /// </summary>
+    /// <param name="source">The complete EF Core-generated migration source.</param>
+    /// <returns>The migration source containing exactly one required using directive.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// The generated source does not contain EF Core's migrations namespace
+    /// anchor or contains duplicate SafeMigrations namespace directives.
+    /// </exception>
+    internal static string EnsureSafeMigrationsUsingDirective(
+        string source
+    )
+    {
+        ArgumentNullException.ThrowIfNull(source);
+
+        var newline = Environment.NewLine;
+        var directive = $"using {SafeMigrationsNamespace};";
+        var directiveIndex = FindExactLineStart(source, directive, newline, startIndex: 0);
+        if (directiveIndex >= 0)
+        {
+            var nextLineStart = directiveIndex + directive.Length + newline.Length;
+            if (FindExactLineStart(source, directive, newline, nextLineStart) >= 0)
+            {
+                throw new InvalidOperationException(
+                    "The EF Core C# migrations generator emitted more than one SafeMigrations namespace "
+                    + "directive. SafeMigrations stopped instead of preserving ambiguous generated source.");
+            }
+
+            return source;
+        }
+
+        const string anchor = "using Microsoft.EntityFrameworkCore.Migrations;";
+        var anchorIndex = FindExactLineStart(source, anchor, newline, startIndex: 0);
+        if (anchorIndex < 0)
+        {
+            throw new InvalidOperationException(
+                "The EF Core C# migrations generator omitted its migrations namespace directive. "
+                + "SafeMigrations stopped instead of emitting source with an unresolved extension method.");
+        }
+
+        return source.Insert(anchorIndex, string.Concat(directive, newline));
+    }
+
+    /// <summary>
+    /// Finds an exact generated-source line without treating the same text in
+    /// a C# string literal or comment as structural evidence.
+    /// </summary>
+    private static int FindExactLineStart(
+        string source,
+        string expectedLine,
+        string newline,
+        int startIndex
+    )
+    {
+        var lineStart = startIndex;
+        while (lineStart <= source.Length)
+        {
+            var newlineIndex = source.IndexOf(newline, lineStart, StringComparison.Ordinal);
+            var lineEnd = newlineIndex < 0 ? source.Length : newlineIndex;
+            var line = source.AsSpan(lineStart, lineEnd - lineStart);
+
+            if (line.SequenceEqual(expectedLine))
+            {
+                return lineStart;
+            }
+
+            if (newlineIndex < 0)
+            {
+                break;
+            }
+
+            lineStart = newlineIndex + newline.Length;
+        }
+
+        return -1;
     }
 
     /// <summary>

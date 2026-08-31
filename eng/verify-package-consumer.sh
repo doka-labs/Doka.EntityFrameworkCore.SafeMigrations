@@ -338,6 +338,7 @@ verify_consumer() {
 
     grep -Fq 'migrationBuilder.CreateTableIfNotExists(' "$migration_file"
     grep -Fq 'migrationBuilder.DropTableIfExists(' "$migration_file"
+    grep -Fq 'using Doka.EntityFrameworkCore.SafeMigrations;' "$migration_file"
     grep -Eq '^namespace .+;$' "$migration_file"
 
     if grep -Fq 'migrationBuilder.CreateTable(' "$migration_file" \

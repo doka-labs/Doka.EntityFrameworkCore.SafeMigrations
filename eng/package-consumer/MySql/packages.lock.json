@@ -285,16 +285,16 @@
       "doka.entityframeworkcore.safemigrations.mysql": {
         "type": "Project",
         "dependencies": {
-          "Doka.EntityFrameworkCore.MySql": "[10.1.2, 10.2.0)",
+          "Doka.EntityFrameworkCore.MySql": "[10.2.0, 10.3.0)",
           "Doka.EntityFrameworkCore.SafeMigrations": "[10.0.1-dev, )",
           "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.0.11, 10.1.0)"
         }
       },
       "Doka.EntityFrameworkCore.MySql": {
         "type": "CentralTransitive",
-        "requested": "[10.1.2, 10.2.0)",
-        "resolved": "10.1.2",
-        "contentHash": "fJHRH4VisZoP5Kvl+HNQXROkvqz33AsBwo0jYJY0W5NA5CY7dCXoRpp14RfpafdSwzFogLZaVKMY++YAgjmHcA==",
+        "requested": "[10.2.0, 10.3.0)",
+        "resolved": "10.2.0",
+        "contentHash": "9s8MnglfEHVtgtEH44a3nyK+MKj7k7lGTJnNh85ha1oiPHP4U6fdqCaslZAG6cPbCVIQ1pFai17W8qYER40K9g==",
         "dependencies": {
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.8, 10.1.0)",
           "MySqlConnector": "[2.5.0, 3.0.0)",

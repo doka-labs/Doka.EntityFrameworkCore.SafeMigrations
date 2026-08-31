@@ -58,6 +58,13 @@ Doka's public SPI performs constant-time exact-type dispatch and remains owner
 of the provider migrations generator. SafeMigrations does not derive from,
 replace, reflect over, or copy Doka provider internals.
 
+Registration declares the required user-variable capability through Doka
+10.2.0. Doka normalizes only an omitted option in its provider-owned connection
+string and validates caller-owned connections or data sources without
+mutation. Its matched-row and Binary16 wire-transport invariants remain
+provider-owned. SafeMigrations then validates the actual runtime connection
+again before migration-history or catalog access.
+
 The handler:
 
 1. validates the actual context connection before migration-history or catalog access;
@@ -378,7 +385,7 @@ global lock or mutable static cache.
 Every multi-command provider plan is idempotent at command boundaries. Tests
 cover failure after earlier standard DDL, same-session recovery after a guard
 failure, cancellation during blocked DDL, cleanup failure with pool eviction,
-and repeat execution. Doka 10.1.2 executes every handler-authored guard as one
+and repeat execution. Doka 10.2.0 executes every handler-authored guard as one
 bounded scope with ordered setup, one body, and reverse-order cleanup. Cleanup
 runs after success, failure, or cancellation with an independent cancellation
 token. A cleanup failure closes the connection and evicts its physical session

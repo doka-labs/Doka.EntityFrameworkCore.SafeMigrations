@@ -154,12 +154,15 @@ Only then release the write fence and mark the instance complete.
 
 ## Partial MySQL/MariaDB retry
 
-The connection must set `Allow User Variables=true`, corresponding to
-`MySqlConnectionStringBuilder.AllowUserVariables`; SafeMigrations validates
-this before its first guarded command. Doka 10.1.2 executes the handler cleanup
-after success, failure, or cancellation with an independent cancellation
-token. If cleanup itself fails, Doka closes the connection, clears its
-MySqlConnector pool generation, and reports a non-retryable cleanup exception.
+`UseMySqlSafeMigrations()` declares the user-variable capability through Doka
+10.2.0. Doka supplies `AllowUserVariables=true` for an owned string only when
+the option was omitted. A caller-owned connection or data source must already
+set it and `GuidFormat=Binary16`; every path must retain
+`UseAffectedRows=false`. SafeMigrations validates the actual connection again
+before its first guarded command. Doka executes handler cleanup after success,
+failure, or cancellation with an independent cancellation token. If cleanup
+itself fails, Doka closes the connection, clears its MySqlConnector pool
+generation, and reports a non-retryable cleanup exception.
 Dispose the failed `DbContext` before an operator-approved retry even when the
 provider reports successful cleanup; the retry must start from a fresh unit of
 work.

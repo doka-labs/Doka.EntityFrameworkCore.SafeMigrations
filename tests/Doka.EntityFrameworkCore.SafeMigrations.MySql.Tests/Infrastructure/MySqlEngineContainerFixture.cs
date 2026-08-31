@@ -188,6 +188,7 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
         Password = password,
         Database = database,
         AllowUserVariables = true,
+        GuidFormat = MySqlConnector.MySqlGuidFormat.Binary16,
         Pooling = false,
     }.ConnectionString;
 

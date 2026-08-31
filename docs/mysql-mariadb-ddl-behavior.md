@@ -11,8 +11,14 @@ session-local, but MySQL-family DDL is not an atomic migration transaction.
 - The migration principal does not need `CREATE ROUTINE`.
 - Guard state lives in the current session and temporary database objects.
 - Prepared SQL contains provider-rendered DDL, not caller-provided SQL text.
-- The connection string must set `Allow User Variables=true`, corresponding to
-  `MySqlConnectionStringBuilder.AllowUserVariables`.
+- SafeMigrations declares its user-variable capability through Doka 10.2.0.
+  Doka supplies `AllowUserVariables=true` for a provider-owned string only when
+  the option was omitted; contradictory owned values fail closed.
+- Caller-owned `DbConnection` and `MySqlDataSource` inputs are never mutated.
+  They must already set `AllowUserVariables=true` and
+  `GuidFormat=Binary16`.
+- Every connection path must retain matched-row semantics
+  (`UseAffectedRows=false`).
 - The runner validates the actual current `DbConnection` before pending EF
   history, model, environment, lock, catalog access, or connection opening.
   Replacing a connection cannot inherit validation from an EF-cached service
@@ -70,7 +76,7 @@ index names from that model so a completed strict batch remains idempotent.
 When neither batch nor target-model evidence is available, the alias is not
 accepted.
 
-Every safe operation returns exactly one Doka 10.1.2 scoped migration command.
+Every safe operation returns exactly one Doka 10.2.0 scoped migration command.
 Its bounded fragment list contains ordered setup, one body, and reverse-order
 cleanup. A data-reading classifier adds setup fragments for lazy state
 evaluation without adding EF command boundaries. This shape reduces executor
@@ -98,7 +104,7 @@ prepared classifier reads column data only after a catalog-only guard has
 proved that the target exists. Missing safe additions remain `Missing`; an
 unsafe missing `NOT NULL` addition to a populated table remains `DataBlocked`.
 
-## Scoped cleanup in Doka 10.1.2
+## Scoped cleanup in Doka 10.2.0
 
 `RenderStandardOperation` exposes provider-validated `Setup`, `Body`, and
 `Cleanup` fragments. SafeMigrations embeds the exact body as UTF-8 hexadecimal
@@ -188,10 +194,18 @@ disabled MariaDB check enforcement. Catalog assertions do not depend on a
 particular backslash interpretation, and temporarily disabled constraint
 enforcement does not bypass SafeMigrations data preconditions.
 
-`Allow User Variables=true` is validated from the actual command connection
-before SafeMigrations commands run, including caller-owned and already-open
-connections. The validation error never includes connection strings or
-credentials.
+SafeMigrations validates `AllowUserVariables=true` from the actual command
+connection before its commands run, including caller-owned and already-open
+connections. This runtime check remains defense in depth after Doka's options-
+level ownership-aware validation. Validation errors never include connection
+strings or credentials.
+
+Doka requires `UseAffectedRows=false` independently of SafeMigrations because
+EF update concurrency depends on matched-row semantics. Its low-level connector
+transport is always `GuidFormat=Binary16`; Doka's model-level
+`DefaultGuidFormat` and property configuration continue to control whether a
+Guid property is stored as `binary(16)` or `char(36)`. This separation prevents
+connection ownership from changing the model's storage contract.
 
 Unsupported features are rejected from Doka's canonical server feature
 profile. Examples include relational schema namespaces and filtered indexes on
@@ -211,6 +225,8 @@ unqualified future engine line is admitted implicitly.
 - [MariaDB ALTER TABLE](https://mariadb.com/docs/server/reference/sql-statements/data-definition/alter/alter-table)
 - [MariaDB INFORMATION_SCHEMA.COLUMNS](https://mariadb.com/docs/server/reference/system-tables/information-schema/information-schema-tables/information-schema-columns-table)
 - [MariaDB PREPARE statement](https://mariadb.com/docs/server/reference/sql-statements/prepared-statements/prepare-statement)
+- [Doka 10.2.0 provider configuration](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.2.0/docs/provider-configuration.md)
+- [Doka ownership-aware connection decision](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.2.0/docs/decisions/D-029-ownership-aware-connection-invariants.md)
 - [Doka.EntityFrameworkCore.MySql](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql)
 
 Deployment sequencing and incident response are defined in

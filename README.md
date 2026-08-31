@@ -26,7 +26,8 @@ equivalent.
 - `Doka.EntityFrameworkCore.SafeMigrations`: provider-neutral intent,
   definitions, planning, reports, and `MigrationBuilder` extensions
 - `Doka.EntityFrameworkCore.SafeMigrations.MySql`: MySQL and MariaDB adapter on
-  the public `Doka.EntityFrameworkCore.MySql` 10.1.2 operation-handler SPI
+  the public `Doka.EntityFrameworkCore.MySql` 10.2.0 operation-handler SPI and
+  ownership-aware connection contract
 - `Doka.EntityFrameworkCore.SafeMigrations.PostgreSql`: PostgreSQL adapter on
   Npgsql 10
 
@@ -41,13 +42,13 @@ The CI and release workflows pin the exact patch tags and image digests used
 when that matrix executes. The exact successful run, not this table, is release
 evidence. See [Support and qualification](docs/support-and-qualification.md).
 
-The initial complete stable delivery is 10.0.0. This source prepares the stable
-10.0.1 maintenance release with the same public API, generated migration-source
-compatibility, SQL behavior, report contracts, and strict-by-default
-scaffolding. It advances the qualified Doka dependency and completes portable
-release-provenance verification. [Release notes](CHANGELOG.md) distinguish
-published releases from prepared source. Only a successful release run and
-verified public packages establish availability or qualification.
+The initial complete stable delivery is 10.0.0, followed by the published
+10.0.1 maintenance release. Current source contains unreleased maintenance
+changes that qualify Doka 10.2.0, delegate required connection capabilities to
+its ownership-aware contract, and make generated migration namespace imports
+self-contained. [Release notes](CHANGELOG.md) distinguish published releases
+from unreleased source. Only a successful release run and verified public
+packages establish availability or qualification.
 
 ## Installation
 
@@ -90,10 +91,15 @@ services.AddDbContext<AppDbContext>(options =>
 });
 ```
 
-The MySQL connection must set `Allow User Variables=true` (the
-`MySqlConnectionStringBuilder.AllowUserVariables` property). Registration
-also validates already-open connections and fails before SafeMigrations
-command execution without exposing the connection string.
+`UseMySqlSafeMigrations()` declares its user-variable requirement through Doka
+10.2.0. For a provider-owned connection string, Doka supplies
+`AllowUserVariables=true` when it was omitted. An explicitly contradictory
+setting is rejected. Caller-owned `DbConnection` and `MySqlDataSource` inputs
+are never mutated and must already use `AllowUserVariables=true` and
+`GuidFormat=Binary16`. Doka also requires matched-row semantics
+(`UseAffectedRows=false`) on every connection path. SafeMigrations retains a
+runtime validation immediately before guarded commands as defense in depth;
+errors do not disclose the connection string.
 
 PostgreSQL registration is additive to `UseNpgsql`:
 
@@ -152,6 +158,9 @@ by Visual Studio's Package Manager Console, migration scaffolding automatically
 writes safe table and index calls. The Tools package supplies EF Design
 transitively; SafeMigrations recognizes both official package layouts. Do not
 copy a generated `CreateTable` body into `ExpectedTableDefinition` by hand.
+Every generated migration explicitly imports
+`Doka.EntityFrameworkCore.SafeMigrations`; no application global using is
+required for its extension methods or policy types.
 
 A runtime-only project may reference a SafeMigrations provider without either
 design-time package. It builds without a design-service attribute or warning;
