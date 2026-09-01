@@ -18,9 +18,11 @@ source promotes that exact public contract without a public API or generated
 migration-source delta. The published 10.0.1 and 10.0.2 maintenance releases
 preserve that public API. Stable 10.1.0 source adds two scaffolder-facing
 index-prefix methods while qualifying Doka 10.3.0's typed migration metadata;
-all earlier signatures remain compatible. Strict scaffolding remains the
-default. A successful release run and exact-version public package readback
-remain the authority for a published API.
+all earlier signatures remain compatible. Prepared stable 10.1.1 preserves
+that complete public surface while correcting internal provider analysis and
+structured-expression rendering. Strict scaffolding remains the default. A
+successful release run and exact-version public package readback remain the
+authority for a published API.
 
 ## Packages and registration
 
@@ -287,6 +289,21 @@ wildcard that disables comparison.
 `Function`, `Cast`, `Collate`, and `Current`. Operators and current values are
 enums. The provider validates supported semantics and renders each token in
 its own context. Do not concatenate user data into SQL or type grammar.
+
+For MySQL/MariaDB, `Literal(value, storeType)` and `Cast(value, storeType)`
+accept provider store types only when they map exactly to the CAST grammar
+shared by both engines. Column aliases are normalized to canonical targets;
+unsupported or extended type clauses produce `structured_cast_type` before
+DDL. Typed nulls preserve the explicit store type on every provider.
+PostgreSQL accepts a structured cast target only when Npgsql's relational type
+mapping recognizes it. SafeMigrations then renders documented built-in aliases
+in their catalog-canonical form so catalog-normalized expressions remain
+stable. Unknown or appended type grammar receives the same fail-closed
+classification. The SQL-standard PostgreSQL aliases `float` and `float(p)` are
+bounded to precision 1 through 53 and normalized to `real` or
+`double precision`, including array forms.
+MariaDB rejects a non-nullable computed definition before DDL with
+`generated_column_nullability`; MySQL can preserve that physical facet.
 
 `Opaque` and `ProviderFragment` retain explicit SQL provenance, but neither
 proves catalog equivalence. They can produce an unsupported classification;

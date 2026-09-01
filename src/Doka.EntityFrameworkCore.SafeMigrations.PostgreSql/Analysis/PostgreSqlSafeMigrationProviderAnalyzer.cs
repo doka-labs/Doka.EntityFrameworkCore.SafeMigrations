@@ -265,6 +265,24 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
     )
     {
         var states = new SafeMigrationObservedState?[operations.Count];
+
+        // PostgreSQL resolves every relation referenced by one SQL statement
+        // before CASE can select a branch. Keep catalog-only prerequisites in
+        // their own statement so a data probe is never planned for a missing
+        // table.
+        await FindPrerequisiteStatesAsync(connection, operations, states, cancellationToken);
+        await FindStateEvaluationGuardStatesAsync(connection, operations, states, cancellationToken);
+
+        return states;
+    }
+
+    private async Task FindPrerequisiteStatesAsync(
+        DbConnection connection,
+        IReadOnlyList<SafeMigrationOperation> operations,
+        SafeMigrationObservedState?[] states,
+        CancellationToken cancellationToken
+    )
+    {
         var rowsRead = 0;
         var ordinal = 0;
         var separatorBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Separator);
@@ -293,15 +311,10 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
 
                 var checkpoint = parameters.Capture();
                 var plan = builder.Build(operation);
-                var stateEvaluationGuardBranch = plan.StateEvaluationGuardFailureExpression is null
-                    ? string.Empty
-                    : $"WHEN NOT COALESCE(({plan.StateEvaluationGuardExpression}), FALSE) THEN "
-                    + $"({plan.StateEvaluationGuardFailureExpression}) ";
 
                 var selection = $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, CASE "
                     + $"WHEN NOT COALESCE(({plan.PrerequisiteExpression}), FALSE) "
                     + "THEN 'prerequisite_missing' "
-                    + stateEvaluationGuardBranch
                     + "ELSE NULL END";
 
                 var selectionBytes = Encoding.UTF8.GetByteCount(selection)
@@ -356,8 +369,116 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
             throw new InvalidOperationException(
                 "The PostgreSQL SafeMigrations prerequisite classifier returned an inconsistent row count.");
         }
+    }
 
-        return states;
+    private async Task FindStateEvaluationGuardStatesAsync(
+        DbConnection connection,
+        IReadOnlyList<SafeMigrationOperation> operations,
+        SafeMigrationObservedState?[] states,
+        CancellationToken cancellationToken
+    )
+    {
+        var ordinal = 0;
+        var separatorBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Separator);
+        var trailerBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Trailer);
+        while (ordinal < operations.Count)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            await using var command = connection.CreateCommand();
+            var parameters = new PostgreSqlCatalogQueryParameters(command);
+            var builder = new PostgreSqlSafeMigrationCatalogSqlBuilder(
+                _typeMappingSource,
+                _sqlGenerationHelper,
+                parameters.AddString);
+
+            var selections = new List<string>(
+                Math.Min(SafeMigrationCatalogQueryLimits.MaximumPostgreSqlOperations, operations.Count - ordinal));
+
+            var selectedOrdinals = new List<int>(selections.Capacity);
+            var sqlBytes = trailerBytes;
+            while (ordinal < operations.Count
+                   && selections.Count < SafeMigrationCatalogQueryLimits.MaximumPostgreSqlOperations)
+            {
+                var operation = operations[ordinal]
+                    ?? throw new ArgumentException(
+                        "The operation batch cannot contain null entries.",
+                        nameof(operations));
+
+                var checkpoint = parameters.Capture();
+                var plan = builder.Build(operation);
+                if (states[ordinal] is not null
+                    || plan.StateEvaluationGuardFailureExpression is null)
+                {
+                    parameters.Rollback(checkpoint);
+                    ordinal++;
+
+                    continue;
+                }
+
+                var selection = $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, CASE "
+                    + $"WHEN NOT COALESCE(({plan.StateEvaluationGuardExpression}), FALSE) THEN "
+                    + $"({plan.StateEvaluationGuardFailureExpression}) ELSE NULL END";
+
+                var selectionBytes = Encoding.UTF8.GetByteCount(selection)
+                    + (selections.Count == 0 ? 0 : separatorBytes);
+
+                var prospectivePayload = sqlBytes + selectionBytes + parameters.Utf8PayloadBytes;
+                if (SafeMigrationCatalogQueryLimits.Exceeded(
+                        parameters.Count,
+                        prospectivePayload,
+                        SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes))
+                {
+                    var prospectiveParameters = parameters.Count;
+                    parameters.Rollback(checkpoint);
+                    if (selections.Count == 0)
+                    {
+                        throw SafeMigrationCatalogQueryLimits.OversizedOperation(
+                            ordinal,
+                            prospectiveParameters,
+                            prospectivePayload);
+                    }
+
+                    break;
+                }
+
+                selections.Add(selection);
+                selectedOrdinals.Add(ordinal);
+                sqlBytes += selectionBytes;
+                ordinal++;
+            }
+
+            if (selections.Count == 0)
+            {
+                continue;
+            }
+
+            command.CommandText = string.Join(SafeMigrationCatalogQueryLimits.Separator, selections)
+                + SafeMigrationCatalogQueryLimits.Trailer;
+
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            var row = 0;
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var resultOrdinal = reader.GetInt32(0);
+                if (row >= selectedOrdinals.Count
+                    || resultOrdinal != selectedOrdinals[row])
+                {
+                    throw new InvalidOperationException(
+                        "The PostgreSQL SafeMigrations state-evaluation guard classifier returned an invalid ordinal.");
+                }
+
+                states[resultOrdinal] = reader.IsDBNull(1) ? null : ParseState(reader.GetString(1));
+                row++;
+            }
+
+            if (row != selectedOrdinals.Count)
+            {
+                throw new InvalidOperationException(
+                    "The PostgreSQL SafeMigrations state-evaluation guard classifier returned "
+                    + "an inconsistent row count.");
+            }
+        }
     }
 
     private static SafeMigrationProviderAnalysis ShortCircuitAnalysis(

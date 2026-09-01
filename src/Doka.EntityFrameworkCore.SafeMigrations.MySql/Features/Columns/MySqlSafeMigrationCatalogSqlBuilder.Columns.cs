@@ -48,6 +48,17 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             return "generated_column";
         }
 
+        if (isMariaDb
+            && definitions.Any(static definition => !definition.IsNullable
+                && (definition.ComputedColumnSql is not null || definition.ComputedExpression is not null)))
+        {
+            // MariaDB's generated-column grammar has no NOT NULL facet and
+            // reports the resulting column as nullable even when incoming DDL
+            // contains that clause. Reject the unrepresentable contract before
+            // target DDL instead of accepting a guaranteed postcondition fault.
+            return "generated_column_nullability";
+        }
+
         return definitions.Any(static definition => definition.DefaultValue.Kind == SafeMigrationDefaultValueKind.Sql)
             && !Supported(features, MySqlMigrationFeature.ExpressionDefaults)
                 ? "expression_default"

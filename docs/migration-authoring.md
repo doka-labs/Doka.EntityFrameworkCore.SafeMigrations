@@ -136,6 +136,44 @@ null literals, parentheses, unary arithmetic and `NOT`, arithmetic and
 comparison operators, `AND`/`OR`, `IS NULL`, `BETWEEN`, `IN`, function calls,
 `CAST`, `COLLATE`, and current date/time values.
 
+The `storeType` supplied to `SafeMigrationSql.Literal` or
+`SafeMigrationSql.Cast` is a provider store type, not raw SQL. The
+MySQL/MariaDB renderer maps column aliases into their common CAST grammar:
+signed integer aliases become `SIGNED`, unsigned integer aliases become
+`UNSIGNED`, `char`/`varchar`/text aliases become `CHAR`, and supported binary,
+decimal, floating-point, date, datetime, and time shapes receive a canonical
+target. Precision, scale, and fractional-second bounds are validated. Types
+whose semantics cannot be represented identically on both engines fail closed
+with `structured_cast_type`; arbitrary type clauses are never copied into SQL.
+This follows the official [MySQL CAST grammar](https://dev.mysql.com/doc/refman/8.4/en/cast-functions.html)
+and [MariaDB CAST grammar](https://mariadb.com/docs/server/reference/sql-functions/string-functions/cast).
+
+A typed null remains typed: MySQL/MariaDB render `CAST(NULL AS <type>)`, while
+PostgreSQL renders `NULL::<type>`. Use an untyped `SafeMigrationSql.Literal(null)`
+only when provider type inference is intentional.
+
+PostgreSQL validates each structured literal or cast store type through
+Npgsql's relational type mapping. SafeMigrations then emits documented built-in
+aliases in their catalog-canonical form. Aliases such as `int4` therefore
+round-trip the catalog's `integer` spelling. Unknown types and values with
+appended SQL grammar are `Unsupported` with `structured_cast_type` before DDL.
+PostgreSQL `float` without a precision maps to `double precision`;
+`float(1)` through `float(24)` map to `real`, while `float(25)` through
+`float(53)` map to `double precision`. Other precisions fail closed before DDL,
+and array forms retain the same scalar semantics. This preserves PostgreSQL's
+native type system without treating a caller-supplied type name as unchecked
+SQL, and follows PostgreSQL's official
+[type-cast syntax](https://www.postgresql.org/docs/current/sql-expressions.html#SQL-SYNTAX-TYPE-CASTS).
+The precision boundaries follow the official
+[floating-point type definition](https://www.postgresql.org/docs/current/datatype-numeric.html#DATATYPE-FLOAT).
+
+MariaDB's generated-column grammar does not expose a `NOT NULL` facet and its
+catalog reports generated columns as nullable. A non-nullable computed
+definition is therefore `Unsupported` with `generated_column_nullability`
+before any target DDL. MySQL supports and verifies that facet. Keep a shared
+MySQL/MariaDB generated-column contract nullable unless separate definitions
+are intentional.
+
 Comments, parameters, multiple statements, subqueries, opaque provider
 operators, provider-dependent backslash escapes, malformed input, excessive
 nesting, oversized lists, and expressions larger than the documented parser

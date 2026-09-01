@@ -6,6 +6,45 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+## [10.1.1] - 2026-09-01
+
+Prepared a stable patch release for provider-safe missing-table convergence
+and structured computed-column expressions. It preserves the 10.1.0 public
+API, generated migration contract, report schema, migration-history behavior,
+and dependency ranges while closing verified runtime and catalog round-trip
+defects across MySQL, MariaDB, and PostgreSQL.
+
+These notes do not establish publication. Require the successful stable
+release run, the authorized signed `v10.1.1` tag, and verified public package,
+symbol, GitHub Release, provenance, SBOM, and attestation readback before
+selecting 10.1.1. All three package IDs must be published at the exact same
+version.
+
+### Fixed
+
+- Separate catalog-only prerequisites from data-reading state guards during
+  MySQL, MariaDB, and PostgreSQL preflight analysis. A required convergence
+  column on a completely missing table now reports `prerequisite_missing`
+  instead of letting the server resolve an unreachable data probe and raise a
+  missing-table error. MySQL/MariaDB runtime SQL applies the same physical
+  statement boundary before preparing the guarded probe, while missing-table
+  convergence remains executable and idempotent.
+- Map structured MySQL/MariaDB literal and cast store types to the bounded CAST
+  grammar shared by both engines. Integer column aliases now render as
+  `SIGNED` or `UNSIGNED`, so generated computed columns execute on MySQL and
+  round-trip MariaDB's catalog normalization. Unsupported targets fail closed
+  with `structured_cast_type`; typed null literals retain their explicit type
+  on MySQL, MariaDB, and PostgreSQL. PostgreSQL structured cast targets are
+  likewise validated through Npgsql's relational type mapping, then documented
+  built-in aliases are canonicalized before their grammar reaches generated
+  SQL. This prevents drift such as `int4` versus catalog-deparsed `integer` and
+  preserves PostgreSQL's `float`/`float(p)` precision semantics even though
+  Npgsql does not map that SQL-standard alias directly.
+- Reject non-nullable MariaDB generated-column definitions before DDL with
+  `generated_column_nullability`. MariaDB accepts an incoming `NOT NULL` clause
+  but does not preserve that physical facet, while MySQL continues to converge
+  and verify the supported definition.
+
 ## [10.1.0] - 2026-09-01
 
 Prepared the first stable minor release after the complete 10.0 delivery. It
@@ -537,7 +576,8 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.1.0...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.1.1...HEAD
+[10.1.1]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.1.0...v10.1.1
 [10.1.0]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.0.2...v10.1.0
 [10.0.2]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.0.1...v10.0.2
 [10.0.1]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.0.0...v10.0.1

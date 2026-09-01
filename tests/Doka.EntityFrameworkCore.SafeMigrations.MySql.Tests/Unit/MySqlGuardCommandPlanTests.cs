@@ -144,14 +144,55 @@ public sealed class MySqlGuardCommandPlanTests
 
         var payloads = DecodeHexPayloads(command.CommandText);
 
+        Assert.Equal(4, Count(command.CommandText, "PREPARE doka_sm_statement FROM"));
+        Assert.Equal(3, Count(command.CommandText, "EXECUTE doka_sm_statement"));
+        Assert.Equal(3, Count(command.CommandText, "DEALLOCATE PREPARE doka_sm_statement"));
         Assert.Contains("WHEN @doka_sm_action = 'apply'", command.CommandText, StringComparison.Ordinal);
         Assert.Contains("WHEN @doka_sm_action = 'repair'", command.CommandText, StringComparison.Ordinal);
-        Assert.Contains("THEN ('missing') ELSE NULL END", command.CommandText, StringComparison.Ordinal);
         Assert.Contains("CASE WHEN @doka_sm_state IS NULL", command.CommandText, StringComparison.Ordinal);
+        Assert.Contains(
+            payloads,
+            payload => payload.Contains(
+                "THEN ('missing') ELSE NULL END INTO @doka_sm_state",
+                StringComparison.Ordinal));
         Assert.Contains(
             payloads,
             payload => payload.StartsWith("ALTER TABLE `items` ADD ", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(payloads, payload => payload.Contains("MODIFY COLUMN", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void RepairableRequiredColumn_MaterializesDataProbeOnlyBehindPreparedPrerequisiteGate()
+    {
+        var options = new DbContextOptionsBuilder<DbContext>();
+        options.UseMySql(
+            "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
+            MySqlServerVersion.MySql(new Version(8, 4, 11)));
+        ((DbContextOptionsBuilder)options).UseMySqlSafeMigrations();
+
+        using var context = new DbContext(options.Options);
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "items",
+                new ExpectedColumnDefinition("value", typeof(int), isNullable: false, storeType: "int")),
+            SafeMigrationPolicy.RepairIfSafe);
+
+        var command = Assert.Single(
+            context
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate([operation], context.Model));
+
+        var payloads = DecodeHexPayloads(command.CommandText);
+        const string dataProbe = "EXISTS (SELECT 1 FROM `items` LIMIT 1)";
+
+        Assert.DoesNotContain(dataProbe, command.CommandText, StringComparison.Ordinal);
+        Assert.Contains(
+            payloads,
+            payload => payload.Contains(dataProbe, StringComparison.Ordinal)
+                && payload.EndsWith("INTO @doka_sm_state", StringComparison.Ordinal));
+        Assert.Equal(4, Count(command.CommandText, "PREPARE doka_sm_statement FROM"));
+        Assert.Equal(3, Count(command.CommandText, "EXECUTE doka_sm_statement"));
+        Assert.Equal(3, Count(command.CommandText, "DEALLOCATE PREPARE doka_sm_statement"));
     }
 
     private static int Count(

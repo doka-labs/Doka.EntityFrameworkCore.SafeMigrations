@@ -223,6 +223,36 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
     )
     {
         var states = new SafeMigrationObservedState?[plans.Length];
+
+        // The server resolves every relation referenced by one SQL statement
+        // before CASE can select a branch. Keep catalog-only prerequisites in
+        // their own statement so a data probe is never prepared for a missing
+        // table.
+        await FindPrerequisiteStatesAsync(
+            connection,
+            plans,
+            states,
+            maximumPayloadBytes,
+            cancellationToken);
+
+        await FindStateEvaluationGuardStatesAsync(
+            connection,
+            plans,
+            states,
+            maximumPayloadBytes,
+            cancellationToken);
+
+        return states;
+    }
+
+    private static async Task FindPrerequisiteStatesAsync(
+        DbConnection connection,
+        MySqlSafeMigrationRuntimePlan[] plans,
+        SafeMigrationObservedState?[] states,
+        int maximumPayloadBytes,
+        CancellationToken cancellationToken
+    )
+    {
         var rowsRead = 0;
         var ordinal = 0;
         var separatorBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Separator);
@@ -245,26 +275,13 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
                 var prerequisite = plan
                     .RenderPrerequisiteExpression(parameterizer.AddString);
 
-                var stateEvaluationGuardBranch = string.Empty;
-                if (plan.StateEvaluationGuardFailureExpression is not null)
-                {
-                    var stateEvaluationGuard = plan
-                        .RenderStateEvaluationGuardExpression(parameterizer.AddString);
-
-                    var guardFailure = plan
-                        .RenderStateEvaluationGuardFailureExpression(parameterizer.AddString);
-
-                    stateEvaluationGuardBranch = $"WHEN NOT COALESCE(({stateEvaluationGuard}), FALSE) THEN "
-                        + $"({guardFailure}) ";
-                }
-
                 var selection = $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, CASE "
                     + $"WHEN NOT COALESCE(({prerequisite}), FALSE) THEN 'prerequisite_missing' "
-                    + stateEvaluationGuardBranch
                     + "ELSE NULL END";
 
                 var selectionBytes = Encoding.UTF8.GetByteCount(selection)
                     + (selections.Count == 0 ? 0 : separatorBytes);
+
                 var prospectivePayload = sqlBytes + selectionBytes + parameterizer.Utf8PayloadBytes;
                 if (SafeMigrationCatalogQueryLimits.Exceeded(
                         parameterizer.Count,
@@ -314,8 +331,116 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
             throw new InvalidOperationException(
                 "The MySQL SafeMigrations prerequisite classifier returned an inconsistent row count.");
         }
+    }
 
-        return states;
+    private static async Task FindStateEvaluationGuardStatesAsync(
+        DbConnection connection,
+        MySqlSafeMigrationRuntimePlan[] plans,
+        SafeMigrationObservedState?[] states,
+        int maximumPayloadBytes,
+        CancellationToken cancellationToken
+    )
+    {
+        var ordinal = 0;
+        var separatorBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Separator);
+        var trailerBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Trailer);
+        while (ordinal < plans.Length)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            while (ordinal < plans.Length
+                   && (states[ordinal] is not null || plans[ordinal].StateEvaluationGuardFailureExpression is null))
+            {
+                ordinal++;
+            }
+
+            if (ordinal == plans.Length)
+            {
+                break;
+            }
+
+            await using var command = connection.CreateCommand();
+            var parameterizer = new MySqlCatalogQueryParameterizer(command);
+            var selections = new List<string>(
+                Math.Min(SafeMigrationCatalogQueryLimits.MaximumMySqlOperations, plans.Length - ordinal));
+
+            var selectedOrdinals = new List<int>(selections.Capacity);
+            var sqlBytes = trailerBytes;
+            while (ordinal < plans.Length
+                   && selections.Count < SafeMigrationCatalogQueryLimits.MaximumMySqlOperations)
+            {
+                if (states[ordinal] is not null
+                    || plans[ordinal].StateEvaluationGuardFailureExpression is null)
+                {
+                    ordinal++;
+
+                    continue;
+                }
+
+                var checkpoint = parameterizer.Capture();
+                var plan = plans[ordinal];
+                var stateEvaluationGuard = plan.RenderStateEvaluationGuardExpression(parameterizer.AddString);
+
+                var guardFailure = plan.RenderStateEvaluationGuardFailureExpression(parameterizer.AddString);
+
+                var selection = $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, CASE "
+                    + $"WHEN NOT COALESCE(({stateEvaluationGuard}), FALSE) THEN ({guardFailure}) "
+                    + "ELSE NULL END";
+
+                var selectionBytes = Encoding.UTF8.GetByteCount(selection)
+                    + (selections.Count == 0 ? 0 : separatorBytes);
+
+                var prospectivePayload = sqlBytes + selectionBytes + parameterizer.Utf8PayloadBytes;
+                if (SafeMigrationCatalogQueryLimits.Exceeded(
+                        parameterizer.Count,
+                        prospectivePayload,
+                        maximumPayloadBytes))
+                {
+                    var prospectiveParameters = parameterizer.Count;
+                    parameterizer.Rollback(checkpoint);
+                    if (selections.Count == 0)
+                    {
+                        throw SafeMigrationCatalogQueryLimits.OversizedOperation(
+                            ordinal,
+                            prospectiveParameters,
+                            prospectivePayload);
+                    }
+
+                    break;
+                }
+
+                selections.Add(selection);
+                selectedOrdinals.Add(ordinal);
+                sqlBytes += selectionBytes;
+                ordinal++;
+            }
+
+            command.CommandText = string.Join(SafeMigrationCatalogQueryLimits.Separator, selections)
+                + SafeMigrationCatalogQueryLimits.Trailer;
+
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            var row = 0;
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var resultOrdinal = reader.GetInt32(0);
+                if (row >= selectedOrdinals.Count
+                    || resultOrdinal != selectedOrdinals[row])
+                {
+                    throw new InvalidOperationException(
+                        "The MySQL SafeMigrations state-evaluation guard classifier returned an invalid ordinal.");
+                }
+
+                states[resultOrdinal] = reader.IsDBNull(1) ? null : ParseState(reader.GetString(1));
+                row++;
+            }
+
+            if (row != selectedOrdinals.Count)
+            {
+                throw new InvalidOperationException(
+                    "The MySQL SafeMigrations state-evaluation guard classifier returned "
+                    + "an inconsistent row count.");
+            }
+        }
     }
 
     private static SafeMigrationProviderAnalysis ShortCircuitAnalysis(
@@ -606,26 +731,28 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
           ORDER BY 1, 2, 3;
           """;
 
-    private const string MariaDbImplicitJsonCheckInventoryJoins = """
-                                                                    LEFT JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc
-                                                                      ON cc.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA
-                                                                     AND cc.TABLE_NAME = tc.TABLE_NAME
-                                                                     AND cc.CONSTRAINT_NAME = tc.CONSTRAINT_NAME
-                                                                    LEFT JOIN INFORMATION_SCHEMA.COLUMNS json_column
-                                                                      ON json_column.TABLE_SCHEMA = tc.CONSTRAINT_SCHEMA
-                                                                     AND json_column.TABLE_NAME = tc.TABLE_NAME
-                                                                     AND json_column.COLUMN_NAME = tc.CONSTRAINT_NAME
-                                                                    """;
+    private const string MariaDbImplicitJsonCheckInventoryJoins =
+        """
+        LEFT JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc
+          ON cc.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA
+         AND cc.TABLE_NAME = tc.TABLE_NAME
+         AND cc.CONSTRAINT_NAME = tc.CONSTRAINT_NAME
+        LEFT JOIN INFORMATION_SCHEMA.COLUMNS json_column
+          ON json_column.TABLE_SCHEMA = tc.CONSTRAINT_SCHEMA
+         AND json_column.TABLE_NAME = tc.TABLE_NAME
+         AND json_column.COLUMN_NAME = tc.CONSTRAINT_NAME
+        """;
 
-    private const string MariaDbImplicitJsonCheckInventoryExpression = """
-                                                                         CASE WHEN tc.CONSTRAINT_TYPE = 'CHECK'
-                                                                           AND json_column.DATA_TYPE = 'longtext'
-                                                                           AND LOWER(json_column.COLLATION_NAME) = 'utf8mb4_bin'
-                                                                           AND LOWER(REPLACE(REPLACE(REPLACE(REPLACE(
-                                                                                 cc.CHECK_CLAUSE, '`', ''), ' ', ''), '(', ''), ')', ''))
-                                                                               = CONCAT('json_valid', LOWER(json_column.COLUMN_NAME))
-                                                                         THEN TRUE ELSE FALSE END
-                                                                         """;
+    private const string MariaDbImplicitJsonCheckInventoryExpression =
+        """
+        CASE WHEN tc.CONSTRAINT_TYPE = 'CHECK'
+          AND json_column.DATA_TYPE = 'longtext'
+          AND LOWER(json_column.COLLATION_NAME) = 'utf8mb4_bin'
+          AND LOWER(REPLACE(REPLACE(REPLACE(REPLACE(
+                cc.CHECK_CLAUSE, '`', ''), ' ', ''), '(', ''), ')', ''))
+              = CONCAT('json_valid', LOWER(json_column.COLUMN_NAME))
+        THEN TRUE ELSE FALSE END
+        """;
 
     private sealed class AnalysisScope : IAsyncDisposable
     {

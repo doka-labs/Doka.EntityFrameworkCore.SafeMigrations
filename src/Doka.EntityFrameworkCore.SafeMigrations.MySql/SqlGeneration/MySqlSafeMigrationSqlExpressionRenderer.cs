@@ -29,6 +29,48 @@ internal sealed class MySqlSafeMigrationSqlExpressionRenderer
         return builder.ToString();
     }
 
+    /// <summary>Returns the first provider-specific incompatibility in an expression tree.</summary>
+    /// <param name="expression">The structured expression to validate.</param>
+    /// <returns>A stable unsupported-feature code, or <see langword="null" /> when rendering is supported.</returns>
+    public string? GetUnsupportedFeature(
+        SafeMigrationSqlExpression expression
+    )
+    {
+        ArgumentNullException.ThrowIfNull(expression);
+
+        return expression switch
+        {
+            SafeMigrationSqlIdentifierExpression => null,
+            SafeMigrationSqlLiteralExpression value => GetUnsupportedLiteralFeature(value),
+            SafeMigrationSqlUnaryExpression value => GetUnsupportedFeature(value.Operand),
+            SafeMigrationSqlBinaryExpression value =>
+                GetUnsupportedFeature(value.Left) ?? GetUnsupportedFeature(value.Right),
+            SafeMigrationSqlNullTestExpression value => GetUnsupportedFeature(value.Operand),
+            SafeMigrationSqlBetweenExpression value =>
+                GetUnsupportedFeature(value.Operand)
+                ?? GetUnsupportedFeature(value.Lower)
+                ?? GetUnsupportedFeature(value.Upper),
+            SafeMigrationSqlInExpression value =>
+                GetUnsupportedFeature(value.Operand)
+                ?? value.Values.Select(GetUnsupportedFeature).FirstOrDefault(static feature => feature is not null),
+            SafeMigrationSqlFunctionExpression value =>
+                value.Arguments.Select(GetUnsupportedFeature).FirstOrDefault(static feature => feature is not null),
+            SafeMigrationSqlCastExpression value =>
+                MySqlSafeMigrationCastTypeRenderer.TryRender(value.StoreType, out _)
+                    ? GetUnsupportedFeature(value.Operand)
+                    : "structured_cast_type",
+            SafeMigrationSqlCollateExpression { Schema: not null } => "schema_qualified_expression_collation",
+            SafeMigrationSqlCollateExpression value => GetUnsupportedFeature(value.Operand),
+            SafeMigrationSqlCurrentValueExpression => null,
+            SafeMigrationSqlProviderFragmentExpression value =>
+                StringComparer.Ordinal.Equals(value.ProviderId, ProviderId)
+                    ? null
+                    : "provider_fragment_mismatch",
+            SafeMigrationSqlOpaqueExpression => null,
+            _ => throw new UnreachableException(),
+        };
+    }
+
     private void Append(
         StringBuilder builder,
         SafeMigrationSqlExpression expression
@@ -90,7 +132,7 @@ internal sealed class MySqlSafeMigrationSqlExpressionRenderer
                 Append(builder, value.Operand);
                 builder
                     .Append(" AS ")
-                    .Append(value.StoreType)
+                    .Append(MySqlSafeMigrationCastTypeRenderer.Render(value.StoreType))
                     .Append(')');
                 break;
             case SafeMigrationSqlCollateExpression value:
@@ -133,18 +175,32 @@ internal sealed class MySqlSafeMigrationSqlExpressionRenderer
         string? storeType
     )
     {
+        var castType = storeType is null ? null : MySqlSafeMigrationCastTypeRenderer.Render(storeType);
+
         if (value is null)
         {
-            builder.Append("NULL");
+            if (castType is null)
+            {
+                builder.Append("NULL");
+            }
+            else
+            {
+                builder
+                    .Append("CAST(NULL AS ")
+                    .Append(castType)
+                    .Append(')');
+            }
+
             return;
         }
 
         var mapping = _typeMappingSource.FindMapping(value.GetType(), storeType)
+            ?? _typeMappingSource.FindMapping(value.GetType())
             ?? throw new NotSupportedException(
                 $"MySQL has no type mapping for structured literal '{value.GetType().FullName}'.");
 
         var literal = mapping.GenerateSqlLiteral(value);
-        if (storeType is null)
+        if (castType is null)
         {
             builder.Append(literal);
         }
@@ -154,9 +210,29 @@ internal sealed class MySqlSafeMigrationSqlExpressionRenderer
                 .Append("CAST(")
                 .Append(literal)
                 .Append(" AS ")
-                .Append(storeType)
+                .Append(castType)
                 .Append(')');
         }
+    }
+
+    private string? GetUnsupportedLiteralFeature(
+        SafeMigrationSqlLiteralExpression expression
+    )
+    {
+        if (expression.StoreType is not null
+            && !MySqlSafeMigrationCastTypeRenderer.TryRender(expression.StoreType, out _))
+        {
+            return "structured_cast_type";
+        }
+
+        if (expression.Value is not null
+            && _typeMappingSource.FindMapping(expression.Value.GetType(), expression.StoreType) is null
+            && _typeMappingSource.FindMapping(expression.Value.GetType()) is null)
+        {
+            return "structured_literal_mapping";
+        }
+
+        return null;
     }
 
     private void AppendList(

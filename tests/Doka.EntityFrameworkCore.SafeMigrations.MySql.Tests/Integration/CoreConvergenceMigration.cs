@@ -33,7 +33,8 @@ public sealed class CoreConvergenceMigration : Migration
             "pipeline_state",
             type: "varchar(80)",
             maxLength: 80,
-            nullable: true);
+            nullable: false,
+            policy: SafeMigrationPolicy.RepairIfSafe);
     }
 
     protected override void Down(

@@ -139,7 +139,7 @@ internal static class SafeMigrationSqlExpressionPropertyCases
                 CreateExpression(identifier, literal, second, depth - 1)),
             6 => SafeMigrationSql.Cast(
                 CreateExpression(identifier, literal, first, depth - 1),
-                "text"),
+                "DATE"),
             7 => SafeMigrationSql.Collate(
                 CreateExpression(identifier, literal, first, depth - 1),
                 "canonical"),

@@ -10,8 +10,8 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureColumn(
             "missing_parent",
-            new ExpectedColumnDefinition("value", typeof(int), true, "integer"),
-            SafeMigrationPolicy.ThrowIfDifferent);
+            new ExpectedColumnDefinition("value", typeof(int), false, "integer"),
+            SafeMigrationPolicy.RepairIfSafe);
         builder.EnsureIndex(
             new ExpectedIndexDefinition(
                 "ix_missing_parent_value",
@@ -49,6 +49,62 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 connectionString,
                 "SELECT COUNT(*) FROM information_schema.tables "
                 + "WHERE table_schema = current_schema() AND table_name = 'missing_parent';"));
+    }
+
+    [Fact]
+    public async Task LegacyConvergence_CreatesMissingTableWithRequiredColumnsAndRemainsIdempotent()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await using var context = CreateContext(connectionString);
+        var definition = new ExpectedTableDefinition(
+            "missing_legacy_table",
+            [
+                new ExpectedColumnDefinition("id", typeof(int), false, "integer"),
+                new ExpectedColumnDefinition(
+                    "required_value",
+                    typeof(string),
+                    false,
+                    "character varying(40)",
+                    maxLength: 40),
+            ]);
+
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.ConvergeTable(definition);
+        var runner = context.GetService<ISafeMigrationRunner>();
+
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("missing-legacy-table-preflight"));
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
+        Assert.Equal(SafeMigrationObservedState.Missing, preflight.Assessments[0].ObservedState);
+        Assert.Equal(SafeMigrationAction.Apply, preflight.Assessments[0].Action);
+        Assert.All(
+            preflight.Assessments.Skip(1),
+            static assessment =>
+            {
+                Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState);
+                Assert.Equal(SafeMigrationAction.NoOp, assessment.Action);
+            });
+
+        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations);
+
+        var postflight = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("missing-legacy-table-postflight"));
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
+        Assert.All(postflight.Assessments, static assessment => Assert.True(assessment.PostconditionSatisfied));
+        Assert.Equal(
+            2,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM information_schema.columns "
+                + "WHERE table_schema = current_schema() AND table_name = 'missing_legacy_table' "
+                + "AND is_nullable = 'NO';"));
     }
 
     [Fact]
@@ -221,8 +277,8 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         {
             builder.EnsureColumn(
                 "chunked_analysis",
-                new ExpectedColumnDefinition($"value_{ordinal}", typeof(int), true, "integer"),
-                SafeMigrationPolicy.ThrowIfDifferent);
+                new ExpectedColumnDefinition($"value_{ordinal}", typeof(int), false, "integer"),
+                SafeMigrationPolicy.RepairIfSafe);
         }
 
         var report = await context
@@ -396,6 +452,51 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM pg_catalog.pg_constraint WHERE conname = 'ck_opaque_expression';"));
+    }
+
+    [Fact]
+    public async Task UnsupportedStructuredCastType_IsRejectedBeforeTargetDdl()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE unsupported_cast_type (value integer NULL);");
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureCheckConstraint(
+            ExpectedCheckConstraintDefinition.FromExpression(
+                "ck_unsupported_cast_type",
+                "unsupported_cast_type",
+                SafeMigrationSql.Binary(
+                    SafeMigrationSql.Cast(
+                        SafeMigrationSql.Identifier("value"),
+                        "integer); DROP TABLE unsupported_cast_type; --"),
+                    SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
+                    SafeMigrationSql.Literal(0))),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("unsupported-cast-type"),
+                CancellationToken.None);
+
+        var assessment = Assert.Single(report.Assessments);
+
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.RejectUnsupported, assessment.Action);
+        Assert.Equal("structured_cast_type", assessment.Code);
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM pg_catalog.pg_class WHERE relname = 'unsupported_cast_type';"));
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM pg_catalog.pg_constraint WHERE conname = 'ck_unsupported_cast_type';"));
     }
 
     [Fact]
@@ -668,7 +769,9 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
 
         try
         {
-            await Task.WhenAll(contexts.Select(context => context.Database.MigrateAsync(cancellationToken: CancellationToken.None)));
+            await Task.WhenAll(
+                contexts.Select(
+                    context => context.Database.MigrateAsync(cancellationToken: CancellationToken.None)));
         }
         finally
         {
@@ -707,7 +810,9 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         command.Transaction = context.Database.CurrentTransaction?.GetDbTransaction();
         command.CommandText = sql;
 
-        return Convert.ToString(await command.ExecuteScalarAsync(CancellationToken.None), CultureInfo.InvariantCulture) ?? "<null>";
+        var result = await command.ExecuteScalarAsync(CancellationToken.None);
+
+        return Convert.ToString(result, CultureInfo.InvariantCulture) ?? "<null>";
     }
 
     private sealed class BlockingProviderAnalyzer(string providerId) : ISafeMigrationProviderAnalyzer
