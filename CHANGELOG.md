@@ -6,6 +6,117 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Raise the MySQL/MariaDB dependency floor to Doka 10.3.0 within the bounded
+  `[10.3.0,10.4.0)` compatibility line. SafeMigrations now consumes Doka's
+  public typed migration-operation metadata contract for Guid storage,
+  value-generation strategies, and ordered index prefix lengths instead of
+  depending on provider annotation names.
+- Preserve MySQL/MariaDB index-prefix metadata during automatic scaffolding.
+  Generated migrations express one non-negative prefix entry per key through
+  the new `CreateIndexWithPrefixesIfNotExistsFromModel` and
+  `CreateCompositeIndexWithPrefixesIfNotExistsFromModel` methods; zero means
+  that the complete key is indexed.
+
+### Fixed
+
+- Regenerate every affected MySQL/MariaDB lock entry from the official Doka
+  10.3.0 package on NuGet.org. Fresh locked restores now validate the published
+  package content instead of failing with `NU1403` because of a locally packed
+  qualification candidate with the same version.
+- Treat Doka's MariaDB JSON representation as one provider-owned column
+  contract: expected `json` now matches the emitted `longtext` storage,
+  `utf8mb4_bin` collation, and exact inline `JSON_VALID` check. That implicit
+  check no longer breaks strict-table postconditions or unexpected-object
+  inventory, while independent user checks still report drift.
+- Parse bounded EF-generated SQL defaults into the typed expression model when
+  expected definitions are captured. `CURRENT_TIMESTAMP(6)` now converges on
+  every qualified MySQL/MariaDB server; unbounded SQL remains opaque and
+  rejects before target DDL.
+- Project an accepted exact-name `DropIndex` or `DropIndexIfExists` into a
+  following ordinary column-BTREE index creation, including across recognized
+  table/column metadata alterations. Postflight now treats the final safe writer
+  for an exact catalog resource as authoritative and reports earlier transient
+  writers as `postcondition_superseded`. Physical key limits, duplicate-data
+  checks, missing prerequisites, opaque provider operations, and differently
+  named semantic conflicts retain their fail-closed result.
+- Match Doka's temporal MySQL/MariaDB row-version materialization as one owned
+  semantic contract: the provider-generated `CURRENT_TIMESTAMP(6)` default and
+  exact `ON UPDATE CURRENT_TIMESTAMP(6)` behavior are required, while missing
+  update behavior and unrelated `EXTRA` modifiers remain drift.
+- Accept MariaDB's exact quoted catalog representation for string defaults when
+  Doka emitted a hexadecimal literal to avoid `sql_mode` ambiguity. Raw,
+  provider-literal, and quoted-display forms remain separate exact candidates;
+  value, quote, and backslash drift are not normalized away.
+- Distinguish an InnoDB index that supports a local foreign key from an
+  independently owned differently named index. The former may be superseded by
+  the reviewed explicit index, as permitted by the engine; the latter remains
+  an identity conflict and no duplicate user index is created.
+- Allow `RepairIfSafe` to converge the documented nullability, default, and
+  comment facets when every Doka column annotation is recognized by the typed
+  provider contract and the remaining physical column shape already matches.
+  Unknown, malformed, contradictory, HiLo, generated, identity, type, and
+  collation drift remain fail-closed.
+- Validate missing MySQL/MariaDB BTREE indexes against the live table engine,
+  row format, InnoDB page size, column encodings, key types, and declared
+  prefix lengths before target DDL. Unachievable keys now reject with
+  `index_prefix_required_for_key_limit`; shapes whose key width cannot be
+  proven reject with `index_key_length_unverifiable`.
+- Reject differently named but semantically equivalent foreign keys, unique
+  constraints, check constraints, and active indexes before adding duplicate
+  database objects on MySQL, MariaDB, or PostgreSQL. PostgreSQL also rejects a
+  differently named existing primary key because a table can own only one.
+  The constraint reasons are `foreign_key_semantic_identity_conflict`,
+  `unique_constraint_semantic_identity_conflict`,
+  `check_constraint_semantic_identity_conflict`, and
+  `primary_key_identity_conflict`; index identity conflicts use the ordinary
+  `Different` decision because no provider capability is missing.
+- Preserve proven table and column prerequisites across ordered EF
+  `InsertDataOperation`, `UpdateDataOperation`, and `DeleteDataOperation`
+  entries so a following non-unique safe index can be preflighted. The data
+  operations remain `provider_owned_not_analyzed`, and every prior
+  data-dependent projection or live pre-batch absence proof is invalidated so
+  unique indexes and additive constraints cannot receive a false readiness
+  decision. Opaque provider operations invalidate both structural projections
+  and live row-level proofs because their SQL may change arbitrary data. Later
+  structural provider operations cannot erase that uncertainty.
+- Select and decorate the active provider migrations-code generator after EF
+  Core has composed referenced, provider, and default design-time services.
+  Provider-owned snapshot and migration-metadata namespace discovery remains
+  authoritative, while SafeMigrations changes only the generated migration
+  body and its validated outer source shape. Explicit non-C# generator
+  requests fail at selection only while SafeMigrations scaffolding is active;
+  disabled scaffolding preserves EF Core's provider-generator selection and
+  output unchanged.
+- Preserve the line-ending convention emitted by the provider migrations-code
+  generator when SafeMigrations inserts policy or index-prefix arguments and
+  converts generated namespaces. LF and CRLF source remain internally
+  consistent; already mixed source fails closed before malformed migration
+  code is returned.
+- Fingerprint EF Core JSON container columns through the public relational
+  `IColumn` facet contract. Nested `ToJson` graphs no longer index an empty
+  scalar property-mapping collection, while existing scalar-model golden
+  fingerprints remain unchanged.
+- Reject PostgreSQL constraints whose catalog identity matches but whose
+  execution semantics do not. The comparison now includes deferral and
+  validation state, foreign-key match type and partial delete-action columns,
+  check inheritance, unique-null treatment, and PostgreSQL 18 enforcement and
+  temporal-constraint facets without breaking PostgreSQL 14 compatibility.
+  Inherited or partition-derived constraints cannot satisfy local ensure or
+  drop operations.
+- Require MySQL checks to be enforced and bind MariaDB check expressions to
+  both table and constraint identity, including the table-scoped constraint
+  names supported by MariaDB 12.1 and later.
+- Reject invalid, unready, dropping, attached, or constraint-owned PostgreSQL
+  indexes where an independently managed index is expected. Partitioned parent
+  indexes remain supported. MySQL invisible and MariaDB ignored indexes no
+  longer satisfy a visible expected index or suppress creation under another
+  name.
+- Reject null arrays passed to the generated prefix-aware index entry points
+  before any migration operation is appended. Length mismatches and negative
+  prefix values remain fail-fast argument errors.
+
 ## [10.0.2] - 2026-08-31
 
 Prepared the stable maintenance release that qualifies Doka 10.2.0's

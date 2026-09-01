@@ -1,8 +1,9 @@
 const string designTimeReferenceAttributeName =
     "Microsoft.EntityFrameworkCore.Design.DesignTimeServicesReferenceAttribute";
 
-const string designTimeServicesTypeName = "Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDesignTimeServices, "
-    + "Doka.EntityFrameworkCore.SafeMigrations";
+const string designTimeServicesTypeName =
+    "Doka.EntityFrameworkCore.SafeMigrations.MySql.MySqlSafeMigrationDesignTimeServices, "
+    + "Doka.EntityFrameworkCore.SafeMigrations.MySql";
 
 const string providerName = "Doka.EntityFrameworkCore.MySql";
 
@@ -37,6 +38,12 @@ var hasExpectedDesignTimeReference = designTimeReferences is [{ ConstructorArgum
 
 if (hasExpectedDesignTimeReference != expectsDesignTimeReference)
 {
+    Console.Error.WriteLine(
+        expectsDesignTimeReference
+            ? "The MySQL/MariaDB package consumer is missing the expected design-time service reference."
+            : "The runtime-only MySQL/MariaDB package consumer contains an unexpected design-time service reference."
+    );
+
     return 2;
 }
 

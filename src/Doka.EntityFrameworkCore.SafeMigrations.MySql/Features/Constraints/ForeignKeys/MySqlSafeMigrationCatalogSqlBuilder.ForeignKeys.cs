@@ -8,16 +8,21 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     {
         var definition = intent.Definition;
         var exists = ConstraintExists(definition.Table, definition.Name, "FOREIGN KEY");
-        var matching = ForeignKeyMatches(definition);
+        var matching = ForeignKeyMatches(definition, requireExpectedName: true);
+        var identityConflict = ForeignKeyMatches(definition, requireExpectedName: false);
         var dataBlocked = ForeignKeyDataBlocked(definition);
 
         return Plan(
             $"CASE WHEN NOT {BaseTableExists(definition.Table)} "
             + $"OR NOT {BaseTableExists(definition.PrincipalTable)} THEN 'prerequisite_missing' "
+            + $"WHEN NOT {exists} AND {identityConflict} THEN 'unsupported' "
             + $"WHEN NOT {exists} AND {dataBlocked} THEN 'data_blocked' "
             + $"WHEN NOT {exists} THEN 'missing' "
             + $"WHEN {matching} THEN 'matching' ELSE 'different' END",
-            matching);
+            matching) with
+        {
+            UnsupportedCode = "foreign_key_semantic_identity_conflict",
+        };
     }
 
     private MySqlSafeMigrationRuntimePlan BuildDropForeignKey(
@@ -32,21 +37,29 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     }
 
     private string ForeignKeyMatches(
-        ExpectedForeignKeyDefinition definition
+        ExpectedForeignKeyDefinition definition,
+        bool requireExpectedName
     )
     {
         var localColumns = OrderedColumnsSql(definition.Columns);
         var principalColumns = OrderedColumnsSql(definition.PrincipalColumns, "kcu.REFERENCED_COLUMN_NAME");
         var updateRules = ReferentialRules(definition.OnUpdate);
         var deleteRules = ReferentialRules(definition.OnDelete);
+        var namePredicate = requireExpectedName
+            ? $"rc.CONSTRAINT_NAME = {Literal(definition.Name)}"
+            : $"rc.CONSTRAINT_NAME <> {Literal(definition.Name)}";
 
         return $"EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc "
             + "JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu "
             + "ON kcu.CONSTRAINT_SCHEMA = rc.CONSTRAINT_SCHEMA "
             + "AND kcu.TABLE_NAME = rc.TABLE_NAME AND kcu.CONSTRAINT_NAME = rc.CONSTRAINT_NAME "
             + $"WHERE rc.CONSTRAINT_SCHEMA = DATABASE() AND rc.TABLE_NAME = {Literal(definition.Table)} "
-            + $"AND rc.CONSTRAINT_NAME = {Literal(definition.Name)} "
-            + $"GROUP BY rc.UPDATE_RULE, rc.DELETE_RULE, kcu.REFERENCED_TABLE_SCHEMA, kcu.REFERENCED_TABLE_NAME "
+            + $"AND {namePredicate} "
+            // Group every physical constraint independently. Without its
+            // identity in the group, two equivalent legacy constraints merge
+            // their key rows and can evade the semantic-candidate predicate.
+            + $"GROUP BY rc.CONSTRAINT_NAME, rc.UPDATE_RULE, rc.DELETE_RULE, "
+            + "kcu.REFERENCED_TABLE_SCHEMA, kcu.REFERENCED_TABLE_NAME "
             + $"HAVING GROUP_CONCAT(kcu.COLUMN_NAME ORDER BY kcu.ORDINAL_POSITION SEPARATOR ',') = {Literal(localColumns)} "
             + $"AND GROUP_CONCAT(kcu.REFERENCED_COLUMN_NAME ORDER BY kcu.ORDINAL_POSITION SEPARATOR ',') = {Literal(principalColumns)} "
             + $"AND kcu.REFERENCED_TABLE_SCHEMA = DATABASE() "

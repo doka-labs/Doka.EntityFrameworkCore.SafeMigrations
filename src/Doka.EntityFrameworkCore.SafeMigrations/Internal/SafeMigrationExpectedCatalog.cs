@@ -5,7 +5,7 @@ internal sealed class SafeMigrationExpectedTableInventory
     public SafeMigrationExpectedTableInventory(
         string table,
         string? schema,
-        IEnumerable<string> columns,
+        IEnumerable<KeyValuePair<string, string?>> columns,
         IEnumerable<string> indexes,
         IEnumerable<string> uniqueIndexes,
         IEnumerable<KeyValuePair<string, SafeMigrationDatabaseObjectKind>> constraints
@@ -14,7 +14,12 @@ internal sealed class SafeMigrationExpectedTableInventory
         Table = table;
         Schema = schema;
 
-        Columns = columns.ToHashSet(StringComparer.Ordinal);
+        ColumnStoreTypes = columns.ToDictionary(
+            static value => value.Key,
+            static value => value.Value,
+            StringComparer.Ordinal);
+
+        Columns = ColumnStoreTypes.Keys.ToHashSet(StringComparer.Ordinal);
         Indexes = indexes.ToHashSet(StringComparer.Ordinal);
         UniqueIndexes = uniqueIndexes.ToHashSet(StringComparer.Ordinal);
         Constraints = constraints.ToDictionary(
@@ -28,6 +33,8 @@ internal sealed class SafeMigrationExpectedTableInventory
     public string? Schema { get; }
 
     public IReadOnlySet<string> Columns { get; }
+
+    public IReadOnlyDictionary<string, string?> ColumnStoreTypes { get; }
 
     public IReadOnlySet<string> Indexes { get; }
 
@@ -166,7 +173,7 @@ internal static partial class SafeMigrationExpectedCatalog
 
         public string? Schema { get; set; }
 
-        public HashSet<string> Columns { get; } = new(StringComparer.Ordinal);
+        public Dictionary<string, string?> Columns { get; } = new(StringComparer.Ordinal);
 
         public HashSet<string> Indexes { get; } = new(StringComparer.Ordinal);
 
@@ -179,7 +186,11 @@ internal static partial class SafeMigrationExpectedCatalog
         )
         {
             var table = new MutableTable(definition.Table, definition.Schema);
-            table.Columns.UnionWith(definition.Columns.Select(static value => value.Name));
+            foreach (var column in definition.Columns)
+            {
+                table.Columns[column.Name] = column.StoreType;
+            }
+
             if (definition.PrimaryKey is not null)
             {
                 table.Constraints[definition.PrimaryKey.Name] = SafeMigrationDatabaseObjectKind.PrimaryKey;

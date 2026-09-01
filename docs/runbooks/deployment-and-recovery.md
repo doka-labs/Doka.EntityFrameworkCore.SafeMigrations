@@ -105,18 +105,22 @@ the same reviewed final-state postflight before accepting the deployment.
 ## Postflight
 
 Call `ISafeMigrationRunner.VerifyAsync` with the final-state contract reviewed
-before the deployment, and retain the JSON report. This API independently
-checks every supplied postcondition against the live catalog; it does not
-apply preflight projection or infer the final state of a historical sequence.
+before the deployment, and retain the JSON report. This API checks effective
+final postconditions against the live catalog; it does not apply preflight
+projection. For repeated safe writes to the same exact resource, only the final
+safe writer is authoritative. Earlier ordered assessments report
+`postcondition_superseded` and an effective satisfied postcondition. This
+supports reviewed drop/recreate and successive-definition streams without
+requiring their transient states to exist after the migration. Ordinary
+provider operations never supersede a safe postcondition.
 
-The execution operations can be reused when every postcondition remains true
-at the final target, such as a purely additive convergence baseline. They
-cannot be reused blindly for ensure-then-rename, ensure-then-drop, or successive
-definitions of one column. For example, after ensuring `legacy_users` and
-renaming it to `users`, verify the old name's absence and the final `users`
-definition, not the intermediate requirement that `legacy_users` exists.
-Retain removal checks and all owned final facets when composing this contract;
-do not omit a failed condition merely to obtain a green report. Verification
+The execution operations can therefore be reused when their ordered final
+writers form the reviewed final-state contract. A rename remains different: its
+built-in postcondition proves source absence, not destination equivalence. For
+example, after ensuring `legacy_users` and renaming it to `users`, include an
+explicit ensure for the final `users` definition or supply a separately reviewed
+final-state contract. Retain removal checks and all owned final facets; do not
+omit a failed condition merely to obtain a green report. Verification
 operations are read-only inputs to `VerifyAsync`, not an additional migration
 to execute.
 
@@ -125,7 +129,9 @@ Then verify:
 - a safe-only final-state contract returns `Ready`; `ReadyWithProviderOperations`
   additionally requires the independent checks below, and `NoOperations` alone
   proves no target conditions;
-- every safe operation has `postconditionSatisfied: true`;
+- every safe operation has `postconditionSatisfied: true`; an earlier safe
+  writer may additionally carry `postcondition_superseded` when a later safe
+  writer owns the same exact resource;
 - provider, instance, model fingerprint, and target migration match the
   approved deployment identity;
 - the postflight contract fingerprint matches the independently approved
@@ -155,7 +161,7 @@ Only then release the write fence and mark the instance complete.
 ## Partial MySQL/MariaDB retry
 
 `UseMySqlSafeMigrations()` declares the user-variable capability through Doka
-10.2.0. Doka supplies `AllowUserVariables=true` for an owned string only when
+10.3.0. Doka supplies `AllowUserVariables=true` for an owned string only when
 the option was omitted. A caller-owned connection or data source must already
 set it and `GuidFormat=Binary16`; every path must retain
 `UseAffectedRows=false`. SafeMigrations validates the actual connection again

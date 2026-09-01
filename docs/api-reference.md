@@ -15,12 +15,11 @@ validation. `10.0.0-rc.3` preserved that public API and existing
 migration-source compatibility while adding exact native Doka 10.1.1
 Guid-format analysis and ordered mixed-migration preflight. The 10.0.0 stable
 source promotes that exact public contract without a public API or generated
-migration-source delta. The published 10.0.1 maintenance release preserves that
-public API. The prepared 10.0.2 maintenance source retains the same API while
-qualifying Doka 10.2.0's ownership-aware connection contract and repairing the
-generated migration namespace import. Strict scaffolding remains the default.
-A successful release run and exact-version public package readback remain the
-authority for a published API.
+migration-source delta. The published 10.0.1 and 10.0.2 maintenance releases
+preserve that public API. Current unreleased source adds two scaffolder-facing
+index-prefix methods while qualifying Doka 10.3.0's typed migration metadata.
+Strict scaffolding remains the default. A successful release run and
+exact-version public package readback remain the authority for a published API.
 
 ## Packages and registration
 
@@ -46,7 +45,7 @@ The external-service-provider overloads can explicitly select canonical
 context/generator configuration as documented in their XML reference.
 
 Registration does not create a database or execute migrations. MySQL/MariaDB
-registration calls Doka 10.2.0's `RequireUserVariables()`. Doka supplies
+registration calls Doka 10.3.0's `RequireUserVariables()`. Doka supplies
 `AllowUserVariables=true` when a provider-owned connection string omitted the
 option and rejects an explicit contradiction. Caller-owned `DbConnection` and
 `MySqlDataSource` instances are never mutated; they must already specify
@@ -141,16 +140,17 @@ mapping is:
 | EF operation | `Strict` source | `LegacyConvergence` source |
 | --- | --- | --- |
 | `CreateTable` | `CreateTableIfNotExists` | `ConvergeTableFromModel` |
-| Single-column `CreateIndex` | `CreateIndexIfNotExistsFromModel` | Same |
-| Multi-column `CreateIndex` | `CreateCompositeIndexIfNotExistsFromModel` | Same |
+| Single-column `CreateIndex` | `CreateIndexIfNotExistsFromModel`, or the prefix-aware counterpart on MySQL/MariaDB | Same |
+| Multi-column `CreateIndex` | `CreateCompositeIndexIfNotExistsFromModel`, or the prefix-aware counterpart on MySQL/MariaDB | Same |
 | Generated rollback of `CreateTable` | `DropTableIfExists` | Entire `Down` body rejects before DDL |
 
 Every generated `ConvergeTableFromModel` call contains an explicit `policy`
 argument. The compatibility default is `ThrowIfDifferent`. `RepairIfSafe`
 allows only nullability, default, and comment changes on an ordinary column
-whose invariant provider catalog shape already matches. Nullability tightening
+whose invariant provider catalog shape already matches. Doka's typed contract
+must recognize every MySQL/MariaDB column annotation. Nullability tightening
 with existing `NULL` values is `DataBlocked`; type, collation, generated,
-identity, row-version, provider-annotation, and unsupported drift remains
+identity, row-version, contradictory metadata, and unsupported drift remains
 fail-closed.
 
 The [migration authoring guide](migration-authoring.md) contains complete
@@ -205,7 +205,7 @@ operations and returns the original `MigrationBuilder`.
 | Schema | `EnsureSchemaExists` | `DropSchemaIfExists` |
 | Table | `EnsureTable`, `ConvergeTable` | `CreateTableIfNotExists<TColumns>`, `ConvergeTableFromModel<TColumns>`, `DropTableIfExists`, `RenameTableIfExists` |
 | Column | `EnsureColumn`, `AlterColumnIfDifferent` | `AddColumnIfNotExists<T>`, `DropColumnIfExists`, `RenameColumnIfExists` |
-| Index | `EnsureIndex` | `CreateIndexIfNotExists`, `CreateIndexIfNotExistsFromModel`, `CreateCompositeIndexIfNotExistsFromModel`, `DropIndexIfExists`, `RenameIndexIfExists` |
+| Index | `EnsureIndex` | `CreateIndexIfNotExists`, `CreateIndexIfNotExistsFromModel`, `CreateCompositeIndexIfNotExistsFromModel`, `CreateIndexWithPrefixesIfNotExistsFromModel`, `CreateCompositeIndexWithPrefixesIfNotExistsFromModel`, `DropIndexIfExists`, `RenameIndexIfExists` |
 | Primary key | `EnsurePrimaryKey` | `AddPrimaryKeyIfNotExists`, `DropPrimaryKeyIfExists` |
 | Unique constraint | `EnsureUniqueConstraint` | `AddUniqueConstraintIfNotExists`, `DropUniqueConstraintIfExists` |
 | Check constraint | `EnsureCheckConstraint` | `AddCheckConstraintIfNotExists`, `DropCheckConstraintIfExists` |
@@ -230,6 +230,10 @@ same object-granular contract without a hand-authored
 EF's generated single- or multi-column index call. They remain public so
 scaffolded migration source has a stable package target. Hand-written
 migrations normally use `CreateIndexIfNotExists` or `EnsureIndex` for indexes.
+The two prefix-aware methods accept exactly one non-negative entry per key.
+Zero captures a complete key and a positive value becomes the key's explicit
+prefix length. They exist so provider-projected migration source does not leak
+Doka annotations onto a custom outer operation.
 
 `Drop*IfExists` operations are explicitly destructive when the target exists;
 the name means idempotent absence, not recovery or undo. Rename methods require
@@ -305,7 +309,7 @@ returns `Task<SafeMigrationRunReport>`:
 | --- | --- | --- |
 | `AnalyzePendingMigrationsAsync` | Pending sequence resolved through EF history and configured migration assembly | Preflight report |
 | `AnalyzeAsync` | Explicit ordered `IReadOnlyList<MigrationOperation>` | Preflight report including earlier safe operations and conditional structural postconditions of recognized ordinary EF operations |
-| `VerifyAsync` | Explicit operations whose postconditions must all hold in the final live state | Postflight report; no preflight projection |
+| `VerifyAsync` | Explicit ordered operations whose effective final postconditions must hold | Postflight report; the final safe writer for an exact resource supersedes its earlier safe writers, without projecting provider-owned effects |
 
 `SafeMigrationRunOptions` requires a nonempty pseudonymous `instanceId` and
 optionally takes `targetMigrationId` and `expectedModelFingerprint`. The
@@ -325,18 +329,27 @@ Recognized ordinary table/column operations may satisfy a later safe
 prerequisite in the ordered projection, but remain
 `provider_owned_not_analyzed`; this conditional projection is not an analysis
 or approval of their DDL.
+Typed EF insert, update, and delete-data operations preserve only structural
+table/column facts for a later non-unique index. They invalidate all earlier
+projected and live pre-batch data-safety proofs, so a later unique index or
+missing data-validating constraint remains blocked until separately provable.
+A later structural provider operation does not restore row-level certainty.
+Raw SQL and unknown provider operations still discard all projection facts.
 Calling EF migration with a null target means latest, which can exceed a
 specifically targeted preflight.
 
-`VerifyAsync` checks every supplied postcondition against the live catalog; it
-does not replay history or derive a final contract from an execution sequence.
-For a pure additive convergence baseline, the same operations can describe
-both execution and final verification. If a later operation renames, drops, or
-changes an earlier target, supply a separately reviewed final-state contract
-instead. Freeze it before execution and bind its fingerprint to the same
-artifact, target migration, and model as the execution contract. Require equal
-preflight/postflight contract fingerprints only when the lists are identical.
-See [postflight](runbooks/deployment-and-recovery.md#postflight).
+`VerifyAsync` checks the effective final postconditions against the live
+catalog; it does not replay history or apply preflight projection. For repeated
+safe writes to the same exact resource, the last writer is authoritative and
+earlier assessments use `postcondition_superseded`. Provider-owned operations
+never participate in that reduction. The same ordered operations can therefore
+describe drop/recreate or successive-definition execution and final
+verification. A rename still proves only source absence, so complete
+destination verification requires an explicit destination ensure or a
+separately reviewed final-state contract. Freeze the chosen contract before
+execution and bind its fingerprint to the same artifact, target migration, and
+model. Require equal preflight/postflight contract fingerprints only when the
+lists are identical. See [postflight](runbooks/deployment-and-recovery.md#postflight).
 
 Pass your cancellation token, or `CancellationToken.None` when intentionally
 uncancellable. Do not use a `DbContext` concurrently. Analysis opens/closes a

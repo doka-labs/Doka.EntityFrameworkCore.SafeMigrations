@@ -28,6 +28,7 @@ internal sealed class SafeMigrationDesignTimeServices : IDesignTimeServices
             ServiceDescriptor.Singleton<ICSharpMigrationOperationGenerator,
                 SafeMigrationCSharpMigrationOperationGenerator>());
         serviceCollection.Replace(
-            ServiceDescriptor.Singleton<IMigrationsCodeGenerator, SafeMigrationCSharpMigrationsGenerator>());
+            ServiceDescriptor.Singleton<IMigrationsCodeGeneratorSelector,
+                SafeMigrationMigrationsCodeGeneratorSelector>());
     }
 }

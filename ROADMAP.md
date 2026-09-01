@@ -33,11 +33,12 @@ changed condition requiring assessment; an incomplete initial feature is not
 a maintenance strategy. There is no scheduled second feature version.
 
 The published 10.0.1 maintenance release responded to Doka 10.1.2 and an
-observed publication-assurance gap. The current maintenance source prepares
-10.0.2 in response to Doka 10.2.0's ownership-aware connection invariants and
-to a confirmed generated-migration namespace defect. These are changed
-dependency conditions and a correctness repair, not an incomplete initial
-feature line.
+observed publication-assurance gap. The 10.0.2 maintenance line responded to
+Doka 10.2.0's ownership-aware connection invariants and to a confirmed
+generated-migration namespace defect. Current source additionally qualifies
+Doka 10.3.0's typed migration-operation metadata and repairs observed legacy
+convergence defects. These are changed dependency conditions and correctness
+repairs, not an incomplete initial feature line.
 
 Requalify affected behavior before adopting a provider, EF Core, database,
 SDK, action, or tooling update. Preserve public API, report, migration, data

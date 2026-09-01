@@ -15,7 +15,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             intent.Definition.Name,
             'p',
             intent.Definition.Columns),
-        PrimaryKeyDataBlocked(intent.Definition));
+        PrimaryKeyDataBlocked(intent.Definition),
+        identityConflict: AnyConstraint(intent.Definition.Table, intent.Definition.Schema, 'p'),
+        identityConflictCode: "primary_key_identity_conflict");
 
     private PostgreSqlSafeMigrationRuntimePlan BuildDropPrimaryKey(
         DropPrimaryKeyIntent intent

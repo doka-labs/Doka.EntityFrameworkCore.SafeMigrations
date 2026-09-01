@@ -246,7 +246,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
     private static PostgreSqlSafeMigrationRuntimePlan Unsupported(
         string code
-    ) => new("'unsupported'", "FALSE", SafeMigrationRepairCapability.None, "FALSE", code);
+    ) => new("'unsupported'", "FALSE", SafeMigrationRepairCapability.None, "FALSE", code)
+    {
+        IsStaticallyUnsupported = true,
+    };
 
     private string QualifiedRegclass(
         string table,

@@ -15,7 +15,16 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             intent.Definition.Name,
             'u',
             intent.Definition.Columns),
-        UniqueConstraintDataBlocked(intent.Definition));
+        UniqueConstraintDataBlocked(intent.Definition),
+        identityConflict: ConstraintColumnsMatch(
+            intent.Definition.Table,
+            intent.Definition.Schema,
+            intent.Definition.Name,
+            'u',
+            intent.Definition.Columns,
+            requireExpectedName: false,
+            requireLocalIdentity: false),
+        identityConflictCode: "unique_constraint_semantic_identity_conflict");
 
     private PostgreSqlSafeMigrationRuntimePlan BuildDropUnique(
         DropUniqueConstraintIntent intent

@@ -55,7 +55,7 @@ public abstract class SafeMigrationScaffoldingDbContext : DbContext
             {
                 user.TenantId,
                 user.Email,
-            });
+            }).HasPrefixLength(0, 64);
         });
     }
 }

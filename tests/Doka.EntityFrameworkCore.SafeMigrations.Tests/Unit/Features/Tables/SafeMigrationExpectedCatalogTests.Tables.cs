@@ -45,12 +45,34 @@ public sealed partial class SafeMigrationExpectedCatalogTests
         var inventory = Assert.Single(SafeMigrationExpectedCatalog.Create(operations));
 
         Assert.Equal(["id", "name"], inventory.Columns.Order());
+        Assert.Null(inventory.ColumnStoreTypes["id"]);
+        Assert.Null(inventory.ColumnStoreTypes["name"]);
         Assert.Equal(["ix_name", "ix_non_unique"], inventory.Indexes.Order());
         Assert.Equal(["ix_name"], inventory.UniqueIndexes);
         Assert.Equal(
             SafeMigrationDatabaseObjectKind.PrimaryKey,
             Assert.Single(inventory.Constraints)
                 .Value);
+    }
+
+    [Fact]
+    public void Catalog_PreservesColumnStoreTypeAcrossRenameForProviderInventoryRules()
+    {
+        IReadOnlyList<MigrationOperation> operations =
+        [
+            Envelope(
+                new EnsureTableIntent(
+                    new ExpectedTableDefinition(
+                        "documents",
+                        [new ExpectedColumnDefinition("legacy_payload", typeof(string), false, "json")]),
+                    SafeMigrationTableMode.StrictDefinition)),
+            Envelope(new RenameColumnIntent("legacy_payload", "documents", "payload")),
+        ];
+
+        var inventory = Assert.Single(SafeMigrationExpectedCatalog.Create(operations));
+
+        Assert.False(inventory.ColumnStoreTypes.ContainsKey("legacy_payload"));
+        Assert.Equal("json", inventory.ColumnStoreTypes["payload"]);
     }
 
     [Fact]

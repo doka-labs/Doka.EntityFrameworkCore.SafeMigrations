@@ -9,8 +9,13 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         intent.Definition.Schema,
         intent.Definition.Name,
         'c',
-        CheckMatches(intent.Definition),
-        CheckConstraintDataBlocked(intent.Definition));
+        CheckMatches(intent.Definition, requireExpectedName: true, requireLocalIdentity: true),
+        CheckConstraintDataBlocked(intent.Definition),
+        identityConflict: CheckMatches(
+            intent.Definition,
+            requireExpectedName: false,
+            requireLocalIdentity: false),
+        identityConflictCode: "check_constraint_semantic_identity_conflict");
 
     private PostgreSqlSafeMigrationRuntimePlan BuildDropCheck(
         DropCheckConstraintIntent intent
@@ -27,9 +32,15 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     }
 
     private string CheckMatches(
-        ExpectedCheckConstraintDefinition definition
-    ) => ConstraintBase(definition.Table, definition.Schema, definition.Name, 'c')
-        + $" AND co.convalidated AND {(definition.Expression is not null
+        ExpectedCheckConstraintDefinition definition,
+        bool requireExpectedName = true,
+        bool requireLocalIdentity = true
+    ) => ConstraintBaseWithoutName(definition.Table, definition.Schema, 'c')
+        + $" AND co.conname {(requireExpectedName ? "=" : "<>")} {Literal(definition.Name)}"
+        + (requireLocalIdentity ? LocalConstraintIdentity() : string.Empty)
+        + " AND co.convalidated AND NOT co.connoinherit"
+        + " AND COALESCE((to_jsonb(co) ->> 'conenforced')::boolean, TRUE)"
+        + $" AND {(definition.Expression is not null
             ? ExpressionMatches("pg_catalog.pg_get_expr(co.conbin, co.conrelid)", definition.Expression)
             : ExpressionMatches("pg_catalog.pg_get_expr(co.conbin, co.conrelid)", definition.Sql!))})";
 }

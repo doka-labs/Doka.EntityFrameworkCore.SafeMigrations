@@ -5,13 +5,40 @@ internal sealed partial class SafeMigrationPreflightProjection
     private SafeMigrationProviderAnalysis Project(
         EnsureForeignKeyIntent intent,
         SafeMigrationProviderAnalysis liveAnalysis
-    ) => TryGet(intent.Definition.Table, intent.Definition.Schema, out var table)
-        ? AnalyzeDefinition(
+    )
+    {
+        if (!TryGet(intent.Definition.Table, intent.Definition.Schema, out var table))
+        {
+            return InvalidateForeignKeyDataDependentMissing(intent, liveAnalysis);
+        }
+
+        var analysis = AnalyzeDefinition(
             table.ForeignKeys,
             intent.Definition.Name,
             intent.Definition,
-            SafeMigrationDefinitionEquivalence.ForeignKey)
-        : liveAnalysis;
+            SafeMigrationDefinitionEquivalence.ForeignKey);
+
+        return InvalidateForeignKeyDataDependentMissing(intent, analysis);
+    }
+
+    private SafeMigrationProviderAnalysis InvalidateForeignKeyDataDependentMissing(
+        EnsureForeignKeyIntent intent,
+        SafeMigrationProviderAnalysis analysis
+    )
+    {
+        var hasUnanalyzedDataChanges = HasUnanalyzedDataChanges(
+                intent.Definition.Table,
+                intent.Definition.Schema)
+            || HasUnanalyzedDataChanges(
+                intent.Definition.PrincipalTable,
+                intent.Definition.PrincipalSchema);
+
+        return hasUnanalyzedDataChanges
+            && analysis.ObservedState is SafeMigrationObservedState.Missing
+                or SafeMigrationObservedState.PrerequisiteMissing
+            ? DataStateUnknown()
+            : analysis;
+    }
 
     private SafeMigrationProviderAnalysis Project(
         DropForeignKeyIntent intent,

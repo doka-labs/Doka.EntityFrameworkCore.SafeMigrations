@@ -217,7 +217,7 @@ public static class MySqlSafeMigrationOptionsBuilderExtensions
     )
     {
         // SafeMigrations owns the requirement for connection-local user
-        // variables. Doka 10.2.0 applies it to provider-owned strings and
+        // variables. Doka 10.3.0 applies it to provider-owned strings and
         // validates borrowed objects without transferring their ownership.
         new MySqlDbContextOptionsBuilder(optionsBuilder).RequireUserVariables();
 

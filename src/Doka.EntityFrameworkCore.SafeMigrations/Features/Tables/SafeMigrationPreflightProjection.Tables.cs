@@ -49,9 +49,14 @@ internal sealed partial class SafeMigrationPreflightProjection
         var key = new TableKey(intent.Definition.Table, intent.Definition.Schema);
         if (analysis.ObservedState == SafeMigrationObservedState.Missing)
         {
-            _tables[key] = new ProjectedTable(intent.Definition);
+            _tables[key] = new ProjectedTable(
+                intent.Definition,
+                dataMutationVersion: _providerDataMutationVersion);
 
-            var prerequisites = new ProjectedPrerequisites(newlyCreated: true);
+            var prerequisites = new ProjectedPrerequisites(
+                newlyCreated: true,
+                dataMutationVersion: _providerDataMutationVersion);
+
             foreach (var column in intent.Definition.Columns)
             {
                 prerequisites.Columns[column.Name] = ProjectedColumn.From(
@@ -66,7 +71,13 @@ internal sealed partial class SafeMigrationPreflightProjection
         if (intent.Mode == SafeMigrationTableMode.ConvergenceContainer
             && analysis.ObservedState == SafeMigrationObservedState.Matching)
         {
-            _prerequisites.TryAdd(key, new ProjectedPrerequisites(newlyCreated: false));
+            _prerequisites.TryAdd(
+                key,
+                new ProjectedPrerequisites(
+                    newlyCreated: false,
+                    // Matching proves that the table exists; it does not
+                    // re-establish row-level safety after provider data DML.
+                    dataMutationVersion: 0));
         }
     }
 

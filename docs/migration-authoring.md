@@ -87,10 +87,11 @@ public partial class AddUsers : Migration
             column: "Email",
             unique: true);
 
-        migrationBuilder.CreateCompositeIndexIfNotExistsFromModel(
+        migrationBuilder.CreateCompositeIndexWithPrefixesIfNotExistsFromModel(
             name: "IX_users_TenantId_Email",
             table: "users",
-            columns: ["TenantId", "Email"]);
+            columns: ["TenantId", "Email"],
+            prefixLengths: [0, 191]);
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)
@@ -109,6 +110,21 @@ silently accepted as equivalent.
 The generated index calls are evaluated independently under the same
 missing/matching/different contract. `DropTableIfExists` makes only absence
 idempotent; it is still destructive when the table exists.
+
+When EF scaffolds an index replacement as `DropIndex` followed by
+`CreateIndex`, SafeMigrations writes `DropIndexIfExists` followed by the
+appropriate safe create helper. Preflight preserves this operation order: an
+accepted exact-name drop makes the replacement target missing, but it does not
+override a data-blocked unique index, an unsupported physical key, a missing
+prerequisite, or a differently named semantic conflict.
+
+The composite example assumes that Doka attached `.HasPrefixLength(0, 191)` to
+the EF model. SafeMigrations reads that metadata through Doka's typed public
+contract and writes it as an explicit argument. Zero preserves the complete
+`TenantId` key; 191 limits `Email` using MySQL's character-prefix semantics.
+The consumed provider annotation is not copied onto the outer safe operation.
+Without prefix metadata, the ordinary
+`CreateCompositeIndexIfNotExistsFromModel` call remains unchanged.
 
 ## Generated check constraints
 
@@ -150,6 +166,13 @@ translation boundary. See the official
 [EF Core check-constraint documentation](https://learn.microsoft.com/en-us/ef/core/modeling/indexes#check-constraints),
 [MySQL string-literal contract](https://dev.mysql.com/doc/refman/8.4/en/string-literals.html),
 and [PostgreSQL lexical contract](https://www.postgresql.org/docs/current/sql-syntax-lexical.html).
+
+The same bounded parser captures SQL defaults exposed by EF through
+`ColumnOperation.DefaultValueSql`. A generated value such as
+`CURRENT_TIMESTAMP(6)` is stored as a structured expression and compared
+semantically with the live catalog. SQL outside the grammar remains opaque and
+fails closed with `opaque_sql_expression`; SafeMigrations never executes an
+unknown expression merely to infer equivalence.
 
 ## Generated legacy convergence
 
@@ -230,10 +253,11 @@ public partial class CoreLegacyConvergence : Migration
             column: "Email",
             unique: true);
 
-        migrationBuilder.CreateCompositeIndexIfNotExistsFromModel(
+        migrationBuilder.CreateCompositeIndexWithPrefixesIfNotExistsFromModel(
             name: "IX_users_TenantId_Email",
             table: "users",
-            columns: ["TenantId", "Email"]);
+            columns: ["TenantId", "Email"],
+            prefixLengths: [0, 191]);
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)
@@ -263,12 +287,13 @@ The policy is a literal part of the generated migration. Without
 `SafeMigrationPolicy.ThrowIfDifferent`. With the explicit `RepairIfSafe`
 configuration above, ordinary existing columns can converge only nullability,
 default, and comment drift. The live catalog must already prove identical store
-type, collation, generated/identity state, row-version state, and provider
-annotations. Existing `NULL` rows make a `NOT NULL` repair `DataBlocked`.
-Invariant or unsupported drift rejects before target DDL. MySQL and MariaDB use
-the Doka provider's complete `MODIFY COLUMN` definition; PostgreSQL uses its
-provider-generated `SET`/`DROP DEFAULT`, `SET`/`DROP NOT NULL`, and comment
-statements.
+type, collation, generated/identity state, and row-version state. Doka's typed
+metadata contract must recognize every MySQL/MariaDB annotation and prove it
+consistent with the column shape. Existing `NULL` rows make a `NOT NULL` repair
+`DataBlocked`. Invariant, malformed, contradictory, or unsupported drift
+rejects before target DDL. MySQL and MariaDB use the Doka provider's complete
+`MODIFY COLUMN` definition; PostgreSQL uses its provider-generated
+`SET`/`DROP DEFAULT`, `SET`/`DROP NOT NULL`, and comment statements.
 
 Ordered preflight projects deterministic structural postconditions of preceding
 ordinary EF table and column operations into later safe prerequisites. For
@@ -280,8 +305,13 @@ example, an ordinary `AddColumnOperation` followed by a safe index can produce
 independent review and postcondition for that operation. Projection describes
 the state only if the earlier provider operation succeeds; it does not convert
 ordinary DDL into a SafeMigrations operation.
-An unrecognized provider operation or raw SQL between that prerequisite and a
-later safe operation invalidates the in-memory projection facts; represent the
+Typed EF insert, update, and delete-data operations preserve structural
+table/column prerequisites for a later non-unique index, but invalidate every
+earlier projected or live pre-batch data-safety proof. A later unique index or
+additive data-validating constraint therefore remains blocked rather than
+assuming that unanalyzed seed or update values are safe. Later structural DDL
+does not re-establish row-level certainty. An unrecognized provider operation
+or raw SQL still invalidates all in-memory projection facts; represent the
 required state explicitly or reorder the safe operation after a separately
 reviewed boundary.
 
@@ -368,11 +398,29 @@ hand-authored definition inputs. Use `ConvergeTableFromModel` when those facets
 must come from provider scaffolding; do not manually translate generated EF
 table source into expected-definition constructors.
 
-Doka 10.2.0 may attach `ClientGuid` to a scaffolded application-converted Guid
+Doka 10.3.0 may attach `ClientGuid` to a scaffolded application-converted Guid
 key. SafeMigrations preserves it but compares the column as non-
 `AUTO_INCREMENT`, so both strict and legacy-convergence preflight can apply a
 missing relationship graph and recognize its idempotent replay. HiLo and
 unmodeled provider column facets remain unsupported before target DDL.
+
+## MySQL and MariaDB index limits
+
+Before applying a missing BTREE index, SafeMigrations evaluates its physical
+key width against the live InnoDB row format and page size. Character prefixes
+are counted in characters and converted through the column character set;
+binary prefixes are counted in bytes. A prefix is rejected when it exceeds the
+declared column width or targets a scalar key. Full `TEXT`/`BLOB`, expression
+keys, unknown store families, and non-BTREE missing-index shapes reject when
+their physical width cannot be proven.
+
+`index_prefix_required_for_key_limit` means the modeled ordinary key is wider
+than the live InnoDB limit. Add the intended `.HasPrefixLength(...)` to the EF
+model, scaffold a new migration, and review the resulting explicit
+`prefixLengths` argument. `index_key_length_unverifiable` means the shape has no
+bounded proof in the adapter; author a reviewed provider-specific transition
+instead of relying on a later server error. SafeMigrations never invents a
+prefix because doing so can change uniqueness and query semantics.
 
 `ConvergeTable` and `ConvergeTableFromModel` reach the same object-granular
 convergence implementation. Their difference is how the immutable expected

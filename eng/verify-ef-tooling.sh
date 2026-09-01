@@ -163,7 +163,6 @@ fi
 for expected in \
   'migrationBuilder.CreateTableIfNotExists(' \
   'migrationBuilder.CreateIndexIfNotExistsFromModel(' \
-  'migrationBuilder.CreateCompositeIndexIfNotExistsFromModel(' \
   'migrationBuilder.DropTableIfExists('; do
   if ! grep -Fq "${expected}" "${strict_migration}"; then
     echo "Strict scaffolding output is missing: ${expected}" >&2
@@ -175,10 +174,22 @@ for expected in \
   'migrationBuilder.ConvergeTableFromModel(' \
   'policy: global::Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationPolicy.RepairIfSafe' \
   'migrationBuilder.CreateIndexIfNotExistsFromModel(' \
-  'migrationBuilder.CreateCompositeIndexIfNotExistsFromModel(' \
   'throw new global::System.NotSupportedException('; do
   if ! grep -Fq "${expected}" "${legacy_migration}"; then
     echo "Legacy scaffolding output is missing: ${expected}" >&2
+    exit 1
+  fi
+done
+
+if [[ "${engine}" == "postgres" ]]; then
+  composite_index_call='migrationBuilder.CreateCompositeIndexIfNotExistsFromModel('
+else
+  composite_index_call='migrationBuilder.CreateCompositeIndexWithPrefixesIfNotExistsFromModel('
+fi
+
+for migration in "${strict_migration}" "${legacy_migration}"; do
+  if ! grep -Fq "${composite_index_call}" "${migration}"; then
+    echo "Scaffolding output is missing: ${composite_index_call}" >&2
     exit 1
   fi
 done
@@ -225,6 +236,18 @@ for migration in "${strict_migration}" "${legacy_migration}"; do
   if ! grep -Fq "${identity_strategy}" "${migration}"; then
     echo "Scaffolding output is missing provider identity strategy: ${identity_strategy}" >&2
     exit 1
+  fi
+
+  if [[ "${engine}" != "postgres" ]]; then
+    if ! grep -Fq 'prefixLengths: [0, 64]' "${migration}"; then
+      echo "MySQL scaffolding output is missing the projected index prefix lengths." >&2
+      exit 1
+    fi
+
+    if grep -Fq 'Doka:MySql:IndexPrefixLength' "${migration}"; then
+      echo "MySQL scaffolding output leaked consumed provider metadata onto the SafeMigrations operation." >&2
+      exit 1
+    fi
   fi
 done
 

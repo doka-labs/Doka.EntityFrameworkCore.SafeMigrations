@@ -87,7 +87,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         MigrationsSqlGenerationOptions options
     )
     {
-        if (runtimePlan.UnsupportedCode is not null)
+        if (runtimePlan.IsStaticallyUnsupported)
         {
             return [];
         }

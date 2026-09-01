@@ -2,9 +2,6 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 
 internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 {
-    private const string GuidFormatAnnotation = "Doka:MySql:GuidFormat";
-    private const string ValueGenerationStrategyAnnotation = "Doka:MySql:ValueGenerationStrategy";
-
     private string? GetUnsupportedColumnFeature(
         SafeMigrationIntent intent,
         MySqlMigrationFeatureSet features,
@@ -65,65 +62,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     /// <returns><see langword="true" /> when the annotation must fail closed.</returns>
     internal static bool HasUnsupportedProviderColumnAnnotation(
         ExpectedColumnDefinition definition
-    )
-    {
-        foreach (var annotation in definition.ProviderAnnotations)
-        {
-            if (StringComparer.Ordinal.Equals(annotation.Name, GuidFormatAnnotation))
-            {
-                if (!IsSupportedGuidFormat(definition, annotation.Value))
-                {
-                    return true;
-                }
-
-                continue;
-            }
-
-            if (StringComparer.Ordinal.Equals(annotation.Name, ValueGenerationStrategyAnnotation))
-            {
-                // ClientGuid is executed by EF before INSERT and Doka emits no
-                // column DDL for it. Preserve the annotation for operation replay
-                // and fingerprints, but compare its catalog state like None.
-                if (annotation.Value is not (MySqlValueGenerationStrategy.None
-                    or MySqlValueGenerationStrategy.AutoIncrement
-                    or MySqlValueGenerationStrategy.ClientGuid))
-                {
-                    return true;
-                }
-
-                continue;
-            }
-
-            return true;
-        }
-
-        return false;
-    }
-
-    private static bool IsSupportedGuidFormat(
-        ExpectedColumnDefinition definition,
-        object? value
-    )
-    {
-        if (definition.ClrType != typeof(Guid))
-        {
-            return false;
-        }
-
-        // Doka emits the storage-format annotation together with the effective
-        // store type. Requiring both prevents a hand-authored, contradictory
-        // annotation from bypassing catalog-shape validation.
-        return value switch
-        {
-            DokaMySqlGuidFormat.Binary16 => StringComparer.OrdinalIgnoreCase.Equals(
-                definition.StoreType,
-                "binary(16)"),
-            DokaMySqlGuidFormat.Char36 => StringComparer.OrdinalIgnoreCase.Equals(
-                definition.StoreType,
-                "char(36)"),
-            _ => false,
-        };
-    }
+    ) => !MySqlSafeMigrationColumnMetadata.TryCreate(definition, out _);
 
     private MySqlSafeMigrationRuntimePlan BuildEnsureColumn(
         EnsureColumnIntent intent,
@@ -136,7 +75,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var matching = BuildColumnMatches(intent.Table, intent.Definition, isMariaDb);
         var unsafeAdd = !SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(intent.Definition);
         var repairCapability = repairRequested
-            && SafeMigrationColumnRepairHelper.CanSafelyConvergeExistingColumn(intent.Definition)
+            && MySqlSafeMigrationColumnMetadata.CanSafelyConverge(intent.Definition)
             ? SafeMigrationRepairCapability.Safe
             : SafeMigrationRepairCapability.None;
 
@@ -266,12 +205,16 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 $"No MySQL type mapping exists for '{definition.ClrType.FullName}'.");
 
         var storeType = definition.StoreType ?? mapping.StoreType;
+        var temporalRowVersion = IsTemporalRowVersion(definition);
+        var mariaDbJsonAlias = isMariaDb
+            && StringComparer.OrdinalIgnoreCase.Equals(storeType.Trim(), "json");
+
         var conditions = new List<string>
         {
             BuildStoreTypeMatches(storeType, isMariaDb),
-            BuildCollationMatches(table, definition.Collation),
+            BuildCollationMatches(table, definition.Collation, mariaDbJsonAlias),
             BuildComputedMatches(definition, isMariaDb),
-            BuildValueGenerationMatches(definition),
+            BuildValueGenerationMatches(definition, temporalRowVersion),
         };
 
         if (includeRepairableFacets)
@@ -279,7 +222,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             conditions.Add($"c.IS_NULLABLE = {(definition.IsNullable ? "'YES'" : "'NO'")}");
             conditions.Add($"COALESCE(c.COLUMN_COMMENT, '') = {Literal(definition.Comment ?? string.Empty)}");
             conditions.Add(
-                BuildDefaultMatches("c.COLUMN_DEFAULT", definition.DefaultValue, definition.IsNullable, mapping));
+                BuildDefaultMatches(
+                    "c.COLUMN_DEFAULT",
+                    definition.DefaultValue,
+                    definition.IsNullable,
+                    mapping,
+                    temporalRowVersion));
         }
 
         if (requireRepairSafeExtra)
@@ -316,24 +264,76 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         "TRIM(REPLACE(LOWER(COALESCE(c.EXTRA, '')), 'default_generated', '')) = ''";
 
     private static string BuildValueGenerationMatches(
+        ExpectedColumnDefinition definition,
+        bool temporalRowVersion
+    )
+    {
+        if (!MySqlSafeMigrationColumnMetadata.TryCreate(definition, out var metadata))
+        {
+            return "FALSE";
+        }
+
+        if (metadata.ValueGenerationStrategy == MySqlValueGenerationStrategy.AutoIncrement)
+        {
+            return "LOCATE('auto_increment', LOWER(c.EXTRA)) > 0";
+        }
+
+        if (temporalRowVersion)
+        {
+            // Doka materializes a temporal row version as both a generated
+            // default and an ON UPDATE expression. Comparing the complete
+            // normalized EXTRA value prevents an unrelated provider modifier
+            // from being accepted as part of that owned contract.
+            return "LOCATE('auto_increment', LOWER(c.EXTRA)) = 0 "
+                + "AND TRIM(REPLACE(LOWER(COALESCE(c.EXTRA, '')), "
+                + "'default_generated', '')) = 'on update current_timestamp(6)'";
+        }
+
+        return "LOCATE('auto_increment', LOWER(c.EXTRA)) = 0";
+    }
+
+    private static bool IsTemporalRowVersion(
         ExpectedColumnDefinition definition
     )
     {
-        var strategy = definition.ProviderAnnotations
-            .SingleOrDefault(annotation =>
-                StringComparer.Ordinal.Equals(annotation.Name, ValueGenerationStrategyAnnotation))
-            ?.Value as MySqlValueGenerationStrategy?;
+        if (!definition.IsRowVersion)
+        {
+            return false;
+        }
 
-        return strategy == MySqlValueGenerationStrategy.AutoIncrement
-            ? "LOCATE('auto_increment', LOWER(c.EXTRA)) > 0"
-            : "LOCATE('auto_increment', LOWER(c.EXTRA)) = 0";
+        if (definition.StoreType is not null)
+        {
+            var normalizedStoreType = definition
+                .StoreType
+                .AsSpan()
+                .TrimStart();
+
+            return normalizedStoreType.StartsWith("timestamp", StringComparison.OrdinalIgnoreCase)
+                || normalizedStoreType.StartsWith("datetime", StringComparison.OrdinalIgnoreCase);
+        }
+
+        // This is the same fallback Doka applies to a hand-authored migration
+        // without ColumnType. Keeping the predicate aligned with the provider's
+        // DDL decision prevents inferred type mappings from changing ownership.
+        var clrType = Nullable.GetUnderlyingType(definition.ClrType) ?? definition.ClrType;
+
+        return clrType == typeof(byte[]) || clrType == typeof(DateTime) || clrType == typeof(DateTimeOffset);
     }
 
     private string BuildCollationMatches(
         string table,
-        SafeMigrationCollationIdentifier? expectedCollation
+        SafeMigrationCollationIdentifier? expectedCollation,
+        bool mariaDbJsonAlias
     )
     {
+        if (mariaDbJsonAlias)
+        {
+            // Doka materializes MariaDB's JSON alias as LONGTEXT with the
+            // binary JSON collation. Compare the provider-owned physical
+            // representation, not the table default inherited by ordinary text.
+            return "LOWER(c.COLLATION_NAME) = 'utf8mb4_bin'";
+        }
+
         if (expectedCollation is not null)
         {
             return $"c.COLLATION_NAME <=> {Literal(expectedCollation.Name)}";
@@ -349,6 +349,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         bool isMariaDb
     )
     {
+        if (isMariaDb
+            && StringComparer.OrdinalIgnoreCase.Equals(storeType.Trim(), "json"))
+        {
+            return "LOWER(c.DATA_TYPE) = 'longtext'";
+        }
+
         if (!isMariaDb
             || storeType.Contains('(', StringComparison.Ordinal))
         {
@@ -379,11 +385,20 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         string catalogExpression,
         SafeMigrationDefaultValue expected,
         bool isNullable,
-        RelationalTypeMapping mapping
+        RelationalTypeMapping mapping,
+        bool temporalRowVersion = false
     )
     {
         if (expected.Kind == SafeMigrationDefaultValueKind.None)
         {
+            if (temporalRowVersion)
+            {
+                var providerDefaultCandidates = BuildDefaultSqlCandidates("CURRENT_TIMESTAMP(6)")
+                    .Select(Literal);
+
+                return $"{catalogExpression} IN ({string.Join(", ", providerDefaultCandidates)})";
+            }
+
             return isNullable
                 ? $"({catalogExpression} IS NULL OR UPPER({catalogExpression}) = 'NULL')"
                 : $"{catalogExpression} IS NULL";
@@ -413,6 +428,11 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var candidates = new HashSet<string>(StringComparer.Ordinal) { providerLiteral };
         AddSimpleStringLiteralDisplayCandidate(candidates, providerLiteral);
         AddExpressionDefaultDisplayCandidate(candidates, providerLiteral);
+
+        if (value is string text)
+        {
+            AddQuotedStringDefaultDisplayCandidate(candidates, text);
+        }
 
         var invariant = Convert.ToString(value, CultureInfo.InvariantCulture);
         if (invariant is not null)
@@ -464,6 +484,23 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         {
             candidates.Add(providerLiteral.Replace("'", "\\'", StringComparison.Ordinal));
         }
+    }
+
+    private static void AddQuotedStringDefaultDisplayCandidate(
+        HashSet<string> candidates,
+        string value
+    )
+    {
+        // MariaDB can expose a character default as its quoted SQL text even
+        // when the provider emitted a hexadecimal literal to avoid sql_mode
+        // ambiguity. Preserve exact value semantics while accepting that
+        // catalog representation; raw and provider-literal forms remain
+        // separate candidates.
+        var escaped = value
+            .Replace("\\", @"\\", StringComparison.Ordinal)
+            .Replace("'", "''", StringComparison.Ordinal);
+
+        candidates.Add($"'{escaped}'");
     }
 
     private string BuildBinaryDefaultMatches(

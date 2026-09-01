@@ -69,7 +69,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     }
 
     [Fact]
-    public async Task FunctionalIndex_FollowsTheActiveEngineCapability()
+    public async Task FunctionalIndexCreation_FailsClosedWhenPhysicalWidthCannotBeProven()
     {
         var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE `functional_indexes` (`value` varchar(80) NULL);");
@@ -85,19 +85,20 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var preflight = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("test-instance"));
+        var assessment = Assert.Single(preflight.Assessments);
 
-        if (Fixture.IsMariaDb)
-        {
-            Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
-            Assert.Equal(
-                SafeMigrationObservedState.Unsupported,
-                Assert.Single(preflight.Assessments)
-                    .ObservedState);
-            return;
-        }
-
-        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
+        Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.RejectUnsupported, assessment.Action);
+        Assert.Equal(
+            Fixture.IsMariaDb ? "functional_index" : "index_key_length_unverifiable",
+            assessment.Code);
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'functional_indexes' "
+                + "AND INDEX_NAME = 'ix_functional_lower_value';"));
     }
 }

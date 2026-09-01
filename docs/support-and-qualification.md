@@ -8,20 +8,19 @@ with roll-forward disabled. SafeMigrations supports EF Core 10 only.
 | Package | Runtime dependency contract |
 | --- | --- |
 | Core | `Microsoft.EntityFrameworkCore.Relational` `[10.0.11,10.1.0)` |
-| MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` `[10.2.0,10.3.0)` |
+| MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` `[10.3.0,10.4.0)` |
 | PostgreSQL | `Npgsql.EntityFrameworkCore.PostgreSQL` `[10.0.3,11.0.0)` |
 
-The MySQL/MariaDB package requires Doka 10.2.0 or a compatible later 10.2 patch
+The MySQL/MariaDB package requires Doka 10.3.0 or a compatible later 10.3 patch
 release and rejects the next minor line. This boundary avoids an exact
 transitive pin without claiming compatibility across an unqualified behavioral
-SPI revision. The committed lockfiles and CI resolve the exact stable Doka
-10.2.0 package. CI does not build Doka and never uses a cross-repository
-ProjectReference. A lockfile update is accepted only after the complete
-package, engine, tooling, coverage, and performance matrix passes again.
-
-The Doka 10.2.0 package metadata, migration-operation handler SPI, and
-ownership-aware connection contract were rechecked against the published
-package and tagged source on 2026-08-31.
+SPI revision. CI does not build Doka and never uses a cross-repository
+ProjectReference. The committed lockfiles were regenerated from the public
+Doka 10.3.0 package. Its typed migration-operation metadata was rechecked
+against signed tag `v10.3.0`, commit `1217d087e269c346d41131688925d29ebd6151f7`,
+on 2026-09-01. The complete package, engine, tooling, coverage, and performance
+matrix remains the SafeMigrations release gate; a local Doka ProjectReference
+or locally packed candidate is not release evidence.
 The remaining declared dependency graph and .NET 10 release metadata were
 rechecked on 2026-08-27. Bounded package ranges describe compatibility; the
 committed lockfiles identify the exact graph selected by a particular
@@ -110,11 +109,29 @@ Provider tests use real Docker servers and cover:
 - source-frozen legacy convergence policy selection, mutable column repair,
   matching rerun, null-data blocking, invariant-drift rejection, and
   MySQL/MariaDB preservation of unmodeled `EXTRA` modifiers;
+- typed Doka column-metadata acceptance and rejection, plus exact repair of
+  historical CLR defaults without retaining a permanent model default;
 - granular heterogeneous table convergence and pairwise legacy-state
   generation with a fixed seed;
 - exact expected column, index, primary-key, unique, check, and foreign-key
   facets, including one-field drift matrices and strict-table embedding;
-- provider-specific index capabilities and unsupported branches;
+- native MySQL JSON and Doka's MariaDB `longtext`/`utf8mb4_bin`/`JSON_VALID`
+  representation, including strict postconditions, inventory ownership,
+  invalid-value enforcement, and independent user-check drift;
+- bounded EF-generated SQL defaults such as `CURRENT_TIMESTAMP(6)`, plus
+  fail-closed retention of unbounded default SQL;
+- provider-specific index capabilities, generated MySQL/MariaDB prefix
+  roundtrips, physical InnoDB key-limit boundaries, and unsupported branches;
+- ordered ordinary and safe index drop/create replacement, including preserved
+  duplicate-data, prerequisite, physical-key, and semantic-conflict rejection;
+- InnoDB foreign-key support indexes followed by an explicit reviewed named
+  index, without weakening independent differently named index conflicts;
+- differently named equivalent foreign-key, unique-constraint,
+  check-constraint, and index conflicts on both providers, plus the PostgreSQL
+  singleton primary-key identity conflict;
+- MySQL check enforcement, MySQL index visibility, MariaDB ignored indexes and
+  table-scoped check names, plus PostgreSQL index health, partition ownership,
+  constraint backing, and partitioned-parent indexes;
 - quotes, backslashes, mixed case, Unicode, and maximum-length identifiers;
 - PostgreSQL non-default schemas, cross-schema foreign keys, and
   same-named-object isolation;
@@ -124,6 +141,8 @@ Provider tests use real Docker servers and cover:
 - four concurrent migrators on one database and parallel independent
   databases;
 - normal EF operations mixed with safe operations;
+- safe table, typed seed/update/delete-data, and following non-unique-index
+  ordering, plus fail-closed unique-index projection after unanalyzed data;
 - EF history success/failure and derived-context model-snapshot guards;
 - read-only preflight, unexpected-object inventory, positive and negative
   postflight, and cancellation before and during catalog access;
@@ -158,21 +177,42 @@ cases stop before target DDL instead of being compared or applied heuristically:
 
 - PostgreSQL 14 rejects `NULLS NOT DISTINCT`; PostgreSQL introduced that
   `CREATE INDEX` clause in version 15.
-- Doka 10.2.0 parenthesizes `DateOnly` and `TimeOnly` typed literals in column
+- Doka 10.3.0 parenthesizes `DateOnly` and `TimeOnly` typed literals in column
   defaults. The complete MySQL and MariaDB matrix qualifies the resulting DDL
   and each engine's catalog display form.
-- Doka 10.2.0 emits `ClientGuid` for client-generated Guid keys, including
+- Doka 10.3.0 emits `ClientGuid` for client-generated Guid keys, including
   application-converted relationship chains. SafeMigrations retains that
   annotation in operation identity and provider replay while comparing its
   live column as non-`AUTO_INCREMENT`. HiLo and unknown column annotations
   remain unsupported because their complete database prerequisites are not
   represented by the column catalog contract.
-- Doka 10.2.0 supplies an omitted `AllowUserVariables=true` option only for
+- Doka 10.3.0 supplies an omitted `AllowUserVariables=true` option only for
   provider-owned strings when SafeMigrations declares the capability.
   Contradictory owned values and incompatible borrowed connections or data
   sources fail closed. The provider also enforces `UseAffectedRows=false` and
   connector transport `GuidFormat=Binary16`; model-level Guid storage remains
   independently configurable as `binary(16)` or `char(36)`.
+- Doka 10.3.0 exposes Guid, value-generation, and index-prefix migration
+  metadata through a typed public snapshot. SafeMigrations rejects any extra,
+  malformed, contradictory, or unmodeled annotation instead of inferring its
+  semantics from a string key.
+- Missing MySQL/MariaDB BTREE indexes are checked against the live InnoDB row
+  format, page size, column encodings, store families, and explicit prefixes.
+  SafeMigrations rejects an unachievable or unprovable key before provider DDL
+  and never relies on server-side non-strict prefix truncation.
+- Existing MySQL checks must be enforced. MySQL invisible and MariaDB ignored
+  indexes do not satisfy the visible index shape emitted by ordinary EF
+  operations. MariaDB check clauses are correlated by table and constraint
+  name so the table-scoped names available from MariaDB 12.1 remain isolated.
+- MariaDB's Doka-emitted JSON alias is the physical triple `longtext`,
+  `utf8mb4_bin`, and the exact inline `JSON_VALID` check. Only that
+  provider-generated check is excluded from strict child-object ownership.
+- EF-generated SQL defaults receive typed equivalence only when the bounded
+  parser proves their structure. Arbitrary SQL strings remain unsupported.
+- Existing PostgreSQL indexes must be valid, ready, live, and independently
+  owned. Partitioned parent indexes are supported; attached child indexes and
+  constraint-owned backing indexes reject independent ensure, drop, or rename
+  operations.
 - MySQL, MariaDB 10.11, and MariaDB 11.4 reject a `Guid` literal default stored
   as `BINARY` because `INFORMATION_SCHEMA.COLUMNS.COLUMN_DEFAULT` does not
   preserve a complete value for repeatable semantic comparison. MariaDB 11.8
@@ -294,6 +334,25 @@ and release-asset verification.
   [value-generation strategies](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.2.0/src/Doka.EntityFrameworkCore.MySql/MySqlValueGenerationStrategy.cs),
   and [migration-operation handler contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.2.0/docs/migration-operation-handlers.md),
   retrieved 2026-08-31.
+- [Doka 10.3.0 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.3.0),
+  [release notes](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.3.0/CHANGELOG.md),
+  [migration-operation metadata](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.3.0/src/Doka.EntityFrameworkCore.MySql/Migrations/MySqlMigrationOperationMetadata.cs),
+  and [signed release tag](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.3.0),
+  retrieved 2026-09-01.
+- [MySQL 8.4 InnoDB limits](https://dev.mysql.com/doc/refman/8.4/en/innodb-limits.html),
+  [MySQL 8.4 CREATE INDEX](https://dev.mysql.com/doc/refman/8.4/en/create-index.html),
+  [MySQL 8.4 invisible indexes](https://dev.mysql.com/doc/refman/8.4/en/invisible-indexes.html),
+  [MySQL 8.4 CHECK constraints](https://dev.mysql.com/doc/refman/8.4/en/create-table-check-constraints.html),
+  [MariaDB InnoDB limitations](https://mariadb.com/docs/server/server-usage/storage-engines/innodb/innodb-limitations),
+  [MariaDB InnoDB row formats](https://mariadb.com/docs/server/server-usage/storage-engines/innodb/innodb-row-formats/innodb-row-formats-overview),
+  and [MariaDB ignored indexes](https://mariadb.com/docs/server/ha-and-performance/optimization-and-tuning/optimization-and-indexes/ignored-indexes),
+  retrieved 2026-09-01.
+- [PostgreSQL 17 `pg_constraint`](https://www.postgresql.org/docs/17/catalog-pg-constraint.html),
+  retrieved 2026-08-31.
+- [PostgreSQL 18 `pg_index`](https://www.postgresql.org/docs/18/catalog-pg-index.html),
+  [`pg_class`](https://www.postgresql.org/docs/18/catalog-pg-class.html), and
+  [`pg_inherits`](https://www.postgresql.org/docs/18/catalog-pg-inherits.html),
+  retrieved 2026-09-01.
 - [EF Core generated values](https://learn.microsoft.com/en-us/ef/core/modeling/generated-properties),
   retrieved 2026-08-29.
 - [PostgreSQL versioning policy](https://www.postgresql.org/support/versioning/)

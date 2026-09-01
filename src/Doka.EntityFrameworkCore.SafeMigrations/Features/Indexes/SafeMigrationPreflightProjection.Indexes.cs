@@ -9,16 +9,48 @@ internal sealed partial class SafeMigrationPreflightProjection
     {
         if (TryGet(intent.Definition.Table, intent.Definition.Schema, out var table))
         {
-            return AnalyzeDefinition(
+            var analysis = AnalyzeDefinition(
                 table.Indexes,
                 intent.Definition.Name,
                 intent.Definition,
                 SafeMigrationDefinitionEquivalence.Index);
+
+            return intent.Definition.Unique
+                ? InvalidateDataDependentMissing(table.Table, table.Schema, analysis)
+                : analysis;
         }
 
-        return CanProjectMissingIndex(intent, liveAnalysis)
-            ? Analysis(SafeMigrationObservedState.Missing)
+        var indexKey = new IndexKey(
+            intent.Definition.Table,
+            intent.Definition.Schema,
+            intent.Definition.Name);
+
+        if (_droppedIndexes.Contains(indexKey)
+            && CanProjectProviderNeutralIndexReplacement(intent.Definition)
+            && liveAnalysis.ObservedState is SafeMigrationObservedState.Missing
+                or SafeMigrationObservedState.Matching
+                or SafeMigrationObservedState.Different
+            && !StringComparer.Ordinal.Equals(
+                liveAnalysis.Code,
+                "index_semantic_identity_conflict"))
+        {
+            // The provider analyzed the original catalog. For ordinary column
+            // indexes it has already checked prerequisites, key width, and
+            // unique-data safety, so an accepted preceding exact-name drop
+            // leaves a deterministically missing replacement target.
+            return Analysis(SafeMigrationObservedState.Missing);
+        }
+
+        var projectedAnalysis = intent.Definition.Unique
+            ? InvalidateDataDependentMissing(
+                intent.Definition.Table,
+                intent.Definition.Schema,
+                liveAnalysis)
             : liveAnalysis;
+
+        return CanProjectMissingIndex(intent, projectedAnalysis)
+            ? Analysis(SafeMigrationObservedState.Missing)
+            : projectedAnalysis;
     }
 
     private SafeMigrationProviderAnalysis Project(
@@ -53,6 +85,12 @@ internal sealed partial class SafeMigrationPreflightProjection
         {
             table.Indexes[intent.Definition.Name] = intent.Definition;
         }
+
+        if (decision.Action == SafeMigrationAction.Apply)
+        {
+            _droppedIndexes.Remove(
+                new IndexKey(intent.Definition.Table, intent.Definition.Schema, intent.Definition.Name));
+        }
     }
 
     private void Observe(
@@ -64,6 +102,11 @@ internal sealed partial class SafeMigrationPreflightProjection
             && TryGet(intent.Table, intent.Schema, out var table))
         {
             table.Indexes.Remove(intent.Name);
+        }
+
+        if (decision.Action == SafeMigrationAction.Apply)
+        {
+            _droppedIndexes.Add(new IndexKey(intent.Table, intent.Schema, intent.Name));
         }
     }
 
@@ -112,8 +155,17 @@ internal sealed partial class SafeMigrationPreflightProjection
             return false;
         }
 
-        if (prerequisites.NewlyCreated
-            || !intent.Definition.Unique)
+        if (!intent.Definition.Unique)
+        {
+            return true;
+        }
+
+        if (prerequisites.DataMutationVersion < _providerDataMutationVersion)
+        {
+            return false;
+        }
+
+        if (prerequisites.NewlyCreated)
         {
             return true;
         }
@@ -148,4 +200,10 @@ internal sealed partial class SafeMigrationPreflightProjection
             Kind: SafeMigrationDefaultValueKind.Sql,
             StructuredExpression: SafeMigrationSqlLiteralExpression { Value: null, },
         };
+
+    private static bool CanProjectProviderNeutralIndexReplacement(
+        ExpectedIndexDefinition definition
+    ) => definition.Keys.All(static key => key.Column is not null)
+        && (definition.Method is null
+            || StringComparer.OrdinalIgnoreCase.Equals(definition.Method, "BTREE"));
 }

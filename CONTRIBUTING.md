@@ -11,7 +11,7 @@ unredacted migration reports in issues, pull requests, or test fixtures.
 - Docker for MySQL, MariaDB, and PostgreSQL tests
 - Bash, `jq`, `curl`, `unzip`, and `rsync` for engineering gates
 - Python 3 for the merged coverage threshold check
-- the exact locked `Doka.EntityFrameworkCore.MySql` 10.2.0 package from
+- the exact locked `Doka.EntityFrameworkCore.MySql` 10.3.0 package from
   nuget.org
 
 Do not add a ProjectReference to the Doka repository. SafeMigrations verifies a

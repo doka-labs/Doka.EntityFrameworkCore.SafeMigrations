@@ -23,11 +23,23 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     /// <summary>Gets the catalog-only guard that must pass before state SQL can be evaluated.</summary>
     public string StateEvaluationGuardExpression { get; init; } = "TRUE";
 
+    /// <summary>
+    /// Gets an optional catalog expression that returns a precise internal
+    /// classification code for state-dependent outcomes.
+    /// </summary>
+    public string? ClassificationCodeExpression { get; init; }
+
     /// <summary>Gets the state expression used when the evaluation guard fails.</summary>
     public string? StateEvaluationGuardFailureExpression { get; init; }
 
     /// <summary>Gets whether runtime SQL must defer state evaluation behind the guard.</summary>
     public bool RequiresLazyStateEvaluation { get; init; }
+
+    /// <summary>
+    /// Gets whether the complete operation is unsupported independently of
+    /// catalog state and therefore has no executable baseline.
+    /// </summary>
+    public bool IsStaticallyUnsupported { get; init; }
 
     /// <summary>Renders the prerequisite expression with provider literals.</summary>
     /// <param name="renderValue">The provider literal renderer.</param>
@@ -58,6 +70,17 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     ) => MySqlCatalogSqlTemplate.Render(
         StateEvaluationGuardFailureExpression
             ?? throw new InvalidOperationException("The state-evaluation guard has no failure expression."),
+        ParameterValues,
+        renderValue);
+
+    /// <summary>Renders the state-dependent classification-code expression.</summary>
+    /// <param name="renderValue">The provider literal renderer.</param>
+    /// <returns>The rendered expression.</returns>
+    public string RenderClassificationCodeExpression(
+        Func<string, string> renderValue
+    ) => MySqlCatalogSqlTemplate.Render(
+        ClassificationCodeExpression
+            ?? throw new InvalidOperationException("The runtime plan has no classification-code expression."),
         ParameterValues,
         renderValue);
 

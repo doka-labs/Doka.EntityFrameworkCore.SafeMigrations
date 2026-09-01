@@ -69,4 +69,43 @@ public sealed partial class SafeMigrationStandardOperationFactoryTests
         Assert.Throws<NotSupportedException>(() =>
             SafeMigrationStandardOperationFactory.CreateRepair(new EnsureColumnIntent("items", definition)));
     }
+
+    [Fact]
+    public void EnsureColumnRepairAllowsProviderToValidateItsOwnMetadata()
+    {
+        var providerOperation = new AddColumnOperation
+        {
+            Name = "id",
+            Table = "items",
+            ClrType = typeof(int),
+            IsNullable = false,
+        };
+
+        providerOperation["Test:Identity"] = "identity";
+        var definition = SafeMigrationExpectedDefinitionFactory.From(providerOperation);
+
+        var repair = Assert.IsType<AlterColumnOperation>(
+            SafeMigrationStandardOperationFactory.CreateRepair(
+                new EnsureColumnIntent("items", definition),
+                providerRepairValidator: static _ => true));
+
+        Assert.Equal("identity", repair["Test:Identity"]);
+    }
+
+    [Fact]
+    public void EnsureColumnRepairDoesNotLetProviderOverrideIntrinsicExclusions()
+    {
+        var computed = new ExpectedColumnDefinition(
+            "computed_value",
+            typeof(int),
+            isNullable: false,
+            storeType: "int",
+            computedColumnSql: "1 + 1",
+            isStored: true);
+
+        Assert.Throws<NotSupportedException>(() =>
+            SafeMigrationStandardOperationFactory.CreateRepair(
+                new EnsureColumnIntent("items", computed),
+                providerRepairValidator: static _ => true));
+    }
 }

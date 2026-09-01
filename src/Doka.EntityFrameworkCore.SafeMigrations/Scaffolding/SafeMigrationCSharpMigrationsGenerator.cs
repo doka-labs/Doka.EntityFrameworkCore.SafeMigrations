@@ -1,32 +1,48 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 /// <summary>
-/// Finalizes SafeMigrations C# migration files after EF Core has generated the
-/// operation bodies.
+/// Decorates the active provider's C# migration generator and finalizes only
+/// SafeMigrations-owned migration source.
 /// </summary>
-internal sealed class SafeMigrationCSharpMigrationsGenerator : CSharpMigrationsGenerator
+/// <remarks>
+/// Snapshot and metadata generation remain provider-owned so provider-specific
+/// namespace discovery and model rendering cannot be bypassed.
+/// </remarks>
+internal sealed class SafeMigrationCSharpMigrationsGenerator : IMigrationsCodeGenerator
 {
     private const string SafeMigrationsNamespace = "Doka.EntityFrameworkCore.SafeMigrations";
 
+    private readonly ICSharpHelper _csharpHelper;
     private readonly SafeMigrationScaffoldingConfiguration _configuration;
+    private readonly IMigrationsCodeGenerator _providerGenerator;
 
     /// <summary>Initializes the SafeMigrations migration-file generator.</summary>
-    /// <param name="dependencies">The shared EF Core migrations-code dependencies.</param>
-    /// <param name="csharpDependencies">The EF Core C# generator dependencies.</param>
+    /// <param name="providerGenerator">The active provider's migrations-code generator.</param>
+    /// <param name="csharpHelper">The EF Core C# identifier formatter.</param>
     /// <param name="configuration">The immutable scaffolding configuration.</param>
     public SafeMigrationCSharpMigrationsGenerator(
-        MigrationsCodeGeneratorDependencies dependencies,
-        CSharpMigrationsGeneratorDependencies csharpDependencies,
+        IMigrationsCodeGenerator providerGenerator,
+        ICSharpHelper csharpHelper,
         SafeMigrationScaffoldingConfiguration configuration
-    ) : base(dependencies, csharpDependencies)
+    )
     {
+        ArgumentNullException.ThrowIfNull(providerGenerator);
+        ArgumentNullException.ThrowIfNull(csharpHelper);
         ArgumentNullException.ThrowIfNull(configuration);
 
+        _providerGenerator = providerGenerator;
+        _csharpHelper = csharpHelper;
         _configuration = configuration;
     }
 
     /// <inheritdoc />
-    public override string GenerateMigration(
+    public string FileExtension => _providerGenerator.FileExtension;
+
+    /// <inheritdoc />
+    public string? Language => _providerGenerator.Language;
+
+    /// <inheritdoc />
+    public string GenerateMigration(
         string? migrationNamespace,
         string migrationName,
         IReadOnlyList<MigrationOperation> upOperations,
@@ -47,7 +63,7 @@ internal sealed class SafeMigrationCSharpMigrationsGenerator : CSharpMigrationsG
             effectiveDownOperations = [new SafeMigrationLegacyRollbackOperation()];
         }
 
-        var source = base.GenerateMigration(
+        var source = _providerGenerator.GenerateMigration(
             migrationNamespace,
             migrationName,
             upOperations,
@@ -61,21 +77,35 @@ internal sealed class SafeMigrationCSharpMigrationsGenerator : CSharpMigrationsG
         return _configuration.IsEnabled && migrationNamespace is not null
             ? UseFileScopedNamespace(
                 source,
-                CSharpDependencies.CSharpHelper.Namespace(migrationNamespace))
+                _csharpHelper.Namespace(migrationNamespace))
             : source;
     }
 
     /// <inheritdoc />
-    protected override IEnumerable<string> GetNamespaces(
-        IEnumerable<MigrationOperation> operations
-    )
-    {
-        var namespaces = base.GetNamespaces(operations);
+    public string GenerateMetadata(
+        string? migrationNamespace,
+        Type contextType,
+        string migrationName,
+        string migrationId,
+        IModel targetModel
+    ) => _providerGenerator.GenerateMetadata(
+        migrationNamespace,
+        contextType,
+        migrationName,
+        migrationId,
+        targetModel);
 
-        return _configuration.IsEnabled
-            ? namespaces.Append(SafeMigrationsNamespace)
-            : namespaces;
-    }
+    /// <inheritdoc />
+    public string GenerateSnapshot(
+        string? modelSnapshotNamespace,
+        Type contextType,
+        string modelSnapshotName,
+        IModel model
+    ) => _providerGenerator.GenerateSnapshot(
+        modelSnapshotNamespace,
+        contextType,
+        modelSnapshotName,
+        model);
 
     /// <summary>
     /// Ensures that a generated migration can resolve SafeMigrations extension
@@ -93,7 +123,7 @@ internal sealed class SafeMigrationCSharpMigrationsGenerator : CSharpMigrationsG
     {
         ArgumentNullException.ThrowIfNull(source);
 
-        var newline = Environment.NewLine;
+        var newline = SafeMigrationGeneratedSource.GetConsistentNewLine(source);
         var directive = $"using {SafeMigrationsNamespace};";
         var directiveIndex = FindExactLineStart(source, directive, newline, startIndex: 0);
         if (directiveIndex >= 0)
@@ -171,7 +201,7 @@ internal sealed class SafeMigrationCSharpMigrationsGenerator : CSharpMigrationsG
         string formattedNamespace
     )
     {
-        var newline = Environment.NewLine;
+        var newline = SafeMigrationGeneratedSource.GetConsistentNewLine(source);
         var declaration = $"namespace {formattedNamespace}";
         var blockHeader = string.Concat(declaration, newline, "{", newline);
         var headerIndex = source.IndexOf(blockHeader, StringComparison.Ordinal);
@@ -193,8 +223,9 @@ internal sealed class SafeMigrationCSharpMigrationsGenerator : CSharpMigrationsG
         result
             .Append(source.AsSpan(0, headerIndex))
             .Append(declaration)
-            .AppendLine(";")
-            .AppendLine();
+            .Append(';')
+            .Append(newline)
+            .Append(newline);
 
         // EF emits block-scoped namespaces for migration bodies. Removing one
         // validated indentation level keeps the generated source compatible

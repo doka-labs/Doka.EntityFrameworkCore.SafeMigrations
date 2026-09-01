@@ -79,10 +79,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             + (expectedUniqueNames.Length == 0
                 ? ")"
                 : $" AND tc.CONSTRAINT_NAME NOT IN ({string.Join(", ", expectedUniqueNames.Select(Literal))}))"),
-            $"(SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc "
-            + $"WHERE tc.CONSTRAINT_SCHEMA = DATABASE() AND tc.TABLE_NAME = {Literal(definition.Table)} "
-            + "AND tc.CONSTRAINT_TYPE = 'CHECK') "
-            + $"= {definition.CheckConstraints.Count.ToString(CultureInfo.InvariantCulture)}",
+            BuildCheckConstraintCountMatches(definition, isMariaDb),
             $"(SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc "
             + $"WHERE tc.CONSTRAINT_SCHEMA = DATABASE() AND tc.TABLE_NAME = {Literal(definition.Table)} "
             + "AND tc.CONSTRAINT_TYPE = 'FOREIGN KEY') "
@@ -105,9 +102,52 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         conditions.AddRange(definition.UniqueConstraints.Select(ConstraintMatches));
         conditions.AddRange(
             definition.CheckConstraints.Select(checkConstraint => CheckConstraintMatches(checkConstraint, isMariaDb)));
-        conditions.AddRange(definition.ForeignKeys.Select(ForeignKeyMatches));
+        conditions.AddRange(definition.ForeignKeys.Select(foreignKey =>
+            ForeignKeyMatches(foreignKey, requireExpectedName: true)));
 
         return $"({string.Join(" AND ", conditions)})";
+    }
+
+    private string BuildCheckConstraintCountMatches(
+        ExpectedTableDefinition definition,
+        bool isMariaDb
+    )
+    {
+        var implicitJsonChecks = isMariaDb
+            ? definition.Columns
+                .Where(static column => StringComparer.OrdinalIgnoreCase.Equals(column.StoreType?.Trim(), "json"))
+                .Select(MariaDbImplicitJsonCheckMatches)
+                .ToArray()
+            : [];
+
+        var providerGeneratedFilter = implicitJsonChecks.Length == 0
+            ? string.Empty
+            : $"AND NOT ({string.Join(" OR ", implicitJsonChecks)}) ";
+
+        return $"(SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc "
+            + (implicitJsonChecks.Length == 0
+                ? string.Empty
+                : "JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc "
+                    + "ON cc.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA "
+                    + "AND cc.TABLE_NAME = tc.TABLE_NAME "
+                    + "AND cc.CONSTRAINT_NAME = tc.CONSTRAINT_NAME ")
+            + $"WHERE tc.CONSTRAINT_SCHEMA = DATABASE() AND tc.TABLE_NAME = {Literal(definition.Table)} "
+            + "AND tc.CONSTRAINT_TYPE = 'CHECK' "
+            + providerGeneratedFilter
+            + $") = {definition.CheckConstraints.Count.ToString(CultureInfo.InvariantCulture)}";
+    }
+
+    private string MariaDbImplicitJsonCheckMatches(
+        ExpectedColumnDefinition column
+    )
+    {
+        // MariaDB names an inline column CHECK after its column. Requiring the
+        // expected JSON store type plus the exact JSON_VALID expression keeps
+        // unrelated user-authored checks visible to strict comparison.
+        return $"(tc.CONSTRAINT_NAME = {Literal(column.Name)} "
+            + "AND LOWER(REPLACE(REPLACE(REPLACE(REPLACE("
+            + "cc.CHECK_CLAUSE, '`', ''), ' ', ''), '(', ''), ')', '')) "
+            + $"= CONCAT('json_valid', LOWER({Literal(column.Name)})))";
     }
 
     private string TableExists(

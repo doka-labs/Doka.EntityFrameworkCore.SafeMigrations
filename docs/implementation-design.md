@@ -59,7 +59,7 @@ of the provider migrations generator. SafeMigrations does not derive from,
 replace, reflect over, or copy Doka provider internals.
 
 Registration declares the required user-variable capability through Doka
-10.2.0. Doka normalizes only an omitted option in its provider-owned connection
+10.3.0. Doka normalizes only an omitted option in its provider-owned connection
 string and validates caller-owned connections or data sources without
 mutation. Its matched-row and Binary16 wire-transport invariants remain
 provider-owned. SafeMigrations then validates the actual runtime connection
@@ -177,19 +177,44 @@ The selected values are read from that context's options by the design-time
 service provider and become literal calls and arguments in the generated
 migration.
 
-`Strict` rewrites table creation, index creation, and table removal.
+The deferred generator selector preserves EF Core's legacy and case-insensitive
+last-match rules. Disabled SafeMigrations scaffolding delegates non-C# provider
+generators unchanged; enabled scaffolding accepts only C# because its bounded
+rewriter understands only C# source. Source edits preserve the provider's LF or
+CRLF convention and reject mixed line endings before returning generated code.
+
+Core accepts zero or one provider-owned create-index projector through an
+internal design-time interface. The MySQL/MariaDB package registers the single
+projector and reads Doka 10.3.0's typed migration-operation metadata. It
+removes the consumed provider annotation from a copied EF operation and emits
+the ordered prefix values as an explicit SafeMigrations argument. Zero means a
+complete key. Multiple projectors, unrecognized operation metadata, malformed
+prefix counts, or negative values stop scaffolding. PostgreSQL registers no
+projector and retains the ordinary generated index calls.
+
+`Strict` rewrites table creation, index creation, index removal, and table removal.
 `LegacyConvergence` rewrites the same forward table/index operations but
 replaces `Down` with a deterministic exception: adopted legacy objects have no
 provable destructive inverse. Other EF operations are delegated unchanged so
 their policy cannot be guessed by the scaffolder.
 
+When the immutable expected definition is captured from an EF column
+operation, SafeMigrations parses SQL defaults through its bounded expression
+grammar. A proven expression such as `CURRENT_TIMESTAMP(6)` receives typed
+catalog equivalence; a fragment outside that grammar remains opaque and fails
+closed. This preserves the reviewed EF operation while avoiding a blanket
+allowlist of provider SQL strings.
+
 The generated table call also freezes either `ThrowIfDifferent` or
 `RepairIfSafe`. Repair-capable `EnsureColumnIntent` analysis separates mutable
 nullability, default, and comment facets from invariant store type, collation,
-generation/identity, row-version, and provider-annotation facets. A repair is
-eligible only for an ordinary column with matching invariants. Tightening
-nullability performs a catalog and data precondition and classifies existing
-nulls as `DataBlocked`. MySQL/MariaDB delegates the complete replacement
+generation/identity, and row-version facets. Provider-neutral Core permits no
+annotation-bearing inferred repair. The MySQL/MariaDB adapter can authorize a
+repair only after Doka's typed public metadata contract recognizes every
+annotation and proves its value consistent with the complete column shape. A
+repair is eligible only for an ordinary column with matching invariants.
+Tightening nullability performs a catalog and data precondition and classifies
+existing nulls as `DataBlocked`. MySQL/MariaDB delegates the complete replacement
 definition to Doka's `AlterColumnOperation` renderer; PostgreSQL delegates facet
 deltas to Npgsql. Apply and repair SQL are distinct guarded branches and share
 the same postcondition. Both adapters first prove target-column existence from
@@ -200,11 +225,59 @@ never fails with an engine-level unknown-column error. Explicit
 baseline; only inferred `EnsureColumnIntent` repair needs a separately rendered
 branch.
 
+Missing MySQL/MariaDB BTREE indexes have an additional physical-achievability
+guard. The catalog plan calculates conservative maximum key bytes from the
+live InnoDB row format and page size, the referenced column metadata, and the
+explicit key prefixes. Unknown-width or non-BTREE creation shapes reject
+before baseline DDL. Existing provider-supported indexes remain comparable,
+because comparison does not imply that SafeMigrations can reproduce an
+unmodeled creation shape.
+
+Constraint and index matching preserves explicit names while also guarding
+semantic identity. If an expected name is absent but a differently named
+active object has the complete modeled shape, creation rejects instead of
+duplicating it. The comparison covers ordered keys, principal identity,
+referential actions, expressions, index method, uniqueness, ordering,
+prefixes, and supported visibility facets. PostgreSQL primary-key ensure also
+rejects when the table already owns a differently named primary key.
+
+InnoDB can create a supporting index for a foreign key and later replace it
+with another suitable explicit index. MySQL/MariaDB index identity analysis
+therefore correlates candidate key columns with local foreign keys through
+`KEY_COLUMN_USAGE`; such provider infrastructure does not suppress creation of
+the reviewed named index. A semantically identical index without that
+foreign-key role remains `Different`.
+
+MySQL checks must be enforced; MariaDB check catalog rows are correlated by
+table as well as constraint name. MySQL invisible and MariaDB ignored indexes
+are not equivalent to the visible indexes emitted by ordinary EF operations.
+For MariaDB, Doka's `json` operation is compared against its complete physical
+alias: `longtext`, `utf8mb4_bin`, and the inline column `JSON_VALID` check. That
+exact provider-generated check is excluded from the separately owned table
+check count and unexpected-object inventory; additional user checks remain
+visible.
+PostgreSQL indexes must be valid, ready, live, and independently owned for an
+exact match. A healthy partitioned parent index remains comparable, while an
+attached child or constraint-owned backing index is rejected for independent
+ensure, drop, and rename operations.
+
+PostgreSQL constraint equality also includes every catalog facet that changes
+the behavior expressible by an ordinary EF migration operation. Primary and
+unique constraints must be validated, immediate, non-deferrable,
+non-temporal, and enforced. Unique constraints retain default `NULLS DISTINCT`
+semantics. Foreign keys additionally require `MATCH SIMPLE` and an all-column
+`SET NULL` or `SET DEFAULT` action. Checks must be validated, enforced, and
+inheritable. Inherited and partition-derived constraints cannot satisfy a
+local ensure or drop. Catalog fields added after PostgreSQL 14 are read through
+a JSON projection of the catalog row, so older supported majors remain query
+compatible while newer unmodeled semantics reject fail-closed.
+
 | EF operation | `Strict` source | `LegacyConvergence` source |
 | --- | --- | --- |
 | `CreateTable` | `CreateTableIfNotExists` | `ConvergeTableFromModel` |
-| Single-column `CreateIndex` | `CreateIndexIfNotExistsFromModel` | Same |
-| Multi-column `CreateIndex` | `CreateCompositeIndexIfNotExistsFromModel` | Same |
+| Single-column `CreateIndex` | `CreateIndexIfNotExistsFromModel`, or prefix-aware MySQL/MariaDB counterpart | Same |
+| Multi-column `CreateIndex` | `CreateCompositeIndexIfNotExistsFromModel`, or prefix-aware MySQL/MariaDB counterpart | Same |
+| `DropIndex` | `DropIndexIfExists` | Same |
 | Generated rollback of `CreateTable` | `DropTableIfExists` | Entire `Down` body rejects before DDL |
 
 The `*FromModel` methods are stable public targets for generated migration
@@ -229,6 +302,11 @@ remains fail-closed. This normalization does not admit an unrelated unique key.
 The behavior follows the
 official [MySQL `TABLE_CONSTRAINTS` contract](https://dev.mysql.com/doc/refman/8.4/en/information-schema-table-constraints-table.html)
 and [MariaDB `TABLE_CONSTRAINTS` contract](https://mariadb.com/docs/server/reference/system-tables/information-schema/information-schema-tables/information-schema-table_constraints-table).
+MariaDB documents `JSON` as an alias for `LONGTEXT COLLATE utf8mb4_bin` with an
+automatic `JSON_VALID` check; SafeMigrations binds that exception only to an
+expected `json` column and the exact provider expression
+([MariaDB JSON data type](https://mariadb.com/docs/server/reference/data-types/string-data-types/json),
+retrieved 2026-09-01).
 
 `ConvergenceContainer` checks only that the target name denotes a table. It is
 used by `ConvergeTable`, which immediately emits granular operations for every
@@ -286,20 +364,39 @@ foreign keys, indexes, checks, sequences, views, queries, functions, stored
 procedures, and classified migration annotations. Values are length-prefixed
 and streamed directly into the hash. The contract does not depend on EF Core's
 debug-string format; an unknown migration annotation value fails closed.
+Ordinary scalar columns retain the property-mapping path that preserves the
+established `v1` digest and allocation profile. A relational column with no
+property mapping, including an EF Core `ToJson` container, is serialized
+through the public `IColumn` facet and converted-default contract. The branch
+avoids indexing an empty `PropertyMappings` collection without imposing the
+aggregating `IColumn` facet getters on every scalar column in a large model.
+
+An accepted exact-name index drop creates a table/schema/name-scoped
+projection tombstone. A later ordinary column BTREE ensure can therefore be
+classified as projected missing even though the batch analyzer observed the
+pre-drop catalog. The projection never overwrites an unsupported key shape,
+duplicate-data block, missing prerequisite, or differently named semantic
+conflict. Opaque provider operations clear the tombstone because their effects
+cannot be bounded.
 
 Facet-isolation tests mutate every serialized relational family independently.
 Golden digests run in separate provider test processes and again under the
 committed EF/Npgsql dependency graph. The exact model-differ plus fingerprint path
 used by `SafeMigrationRunner` has provider-specific duration/allocation budgets.
 
-Postflight re-runs the live classifier without preflight projection and
-requires every supplied postcondition to hold simultaneously. The caller
-supplies an explicitly reviewed final-state contract; an execution sequence
-whose intermediate objects are later renamed, dropped, or altered is not
-automatically such a contract. Bind the final-state contract and its fingerprint
-to the same artifact, model, and target migration as execution. The
-[postflight runbook](runbooks/deployment-and-recovery.md#postflight) owns these
-checks. Reports are immutable and can be streamed through a caller-owned
+Postflight re-runs the live classifier without preflight projection. It walks
+the ordered safe contract backwards and treats the final writer for one exact
+schema, table, column, index, primary-key, or named-constraint resource as
+authoritative. Earlier safe writers remain visible with
+`postcondition_superseded` and a satisfied effective postcondition. This makes
+drop/recreate and successive-definition streams verifiable against their final
+catalog without requiring an impossible transient state. Provider-owned
+operations never participate in the reduction. Renames still prove source
+absence only, so complete destination verification requires an explicit ensure
+or a separately reviewed final-state contract. Bind the selected contract and
+its fingerprint to the same artifact, model, and target migration as execution.
+The [postflight runbook](runbooks/deployment-and-recovery.md#postflight) owns
+these checks. Reports are immutable and can be streamed through a caller-owned
 `Utf8JsonWriter` without reflection or an intermediate DTO graph.
 
 Operation-contract fingerprints include safe intent, expected definitions,
@@ -310,6 +407,16 @@ Recognized ordinary create/add/alter/drop/rename table and column operations may
 contribute a conditional structural postcondition to later prerequisite
 projection. Their assessment remains `provider_owned_not_analyzed`, and no
 facet or data-safety claim is inferred beyond the bounded projection facts.
+Typed `InsertDataOperation`, `UpdateDataOperation`, and `DeleteDataOperation`
+entries cannot change schema prerequisites, so they preserve known table and
+column presence. They can change every row-level precondition directly or
+through triggers, so they mark all previously projected data state and every
+live pre-batch row-safety result uncertain. Later structural provider
+operations preserve this marker instead of presenting their newer structural
+timestamp as a new data proof. A later non-unique index can still project
+`Missing`; a missing unique index, primary key, unique/check/foreign constraint,
+unsafe column addition, or nullability-tightening repair remains blocked until
+its post-DML data state is independently provable.
 
 Each chunk contains at most 512 MySQL/MariaDB operations or 128 PostgreSQL
 operations, 16,000 bound parameters, and 4 MiB of UTF-8 SQL plus parameter
@@ -337,13 +444,13 @@ do not create complete projected table definitions. For a unique index on an
 existing table, a live `PrerequisiteMissing` result becomes projected `Missing`
 only when every referenced column is known and a newly added key column is
 nullable, non-computed, has no non-null default, and uses default null-distinct
-semantics. Other unique transitions remain blocked. Unrecognized provider
-operations do not invent projection facts, and every ordinary operation still
-requires independent review and postcondition evidence. A recognized ordinary
-operation invalidates any complete projected table image that its provider-owned
-side effects could make stale. An unrecognized operation discards all projection
-facts, because arbitrary DDL or data changes cannot safely carry earlier
-inferences forward.
+semantics. Other unique transitions remain blocked. Typed EF data operations
+retain only structural facts and invalidate projected data safety. Every
+ordinary operation still requires independent review and postcondition
+evidence. A recognized structural operation invalidates any complete projected
+table image that its provider-owned side effects could make stale. An
+unrecognized operation discards all projection facts, because arbitrary DDL or
+data changes cannot safely carry earlier inferences forward.
 
 `AnalyzePendingMigrationsAsync` calls provider validation before EF's
 `IHistoryRepository.GetAppliedMigrationsAsync` path. This ordering is required
@@ -385,7 +492,7 @@ global lock or mutable static cache.
 Every multi-command provider plan is idempotent at command boundaries. Tests
 cover failure after earlier standard DDL, same-session recovery after a guard
 failure, cancellation during blocked DDL, cleanup failure with pool eviction,
-and repeat execution. Doka 10.2.0 executes every handler-authored guard as one
+and repeat execution. Doka 10.3.0 executes every handler-authored guard as one
 bounded scope with ordered setup, one body, and reverse-order cleanup. Cleanup
 runs after success, failure, or cancellation with an independent cancellation
 token. A cleanup failure closes the connection and evicts its physical session

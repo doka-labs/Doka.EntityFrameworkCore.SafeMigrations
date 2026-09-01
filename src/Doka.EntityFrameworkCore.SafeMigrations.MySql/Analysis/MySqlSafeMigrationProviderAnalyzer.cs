@@ -158,10 +158,14 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
                     var stateExpression = plan.RenderStateExpression(parameterizer.AddString);
                     var postcondition = plan.RenderPostcondition(parameterizer.AddString);
                     var repairPrecondition = plan.RenderRepairPrecondition(parameterizer.AddString);
+                    var classificationCode = plan.ClassificationCodeExpression is null
+                        ? "NULL"
+                        : plan.RenderClassificationCodeExpression(parameterizer.AddString);
                     var selection = $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, "
                         + $"({stateExpression}), "
                         + $"COALESCE(({postcondition}), FALSE), "
-                        + $"COALESCE(({repairPrecondition}), FALSE)";
+                        + $"COALESCE(({repairPrecondition}), FALSE), "
+                        + $"({classificationCode})";
 
                     var selectionBytes = Encoding.UTF8.GetByteCount(selection)
                         + (selections.Count == 0 ? 0 : separatorBytes);
@@ -364,9 +368,11 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
                 ? SafeMigrationRepairCapability.Safe
                 : SafeMigrationRepairCapability.None;
 
-            var code = state == SafeMigrationObservedState.Unsupported
-                ? plans[ordinal].UnsupportedCode ?? "classified_unsupported"
-                : $"classified_{StateCode(state)}";
+            var code = reader.IsDBNull(4)
+                ? state == SafeMigrationObservedState.Unsupported
+                    ? plans[ordinal].UnsupportedCode ?? "classified_unsupported"
+                    : $"classified_{StateCode(state)}"
+                : reader.GetString(4);
 
             results.Add(new SafeMigrationProviderAnalysis(state, repairCapability, reader.GetBoolean(2), code));
         }
@@ -395,6 +401,9 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
 
         try
         {
+            var serverVersion = MySqlServerVersion.AutoDetect(
+                connection,
+                MySqlServerVersionCompatibilityMode.AllowUnsupported);
             var findings = new List<SafeMigrationUnexpectedObject>();
             var seen = new HashSet<(SafeMigrationDatabaseObjectKind Kind, string Table, string Name)>();
 
@@ -414,7 +423,7 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
                 await using var command = connection.CreateCommand();
                 var parameters = new MySqlCatalogQueryParameterizer(command);
                 var tableScope = string.Join(", ", tableBatch.Select(parameters.AddString));
-                command.CommandText = BuildUnexpectedChildObjectSql(tableScope);
+                command.CommandText = BuildUnexpectedChildObjectSql(tableScope, serverVersion.IsMariaDb);
                 await ReadUnexpectedAsync(command, expected, findings, seen, cancellationToken);
             }
 
@@ -446,6 +455,7 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
             var kind = ParseObjectKind(reader.GetString(0));
             var tableName = reader.GetString(1);
             var objectName = reader.GetString(2);
+            var providerGeneratedJsonCheck = reader.GetBoolean(3);
             if (!seen.Add((kind, tableName, objectName)))
             {
                 continue;
@@ -462,7 +472,7 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
             }
 
             if (kind == SafeMigrationDatabaseObjectKind.Table
-                || IsExpected(table, kind, objectName))
+                || IsExpected(table, kind, objectName, providerGeneratedJsonCheck))
             {
                 continue;
             }
@@ -500,10 +510,14 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
     private static bool IsExpected(
         SafeMigrationExpectedTableInventory table,
         SafeMigrationDatabaseObjectKind kind,
-        string name
+        string name,
+        bool providerGeneratedJsonCheck
     ) => kind switch
     {
         SafeMigrationDatabaseObjectKind.Column => table.Columns.Contains(name),
+        SafeMigrationDatabaseObjectKind.CheckConstraint when providerGeneratedJsonCheck
+            && table.ColumnStoreTypes.TryGetValue(name, out var storeType)
+            && StringComparer.OrdinalIgnoreCase.Equals(storeType?.Trim(), "json") => true,
         SafeMigrationDatabaseObjectKind.Index => table.Indexes.Contains(name),
         SafeMigrationDatabaseObjectKind.PrimaryKey => table.Constraints.Values.Contains(
             SafeMigrationDatabaseObjectKind.PrimaryKey),
@@ -547,16 +561,17 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
     };
 
     private static string BuildUnexpectedTableSql() => """
-                                                       SELECT 'table', t.TABLE_NAME, t.TABLE_NAME
+                                                       SELECT 'table', t.TABLE_NAME, t.TABLE_NAME, FALSE
                                                        FROM INFORMATION_SCHEMA.TABLES t
                                                        WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_TYPE = 'BASE TABLE'
                                                        ORDER BY 1, 2, 3;
                                                        """;
 
     private static string BuildUnexpectedChildObjectSql(
-        string tableScope
+        string tableScope,
+        bool isMariaDb
     ) => $"""
-          SELECT 'column', c.TABLE_NAME, c.COLUMN_NAME
+          SELECT 'column', c.TABLE_NAME, c.COLUMN_NAME, FALSE
           FROM INFORMATION_SCHEMA.COLUMNS c
           WHERE c.TABLE_SCHEMA = DATABASE()
             AND c.TABLE_NAME IN ({tableScope})
@@ -568,13 +583,15 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
               WHEN 'FOREIGN KEY' THEN 'foreign_key'
               END,
               tc.TABLE_NAME,
-              tc.CONSTRAINT_NAME
+              tc.CONSTRAINT_NAME,
+              {(isMariaDb ? MariaDbImplicitJsonCheckInventoryExpression : "FALSE")}
           FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+          {(isMariaDb ? MariaDbImplicitJsonCheckInventoryJoins : string.Empty)}
           WHERE tc.CONSTRAINT_SCHEMA = DATABASE()
             AND tc.TABLE_NAME IN ({tableScope})
             AND tc.CONSTRAINT_TYPE IN ('PRIMARY KEY', 'UNIQUE', 'CHECK', 'FOREIGN KEY')
           UNION ALL
-          SELECT 'index', s.TABLE_NAME, s.INDEX_NAME
+          SELECT 'index', s.TABLE_NAME, s.INDEX_NAME, FALSE
           FROM INFORMATION_SCHEMA.STATISTICS s
           WHERE s.TABLE_SCHEMA = DATABASE()
             AND s.TABLE_NAME IN ({tableScope})
@@ -588,6 +605,27 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
                   AND tc.CONSTRAINT_NAME = s.INDEX_NAME)
           ORDER BY 1, 2, 3;
           """;
+
+    private const string MariaDbImplicitJsonCheckInventoryJoins = """
+                                                                    LEFT JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc
+                                                                      ON cc.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA
+                                                                     AND cc.TABLE_NAME = tc.TABLE_NAME
+                                                                     AND cc.CONSTRAINT_NAME = tc.CONSTRAINT_NAME
+                                                                    LEFT JOIN INFORMATION_SCHEMA.COLUMNS json_column
+                                                                      ON json_column.TABLE_SCHEMA = tc.CONSTRAINT_SCHEMA
+                                                                     AND json_column.TABLE_NAME = tc.TABLE_NAME
+                                                                     AND json_column.COLUMN_NAME = tc.CONSTRAINT_NAME
+                                                                    """;
+
+    private const string MariaDbImplicitJsonCheckInventoryExpression = """
+                                                                         CASE WHEN tc.CONSTRAINT_TYPE = 'CHECK'
+                                                                           AND json_column.DATA_TYPE = 'longtext'
+                                                                           AND LOWER(json_column.COLLATION_NAME) = 'utf8mb4_bin'
+                                                                           AND LOWER(REPLACE(REPLACE(REPLACE(REPLACE(
+                                                                                 cc.CHECK_CLAUSE, '`', ''), ' ', ''), '(', ''), ')', ''))
+                                                                               = CONCAT('json_valid', LOWER(json_column.COLUMN_NAME))
+                                                                         THEN TRUE ELSE FALSE END
+                                                                         """;
 
     private sealed class AnalysisScope : IAsyncDisposable
     {
