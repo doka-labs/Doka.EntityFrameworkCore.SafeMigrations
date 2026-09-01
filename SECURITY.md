@@ -90,14 +90,16 @@ changes.
 
 ## Supported Versions
 
-This policy covers all three SafeMigrations packages. The stable 10.0.x line is
-supported; a dated changelog entry is not proof that a particular patch has
-been published.
+This policy covers all three SafeMigrations packages. Stable 10.1.x is the
+prepared supported line; a dated changelog entry is not proof that a particular
+version has been published. Until 10.1.0 publication is verified, the latest
+published 10.0.x package remains the installable supported release.
 
 | Release state | Security support |
 | --- | --- |
-| Stable 10.0.x | Supported release line; fixes may require updating to its latest published patch |
-| 10.0.0 release-candidate line | Superseded by stable 10.0.x; candidates are not independently serviced |
+| Stable 10.1.x | Supported release line after publication; fixes may require updating to its latest published patch |
+| Stable 10.0.x | Supported until 10.1.0 publication; superseded by the stable 10.1.x line afterward |
+| 10.0.0 release-candidate line | Superseded by stable releases; candidates are not independently serviced |
 | Earlier proof-of-concept or other release lines | No separate servicing promise; reports are still triaged for impact on the supported contract |
 
 Candidates qualify the same complete feature contract. This policy does not

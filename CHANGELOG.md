@@ -6,6 +6,22 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+## [10.1.0] - 2026-09-01
+
+Prepared the first stable minor release after the complete 10.0 delivery. It
+qualifies Doka 10.3.0's typed migration metadata, adds two scaffolder-facing
+index-prefix entry points, and closes the documented brownfield convergence
+defects across MySQL, MariaDB, and PostgreSQL. Existing public operations,
+migration source, reports, history semantics, and runtime policies remain
+compatible; generated MySQL/MariaDB migrations use the new entry points only
+when provider metadata contains ordered index-prefix lengths.
+
+These notes do not establish publication. Require the successful stable
+release run, the authorized signed `v10.1.0` tag, and verified public package,
+symbol, GitHub Release, provenance, SBOM, and attestation readback before
+selecting 10.1.0. All three package IDs must be published at the exact same
+version.
+
 ### Changed
 
 - Raise the MySQL/MariaDB dependency floor to Doka 10.3.0 within the bounded
@@ -18,6 +34,9 @@ All notable changes are documented here. The format follows
   the new `CreateIndexWithPrefixesIfNotExistsFromModel` and
   `CreateCompositeIndexWithPrefixesIfNotExistsFromModel` methods; zero means
   that the complete key is indexed.
+- Promote both new Core signatures from the unshipped API inventory into the
+  10.1.0 shipped baseline. There are no MySQL/MariaDB- or PostgreSQL-specific
+  public signature changes in this release.
 
 ### Fixed
 
@@ -518,7 +537,8 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.0.2...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.1.0...HEAD
+[10.1.0]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.0.2...v10.1.0
 [10.0.2]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.0.1...v10.0.2
 [10.0.1]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.0.0...v10.0.1
 [10.0.0]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.0.0-rc.3...v10.0.0

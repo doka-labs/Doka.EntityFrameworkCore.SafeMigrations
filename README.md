@@ -42,30 +42,30 @@ The CI and release workflows pin the exact patch tags and image digests used
 when that matrix executes. The exact successful run, not this table, is release
 evidence. See [Support and qualification](docs/support-and-qualification.md).
 
-The initial complete stable delivery is 10.0.0. The latest published
-maintenance release is 10.0.2. Current unreleased source consumes Doka 10.3.0's
-typed migration metadata, preserves MySQL/MariaDB index prefixes during
-scaffolding, and closes catalog-convergence edge cases documented in the
-[release notes](CHANGELOG.md). Only a successful release run and verified
-public packages establish availability or qualification.
+The initial complete stable delivery is 10.0.0. The latest confirmed published
+maintenance release is 10.0.2. This source is prepared for stable 10.1.0: it
+consumes Doka 10.3.0's typed migration metadata, preserves MySQL/MariaDB index
+prefixes during scaffolding, and closes the catalog-convergence edge cases in
+the [release notes](CHANGELOG.md). Only a successful release run and verified
+public packages establish 10.1.0 availability or qualification.
 
 ## Installation
 
 Install one provider package. The core package is included transitively. The
-commands select the prepared stable maintenance release exactly so restore does
+commands select the prepared stable release exactly so restore does
 not move to a different package version implicitly. Confirm the matching
 published release and all three NuGet package pages before installation; source
 or changelog entries alone do not establish package availability.
 
 ```bash
-package_version='10.0.2'
+package_version='10.1.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.MySql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.0.2'
+package_version='10.1.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version "$package_version"
 ```
 
