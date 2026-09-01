@@ -90,7 +90,16 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             setupCommands.Add(
                 $"SET @doka_sm_prerequisite_ok = COALESCE(("
                 + $"{runtimePlan.RenderPreparedPrerequisiteExpression(renderedParameterValues)}), FALSE);");
-            setupCommands.Add(BuildInitialLazyStateAssignment(runtimePlan, renderedParameterValues));
+
+            setupCommands.Add(BuildInitialLazyStateAssignment());
+            if (runtimePlan.StateEvaluationGuardFailureExpression is not null)
+            {
+                setupCommands.Add(BuildGuardEvaluationAssignment(runtimePlan, renderedParameterValues));
+                setupCommands.Add($"PREPARE {PreparedStatementName} FROM @doka_sm_sql;");
+                setupCommands.Add($"EXECUTE {PreparedStatementName};");
+                setupCommands.Add($"DEALLOCATE PREPARE {PreparedStatementName};");
+            }
+
             setupCommands.Add(BuildStateEvaluationAssignment(runtimePlan, renderedParameterValues));
             setupCommands.Add($"PREPARE {PreparedStatementName} FROM @doka_sm_sql;");
             setupCommands.Add($"EXECUTE {PreparedStatementName};");
@@ -229,24 +238,27 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             + "ELSE 'DO 0' END;";
     }
 
-    private static string BuildInitialLazyStateAssignment(
+    private static string BuildGuardEvaluationAssignment(
         MySqlSafeMigrationRuntimePlan runtimePlan,
         IReadOnlyList<string> renderedParameterValues
     )
     {
-        var guardBranch = runtimePlan.StateEvaluationGuardFailureExpression is null
-            ? string.Empty
-            : "WHEN NOT COALESCE(("
+        var statement = "SELECT CASE WHEN NOT COALESCE(("
             + runtimePlan.RenderPreparedStateEvaluationGuardExpression(renderedParameterValues)
             + "), FALSE) THEN ("
             + runtimePlan.RenderPreparedStateEvaluationGuardFailureExpression(renderedParameterValues)
-            + ") ";
+            + ") ELSE NULL END INTO @doka_sm_state";
 
-        return "SET @doka_sm_state = CASE "
-            + "WHEN NOT @doka_sm_prerequisite_ok THEN 'prerequisite_missing' "
-            + guardBranch
-            + "ELSE NULL END, @doka_sm_repair_ok = FALSE;";
+        // PREPARE performs identifier resolution. Materialize the data-reading
+        // guard only after the catalog-only prerequisite has succeeded.
+        return "SET @doka_sm_sql = CASE WHEN @doka_sm_state IS NULL "
+            + $"THEN CONVERT(0x{Convert.ToHexString(Encoding.UTF8.GetBytes(statement))} USING utf8mb4) "
+            + "ELSE 'DO 0' END;";
     }
+
+    private static string BuildInitialLazyStateAssignment() => "SET @doka_sm_state = CASE "
+        + "WHEN NOT @doka_sm_prerequisite_ok THEN 'prerequisite_missing' "
+        + "ELSE NULL END, @doka_sm_repair_ok = FALSE;";
 
     private static string BuildPreparedSqlAssignment(
         string applyDdl,

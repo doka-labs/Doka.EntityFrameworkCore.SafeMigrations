@@ -30,6 +30,47 @@ internal sealed class PostgreSqlSafeMigrationSqlExpressionRenderer
         return writer.ToString();
     }
 
+    /// <summary>Returns the first provider-specific incompatibility in an expression tree.</summary>
+    /// <param name="expression">The structured expression to validate.</param>
+    /// <returns>A stable unsupported-feature code, or <see langword="null" /> when rendering is supported.</returns>
+    public string? GetUnsupportedFeature(
+        SafeMigrationSqlExpression expression
+    )
+    {
+        ArgumentNullException.ThrowIfNull(expression);
+
+        return expression switch
+        {
+            SafeMigrationSqlIdentifierExpression => null,
+            SafeMigrationSqlLiteralExpression value => GetUnsupportedLiteralFeature(value),
+            SafeMigrationSqlUnaryExpression value => GetUnsupportedFeature(value.Operand),
+            SafeMigrationSqlBinaryExpression value =>
+                GetUnsupportedFeature(value.Left) ?? GetUnsupportedFeature(value.Right),
+            SafeMigrationSqlNullTestExpression value => GetUnsupportedFeature(value.Operand),
+            SafeMigrationSqlBetweenExpression value =>
+                GetUnsupportedFeature(value.Operand)
+                ?? GetUnsupportedFeature(value.Lower)
+                ?? GetUnsupportedFeature(value.Upper),
+            SafeMigrationSqlInExpression value =>
+                GetUnsupportedFeature(value.Operand)
+                ?? value.Values.Select(GetUnsupportedFeature).FirstOrDefault(static feature => feature is not null),
+            SafeMigrationSqlFunctionExpression value =>
+                value.Arguments.Select(GetUnsupportedFeature).FirstOrDefault(static feature => feature is not null),
+            SafeMigrationSqlCastExpression value =>
+                TryFindCanonicalStoreType(value.StoreType, out _)
+                    ? GetUnsupportedFeature(value.Operand)
+                    : "structured_cast_type",
+            SafeMigrationSqlCollateExpression value => GetUnsupportedFeature(value.Operand),
+            SafeMigrationSqlCurrentValueExpression => null,
+            SafeMigrationSqlProviderFragmentExpression value =>
+                StringComparer.Ordinal.Equals(value.ProviderId, ProviderId)
+                    ? null
+                    : "provider_fragment_mismatch",
+            SafeMigrationSqlOpaqueExpression => null,
+            _ => throw new UnreachableException(),
+        };
+    }
+
     public string RenderCatalogCandidateSql(
         SafeMigrationSqlExpression expression,
         Func<string, string> literal
@@ -207,19 +248,20 @@ internal sealed class PostgreSqlSafeMigrationSqlExpressionRenderer
                 writer.Append(')');
                 break;
             case SafeMigrationSqlCastExpression value:
+                var castType = FindCanonicalStoreType(value.StoreType);
                 if (catalogShape)
                 {
                     writer.Append('(');
                     Append(writer, value.Operand, catalogShape);
                     writer.Append(")::");
-                    writer.Append(value.StoreType);
+                    writer.Append(castType);
                 }
                 else
                 {
                     writer.Append("CAST(");
                     Append(writer, value.Operand, catalogShape);
                     writer.Append(" AS ");
-                    writer.Append(value.StoreType);
+                    writer.Append(castType);
                     writer.Append(')');
                 }
 
@@ -264,22 +306,235 @@ internal sealed class PostgreSqlSafeMigrationSqlExpressionRenderer
         string? storeType
     )
     {
+        var castType = storeType is null ? null : FindCanonicalStoreType(storeType);
+
         if (value is null)
         {
             writer.Append("NULL");
+            if (castType is not null)
+            {
+                writer.Append("::");
+                writer.Append(castType);
+            }
+
             return;
         }
 
         var mapping = _typeMappingSource.FindMapping(value.GetType(), storeType)
+            ?? _typeMappingSource.FindMapping(value.GetType())
             ?? throw new NotSupportedException(
                 $"PostgreSQL has no type mapping for structured literal '{value.GetType().FullName}'.");
 
         writer.Append(mapping.GenerateSqlLiteral(value));
-        if (storeType is not null)
+        if (castType is not null)
         {
             writer.Append("::");
-            writer.Append(storeType);
+            writer.Append(castType);
         }
+    }
+
+    private string? GetUnsupportedLiteralFeature(
+        SafeMigrationSqlLiteralExpression expression
+    )
+    {
+        if (expression.StoreType is not null
+            && !TryFindCanonicalStoreType(expression.StoreType, out _))
+        {
+            return "structured_cast_type";
+        }
+
+        if (expression.Value is not null
+            && _typeMappingSource.FindMapping(expression.Value.GetType(), expression.StoreType) is null
+            && _typeMappingSource.FindMapping(expression.Value.GetType()) is null)
+        {
+            return "structured_literal_mapping";
+        }
+
+        return null;
+    }
+
+    private string FindCanonicalStoreType(
+        string storeType
+    )
+    {
+        if (!TryFindCanonicalStoreType(storeType, out var canonicalStoreType))
+        {
+            throw new NotSupportedException(
+                $"PostgreSQL has no type mapping for structured CAST target '{storeType}'.");
+        }
+
+        return canonicalStoreType;
+    }
+
+    private bool TryFindCanonicalStoreType(
+        string storeType,
+        out string canonicalStoreType
+    )
+    {
+        if (!TryNormalizePreMappingAlias(storeType, out var mappingStoreType))
+        {
+            canonicalStoreType = string.Empty;
+            return false;
+        }
+
+        var mapping = _typeMappingSource.FindMapping(mappingStoreType);
+        if (mapping is null)
+        {
+            canonicalStoreType = string.Empty;
+            return false;
+        }
+
+        // Npgsql validates the type but intentionally preserves caller aliases.
+        // PostgreSQL's catalog deparser emits canonical built-in names, so
+        // normalize documented aliases before building both DDL and candidates.
+        canonicalStoreType = CanonicalizeBuiltInAliases(mapping.StoreType);
+        return true;
+    }
+
+    private static bool TryNormalizePreMappingAlias(
+        string storeType,
+        out string normalizedStoreType
+    )
+    {
+        var candidate = storeType.AsSpan().Trim();
+        var scalarLength = candidate.Length;
+        while (scalarLength >= 2
+               && candidate[..scalarLength].EndsWith("[]", StringComparison.Ordinal))
+        {
+            scalarLength -= 2;
+        }
+
+        var scalarType = candidate[..scalarLength].TrimEnd();
+        var arraySuffix = candidate[scalarLength..];
+        if (!scalarType.StartsWith("float", StringComparison.OrdinalIgnoreCase))
+        {
+            normalizedStoreType = storeType;
+            return true;
+        }
+
+        var precisionClause = scalarType["float".Length..].Trim();
+        if (precisionClause.Length == 0)
+        {
+            normalizedStoreType = AppendArraySuffix("double precision", arraySuffix);
+            return true;
+        }
+
+        // Preserve custom types that merely share the keyword prefix. Once an
+        // opening parenthesis is present, however, the input claims PostgreSQL
+        // FLOAT(p) grammar and must satisfy its documented binary-precision
+        // range before reaching Npgsql.
+        if (precisionClause[0] != '(')
+        {
+            normalizedStoreType = storeType;
+            return true;
+        }
+
+        if (precisionClause[^1] != ')'
+            || !int.TryParse(
+                precisionClause[1..^1].Trim(),
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out var precision)
+            || precision is < 1 or > 53)
+        {
+            normalizedStoreType = string.Empty;
+            return false;
+        }
+
+        normalizedStoreType = AppendArraySuffix(
+            precision <= 24 ? "real" : "double precision",
+            arraySuffix);
+        return true;
+    }
+
+    private static string AppendArraySuffix(
+        string scalarType,
+        ReadOnlySpan<char> arraySuffix
+    ) => arraySuffix.Length == 0
+        ? scalarType
+        : string.Concat(scalarType.AsSpan(), arraySuffix);
+
+    private static string CanonicalizeBuiltInAliases(
+        string storeType
+    )
+    {
+        var candidate = storeType.Trim();
+        var scalarLength = candidate.Length;
+        while (scalarLength >= 2
+               && candidate
+                   .AsSpan(0, scalarLength)
+                   .EndsWith("[]", StringComparison.Ordinal))
+        {
+            scalarLength -= 2;
+        }
+
+        var scalarType = candidate[..scalarLength];
+        var arraySuffix = candidate[scalarLength..];
+        var canonicalScalarType = scalarType.ToLowerInvariant() switch
+        {
+            "int" or "int4" => "integer",
+            "int2" => "smallint",
+            "int8" => "bigint",
+            "float4" => "real",
+            "float8" => "double precision",
+            "bool" => "boolean",
+            _ => CanonicalizeParameterizedBuiltInAlias(scalarType),
+        };
+
+        return canonicalScalarType + arraySuffix;
+    }
+
+    private static string CanonicalizeParameterizedBuiltInAlias(
+        string storeType
+    )
+    {
+        if (TryReplaceAlias(storeType, "decimal", "numeric", out var canonical)
+            || TryReplaceAlias(storeType, "varchar", "character varying", out canonical)
+            || TryReplaceAlias(storeType, "bpchar", "character", out canonical)
+            || TryReplaceAlias(storeType, "char", "character", out canonical)
+            || TryReplaceAlias(storeType, "varbit", "bit varying", out canonical))
+        {
+            return canonical;
+        }
+
+        if (TryReplaceAlias(storeType, "timestamptz", "timestamp", out canonical)
+            || TryReplaceAlias(storeType, "timetz", "time", out canonical))
+        {
+            return canonical + " with time zone";
+        }
+
+        if (TryReplaceAlias(storeType, "timestamp", "timestamp", out canonical)
+            || TryReplaceAlias(storeType, "time", "time", out canonical))
+        {
+            return canonical + " without time zone";
+        }
+
+        return storeType;
+    }
+
+    private static bool TryReplaceAlias(
+        string storeType,
+        string alias,
+        string canonicalName,
+        out string canonical
+    )
+    {
+        if (!storeType.StartsWith(alias, StringComparison.OrdinalIgnoreCase))
+        {
+            canonical = string.Empty;
+            return false;
+        }
+
+        var suffix = storeType[alias.Length..];
+        if (suffix.Length > 0
+            && (suffix[0] != '(' || suffix[^1] != ')'))
+        {
+            canonical = string.Empty;
+            return false;
+        }
+
+        canonical = canonicalName + suffix;
+        return true;
     }
 
     private void AppendList(

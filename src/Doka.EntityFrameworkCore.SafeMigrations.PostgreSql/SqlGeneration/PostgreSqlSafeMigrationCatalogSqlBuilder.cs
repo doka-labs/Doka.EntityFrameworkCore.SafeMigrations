@@ -153,7 +153,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         SafeMigrationSqlExpression expression
     ) => _expressionRenderer.Render(expression);
 
-    private static string? GetUnsupportedSqlExpressionFeature(
+    private string? GetUnsupportedSqlExpressionFeature(
         SafeMigrationIntent intent
     )
     {
@@ -182,6 +182,12 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             if (!SafeMigrationSqlExpressionInspector.IsStructurallyComparable(expression))
             {
                 return "opaque_sql_expression";
+            }
+
+            var providerFeature = _expressionRenderer.GetUnsupportedFeature(expression);
+            if (providerFeature is not null)
+            {
+                return providerFeature;
             }
         }
 

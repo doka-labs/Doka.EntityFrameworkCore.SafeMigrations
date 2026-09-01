@@ -477,6 +477,24 @@ var nonNegative = ExpectedCheckConstraintDefinition.FromExpression(
         SafeMigrationSql.Literal(0)));
 ```
 
+On MySQL and MariaDB, a typed literal or `Cast` store type is mapped to the
+bounded CAST grammar shared by both engines. Integer column aliases such as
+`int` and `bigint unsigned` render as `SIGNED` and `UNSIGNED`; string column
+aliases render through `CHAR`. A type without an exact common mapping is
+classified as `structured_cast_type` before target DDL instead of being copied
+into SQL. A typed `null` retains its requested type on every provider.
+PostgreSQL validates the requested store type through Npgsql's relational type
+mapping, then SafeMigrations renders documented built-in aliases in their
+catalog-canonical form in `CAST` or `::<type>` syntax. This prevents drift
+between aliases such as `int4` and `integer` and uses the same fail-closed
+classification for unknown type grammar. PostgreSQL `float` and `float(p)` are
+normalized according to their documented binary-precision ranges before type
+mapping, including array forms.
+
+MariaDB generated columns cannot preserve a `NOT NULL` facet; that
+unrepresentable definition fails before DDL with
+`generated_column_nullability`, while MySQL retains and verifies the facet.
+
 EF-scaffolded check constraints using this bounded grammar are converted to
 the same structured tree automatically. Unsupported SQL stops scaffolding
 before a migration file is accepted; use an explicit `FromExpression`

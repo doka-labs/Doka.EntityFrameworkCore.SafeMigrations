@@ -87,10 +87,15 @@ public sealed class MySqlSafeMigrationPropertyTests : IDisposable
     )
     {
         var sql = Identifier(rawSql, "sql");
+        var expression = SafeMigrationSql.ProviderFragment("foreign_provider", sql);
+        if (_renderer.GetUnsupportedFeature(expression) != "provider_fragment_mismatch")
+        {
+            return false;
+        }
 
         try
         {
-            _ = _renderer.Render(SafeMigrationSql.ProviderFragment("foreign_provider", sql));
+            _ = _renderer.Render(expression);
             return false;
         }
         catch (NotSupportedException)

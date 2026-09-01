@@ -288,6 +288,21 @@ wildcard that disables comparison.
 enums. The provider validates supported semantics and renders each token in
 its own context. Do not concatenate user data into SQL or type grammar.
 
+For MySQL/MariaDB, `Literal(value, storeType)` and `Cast(value, storeType)`
+accept provider store types only when they map exactly to the CAST grammar
+shared by both engines. Column aliases are normalized to canonical targets;
+unsupported or extended type clauses produce `structured_cast_type` before
+DDL. Typed nulls preserve the explicit store type on every provider.
+PostgreSQL accepts a structured cast target only when Npgsql's relational type
+mapping recognizes it. SafeMigrations then renders documented built-in aliases
+in their catalog-canonical form so catalog-normalized expressions remain
+stable. Unknown or appended type grammar receives the same fail-closed
+classification. The SQL-standard PostgreSQL aliases `float` and `float(p)` are
+bounded to precision 1 through 53 and normalized to `real` or
+`double precision`, including array forms.
+MariaDB rejects a non-nullable computed definition before DDL with
+`generated_column_nullability`; MySQL can preserve that physical facet.
+
 `Opaque` and `ProviderFragment` retain explicit SQL provenance, but neither
 proves catalog equivalence. They can produce an unsupported classification;
 they are not an escape hatch around strict comparison. See

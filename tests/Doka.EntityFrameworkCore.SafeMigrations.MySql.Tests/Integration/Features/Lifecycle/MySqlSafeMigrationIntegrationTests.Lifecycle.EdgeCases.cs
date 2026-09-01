@@ -49,8 +49,8 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureColumn(
             "missing_parent",
-            new ExpectedColumnDefinition("value", typeof(int), true, "int"),
-            SafeMigrationPolicy.ThrowIfDifferent);
+            new ExpectedColumnDefinition("value", typeof(int), false, "int"),
+            SafeMigrationPolicy.RepairIfSafe);
         builder.EnsureIndex(
             new ExpectedIndexDefinition(
                 "ix_missing_parent_value",
@@ -89,6 +89,62 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 connectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'missing_parent';"));
+    }
+
+    [Fact]
+    public async Task LegacyConvergence_CreatesMissingTableWithRequiredColumnsAndRemainsIdempotent()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await using var context = CreateContext(connectionString);
+        var definition = new ExpectedTableDefinition(
+            "missing_legacy_table",
+            [
+                new ExpectedColumnDefinition("id", typeof(int), false, "int"),
+                new ExpectedColumnDefinition(
+                    "required_value",
+                    typeof(string),
+                    false,
+                    "varchar(40)",
+                    maxLength: 40),
+            ]);
+
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.ConvergeTable(definition);
+        var runner = context.GetService<ISafeMigrationRunner>();
+
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("missing-legacy-table-preflight"));
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
+        Assert.Equal(SafeMigrationObservedState.Missing, preflight.Assessments[0].ObservedState);
+        Assert.Equal(SafeMigrationAction.Apply, preflight.Assessments[0].Action);
+        Assert.All(
+            preflight.Assessments.Skip(1),
+            static assessment =>
+            {
+                Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState);
+                Assert.Equal(SafeMigrationAction.NoOp, assessment.Action);
+            });
+
+        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations);
+
+        var postflight = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("missing-legacy-table-postflight"));
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
+        Assert.All(postflight.Assessments, static assessment => Assert.True(assessment.PostconditionSatisfied));
+        Assert.Equal(
+            2,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'missing_legacy_table' "
+                + "AND IS_NULLABLE = 'NO';"));
     }
 
     [Fact]
@@ -261,8 +317,8 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         {
             builder.EnsureColumn(
                 "chunked_analysis",
-                new ExpectedColumnDefinition($"value_{ordinal}", typeof(int), true, "int"),
-                SafeMigrationPolicy.ThrowIfDifferent);
+                new ExpectedColumnDefinition($"value_{ordinal}", typeof(int), false, "int"),
+                SafeMigrationPolicy.RepairIfSafe);
         }
 
         var report = await context
@@ -598,7 +654,9 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         try
         {
-            await Task.WhenAll(contexts.Select(context => context.Database.MigrateAsync(cancellationToken: CancellationToken.None)));
+            await Task.WhenAll(
+                contexts.Select(
+                    context => context.Database.MigrateAsync(cancellationToken: CancellationToken.None)));
         }
         finally
         {
