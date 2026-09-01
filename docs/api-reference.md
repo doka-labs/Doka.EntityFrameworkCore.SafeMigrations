@@ -18,9 +18,11 @@ source promotes that exact public contract without a public API or generated
 migration-source delta. The published 10.0.1 and 10.0.2 maintenance releases
 preserve that public API. Stable 10.1.0 source adds two scaffolder-facing
 index-prefix methods while qualifying Doka 10.3.0's typed migration metadata;
-all earlier signatures remain compatible. Strict scaffolding remains the
-default. A successful release run and exact-version public package readback
-remain the authority for a published API.
+all earlier signatures remain compatible. Prepared stable 10.1.1 preserves
+that complete public surface while correcting internal provider analysis and
+structured-expression rendering. Strict scaffolding remains the default. A
+successful release run and exact-version public package readback remain the
+authority for a published API.
 
 ## Packages and registration
 

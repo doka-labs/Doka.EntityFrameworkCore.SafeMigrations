@@ -35,11 +35,13 @@ a maintenance strategy. There is no scheduled second feature version.
 The published 10.0.1 maintenance release responded to Doka 10.1.2 and an
 observed publication-assurance gap. The 10.0.2 maintenance line responded to
 Doka 10.2.0's ownership-aware connection invariants and to a confirmed
-generated-migration namespace defect. Prepared stable 10.1.0 qualifies Doka
+generated-migration namespace defect. Published stable 10.1.0 qualifies Doka
 10.3.0's typed migration-operation metadata, exposes the two public methods
 required by generated prefix-aware index source, and repairs observed legacy
-convergence defects. This minor release follows changed dependency conditions
-and confirmed correctness requirements; it is not deferred initial scope.
+convergence defects. Prepared stable 10.1.1 closes verified missing-table and
+structured-expression defects without changing the public API. These releases
+follow changed dependency conditions and confirmed correctness requirements;
+they are not deferred initial scope.
 
 Requalify affected behavior before adopting a provider, EF Core, database,
 SDK, action, or tooling update. Preserve public API, report, migration, data

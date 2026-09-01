@@ -19,15 +19,15 @@ expect_failure() {
     fi
 }
 
-expect_success 10.1.0
+expect_success 10.1.1
 
-expect_failure v10.1.0
-expect_failure 10.1.0-RC.1
-expect_failure 10.1.0+build.1
-expect_failure 10.1.0-rc.01
-expect_failure 10.1.0--rc
-expect_failure 10.1.0-rc.1
-expect_failure 10.0.2
-expect_failure 10.1.1
+expect_failure v10.1.1
+expect_failure 10.1.1-RC.1
+expect_failure 10.1.1+build.1
+expect_failure 10.1.1-rc.01
+expect_failure 10.1.1--rc
+expect_failure 10.1.1-rc.1
+expect_failure 10.1.0
+expect_failure 10.1.2
 
 echo "Release version positive and negative cases passed."

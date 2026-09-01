@@ -489,7 +489,7 @@
       "doka.entityframeworkcore.safemigrations.postgresql": {
         "type": "Project",
         "dependencies": {
-          "Doka.EntityFrameworkCore.SafeMigrations": "[10.1.0-dev, )",
+          "Doka.EntityFrameworkCore.SafeMigrations": "[10.1.1-dev, )",
           "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.0.11, 10.1.0)",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, 11.0.0)"
         }
