@@ -14,6 +14,7 @@ the runner as follows; do not treat all codes below as interchangeable:
 | Assessment | Code source |
 | --- | --- |
 | Ordinary EF/provider operation | `provider_owned_not_analyzed` |
+| Superseded postflight safe operation | `postcondition_superseded` |
 | Blocked postflight | `postcondition_failed` |
 | Blocked preflight with `Unsupported` state | The analyzer's specific unsupported reason, or `classified_unsupported` |
 | Other blocked preflight | The rejecting planner decision code |
@@ -89,16 +90,29 @@ data/prerequisite result uses its planner rejection code.
 | `projected_missing` | Preflight projection observes absence after applying earlier accepted operations virtually. |
 | `projected_matching` | Preflight projection observes a match after earlier accepted operations virtually. |
 | `projected_different` | Preflight projection observes a conflict between ordered operations. |
-| `provider_owned_not_analyzed` | Ordinary EF/provider operation is present and is not classified as safe. A recognized deterministic table/column postcondition may be projected conditionally into a later safe prerequisite, but the provider operation itself remains unanalyzed. |
+| `projected_data_state_unknown` | A typed EF data operation preserved structural facts but invalidated a projected or live pre-batch row-safety proof. The public blocked assessment uses `prerequisite_missing`; do not execute the dependent operation without a separately provable post-DML state. |
+| `postcondition_superseded` | A later safe operation is the final writer for the same exact catalog resource. The earlier ordered assessment remains visible and has a satisfied effective postcondition; provider-owned operations can never produce this code. |
+| `provider_owned_not_analyzed` | Ordinary EF/provider operation is present and is not classified as safe. A recognized deterministic table/column postcondition may be projected conditionally into a later safe prerequisite. Typed insert/update/delete-data operations retain those structural facts but invalidate data-safety proofs; the provider operation itself remains unanalyzed. |
 
 When a report is `ReadyWithProviderOperations`, supply independent
 postconditions for every `provider_owned_not_analyzed` operation before
 deployment approval. A later `projected_missing` result proves only that its
 safe prerequisite follows if the preceding provider operation succeeds; it
 does not waive that independent evidence.
+Typed EF data operations preserve only structural prerequisites for a later
+non-unique index. A data-dependent unique index or additive constraint remains
+blocked even when the live analyzer observed absence before the ordered data
+operation. A later structural provider operation cannot clear that uncertainty.
 If an unrecognized provider operation or raw SQL separates the prerequisite
 from the safe operation, projection facts are discarded and the later operation
 uses the live analyzer result.
+
+An accepted exact-name index drop can project a following ordinary column
+BTREE ensure to `projected_missing`. It cannot override
+`projected_data_state_unknown`, a physical-key unsupported result,
+`data_blocked`, `prerequisite_missing`, or a differently named semantic index
+conflict. If replacement preflight blocks, do not execute the preceding
+ordinary drop independently; correct the target definition or live data first.
 
 ## Accepting planner decision codes
 
@@ -130,6 +144,12 @@ code, not a claim that the feature is absent from every version of that engine.
 | `opaque_expression_rename_projection` | Both | An earlier rename affected an opaque facet that cannot be safely rewritten. |
 | `column_type_mapping` | Both | The expected column has no supported relational type mapping. |
 | `index_prefix_length` | Both | Prefix-length keys are not supported by the selected provider/capability. |
+| `index_prefix_required_for_key_limit` | MySQL/MariaDB | A missing ordinary BTREE index exceeds the live InnoDB key limit, or a declared prefix is invalid for the key column. SafeMigrations does not invent a semantics-changing prefix. |
+| `index_key_length_unverifiable` | MySQL/MariaDB | A missing expression, non-BTREE, text/blob, unknown-type, or otherwise unbounded index shape has no provable physical key width. |
+| `foreign_key_semantic_identity_conflict` | Both | The expected foreign-key name is absent, but one or more differently named constraints already have the same ordered columns, principal identity, and referential actions. |
+| `unique_constraint_semantic_identity_conflict` | Both | The expected unique-constraint name is absent, but a differently named active constraint already enforces the same ordered columns and null semantics. |
+| `check_constraint_semantic_identity_conflict` | Both | The expected check-constraint name is absent, but a differently named active constraint already enforces the same expression. |
+| `primary_key_identity_conflict` | PostgreSQL | The expected primary-key name is absent while the table already owns a differently named primary key. A second primary key cannot be added. |
 | `schema_operations` | MySQL/MariaDB | PostgreSQL-style schema ensure/drop is not a supported namespace operation. |
 | `schema_qualified_object` | MySQL/MariaDB | An object expectation supplies a PostgreSQL-style schema namespace. |
 | `schema_qualified_collation` | MySQL/MariaDB | A column collation supplies a schema-qualified identity. |
@@ -158,6 +178,166 @@ and [PostgreSQL](../../src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/Sq
 For an unknown reason, stop automated rollout, record the actual package/engine
 versions, and investigate a documentation gap, version mismatch, or defect.
 Do not assume that an undocumented string alone proves a new runtime contract.
+
+## Diagnose index and constraint identity conflicts
+
+The assessment code remains low-cardinality and therefore never embeds live
+object names, widths, or SQL fragments. The protected assessment still carries
+the expected table/index/constraint identity. Retrieve live candidates only in
+the controlled deployment session and retain the result with the deployment
+record; do not copy it into metric labels.
+
+For `index_prefix_required_for_key_limit` or
+`index_key_length_unverifiable`, inspect the live MySQL/MariaDB table and key
+columns:
+
+```sql
+SELECT
+    t.ENGINE,
+    t.ROW_FORMAT,
+    @@innodb_page_size AS innodb_page_size,
+    c.COLUMN_NAME,
+    c.DATA_TYPE,
+    c.CHARACTER_MAXIMUM_LENGTH,
+    c.CHARACTER_OCTET_LENGTH,
+    c.CHARACTER_SET_NAME,
+    c.NUMERIC_PRECISION,
+    c.NUMERIC_SCALE,
+    c.DATETIME_PRECISION
+FROM INFORMATION_SCHEMA.TABLES AS t
+JOIN INFORMATION_SCHEMA.COLUMNS AS c
+    ON c.TABLE_SCHEMA = t.TABLE_SCHEMA
+    AND c.TABLE_NAME = t.TABLE_NAME
+WHERE t.TABLE_SCHEMA = DATABASE()
+    AND t.TABLE_NAME = '<expected_table>'
+    AND c.COLUMN_NAME IN ('<key_column_1>', '<key_column_2>')
+ORDER BY c.ORDINAL_POSITION;
+```
+
+Compare those values with the generated `prefixLengths` argument and the
+reviewed EF model. A zero entry means the complete key. Do not copy a prefix
+from another installation: character set, row format, page size, and intended
+uniqueness semantics are part of the decision.
+
+If an expected index is reported `Different` while an equivalent differently
+named index exists, inspect whether the candidate is an independent index or
+the engine-created support for a local foreign key. SafeMigrations correlates
+foreign-key columns through `KEY_COLUMN_USAGE`; only that bounded support role
+is exempt from semantic-identity rejection. Never rename or drop a candidate
+solely because it has the same columns.
+
+For `foreign_key_semantic_identity_conflict` on MySQL/MariaDB, list each
+physical candidate independently:
+
+```sql
+SELECT
+    rc.CONSTRAINT_NAME,
+    rc.UPDATE_RULE,
+    rc.DELETE_RULE,
+    kcu.ORDINAL_POSITION,
+    kcu.COLUMN_NAME,
+    kcu.REFERENCED_TABLE_SCHEMA,
+    kcu.REFERENCED_TABLE_NAME,
+    kcu.REFERENCED_COLUMN_NAME
+FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS AS rc
+JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS kcu
+    ON kcu.CONSTRAINT_SCHEMA = rc.CONSTRAINT_SCHEMA
+    AND kcu.TABLE_NAME = rc.TABLE_NAME
+    AND kcu.CONSTRAINT_NAME = rc.CONSTRAINT_NAME
+WHERE rc.CONSTRAINT_SCHEMA = DATABASE()
+    AND rc.TABLE_NAME = '<expected_table>'
+ORDER BY rc.CONSTRAINT_NAME, kcu.ORDINAL_POSITION;
+```
+
+For unique/check/index identity or facet drift, inspect the corresponding
+catalog without copying live expressions into logs. MySQL exposes check
+enforcement and index visibility; MariaDB exposes the table identity of a check
+and whether an index is ignored:
+
+```sql
+-- MySQL
+SELECT tc.TABLE_NAME, tc.CONSTRAINT_NAME, tc.CONSTRAINT_TYPE, tc.ENFORCED
+FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS AS tc
+WHERE tc.CONSTRAINT_SCHEMA = DATABASE()
+    AND tc.TABLE_NAME = '<expected_table>';
+
+SELECT s.INDEX_NAME, s.SEQ_IN_INDEX, s.COLUMN_NAME, s.NON_UNIQUE,
+    s.INDEX_TYPE, s.SUB_PART, s.COLLATION, s.IS_VISIBLE
+FROM INFORMATION_SCHEMA.STATISTICS AS s
+WHERE s.TABLE_SCHEMA = DATABASE()
+    AND s.TABLE_NAME = '<expected_table>'
+ORDER BY s.INDEX_NAME, s.SEQ_IN_INDEX;
+```
+
+```sql
+-- MariaDB
+SELECT cc.TABLE_NAME, cc.CONSTRAINT_NAME, cc.CHECK_CLAUSE
+FROM INFORMATION_SCHEMA.CHECK_CONSTRAINTS AS cc
+WHERE cc.CONSTRAINT_SCHEMA = DATABASE()
+    AND cc.TABLE_NAME = '<expected_table>';
+
+SELECT s.INDEX_NAME, s.SEQ_IN_INDEX, s.COLUMN_NAME, s.NON_UNIQUE,
+    s.INDEX_TYPE, s.SUB_PART, s.COLLATION, s.IGNORED
+FROM INFORMATION_SCHEMA.STATISTICS AS s
+WHERE s.TABLE_SCHEMA = DATABASE()
+    AND s.TABLE_NAME = '<expected_table>'
+ORDER BY s.INDEX_NAME, s.SEQ_IN_INDEX;
+```
+
+For PostgreSQL constraint identity or facet conflicts, query the catalog in the
+expected schema:
+
+```sql
+SELECT
+    c.conname,
+    c.contype,
+    c.convalidated,
+    c.condeferrable,
+    c.condeferred,
+    c.conislocal,
+    c.coninhcount,
+    c.conparentid,
+    pg_get_constraintdef(c.oid, true) AS definition
+FROM pg_catalog.pg_constraint AS c
+JOIN pg_catalog.pg_class AS t ON t.oid = c.conrelid
+JOIN pg_catalog.pg_namespace AS n ON n.oid = t.relnamespace
+WHERE n.nspname = '<expected_schema>'
+    AND t.relname = '<expected_table>'
+    AND c.contype IN ('p', 'u', 'c', 'f')
+ORDER BY c.contype, c.conname;
+```
+
+For PostgreSQL index drift, retain health and ownership evidence together:
+
+```sql
+SELECT
+    idx.relname,
+    idx.relkind,
+    i.indisvalid,
+    i.indisready,
+    i.indislive,
+    parent.oid IS NOT NULL AS attached_to_parent,
+    owner.conname AS owning_constraint,
+    pg_get_indexdef(i.indexrelid) AS definition
+FROM pg_catalog.pg_index AS i
+JOIN pg_catalog.pg_class AS idx ON idx.oid = i.indexrelid
+JOIN pg_catalog.pg_class AS tbl ON tbl.oid = i.indrelid
+JOIN pg_catalog.pg_namespace AS n ON n.oid = idx.relnamespace
+LEFT JOIN pg_catalog.pg_inherits AS parent ON parent.inhrelid = i.indexrelid
+LEFT JOIN pg_catalog.pg_constraint AS owner
+    ON owner.conindid = i.indexrelid
+    AND owner.conrelid = i.indrelid
+    AND owner.contype IN ('p', 'u', 'x')
+WHERE n.nspname = '<expected_schema>'
+    AND tbl.relname = '<expected_table>'
+ORDER BY idx.relname;
+```
+
+Resolve ownership explicitly. If the legacy identity is canonical, rename it
+in a reviewed migration and rerun preflight. If the expected name is canonical,
+remove or replace the legacy constraint only after its dependencies and data
+integrity have been independently verified. Never bypass the conflict by
+allowing the provider to create a second semantic copy.
 
 ## Unexpected-object inventory codes
 

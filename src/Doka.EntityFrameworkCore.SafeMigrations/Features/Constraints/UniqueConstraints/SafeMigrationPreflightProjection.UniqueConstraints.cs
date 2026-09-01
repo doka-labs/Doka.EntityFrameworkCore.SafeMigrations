@@ -5,13 +5,24 @@ internal sealed partial class SafeMigrationPreflightProjection
     private SafeMigrationProviderAnalysis Project(
         EnsureUniqueConstraintIntent intent,
         SafeMigrationProviderAnalysis liveAnalysis
-    ) => TryGet(intent.Definition.Table, intent.Definition.Schema, out var table)
-        ? AnalyzeDefinition(
+    )
+    {
+        if (!TryGet(intent.Definition.Table, intent.Definition.Schema, out var table))
+        {
+            return InvalidateDataDependentMissing(
+                intent.Definition.Table,
+                intent.Definition.Schema,
+                liveAnalysis);
+        }
+
+        var analysis = AnalyzeDefinition(
             table.UniqueConstraints,
             intent.Definition.Name,
             intent.Definition,
-            SafeMigrationDefinitionEquivalence.UniqueConstraint)
-        : liveAnalysis;
+            SafeMigrationDefinitionEquivalence.UniqueConstraint);
+
+        return InvalidateDataDependentMissing(table.Table, table.Schema, analysis);
+    }
 
     private SafeMigrationProviderAnalysis Project(
         DropUniqueConstraintIntent intent,

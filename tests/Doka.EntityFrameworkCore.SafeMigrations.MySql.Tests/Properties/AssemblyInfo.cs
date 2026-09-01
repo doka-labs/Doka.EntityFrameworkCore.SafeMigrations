@@ -1,3 +1,3 @@
 [assembly: Microsoft.EntityFrameworkCore.Design.DesignTimeServicesReference(
-    "Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDesignTimeServices, Doka.EntityFrameworkCore.SafeMigrations",
+    "Doka.EntityFrameworkCore.SafeMigrations.MySql.MySqlSafeMigrationDesignTimeServices, Doka.EntityFrameworkCore.SafeMigrations.MySql",
     "Doka.EntityFrameworkCore.MySql")]

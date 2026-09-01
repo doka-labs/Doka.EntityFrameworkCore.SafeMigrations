@@ -75,30 +75,43 @@ a valid generated child policy because it would hide definition drift.
 
 Automatic column repair is limited to nullability, default, and comment on an
 ordinary column whose invariant catalog shape already matches. Store type,
-collation, generated/identity state, row-version state, and provider annotations
-are invariants. Existing nulls block nullability tightening. MySQL and MariaDB
-use Doka's complete-definition `MODIFY COLUMN` rendering; PostgreSQL uses
-Npgsql's facet-specific `ALTER TABLE` rendering. Apply and repair remain
-separate guarded branches with a shared target postcondition.
+collation, generated/identity state, and row-version state are invariants.
+Provider-neutral Core does not repair annotation-bearing definitions; the
+MySQL/MariaDB adapter may authorize one only when Doka's typed public contract
+recognizes every annotation and proves it consistent with the column shape.
+Existing nulls block nullability tightening. MySQL and MariaDB use Doka's
+complete-definition `MODIFY COLUMN` rendering; PostgreSQL uses Npgsql's
+facet-specific `ALTER TABLE` rendering. Apply and repair remain separate
+guarded branches with a shared target postcondition.
 
 SafeMigrations registers `IDesignTimeServices` through EF's
 `DesignTimeServicesReferenceAttribute`. Provider-package `buildTransitive`
 assets add that attribute when the startup project directly references
 `Microsoft.EntityFrameworkCore.Design` or `Microsoft.EntityFrameworkCore.Tools`;
 the latter supplies Design transitively. Runtime-only projects with neither
-package receive no design-time attribute. The design service replaces the
-public C# migration generator services after provider design services are
-composed. It asks EF Core to render each supported operation and replaces only
-one validated leading method token. Any missing, repeated, or non-leading token
-stops scaffolding.
+package receive no design-time attribute. EF Core invokes referenced services
+before provider and default design-time services, so SafeMigrations registers a
+deferred `IMigrationsCodeGeneratorSelector`. At selection time it preserves EF
+Core's legacy precedence and case-insensitive last-language match, then decorates
+the selected provider `IMigrationsCodeGenerator`. Migration metadata and
+snapshots pass through unchanged, preserving provider-owned model namespace
+discovery and rendering. SafeMigrations asks EF Core to render each supported
+migration operation and replaces only one validated leading method token. Any
+missing, repeated, or non-leading token stops scaffolding. Disabled
+SafeMigrations scaffolding delegates provider languages unchanged. Enabled
+scaffolding accepts C# only and rejects an unsupported language before applying
+the C# decorator. A genuinely missing generator always fails at selection.
 
 SafeMigrations also converts the validated outer migration namespace to the
 repository's file-scoped form and rewrites only known one-dimensional array
 arguments under its table/index boundary to collection expressions. This keeps
 generated migrations analyzer-compatible without changing provider values or
-disabling analysis.
+disabling analysis. Every insertion preserves the LF or CRLF convention found
+in provider-generated source; mixed line endings and standalone carriage
+returns fail closed.
 
-Automatic rewriting covers `CreateTable`, `CreateIndex`, and `DropTable`.
+Automatic rewriting covers `CreateTable`, `CreateIndex`, `DropIndex`, and
+`DropTable`.
 Add/alter/drop column, constraint, rename, and schema operations remain ordinary
 EF operations unless the author chooses the corresponding explicit
 SafeMigrations API. This keeps policy selection explicit where ownership,
@@ -114,6 +127,14 @@ PostgreSQL compares `None`, identity-always, and identity-by-default with
 `pg_attribute.attidentity`. Unknown value types fail capture. Undefined,
 contradictory, or unmodeled operation annotations classify unsupported before
 target DDL.
+
+MySQL/MariaDB design services register one provider-owned create-index
+projector. It consumes Doka's typed prefix snapshot, copies the EF operation
+without the consumed provider annotation, and emits one explicit non-negative
+prefix entry per key through a prefix-aware `*FromModel` method. Zero means the
+complete key. Multiple projectors, unknown annotations, malformed counts, or
+negative values stop scaffolding. PostgreSQL registers no projector and keeps
+the provider-neutral generated call.
 
 Scaffolding mode and legacy policy are intentionally absent from runtime
 service-provider hash and equality because they change no runtime service
@@ -227,13 +248,21 @@ snapshots already required for catalog comparison and hashing.
   catalog contracts while retaining fail-closed rejection for contradictory or
   unknown provider annotations.
 - 2026-08-31: Required every generated migration to contain an explicit `Doka.EntityFrameworkCore.SafeMigrations` using directive. The generator now fails closed on a missing EF namespace anchor or duplicate SafeMigrations directive, and package-only plus provider tooling gates verify the generated import without a masking global using.
+- 2026-08-31: Changed the migrations-code generator integration from replacement to selection-time decoration. The deferred selector follows EF Core's referenced-before-provider composition order while provider metadata and snapshot generation remain byte-for-byte provider-owned, including provider-specific model namespace discovery.
+- 2026-09-01: Added typed MySQL/MariaDB index-prefix projection through Doka 10.3.0. Generated safe calls now retain full-key and prefixed-key intent without leaking the consumed provider annotation onto the outer operation.
+- 2026-09-01: Preserved disabled non-C# provider generation and made every
+  generated-source rewrite retain one validated LF or CRLF convention.
 
 ### Implementation References
 
 - [Scaffolding mode and options](../../src/Doka.EntityFrameworkCore.SafeMigrations/Scaffolding/SafeMigrationScaffoldingMode.cs)
 - [Design-time service registration](../../src/Doka.EntityFrameworkCore.SafeMigrations/Scaffolding/SafeMigrationDesignTimeServices.cs)
 - [C# operation generator composition](../../src/Doka.EntityFrameworkCore.SafeMigrations/Scaffolding/SafeMigrationCSharpMigrationOperationGenerator.cs)
+- [Deferred provider-generator selector](../../src/Doka.EntityFrameworkCore.SafeMigrations/Scaffolding/SafeMigrationMigrationsCodeGeneratorSelector.cs)
+- [Provider code-generator decoration](../../src/Doka.EntityFrameworkCore.SafeMigrations/Scaffolding/SafeMigrationCSharpMigrationsGenerator.cs)
 - [Typed table capture](../../src/Doka.EntityFrameworkCore.SafeMigrations/Features/Tables/SafeMigrationBuilderExtensions.Tables.cs)
+- [Provider index projector boundary](../../src/Doka.EntityFrameworkCore.SafeMigrations/Scaffolding/ISafeMigrationCreateIndexScaffoldingProjector.cs)
+- [MySQL/MariaDB prefix projector](../../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/Scaffolding/MySqlSafeMigrationCreateIndexScaffoldingProjector.cs)
 - [Scaffolding unit tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Unit/Scaffolding/SafeMigrationScaffoldingTests.cs)
 - [MySQL/MariaDB identity integration](../../tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Integration/Features/Columns/MySqlSafeMigrationIntegrationTests.Columns.Scaffolding.cs)
 - [PostgreSQL identity integration](../../tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Integration/Features/Columns/PostgreSqlSafeMigrationIntegrationTests.Columns.Scaffolding.cs)
@@ -246,6 +275,8 @@ snapshots already required for catalog comparison and hashing.
 - [Installing EF Core tools](https://learn.microsoft.com/en-us/ef/core/get-started/overview/install) (primary source; retrieved 2026-08-27)
 - [EF Core design-time DbContext creation](https://learn.microsoft.com/en-us/ef/core/cli/dbcontext-creation) (primary source; retrieved 2026-08-27)
 - [EF Core IMigrationsCodeGenerator API](https://learn.microsoft.com/en-us/dotnet/api/microsoft.entityframeworkcore.migrations.design.imigrationscodegenerator?view=efcore-10.0) (primary source; retrieved 2026-08-27)
+- [EF Core 10.0.11 DesignTimeServicesBuilder ordering](https://github.com/dotnet/efcore/blob/v10.0.11/src/EFCore.Design/Design/Internal/DesignTimeServicesBuilder.cs) (primary source; retrieved 2026-08-31)
+- [EF Core 10.0.11 IMigrationsCodeGeneratorSelector API](https://github.com/dotnet/efcore/blob/v10.0.11/src/EFCore.Design/Migrations/Design/IMigrationsCodeGeneratorSelector.cs) (primary source; retrieved 2026-08-31)
 - [EF Core DesignTimeServicesReferenceAttribute API](https://learn.microsoft.com/en-us/dotnet/api/microsoft.entityframeworkcore.design.designtimeservicesreferenceattribute?view=efcore-10.0) (primary source; retrieved 2026-08-27)
 - [NuGet MSBuild props and targets](https://learn.microsoft.com/en-us/nuget/concepts/msbuild-props-and-targets) (primary source; retrieved 2026-08-27)
 - [NuGet package build assets](https://learn.microsoft.com/en-us/nuget/create-packages/creating-a-package) (primary source; retrieved 2026-08-27)

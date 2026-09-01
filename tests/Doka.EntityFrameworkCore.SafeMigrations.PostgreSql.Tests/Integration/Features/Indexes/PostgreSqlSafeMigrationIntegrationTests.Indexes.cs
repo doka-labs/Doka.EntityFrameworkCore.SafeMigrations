@@ -97,7 +97,11 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task OrderedIndexMatrix_ConvergesAndPreservesExplicitNullPlacement()
     {
         var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE ordered_indexes (value integer NULL);");
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE ordered_indexes (value_provider_default integer NULL, "
+            + "value_asc_first integer NULL, value_asc_last integer NULL, "
+            + "value_desc_first integer NULL, value_desc_last integer NULL);");
         await using var context = CreateContext(connectionString);
         var orderings = new[]
         {
@@ -121,7 +125,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                     "ordered_indexes",
                     [
                         new ExpectedIndexKeyDefinition(
-                            column: "value",
+                            column: $"value_{name}",
                             sortOrder: sort,
                             nullOrder: nulls)
                     ],

@@ -571,6 +571,399 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     }
 
     [Fact]
+    public async Task PreflightPreservesSafeStructureAcrossProviderSeedData()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        _ = builder.CreateTableIfNotExists(
+            "seed_projection",
+            table => new
+            {
+                Id = table.Column<int>(type: "int", nullable: false),
+                GroupId = table.Column<int>(type: "int", nullable: false),
+            });
+        _ = builder.InsertData(
+            table: "seed_projection",
+            columns: ["Id", "GroupId"],
+            columnTypes: ["int", "int"],
+            values: new object[,] { { 1, 7, }, });
+        _ = builder.CreateIndexIfNotExistsFromModel(
+            "ix_seed_projection_group_id",
+            "seed_projection",
+            "GroupId");
+
+        var runner = context.GetService<ISafeMigrationRunner>();
+        var options = new SafeMigrationRunOptions("provider-seed-projection");
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            options,
+            CancellationToken.None);
+
+        Assert.Equal(SafeMigrationReportStatus.ReadyWithProviderOperations, preflight.Status);
+        Assert.Equal(3, preflight.Assessments.Count);
+        Assert.Equal("provider_owned_not_analyzed", preflight.Assessments[1].Code);
+        Assert.Equal(SafeMigrationObservedState.Missing, preflight.Assessments[2].ObservedState);
+        Assert.Equal(SafeMigrationAction.Apply, preflight.Assessments[2].Action);
+        Assert.Equal("projected_missing", preflight.Assessments[2].Code);
+
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+
+        var replay = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            options,
+            CancellationToken.None);
+
+        Assert.Equal(SafeMigrationReportStatus.ReadyWithProviderOperations, replay.Status);
+        Assert.Equal(SafeMigrationAction.NoOp, replay.Assessments[0].Action);
+        Assert.Equal(SafeMigrationAction.NoOp, replay.Assessments[2].Action);
+        Assert.Equal(1, await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `seed_projection`;"));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'seed_projection' "
+                + "AND INDEX_NAME = 'ix_seed_projection_group_id';"));
+    }
+
+    [Theory]
+    [InlineData(
+        SafeMigrationScaffoldingMode.Strict,
+        DokaMySqlGuidFormat.Binary16)]
+    [InlineData(
+        SafeMigrationScaffoldingMode.Strict,
+        DokaMySqlGuidFormat.Char36)]
+    [InlineData(
+        SafeMigrationScaffoldingMode.LegacyConvergence,
+        DokaMySqlGuidFormat.Binary16)]
+    [InlineData(
+        SafeMigrationScaffoldingMode.LegacyConvergence,
+        DokaMySqlGuidFormat.Char36)]
+    public async Task ProviderSeedJourneyPreservesStructureGuidValuesAndCascade(
+        SafeMigrationScaffoldingMode mode,
+        DokaMySqlGuidFormat guidFormat
+    )
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        var storeType = GuidStoreType(guidFormat);
+        var maxLength = guidFormat == DokaMySqlGuidFormat.Binary16 ? 16 : 36;
+        var principalId = Guid.Parse("818f242c-e003-402c-bc14-97b7942d48fa");
+        var publicId = Guid.Parse("e858586f-4854-42e6-ab8d-435ad58a8a4c");
+        var optionalGuid = Guid.Parse("30892e1d-6d6f-48eb-926e-1ea3d23ad4eb");
+        // InsertDataOperation contains provider values after EF's model-differ
+        // conversion. Char36 is therefore a string here while Binary16 remains
+        // a Guid; snapshots and migration designers preserve model-side Guid
+        // literals and are qualified by the Doka provider repository.
+        var principalSeedValue = ProviderGuidValue(guidFormat, principalId);
+        var publicSeedValue = ProviderGuidValue(guidFormat, publicId);
+        var optionalSeedValue = ProviderGuidValue(guidFormat, optionalGuid);
+
+        _ = AddScaffoldedTable(
+            builder,
+            mode,
+            name: "seed_journey_principals",
+            columns: table => new
+            {
+                id = table
+                    .Column<Guid>(
+                        type: storeType,
+                        maxLength: maxLength,
+                        fixedLength: true,
+                        nullable: false)
+                    .Annotation("Doka:MySql:GuidFormat", guidFormat),
+            },
+            constraints: table => table.PrimaryKey("pk_seed_journey_principals", value => value.id));
+
+        _ = AddScaffoldedTable(
+            builder,
+            mode,
+            name: "seed_journey_scalars",
+            columns: table => new
+            {
+                id = table.Column<int>(type: "int", nullable: false),
+                public_id = table
+                    .Column<Guid>(
+                        type: storeType,
+                        maxLength: maxLength,
+                        fixedLength: true,
+                        nullable: false)
+                    .Annotation("Doka:MySql:GuidFormat", guidFormat),
+                optional_guid = table
+                    .Column<Guid>(
+                        type: storeType,
+                        maxLength: maxLength,
+                        fixedLength: true,
+                        nullable: true)
+                    .Annotation("Doka:MySql:GuidFormat", guidFormat),
+            },
+            constraints: table => table.PrimaryKey("pk_seed_journey_scalars", value => value.id));
+
+        _ = AddScaffoldedTable(
+            builder,
+            mode,
+            name: "seed_journey_dependents",
+            columns: table => new
+            {
+                id = table.Column<int>(type: "int", nullable: false),
+                principal_id = table
+                    .Column<Guid>(
+                        type: storeType,
+                        maxLength: maxLength,
+                        fixedLength: true,
+                        nullable: false)
+                    .Annotation("Doka:MySql:GuidFormat", guidFormat),
+            },
+            constraints: table =>
+            {
+                table.PrimaryKey("pk_seed_journey_dependents", value => value.id);
+                table.ForeignKey(
+                    "fk_seed_journey_dependents_principals",
+                    value => value.principal_id,
+                    "seed_journey_principals",
+                    "id",
+                    onDelete: ReferentialAction.Cascade);
+            });
+
+        _ = builder.InsertData(
+            table: "seed_journey_principals",
+            column: "id",
+            columnType: storeType,
+            value: principalSeedValue);
+        _ = builder.InsertData(
+            table: "seed_journey_scalars",
+            columns: ["id", "public_id", "optional_guid"],
+            columnTypes: ["int", storeType, storeType],
+            values: new object[,] { { 1, publicSeedValue, optionalSeedValue, }, });
+        _ = builder.InsertData(
+            table: "seed_journey_dependents",
+            columns: ["id", "principal_id"],
+            columnTypes: ["int", storeType],
+            values: new object[,] { { 1, principalSeedValue, }, });
+        _ = builder.CreateIndexIfNotExistsFromModel(
+            "ix_seed_journey_dependents_principal_id",
+            "seed_journey_dependents",
+            "principal_id");
+
+        var runner = context.GetService<ISafeMigrationRunner>();
+        var options = new SafeMigrationRunOptions($"provider-seed-journey-{mode}-{guidFormat}");
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            options,
+            CancellationToken.None);
+        var providerAssessments = preflight.Assessments
+            .Where(static assessment => !assessment.IsSafeOperation)
+            .ToArray();
+        var indexAssessment = preflight.Assessments.Single(assessment =>
+            assessment.OperationKind == SafeMigrationOperationKind.EnsureIndex
+            && assessment.ObjectName == "ix_seed_journey_dependents_principal_id");
+
+        Assert.Equal(SafeMigrationReportStatus.ReadyWithProviderOperations, preflight.Status);
+        Assert.Equal(3, providerAssessments.Length);
+        Assert.All(
+            providerAssessments,
+            static assessment => Assert.Equal("provider_owned_not_analyzed", assessment.Code));
+        Assert.Equal(
+            providerAssessments[0].Ordinal + 1,
+            providerAssessments[1].Ordinal);
+        Assert.Equal(
+            providerAssessments[1].Ordinal + 1,
+            providerAssessments[2].Ordinal);
+        Assert.Equal(SafeMigrationObservedState.Missing, indexAssessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.Apply, indexAssessment.Action);
+
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+
+        var storedPrincipalId = guidFormat == DokaMySqlGuidFormat.Binary16
+            ? await ScalarStringAsync(
+                connectionString,
+                "SELECT LOWER(HEX(`id`)) FROM `seed_journey_principals`;")
+            : await ScalarStringAsync(
+                connectionString,
+                "SELECT LOWER(`id`) FROM `seed_journey_principals`;");
+        var storedPublicId = guidFormat == DokaMySqlGuidFormat.Binary16
+            ? await ScalarStringAsync(
+                connectionString,
+                "SELECT LOWER(HEX(`public_id`)) FROM `seed_journey_scalars`;")
+            : await ScalarStringAsync(
+                connectionString,
+                "SELECT LOWER(`public_id`) FROM `seed_journey_scalars`;");
+        var storedOptionalGuid = guidFormat == DokaMySqlGuidFormat.Binary16
+            ? await ScalarStringAsync(
+                connectionString,
+                "SELECT LOWER(HEX(`optional_guid`)) FROM `seed_journey_scalars`;")
+            : await ScalarStringAsync(
+                connectionString,
+                "SELECT LOWER(`optional_guid`) FROM `seed_journey_scalars`;");
+        var expectedFormat = guidFormat == DokaMySqlGuidFormat.Binary16 ? "N" : "D";
+
+        Assert.Equal(principalId.ToString(expectedFormat), storedPrincipalId);
+        Assert.Equal(publicId.ToString(expectedFormat), storedPublicId);
+        Assert.Equal(optionalGuid.ToString(expectedFormat), storedOptionalGuid);
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM `seed_journey_dependents` AS `dependent` "
+                + "INNER JOIN `seed_journey_principals` AS `principal` "
+                + "ON `dependent`.`principal_id` = `principal`.`id`;"));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'seed_journey_dependents' "
+                + "AND INDEX_NAME = 'ix_seed_journey_dependents_principal_id';"));
+
+        await ExecuteSqlAsync(connectionString, "DELETE FROM `seed_journey_principals`;");
+
+        Assert.Equal(0, await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `seed_journey_dependents`;"));
+        Assert.Equal(1, await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `seed_journey_scalars`;"));
+    }
+
+    [Fact]
+    public async Task PreflightDoesNotInferUniqueSafetyAcrossProviderSeedData()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        _ = builder.CreateTableIfNotExists(
+            "seed_unique_projection",
+            table => new
+            {
+                Id = table.Column<int>(type: "int", nullable: false),
+                GroupId = table.Column<int>(type: "int", nullable: false),
+            });
+        _ = builder.InsertData(
+            table: "seed_unique_projection",
+            columns: ["Id", "GroupId"],
+            columnTypes: ["int", "int"],
+            values: new object[,]
+            {
+                { 1, 7, },
+                { 2, 7, },
+            });
+        _ = builder.CreateIndexIfNotExistsFromModel(
+            "ux_seed_unique_projection_group_id",
+            "seed_unique_projection",
+            "GroupId",
+            unique: true);
+
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("provider-seed-unique-projection"),
+                CancellationToken.None);
+
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, report.Assessments[2].ObservedState);
+        Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, report.Assessments[2].Action);
+        Assert.Equal("prerequisite_missing", report.Assessments[2].Code);
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'seed_unique_projection';"));
+    }
+
+    [Fact]
+    public async Task PreflightPreservesLiveNonUniqueIndexAcrossProviderSeedData()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `existing_seed_projection` (`Id` int NOT NULL, `GroupId` int NOT NULL);");
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        _ = builder.InsertData(
+            table: "existing_seed_projection",
+            columns: ["Id", "GroupId"],
+            columnTypes: ["int", "int"],
+            values: new object[,] { { 1, 7, }, });
+        _ = builder.CreateIndexIfNotExistsFromModel(
+            "ix_existing_seed_projection_group_id",
+            "existing_seed_projection",
+            "GroupId");
+
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("provider-existing-seed-projection"),
+                CancellationToken.None);
+
+        Assert.Equal(SafeMigrationReportStatus.ReadyWithProviderOperations, report.Status);
+        Assert.Equal(SafeMigrationObservedState.Missing, report.Assessments[1].ObservedState);
+        Assert.Equal(SafeMigrationAction.Apply, report.Assessments[1].Action);
+
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+
+        Assert.Equal(1, await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `existing_seed_projection`;"));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'existing_seed_projection' "
+                + "AND INDEX_NAME = 'ix_existing_seed_projection_group_id';"));
+    }
+
+    [Fact]
+    public async Task PreflightInvalidatesLiveUniqueIndexSafetyAcrossProviderSeedData()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `existing_seed_unique_projection` (`Id` int NOT NULL, `GroupId` int NOT NULL);");
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        _ = builder.InsertData(
+            table: "existing_seed_unique_projection",
+            columns: ["Id", "GroupId"],
+            columnTypes: ["int", "int"],
+            values: new object[,]
+            {
+                { 1, 7, },
+                { 2, 7, },
+            });
+        _ = builder.CreateIndexIfNotExistsFromModel(
+            "ux_existing_seed_unique_projection_group_id",
+            "existing_seed_unique_projection",
+            "GroupId",
+            unique: true);
+
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("provider-existing-seed-unique-projection"),
+                CancellationToken.None);
+
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, report.Assessments[1].ObservedState);
+        Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, report.Assessments[1].Action);
+        Assert.Equal("prerequisite_missing", report.Assessments[1].Code);
+        Assert.Equal(0, await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `existing_seed_unique_projection`;"));
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'existing_seed_unique_projection' "
+                + "AND INDEX_NAME = 'ux_existing_seed_unique_projection_group_id';"));
+    }
+
+    [Fact]
     public async Task Preflight_RejectsWrongCanonicalModelFingerprintBeforeCatalogAccess()
     {
         var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
@@ -905,4 +1298,14 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'least_privilege_target' "
                 + "AND COLUMN_NAME = 'guarded_value';"));
     }
+
+    private static object ProviderGuidValue(
+        DokaMySqlGuidFormat format,
+        Guid value
+    ) => format switch
+    {
+        DokaMySqlGuidFormat.Binary16 => value,
+        DokaMySqlGuidFormat.Char36 => value.ToString("D"),
+        _ => throw new ArgumentOutOfRangeException(nameof(format), format, "Unsupported GUID format."),
+    };
 }

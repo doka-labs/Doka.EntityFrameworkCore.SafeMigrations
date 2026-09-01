@@ -158,7 +158,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             && SafeMigrationColumnRepairHelper.CanSafelyAlterColumn(value.OldDefinition, value.Definition)
             && value.OldDefinition.IsNullable
             && !value.Definition.IsNullable,
-        EnsureIndexIntent value => value.Definition.Unique,
+        // Index classification now reads physical key widths for every index,
+        // not only row data for unique indexes. Defer both probes until the
+        // prerequisite guard has proved that every referenced column exists.
+        EnsureIndexIntent => true,
         EnsurePrimaryKeyIntent => true,
         EnsureUniqueConstraintIntent => true,
         EnsureCheckConstraintIntent => true,
@@ -278,7 +281,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
     private static MySqlSafeMigrationRuntimePlan Unsupported(
         string code
-    ) => new("'unsupported'", "FALSE", SafeMigrationRepairCapability.None, "FALSE", code);
+    ) => new("'unsupported'", "FALSE", SafeMigrationRepairCapability.None, "FALSE", code)
+    {
+        IsStaticallyUnsupported = true,
+    };
 
     private string Literal(
         string value

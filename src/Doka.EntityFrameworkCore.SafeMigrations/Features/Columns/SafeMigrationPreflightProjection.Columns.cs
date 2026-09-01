@@ -5,18 +5,50 @@ internal sealed partial class SafeMigrationPreflightProjection
     private SafeMigrationProviderAnalysis Project(
         EnsureColumnIntent intent,
         SafeMigrationProviderAnalysis liveAnalysis
-    ) => TryGet(intent.Table, intent.Schema, out var table)
-        ? AnalyzeDefinition(
+    )
+    {
+        if (!TryGet(intent.Table, intent.Schema, out var table))
+        {
+            return SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(intent.Definition)
+                ? liveAnalysis
+                : InvalidateDataDependentMissing(intent.Table, intent.Schema, liveAnalysis);
+        }
+
+        var analysis = AnalyzeDefinition(
             table.Columns,
             intent.Definition.Name,
             intent.Definition,
-            SafeMigrationDefinitionEquivalence.Column)
-        : liveAnalysis;
+            SafeMigrationDefinitionEquivalence.Column);
+
+        return SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(intent.Definition)
+            ? analysis
+            : InvalidateDataDependentMissing(table.Table, table.Schema, analysis);
+    }
 
     private SafeMigrationProviderAnalysis Project(
         AlterColumnIntent intent,
         SafeMigrationProviderAnalysis liveAnalysis
-    ) => TryGet(intent.Table, intent.Schema, out var table) ? AnalyzeAlterColumn(table, intent) : liveAnalysis;
+    )
+    {
+        if (!TryGet(intent.Table, intent.Schema, out var table))
+        {
+            return HasUnanalyzedDataChanges(intent.Table, intent.Schema)
+                && liveAnalysis.ObservedState == SafeMigrationObservedState.Different
+                && intent.OldDefinition?.IsNullable == true
+                && !intent.Definition.IsNullable
+                    ? DataStateUnknown()
+                    : liveAnalysis;
+        }
+
+        var analysis = AnalyzeAlterColumn(table, intent);
+
+        return HasUnanalyzedDataChanges(table.Table, table.Schema)
+            && analysis.ObservedState == SafeMigrationObservedState.Different
+            && intent.OldDefinition?.IsNullable == true
+            && !intent.Definition.IsNullable
+                ? DataStateUnknown()
+                : analysis;
+    }
 
     private SafeMigrationProviderAnalysis Project(
         DropColumnIntent intent,

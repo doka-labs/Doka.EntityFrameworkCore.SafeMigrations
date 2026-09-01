@@ -45,16 +45,30 @@ internal static class SafeMigrationColumnRepairHelper
     {
         ArgumentNullException.ThrowIfNull(targetDefinition);
 
-        // Inferred provider facets cannot be reconstructed safely by a generic
-        // convergence operation. Their changes remain explicit migrations with
-        // a reviewed old definition.
+        return HasRepairableIntrinsicShape(targetDefinition)
+            && targetDefinition.ProviderAnnotations.Count == 0;
+    }
+
+    /// <summary>
+    /// Determines whether provider-neutral column facets can be converged after
+    /// the active provider has independently validated its own metadata.
+    /// </summary>
+    /// <param name="targetDefinition">The immutable expected column definition.</param>
+    /// <returns><see langword="true" /> when the provider-neutral shape is repairable.</returns>
+    internal static bool HasRepairableIntrinsicShape(
+        ExpectedColumnDefinition targetDefinition
+    )
+    {
+        ArgumentNullException.ThrowIfNull(targetDefinition);
+
+        // Provider metadata is deliberately excluded here. Only the owning
+        // provider can prove whether its annotations affect physical DDL.
         return targetDefinition is
         {
             IsRowVersion: false,
             ComputedColumnSql: null,
             ComputedExpression: null,
             IsStored: null,
-            ProviderAnnotations.Count: 0,
         };
     }
 }

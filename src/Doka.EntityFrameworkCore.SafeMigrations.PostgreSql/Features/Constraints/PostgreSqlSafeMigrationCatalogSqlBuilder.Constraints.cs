@@ -9,7 +9,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         char type,
         string matching,
         string dataBlocked,
-        string additionalPrerequisite = "TRUE"
+        string additionalPrerequisite = "TRUE",
+        string identityConflict = "FALSE",
+        string? identityConflictCode = null
     )
     {
         var tableExists = TableExists(table, schema);
@@ -17,10 +19,14 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
         return Plan(
             $"CASE WHEN NOT {tableExists} OR NOT ({additionalPrerequisite}) THEN 'prerequisite_missing' "
+            + $"WHEN NOT {exists} AND ({identityConflict}) THEN 'unsupported' "
             + $"WHEN NOT {exists} AND {dataBlocked} THEN 'data_blocked' "
             + $"WHEN NOT {exists} THEN 'missing' "
             + $"WHEN {matching} THEN 'matching' ELSE 'different' END",
-            matching);
+            matching) with
+        {
+            UnsupportedCode = identityConflictCode,
+        };
     }
 
     private PostgreSqlSafeMigrationRuntimePlan BuildDropConstraint(
@@ -31,7 +37,11 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     )
     {
         var exists = ConstraintExists(table, schema, name, type);
-        return Plan($"CASE WHEN {exists} THEN 'matching' ELSE 'missing' END", $"NOT {exists}");
+        var local = ConstraintExists(table, schema, name, type, requireLocalIdentity: true);
+
+        return Plan(
+            $"CASE WHEN NOT {exists} THEN 'missing' WHEN {local} THEN 'matching' ELSE 'different' END",
+            $"NOT {exists}");
     }
 
     private string ConstraintColumnsMatch(
@@ -39,11 +49,38 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         string? schema,
         string name,
         char type,
-        IReadOnlyList<string> columns
-    ) => ConstraintBase(table, schema, name, type)
+        IReadOnlyList<string> columns,
+        bool requireExpectedName = true,
+        bool requireLocalIdentity = true
+    ) => ConstraintBaseWithoutName(table, schema, type)
+        + $" AND co.conname {(requireExpectedName ? "=" : "<>")} {Literal(name)}"
+        + StandardConstraintSemantics(requireLocalIdentity)
+        + (type == 'u' ? UniqueNullSemanticsMatch() : string.Empty)
         + $" AND ARRAY(SELECT a.attname FROM unnest(co.conkey) WITH ORDINALITY AS key(attnum, ord) "
         + "JOIN pg_catalog.pg_attribute a ON a.attrelid = co.conrelid AND a.attnum = key.attnum "
         + $"ORDER BY key.ord) = {NameArray(columns)})";
+
+    private static string StandardConstraintSemantics(
+        bool requireLocalIdentity = true
+    )
+        // JSON projection keeps one catalog query compatible with PostgreSQL
+        // 14-18 while still rejecting semantics introduced by newer servers.
+        => (requireLocalIdentity ? LocalConstraintIdentity() : string.Empty)
+            + " AND NOT co.condeferrable AND NOT co.condeferred AND co.convalidated"
+            + " AND COALESCE((to_jsonb(co) ->> 'conenforced')::boolean, TRUE)"
+            + " AND NOT COALESCE((to_jsonb(co) ->> 'conperiod')::boolean, FALSE)";
+
+    private static string LocalConstraintIdentity()
+        // Inherited and partition-derived constraints can enforce the same
+        // expression while remaining owned by another table. Treating them as
+        // local would make a later parent change invalidate our postcondition.
+        => " AND co.conparentid = 0 AND co.conislocal AND co.coninhcount = 0";
+
+    private static string UniqueNullSemanticsMatch()
+        // PostgreSQL 15 added indnullsnotdistinct. An ordinary EF unique
+        // constraint retains the older/default NULLS DISTINCT behavior.
+        => " AND NOT COALESCE((SELECT (to_jsonb(i) ->> 'indnullsnotdistinct')::boolean "
+            + "FROM pg_catalog.pg_index i WHERE i.indexrelid = co.conindid), FALSE)";
 
     private string DuplicateDataExists(
         string table,
@@ -66,18 +103,28 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         string? schema,
         string name,
         char type
+    ) => ConstraintBaseWithoutName(table, schema, type)
+        + $" AND co.conname = {Literal(name)}";
+
+    private string ConstraintBaseWithoutName(
+        string table,
+        string? schema,
+        char type
     ) => "EXISTS (SELECT 1 FROM pg_catalog.pg_constraint co "
         + "JOIN pg_catalog.pg_class c ON c.oid = co.conrelid "
         + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
         + $"WHERE n.nspname = {SchemaExpression(schema)} AND c.relname = {Literal(table)} "
-        + $"AND co.conname = {Literal(name)} AND co.contype = {Literal(type.ToString())}::\"char\"";
+        + $"AND co.contype = {Literal(type.ToString())}::\"char\"";
 
     private string ConstraintExists(
         string table,
         string? schema,
         string name,
-        char type
-    ) => ConstraintBase(table, schema, name, type) + ")";
+        char type,
+        bool requireLocalIdentity = false
+    ) => ConstraintBase(table, schema, name, type)
+        + (requireLocalIdentity ? LocalConstraintIdentity() : string.Empty)
+        + ")";
 
     private string AnyConstraint(
         string table,

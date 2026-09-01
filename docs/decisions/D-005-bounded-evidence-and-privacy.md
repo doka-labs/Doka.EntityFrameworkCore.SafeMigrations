@@ -76,6 +76,11 @@ policy. Ordinary provider operations contribute only their CLR type marker,
 not their properties or SQL; the immutable artifact digest and independent
 review cover that separate boundary. Unknown migration-relevant annotation
 value shapes fail closed instead of silently disappearing from identity.
+Relational column fingerprinting distinguishes EF Core's two public shapes.
+Ordinary scalar columns use their existing property mapping so established
+digests and allocation budgets remain stable. Property-less `ToJson` container
+columns use the public `IColumn` facets instead of assuming that a scalar
+mapping exists.
 
 A fingerprint detects drift relative to a supplied expectation. It does not
 authenticate the report, its producer, or a deployment caller. Protected
@@ -182,6 +187,7 @@ window. Neither a hash nor a report proves the database server is honest.
 - 2026-08-26: Status changed from proposed to accepted. Dominic Kalkbrenner confirmed the recorded decision and its existing implementation.
 - 2026-08-26: Status changed from accepted to implemented. Bounded catalog work, immutable definitions, fingerprints, reports, and telemetry privacy are implemented with the referenced regression coverage and measurement boundaries.
 - 2026-08-26: Clarified the existing fingerprint boundary for ordinary provider operations; their content identity requires the deployment artifact digest and separate review.
+- 2026-08-31: Added the public `IColumn` facet path for property-less JSON container columns while retaining the established scalar property-mapping path and its allocation profile.
 
 ### Implementation References
 
@@ -193,6 +199,7 @@ window. Neither a hash nor a report proves the database server is honest.
 - [Operation-order and policy fingerprint tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Unit/Features/Lifecycle/SafeMigrationContractFingerprintTests.Lifecycle.cs)
 - [Column-facet fingerprint tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Unit/Features/Columns/SafeMigrationContractFingerprintTests.Columns.cs)
 - [MySQL/MariaDB model-fingerprint tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Infrastructure/MySqlModelFingerprintTests.cs)
+- [PostgreSQL model-fingerprint tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Infrastructure/PostgreSqlModelFingerprintTests.cs)
 - [PostgreSQL model-facet tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Infrastructure/PostgreSqlModelFingerprintFacetTests.cs)
 - [Report contract](../../src/Doka.EntityFrameworkCore.SafeMigrations/Analysis/SafeMigrationRunReport.cs)
 - [JSON writer](../../src/Doka.EntityFrameworkCore.SafeMigrations/Analysis/SafeMigrationReportJson.cs)

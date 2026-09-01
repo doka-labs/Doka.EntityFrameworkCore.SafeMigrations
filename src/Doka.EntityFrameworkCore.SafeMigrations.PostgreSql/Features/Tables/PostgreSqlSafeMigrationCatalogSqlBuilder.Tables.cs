@@ -90,8 +90,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 'u',
                 value.Columns)));
 
-        conditions.AddRange(definition.CheckConstraints.Select(CheckMatches));
-        conditions.AddRange(definition.ForeignKeys.Select(ForeignKeyMatches));
+        conditions.AddRange(definition.CheckConstraints.Select(check => CheckMatches(check)));
+        conditions.AddRange(definition.ForeignKeys.Select(foreignKey =>
+            ForeignKeyMatches(foreignKey, requireExpectedName: true)));
 
         return $"({string.Join(" AND ", conditions)})";
     }

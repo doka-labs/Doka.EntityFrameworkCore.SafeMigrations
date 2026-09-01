@@ -74,6 +74,30 @@ public sealed class PostgreSqlModelFingerprintTests
     }
 
     [Fact]
+    public void Create_HandlesNestedJsonContainerWithoutScalarPropertyMappings()
+    {
+        using var context = new JsonArtifactContext();
+        var model = context.GetService<IDesignTimeModel>()
+            .Model;
+        var jsonColumn = model
+            .GetRelationalModel()
+            .Tables
+            .Single(static table => table.Name == "json_artifacts")
+            .Columns
+            .Single(static column => column.Name == "payload");
+
+        var first = SafeMigrationModelFingerprint.Create(model, ProviderContract);
+        var second = SafeMigrationModelFingerprint.Create(model, ProviderContract);
+
+        Assert.Empty(jsonColumn.PropertyMappings);
+        Assert.Equal(first, second);
+        Assert.StartsWith(
+            "safe-relational-model:v1:Npgsql.EntityFrameworkCore.PostgreSQL:sha256:",
+            first,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ValidateExpected_RejectsLegacyBareHash()
     {
         using var context = new FirstOrderContext();
@@ -258,6 +282,32 @@ public sealed class PostgreSqlModelFingerprintTests
         }
     }
 
+    private sealed class JsonArtifactContext : DbContext
+    {
+        protected override void OnConfiguring(
+            DbContextOptionsBuilder optionsBuilder
+        ) => optionsBuilder.UseNpgsql(
+            "Host=localhost;Database=fingerprint;Username=test;Password=test");
+
+        protected override void OnModelCreating(
+            ModelBuilder modelBuilder
+        )
+        {
+            modelBuilder.Entity<JsonArtifact>(entity =>
+            {
+                entity.ToTable("json_artifacts", "review");
+                entity.HasKey(static artifact => artifact.Id);
+                entity.OwnsOne(
+                    static artifact => artifact.Payload,
+                    owned =>
+                    {
+                        owned.ToJson("payload");
+                        owned.OwnsOne(static payload => payload.Details);
+                    });
+            });
+        }
+    }
+
     private sealed class UnsupportedAnnotationContext : FingerprintContext
     {
         protected override void OnModelCreating(
@@ -430,5 +480,24 @@ public sealed class PostgreSqlModelFingerprintTests
         public int Id { get; set; }
 
         public bool Enabled { get; set; }
+    }
+
+    private sealed class JsonArtifact
+    {
+        public int Id { get; set; }
+
+        public JsonArtifactPayload Payload { get; set; } = new();
+    }
+
+    private sealed class JsonArtifactPayload
+    {
+        public string Name { get; set; } = string.Empty;
+
+        public JsonArtifactDetails Details { get; set; } = new();
+    }
+
+    private sealed class JsonArtifactDetails
+    {
+        public int Revision { get; set; }
     }
 }

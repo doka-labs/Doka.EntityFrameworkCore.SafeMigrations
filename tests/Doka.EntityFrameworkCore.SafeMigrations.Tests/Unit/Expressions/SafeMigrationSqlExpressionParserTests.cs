@@ -146,6 +146,42 @@ public sealed class SafeMigrationSqlExpressionParserTests
         Assert.Equal(unsupported.Sql, opaque.Sql);
     }
 
+    [Fact]
+    public void ExpectedDefinitionFactory_ParsesBoundedSqlDefaultsAndPreservesOpaqueSql()
+    {
+        var supported = new AddColumnOperation
+        {
+            Name = "created_at",
+            Table = "orders",
+            ClrType = typeof(DateTime),
+            ColumnType = "datetime(6)",
+            IsNullable = false,
+            DefaultValueSql = "CURRENT_TIMESTAMP(6)",
+        };
+
+        var unsupported = new AddColumnOperation
+        {
+            Name = "expires_at",
+            Table = "orders",
+            ClrType = typeof(DateTime),
+            ColumnType = "datetime(6)",
+            IsNullable = false,
+            DefaultValueSql = "CURRENT_TIMESTAMP(6) + INTERVAL 1 DAY",
+        };
+
+        var structured = SafeMigrationExpectedDefinitionFactory.From(supported);
+        var opaque = SafeMigrationExpectedDefinitionFactory.From(unsupported);
+        var current = Assert.IsType<SafeMigrationSqlCurrentValueExpression>(
+            structured.DefaultValue.StructuredExpression);
+
+        Assert.Equal(SafeMigrationDefaultValueKind.Sql, structured.DefaultValue.Kind);
+        Assert.Equal(SafeMigrationSqlCurrentValue.Timestamp, current.Value);
+        Assert.Equal(6, current.Precision);
+        Assert.Null(structured.DefaultValue.SqlExpression);
+        Assert.Null(opaque.DefaultValue.StructuredExpression);
+        Assert.Equal(unsupported.DefaultValueSql, opaque.DefaultValue.SqlExpression);
+    }
+
     private static void AssertParseFailure(
         string sql,
         string expectedFailureCode

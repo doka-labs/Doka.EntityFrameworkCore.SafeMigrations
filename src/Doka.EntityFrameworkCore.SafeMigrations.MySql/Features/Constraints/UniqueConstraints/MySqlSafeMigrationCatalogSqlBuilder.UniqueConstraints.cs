@@ -9,14 +9,24 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var definition = intent.Definition;
         var exists = ConstraintExists(definition.Table, definition.Name, "UNIQUE");
         var matching = ConstraintColumnsMatch(definition.Table, definition.Name, definition.Columns, "UNIQUE");
+        var identityConflict = ConstraintColumnsMatch(
+            definition.Table,
+            definition.Name,
+            definition.Columns,
+            "UNIQUE",
+            requireExpectedName: false);
         var dataBlocked = UniqueConstraintDataBlocked(definition);
 
         return Plan(
             $"CASE WHEN NOT {BaseTableExists(definition.Table)} THEN 'prerequisite_missing' "
+            + $"WHEN NOT {exists} AND {identityConflict} THEN 'unsupported' "
             + $"WHEN NOT {exists} AND {dataBlocked} THEN 'data_blocked' "
             + $"WHEN NOT {exists} THEN 'missing' "
             + $"WHEN {matching} THEN 'matching' ELSE 'different' END",
-            matching);
+            matching) with
+        {
+            UnsupportedCode = "unique_constraint_semantic_identity_conflict",
+        };
     }
 
     private MySqlSafeMigrationRuntimePlan BuildDropUniqueConstraint(

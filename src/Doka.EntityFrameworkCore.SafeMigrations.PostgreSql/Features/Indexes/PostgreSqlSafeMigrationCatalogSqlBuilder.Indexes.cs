@@ -15,7 +15,11 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         var definition = intent.Definition;
         var table = TableExists(definition.Table, definition.Schema);
         var exists = IndexExists(definition.Name, definition.Schema);
-        var matching = IndexMatches(definition);
+        var matching = IndexMatches(definition, requireExpectedName: true);
+        var identityConflict = IndexMatches(
+            definition,
+            requireExpectedName: false,
+            requireIndependentIdentity: false);
         var dataBlocked = definition.Unique ? UniqueIndexDataBlocked(definition) : "FALSE";
         var unsupportedConditions = new List<string>();
         if (definition.NullsDistinct == false)
@@ -39,6 +43,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         return Plan(
             $"CASE WHEN {unsupported} THEN 'unsupported' "
             + $"WHEN NOT {table} THEN 'prerequisite_missing' "
+            + $"WHEN NOT {exists} AND {identityConflict} THEN 'different' "
             + $"WHEN NOT {exists} AND {dataBlocked} THEN 'data_blocked' "
             + $"WHEN NOT {exists} THEN 'missing' "
             + $"WHEN {matching} THEN 'matching' ELSE 'different' END",
@@ -51,9 +56,11 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     {
         var exists = IndexExists(intent.Name, intent.Schema);
         var belongsToTable = IndexExists(intent.Name, intent.Schema, intent.Table);
+        var independentlyOwned = IndependentIndexExists(intent.Name, intent.Schema, intent.Table);
 
         return Plan(
-            $"CASE WHEN NOT {exists} THEN 'missing' WHEN {belongsToTable} THEN 'matching' " + "ELSE 'different' END",
+            $"CASE WHEN NOT {exists} THEN 'missing' "
+            + $"WHEN {belongsToTable} AND {independentlyOwned} THEN 'matching' ELSE 'different' END",
             $"NOT {exists}");
     }
 
@@ -63,26 +70,46 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     {
         var source = IndexExists(intent.Name, intent.Schema);
         var sourceOnTable = IndexExists(intent.Name, intent.Schema, intent.Table);
+        var independentlyOwned = IndependentIndexExists(intent.Name, intent.Schema, intent.Table);
         var target = IndexExists(intent.NewName, intent.Schema);
 
         return Plan(
             $"CASE WHEN NOT {source} THEN 'missing' WHEN NOT {sourceOnTable} THEN 'different' "
+            + $"WHEN NOT {independentlyOwned} THEN 'different' "
             + $"WHEN {target} THEN 'different' "
             + "ELSE 'matching' END",
             $"NOT {source}");
     }
 
     private string IndexMatches(
-        ExpectedIndexDefinition definition
+        ExpectedIndexDefinition definition,
+        bool requireExpectedName = true,
+        bool requireIndependentIdentity = true
     )
     {
         var conditions = new List<string>
         {
+            "i.indisvalid",
+            "i.indisready",
+            "i.indislive",
             $"i.indisunique = {definition.Unique.ToString().ToUpperInvariant()}",
             $"i.indnkeyatts = {definition.Keys.Count.ToString(CultureInfo.InvariantCulture)}",
             $"i.indnatts = {(definition.Keys.Count + definition.IncludedColumns.Count).ToString(CultureInfo.InvariantCulture)}",
             $"am.amname = {Literal(definition.Method ?? "btree")}",
         };
+
+        if (requireIndependentIdentity)
+        {
+            // Attached partition indexes and constraint-owned backing indexes
+            // are not independently managed EF indexes even when keys match.
+            conditions.Add(
+                "NOT EXISTS (SELECT 1 FROM pg_catalog.pg_inherits inh "
+                + "WHERE inh.inhrelid = i.indexrelid)");
+            conditions.Add(
+                "NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint co "
+                + "WHERE co.conindid = i.indexrelid AND co.conrelid = i.indrelid "
+                + "AND co.contype IN ('p'::\"char\", 'u'::\"char\", 'x'::\"char\"))");
+        }
 
         conditions.Add(
             definition.Filter is null && definition.StructuredFilter is null
@@ -163,7 +190,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             + "JOIN pg_catalog.pg_namespace n ON n.oid = idx.relnamespace "
             + "JOIN pg_catalog.pg_am am ON am.oid = idx.relam "
             + $"WHERE n.nspname = {SchemaExpression(definition.Schema)} "
-            + $"AND idx.relname = {Literal(definition.Name)} AND tbl.relname = {Literal(definition.Table)} "
+            + $"AND idx.relname {(requireExpectedName ? "=" : "<>")} {Literal(definition.Name)} "
+            + $"AND tbl.relname = {Literal(definition.Table)} "
             + $"AND {string.Join(" AND ", conditions)})";
     }
 
@@ -356,7 +384,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     ) => "EXISTS (SELECT 1 FROM pg_catalog.pg_class idx "
         + "JOIN pg_catalog.pg_namespace n ON n.oid = idx.relnamespace "
         + $"WHERE n.nspname = {SchemaExpression(schema)} AND idx.relname = {Literal(name)} "
-        + "AND idx.relkind = 'i')";
+        + "AND idx.relkind IN ('i', 'I'))";
 
     private string IndexExists(
         string name,
@@ -367,7 +395,22 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         + "JOIN pg_catalog.pg_class tbl ON tbl.oid = i.indrelid "
         + "JOIN pg_catalog.pg_namespace n ON n.oid = idx.relnamespace "
         + $"WHERE n.nspname = {SchemaExpression(schema)} AND idx.relname = {Literal(name)} "
-        + $"AND tbl.relname = {Literal(table)} AND idx.relkind = 'i')";
+        + $"AND tbl.relname = {Literal(table)} AND idx.relkind IN ('i', 'I'))";
+
+    private string IndependentIndexExists(
+        string name,
+        string? schema,
+        string table
+    ) => "EXISTS (SELECT 1 FROM pg_catalog.pg_index i "
+        + "JOIN pg_catalog.pg_class idx ON idx.oid = i.indexrelid "
+        + "JOIN pg_catalog.pg_class tbl ON tbl.oid = i.indrelid "
+        + "JOIN pg_catalog.pg_namespace n ON n.oid = idx.relnamespace "
+        + $"WHERE n.nspname = {SchemaExpression(schema)} AND idx.relname = {Literal(name)} "
+        + $"AND tbl.relname = {Literal(table)} AND idx.relkind IN ('i', 'I') "
+        + "AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_inherits inh WHERE inh.inhrelid = i.indexrelid) "
+        + "AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint co "
+        + "WHERE co.conindid = i.indexrelid AND co.conrelid = i.indrelid "
+        + "AND co.contype IN ('p'::\"char\", 'u'::\"char\", 'x'::\"char\")))";
 
     private string ExpressionMatches(
         string catalogExpression,

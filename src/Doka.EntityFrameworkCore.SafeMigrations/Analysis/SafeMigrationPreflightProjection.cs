@@ -8,6 +8,8 @@ internal sealed partial class SafeMigrationPreflightProjection
     // records only prerequisites proven by earlier convergence operations, so
     // a later operation cannot infer safety from an object that was rejected.
     private readonly Dictionary<TableKey, ProjectedPrerequisites> _prerequisites = [];
+    private readonly HashSet<IndexKey> _droppedIndexes = [];
+    private long _providerDataMutationVersion;
 
     public SafeMigrationProviderAnalysis Project(
         SafeMigrationOperation operation,
@@ -150,10 +152,16 @@ internal sealed partial class SafeMigrationPreflightProjection
             case AlterColumnOperation value:
                 ObserveProviderPostcondition(value);
                 break;
+            case AlterTableOperation value:
+                ObserveProviderPostcondition(value);
+                break;
             case DropColumnOperation value:
                 ObserveProviderPostcondition(value);
                 break;
             case RenameColumnOperation value:
+                ObserveProviderPostcondition(value);
+                break;
+            case DropIndexOperation value:
                 ObserveProviderPostcondition(value);
                 break;
             case DropTableOperation value:
@@ -162,12 +170,20 @@ internal sealed partial class SafeMigrationPreflightProjection
             case RenameTableOperation value:
                 ObserveProviderPostcondition(value);
                 break;
+            case InsertDataOperation:
+            case UpdateDataOperation:
+            case DeleteDataOperation:
+                ObserveProviderDataMutation();
+                break;
             default:
                 // An unrecognized provider operation may contain arbitrary DDL
-                // or data changes. Retaining inferred state across that boundary
-                // would turn an unknown effect into a false readiness claim.
+                // or data changes. Invalidate live row-level proofs as well as
+                // inferred structure so an opaque SQL operation cannot make a
+                // later additive constraint appear safe.
+                ObserveProviderDataMutation();
                 _tables.Clear();
                 _prerequisites.Clear();
+                _droppedIndexes.Clear();
                 break;
         }
     }
@@ -182,6 +198,38 @@ internal sealed partial class SafeMigrationPreflightProjection
         string? schema,
         [NotNullWhen(true)] out ProjectedTable? projection
     ) => _tables.TryGetValue(new TableKey(table, schema), out projection);
+
+    private bool HasUnanalyzedDataChanges(
+        string table,
+        string? schema
+    )
+    {
+        var key = new TableKey(table, schema);
+
+        return (_tables.TryGetValue(key, out var projectedTable)
+                && projectedTable.DataMutationVersion < _providerDataMutationVersion)
+            || (_prerequisites.TryGetValue(key, out var prerequisites)
+                && prerequisites.DataMutationVersion < _providerDataMutationVersion)
+            || (!_tables.ContainsKey(key)
+                && !_prerequisites.ContainsKey(key)
+                && _providerDataMutationVersion > 0);
+    }
+
+    private SafeMigrationProviderAnalysis InvalidateDataDependentMissing(
+        string table,
+        string? schema,
+        SafeMigrationProviderAnalysis analysis
+    ) => HasUnanalyzedDataChanges(table, schema)
+        && analysis.ObservedState is SafeMigrationObservedState.Missing
+            or SafeMigrationObservedState.PrerequisiteMissing
+            ? DataStateUnknown()
+            : analysis;
+
+    private static SafeMigrationProviderAnalysis DataStateUnknown() => new(
+        SafeMigrationObservedState.PrerequisiteMissing,
+        SafeMigrationRepairCapability.None,
+        postconditionSatisfied: false,
+        "projected_data_state_unknown");
 
     private static SafeMigrationProviderAnalysis AnalyzeDefinition<T>(
         IReadOnlyDictionary<string, T> definitions,
@@ -238,11 +286,20 @@ internal sealed partial class SafeMigrationPreflightProjection
         string? Schema
     );
 
+    private readonly record struct IndexKey(
+        string Table,
+        string? Schema,
+        string Name
+    );
+
     private sealed class ProjectedPrerequisites(
-        bool newlyCreated
+        bool newlyCreated,
+        long dataMutationVersion
     )
     {
         public Dictionary<string, ProjectedColumn> Columns { get; } = new(StringComparer.Ordinal);
+
+        public long DataMutationVersion { get; } = dataMutationVersion;
 
         public bool NewlyCreated { get; } = newlyCreated;
     }
@@ -287,7 +344,8 @@ internal sealed partial class SafeMigrationPreflightProjection
         private readonly string? _comment;
 
         public ProjectedTable(
-            ExpectedTableDefinition definition
+            ExpectedTableDefinition definition,
+            long dataMutationVersion
         )
         {
             _table = definition.Table;
@@ -310,6 +368,7 @@ internal sealed partial class SafeMigrationPreflightProjection
                 StringComparer.Ordinal);
 
             ForeignKeys = definition.ForeignKeys.ToDictionary(static value => value.Name, StringComparer.Ordinal);
+            DataMutationVersion = dataMutationVersion;
         }
 
         public ExpectedTableDefinition Definition =>
@@ -324,6 +383,8 @@ internal sealed partial class SafeMigrationPreflightProjection
                 ForeignKeys.Values);
 
         public Dictionary<string, ExpectedColumnDefinition> Columns { get; }
+
+        public long DataMutationVersion { get; }
 
         public string Table => _table;
 

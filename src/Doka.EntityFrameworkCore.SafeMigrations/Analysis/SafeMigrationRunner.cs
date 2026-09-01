@@ -258,7 +258,14 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
         var assessments = new List<SafeMigrationAssessment>(operations.Count);
         var blocked = false;
         var hasProviderOperations = false;
-        var projection = mode == SafeMigrationReportMode.Preflight ? new SafeMigrationPreflightProjection() : null;
+        var preflightProjection = mode == SafeMigrationReportMode.Preflight
+            ? new SafeMigrationPreflightProjection()
+            : null;
+
+        var postflightProjection = mode == SafeMigrationReportMode.Postflight
+            ? new SafeMigrationPostflightProjection(operations)
+            : null;
+
         var safeOperations = operations
             .OfType<SafeMigrationOperation>()
             .ToArray();
@@ -293,28 +300,31 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
                         postconditionSatisfied: null,
                         "provider_owned_not_analyzed"));
 
-                projection?.ObserveProviderPostcondition(operation);
+                preflightProjection?.ObserveProviderPostcondition(operation);
 
                 continue;
             }
 
             var liveAnalysis = liveAnalyses[safeOperationOrdinal++];
-            var analysis = projection?.Project(safeOperation, liveAnalysis) ?? liveAnalysis;
+            var analysis = preflightProjection?.Project(safeOperation, liveAnalysis) ?? liveAnalysis;
             var decision = SafeMigrationDecisionPlanner.Plan(
                 safeOperation.Intent.Kind,
                 analysis.ObservedState,
                 safeOperation.Policy,
                 analysis.RepairCapability);
 
+            var postconditionSuperseded = postflightProjection?.IsSuperseded(ordinal) == true;
+            var postconditionSatisfied = analysis.PostconditionSatisfied || postconditionSuperseded;
+
             var operationBlocked = mode == SafeMigrationReportMode.Preflight
                 ? decision.Action is SafeMigrationAction.RejectDifferent
                     or SafeMigrationAction.RejectUnsupported
                     or SafeMigrationAction.RejectDataBlocked
                     or SafeMigrationAction.RejectPrerequisiteMissing
-                : !analysis.PostconditionSatisfied;
+                : !postconditionSatisfied;
 
             blocked |= operationBlocked;
-            projection?.Observe(safeOperation, analysis, decision);
+            preflightProjection?.Observe(safeOperation, analysis, decision);
             assessments.Add(
                 new SafeMigrationAssessment(
                     ordinal,
@@ -324,8 +334,10 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
                     safeOperation.Intent.ObjectName,
                     analysis.ObservedState,
                     decision.Action,
-                    analysis.PostconditionSatisfied,
-                    operationBlocked
+                    postconditionSatisfied,
+                    postconditionSuperseded
+                        ? "postcondition_superseded"
+                        : operationBlocked
                         ? mode == SafeMigrationReportMode.Postflight
                             ? "postcondition_failed"
                             : analysis.ObservedState == SafeMigrationObservedState.Unsupported

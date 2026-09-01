@@ -15,18 +15,30 @@ internal sealed class SafeMigrationCSharpMigrationOperationGenerator : CSharpMig
         + "because SafeMigrations cannot prove which database objects predated the migration.";
 
     private readonly SafeMigrationScaffoldingConfiguration _configuration;
+    private readonly ISafeMigrationCreateIndexScaffoldingProjector? _createIndexProjector;
 
     /// <summary>Initializes the SafeMigrations operation generator.</summary>
     /// <param name="dependencies">The EF Core C# operation-generator dependencies.</param>
     /// <param name="configuration">The immutable scaffolding configuration.</param>
+    /// <param name="createIndexProjectors">The active provider's create-index metadata projectors.</param>
     public SafeMigrationCSharpMigrationOperationGenerator(
         CSharpMigrationOperationGeneratorDependencies dependencies,
-        SafeMigrationScaffoldingConfiguration configuration
+        SafeMigrationScaffoldingConfiguration configuration,
+        IEnumerable<ISafeMigrationCreateIndexScaffoldingProjector> createIndexProjectors
     ) : base(dependencies)
     {
         ArgumentNullException.ThrowIfNull(configuration);
+        ArgumentNullException.ThrowIfNull(createIndexProjectors);
+
+        var projectorSnapshot = createIndexProjectors.ToArray();
+        if (projectorSnapshot.Length > 1)
+        {
+            throw new InvalidOperationException(
+                "SafeMigrations requires exactly one create-index metadata projector per active provider.");
+        }
 
         _configuration = configuration;
+        _createIndexProjector = projectorSnapshot.SingleOrDefault();
     }
 
     /// <inheritdoc />
@@ -101,6 +113,7 @@ internal sealed class SafeMigrationCSharpMigrationOperationGenerator : CSharpMig
         var openParenthesis = methodIndex + method.Length - 1;
         var closeParenthesis = FindMatchingParenthesis(source, openParenthesis);
         var argumentIndent = FindArgumentIndent(source, openParenthesis, closeParenthesis);
+        var newline = SafeMigrationGeneratedSource.GetConsistentNewLine(source);
         var policy = _configuration.LegacyConvergencePolicy switch
         {
             SafeMigrationPolicy.ThrowIfDifferent => nameof(SafeMigrationPolicy.ThrowIfDifferent),
@@ -113,7 +126,8 @@ internal sealed class SafeMigrationCSharpMigrationOperationGenerator : CSharpMig
         return source.Insert(
             closeParenthesis,
             string.Concat(
-                ",\n",
+                ",",
+                newline,
                 argumentIndent,
                 "policy: global::Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationPolicy.",
                 policy));
@@ -300,6 +314,21 @@ internal sealed class SafeMigrationCSharpMigrationOperationGenerator : CSharpMig
 
     /// <inheritdoc />
     protected override void Generate(
+        DropIndexOperation operation,
+        IndentedStringBuilder builder
+    )
+    {
+        if (!_configuration.IsEnabled)
+        {
+            base.Generate(operation, builder);
+            return;
+        }
+
+        GenerateWithReplacement(operation, builder, ".DropIndex(", ".DropIndexIfExists(");
+    }
+
+    /// <inheritdoc />
+    protected override void Generate(
         CreateIndexOperation operation,
         IndentedStringBuilder builder
     )
@@ -310,8 +339,11 @@ internal sealed class SafeMigrationCSharpMigrationOperationGenerator : CSharpMig
             return;
         }
 
+        var projection = _createIndexProjector?.Project(operation)
+            ?? new SafeMigrationCreateIndexScaffoldingProjection(operation, PrefixLengths: null);
+
         var baseline = CreateScratchBuilder(builder);
-        base.Generate(operation, baseline);
+        base.Generate(projection.Operation, baseline);
 
         // EF migration bodies remain reviewable source and are analyzed by the
         // consuming project. Collection expressions preserve EF's values while
@@ -327,17 +359,67 @@ internal sealed class SafeMigrationCSharpMigrationOperationGenerator : CSharpMig
             source = ReplaceArrayLiteral(source, Dependencies.CSharpHelper.Literal(operation.IsDescending), 1);
         }
 
+        if (projection.PrefixLengths is not null)
+        {
+            source = AppendIndexPrefixLengths(source, projection.PrefixLengths);
+        }
+
         AppendReplaced(
             builder,
             source,
             ".CreateIndex(",
             operation.Columns.Length == 1
-                ? ".CreateIndexIfNotExistsFromModel("
-                : ".CreateCompositeIndexIfNotExistsFromModel(");
+                ? projection.PrefixLengths is null
+                    ? ".CreateIndexIfNotExistsFromModel("
+                    : ".CreateIndexWithPrefixesIfNotExistsFromModel("
+                : projection.PrefixLengths is null
+                    ? ".CreateCompositeIndexIfNotExistsFromModel("
+                    : ".CreateCompositeIndexWithPrefixesIfNotExistsFromModel(");
+    }
+
+    private static string AppendIndexPrefixLengths(
+        string source,
+        IReadOnlyList<int> prefixLengths
+    )
+    {
+        const string method = ".CreateIndex(";
+
+        var methodIndex = source.IndexOf(method, StringComparison.Ordinal);
+        if (methodIndex < 0
+            || source.IndexOf(method, methodIndex + method.Length, StringComparison.Ordinal) >= 0)
+        {
+            throw new InvalidOperationException(
+                "The EF Core C# operation generator emitted an unexpected CreateIndex shape. "
+                + "SafeMigrations stopped instead of projecting ambiguous index metadata.");
+        }
+
+        var openParenthesis = methodIndex + method.Length - 1;
+        var closeParenthesis = FindMatchingParenthesis(source, openParenthesis);
+        var argumentIndent = FindArgumentIndent(source, openParenthesis, closeParenthesis);
+        var newline = SafeMigrationGeneratedSource.GetConsistentNewLine(source);
+        var prefixValues = string.Join(
+            ", ",
+            prefixLengths.Select(static value => value.ToString(CultureInfo.InvariantCulture)));
+
+        return source.Insert(
+            closeParenthesis,
+            string.Concat(",", newline, argumentIndent, "prefixLengths: [", prefixValues, "]"));
     }
 
     private void GenerateWithReplacement(
         DropTableOperation operation,
+        IndentedStringBuilder builder,
+        string expected,
+        string replacement
+    )
+    {
+        var baseline = CreateScratchBuilder(builder);
+        base.Generate(operation, baseline);
+        AppendReplaced(builder, baseline.ToString(), expected, replacement);
+    }
+
+    private void GenerateWithReplacement(
+        DropIndexOperation operation,
         IndentedStringBuilder builder,
         string expected,
         string replacement

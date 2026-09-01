@@ -52,7 +52,13 @@ public sealed class SafeMigrationScaffoldingTests
         var source = builder.ToString();
 
         Assert.Contains(".ConvergeTableFromModel(", source, StringComparison.Ordinal);
-        Assert.Contains("policy: global::Doka.EntityFrameworkCore.SafeMigrations." + expectedPolicy, source,
+        Assert.Contains(
+            string.Concat(
+                ",",
+                Environment.NewLine,
+                "    policy: global::Doka.EntityFrameworkCore.SafeMigrations.",
+                expectedPolicy),
+            source,
             StringComparison.Ordinal);
         Assert.EndsWith(");", source, StringComparison.Ordinal);
     }
@@ -84,6 +90,29 @@ public sealed class SafeMigrationScaffoldingTests
 
         Assert.Contains("migrationBuilder.CreateTable(", builder.ToString(), StringComparison.Ordinal);
         Assert.DoesNotContain("CreateTableIfNotExists", builder.ToString(), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(true, ".DropIndexIfExists(")]
+    [InlineData(false, ".DropIndex(")]
+    public void DropIndexGenerationFollowsTheSelectedScaffoldingContract(
+        bool isEnabled,
+        string expectedMethod
+    )
+    {
+        var generator = CreateOperationGenerator(SafeMigrationScaffoldingMode.Strict, isEnabled: isEnabled);
+        var builder = new IndentedStringBuilder();
+        var operation = new DropIndexOperation
+        {
+            Name = "ix_users_email",
+            Table = "users",
+        };
+
+        generator.Generate("migrationBuilder", [operation], builder);
+        var source = builder.ToString();
+
+        Assert.Contains(expectedMethod, source, StringComparison.Ordinal);
+        Assert.Equal(isEnabled, source.Contains(".DropIndexIfExists(", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -162,6 +191,89 @@ public sealed class SafeMigrationScaffoldingTests
     }
 
     [Fact]
+    public void ProjectedIndexPrefixesAreRenderedAndCapturedInKeyOrder()
+    {
+        var generator = CreateOperationGenerator(
+            SafeMigrationScaffoldingMode.Strict,
+            createIndexProjectors: [new TestIndexProjector([0, 64])]);
+        var sourceBuilder = new IndentedStringBuilder();
+        var operation = new CreateIndexOperation
+        {
+            Name = "ix_users_tenant_email",
+            Table = "users",
+            Columns = ["tenant_id", "email"],
+        };
+
+        generator.Generate("migrationBuilder", [operation], sourceBuilder);
+        var source = sourceBuilder.ToString();
+
+        Assert.Contains(".CreateCompositeIndexWithPrefixesIfNotExistsFromModel(", source, StringComparison.Ordinal);
+        Assert.Contains(
+            string.Concat(",", Environment.NewLine, "    prefixLengths: [0, 64]"),
+            source,
+            StringComparison.Ordinal);
+
+        var migrationBuilder = new MigrationBuilder("test");
+        _ = migrationBuilder.CreateCompositeIndexWithPrefixesIfNotExistsFromModel(
+            operation.Name,
+            operation.Table,
+            operation.Columns,
+            [0, 64]);
+
+        var safeOperation = Assert.IsType<SafeMigrationOperation>(Assert.Single(migrationBuilder.Operations));
+        var intent = Assert.IsType<EnsureIndexIntent>(safeOperation.Intent);
+
+        Assert.Null(intent.Definition.Keys[0].PrefixLength);
+        Assert.Equal(64, intent.Definition.Keys[1].PrefixLength);
+        Assert.Empty(safeOperation.GetAnnotations());
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(0, 64)]
+    public void SingleIndexPrefixProjectionRejectsInvalidShapes(
+        params int[] prefixLengths
+    )
+    {
+        var migrationBuilder = new MigrationBuilder("test");
+
+        Assert.Throws<ArgumentException>(() =>
+            migrationBuilder.CreateIndexWithPrefixesIfNotExistsFromModel(
+                "ix_users_email",
+                "users",
+                "email",
+                prefixLengths));
+        Assert.Empty(migrationBuilder.Operations);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void IndexPrefixProjectionRejectsMissingRequiredMetadata(
+        bool composite
+    )
+    {
+        var migrationBuilder = new MigrationBuilder("test");
+
+        var exception = composite
+            ? Assert.Throws<ArgumentNullException>(() =>
+                migrationBuilder.CreateCompositeIndexWithPrefixesIfNotExistsFromModel(
+                    "ix_users_tenant_email",
+                    "users",
+                    ["tenant_id", "email"],
+                    prefixLengths: null!))
+            : Assert.Throws<ArgumentNullException>(() =>
+                migrationBuilder.CreateIndexWithPrefixesIfNotExistsFromModel(
+                    "ix_users_email",
+                    "users",
+                    "email",
+                    prefixLengths: null!));
+
+        Assert.Equal("prefixLengths", exception.ParamName);
+        Assert.Empty(migrationBuilder.Operations);
+    }
+
+    [Fact]
     public void CompositeForeignKeyGenerationUsesAnalyzerCompatiblePrincipalColumns()
     {
         var generator = CreateOperationGenerator(SafeMigrationScaffoldingMode.Strict);
@@ -202,10 +314,13 @@ public sealed class SafeMigrationScaffoldingTests
         Assert.DoesNotContain("new[]", source, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void MigrationGenerationUsesAnalyzerCompatibleFileScopedNamespace()
+    [Theory]
+    [InlineData("\n")]
+    [InlineData("\r\n")]
+    public void MigrationGenerationUsesAnalyzerCompatibleFileScopedNamespace(
+        string newline
+    )
     {
-        var newline = Environment.NewLine;
         var blockScopedSource = string.Concat(
             "#nullable disable",
             newline,
@@ -233,12 +348,16 @@ public sealed class SafeMigrationScaffoldingTests
             source,
             StringComparison.Ordinal);
         Assert.Contains("public partial class CreateUsers : Migration", source, StringComparison.Ordinal);
+        Assert.Equal(newline, SafeMigrationGeneratedSource.GetConsistentNewLine(source));
     }
 
-    [Fact]
-    public void MigrationGenerationAddsMissingSafeMigrationsNamespaceImportExactlyOnce()
+    [Theory]
+    [InlineData("\n")]
+    [InlineData("\r\n")]
+    public void MigrationGenerationAddsMissingSafeMigrationsNamespaceImportExactlyOnce(
+        string newline
+    )
     {
-        var newline = Environment.NewLine;
         var source = string.Concat(
             "using Doka.EntityFrameworkCore.MySql;",
             newline,
@@ -272,6 +391,20 @@ public sealed class SafeMigrationScaffoldingTests
             directive,
             repeated[(directiveIndex + directive.Length)..],
             StringComparison.Ordinal);
+        Assert.Equal(newline, SafeMigrationGeneratedSource.GetConsistentNewLine(repeated));
+    }
+
+    [Theory]
+    [InlineData("first\r\nsecond\n")]
+    [InlineData("first\rsecond")]
+    public void MigrationGenerationRejectsInconsistentLineEndings(
+        string source
+    )
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            SafeMigrationGeneratedSource.GetConsistentNewLine(source));
+
+        Assert.Contains("inconsistent line endings", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -326,6 +459,235 @@ public sealed class SafeMigrationScaffoldingTests
                 "using Microsoft.EntityFrameworkCore.Migrations;"),
             result,
             StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DesignTimeServicesDecorateProviderGeneratorWithoutRewritingProviderArtifacts()
+    {
+        var providerGenerator = new TestMigrationsCodeGenerator();
+        var services = new ServiceCollection();
+        new SafeMigrationDesignTimeServices().ConfigureDesignTimeServices(services);
+        services.AddSingleton<ITypeMappingSource, NullTypeMappingSource>();
+        services.AddEntityFrameworkDesignTimeServices();
+        services.Replace(ServiceDescriptor.Singleton<IMigrationsCodeGenerator>(providerGenerator));
+        services.AddSingleton<IDbContextOptions>(new DbContextOptionsBuilder().Options);
+
+        using var provider = services.BuildServiceProvider();
+        var generator = provider
+            .GetRequiredService<IMigrationsCodeGeneratorSelector>()
+            .Select("C#");
+        var metadata = generator.GenerateMetadata(
+            "Company.Migrations",
+            typeof(SafeMigrationScaffoldingTests),
+            "CreateUsers",
+            "202608310001_CreateUsers",
+            targetModel: null!);
+        var snapshot = generator.GenerateSnapshot(
+            "Company.Migrations",
+            typeof(SafeMigrationScaffoldingTests),
+            "ReviewContextModelSnapshot",
+            model: null!);
+
+        Assert.NotSame(providerGenerator, generator);
+        Assert.Equal(providerGenerator.Language, generator.Language);
+        Assert.Equal(providerGenerator.FileExtension, generator.FileExtension);
+        Assert.Equal(TestMigrationsCodeGenerator.MetadataSource, metadata);
+        Assert.Equal(TestMigrationsCodeGenerator.SnapshotSource, snapshot);
+        Assert.Contains("using System;", metadata, StringComparison.Ordinal);
+        Assert.Contains("new Guid(", metadata, StringComparison.Ordinal);
+        Assert.Contains("using System;", snapshot, StringComparison.Ordinal);
+        Assert.Contains("new Guid(", snapshot, StringComparison.Ordinal);
+        Assert.Equal(1, providerGenerator.MetadataCallCount);
+        Assert.Equal(1, providerGenerator.SnapshotCallCount);
+    }
+
+    [Fact]
+    public void DesignTimeServicesDeferGeneratorDecorationUntilProviderServicesExist()
+    {
+        var services = new ServiceCollection();
+        new SafeMigrationDesignTimeServices().ConfigureDesignTimeServices(services);
+        services.AddSingleton<ITypeMappingSource, NullTypeMappingSource>();
+        services.AddEntityFrameworkDesignTimeServices();
+        services.Replace(
+            ServiceDescriptor.Singleton<IMigrationsCodeGenerator, TestMigrationsCodeGenerator>());
+        services.AddSingleton<IDbContextOptions>(new DbContextOptionsBuilder().Options);
+
+        using var provider = services.BuildServiceProvider();
+        var generator = provider
+            .GetRequiredService<IMigrationsCodeGeneratorSelector>()
+            .Select(language: null);
+
+        Assert.IsType<SafeMigrationCSharpMigrationsGenerator>(generator);
+    }
+
+    [Fact]
+    public void DesignTimeServicesRejectMissingProviderGeneratorAtSelectionTime()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<ITypeMappingSource, NullTypeMappingSource>();
+        services.AddEntityFrameworkDesignTimeServices();
+        services.RemoveAll<IMigrationsCodeGenerator>();
+        services.AddSingleton<IDbContextOptions>(new DbContextOptionsBuilder().Options);
+        new SafeMigrationDesignTimeServices().ConfigureDesignTimeServices(services);
+
+        using var provider = services.BuildServiceProvider();
+        var selector = provider.GetRequiredService<IMigrationsCodeGeneratorSelector>();
+
+        var exception = Assert.Throws<OperationException>(() => selector.Select("C#"));
+
+        Assert.Contains("No SafeMigrations code generator", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("C#", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DesignTimeServicesPreserveProviderLanguageWhenScaffoldingIsDisabled()
+    {
+        var csharpGenerator = new TestMigrationsCodeGenerator();
+        var fsharpGenerator = new TestMigrationsCodeGenerator(language: "F#");
+        var services = new ServiceCollection();
+        new SafeMigrationDesignTimeServices().ConfigureDesignTimeServices(services);
+        services.AddSingleton<ITypeMappingSource, NullTypeMappingSource>();
+        services.AddEntityFrameworkDesignTimeServices();
+        services.RemoveAll<IMigrationsCodeGenerator>();
+        services.AddSingleton<IMigrationsCodeGenerator>(csharpGenerator);
+        services.AddSingleton<IMigrationsCodeGenerator>(fsharpGenerator);
+        services.AddSingleton<IDbContextOptions>(new DbContextOptionsBuilder().Options);
+
+        using var provider = services.BuildServiceProvider();
+        var selector = provider.GetRequiredService<IMigrationsCodeGeneratorSelector>();
+        var generator = selector.Select("F#");
+
+        var source = generator.GenerateMigration(
+            "Company.Migrations",
+            "CreateUsers",
+            upOperations: [],
+            downOperations: []);
+
+        Assert.Equal("F#", generator.Language);
+        Assert.Equal(TestMigrationsCodeGenerator.MigrationSource, source);
+        Assert.Equal(0, csharpGenerator.MigrationCallCount);
+        Assert.Equal(1, fsharpGenerator.MigrationCallCount);
+    }
+
+    [Fact]
+    public void EnabledCodeGeneratorSelectorRejectsUnsupportedLanguage()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<ITypeMappingSource, NullTypeMappingSource>();
+        services.AddEntityFrameworkDesignTimeServices();
+
+        using var provider = services.BuildServiceProvider();
+        var selector = new SafeMigrationMigrationsCodeGeneratorSelector(
+            [
+                new TestMigrationsCodeGenerator(),
+                new TestMigrationsCodeGenerator(language: "F#"),
+            ],
+            provider.GetRequiredService<ICSharpHelper>(),
+            new SafeMigrationScaffoldingConfiguration(
+                IsEnabled: true,
+                Mode: SafeMigrationScaffoldingMode.Strict));
+
+        var exception = Assert.Throws<OperationException>(() => selector.Select("F#"));
+
+        Assert.Contains("No SafeMigrations code generator", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("F#", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DesignTimeServicesActivateProviderImplementationTypeRegistration()
+    {
+        var services = new ServiceCollection();
+        new SafeMigrationDesignTimeServices().ConfigureDesignTimeServices(services);
+        services.AddSingleton<ITypeMappingSource, NullTypeMappingSource>();
+        services.AddEntityFrameworkDesignTimeServices();
+        services.Replace(
+            ServiceDescriptor.Singleton<IMigrationsCodeGenerator, TestMigrationsCodeGenerator>());
+        services.AddSingleton<IDbContextOptions>(new DbContextOptionsBuilder().Options);
+
+        using var provider = services.BuildServiceProvider();
+        var generator = provider
+            .GetRequiredService<IMigrationsCodeGeneratorSelector>()
+            .Select("C#");
+        var snapshot = generator.GenerateSnapshot(
+            "Company.Migrations",
+            typeof(SafeMigrationScaffoldingTests),
+            "ReviewContextModelSnapshot",
+            model: null!);
+
+        Assert.IsType<SafeMigrationCSharpMigrationsGenerator>(generator);
+        Assert.Equal(TestMigrationsCodeGenerator.SnapshotSource, snapshot);
+    }
+
+    [Fact]
+    public void CodeGeneratorSelectorPreservesLastLanguageMatch()
+    {
+        var firstGenerator = new TestMigrationsCodeGenerator();
+        var secondGenerator = new TestMigrationsCodeGenerator();
+        var services = new ServiceCollection();
+        new SafeMigrationDesignTimeServices().ConfigureDesignTimeServices(services);
+        services.AddSingleton<ITypeMappingSource, NullTypeMappingSource>();
+        services.AddEntityFrameworkDesignTimeServices();
+        services.RemoveAll<IMigrationsCodeGenerator>();
+        services.AddSingleton<IMigrationsCodeGenerator>(firstGenerator);
+        services.AddSingleton<IMigrationsCodeGenerator>(secondGenerator);
+        services.AddSingleton<IDbContextOptions>(new DbContextOptionsBuilder().Options);
+
+        using var provider = services.BuildServiceProvider();
+        var generator = provider
+            .GetRequiredService<IMigrationsCodeGeneratorSelector>()
+            .Select("c#");
+
+        _ = generator.GenerateSnapshot(
+            "Company.Migrations",
+            typeof(SafeMigrationScaffoldingTests),
+            "ReviewContextModelSnapshot",
+            model: null!);
+
+        Assert.Equal(0, firstGenerator.SnapshotCallCount);
+        Assert.Equal(1, secondGenerator.SnapshotCallCount);
+    }
+
+    [Fact]
+    public void CodeGeneratorSelectorPreservesLegacyGeneratorPrecedence()
+    {
+        var legacyGenerator = new TestMigrationsCodeGenerator(language: null);
+        var csharpGenerator = new TestMigrationsCodeGenerator();
+        var services = new ServiceCollection();
+        new SafeMigrationDesignTimeServices().ConfigureDesignTimeServices(services);
+        services.AddSingleton<ITypeMappingSource, NullTypeMappingSource>();
+        services.AddEntityFrameworkDesignTimeServices();
+        services.RemoveAll<IMigrationsCodeGenerator>();
+        services.AddSingleton<IMigrationsCodeGenerator>(legacyGenerator);
+        services.AddSingleton<IMigrationsCodeGenerator>(csharpGenerator);
+        services.AddSingleton<IDbContextOptions>(new DbContextOptionsBuilder().Options);
+
+        using var provider = services.BuildServiceProvider();
+        var generator = provider
+            .GetRequiredService<IMigrationsCodeGeneratorSelector>()
+            .Select("C#");
+
+        _ = generator.GenerateMetadata(
+            "Company.Migrations",
+            typeof(SafeMigrationScaffoldingTests),
+            "CreateUsers",
+            "202608310001_CreateUsers",
+            targetModel: null!);
+
+        Assert.Equal(1, legacyGenerator.MetadataCallCount);
+        Assert.Equal(0, csharpGenerator.MetadataCallCount);
+    }
+
+    [Fact]
+    public void DesignTimeServicesAreIdempotentBeforeProviderRegistration()
+    {
+        var services = new ServiceCollection();
+        var designTimeServices = new SafeMigrationDesignTimeServices();
+
+        designTimeServices.ConfigureDesignTimeServices(services);
+        designTimeServices.ConfigureDesignTimeServices(services);
+
+        Assert.Single(services, static descriptor =>
+            descriptor.ServiceType == typeof(IMigrationsCodeGeneratorSelector));
     }
 
     [Fact]
@@ -534,7 +896,8 @@ public sealed class SafeMigrationScaffoldingTests
     private static SafeMigrationCSharpMigrationOperationGenerator CreateOperationGenerator(
         SafeMigrationScaffoldingMode mode,
         bool isEnabled = true,
-        SafeMigrationPolicy legacyConvergencePolicy = SafeMigrationPolicy.ThrowIfDifferent
+        SafeMigrationPolicy legacyConvergencePolicy = SafeMigrationPolicy.ThrowIfDifferent,
+        IEnumerable<ISafeMigrationCreateIndexScaffoldingProjector>? createIndexProjectors = null
     )
     {
         var services = new ServiceCollection();
@@ -546,7 +909,8 @@ public sealed class SafeMigrationScaffoldingTests
 
         return new SafeMigrationCSharpMigrationOperationGenerator(
             dependencies,
-            new SafeMigrationScaffoldingConfiguration(isEnabled, mode, legacyConvergencePolicy));
+            new SafeMigrationScaffoldingConfiguration(isEnabled, mode, legacyConvergencePolicy),
+            createIndexProjectors ?? []);
     }
 
     private static CreateTableOperation CreateTable()
@@ -596,8 +960,75 @@ public sealed class SafeMigrationScaffoldingTests
         ) => null;
     }
 
+    private sealed class TestMigrationsCodeGenerator(
+        string? language = "C#"
+    ) : IMigrationsCodeGenerator
+    {
+        public const string MigrationSource = "module Company.Migrations.CreateUsers";
+        public const string MetadataSource = "using System;\npartial class CreateUsers "
+            + "{ private readonly Guid _id = new Guid(\"1714e708-5197-44c4-b355-ad0f2bc6cc80\"); }";
+        public const string SnapshotSource = "using System;\npartial class ReviewContextModelSnapshot "
+            + "{ private readonly Guid _id = new Guid(\"1714e708-5197-44c4-b355-ad0f2bc6cc80\"); }";
+
+        public string FileExtension => ".cs";
+
+        public string? Language { get; } = language;
+
+        public int MigrationCallCount { get; private set; }
+
+        public int MetadataCallCount { get; private set; }
+
+        public int SnapshotCallCount { get; private set; }
+
+        public string GenerateMigration(
+            string? migrationNamespace,
+            string migrationName,
+            IReadOnlyList<MigrationOperation> upOperations,
+            IReadOnlyList<MigrationOperation> downOperations
+        )
+        {
+            MigrationCallCount++;
+
+            return MigrationSource;
+        }
+
+        public string GenerateMetadata(
+            string? migrationNamespace,
+            Type contextType,
+            string migrationName,
+            string migrationId,
+            IModel targetModel
+        )
+        {
+            MetadataCallCount++;
+
+            return MetadataSource;
+        }
+
+        public string GenerateSnapshot(
+            string? modelSnapshotNamespace,
+            Type contextType,
+            string modelSnapshotName,
+            IModel model
+        )
+        {
+            SnapshotCallCount++;
+
+            return SnapshotSource;
+        }
+    }
+
     private enum TestValueGenerationStrategy
     {
         Identity = 1,
+    }
+
+    private sealed class TestIndexProjector(
+        IReadOnlyList<int> prefixLengths
+    ) : ISafeMigrationCreateIndexScaffoldingProjector
+    {
+        public SafeMigrationCreateIndexScaffoldingProjection Project(
+            CreateIndexOperation operation
+        ) => new(operation, prefixLengths);
     }
 }

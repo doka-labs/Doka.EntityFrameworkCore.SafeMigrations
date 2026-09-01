@@ -47,6 +47,12 @@ public static partial class SafeMigrationModelFingerprint
     )
     {
         var mappings = column.PropertyMappings;
+        if (mappings.Count == 0)
+        {
+            WriteUnmappedColumn(writer, column);
+            return;
+        }
+
         var mapping = mappings[0];
         var property = mapping.Property;
 
@@ -82,6 +88,35 @@ public static partial class SafeMigrationModelFingerprint
         WriteAnnotations(writer, column);
     }
 
+    private static void WriteUnmappedColumn(
+        CanonicalHashWriter writer,
+        IColumn column
+    )
+    {
+        // JSON container columns intentionally have no property mappings. Use
+        // the public relational column contract only for that provider-owned
+        // shape; ordinary scalar columns retain the allocation-efficient
+        // property-mapping path above.
+        writer.Add(column.Name);
+        writer.Add(column.StoreType);
+        writer.Add(column.ProviderClrType.FullName);
+        writer.Add(column.IsNullable);
+        writer.Add(column.MaxLength);
+        writer.Add(column.Precision);
+        writer.Add(column.Scale);
+        writer.Add(column.IsUnicode);
+        writer.Add(column.IsFixedLength);
+        writer.Add(column.IsRowVersion);
+        writer.Add(column.Collation);
+        writer.Add(column.Comment);
+        writer.Add(column.Order);
+        writer.Add(column.ComputedColumnSql);
+        writer.Add(column.IsStored);
+        writer.Add(column.DefaultValueSql);
+        WriteColumnDefaultValue(writer, column);
+        WriteAnnotations(writer, column);
+    }
+
     private static void WriteColumnDefaultValue(
         CanonicalHashWriter writer,
         Microsoft.EntityFrameworkCore.Metadata.IColumnMapping mapping
@@ -100,6 +135,21 @@ public static partial class SafeMigrationModelFingerprint
             writer,
             converter is null ? annotation.Value : converter.ConvertToProvider(annotation.Value),
             "column default value");
+    }
+
+    private static void WriteColumnDefaultValue(
+        CanonicalHashWriter writer,
+        IColumn column
+    )
+    {
+        if (!column.TryGetDefaultValue(out var defaultValue))
+        {
+            writer.Add(false);
+            return;
+        }
+
+        writer.Add(true);
+        WriteValue(writer, defaultValue, "column default value");
     }
 
     private static void WriteColumnBase(

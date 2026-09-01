@@ -11,7 +11,7 @@ session-local, but MySQL-family DDL is not an atomic migration transaction.
 - The migration principal does not need `CREATE ROUTINE`.
 - Guard state lives in the current session and temporary database objects.
 - Prepared SQL contains provider-rendered DDL, not caller-provided SQL text.
-- SafeMigrations declares its user-variable capability through Doka 10.2.0.
+- SafeMigrations declares its user-variable capability through Doka 10.3.0.
   Doka supplies `AllowUserVariables=true` for a provider-owned string only when
   the option was omitted; contradictory owned values fail closed.
 - Caller-owned `DbConnection` and `MySqlDataSource` inputs are never mutated.
@@ -76,7 +76,7 @@ index names from that model so a completed strict batch remains idempotent.
 When neither batch nor target-model evidence is available, the alias is not
 accepted.
 
-Every safe operation returns exactly one Doka 10.2.0 scoped migration command.
+Every safe operation returns exactly one Doka 10.3.0 scoped migration command.
 Its bounded fragment list contains ordered setup, one body, and reverse-order
 cleanup. A data-reading classifier adds setup fragments for lazy state
 evaluation without adding EF command boundaries. This shape reduces executor
@@ -89,8 +89,10 @@ A generated legacy-convergence migration retains `ThrowIfDifferent` unless its
 source explicitly selects `RepairIfSafe`. That policy can repair only
 nullability, default, and comment drift on an ordinary existing column. Store
 type, collation, generated-value state, row-version state, and provider
-annotations must already match. Existing `NULL` values block a repair to `NOT
-NULL` before target DDL.
+metadata must already match. Doka's typed metadata contract must recognize
+every provider annotation and prove that Guid storage and value-generation
+metadata are consistent with the complete column shape. Existing `NULL` values
+block a repair to `NOT NULL` before target DDL.
 
 MySQL and MariaDB require `MODIFY COLUMN` to carry the complete target column
 definition. SafeMigrations therefore asks Doka to render that complete
@@ -104,7 +106,104 @@ prepared classifier reads column data only after a catalog-only guard has
 proved that the target exists. Missing safe additions remain `Missing`; an
 unsafe missing `NOT NULL` addition to a populated table remains `DataBlocked`.
 
-## Scoped cleanup in Doka 10.2.0
+## Index prefixes and physical key limits
+
+Doka 10.3.0 exposes ordered index-prefix metadata through its typed public
+migration-operation contract. At design time, SafeMigrations consumes that
+metadata, removes the provider annotation from the operation EF renders, and
+writes the values into the generated SafeMigrations call. Zero represents the
+complete key. A positive prefix uses character-count semantics for character
+columns and byte-count semantics for binary columns.
+
+At runtime, a missing BTREE index is eligible for DDL only after catalog
+analysis proves its complete maximum key width. The proof reads the live
+InnoDB engine, row format, `@@innodb_page_size`, column store families,
+character widths, numeric precision/scale, temporal precision, and explicit
+prefixes. `COMPACT` and `REDUNDANT` use the 767-byte limit. A 4 KiB or 8 KiB
+page uses 768 or 1536 bytes respectively; the qualified default 16 KiB profile
+uses 3072 bytes.
+
+An overlong ordinary key rejects as
+`index_prefix_required_for_key_limit`. An unknown-width, expression,
+unsupported access-method, or full `TEXT`/`BLOB` key rejects as
+`index_key_length_unverifiable`. A prefix longer than its column or a prefix on
+a scalar key also rejects. Existing indexes remain catalog-comparable, so an
+already materialized provider-supported index is not rejected merely because
+SafeMigrations does not own a creation proof for its access method. No path
+silently truncates or invents a prefix.
+
+## Ordered index replacement
+
+Automatic scaffolding emits `DropIndexIfExists` for an EF `DropIndex`
+operation. Preflight also recognizes a manually retained ordinary provider
+`DropIndexOperation`. Once the exact table, schema, and index name has an
+accepted drop, a following ordinary column BTREE ensure is projected as
+missing. The live analyzer still proves referenced columns, physical key width,
+and unique-data safety before that projection. Unsupported, data-blocked, and
+prerequisite-missing results are never converted to readiness. A differently
+named semantic index conflict is also retained because dropping the expected
+name cannot remove that object.
+
+EF represents a drop and a create as ordered migration operations; the
+SafeMigrations projection follows that order without mutating the database
+during preflight. See the EF Core 10
+[`MigrationBuilder.DropIndex` API](https://learn.microsoft.com/en-us/dotnet/api/microsoft.entityframeworkcore.migrations.migrationbuilder.dropindex?view=efcore-10.0)
+(retrieved 2026-09-01).
+
+## JSON aliases and SQL defaults
+
+MySQL stores `json` natively. Doka emits the same model store type on MariaDB
+as `longtext COLLATE utf8mb4_bin` with an inline `JSON_VALID` check.
+SafeMigrations compares those physical facets as one provider-owned JSON
+contract. Strict table counts and unexpected-object inventory exclude only the
+check whose column name and canonical `JSON_VALID(column)` expression match an
+expected `json` column. An independent check remains owned drift and blocks a
+strict table operation.
+
+EF column operations expose SQL defaults through `DefaultValueSql`.
+SafeMigrations parses that value with its bounded typed grammar when capturing
+an EF-generated definition. `CURRENT_TIMESTAMP(6)` is therefore structurally
+rendered and compared instead of being rejected as opaque. Expressions outside
+the grammar remain `opaque_sql_expression`; they are not executed or accepted
+heuristically. Primary contracts:
+
+- [MariaDB JSON data type](https://mariadb.com/docs/server/reference/data-types/string-data-types/json)
+  (retrieved 2026-09-01);
+- [EF Core 10 `ColumnOperation.DefaultValueSql`](https://learn.microsoft.com/en-us/dotnet/api/microsoft.entityframeworkcore.migrations.operations.columnoperation.defaultvaluesql?view=efcore-10.0)
+  (retrieved 2026-09-01).
+
+## Constraint and index identity conflicts
+
+Object identity is nominal and semantic. When an expected foreign-key, unique,
+check, or index name is absent, SafeMigrations searches each physical candidate
+independently for the complete modeled shape. A differently named semantic
+match rejects before DDL instead of creating a duplicate. Different columns,
+expressions, actions, ordering, prefixes, methods, uniqueness, or visibility do
+not suppress creation of the reviewed expected object.
+
+Foreign-key, unique-constraint, and check-constraint conflicts use
+`foreign_key_semantic_identity_conflict`,
+`unique_constraint_semantic_identity_conflict`, and
+`check_constraint_semantic_identity_conflict`. An index conflict is
+`Different`, because the engine supports the requested shape but an ambiguous
+physical identity already exists.
+
+InnoDB may create an index automatically for a foreign key and may later drop
+that index silently when another suitable index becomes available. A candidate
+that has the exact ordered columns of a local foreign key is therefore treated
+as provider support infrastructure for index-identity conflict detection, not
+as an independently owned duplicate. The explicit expected index must still be
+created and match by name. This follows the
+[MySQL 8.4 foreign-key index contract](https://dev.mysql.com/doc/refman/8.4/en/create-table-foreign-keys.html)
+(retrieved 2026-09-01).
+
+MySQL checks match only when `TABLE_CONSTRAINTS.ENFORCED` is `YES`. MariaDB
+check rows are joined by schema, table, and constraint name so table-scoped
+names introduced in MariaDB 12.1 cannot cross-match another table. MySQL
+invisible indexes and MariaDB ignored indexes do not satisfy a visible expected
+index and do not block creation under a different name.
+
+## Scoped cleanup in Doka 10.3.0
 
 `RenderStandardOperation` exposes provider-validated `Setup`, `Body`, and
 `Cleanup` fragments. SafeMigrations embeds the exact body as UTF-8 hexadecimal
@@ -118,9 +217,10 @@ For column value generation, `AutoIncrement` is compared against `c.EXTRA`.
 latter is a client-side EF value generator and is therefore not a database
 column facet. SafeMigrations still retains the exact annotation in its
 immutable definition, contract fingerprint, and provider operation replay.
-HiLo, Guid storage-format, spatial, invisible, and unknown column annotations
-remain unsupported until their complete observable database contracts are
-modeled.
+Supported `Binary16` and `Char36` Guid metadata is accepted only when it is
+consistent with a Guid column's complete store type. HiLo, malformed,
+contradictory, spatial, invisible, and unknown column metadata remains
+unsupported until its complete observable database contract is modeled.
 
 Doka attempts cleanup after setup or body failure and after caller
 cancellation. Asynchronous cleanup uses an independent cancellation token.
@@ -219,15 +319,23 @@ unqualified future engine line is admitted implicitly.
 - [MySQL implicit commit statements](https://dev.mysql.com/doc/refman/8.4/en/implicit-commit.html)
 - [MySQL prepared statement restrictions](https://dev.mysql.com/doc/refman/8.4/en/sql-prepared-statements.html)
 - [MySQL ALTER TABLE](https://dev.mysql.com/doc/refman/8.4/en/alter-table.html)
+- [MySQL InnoDB limits](https://dev.mysql.com/doc/refman/8.4/en/innodb-limits.html)
+- [MySQL CREATE INDEX](https://dev.mysql.com/doc/refman/8.4/en/create-index.html)
+- [MySQL invisible indexes](https://dev.mysql.com/doc/refman/8.4/en/invisible-indexes.html)
+- [MySQL CHECK constraints](https://dev.mysql.com/doc/refman/8.4/en/create-table-check-constraints.html)
 - [MySQL INFORMATION_SCHEMA.COLUMNS](https://dev.mysql.com/doc/refman/en/information-schema-columns-table.html)
 - [MySQL temporary table privileges](https://dev.mysql.com/doc/refman/8.4/en/create-temporary-table.html)
 - [MariaDB SQL statements causing implicit commit](https://mariadb.com/docs/server/reference/sql-statements/transactions/sql-statements-that-cause-an-implicit-commit)
 - [MariaDB ALTER TABLE](https://mariadb.com/docs/server/reference/sql-statements/data-definition/alter/alter-table)
 - [MariaDB INFORMATION_SCHEMA.COLUMNS](https://mariadb.com/docs/server/reference/system-tables/information-schema/information-schema-tables/information-schema-columns-table)
 - [MariaDB PREPARE statement](https://mariadb.com/docs/server/reference/sql-statements/prepared-statements/prepare-statement)
+- [MariaDB InnoDB limitations](https://mariadb.com/docs/server/server-usage/storage-engines/innodb/innodb-limitations)
+- [MariaDB InnoDB row formats](https://mariadb.com/docs/server/server-usage/storage-engines/innodb/innodb-row-formats/innodb-row-formats-overview)
+- [MariaDB ignored indexes](https://mariadb.com/docs/server/ha-and-performance/optimization-and-tuning/optimization-and-indexes/ignored-indexes)
 - [Doka 10.2.0 provider configuration](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.2.0/docs/provider-configuration.md)
 - [Doka ownership-aware connection decision](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.2.0/docs/decisions/D-029-ownership-aware-connection-invariants.md)
-- [Doka.EntityFrameworkCore.MySql](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql)
+- [Doka 10.3.0 migration-operation metadata](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.3.0/src/Doka.EntityFrameworkCore.MySql/Migrations/MySqlMigrationOperationMetadata.cs)
+- [Doka.EntityFrameworkCore.MySql 10.3.0 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.3.0)
 
 Deployment sequencing and incident response are defined in
 [Deployment and recovery](runbooks/deployment-and-recovery.md).

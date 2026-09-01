@@ -37,6 +37,12 @@ var hasExpectedDesignTimeReference = designTimeReferences is [{ ConstructorArgum
 
 if (hasExpectedDesignTimeReference != expectsDesignTimeReference)
 {
+    Console.Error.WriteLine(
+        expectsDesignTimeReference
+            ? "The PostgreSQL package consumer is missing the expected design-time service reference."
+            : "The runtime-only PostgreSQL package consumer contains an unexpected design-time service reference."
+    );
+
     return 2;
 }
 

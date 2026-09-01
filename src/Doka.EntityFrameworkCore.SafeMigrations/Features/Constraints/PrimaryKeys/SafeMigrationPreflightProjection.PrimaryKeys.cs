@@ -5,9 +5,23 @@ internal sealed partial class SafeMigrationPreflightProjection
     private SafeMigrationProviderAnalysis Project(
         EnsurePrimaryKeyIntent intent,
         SafeMigrationProviderAnalysis liveAnalysis
-    ) => TryGet(intent.Definition.Table, intent.Definition.Schema, out var table)
-        ? AnalyzeOptional(table.PrimaryKey, intent.Definition, SafeMigrationDefinitionEquivalence.PrimaryKey)
-        : liveAnalysis;
+    )
+    {
+        if (!TryGet(intent.Definition.Table, intent.Definition.Schema, out var table))
+        {
+            return InvalidateDataDependentMissing(
+                intent.Definition.Table,
+                intent.Definition.Schema,
+                liveAnalysis);
+        }
+
+        var analysis = AnalyzeOptional(
+            table.PrimaryKey,
+            intent.Definition,
+            SafeMigrationDefinitionEquivalence.PrimaryKey);
+
+        return InvalidateDataDependentMissing(table.Table, table.Schema, analysis);
+    }
 
     private SafeMigrationProviderAnalysis Project(
         DropPrimaryKeyIntent intent,

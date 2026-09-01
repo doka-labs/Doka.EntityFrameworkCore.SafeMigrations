@@ -56,14 +56,18 @@ internal static partial class SafeMigrationStandardOperationFactory
     /// <param name="intent">The ensure-column intent to repair.</param>
     /// <param name="renderExpression">The provider expression renderer, when expressions are present.</param>
     /// <param name="renderCollation">The provider collation renderer, when collations are present.</param>
+    /// <param name="providerRepairValidator">
+    /// The provider-owned metadata validator, or null when no provider annotations are permitted.
+    /// </param>
     /// <returns>An ordinary EF Core alter-column operation.</returns>
     public static MigrationOperation CreateRepair(
         EnsureColumnIntent intent,
         Func<SafeMigrationSqlExpression, string>? renderExpression = null,
-        Func<SafeMigrationCollationIdentifier, string?>? renderCollation = null
+        Func<SafeMigrationCollationIdentifier, string?>? renderCollation = null,
+        Func<ExpectedColumnDefinition, bool>? providerRepairValidator = null
     )
     {
-        ValidateRepairIntent(intent);
+        ValidateRepairIntent(intent, providerRepairValidator);
 
         return CreateRepairOperation(
             intent,
@@ -79,14 +83,18 @@ internal static partial class SafeMigrationStandardOperationFactory
     /// <param name="intent">The ensure-column intent to repair.</param>
     /// <param name="renderExpression">The provider expression renderer, when expressions are present.</param>
     /// <param name="renderCollation">The provider collation renderer, when collations are present.</param>
+    /// <param name="providerRepairValidator">
+    /// The provider-owned metadata validator, or null when no provider annotations are permitted.
+    /// </param>
     /// <returns>An ordinary EF Core alter-column operation.</returns>
     public static MigrationOperation CreateFullDefinitionRepair(
         EnsureColumnIntent intent,
         Func<SafeMigrationSqlExpression, string>? renderExpression = null,
-        Func<SafeMigrationCollationIdentifier, string?>? renderCollation = null
+        Func<SafeMigrationCollationIdentifier, string?>? renderCollation = null,
+        Func<ExpectedColumnDefinition, bool>? providerRepairValidator = null
     )
     {
-        ValidateRepairIntent(intent);
+        ValidateRepairIntent(intent, providerRepairValidator);
 
         return CreateRepairOperation(
             intent,
@@ -96,12 +104,23 @@ internal static partial class SafeMigrationStandardOperationFactory
     }
 
     private static void ValidateRepairIntent(
-        EnsureColumnIntent intent
+        EnsureColumnIntent intent,
+        Func<ExpectedColumnDefinition, bool>? providerRepairValidator
     )
     {
         ArgumentNullException.ThrowIfNull(intent);
 
-        if (!SafeMigrationColumnRepairHelper.CanSafelyConvergeExistingColumn(intent.Definition))
+        var providerMetadataIsRepairable = providerRepairValidator is null
+            ? intent.Definition.ProviderAnnotations.Count == 0
+            : providerRepairValidator(intent.Definition);
+
+        // A provider may narrow repair eligibility for its own metadata, but
+        // it cannot override Core's intrinsic exclusions for computed,
+        // row-version, or otherwise incomplete replacement definitions.
+        var isRepairable = SafeMigrationColumnRepairHelper.HasRepairableIntrinsicShape(intent.Definition)
+            && providerMetadataIsRepairable;
+
+        if (!isRepairable)
         {
             throw new NotSupportedException(
                 "The ensure-column definition contains facets that cannot be repaired "

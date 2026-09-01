@@ -6,13 +6,15 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         string table,
         string name,
         IReadOnlyList<string> columns,
-        string type
+        string type,
+        bool requireExpectedName = true
     ) => $"EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc "
         + "JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu "
         + "ON kcu.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA "
         + "AND kcu.TABLE_NAME = tc.TABLE_NAME AND kcu.CONSTRAINT_NAME = tc.CONSTRAINT_NAME "
         + $"WHERE tc.CONSTRAINT_SCHEMA = DATABASE() AND tc.TABLE_NAME = {Literal(table)} "
-        + $"AND tc.CONSTRAINT_NAME = {Literal(name)} AND tc.CONSTRAINT_TYPE = {Literal(type)} "
+        + $"AND tc.CONSTRAINT_NAME {(requireExpectedName ? "=" : "<>")} {Literal(name)} "
+        + $"AND tc.CONSTRAINT_TYPE = {Literal(type)} "
         + $"GROUP BY tc.CONSTRAINT_NAME HAVING COUNT(*) = {columns.Count.ToString(CultureInfo.InvariantCulture)} "
         + $"AND GROUP_CONCAT(kcu.COLUMN_NAME ORDER BY kcu.ORDINAL_POSITION SEPARATOR ',') "
         + $"= {Literal(OrderedColumnsSql(columns))})";

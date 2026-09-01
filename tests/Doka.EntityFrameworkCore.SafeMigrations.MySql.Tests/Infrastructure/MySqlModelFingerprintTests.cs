@@ -34,6 +34,30 @@ public sealed class MySqlModelFingerprintTests
         Assert.NotEqual(Fingerprint(baseline), Fingerprint(changed));
     }
 
+    [Fact]
+    public void Create_HandlesNestedJsonContainerWithoutScalarPropertyMappings()
+    {
+        using var context = new JsonArtifactContext();
+        var model = context.GetService<IDesignTimeModel>()
+            .Model;
+        var jsonColumn = model
+            .GetRelationalModel()
+            .Tables
+            .Single(static table => table.Name == "json_artifacts")
+            .Columns
+            .Single(static column => column.Name == "payload");
+
+        var first = SafeMigrationModelFingerprint.Create(model, ProviderContract);
+        var second = SafeMigrationModelFingerprint.Create(model, ProviderContract);
+
+        Assert.Empty(jsonColumn.PropertyMappings);
+        Assert.Equal(first, second);
+        Assert.StartsWith(
+            "safe-relational-model:v1:Doka.EntityFrameworkCore.MySql:sha256:",
+            first,
+            StringComparison.Ordinal);
+    }
+
     private static string Fingerprint(
         DbContext context
     ) => SafeMigrationModelFingerprint.Create(
@@ -117,6 +141,33 @@ public sealed class MySqlModelFingerprintTests
         }
     }
 
+    private sealed class JsonArtifactContext : DbContext
+    {
+        protected override void OnConfiguring(
+            DbContextOptionsBuilder optionsBuilder
+        ) => optionsBuilder.UseMySql(
+            "Server=localhost;Database=fingerprint;User ID=test;Password=test",
+            MySqlServerVersion.MySql(new Version(8, 4, 11)));
+
+        protected override void OnModelCreating(
+            ModelBuilder modelBuilder
+        )
+        {
+            modelBuilder.Entity<JsonArtifact>(entity =>
+            {
+                entity.ToTable("json_artifacts");
+                entity.HasKey(static artifact => artifact.Id);
+                entity.OwnsOne(
+                    static artifact => artifact.Payload,
+                    owned =>
+                    {
+                        owned.ToJson("payload");
+                        owned.OwnsOne(static payload => payload.Details);
+                    });
+            });
+        }
+    }
+
     private sealed class Alpha
     {
         public int Id { get; set; }
@@ -129,5 +180,24 @@ public sealed class MySqlModelFingerprintTests
         public int Id { get; set; }
 
         public bool Enabled { get; set; }
+    }
+
+    private sealed class JsonArtifact
+    {
+        public int Id { get; set; }
+
+        public JsonArtifactPayload Payload { get; set; } = new();
+    }
+
+    private sealed class JsonArtifactPayload
+    {
+        public string Name { get; set; } = string.Empty;
+
+        public JsonArtifactDetails Details { get; set; } = new();
+    }
+
+    private sealed class JsonArtifactDetails
+    {
+        public int Revision { get; set; }
     }
 }

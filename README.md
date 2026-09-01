@@ -26,8 +26,8 @@ equivalent.
 - `Doka.EntityFrameworkCore.SafeMigrations`: provider-neutral intent,
   definitions, planning, reports, and `MigrationBuilder` extensions
 - `Doka.EntityFrameworkCore.SafeMigrations.MySql`: MySQL and MariaDB adapter on
-  the public `Doka.EntityFrameworkCore.MySql` 10.2.0 operation-handler SPI and
-  ownership-aware connection contract
+  the public `Doka.EntityFrameworkCore.MySql` 10.3.0 operation-handler and
+  typed migration-metadata SPI
 - `Doka.EntityFrameworkCore.SafeMigrations.PostgreSql`: PostgreSQL adapter on
   Npgsql 10
 
@@ -42,31 +42,30 @@ The CI and release workflows pin the exact patch tags and image digests used
 when that matrix executes. The exact successful run, not this table, is release
 evidence. See [Support and qualification](docs/support-and-qualification.md).
 
-The initial complete stable delivery is 10.0.0, followed by the published
-10.0.1 maintenance release. This source prepares the stable 10.0.2 maintenance
-release, which qualifies Doka 10.2.0, delegates required connection
-capabilities to its ownership-aware contract, and makes generated migration
-namespace imports self-contained. [Release notes](CHANGELOG.md) distinguish
-prepared source from published releases. Only a successful release run and
-verified public packages establish availability or qualification.
+The initial complete stable delivery is 10.0.0. The latest confirmed published
+maintenance release is 10.0.2. This source is prepared for stable 10.1.0: it
+consumes Doka 10.3.0's typed migration metadata, preserves MySQL/MariaDB index
+prefixes during scaffolding, and closes the catalog-convergence edge cases in
+the [release notes](CHANGELOG.md). Only a successful release run and verified
+public packages establish 10.1.0 availability or qualification.
 
 ## Installation
 
 Install one provider package. The core package is included transitively. The
-commands select the prepared stable maintenance release exactly so restore does
+commands select the prepared stable release exactly so restore does
 not move to a different package version implicitly. Confirm the matching
 published release and all three NuGet package pages before installation; source
 or changelog entries alone do not establish package availability.
 
 ```bash
-package_version='10.0.2'
+package_version='10.1.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.MySql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.0.2'
+package_version='10.1.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version "$package_version"
 ```
 
@@ -92,7 +91,7 @@ services.AddDbContext<AppDbContext>(options =>
 ```
 
 `UseMySqlSafeMigrations()` declares its user-variable requirement through Doka
-10.2.0. For a provider-owned connection string, Doka supplies
+10.3.0. For a provider-owned connection string, Doka supplies
 `AllowUserVariables=true` when it was omitted. An explicitly contradictory
 setting is rejected. Caller-owned `DbConnection` and `MySqlDataSource` inputs
 are never mutated and must already use `AllowUserVariables=true` and
@@ -296,8 +295,10 @@ and a non-default legacy policy without `LegacyConvergence` fail during options
 configuration.
 
 Automatic rewriting is deliberately bounded to scaffolded `CreateTable`,
-`CreateIndex`, and `DropTable` operations. Other EF operations remain ordinary
-EF migration operations. When a later migration needs catalog-aware idempotent
+`CreateIndex`, `DropIndex`, and `DropTable` operations. Those calls become
+`CreateTableIfNotExists`, a safe index-create helper, `DropIndexIfExists`, and
+`DropTableIfExists`, respectively. Other EF operations remain ordinary EF
+migration operations. When a later migration needs catalog-aware idempotent
 handling for a column, constraint, rename, or schema operation, use the
 corresponding SafeMigrations builder API and review the resulting contract.
 This boundary prevents the design-time layer from silently assigning policies
@@ -311,6 +312,13 @@ non-`AUTO_INCREMENT` catalog state because it generates values in the client,
 not in the database. HiLo, storage-format, unknown column, and unsupported
 operation-level annotations remain `Unsupported` before target DDL instead of
 being ignored.
+
+For MySQL and MariaDB, the scaffolder also projects Doka's typed index-prefix
+metadata into explicit `*WithPrefixesIfNotExistsFromModel` calls. A zero entry
+means the complete key; a positive entry limits that key to the declared number
+of characters or bytes according to the engine contract. No provider annotation
+is left on the outer SafeMigrations operation. The complete generated source is
+shown in the [migration authoring guide](docs/migration-authoring.md).
 
 The `*FromModel` helpers are public because generated migrations must compile
 against a stable package API. They are scaffolder targets, not required
@@ -341,12 +349,14 @@ operations for every owned column and constraint. Scaffolded indexes follow as
 their own safe operations. Those children use the policy written into the
 generated call; the default is `ThrowIfDifferent`. With explicit
 `RepairIfSafe`, an ordinary existing column is repaired only when its resolved
-store type, collation, generated/identity state, row-version state, and provider
-annotations already match. The allowlist is limited to nullability, default,
-and comment. Tightening nullability is `DataBlocked` when any row contains
-`NULL`. Type, collation, computed/generated, identity, row-version, and
-provider-annotation drift rejects without mutation. The table container alone
-never hides missing children.
+store type, collation, generated/identity state, and row-version state already
+match. Doka 10.3.0's typed metadata must recognize every provider annotation;
+unknown, malformed, contradictory, or unsupported metadata rejects. The
+allowlist is limited to nullability, default, and comment. Tightening
+nullability is `DataBlocked` when any row contains `NULL`. Type, collation,
+computed/generated, identity, row-version, and unsupported provider-metadata
+drift rejects without mutation. The table container alone never hides missing
+children.
 
 `ExpectedTableDefinition` and `ConvergeTable` remain available for advanced
 hand-authored contracts, for example when a reviewed migration needs a policy
@@ -398,6 +408,11 @@ to the exact analyzed target, not the latest migration in the assembly.
 ordinary provider operations; `NoOperations` requires checking intended history
 and postconditions rather than executing an unqualified target. A blocked report
 must stop deployment. Propagate a deployment cancellation token when available.
+Typed EF seed/update/delete-data operations retain preceding structural facts
+for a later non-unique safe index, but they remain independently reviewable and
+invalidate every projected or live pre-batch data-safety proof. A later unique
+index or additive data-validating constraint therefore remains fail-closed;
+subsequent structural provider operations do not clear that uncertainty.
 Keep the migration assembly fixed and the required write/DDL fences in place;
 preflight does not reserve database state. The
 [deployment runbook](docs/runbooks/deployment-and-recovery.md) owns these checks
@@ -405,9 +420,14 @@ and postflight. EF's [targeted migrator](https://learn.microsoft.com/en-us/dotne
 uses a null target to mean latest, so the example rejects a missing target.
 
 For an explicit execution contract, use `AnalyzeAsync` before migration. Use
-`VerifyAsync` afterwards with the reviewed final-state contract. Reuse the same
-operations only if every postcondition still describes the final target: an
-ensure followed by a rename or drop must not require the old object to remain.
+`VerifyAsync` afterwards with the reviewed final-state contract. When the same
+exact safe schema, table, column, index, primary-key, or named-constraint
+resource is written more than once, postflight treats only its final safe
+writer as authoritative. Earlier assessments remain ordered and report
+`postcondition_superseded` with a satisfied effective postcondition. Ordinary
+provider operations never supersede a safe postcondition because their effects
+are not owned or inferred. A rename proves source absence only; add an explicit
+ensure for the destination when its complete final definition must be verified.
 The [postflight procedure](docs/runbooks/deployment-and-recovery.md#postflight)
 binds each contract's fingerprint to the same deployment artifact and target.
 

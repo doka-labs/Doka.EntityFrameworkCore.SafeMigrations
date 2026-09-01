@@ -38,7 +38,9 @@ internal static partial class SafeMigrationExpectedDefinitionFactory
     {
         if (operation.DefaultValueSql is not null)
         {
-            return SafeMigrationDefaultValue.Sql(operation.DefaultValueSql);
+            return SafeMigrationSqlExpressionParser.TryParse(operation.DefaultValueSql, out var expression)
+                ? SafeMigrationDefaultValue.Sql(expression)
+                : SafeMigrationDefaultValue.Sql(operation.DefaultValueSql);
         }
 
         return operation.DefaultValue is null

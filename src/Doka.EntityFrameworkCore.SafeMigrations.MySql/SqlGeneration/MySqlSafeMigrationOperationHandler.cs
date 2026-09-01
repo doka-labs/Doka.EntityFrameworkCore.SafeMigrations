@@ -353,7 +353,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         MySqlMigrationOperationContext context
     )
     {
-        if (runtimePlan.UnsupportedCode is not null)
+        if (runtimePlan.IsStaticallyUnsupported)
         {
             return [Command("DO 0;", transactionSuppressed: true)];
         }
@@ -396,7 +396,8 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         var repairOperation = SafeMigrationStandardOperationFactory.CreateFullDefinitionRepair(
             intent,
             _expressionRenderer.Render,
-            static collation => collation.Schema is null ? collation.Name : null);
+            static collation => collation.Schema is null ? collation.Name : null,
+            MySqlSafeMigrationColumnMetadata.CanSafelyConverge);
 
         var repairCommand = GetSingleBaselineCommand(context.RenderStandardOperation(repairOperation));
         var repairFragments = GetBaselineFragments(repairCommand);

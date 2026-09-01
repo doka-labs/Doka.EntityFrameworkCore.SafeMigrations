@@ -73,15 +73,40 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var definition = intent.Definition;
         var tableExists = BaseTableExists(definition.Table);
         var indexExists = IndexExists(definition.Table, definition.Name);
-        var matching = BuildIndexMatches(definition, isMariaDb);
+        var matching = BuildIndexMatches(definition, isMariaDb, requireExpectedName: true);
+        var identityConflict = BuildIndexMatches(
+            definition,
+            isMariaDb,
+            requireExpectedName: false,
+            excludeForeignKeySupportIndexes: true);
         var dataBlocked = definition.Unique ? UniqueIndexDataBlocked(definition) : "FALSE";
+        var physicallyAchievable = BuildIndexPhysicalShapeSupported(definition);
+        var hasProviderNeutralPhysicalShape = definition.Keys.All(static key => key.Column is not null)
+            && (definition.Method is null
+                || StringComparer.OrdinalIgnoreCase.Equals(definition.Method, "BTREE"));
+        var physicalFailureCode = definition.Keys.Any(
+                static key => key.Expression is not null || key.StructuredExpression is not null)
+            || definition.Method is not null
+            && !StringComparer.OrdinalIgnoreCase.Equals(definition.Method, "BTREE")
+                ? "index_key_length_unverifiable"
+                : "index_prefix_required_for_key_limit";
 
         return Plan(
             $"CASE WHEN NOT {tableExists} THEN 'prerequisite_missing' "
-            + $"WHEN NOT {indexExists} AND {dataBlocked} THEN 'data_blocked' "
+            + $"WHEN {identityConflict} THEN 'different' "
+            + (hasProviderNeutralPhysicalShape
+                ? $"WHEN NOT ({physicallyAchievable}) THEN 'unsupported' "
+                    + $"WHEN {dataBlocked} THEN 'data_blocked' "
+                : $"WHEN NOT {indexExists} AND NOT ({physicallyAchievable}) THEN 'unsupported' "
+                    + $"WHEN NOT {indexExists} AND {dataBlocked} THEN 'data_blocked' ")
             + $"WHEN NOT {indexExists} THEN 'missing' "
             + $"WHEN {matching} THEN 'matching' ELSE 'different' END",
-            matching);
+            matching) with
+        {
+            UnsupportedCode = physicalFailureCode,
+            ClassificationCodeExpression = $"CASE WHEN {identityConflict} "
+                + "THEN 'index_semantic_identity_conflict' ELSE NULL END",
+        };
     }
 
     private MySqlSafeMigrationRuntimePlan BuildDropIndex(
@@ -110,19 +135,23 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
     private string BuildIndexMatches(
         ExpectedIndexDefinition definition,
-        bool isMariaDb
+        bool isMariaDb,
+        bool requireExpectedName = true,
+        bool excludeForeignKeySupportIndexes = false
     )
     {
+        const string candidate = "candidate";
         var conditions = new List<string>
         {
             $"(SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS s "
             + $"WHERE s.TABLE_SCHEMA = DATABASE() AND s.TABLE_NAME = {Literal(definition.Table)} "
-            + $"AND s.INDEX_NAME = {Literal(definition.Name)}) "
+            + $"AND s.INDEX_NAME = {candidate}.INDEX_NAME) "
             + $"= {definition.Keys.Count.ToString(CultureInfo.InvariantCulture)}",
             $"NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS s "
             + $"WHERE s.TABLE_SCHEMA = DATABASE() AND s.TABLE_NAME = {Literal(definition.Table)} "
-            + $"AND s.INDEX_NAME = {Literal(definition.Name)} "
+            + $"AND s.INDEX_NAME = {candidate}.INDEX_NAME "
             + $"AND s.NON_UNIQUE <> {(definition.Unique ? "0" : "1")})",
+            isMariaDb ? $"{candidate}.IGNORED = 'NO'" : $"{candidate}.IS_VISIBLE = 'YES'",
         };
 
         if (definition.Method is not null)
@@ -130,7 +159,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             conditions.Add(
                 $"NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS s "
                 + $"WHERE s.TABLE_SCHEMA = DATABASE() AND s.TABLE_NAME = {Literal(definition.Table)} "
-                + $"AND s.INDEX_NAME = {Literal(definition.Name)} "
+                + $"AND s.INDEX_NAME = {candidate}.INDEX_NAME "
                 + $"AND s.INDEX_TYPE <> {Literal(definition.Method)})");
         }
 
@@ -157,11 +186,51 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             conditions.Add(
                 $"EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS s "
                 + $"WHERE s.TABLE_SCHEMA = DATABASE() AND s.TABLE_NAME = {Literal(definition.Table)} "
-                + $"AND s.INDEX_NAME = {Literal(definition.Name)} "
+                + $"AND s.INDEX_NAME = {candidate}.INDEX_NAME "
                 + $"AND {string.Join(" AND ", keyConditions)})");
         }
 
-        return $"({string.Join(" AND ", conditions)})";
+        var nameOperator = requireExpectedName ? "=" : "<>";
+        var foreignKeySupportFilter = excludeForeignKeySupportIndexes
+            ? BuildForeignKeySupportIndexExclusion(definition, candidate)
+            : string.Empty;
+
+        return $"EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS {candidate} "
+            + $"WHERE {candidate}.TABLE_SCHEMA = DATABASE() "
+            + $"AND {candidate}.TABLE_NAME = {Literal(definition.Table)} "
+            + $"AND {candidate}.INDEX_NAME {nameOperator} {Literal(definition.Name)} "
+            + foreignKeySupportFilter
+            + $"AND {candidate}.SEQ_IN_INDEX = 1 AND {string.Join(" AND ", conditions)})";
+    }
+
+    private string BuildForeignKeySupportIndexExclusion(
+        ExpectedIndexDefinition definition,
+        string candidate
+    )
+    {
+        if (definition.Unique
+            || definition.Keys.Any(static key => key.Column is null))
+        {
+            return string.Empty;
+        }
+
+        var expectedColumns = OrderedColumnsSql(
+            definition.Keys.Select(static key => key.Column!).ToArray());
+
+        // InnoDB may create a non-unique supporting index for a foreign key and
+        // may later replace it with a suitable explicit index. Such an index
+        // is provider infrastructure, not a conflicting user-owned identity.
+        // KEY_COLUMN_USAGE is the portable catalog link: the FK symbol and
+        // supporting index name are not required to be equal. A unique
+        // candidate remains user-owned because InnoDB does not need to invent
+        // uniqueness to enforce the foreign key.
+        return "AND NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE fk "
+            + $"WHERE fk.CONSTRAINT_SCHEMA = {candidate}.TABLE_SCHEMA "
+            + $"AND fk.TABLE_NAME = {candidate}.TABLE_NAME "
+            + "AND fk.REFERENCED_TABLE_NAME IS NOT NULL "
+            + "GROUP BY fk.CONSTRAINT_NAME "
+            + "HAVING GROUP_CONCAT(fk.COLUMN_NAME ORDER BY fk.ORDINAL_POSITION SEPARATOR ',') "
+            + $"= {Literal(expectedColumns)}) ";
     }
 
     private static string BuildIndexSortMatches(
@@ -223,4 +292,97 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     ) => $"EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS s "
         + $"WHERE s.TABLE_SCHEMA = DATABASE() AND s.TABLE_NAME = {Literal(table)} "
         + $"AND s.INDEX_NAME = {Literal(name)})";
+
+    private string BuildIndexPhysicalShapeSupported(
+        ExpectedIndexDefinition definition
+    )
+    {
+        if (definition.Keys.Any(static key => key.Expression is not null || key.StructuredExpression is not null)
+            || definition.Method is not null
+            && !StringComparer.OrdinalIgnoreCase.Equals(definition.Method, "BTREE"))
+        {
+            // Catalog matching remains available for existing provider-supported
+            // indexes. Creation is rejected because SafeMigrations cannot prove
+            // the physical key width for this access method or expression.
+            return "FALSE";
+        }
+
+        var keyWidths = definition.Keys
+            .Select(key => BuildIndexKeyWidth(definition.Table, key))
+            .ToArray();
+
+        var totalWidth = string.Join(" + ", keyWidths.Select(static width => $"COALESCE(({width}), 2147483647)"));
+        var maximumWidth = "CASE "
+            + "WHEN UPPER(COALESCE(t.ROW_FORMAT, '')) IN ('COMPACT', 'REDUNDANT') THEN 767 "
+            + "WHEN @@innodb_page_size = 4096 THEN 768 "
+            + "WHEN @@innodb_page_size = 8192 THEN 1536 "
+            + "ELSE 3072 END";
+
+        return $"EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES t "
+            + $"WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_NAME = {Literal(definition.Table)} "
+            + $"AND UPPER(t.ENGINE) = 'INNODB' AND ({totalWidth}) <= ({maximumWidth}))";
+    }
+
+    private string BuildIndexKeyWidth(
+        string table,
+        ExpectedIndexKeyDefinition key
+    )
+    {
+        var prefixLength = key.PrefixLength?.ToString(CultureInfo.InvariantCulture);
+        var characterWidth = prefixLength is null
+            ? "CASE WHEN c.DATA_TYPE IN ('tinytext', 'text', 'mediumtext', 'longtext') "
+                + "THEN NULL ELSE c.CHARACTER_OCTET_LENGTH END"
+            : $"CASE WHEN {prefixLength} <= c.CHARACTER_MAXIMUM_LENGTH "
+                + $"THEN {prefixLength} * CEIL(c.CHARACTER_OCTET_LENGTH "
+                + "/ NULLIF(c.CHARACTER_MAXIMUM_LENGTH, 0)) ELSE NULL END";
+
+        var binaryWidth = prefixLength is null
+            ? "CASE WHEN c.DATA_TYPE IN ('tinyblob', 'blob', 'mediumblob', 'longblob') "
+                + "THEN NULL ELSE c.CHARACTER_OCTET_LENGTH END"
+            : $"CASE WHEN {prefixLength} <= c.CHARACTER_OCTET_LENGTH "
+                + $"THEN {prefixLength} ELSE NULL END";
+
+        var decimalWidth = "(4 * FLOOR((c.NUMERIC_PRECISION - c.NUMERIC_SCALE) / 9) "
+            + "+ CASE MOD(c.NUMERIC_PRECISION - c.NUMERIC_SCALE, 9) "
+            + "WHEN 0 THEN 0 WHEN 1 THEN 1 WHEN 2 THEN 1 WHEN 3 THEN 2 WHEN 4 THEN 2 "
+            + "WHEN 5 THEN 3 WHEN 6 THEN 3 ELSE 4 END "
+            + "+ 4 * FLOOR(c.NUMERIC_SCALE / 9) "
+            + "+ CASE MOD(c.NUMERIC_SCALE, 9) "
+            + "WHEN 0 THEN 0 WHEN 1 THEN 1 WHEN 2 THEN 1 WHEN 3 THEN 2 WHEN 4 THEN 2 "
+            + "WHEN 5 THEN 3 WHEN 6 THEN 3 ELSE 4 END)";
+
+        var fractionalSeconds = "CASE COALESCE(c.DATETIME_PRECISION, 0) "
+            + "WHEN 0 THEN 0 WHEN 1 THEN 1 WHEN 2 THEN 1 WHEN 3 THEN 2 WHEN 4 THEN 2 ELSE 3 END";
+
+        var scalarWidth = "CASE "
+            + "WHEN c.DATA_TYPE = 'tinyint' THEN 1 WHEN c.DATA_TYPE = 'smallint' THEN 2 "
+            + "WHEN c.DATA_TYPE = 'mediumint' THEN 3 WHEN c.DATA_TYPE IN ('int', 'integer') THEN 4 "
+            + "WHEN c.DATA_TYPE = 'float' THEN CASE WHEN c.NUMERIC_PRECISION <= 24 THEN 4 ELSE 8 END "
+            + "WHEN c.DATA_TYPE IN ('bigint', 'double', 'real') THEN 8 "
+            + $"WHEN c.DATA_TYPE IN ('decimal', 'numeric') THEN {decimalWidth} "
+            + "WHEN c.DATA_TYPE = 'bit' THEN CEIL(c.NUMERIC_PRECISION / 8) "
+            + "WHEN c.DATA_TYPE = 'date' THEN 3 WHEN c.DATA_TYPE = 'year' THEN 1 "
+            + $"WHEN c.DATA_TYPE = 'time' THEN 3 + {fractionalSeconds} "
+            + $"WHEN c.DATA_TYPE = 'datetime' THEN 5 + {fractionalSeconds} "
+            + $"WHEN c.DATA_TYPE = 'timestamp' THEN 4 + {fractionalSeconds} "
+            + "WHEN c.DATA_TYPE = 'enum' THEN 2 WHEN c.DATA_TYPE = 'set' THEN 8 ELSE NULL END";
+
+        // Prefix lengths have character-count semantics for character keys and
+        // byte-count semantics for binary keys. MySQL rejects prefixes on all
+        // scalar families, so return NULL and let preflight fail closed before
+        // a provider DDL command can discover that error after mutation begins.
+        var width = prefixLength is null
+            ? "CASE "
+                + $"WHEN c.DATA_TYPE IN ('char', 'varchar', 'tinytext', 'text', 'mediumtext', 'longtext') THEN {characterWidth} "
+                + $"WHEN c.DATA_TYPE IN ('binary', 'varbinary', 'tinyblob', 'blob', 'mediumblob', 'longblob') THEN {binaryWidth} "
+                + $"ELSE {scalarWidth} END"
+            : "CASE "
+                + $"WHEN c.DATA_TYPE IN ('char', 'varchar', 'tinytext', 'text', 'mediumtext', 'longtext') THEN {characterWidth} "
+                + $"WHEN c.DATA_TYPE IN ('binary', 'varbinary', 'tinyblob', 'blob', 'mediumblob', 'longblob') THEN {binaryWidth} "
+                + "ELSE NULL END";
+
+        return $"SELECT {width} FROM INFORMATION_SCHEMA.COLUMNS c "
+            + $"WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = {Literal(table)} "
+            + $"AND c.COLUMN_NAME = {Literal(key.Column!)}";
+    }
 }

@@ -9,9 +9,14 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         intent.Definition.Schema,
         intent.Definition.Name,
         'f',
-        ForeignKeyMatches(intent.Definition),
+        ForeignKeyMatches(intent.Definition, requireExpectedName: true),
         ForeignKeyDataBlocked(intent.Definition),
-        TableExists(intent.Definition.PrincipalTable, intent.Definition.PrincipalSchema));
+        TableExists(intent.Definition.PrincipalTable, intent.Definition.PrincipalSchema),
+        ForeignKeyMatches(
+            intent.Definition,
+            requireExpectedName: false,
+            requireLocalIdentity: false),
+        "foreign_key_semantic_identity_conflict");
 
     private PostgreSqlSafeMigrationRuntimePlan BuildDropForeignKey(
         DropForeignKeyIntent intent
@@ -37,8 +42,14 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     }
 
     private string ForeignKeyMatches(
-        ExpectedForeignKeyDefinition definition
-    ) => ConstraintBase(definition.Table, definition.Schema, definition.Name, 'f')
+        ExpectedForeignKeyDefinition definition,
+        bool requireExpectedName,
+        bool requireLocalIdentity = true
+    ) => ConstraintBaseWithoutName(definition.Table, definition.Schema, 'f')
+        + (requireExpectedName
+            ? $" AND co.conname = {Literal(definition.Name)}"
+            : $" AND co.conname <> {Literal(definition.Name)}")
+        + StandardConstraintSemantics(requireLocalIdentity)
         + $" AND ARRAY(SELECT a.attname FROM unnest(co.conkey) WITH ORDINALITY AS key(attnum, ord) "
         + "JOIN pg_catalog.pg_attribute a ON a.attrelid = co.conrelid AND a.attnum = key.attnum "
         + $"ORDER BY key.ord) = {NameArray(definition.Columns)} "
@@ -48,7 +59,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         + $"ORDER BY key.ord) = {NameArray(definition.PrincipalColumns)} "
         + $"AND co.confupdtype = {Literal(ReferentialCode(definition.OnUpdate))}::\"char\" "
         + $"AND co.confdeltype = {Literal(ReferentialCode(definition.OnDelete))}::\"char\" "
-        + "AND co.convalidated)";
+        + "AND co.confmatchtype = 's'::\"char\" "
+        // A column-list SET NULL/DEFAULT action changes which dependent
+        // columns are updated and is not expressible by the EF operation.
+        + "AND (to_jsonb(co) ->> 'confdelsetcols') IS NULL)";
 
     private static string ReferentialCode(
         ReferentialAction action

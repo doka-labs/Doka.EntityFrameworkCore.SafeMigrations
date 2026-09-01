@@ -5,9 +5,11 @@ internal static partial class SafeMigrationExpectedCatalog
     private static void Apply(
         Dictionary<TableKey, MutableTable> tables,
         EnsureColumnIntent intent
-    ) => Find(tables, intent.Schema, intent.Table)
-        ?.Columns
-        .Add(intent.Definition.Name);
+    )
+    {
+        var table = Find(tables, intent.Schema, intent.Table);
+        table?.Columns[intent.Definition.Name] = intent.Definition.StoreType;
+    }
 
     private static void Apply(
         Dictionary<TableKey, MutableTable> tables,
@@ -19,8 +21,12 @@ internal static partial class SafeMigrationExpectedCatalog
     private static void Apply(
         Dictionary<TableKey, MutableTable> tables,
         RenameColumnIntent intent
-    ) => Rename(
-        Find(tables, intent.Schema, intent.Table)?.Columns,
-        intent.Name,
-        intent.NewName);
+    )
+    {
+        var columns = Find(tables, intent.Schema, intent.Table)?.Columns;
+        if (columns?.Remove(intent.Name, out var storeType) == true)
+        {
+            columns[intent.NewName] = storeType;
+        }
+    }
 }

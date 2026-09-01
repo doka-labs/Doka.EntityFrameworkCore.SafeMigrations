@@ -3,6 +3,198 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 public sealed partial class MySqlSafeMigrationIntegrationTests
 {
     [Fact]
+    public async Task AnnotatedColumns_RepairDefaultsAndCommentsWithoutLosingRows()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `annotated_column_repair` ("
+            + "`id` int NOT NULL, "
+            + "`is_active` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'legacy', "
+            + "`display_name` varchar(80) NULL DEFAULT '' COMMENT 'legacy', "
+            + "`external_id` char(36) NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000' COMMENT 'legacy', "
+            + "`occurred_at` datetime(6) NOT NULL DEFAULT '0001-01-01 00:00:00.000000' COMMENT 'legacy', "
+            + "PRIMARY KEY (`id`));"
+            + "INSERT INTO `annotated_column_repair` VALUES ("
+            + "1, 1, 'preserved', '22222222-2222-2222-2222-222222222222', '2026-08-31 12:00:00.000000');");
+
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        _ = builder.ConvergeTableFromModel(
+            name: "annotated_column_repair",
+            columns: table => new
+            {
+                id = table
+                    .Column<int>(type: "int", nullable: false)
+                    .Annotation(
+                        "Doka:MySql:ValueGenerationStrategy",
+                        MySqlValueGenerationStrategy.None),
+                is_active = table
+                    .Column<bool>(type: "tinyint(1)", nullable: false, comment: "canonical")
+                    .Annotation(
+                        "Doka:MySql:ValueGenerationStrategy",
+                        MySqlValueGenerationStrategy.None),
+                display_name = table
+                    .Column<string>(
+                        type: "varchar(80)",
+                        maxLength: 80,
+                        nullable: false,
+                        comment: "canonical")
+                    .Annotation(
+                        "Doka:MySql:ValueGenerationStrategy",
+                        MySqlValueGenerationStrategy.None),
+                external_id = table
+                    .Column<Guid>(
+                        type: "char(36)",
+                        maxLength: 36,
+                        fixedLength: true,
+                        nullable: false,
+                        comment: "canonical")
+                    .Annotation("Doka:MySql:GuidFormat", DokaMySqlGuidFormat.Char36)
+                    .Annotation(
+                        "Doka:MySql:ValueGenerationStrategy",
+                        MySqlValueGenerationStrategy.None),
+                occurred_at = table
+                    .Column<DateTime>(
+                        type: "datetime(6)",
+                        nullable: false,
+                        comment: "canonical")
+                    .Annotation(
+                        "Doka:MySql:ValueGenerationStrategy",
+                        MySqlValueGenerationStrategy.None),
+            },
+            constraints: table => table.PrimaryKey("pk_annotated_column_repair", value => value.id),
+            policy: SafeMigrationPolicy.RepairIfSafe);
+
+        var runner = context.GetService<ISafeMigrationRunner>();
+        var options = new SafeMigrationRunOptions("annotated-column-repair");
+        var preflight = await runner.AnalyzeAsync(context, builder.Operations, options);
+
+        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteSqlAsync(
+            connectionString,
+            "INSERT INTO `annotated_column_repair` "
+            + "(`id`, `is_active`, `display_name`, `external_id`, `occurred_at`) VALUES "
+            + "(2, 0, 'inserted', '33333333-3333-3333-3333-333333333333', "
+            + "'2026-08-31 13:00:00.000000');");
+
+        var postflight = await runner.VerifyAsync(context, builder.Operations, options);
+
+        Assert.Contains(preflight.Assessments, static assessment => assessment.Action == SafeMigrationAction.Repair);
+        Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
+        Assert.All(postflight.Assessments, static assessment => Assert.True(assessment.PostconditionSatisfied));
+        Assert.Equal(2, await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `annotated_column_repair`;"));
+        Assert.Equal(
+            4,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'annotated_column_repair' "
+                + "AND COLUMN_NAME <> 'id' AND COLUMN_COMMENT = 'canonical' AND COLUMN_DEFAULT IS NULL;"));
+    }
+
+    [Fact]
+    public async Task AnnotatedNullableColumn_WithNullRows_IsDataBlockedWithoutMutation()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `annotated_nullable_blocked` ("
+            + "`value` varchar(80) NULL DEFAULT '' COMMENT 'legacy');"
+            + "INSERT INTO `annotated_nullable_blocked` (`value`) VALUES (NULL);");
+
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        _ = builder.ConvergeTableFromModel(
+            name: "annotated_nullable_blocked",
+            columns: table => new
+            {
+                value = table
+                    .Column<string>(
+                        type: "varchar(80)",
+                        maxLength: 80,
+                        nullable: false,
+                        comment: "canonical")
+                    .Annotation(
+                        "Doka:MySql:ValueGenerationStrategy",
+                        MySqlValueGenerationStrategy.None),
+            },
+            policy: SafeMigrationPolicy.RepairIfSafe);
+
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("annotated-nullable-blocked"));
+
+        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+            ExecuteOperationsAsync(context, builder.Operations));
+        var assessment = Assert.Single(
+            report.Assessments,
+            static candidate => candidate.ObjectName == "value");
+
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(SafeMigrationObservedState.DataBlocked, assessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.RejectDataBlocked, assessment.Action);
+        Assert.Contains("doka_sm_data_blocked", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'annotated_nullable_blocked' "
+                + "AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'YES' "
+                + "AND COLUMN_DEFAULT IS NOT NULL AND COLUMN_COMMENT = 'legacy';"));
+    }
+
+    [Fact]
+    public async Task RepairIfSafe_DoesNotRewriteAutoIncrementMismatch()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `annotated_identity_mismatch` (`id` int NOT NULL, PRIMARY KEY (`id`));");
+
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        _ = builder.ConvergeTableFromModel(
+            name: "annotated_identity_mismatch",
+            columns: table => new
+            {
+                id = table
+                    .Column<int>(type: "int", nullable: false)
+                    .Annotation(
+                        "Doka:MySql:ValueGenerationStrategy",
+                        MySqlValueGenerationStrategy.AutoIncrement),
+            },
+            constraints: table => table.PrimaryKey("pk_annotated_identity_mismatch", value => value.id),
+            policy: SafeMigrationPolicy.RepairIfSafe);
+
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("identity-mismatch"));
+
+        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+            ExecuteOperationsAsync(context, builder.Operations));
+
+        Assert.Contains(
+            report.Assessments,
+            static assessment => assessment is
+            {
+                ObjectName: "id",
+                ObservedState: SafeMigrationObservedState.Different,
+                Action: SafeMigrationAction.RejectDifferent,
+            });
+        Assert.Contains("doka_sm_different", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(
+            string.Empty,
+            await ScalarStringAsync(
+                connectionString,
+                "SELECT EXTRA FROM INFORMATION_SCHEMA.COLUMNS "
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'annotated_identity_mismatch' "
+                + "AND COLUMN_NAME = 'id';"));
+    }
+
+    [Fact]
     public async Task ScaffoldedAutoIncrementTable_PreservesGenerationAndIsIdempotent()
     {
         var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
