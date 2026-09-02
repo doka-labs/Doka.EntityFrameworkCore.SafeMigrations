@@ -6,6 +6,20 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+## [10.1.2] - 2026-09-02
+
+Prepared a stable patch release for deterministic semantic identity and
+bounded large-catalog analysis. It preserves the 10.1.1 public API, generated
+migration contract, report schema, migration-history behavior, and dependency
+ranges while closing verified classification, resource, and provider namespace
+defects across MySQL, MariaDB, and PostgreSQL.
+
+These notes do not establish publication. Require the successful stable
+release run, the authorized signed `v10.1.2` tag, and verified public package,
+symbol, GitHub Release, provenance, SBOM, and attestation readback before
+selecting 10.1.2. All three package IDs must be published at the exact same
+version.
+
 ### Changed
 
 - Treat a differently named primary key, unique constraint, check constraint,
@@ -621,7 +635,8 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.1.1...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.1.2...HEAD
+[10.1.2]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.1.1...v10.1.2
 [10.1.1]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.1.0...v10.1.1
 [10.1.0]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.0.2...v10.1.0
 [10.0.2]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.0.1...v10.0.2

@@ -38,10 +38,12 @@ Doka 10.2.0's ownership-aware connection invariants and to a confirmed
 generated-migration namespace defect. Published stable 10.1.0 qualifies Doka
 10.3.0's typed migration-operation metadata, exposes the two public methods
 required by generated prefix-aware index source, and repairs observed legacy
-convergence defects. Prepared stable 10.1.1 closes verified missing-table and
-structured-expression defects without changing the public API. These releases
-follow changed dependency conditions and confirmed correctness requirements;
-they are not deferred initial scope.
+convergence defects. Published stable 10.1.1 closes verified missing-table and
+structured-expression defects without changing the public API. Prepared stable
+10.1.2 closes verified semantic-identity, catalog-scalability, provider
+namespace-collision, and ordered index-replacement defects while preserving
+the same public surface. These releases follow changed dependency conditions
+and confirmed correctness requirements; they are not deferred initial scope.
 
 Requalify affected behavior before adopting a provider, EF Core, database,
 SDK, action, or tooling update. Preserve public API, report, migration, data
