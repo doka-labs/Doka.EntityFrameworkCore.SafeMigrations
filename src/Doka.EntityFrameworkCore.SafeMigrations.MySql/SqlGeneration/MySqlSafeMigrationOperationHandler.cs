@@ -12,6 +12,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
     private readonly MySqlSafeMigrationPlanCapture _planCapture;
     private readonly ISqlGenerationHelper _sqlGenerationHelper;
     private readonly MySqlSafeMigrationSqlExpressionRenderer _expressionRenderer;
+    private readonly IRelationalTypeMappingSource _typeMappingSource;
     private readonly RelationalTypeMapping _stringMapping;
     private Dictionary<ModelTableKey, IReadOnlyList<ExpectedIndexDefinition>>? _modelUniqueIndexes;
     private IModel? _modelUniqueIndexSource;
@@ -33,6 +34,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         _planCapture = planCapture;
         _sqlGenerationHelper = sqlGenerationHelper;
         _expressionRenderer = new MySqlSafeMigrationSqlExpressionRenderer(typeMappingSource, sqlGenerationHelper);
+        _typeMappingSource = typeMappingSource;
         _stringMapping = typeMappingSource.FindMapping(typeof(string))
             ?? throw new InvalidOperationException("The MySQL provider has no string type mapping.");
     }
@@ -79,7 +81,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
 
         var renderedParameterValues = runtimePlan
             .ParameterValues
-            .Select(Literal)
+            .Select(RenderParameterLiteral)
             .ToArray();
 
         // A connection-local temporary table turns rejected decisions and a
@@ -443,6 +445,17 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             return [Command("DO 0;", transactionSuppressed: true)];
         }
 
+        if (operation.Intent is ModelManagedDataIntent modelManagedData)
+        {
+            return
+            [
+                Command(
+                    runtimePlan.RenderPreparedMutationSql(
+                        runtimePlan.ParameterValues.Select(RenderParameterLiteral).ToArray()),
+                    transactionSuppressed: false),
+            ];
+        }
+
         if (operation.Intent is EnsureIndexIntent index
             && (index.Definition.Keys.Any(static key =>
                     key.Expression is not null || key.StructuredExpression is not null || key.PrefixLength is not null)
@@ -511,6 +524,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             SafeMigrationObservedState.Unsupported,
             SafeMigrationObservedState.DataBlocked,
             SafeMigrationObservedState.PrerequisiteMissing,
+            SafeMigrationObservedState.TransitionReady,
         ];
 
         var builder = new StringBuilder("SET @doka_sm_action = CASE @doka_sm_state ");
@@ -560,6 +574,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         SafeMigrationObservedState.Unsupported => "unsupported",
         SafeMigrationObservedState.DataBlocked => "data_blocked",
         SafeMigrationObservedState.PrerequisiteMissing => "prerequisite_missing",
+        SafeMigrationObservedState.TransitionReady => "transition_ready",
         _ => throw new ArgumentOutOfRangeException(nameof(state)),
     };
 
@@ -608,6 +623,25 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
     private string Literal(
         string value
     ) => _stringMapping.GenerateSqlLiteral(value);
+
+    private string RenderParameterLiteral(
+        MySqlCatalogParameterValue parameter
+    )
+    {
+        if (parameter.StoreType is null)
+        {
+            return Literal((string)parameter.Value!);
+        }
+
+        var mapping = parameter.Value is null
+            ? _typeMappingSource.FindMapping(parameter.StoreType)
+            : _typeMappingSource.FindMapping(parameter.Value.GetType(), parameter.StoreType);
+
+        return (mapping
+                ?? throw new NotSupportedException(
+                    $"MySQL has no type mapping for store type '{parameter.StoreType}'."))
+            .GenerateSqlLiteral(parameter.Value);
+    }
 
     private static MySqlMigrationCommandSpec Command(
         string sql,

@@ -100,11 +100,11 @@ engineering suites evolve independently of the support contract.
 
 Provider tests use real Docker servers and cover:
 
-- all 20 operation kinds;
+- all 23 operation kinds;
 - all 22 supported non-null CLR literal families plus literal `NULL`, with
   provider-specific convergence or pre-DDL fail-closed classification;
-- missing, matching, different, unsupported, data-blocked, and
-  prerequisite-missing states;
+- missing, matching, transition-ready, different, unsupported, data-blocked,
+  and prerequisite-missing states;
 - `ExistenceOnly`, `ThrowIfDifferent`, and `RepairIfSafe`;
 - source-frozen legacy convergence policy selection, mutable column repair,
   matching rerun, null-data blocking, invariant-drift rejection, and
@@ -142,8 +142,18 @@ Provider tests use real Docker servers and cover:
 - four concurrent migrators on one database and parallel independent
   databases;
 - normal EF operations mixed with safe operations;
-- safe table, typed seed/update/delete-data, and following non-unique-index
-  ordering, plus fail-closed unique-index projection after unanalyzed data;
+- safe table, source-frozen model-managed ensure/update/delete, raw typed
+  seed/update/delete-data, and following non-unique-index ordering, plus
+  fail-closed unique-index projection after unanalyzed data;
+- model-managed single/composite keys, mixed absent/source/target batches,
+  unique/check conflicts, source drift, retry, idempotent replay, trigger
+  postconditions, cancellation, and compare-and-swap races;
+- Strict and legacy initial migrations generated through the real provider
+  design-time differ, compiled, preflighted against an empty database, executed
+  twice as the identical operation stream, and verified through postflight;
+- incoming model-managed delete dependencies for every supported referential
+  action, including accepted ordered child/parent removal and rejection of one
+  remaining or concurrently inserted dependent row;
 - EF history success/failure and derived-context model-snapshot guards;
 - read-only preflight, unexpected-object inventory, positive and negative
   postflight, and cancellation before and during catalog access;
@@ -163,8 +173,9 @@ results without per-operation catalog roundtrips, and no partial report is
 published after a later failure. Every engine profile also qualifies 100,000
 deterministically ordered mixed operations. That workload covers `Missing`,
 `Matching`, `Different`, `Unsupported`, `DataBlocked`, and
-`PrerequisiteMissing`, all seven planned actions, and heterogeneous table,
-column, index, primary-key, unique, check, and foreign-key operations. Native
+`PrerequisiteMissing`, `TransitionReady`, all seven planned actions, and
+heterogeneous table, column, index, primary-key, unique, check, foreign-key, and
+model-managed-data operations. Native
 `DbBatch` execution and the sequential fallback for connections with
 `CanCreateBatch == false` share the same bounded command adapter; live fallback
 tests verify command order, timeout propagation, and cancellation. Coverage
@@ -277,6 +288,10 @@ MySQL/MariaDB, and PostgreSQL dependency boundaries for:
 - PostgreSQL adapter output;
 - canonical snapshot initialization, relational model differ, and fingerprint;
 - report JSON serialization.
+- model-managed intent construction and contract fingerprinting at 384 row
+  transitions;
+- provider model-managed command generation and analyzer-plan construction at
+  384 row transitions.
 
 Allocation ceilings are deterministic blocking gates. Wall-clock measurements
 on shared GitHub-hosted runners are not deterministic, so their three-times-
@@ -298,6 +313,15 @@ remain excluded by the expected-table scope, and noisy p95 is at most
 `2 * clean p95 + 250 ms`. Each invocation can include multiple database
 roundtrips. This is a same-runner relative SLO; it is not an absolute
 cross-machine latency promise.
+
+Every provider engine cell also analyzes 100,000 ordered mixed operations whose
+observations cover every state and planner action, including model-managed
+ensure, update, and delete. Separate live execution tests apply and replay at
+least 50,000 mixed absent, source, and already-target row transitions using the
+production 128-row/4,096-cell partitioning. Their JSON evidence records elapsed
+time, managed allocations, command count, maximum batch rows/cells, and maximum
+generated command bytes. These are scalability and allocation gates, not an
+absolute wall-clock promise across different runner hardware.
 
 After locked restore, the quality workflow rejects warning-level Roslyn style
 violations and unnecessary imports. Rider/ReSharper remains the repository

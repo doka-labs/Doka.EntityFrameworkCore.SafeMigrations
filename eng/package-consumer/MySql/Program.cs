@@ -70,6 +70,18 @@ internal sealed class PackageScaffoldingDbContext : DbContext
             MySqlServerVersion.MySql(new Version(8, 4, 0)));
         optionsBuilder.UseMySqlSafeMigrations();
     }
+
+    protected override void OnModelCreating(
+        ModelBuilder modelBuilder
+    )
+    {
+        modelBuilder.Entity<PackageScaffoldingEntity>().HasData(
+            new PackageScaffoldingEntity
+            {
+                Id = 1,
+                Name = "package-consumer",
+            });
+    }
 }
 
 internal sealed class PackageScaffoldingEntity

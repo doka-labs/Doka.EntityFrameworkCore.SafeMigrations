@@ -9,7 +9,7 @@ scope: "Automatic generation of safe table and index migration source from the c
 supersedes: []
 superseded-by: []
 amends: [D-002]
-amended-by: []
+amended-by: [D-009]
 madr-version: "4.0.0"
 doka-profile-version: "1.0"
 ---
@@ -252,6 +252,9 @@ snapshots already required for catalog comparison and hashing.
 - 2026-09-01: Added typed MySQL/MariaDB index-prefix projection through Doka 10.3.0. Generated safe calls now retain full-key and prefixed-key intent without leaking the consumed provider annotation onto the outer operation.
 - 2026-09-01: Preserved disabled non-C# provider generation and made every
   generated-source rewrite retain one validated LF or CRLF convention.
+- 2026-09-02: D-009 amended automatic scaffolding to decorate the provider
+  model differ, pair forward/inverse model-managed rows, and emit guarded
+  ensure/update/delete calls without changing structural mode selection.
 
 ### Implementation References
 

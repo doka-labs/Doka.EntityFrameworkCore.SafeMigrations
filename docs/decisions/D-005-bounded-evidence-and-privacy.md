@@ -9,7 +9,7 @@ scope: "Catalog-query resource bounds, immutable reports, fingerprints, and diag
 supersedes: []
 superseded-by: []
 amends: []
-amended-by: []
+amended-by: [D-009]
 madr-version: "4.0.0"
 doka-profile-version: "1.0"
 ---
@@ -204,6 +204,9 @@ window. Neither a hash nor a report proves the database server is honest.
 - 2026-08-31: Added the public `IColumn` facet path for property-less JSON container columns while retaining the established scalar property-mapping path and its allocation profile.
 - 2026-09-02: Bounded optimizer-visible statements independently from ADO.NET transport batches, propagated EF command timeouts to raw catalog work, and added 100,000-operation mixed-state live qualification.
 - 2026-09-02: Capability-gated native batching and added the bounded sequential command fallback for compatible ADO.NET wrappers that do not implement `DbBatch`.
+- 2026-09-02: D-009 added 128-row/4,096-cell model-managed operation bounds,
+  compact row evidence, canonical value hashing, and explicit non-disclosure of
+  keys and managed values in reports, telemetry, and exceptions.
 
 ### Implementation References
 

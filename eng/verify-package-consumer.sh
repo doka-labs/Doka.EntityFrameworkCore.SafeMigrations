@@ -338,10 +338,14 @@ verify_consumer() {
 
     grep -Fq 'migrationBuilder.CreateTableIfNotExists(' "$migration_file"
     grep -Fq 'migrationBuilder.DropTableIfExists(' "$migration_file"
+    grep -Fq 'migrationBuilder.EnsureModelManagedDataFromModel(' "$migration_file"
     grep -Fq 'using Doka.EntityFrameworkCore.SafeMigrations;' "$migration_file"
     grep -Eq '^namespace .+;$' "$migration_file"
 
     if grep -Fq 'migrationBuilder.CreateTable(' "$migration_file" \
+        || grep -Fq 'migrationBuilder.InsertData(' "$migration_file" \
+        || grep -Fq 'migrationBuilder.UpdateData(' "$migration_file" \
+        || grep -Fq 'migrationBuilder.DeleteData(' "$migration_file" \
         || grep -Fq 'new[] {' "$migration_file"; then
         echo "$consumer_name $tooling_reference consumer scaffolded analyzer-incompatible or unsafe source." >&2
         exit 1

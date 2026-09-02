@@ -28,7 +28,7 @@ because some operations use SafeMigrations.
 | Boundary | Potentially hostile input | Required treatment |
 | --- | --- | --- |
 | Migration author to Core | Definitions, enum values, collections, custom SQL, context configuration | Validate the closed contract and snapshot inputs; do not turn raw SQL into proven equivalence |
-| EF/provider generator to scaffolder | Version-sensitive generated C# shape, provider annotations, selected design-time mode | Delegate rendering, validate one bounded source shape, freeze mode into source, reject unknown annotations |
+| EF/provider differ and generator to scaffolder | Version-sensitive source/target differences, generated C# shape, provider annotations, selected design-time mode | Decorate public contracts, pair inverse model-managed rows exactly, freeze types and values, validate bounded source shapes, reject ambiguity |
 | Database to classifier | Names, defaults, computed/check expressions, catalog shape, conflicting rows | Parameterized catalog filters, typed comparisons, explicit unsupported/data-blocked results |
 | Classifier/planner to DDL | Observed state, old/new definitions, capabilities | Exact policy and repair allowlist; prerequisite and postcondition checks |
 | Analysis to execution | Time and concurrent database changes | No claim that preflight reserves future state; external write/DDL fence and runtime guards |
@@ -176,6 +176,34 @@ and provider `buildTransitive` discovery assets. Evidence:
 identity tests, and package-only Design/Tools/runtime consumer profiles. A
 generated migration remains privileged reviewed source; scaffolding is not an
 authorization boundary for an untrusted migration author.
+
+### S8 - Model-managed data cannot overwrite unproven live state
+
+Newly scaffolded `HasData` changes are paired with their inverse model
+difference before source is written. The generated operation freezes key,
+source, target, store-type, candidate-key, and dependency metadata. Ensure
+inserts only an absent primary key. Update and delete repeat the complete
+captured source predicate in compare-and-swap DML and verify their target
+postcondition. Delete rejects dependent rows which would be cascaded, nulled,
+defaulted, or otherwise changed implicitly. No insert-ignore, generic upsert,
+merge, or data-repair policy can bypass those proofs.
+
+The model-managed values are source-controlled material and therefore remain
+visible in the EF model snapshot, migration source, and generated SQL. They are
+not written to SafeMigrations reports, telemetry, stable reason codes, or
+exceptions. Consumers must not use `HasData` for secrets or environment-specific
+values. Access to source, artifacts, scripts, and migration logs remains an
+application security responsibility.
+
+Controls: [model-managed contract validation](../../src/Doka.EntityFrameworkCore.SafeMigrations/Features/ModelManagedData/SafeMigrationModelManagedDataContractValidator.cs),
+[source/inverse pairing](../../src/Doka.EntityFrameworkCore.SafeMigrations/Scaffolding/SafeMigrationModelManagedDataPairer.cs),
+and provider `ModelManagedData` feature slices. Evidence includes Core privacy,
+pairing, bounds, and decision tests; provider positive/negative row-state,
+unique/check conflict, trigger, cancellation, compare-and-swap race, composite
+key, incoming-FK action, retry, and idempotent replay tests; real EF tooling;
+package-only consumers; and large-run allocation evidence. EF's migration
+transaction is the rollback boundary for transactional DML. SafeMigrations does
+not create a nested transaction inside the provider handler.
 
 ## Residual risks and response
 

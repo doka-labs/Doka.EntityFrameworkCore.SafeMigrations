@@ -10,8 +10,9 @@ existing implementation retrospectively; they do not invent earlier approval
 dates. Dominic Kalkbrenner has confirmed their recorded rationale and existing
 implementation. D-007 records the maintainer's explicit choice of documentation
 format and tooling boundary. D-008 records the implemented automatic
-scaffolding contract selected on 2026-08-27. The dated transitions are retained
-in each record's Decision History.
+scaffolding contract selected on 2026-08-27. D-009 records the implemented
+source-frozen model-managed-data contract selected on 2026-09-02. The dated
+transitions are retained in each record's Decision History.
 
 | Record | Bounded decision |
 | --- | --- |
@@ -23,6 +24,7 @@ in each record's Decision History.
 | [D-006](D-006-package-qualification-and-release.md) | Untagged qualification, protected approval, and exact-byte publication |
 | [D-007](D-007-documentation-and-madr.md) | Shared Doka document standard without a repository-specific ADR toolchain |
 | [D-008](D-008-automatic-safe-migration-scaffolding.md) | Source-frozen automatic strict and legacy-convergence scaffolding through EF design-time services |
+| [D-009](D-009-model-managed-data-convergence.md) | Automatic guarded convergence of source-frozen EF model-managed data |
 
 ## Authoring and review
 

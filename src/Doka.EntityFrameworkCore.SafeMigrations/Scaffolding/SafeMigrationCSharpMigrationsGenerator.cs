@@ -49,24 +49,38 @@ internal sealed class SafeMigrationCSharpMigrationsGenerator : IMigrationsCodeGe
         IReadOnlyList<MigrationOperation> downOperations
     )
     {
+        var effectiveUpOperations = upOperations;
         IReadOnlyList<MigrationOperation> effectiveDownOperations;
-        if (!_configuration.IsEnabled
-            || _configuration.Mode != SafeMigrationScaffoldingMode.LegacyConvergence)
+        if (!_configuration.IsEnabled)
         {
             effectiveDownOperations = downOperations;
         }
         else
         {
-            // A convergence baseline may adopt objects that existed before the
-            // migration. Replacing Down with a deterministic rejection prevents a
-            // rollback from deleting data or schema the migration did not create.
-            effectiveDownOperations = [new SafeMigrationLegacyRollbackOperation()];
+            // EF's inverse operations are the only authoritative source for
+            // pre-change model-managed values. Pair both directions before a
+            // legacy rollback is replaced so Up never loses that evidence.
+            effectiveUpOperations = SafeMigrationModelManagedDataPairer.Pair(upOperations, downOperations);
+            var pairedDownOperations = SafeMigrationModelManagedDataPairer.Pair(downOperations, upOperations);
+
+            if (_configuration.Mode != SafeMigrationScaffoldingMode.LegacyConvergence)
+            {
+                effectiveDownOperations = pairedDownOperations;
+            }
+            else
+            {
+                // A convergence baseline may adopt objects that existed before
+                // the migration. Replacing Down with a deterministic rejection
+                // prevents a rollback from deleting data or schema the migration
+                // did not create.
+                effectiveDownOperations = [new SafeMigrationLegacyRollbackOperation()];
+            }
         }
 
         var source = _providerGenerator.GenerateMigration(
             migrationNamespace,
             migrationName,
-            upOperations,
+            effectiveUpOperations,
             effectiveDownOperations);
 
         if (_configuration.IsEnabled)

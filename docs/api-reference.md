@@ -20,11 +20,12 @@ preserve that public API. Stable 10.1.0 source adds two scaffolder-facing
 index-prefix methods while qualifying Doka 10.3.0's typed migration metadata;
 all earlier signatures remain compatible. Published stable 10.1.1 preserves
 that complete public surface while correcting internal provider analysis and
-structured-expression rendering. Prepared stable 10.1.2 preserves it again
+structured-expression rendering. Published stable 10.1.2 preserves it again
 while correcting semantic identity, bounded catalog analysis, provider
-namespace guards, and ordered index replacement. Strict scaffolding remains
-the default. A successful release run and exact-version public package
-readback remain the authority for a published API.
+namespace guards, and ordered index replacement. Prepared stable 10.2.0 adds
+source-frozen model-managed-data operations and the transition-ready state.
+Strict scaffolding remains the default. A successful release run and
+exact-version public package readback remain the authority for a published API.
 
 ## Packages and registration
 
@@ -147,6 +148,9 @@ mapping is:
 | `CreateTable` | `CreateTableIfNotExists` | `ConvergeTableFromModel` |
 | Single-column `CreateIndex` | `CreateIndexIfNotExistsFromModel`, or the prefix-aware counterpart on MySQL/MariaDB | Same |
 | Multi-column `CreateIndex` | `CreateCompositeIndexIfNotExistsFromModel`, or the prefix-aware counterpart on MySQL/MariaDB | Same |
+| Model-managed insert from `HasData` | `EnsureModelManagedDataFromModel` | Same |
+| Model-managed update from `HasData` | `UpdateModelManagedDataFromModel` with captured old and new values | Same |
+| Model-managed delete from `HasData` | `DeleteModelManagedDataFromModel` with complete captured old values and incoming source-model dependencies | Same; inverse data is analyzed before rollback is replaced |
 | Generated rollback of `CreateTable` | `DropTableIfExists` | Entire `Down` body rejects before DDL |
 
 Every generated `ConvergeTableFromModel` call contains an explicit `policy`
@@ -195,8 +199,11 @@ auto-generated or suppressing diagnostics.
 
 The design-time replacement does not rewrite add/alter/drop column, constraint,
 rename, or schema operations. Those retain EF behavior unless the migration
-author selects an explicit SafeMigrations API. This is an intentional policy
-boundary, not a partial interpretation of those operations.
+author selects an explicit SafeMigrations API. Raw hand-authored or existing
+data operations are not reinterpreted either. Only newly scaffolded
+model-managed operations whose source and inverse model differences can be
+paired exactly are converted. This is an intentional policy boundary, not a
+partial interpretation of those operations.
 
 ## MigrationBuilder operations
 
@@ -215,6 +222,7 @@ operations and returns the original `MigrationBuilder`.
 | Unique constraint | `EnsureUniqueConstraint` | `AddUniqueConstraintIfNotExists`, `DropUniqueConstraintIfExists` |
 | Check constraint | `EnsureCheckConstraint` | `AddCheckConstraintIfNotExists`, `DropCheckConstraintIfExists` |
 | Foreign key | `EnsureForeignKey` | `AddForeignKeyIfNotExists`, `DropForeignKeyIfExists` |
+| Model-managed data | Generated source uses the fixed fail-closed contract | `EnsureModelManagedDataFromModel`, `UpdateModelManagedDataFromModel`, `DeleteModelManagedDataFromModel` |
 
 Definitions specify the target name, parent table where applicable, optional
 schema, ordered members, and expected facets. Explicit ensure APIs require a
@@ -260,6 +268,19 @@ rename postflight alone is not proof of destination equivalence.
 `AlterColumnIfDifferent` takes the target definition, nullable old definition,
 and policy; an absent or mismatching old definition does not authorize repair.
 
+The three model-managed-data methods are public targets for generated migration
+source. They always use `ThrowIfDifferent`; they expose no overwrite or repair
+policy. Ensure receives key columns and complete target rows. Update receives
+keys, managed columns, captured old values, and target values. Delete receives
+keys, complete captured old rows, and source-model incoming foreign keys.
+`ExpectedModelManagedDataUniqueKeyDefinition` identifies source-model candidate
+keys used for collision analysis.
+`ExpectedModelManagedDataForeignKeyDefinition` identifies dependent/principal
+column pairs which must remain unaffected by a principal delete. All matrices
+are defensively copied and must contain at most 128 rows and 4,096 value cells
+per operation. The scaffolder performs deterministic partitioning; hand-written
+calls exceeding either bound reject during construction.
+
 ## Expected definitions
 
 | Type | Principal inputs |
@@ -273,6 +294,8 @@ and policy; an absent or mismatching old definition does not authorize repair.
 | `ExpectedCheckConstraintDefinition` | Name, table/schema and check expression; prefer `FromExpression` |
 | `ExpectedForeignKeyDefinition` | Name, dependent/principal identities, ordered column pairs and referential actions |
 | `SafeMigrationCollationIdentifier` | Exact name and optional schema, never a dot-split combined string |
+| `ExpectedModelManagedDataUniqueKeyDefinition` | Ordered source-model candidate-key columns used to detect target collisions |
+| `ExpectedModelManagedDataForeignKeyDefinition` | Dependent table/schema and ordered dependent/principal column mapping used to prevent implicit delete side effects |
 
 Collections are snapshotted by the definitions. Invalid names, enum values,
 contradictory facets, or incompatible literal values fail construction. A
@@ -359,12 +382,17 @@ Recognized ordinary table/column operations may satisfy a later safe
 prerequisite in the ordered projection, but remain
 `provider_owned_not_analyzed`; this conditional projection is not an analysis
 or approval of their DDL.
-Typed EF insert, update, and delete-data operations preserve only structural
-table/column facts for a later non-unique index. They invalidate all earlier
-projected and live pre-batch data-safety proofs, so a later unique index or
-missing data-validating constraint remains blocked until separately provable.
-A later structural provider operation does not restore row-level certainty.
-Raw SQL and unknown provider operations still discard all projection facts.
+Source-frozen model-managed operations participate in ordered row projection:
+accepted ensures record target rows, accepted updates replace captured source
+state with target state, and accepted deletes record absence. The projection
+tracks only identities touched by the migration and does not load the complete
+table. Raw EF insert, update, and delete-data operations preserve only
+structural table/column facts for a later non-unique index. They invalidate all
+earlier projected and live pre-batch data-safety proofs, so a later unique index
+or missing data-validating constraint remains blocked until separately
+provable. A later structural provider operation does not restore row-level
+certainty. Raw SQL and unknown provider operations still discard all projection
+facts.
 Calling EF migration with a null target means latest, which can exceed a
 specifically targeted preflight.
 
@@ -420,6 +448,14 @@ operations separately.
 | `Ready` | Preflight permits the safe sequence subject to external gates; postflight confirms all supplied safe postconditions |
 | `ReadyWithProviderOperations` | Ordinary EF/provider operations need independent review and postconditions |
 | `Blocked` | One or more operations reject; do not execute/continue deployment |
+
+`SafeMigrationObservedState.TransitionReady` is used only when a captured
+source row is present and a guarded update or delete may attempt its
+compare-and-swap transition. It is not a repair classification and does not
+mean that the target postcondition already holds. The new operation kinds are
+`EnsureModelManagedData`, `UpdateModelManagedData`, and
+`DeleteModelManagedData`; their stable JSON names use the corresponding
+snake-case values.
 
 `SafeMigrationReportJson.SerializeToUtf8Bytes(report)` returns a new
 byte array. `Write(writer, report)` uses a caller-owned `Utf8JsonWriter` and

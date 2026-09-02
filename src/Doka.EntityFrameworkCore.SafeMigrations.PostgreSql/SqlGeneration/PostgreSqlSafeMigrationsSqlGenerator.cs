@@ -99,6 +99,16 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             return _baselineGenerator.Generate([sqlOperation], model, options);
         }
 
+        if (operation.Intent is ModelManagedDataIntent modelManagedData)
+        {
+            var sqlOperation = new SqlOperation
+            {
+                Sql = _catalogSqlBuilder.BuildModelManagedDataMutationSql(modelManagedData),
+            };
+
+            return _baselineGenerator.Generate([sqlOperation], model, options);
+        }
+
         var standardOperation = SafeMigrationStandardOperationFactory.Create(
             operation.Intent,
             _expressionRenderer.Render,
@@ -365,6 +375,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         SafeMigrationObservedState.Unsupported => "unsupported",
         SafeMigrationObservedState.DataBlocked => "data_blocked",
         SafeMigrationObservedState.PrerequisiteMissing => "prerequisite_missing",
+        SafeMigrationObservedState.TransitionReady => "transition_ready",
         _ => throw new ArgumentOutOfRangeException(nameof(state)),
     };
 

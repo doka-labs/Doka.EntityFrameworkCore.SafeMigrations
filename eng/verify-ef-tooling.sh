@@ -95,10 +95,22 @@ if [[ "${engine}" == "postgres" ]]; then
     createdb -h 127.0.0.1 -p 5432 -U postgres tooling_cli
   docker exec -e PGPASSWORD=postgrespw "${container_name}" \
     createdb -h 127.0.0.1 -p 5432 -U postgres tooling_bundle
+  docker exec -e PGPASSWORD=postgrespw "${container_name}" \
+    createdb -h 127.0.0.1 -p 5432 -U postgres tooling_transition_strict
+  docker exec -e PGPASSWORD=postgrespw "${container_name}" \
+    createdb -h 127.0.0.1 -p 5432 -U postgres tooling_transition_legacy
+  docker exec -e PGPASSWORD=postgrespw "${container_name}" \
+    createdb -h 127.0.0.1 -p 5432 -U postgres tooling_generated_strict
+  docker exec -e PGPASSWORD=postgrespw "${container_name}" \
+    createdb -h 127.0.0.1 -p 5432 -U postgres tooling_generated_legacy
   port="$(docker port "${container_name}" 5432/tcp | head -n 1 | awk -F: '{print $NF}')"
   project="tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.csproj"
   cli_connection="Host=127.0.0.1;Port=${port};Username=postgres;Password=postgrespw;Database=tooling_cli"
   bundle_connection="Host=127.0.0.1;Port=${port};Username=postgres;Password=postgrespw;Database=tooling_bundle"
+  strict_transition_connection="Host=127.0.0.1;Port=${port};Username=postgres;Password=postgrespw;Database=tooling_transition_strict"
+  legacy_transition_connection="Host=127.0.0.1;Port=${port};Username=postgres;Password=postgrespw;Database=tooling_transition_legacy"
+  generated_strict_connection="Host=127.0.0.1;Port=${port};Username=postgres;Password=postgrespw;Database=tooling_generated_strict"
+  generated_legacy_connection="Host=127.0.0.1;Port=${port};Username=postgres;Password=postgrespw;Database=tooling_generated_legacy"
 else
   if [[ "${engine}" == "mariadb" ]]; then
     database_variable="MARIADB_DATABASE"
@@ -117,11 +129,17 @@ else
     -p 0:3306 "${image}" >/dev/null
   wait_for_mysql "${admin_client}"
   docker exec "${container_name}" "${client}" -h127.0.0.1 -uroot -prootpw \
-    -e "CREATE DATABASE tooling_cli; CREATE DATABASE tooling_bundle;"
+    -e "CREATE DATABASE tooling_cli; CREATE DATABASE tooling_bundle; CREATE DATABASE tooling_transition_strict; CREATE DATABASE tooling_transition_legacy;"
+  docker exec "${container_name}" "${client}" -h127.0.0.1 -uroot -prootpw \
+    -e "CREATE DATABASE tooling_generated_strict; CREATE DATABASE tooling_generated_legacy;"
   port="$(docker port "${container_name}" 3306/tcp | head -n 1 | awk -F: '{print $NF}')"
   project="tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests.csproj"
   cli_connection="Server=127.0.0.1;Port=${port};User ID=root;Password=rootpw;Database=tooling_cli;Allow User Variables=true"
   bundle_connection="Server=127.0.0.1;Port=${port};User ID=root;Password=rootpw;Database=tooling_bundle;Allow User Variables=true"
+  strict_transition_connection="Server=127.0.0.1;Port=${port};User ID=root;Password=rootpw;Database=tooling_transition_strict;Allow User Variables=true"
+  legacy_transition_connection="Server=127.0.0.1;Port=${port};User ID=root;Password=rootpw;Database=tooling_transition_legacy;Allow User Variables=true"
+  generated_strict_connection="Server=127.0.0.1;Port=${port};User ID=root;Password=rootpw;Database=tooling_generated_strict;Allow User Variables=true"
+  generated_legacy_connection="Server=127.0.0.1;Port=${port};User ID=root;Password=rootpw;Database=tooling_generated_legacy;Allow User Variables=true"
   export SAFE_MIGRATIONS_MYSQL_ENGINE="${engine}"
   export SAFE_MIGRATIONS_MYSQL_VERSION="${version}"
 fi
@@ -138,6 +156,8 @@ export SAFE_MIGRATIONS_CONNECTION_STRING="${cli_connection}"
 project_directory="$(dirname "${project}")"
 strict_output="ScaffoldingProbes/${engine}/Strict"
 legacy_output="ScaffoldingProbes/${engine}/Legacy"
+strict_transition_output="ScaffoldingProbes/${engine}/StrictDataTransition"
+legacy_transition_output="ScaffoldingProbes/${engine}/LegacyDataTransition"
 
 dotnet ef migrations add StrictScaffoldingProbe \
   --project "${project}" \
@@ -152,11 +172,51 @@ dotnet ef migrations add LegacyScaffoldingProbe \
   --configuration Release \
   --no-build
 
+export SAFE_MIGRATIONS_MODEL_MANAGED_DATA_STATE="source"
+dotnet ef migrations add StrictDataTransitionBaseline \
+  --project "${project}" \
+  --context StrictSafeMigrationDataTransitionScaffoldingDbContext \
+  --output-dir "${strict_transition_output}" \
+  --configuration Release \
+  --no-build
+dotnet ef migrations add LegacyDataTransitionBaseline \
+  --project "${project}" \
+  --context LegacySafeMigrationDataTransitionScaffoldingDbContext \
+  --output-dir "${legacy_transition_output}" \
+  --configuration Release \
+  --no-build
+
+# The second scaffold must load the generated baseline snapshot from the compiled
+# migrations assembly. Reusing the pre-baseline assembly would compare the target
+# model with an empty model and would not qualify UpdateData/DeleteData pairing.
+dotnet build "${project}" \
+  --configuration Release --no-restore --disable-build-servers -m:1 /nodeReuse:false
+
+export SAFE_MIGRATIONS_MODEL_MANAGED_DATA_STATE="target"
+dotnet ef migrations add StrictDataTransitionProbe \
+  --project "${project}" \
+  --context StrictSafeMigrationDataTransitionScaffoldingDbContext \
+  --output-dir "${strict_transition_output}" \
+  --configuration Release \
+  --no-build
+dotnet ef migrations add LegacyDataTransitionProbe \
+  --project "${project}" \
+  --context LegacySafeMigrationDataTransitionScaffoldingDbContext \
+  --output-dir "${legacy_transition_output}" \
+  --configuration Release \
+  --no-build
+unset SAFE_MIGRATIONS_MODEL_MANAGED_DATA_STATE
+
 strict_migration="$(find "${project_directory}/${strict_output}" -type f -name '*_StrictScaffoldingProbe.cs' -print -quit)"
 legacy_migration="$(find "${project_directory}/${legacy_output}" -type f -name '*_LegacyScaffoldingProbe.cs' -print -quit)"
+strict_transition_migration="$(find "${project_directory}/${strict_transition_output}" -type f -name '*_StrictDataTransitionProbe.cs' -print -quit)"
+legacy_transition_migration="$(find "${project_directory}/${legacy_transition_output}" -type f -name '*_LegacyDataTransitionProbe.cs' -print -quit)"
 
-if [[ -z "${strict_migration}" || -z "${legacy_migration}" ]]; then
-  echo "EF tooling did not create both SafeMigrations scaffolding probes." >&2
+if [[ -z "${strict_migration}" \
+  || -z "${legacy_migration}" \
+  || -z "${strict_transition_migration}" \
+  || -z "${legacy_transition_migration}" ]]; then
+  echo "EF tooling did not create every SafeMigrations scaffolding probe." >&2
   exit 1
 fi
 
@@ -169,6 +229,38 @@ for expected in \
     exit 1
   fi
 done
+
+for migration in "${strict_transition_migration}" "${legacy_transition_migration}"; do
+  for expected in \
+    'migrationBuilder.EnsureModelManagedDataFromModel(' \
+    'migrationBuilder.UpdateModelManagedDataFromModel(' \
+    'migrationBuilder.DeleteModelManagedDataFromModel('; do
+    if ! grep -Fq "${expected}" "${migration}"; then
+      echo "Data-transition scaffolding output is missing: ${expected}" >&2
+      exit 1
+    fi
+  done
+
+  for unsafe_data_call in \
+    'migrationBuilder.InsertData(' \
+    'migrationBuilder.UpdateData(' \
+    'migrationBuilder.DeleteData('; do
+    if grep -Fq "${unsafe_data_call}" "${migration}"; then
+      echo "Data-transition scaffolding output contains an unsafe call: ${unsafe_data_call}" >&2
+      exit 1
+    fi
+  done
+
+  if [[ "$(grep -Fc 'using Doka.EntityFrameworkCore.SafeMigrations;' "${migration}")" != "1" ]]; then
+    echo "Data-transition scaffolding output must contain exactly one SafeMigrations import." >&2
+    exit 1
+  fi
+done
+
+if ! grep -Fq 'throw new global::System.NotSupportedException(' "${legacy_transition_migration}"; then
+  echo "Legacy data-transition scaffolding output is missing its deterministic rollback rejection." >&2
+  exit 1
+fi
 
 for expected in \
   'migrationBuilder.ConvergeTableFromModel(' \
@@ -192,6 +284,21 @@ for migration in "${strict_migration}" "${legacy_migration}"; do
     echo "Scaffolding output is missing: ${composite_index_call}" >&2
     exit 1
   fi
+
+  if ! grep -Fq 'migrationBuilder.EnsureModelManagedDataFromModel(' "${migration}"; then
+    echo "Scaffolding output is missing safe model-managed data convergence." >&2
+    exit 1
+  fi
+
+  for unsafe_data_call in \
+    'migrationBuilder.InsertData(' \
+    'migrationBuilder.UpdateData(' \
+    'migrationBuilder.DeleteData('; do
+    if grep -Fq "${unsafe_data_call}" "${migration}"; then
+      echo "Scaffolding output contains an unsafe data call: ${unsafe_data_call}" >&2
+      exit 1
+    fi
+  done
 done
 
 if grep -Fq 'migrationBuilder.CreateTable(' "${strict_migration}"; then
@@ -228,6 +335,11 @@ for migration in "${strict_migration}" "${legacy_migration}"; do
     exit 1
   fi
 
+  if grep -Fq 'object?[' "${migration}"; then
+    echo "Scaffolding output contains nullable syntax inside EF's nullable-disabled migration source." >&2
+    exit 1
+  fi
+
   if ! grep -Fq "${identity_annotation}" "${migration}"; then
     echo "Scaffolding output is missing provider identity annotation: ${identity_annotation}" >&2
     exit 1
@@ -254,6 +366,74 @@ done
 dotnet build "${project}" \
   --configuration Release --no-restore --disable-build-servers -m:1 /nodeReuse:false
 
+export SAFE_MIGRATIONS_GENERATED_STRICT_CONNECTION_STRING="${generated_strict_connection}"
+export SAFE_MIGRATIONS_GENERATED_LEGACY_CONNECTION_STRING="${generated_legacy_connection}"
+dotnet test "${project}" \
+  --configuration Release --no-build --no-restore \
+  --filter FullyQualifiedName~GeneratedInitialMigrationPreflightTests
+unset SAFE_MIGRATIONS_GENERATED_STRICT_CONNECTION_STRING
+unset SAFE_MIGRATIONS_GENERATED_LEGACY_CONNECTION_STRING
+
+read_transition_state() {
+  local database="$1"
+
+  if [[ "${engine}" == "postgres" ]]; then
+    docker exec -e PGPASSWORD=postgrespw "${container_name}" \
+      psql -h 127.0.0.1 -p 5432 -U postgres -d "${database}" -Atc \
+      "SELECT COALESCE(string_agg(\"Id\"::text || ':' || \"Email\", ',' ORDER BY \"Id\"), '') FROM scaffolding_transition_users;"
+  else
+    docker exec "${container_name}" "${client}" -h127.0.0.1 -uroot -prootpw -N -B "${database}" \
+      -e "SELECT COALESCE(GROUP_CONCAT(CONCAT(\`id\`, ':', \`email\`) ORDER BY \`id\` SEPARATOR ','), '') FROM \`scaffolding_transition_users\`;"
+  fi
+}
+
+assert_transition_state() {
+  local database="$1"
+  local expected="$2"
+  local phase="$3"
+  local actual
+
+  actual="$(read_transition_state "${database}")"
+  if [[ "${actual}" != "${expected}" ]]; then
+    echo "EF tooling ${phase} state verification failed for ${engine}: ${actual}" >&2
+    exit 1
+  fi
+}
+
+source_transition_state="1:administrator@example.test,2:member@example.test"
+target_transition_state="1:owner@example.test,3:auditor@example.test"
+
+export SAFE_MIGRATIONS_MODEL_MANAGED_DATA_STATE="target"
+export SAFE_MIGRATIONS_CONNECTION_STRING="${strict_transition_connection}"
+dotnet ef database update --project "${project}" \
+  --context StrictSafeMigrationDataTransitionScaffoldingDbContext \
+  --configuration Release --no-build
+assert_transition_state "tooling_transition_strict" "${target_transition_state}" "strict target"
+dotnet ef database update StrictDataTransitionBaseline --project "${project}" \
+  --context StrictSafeMigrationDataTransitionScaffoldingDbContext \
+  --configuration Release --no-build
+assert_transition_state "tooling_transition_strict" "${source_transition_state}" "strict rollback"
+dotnet ef database update --project "${project}" \
+  --context StrictSafeMigrationDataTransitionScaffoldingDbContext \
+  --configuration Release --no-build
+assert_transition_state "tooling_transition_strict" "${target_transition_state}" "strict replay"
+dotnet ef database update --project "${project}" \
+  --context StrictSafeMigrationDataTransitionScaffoldingDbContext \
+  --configuration Release --no-build
+assert_transition_state "tooling_transition_strict" "${target_transition_state}" "strict idempotent replay"
+
+export SAFE_MIGRATIONS_CONNECTION_STRING="${legacy_transition_connection}"
+dotnet ef database update --project "${project}" \
+  --context LegacySafeMigrationDataTransitionScaffoldingDbContext \
+  --configuration Release --no-build
+assert_transition_state "tooling_transition_legacy" "${target_transition_state}" "legacy target"
+dotnet ef database update --project "${project}" \
+  --context LegacySafeMigrationDataTransitionScaffoldingDbContext \
+  --configuration Release --no-build
+assert_transition_state "tooling_transition_legacy" "${target_transition_state}" "legacy idempotent replay"
+unset SAFE_MIGRATIONS_MODEL_MANAGED_DATA_STATE
+
+export SAFE_MIGRATIONS_CONNECTION_STRING="${cli_connection}"
 dotnet ef database update --project "${project}" --context SafeMigrationDbContext \
   --configuration Release --no-build
 dotnet ef database update --project "${project}" --context SafeMigrationDbContext \

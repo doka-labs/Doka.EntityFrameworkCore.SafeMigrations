@@ -8,6 +8,8 @@
       "decision_planner_1",
       "decision_planner_100",
       "decision_planner_1000",
+      "model_data_intent_construction_384",
+      "model_data_contract_fingerprint_384",
       "report_json_1",
       "report_json_100",
       "report_json_1000"
@@ -21,6 +23,8 @@
       "mysql_analyzer_build_1000",
       "mysql_repair_generation_1000",
       "mysql_repair_analyzer_build_1000",
+      "mysql_model_data_generation_384",
+      "mysql_model_data_analyzer_build_384",
       "mysql_canonical_model_validation",
       "model_fingerprint_10x10",
       "model_fingerprint_100x10",
@@ -35,6 +39,8 @@
       "postgresql_analyzer_build_1000",
       "postgresql_repair_generation_1000",
       "postgresql_repair_analyzer_build_1000",
+      "postgresql_model_data_generation_384",
+      "postgresql_model_data_analyzer_build_384",
       "postgresql_canonical_model_validation"
     ]
   },
@@ -45,6 +51,8 @@
     "decision_planner_1": { "baselineDurationMilliseconds": 0.05, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 2048 },
     "decision_planner_100": { "baselineDurationMilliseconds": 0.1, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 8192 },
     "decision_planner_1000": { "baselineDurationMilliseconds": 0.5, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 49152 },
+    "model_data_intent_construction_384": { "baselineDurationMilliseconds": 1, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 65536 },
+    "model_data_contract_fingerprint_384": { "baselineDurationMilliseconds": 1, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 65536 },
     "mysql_generation_1": { "baselineDurationMilliseconds": 0.5, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 65536 },
     "mysql_generation_100": { "baselineDurationMilliseconds": 5, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 5000000 },
     "mysql_generation_1000": { "baselineDurationMilliseconds": 60, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 50000000 },
@@ -61,6 +69,8 @@
       "regressionTolerancePercent": 200,
       "maximumAllocatedBytes": 22000000
     },
+    "mysql_model_data_generation_384": { "baselineDurationMilliseconds": 8, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 8000000 },
+    "mysql_model_data_analyzer_build_384": { "baselineDurationMilliseconds": 2, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 2000000 },
     "mysql_canonical_model_validation": { "baselineDurationMilliseconds": 2, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 200000 },
     "model_fingerprint_10x10": { "baselineDurationMilliseconds": 2, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 200000 },
     "model_fingerprint_100x10": { "baselineDurationMilliseconds": 15, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 1500000 },
@@ -81,6 +91,8 @@
       "regressionTolerancePercent": 200,
       "maximumAllocatedBytes": 30000000
     },
+    "postgresql_model_data_generation_384": { "baselineDurationMilliseconds": 8, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 8000000 },
+    "postgresql_model_data_analyzer_build_384": { "baselineDurationMilliseconds": 2, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 2000000 },
     "postgresql_canonical_model_validation": { "baselineDurationMilliseconds": 2, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 200000 },
     "report_json_1": { "baselineDurationMilliseconds": 0.2, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 16384 },
     "report_json_100": { "baselineDurationMilliseconds": 1, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 160000 },

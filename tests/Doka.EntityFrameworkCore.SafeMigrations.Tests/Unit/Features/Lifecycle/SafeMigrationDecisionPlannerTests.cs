@@ -133,6 +133,10 @@ public sealed class SafeMigrationDecisionPlannerTests
             (SafeMigrationAction.NoOp, "source_missing_noop"),
         SafeMigrationObservedState.Missing when operationKind == SafeMigrationOperationKind.AlterColumn =>
             (SafeMigrationAction.RejectDifferent, "alter_target_missing"),
+        SafeMigrationObservedState.Missing when operationKind == SafeMigrationOperationKind.UpdateModelManagedData =>
+            (SafeMigrationAction.RejectPrerequisiteMissing, "missing_model_managed_row"),
+        SafeMigrationObservedState.Missing when operationKind == SafeMigrationOperationKind.DeleteModelManagedData =>
+            (SafeMigrationAction.NoOp, "missing_noop"),
         SafeMigrationObservedState.Missing => (SafeMigrationAction.Apply, "missing_apply"),
         SafeMigrationObservedState.Matching when IsDrop(operationKind) => (SafeMigrationAction.Apply, "existing_drop"),
         SafeMigrationObservedState.Matching when IsRename(operationKind) =>
@@ -149,6 +153,8 @@ public sealed class SafeMigrationDecisionPlannerTests
             (SafeMigrationAction.Repair, "different_repair"),
         SafeMigrationObservedState.Different when operationKind == SafeMigrationOperationKind.AlterColumn =>
             (SafeMigrationAction.RejectDifferent, "alter_not_approved"),
+        SafeMigrationObservedState.Different when IsModelManagedData(operationKind) =>
+            (SafeMigrationAction.RejectDifferent, "different_reject"),
         SafeMigrationObservedState.Different when policy == SafeMigrationPolicy.ExistenceOnly =>
             (SafeMigrationAction.NoOp, "existing_existence_noop"),
         SafeMigrationObservedState.Different when policy == SafeMigrationPolicy.ThrowIfDifferent =>
@@ -160,6 +166,12 @@ public sealed class SafeMigrationDecisionPlannerTests
         SafeMigrationObservedState.DataBlocked => (SafeMigrationAction.RejectDataBlocked, "data_blocked"),
         SafeMigrationObservedState.PrerequisiteMissing => (SafeMigrationAction.RejectPrerequisiteMissing,
             "prerequisite_missing"),
+        SafeMigrationObservedState.TransitionReady
+            when operationKind is SafeMigrationOperationKind.UpdateModelManagedData
+                or SafeMigrationOperationKind.DeleteModelManagedData =>
+            (SafeMigrationAction.Apply, "transition_ready_apply"),
+        SafeMigrationObservedState.TransitionReady =>
+            (SafeMigrationAction.RejectUnsupported, "transition_state_invalid"),
         _ => throw new ArgumentOutOfRangeException(nameof(observedState)),
     };
 
@@ -179,4 +191,10 @@ public sealed class SafeMigrationDecisionPlannerTests
     ) => operationKind is SafeMigrationOperationKind.RenameTable
         or SafeMigrationOperationKind.RenameColumn
         or SafeMigrationOperationKind.RenameIndex;
+
+    private static bool IsModelManagedData(
+        SafeMigrationOperationKind operationKind
+    ) => operationKind is SafeMigrationOperationKind.EnsureModelManagedData
+        or SafeMigrationOperationKind.UpdateModelManagedData
+        or SafeMigrationOperationKind.DeleteModelManagedData;
 }

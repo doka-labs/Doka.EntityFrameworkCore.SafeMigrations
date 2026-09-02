@@ -7,11 +7,13 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     private readonly PostgreSqlSafeMigrationSqlExpressionRenderer _expressionRenderer;
     private readonly RelationalTypeMapping _stringMapping;
     private readonly Func<string, string> _literal;
+    private readonly Func<object?, string, string> _valueLiteral;
 
     public PostgreSqlSafeMigrationCatalogSqlBuilder(
         IRelationalTypeMappingSource typeMappingSource,
         ISqlGenerationHelper sqlGenerationHelper,
-        Func<string, string>? literal = null
+        Func<string, string>? literal = null,
+        Func<object?, string, string>? valueLiteral = null
     )
     {
         ArgumentNullException.ThrowIfNull(typeMappingSource);
@@ -24,6 +26,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             ?? throw new InvalidOperationException("The PostgreSQL provider has no string type mapping.");
 
         _literal = literal ?? _stringMapping.GenerateSqlLiteral;
+        _valueLiteral = valueLiteral ?? RenderValueLiteral;
     }
 
     public PostgreSqlSafeMigrationRuntimePlan Build(
@@ -65,6 +68,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             DropCheckConstraintIntent value => BuildDropCheck(value),
             EnsureForeignKeyIntent value => BuildEnsureForeignKey(value),
             DropForeignKeyIntent value => BuildDropForeignKey(value),
+            EnsureModelManagedDataIntent value => BuildEnsureModelManagedData(value),
+            UpdateModelManagedDataIntent value => BuildUpdateModelManagedData(value),
+            DeleteModelManagedDataIntent value => BuildDeleteModelManagedData(value),
             _ => throw new ArgumentOutOfRangeException(
                 nameof(operation),
                 operation.Intent.GetType()
@@ -120,6 +126,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                     value.Definition.PrincipalTable,
                     value.Definition.PrincipalSchema,
                     SafeMigrationPrerequisiteColumns.Principal(value))})",
+            ModelManagedDataIntent value => BuildModelManagedDataPrerequisite(value),
             _ => "TRUE",
         };
     }
@@ -284,4 +291,24 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     private string Literal(
         string value
     ) => _literal(value);
+
+    private string ValueLiteral(
+        object? value,
+        string storeType
+    ) => _valueLiteral(value, storeType);
+
+    private string RenderValueLiteral(
+        object? value,
+        string storeType
+    )
+    {
+        var mapping = value is null
+            ? _typeMappingSource.FindMapping(storeType)
+            : _typeMappingSource.FindMapping(value.GetType(), storeType);
+
+        return (mapping
+                ?? throw new NotSupportedException(
+                    $"PostgreSQL has no type mapping for store type '{storeType}'."))
+            .GenerateSqlLiteral(value);
+    }
 }

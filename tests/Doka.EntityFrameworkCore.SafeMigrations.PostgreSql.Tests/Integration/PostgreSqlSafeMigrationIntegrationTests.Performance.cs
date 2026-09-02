@@ -31,6 +31,74 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     }
 
     [Fact]
+    [Trait("Category", "LargeScale")]
+    public async Task ModelManagedData_FiftyThousandMixedRowsConvergeAndReplayIdempotently()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE large_model_managed_rows ("
+            + "id integer NOT NULL PRIMARY KEY, managed_value character varying(32) NOT NULL);"
+            + BuildPostgreSqlModelManagedInitialRows());
+
+        await using var context = CreateContext(connectionString);
+        context.Database.SetCommandTimeout(PerformanceFixtureCommandTimeoutSeconds);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        var expectation = ModelManagedDataLargeExecutionContract.Populate(
+            builder,
+            "integer",
+            "character varying(32)");
+
+        var runner = context.GetService<ISafeMigrationRunner>();
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(builder.Operations, context.Model);
+
+        var initial = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(() => runner.AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("large-model-managed-data"),
+                CancellationToken.None));
+
+        var initialExecution = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(() =>
+            ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
+
+        var replayExecution = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(() =>
+            ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
+
+        var replay = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(() => runner.AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("large-model-managed-data-replay"),
+                CancellationToken.None));
+
+        ModelManagedDataLargeExecutionEvidence.Write(
+            "postgresql",
+            Fixture.ServerVersion.ToString(),
+            commands,
+            initial.Measurement,
+            initialExecution,
+            replayExecution,
+            replay.Measurement);
+
+        expectation.AssertInitialReport(initial.Result);
+        expectation.AssertReplayReport(replay.Result);
+        Assert.Equal(
+            expectation.FinalRowCount,
+            await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM large_model_managed_rows;"));
+        Assert.Equal(
+            expectation.FinalRowCount,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM large_model_managed_rows WHERE managed_value = 'target';"));
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM large_model_managed_rows WHERE id >= 3000000;"));
+    }
+
+    [Fact]
     public async Task Analyzer_AppliesConfiguredCommandTimeoutToCatalogBatches()
     {
         var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
@@ -170,7 +238,29 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         + "id, matching_value, repair_value, blocked_value, indexed_value, "
         + "unique_value, check_value, parent_id, parent_tenant_id, "
         + "secondary_parent_id, secondary_parent_tenant_id) "
-        + "VALUES (1, 1, 'legacy', NULL, 1, 1, 1, 1, 1, 1, 1);";
+        + "VALUES (1, 1, 'legacy', NULL, 1, 1, 1, 1, 1, 1, 1);"
+        + BuildLargeMigrationModelManagedRows();
+
+    private static string BuildLargeMigrationModelManagedRows() =>
+        "INSERT INTO large_migration_target ("
+        + "id, matching_value, repair_value, blocked_value, indexed_value, "
+        + "unique_value, check_value, parent_id, parent_tenant_id, "
+        + "secondary_parent_id, secondary_parent_tenant_id) VALUES "
+        + string.Join(
+            ", ",
+            LargeMigrationStressContract
+                .ModelManagedUpdateOrdinals(LargeMigrationStressDialect.PostgreSql)
+                .Select(ordinal =>
+                {
+                    var key = LargeMigrationStressContract
+                        .ModelManagedUpdateKey(ordinal)
+                        .ToString(CultureInfo.InvariantCulture);
+
+                    var value = ordinal.ToString(CultureInfo.InvariantCulture);
+
+                    return $"({key}, {value}, 'canonical', NULL, {value}, {key}, {value}, 1, 1, 1, 1)";
+                }))
+        + ";";
 
     private static string BuildPostgreSqlPerformanceTables(
         string prefix,
@@ -190,4 +280,15 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
 
                 return $"CREATE TABLE \"{table}\" (\"id\" integer NOT NULL{payloadColumn});{indexDdl}";
             }));
+
+    private static string BuildPostgreSqlModelManagedInitialRows() => string.Join(
+        Environment.NewLine,
+        ModelManagedDataLargeExecutionContract
+            .InitialRows()
+            .Chunk(1000)
+            .Select(batch => "INSERT INTO large_model_managed_rows (id, managed_value) VALUES "
+                + string.Join(
+                    ", ",
+                    batch.Select(row => $"({row.Id.ToString(CultureInfo.InvariantCulture)}, '{row.Value}')"))
+                + ";"));
 }

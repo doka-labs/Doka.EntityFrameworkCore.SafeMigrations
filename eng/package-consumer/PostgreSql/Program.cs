@@ -67,6 +67,18 @@ internal sealed class PackageScaffoldingDbContext : DbContext
         optionsBuilder.UseNpgsql("Host=127.0.0.1;Username=package;Password=package;Database=package");
         optionsBuilder.UsePostgreSqlSafeMigrations();
     }
+
+    protected override void OnModelCreating(
+        ModelBuilder modelBuilder
+    )
+    {
+        modelBuilder.Entity<PackageScaffoldingEntity>().HasData(
+            new PackageScaffoldingEntity
+            {
+                Id = 1,
+                Name = "package-consumer",
+            });
+    }
 }
 
 internal sealed class PackageScaffoldingEntity

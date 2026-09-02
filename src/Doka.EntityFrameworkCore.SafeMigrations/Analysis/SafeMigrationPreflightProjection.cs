@@ -41,6 +41,7 @@ internal sealed partial class SafeMigrationPreflightProjection
             DropCheckConstraintIntent value => Project(value, liveAnalysis),
             EnsureForeignKeyIntent value => Project(value, liveAnalysis),
             DropForeignKeyIntent value => Project(value, liveAnalysis),
+            ModelManagedDataIntent value => Project(value, liveAnalysis),
             _ => liveAnalysis,
         };
     }
@@ -127,6 +128,9 @@ internal sealed partial class SafeMigrationPreflightProjection
             case DropForeignKeyIntent value:
                 Observe(value, decision);
                 break;
+            case ModelManagedDataIntent value:
+                Observe(value, analysis);
+                break;
         }
     }
 
@@ -174,6 +178,7 @@ internal sealed partial class SafeMigrationPreflightProjection
             case UpdateDataOperation:
             case DeleteDataOperation:
                 ObserveProviderDataMutation();
+                InvalidateModelManagedDataProjection();
                 break;
             default:
                 // An unrecognized provider operation may contain arbitrary DDL
@@ -184,6 +189,7 @@ internal sealed partial class SafeMigrationPreflightProjection
                 _tables.Clear();
                 _prerequisites.Clear();
                 _droppedIndexes.Clear();
+                InvalidateModelManagedDataProjection();
                 break;
         }
     }

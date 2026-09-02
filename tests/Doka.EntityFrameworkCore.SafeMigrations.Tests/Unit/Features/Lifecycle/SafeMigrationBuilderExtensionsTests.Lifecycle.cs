@@ -39,6 +39,30 @@ public sealed partial class SafeMigrationBuilderExtensionsTests
         builder.DropCheckConstraintIfExists("ck_items_id", "items");
         builder.EnsureForeignKey(foreignKey, SafeMigrationPolicy.ThrowIfDifferent);
         builder.DropForeignKeyIfExists("fk_items_parent", "items");
+        builder.EnsureModelManagedDataFromModel(
+            "items",
+            ["id"],
+            ["int"],
+            ["id"],
+            ["int"],
+            new object?[,] { { 1 } });
+        builder.UpdateModelManagedDataFromModel(
+            "items",
+            ["id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            ["value"],
+            ["varchar(32)"],
+            new object?[,] { { "old" } },
+            new object?[,] { { "new" } });
+        builder.DeleteModelManagedDataFromModel(
+            "items",
+            ["id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            ["id"],
+            ["int"],
+            new object?[,] { { 1 } });
 
         var operations = builder
             .Operations

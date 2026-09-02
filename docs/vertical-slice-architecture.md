@@ -31,6 +31,7 @@ Inside every package, the same feature slices are mirrored:
 - `Constraints/UniqueConstraints`
 - `Constraints/CheckConstraints`
 - `Constraints/ForeignKeys`
+- `ModelManagedData`
 
 The implemented source layout is:
 
@@ -52,11 +53,12 @@ contracts. Those areas verify behavior spanning more than one operation family
 and do not own product behavior.
 
 Design-time scaffolding is a cross-slice composition concern under Core's
-`Scaffolding` folder. It delegates provider-specific C# rendering to EF Core,
-then maps only the reviewed table/index boundaries to existing slice entry
-points. Provider `buildTransitive` assets own discovery. Provider column
-annotation comparison remains in each provider's `Columns` slice; scaffolding
-does not introduce a runtime feature registry or a fourth package.
+`Scaffolding` folder. It delegates provider-specific model differ and C#
+rendering behavior to EF Core, then maps reviewed table/index boundaries and
+exactly paired model-managed data into existing slice entry points. Provider
+`buildTransitive` assets own discovery. Provider column annotation comparison
+remains in each provider's `Columns` slice; scaffolding does not introduce a
+runtime feature registry or a fourth package.
 
 ## Slice ownership
 
@@ -136,7 +138,10 @@ and returned catalog inventory; bounded requests do not imply constant memory
 or an operation-count-only bound. Provider matrix tests retain same-runner live
 p95 evidence for clean and 1,000-table noisy catalogs, plus qualification with
 100,000 ordered mixed operations spanning every observed state and planned
-action on every supported engine profile.
+action on every supported engine profile. Model-managed-data benchmarks measure
+intent/fingerprint and provider generation/analyzer allocations at 384 row
+transitions. Live gates execute and replay 50,000 mixed row transitions using
+the production row/cell batching limits and persist command/allocation evidence.
 
 ## Verification
 

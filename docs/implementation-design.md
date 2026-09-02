@@ -159,12 +159,12 @@ engine families retain negative value-, operator-, and identifier-drift tests.
 ## Table modes and convergence
 
 EF Core's design-time service pipeline supplies the provider model differ and
-C# migration generator. SafeMigrations replaces only the public C# generator
-services at design time, delegates operation rendering to EF Core, validates
-the expected generated call shape, and substitutes the safe table/index method
-name. This preserves provider-rendered arguments and annotations without
-forking EF Core's generator implementation. An unexpected upstream output
-shape stops scaffolding instead of producing ambiguous source.
+C# migration generator. SafeMigrations decorates both public contracts. The C#
+generator delegates provider rendering to EF Core, validates the expected
+generated call shape, and substitutes reviewed safe calls. This preserves
+provider-rendered arguments and annotations without forking EF Core's generator
+implementation. An unexpected upstream output shape stops scaffolding instead
+of producing ambiguous source.
 
 Provider package `buildTransitive` assets add EF's
 `DesignTimeServicesReferenceAttribute` to a consuming startup assembly that
@@ -192,11 +192,30 @@ complete key. Multiple projectors, unrecognized operation metadata, malformed
 prefix counts, or negative values stop scaffolding. PostgreSQL registers no
 projector and retains the ordinary generated index calls.
 
-`Strict` rewrites table creation, index creation, index removal, and table removal.
-`LegacyConvergence` rewrites the same forward table/index operations but
-replaces `Down` with a deterministic exception: adopted legacy objects have no
-provable destructive inverse. Other EF operations are delegated unchanged so
-their policy cannot be guessed by the scaffolder.
+`Strict` rewrites table creation, index creation, index removal, table removal,
+and model-managed data produced from `HasData`. `LegacyConvergence` rewrites the
+same forward operations but replaces `Down` with a deterministic exception:
+adopted legacy objects have no provable destructive inverse. The inverse model
+difference is still verified before that replacement because safe forward
+updates and deletes require captured source values. Other EF operations are
+delegated unchanged so their policy cannot be guessed by the scaffolder.
+
+The model-differ decorator first delegates to the active Doka or Npgsql differ,
+then completes data-operation store types from public source and target
+`IRelationalModel` metadata. It snapshots only candidate-key and incoming
+foreign-key maps required by the changed rows. Provider-supplied and relational
+store types must agree; missing, contradictory, or unrepresentable metadata
+stops scaffolding.
+
+Before rendering, the migration generator pairs forward and inverse data rows
+by schema, table, ordered key columns, and canonical typed key values. An insert
+pairs with its inverse delete to prove key identity, an update pairs with its
+inverse update to capture old values, and a delete pairs with its inverse insert
+to capture the complete removed row. Pairing is exactly one-to-one and rejects
+missing, duplicate, ambiguous, contradictory, or unused inverse rows. Verified
+rows retain EF order and are partitioned at 128 rows or 4,096 value cells,
+whichever bound is reached first. No accepted scaffolding run falls back to raw
+data operations.
 
 When the immutable expected definition is captured from an EF column
 operation, SafeMigrations parses SQL defaults through its bounded expression
@@ -341,6 +360,7 @@ Each provider must classify exactly one state:
 | `Unsupported` | The active engine cannot represent the requested feature. |
 | `DataBlocked` | Existing rows violate a required transition precondition. |
 | `PrerequisiteMissing` | A required table or referenced column does not exist, so dependent state cannot be evaluated safely. |
+| `TransitionReady` | A captured model-managed source row is present and a guarded compare-and-swap transition may be attempted. |
 
 The pure planner maps operation kind, state, policy, and repair capability to
 one action. It is total over all defined enum combinations and performs no
@@ -352,6 +372,50 @@ safe after data preconditions. Alter-column repair requires the live column to
 match the declared old definition and permits only the implementation's
 lossless metadata/default transition. Type narrowing, collation changes,
 renames, primary-key reconstruction, and violated constraints reject.
+Model-managed data never uses repair policy. Ensure, update, and delete have a
+fixed `ThrowIfDifferent` contract. A transition-ready update/delete is an
+explicit source-frozen migration step, not permission to overwrite arbitrary
+live drift.
+
+## Model-managed data convergence
+
+The `ModelManagedData` slice owns three provider-neutral intents. Ensure freezes
+the complete target rows and inserts only absent primary keys. Update freezes
+keys, old managed values, and target values. Delete freezes keys, complete old
+rows, and incoming source-model dependency maps. Values retain canonical type
+identity in fingerprints but are excluded from assessment text, telemetry, and
+exception messages.
+
+Provider classification uses typed parameters and null-safe equality: `<=>` on
+MySQL/MariaDB and `IS NOT DISTINCT FROM` on PostgreSQL. It distinguishes absent,
+target-matching, source-matching, drifted, unique/check blocked, dependent, and
+missing-prerequisite rows without interpolating values into catalog SQL. MySQL
+and MariaDB additionally require a transactional table engine.
+
+Execution deliberately avoids generic upsert syntax. Ensure uses conditional
+plain inserts. Update and delete repeat the captured source predicate in their
+target DML, then verify the target state in the same provider-owned migration
+command scope. A concurrent source change therefore cannot become an overwrite;
+it causes a failed postcondition. Delete also proves that incoming rows will not
+be cascaded, nulled, defaulted, or otherwise changed implicitly. EF's normal
+migration transaction owns rollback where the provider supports it; the
+handler does not create a nested transaction.
+
+Ordered preflight projection retains only model-managed identities touched by
+the migration. Accepted ensures record targets, updates replace source with
+target candidate-key identities, and deletes record absence. Earlier accepted
+child deletes can therefore discharge the exact dependency needed by a later
+parent delete. An unmatched live dependent row, unknown data-changing operation,
+or incompletely known structural effect invalidates the relevant proof and
+fails closed.
+
+An accepted table creation additionally proves that its complete projected
+relation starts empty. A following model-managed ensure may therefore classify
+an otherwise catalog-invisible key as missing when every referenced column is
+known and no intervening provider DML or opaque operation could have populated
+the table, including through a trigger. This inference is never used for an
+existing table or for a key whose earlier projected row is only partially
+known; those paths retain the live, fail-closed analysis.
 
 ## Preflight and postflight
 
@@ -420,16 +484,18 @@ Recognized ordinary create/add/alter/drop/rename table and column operations may
 contribute a conditional structural postcondition to later prerequisite
 projection. Their assessment remains `provider_owned_not_analyzed`, and no
 facet or data-safety claim is inferred beyond the bounded projection facts.
-Typed `InsertDataOperation`, `UpdateDataOperation`, and `DeleteDataOperation`
-entries cannot change schema prerequisites, so they preserve known table and
-column presence. They can change every row-level precondition directly or
-through triggers, so they mark all previously projected data state and every
-live pre-batch row-safety result uncertain. Later structural provider
-operations preserve this marker instead of presenting their newer structural
-timestamp as a new data proof. A later non-unique index can still project
-`Missing`; a missing unique index, primary key, unique/check/foreign constraint,
-unsafe column addition, or nullability-tightening repair remains blocked until
-its post-DML data state is independently provable.
+Source-frozen model-managed operations contribute bounded row evidence and the
+ordered projection described above. Raw `InsertDataOperation`,
+`UpdateDataOperation`, and `DeleteDataOperation` entries cannot change schema
+prerequisites, so they preserve known table and column presence. They can change
+every row-level precondition directly or through triggers, so they mark all
+previously projected data state and every live pre-batch row-safety result
+uncertain. Later structural provider operations preserve this marker instead
+of presenting their newer structural timestamp as a new data proof. A later
+non-unique index can still project `Missing`; a missing unique index, primary
+key, unique/check/foreign constraint, unsafe column addition, or
+nullability-tightening repair remains blocked until its post-DML data state is
+independently provable.
 
 Each optimizer-visible statement contains at most 32 operations. At most eight
 statements travel in one ADO.NET batch, bounded by 16,000 parameters and 4 MiB

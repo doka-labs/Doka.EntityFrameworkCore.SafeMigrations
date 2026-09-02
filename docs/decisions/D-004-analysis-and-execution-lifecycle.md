@@ -9,7 +9,7 @@ scope: "Preflight, runtime, postflight, connection ownership, and failure recove
 supersedes: []
 superseded-by: []
 amends: []
-amended-by: []
+amended-by: [D-009]
 madr-version: "4.0.0"
 doka-profile-version: "1.0"
 ---
@@ -196,6 +196,9 @@ installations.
 - 2026-08-29: Preflight retained the provider-operation boundary while adding
   ordered conditional projection for deterministic ordinary table and column
   postconditions required by later safe operations.
+- 2026-09-02: D-009 amended the lifecycle with guarded compare-and-swap
+  model-managed transitions and target postconditions while retaining EF
+  transaction ownership and external write-fence requirements.
 
 ### Implementation References
 

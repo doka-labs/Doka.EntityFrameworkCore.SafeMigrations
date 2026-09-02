@@ -118,6 +118,11 @@ internal sealed partial class SafeMigrationPreflightProjection
         SafeMigrationDecision decision
     )
     {
+        if (decision.Action == SafeMigrationAction.Apply)
+        {
+            InvalidateModelManagedDataProjection();
+        }
+
         if (decision.Action == SafeMigrationAction.Apply
             && _prerequisites.TryGetValue(new TableKey(intent.Table, intent.Schema), out var prerequisites))
         {
@@ -140,6 +145,8 @@ internal sealed partial class SafeMigrationPreflightProjection
         {
             return;
         }
+
+        InvalidateModelManagedDataProjection();
 
         if (_prerequisites.TryGetValue(new TableKey(intent.Table, intent.Schema), out var prerequisites)
             && prerequisites.Columns.Remove(intent.Name, out var prerequisite))

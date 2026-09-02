@@ -42,6 +42,19 @@ runner.Measure(
     "postgresql_repair_analyzer_build_1000",
     () => BuildPlans(catalogBuilder, repairOperations));
 
+var modelManagedOperations = ModelManagedDataBenchmarkWorkload.CreateOperations(
+    context.Database.ProviderName!,
+    "integer",
+    "character varying(64)");
+
+runner.Measure(
+    "postgresql_model_data_generation_384",
+    () => generator.Generate(modelManagedOperations, context.Model)
+        .Count);
+runner.Measure(
+    "postgresql_model_data_analyzer_build_384",
+    () => BuildPlans(catalogBuilder, modelManagedOperations));
+
 return runner.Complete();
 
 static int BuildPlans(

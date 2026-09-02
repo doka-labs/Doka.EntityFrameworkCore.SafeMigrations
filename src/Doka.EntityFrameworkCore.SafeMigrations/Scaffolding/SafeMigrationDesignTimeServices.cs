@@ -30,5 +30,6 @@ internal sealed class SafeMigrationDesignTimeServices : IDesignTimeServices
         serviceCollection.Replace(
             ServiceDescriptor.Singleton<IMigrationsCodeGeneratorSelector,
                 SafeMigrationMigrationsCodeGeneratorSelector>());
+        SafeMigrationServiceCollectionDecorator.DecorateMigrationsModelDiffer(serviceCollection);
     }
 }

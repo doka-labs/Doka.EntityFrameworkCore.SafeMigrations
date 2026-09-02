@@ -1,5 +1,3 @@
-using System.Runtime.CompilerServices;
-
 [assembly: InternalsVisibleTo("Doka.EntityFrameworkCore.SafeMigrations.Tests")]
 
 // Provider property suites verify parser-renderer round trips without making

@@ -74,6 +74,12 @@ Preflight is read-only and cannot reserve the catalog state. Before execution:
   preflight;
 - start migration promptly; rerun preflight if the window or artifact changes.
 
+For model-managed data, `TransitionReady` proves only that the captured source
+row was present during analysis. Runtime update/delete repeats that source
+predicate and every model-managed mutation verifies its target postcondition.
+The write fence remains required because an application or trigger can still
+race after preflight; the guard converts that race into failure, not approval.
+
 ## Migration
 
 1. Capture the pre-migration Core history rows.
@@ -86,6 +92,11 @@ Preflight is read-only and cannot reserve the catalog state. Before execution:
 5. Capture the exact exception type, provider error code, SafeMigrations/Doka
    code, operation ordinal, and timestamp without logging SQL payloads or
    connection data.
+
+Model-managed values are intentionally present in migration source and SQL
+scripts. Treat both as source-controlled deployment artifacts and do not copy
+their contents into general logs or tickets. `HasData` must not contain secrets
+or environment-specific values.
 
 ### Externally executed SQL scripts
 
@@ -156,7 +167,14 @@ Only then release the write fence and mark the instance complete.
 | PostgreSQL transactional command | Current migration transaction normally rolled back | Confirm history and catalog; correct the cause; rerun. Account for explicitly transaction-suppressed provider operations. |
 | Process lost after DDL | History may or may not contain the row | Read catalog and history; never infer success from process exit alone; rerun guarded pending migration or postflight applied migration. |
 | Postflight failed with history present | Migration is recorded but target contract is not satisfied | Stop traffic, preserve evidence, issue a reviewed forward-fix migration or restore backup. Do not edit history as a shortcut. |
+| Model-managed compare-and-swap or postcondition failed | A row, dependent row, trigger result, or constraint changed after the approved source state | Keep writes fenced, inspect the affected key through protected operator tooling, correct the conflict or author a new forward migration, then rerun preflight. Never weaken the operation into an upsert or edit an applied migration. |
 | Data corruption or unbounded destructive effect | State cannot be proven safe | Isolate instance and restore the tested backup/snapshot under incident control. |
+
+An unapplied migration containing raw HasData-derived `InsertData`,
+`UpdateData`, or `DeleteData` calls can be removed and scaffolded again with the
+current package. An already applied migration is immutable. Correct it with a
+new forward migration; do not rewrite source, snapshot, or history to make the
+old execution appear different.
 
 ## Partial MySQL/MariaDB retry
 
