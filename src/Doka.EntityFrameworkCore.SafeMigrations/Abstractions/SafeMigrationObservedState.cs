@@ -23,4 +23,9 @@ public enum SafeMigrationObservedState
 
     /// <summary>A parent table or referenced column required by the operation is absent.</summary>
     PrerequisiteMissing = 5,
+
+    /// <summary>
+    /// The captured source state is present and the compare-and-swap transition may be attempted.
+    /// </summary>
+    TransitionReady = 6,
 }

@@ -64,4 +64,13 @@ public enum SafeMigrationOperationKind
 
     /// <summary>Drop a foreign key when it exists.</summary>
     DropForeignKey = 19,
+
+    /// <summary>Ensure model-managed rows exist with their source-controlled values.</summary>
+    EnsureModelManagedData = 20,
+
+    /// <summary>Update model-managed rows from captured source values to target values.</summary>
+    UpdateModelManagedData = 21,
+
+    /// <summary>Delete model-managed rows only when their captured source values still match.</summary>
+    DeleteModelManagedData = 22,
 }

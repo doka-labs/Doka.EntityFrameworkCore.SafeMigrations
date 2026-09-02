@@ -21,6 +21,14 @@ public sealed class SafeMigrationOperation : MigrationOperation
             throw new ArgumentOutOfRangeException(nameof(policy));
         }
 
+        if (intent is ModelManagedDataIntent
+            && policy != SafeMigrationPolicy.ThrowIfDifferent)
+        {
+            throw new ArgumentException(
+                "Model-managed data operations require the fixed ThrowIfDifferent policy.",
+                nameof(policy));
+        }
+
         Intent = intent;
         Policy = policy;
     }

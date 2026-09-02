@@ -21,7 +21,7 @@ public static class SafeMigrationDecisionPlanner
     {
         var operationFamily = ClassifyOperation(operationKind);
 
-        Validate(observedState, policy, repairCapability);
+        Validate(operationKind, observedState, policy, repairCapability);
 
         return observedState switch
         {
@@ -33,6 +33,7 @@ public static class SafeMigrationDecisionPlanner
             SafeMigrationObservedState.PrerequisiteMissing => Decision(
                 SafeMigrationAction.RejectPrerequisiteMissing,
                 "prerequisite_missing"),
+            SafeMigrationObservedState.TransitionReady => PlanTransitionReady(operationFamily),
             _ => throw new UnreachableException(),
         };
     }
@@ -45,6 +46,11 @@ public static class SafeMigrationDecisionPlanner
         OperationFamily.Drop => Decision(SafeMigrationAction.NoOp, "missing_noop"),
         OperationFamily.Rename => Decision(SafeMigrationAction.NoOp, "source_missing_noop"),
         OperationFamily.Alter => Decision(SafeMigrationAction.RejectDifferent, "alter_target_missing"),
+        OperationFamily.ModelManagedEnsure => Decision(SafeMigrationAction.Apply, "missing_apply"),
+        OperationFamily.ModelManagedUpdate => Decision(
+            SafeMigrationAction.RejectPrerequisiteMissing,
+            "missing_model_managed_row"),
+        OperationFamily.ModelManagedDelete => Decision(SafeMigrationAction.NoOp, "missing_noop"),
         _ => throw new UnreachableException(),
     };
 
@@ -56,6 +62,9 @@ public static class SafeMigrationDecisionPlanner
         OperationFamily.Drop => Decision(SafeMigrationAction.Apply, "existing_drop"),
         OperationFamily.Rename => Decision(SafeMigrationAction.Apply, "source_exists_rename"),
         OperationFamily.Alter => Decision(SafeMigrationAction.NoOp, "matching_noop"),
+        OperationFamily.ModelManagedEnsure
+            or OperationFamily.ModelManagedUpdate
+            or OperationFamily.ModelManagedDelete => Decision(SafeMigrationAction.NoOp, "matching_noop"),
         _ => throw new UnreachableException(),
     };
 
@@ -73,6 +82,11 @@ public static class SafeMigrationDecisionPlanner
                 SafeMigrationAction.Repair,
                 "different_repair"),
         OperationFamily.Alter => Decision(SafeMigrationAction.RejectDifferent, "alter_not_approved"),
+        OperationFamily.ModelManagedEnsure
+            or OperationFamily.ModelManagedUpdate
+            or OperationFamily.ModelManagedDelete => Decision(
+                SafeMigrationAction.RejectDifferent,
+                "different_reject"),
         _ => throw new UnreachableException(),
     };
 
@@ -90,6 +104,12 @@ public static class SafeMigrationDecisionPlanner
         _ => throw new UnreachableException(),
     };
 
+    private static SafeMigrationDecision PlanTransitionReady(
+        OperationFamily operationFamily
+    ) => operationFamily is OperationFamily.ModelManagedUpdate or OperationFamily.ModelManagedDelete
+        ? Decision(SafeMigrationAction.Apply, "transition_ready_apply")
+        : Decision(SafeMigrationAction.RejectUnsupported, "transition_state_invalid");
+
     private static OperationFamily ClassifyOperation(
         SafeMigrationOperationKind operationKind
     ) => operationKind switch
@@ -102,6 +122,9 @@ public static class SafeMigrationDecisionPlanner
             or SafeMigrationOperationKind.EnsureUniqueConstraint
             or SafeMigrationOperationKind.EnsureCheckConstraint
             or SafeMigrationOperationKind.EnsureForeignKey => OperationFamily.Ensure,
+        SafeMigrationOperationKind.EnsureModelManagedData => OperationFamily.ModelManagedEnsure,
+        SafeMigrationOperationKind.UpdateModelManagedData => OperationFamily.ModelManagedUpdate,
+        SafeMigrationOperationKind.DeleteModelManagedData => OperationFamily.ModelManagedDelete,
         SafeMigrationOperationKind.DropSchema
             or SafeMigrationOperationKind.DropTable
             or SafeMigrationOperationKind.DropColumn
@@ -123,6 +146,7 @@ public static class SafeMigrationDecisionPlanner
     ) => new(action, code);
 
     private static void Validate(
+        SafeMigrationOperationKind operationKind,
         SafeMigrationObservedState observedState,
         SafeMigrationPolicy policy,
         SafeMigrationRepairCapability repairCapability
@@ -142,6 +166,7 @@ public static class SafeMigrationDecisionPlanner
         {
             throw new ArgumentOutOfRangeException(nameof(repairCapability));
         }
+
     }
 
     private enum OperationFamily
@@ -150,5 +175,8 @@ public static class SafeMigrationDecisionPlanner
         Drop,
         Rename,
         Alter,
+        ModelManagedEnsure,
+        ModelManagedUpdate,
+        ModelManagedDelete,
     }
 }

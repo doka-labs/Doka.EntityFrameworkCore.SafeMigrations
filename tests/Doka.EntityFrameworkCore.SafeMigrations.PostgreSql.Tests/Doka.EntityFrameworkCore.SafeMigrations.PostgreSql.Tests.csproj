@@ -8,6 +8,8 @@
              Link="Infrastructure\LivePerformanceEvidence.cs" />
     <Compile Include="..\Shared\LargeMigrationStressContract.cs"
              Link="Infrastructure\LargeMigrationStressContract.cs" />
+    <Compile Include="..\Shared\ModelManagedDataLargeExecutionContract.cs"
+             Link="Infrastructure\ModelManagedDataLargeExecutionContract.cs" />
     <Compile Include="..\Shared\SafeMigrationSqlExpressionPropertyCases.cs"
              Link="Infrastructure\SafeMigrationSqlExpressionPropertyCases.cs" />
     <ProjectReference Include="..\..\src\Doka.EntityFrameworkCore.SafeMigrations\Doka.EntityFrameworkCore.SafeMigrations.csproj" />

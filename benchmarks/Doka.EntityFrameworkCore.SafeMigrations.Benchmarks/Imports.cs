@@ -8,4 +8,5 @@ global using System.Linq;
 global using System.Text.Json;
 global using Doka.EntityFrameworkCore.SafeMigrations;
 global using Doka.EntityFrameworkCore.SafeMigrations.Benchmarks;
+global using Microsoft.EntityFrameworkCore.Migrations;
 global using Microsoft.EntityFrameworkCore.Migrations.Operations;

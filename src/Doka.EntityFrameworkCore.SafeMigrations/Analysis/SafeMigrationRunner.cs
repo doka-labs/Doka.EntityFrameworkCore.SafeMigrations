@@ -122,6 +122,7 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
         cancellationToken.ThrowIfCancellationRequested();
 
         _providerAnalyzer.ValidateContext(context);
+        SafeMigrationModelManagedDataContractValidator.Validate(operations);
 
         // Validate the canonical Core model before trusting any catalog result
         // produced for an instance-specific derived DbContext.

@@ -14,7 +14,7 @@ canonical migration sequence across MySQL, MariaDB, and PostgreSQL without
 assuming a common legacy migration history or deleting unknown objects.
 
 The library classifies each operation against the live catalog as `missing`,
-`matching`, `different`, `unsupported`, `data_blocked`, or
+`matching`, `transition_ready`, `different`, `unsupported`, `data_blocked`, or
 `prerequisite_missing`. It then applies one provider-neutral policy. An
 operation either converges safely, remains an idempotent no-op, or stops with a
 stable reason. It never guesses that two unknown objects are semantically
@@ -43,11 +43,11 @@ when that matrix executes. The exact successful run, not this table, is release
 evidence. See [Support and qualification](docs/support-and-qualification.md).
 
 The initial complete stable delivery is 10.0.0. The latest confirmed published
-release is 10.1.1. This source is prepared for stable 10.1.2: it reconciles
-equivalent legacy object names without destructive cleanup, bounds large
-catalog analysis, and rejects provider namespace collisions before DDL as
-documented in the [release notes](CHANGELOG.md). Only a successful release run
-and verified public packages establish 10.1.2 availability or qualification.
+release is 10.1.2. This source is prepared for stable 10.2.0: newly scaffolded
+EF model-managed data is source-frozen into guarded, idempotent ensure, update,
+and delete operations as documented in the [release notes](CHANGELOG.md). Only
+a successful release run and verified public packages establish 10.2.0
+availability or qualification.
 
 ## Installation
 
@@ -58,14 +58,14 @@ published release and all three NuGet package pages before installation; source
 or changelog entries alone do not establish package availability.
 
 ```bash
-package_version='10.1.2'
+package_version='10.2.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.MySql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.1.2'
+package_version='10.2.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version "$package_version"
 ```
 
@@ -294,15 +294,17 @@ not runtime switches for existing migration files. The policy accepts only
 and a non-default legacy policy without `LegacyConvergence` fail during options
 configuration.
 
-Automatic rewriting is deliberately bounded to scaffolded `CreateTable`,
-`CreateIndex`, `DropIndex`, and `DropTable` operations. Those calls become
-`CreateTableIfNotExists`, a safe index-create helper, `DropIndexIfExists`, and
-`DropTableIfExists`, respectively. Other EF operations remain ordinary EF
-migration operations. When a later migration needs catalog-aware idempotent
-handling for a column, constraint, rename, or schema operation, use the
-corresponding SafeMigrations builder API and review the resulting contract.
-This boundary prevents the design-time layer from silently assigning policies
-to operations whose repair or ownership semantics require an explicit choice.
+Automatic rewriting covers scaffolded `CreateTable`, `CreateIndex`,
+`DropIndex`, and `DropTable` operations plus data changes derived from
+`HasData`. The structural calls become `CreateTableIfNotExists`, a safe
+index-create helper, `DropIndexIfExists`, and `DropTableIfExists`. Model-managed
+inserts, updates, and deletes become source-frozen SafeMigrations operations.
+Other EF operations remain ordinary EF migration operations. When a later
+migration needs catalog-aware idempotent handling for a column, constraint,
+rename, or schema operation, use the corresponding SafeMigrations builder API
+and review the resulting contract. This boundary prevents the design-time
+layer from silently assigning policies to operations whose repair or ownership
+semantics require an explicit choice.
 
 Provider identity annotations on scaffolded columns are captured immutably and
 participate in fingerprints, live-catalog comparison, and final DDL. This
@@ -324,6 +326,47 @@ The `*FromModel` helpers are public because generated migrations must compile
 against a stable package API. They are scaffolder targets, not required
 hand-written boilerplate. For a manually authored index contract, use
 `CreateIndexIfNotExists` or `EnsureIndex` instead.
+
+### Model-managed data from `HasData`
+
+Keep model-managed rows in the normal EF model:
+
+```csharp
+modelBuilder.Entity<Role>().HasData(
+    new Role
+    {
+        Id = 1,
+        Name = "Administrator",
+    });
+```
+
+With either SafeMigrations scaffolding mode enabled, the next ordinary
+`dotnet ef migrations add` command replaces EF's generated model-managed
+`InsertData`, `UpdateData`, and `DeleteData` calls with
+`EnsureModelManagedDataFromModel`, `UpdateModelManagedDataFromModel`, and
+`DeleteModelManagedDataFromModel`. No second definition and no manual migration
+rewrite are required.
+
+For an initial migration, preflight projects an accepted table creation before
+its generated model-managed ensure. The empty-schema deployment is therefore
+ready without treating an existing or otherwise unknown table as empty.
+
+An ensure inserts only an absent primary-key row and treats an equal row as a
+no-op. An update or delete proceeds only while the complete source-frozen row
+still matches; otherwise it rejects rather than overwriting external changes.
+Delete also rejects unmodeled dependent-row effects. Every mutation verifies
+its target postcondition, and a second successful execution is a no-op.
+
+The generated source contains the values by design. Model snapshots and SQL
+scripts already contain the same model-managed data. Do not place secrets,
+environment-specific values, mutable operational data, or large datasets in
+`HasData`; use EF Core `UseSeeding`/`UseAsyncSeeding` or an application-owned
+bootstrap workflow for those cases. Existing migration files are immutable:
+remove and re-scaffold an unapplied raw-data migration after upgrading, but
+correct an already applied migration only through a new forward migration.
+
+See [Model-managed data authoring](docs/migration-authoring.md#model-managed-data-from-hasdata)
+for the generated ensure, update, and delete source and conflict behavior.
 
 ## Policies
 

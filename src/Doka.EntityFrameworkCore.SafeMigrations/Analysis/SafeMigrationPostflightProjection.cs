@@ -119,6 +119,11 @@ internal sealed class SafeMigrationPostflightProjection
                 value.Schema,
                 value.Table,
                 value.Name),
+            ModelManagedDataIntent value => new PostflightResource(
+                PostflightResourceKind.ModelManagedData,
+                value.Schema,
+                value.Table,
+                ModelManagedKeySet(value)),
             _ => default,
         };
 
@@ -136,6 +141,7 @@ internal sealed class SafeMigrationPostflightProjection
         UniqueConstraint,
         CheckConstraint,
         ForeignKey,
+        ModelManagedData,
     }
 
     private readonly record struct PostflightResource(
@@ -144,4 +150,31 @@ internal sealed class SafeMigrationPostflightProjection
         string? Table,
         string? Name
     );
+
+    private static string ModelManagedKeySet(
+        ModelManagedDataIntent intent
+    )
+    {
+        var rowFingerprints = new string[intent.RowCount];
+        for (var row = 0; row < intent.RowCount; row++)
+        {
+            using var rowWriter = new CanonicalHashWriter();
+            for (var column = 0; column < intent.KeyColumns.Count; column++)
+            {
+                rowWriter.Add(intent.KeyColumns[column]);
+                SafeMigrationModelManagedValue.Write(rowWriter, intent.KeyValues.GetUnsafeValue(row, column));
+            }
+
+            rowFingerprints[row] = rowWriter.GetHash();
+        }
+
+        Array.Sort(rowFingerprints, StringComparer.Ordinal);
+        using var writer = new CanonicalHashWriter();
+        foreach (var fingerprint in rowFingerprints)
+        {
+            writer.Add(fingerprint);
+        }
+
+        return writer.GetHash();
+    }
 }

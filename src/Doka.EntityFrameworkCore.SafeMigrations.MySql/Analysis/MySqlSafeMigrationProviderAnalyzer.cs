@@ -4,17 +4,21 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
 {
     private readonly MySqlSafeMigrationPlanCapture _planCapture;
     private readonly IMigrationsSqlGenerator _sqlGenerator;
+    private readonly IRelationalTypeMappingSource _typeMappingSource;
 
     public MySqlSafeMigrationProviderAnalyzer(
         IMigrationsSqlGenerator sqlGenerator,
-        MySqlSafeMigrationPlanCapture planCapture
+        MySqlSafeMigrationPlanCapture planCapture,
+        IRelationalTypeMappingSource typeMappingSource
     )
     {
         ArgumentNullException.ThrowIfNull(sqlGenerator);
         ArgumentNullException.ThrowIfNull(planCapture);
+        ArgumentNullException.ThrowIfNull(typeMappingSource);
 
         _sqlGenerator = sqlGenerator;
         _planCapture = planCapture;
+        _typeMappingSource = typeMappingSource;
     }
 
     public string ProviderId => "doka_mysql";
@@ -151,7 +155,7 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
                            && shortCircuitStates[ordinal] is null)
                     {
                         var command = batch.CreateCommand();
-                        var parameterizer = new MySqlCatalogQueryParameterizer(command);
+                        var parameterizer = new MySqlCatalogQueryParameterizer(command, _typeMappingSource);
                         var selections = new List<string>(
                             Math.Min(
                                 SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement,
@@ -168,19 +172,29 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
 
                             var checkpoint = parameterizer.Capture();
                             var plan = plans[ordinal];
-                            var stateExpression = plan.RenderStateExpression(parameterizer.AddString);
-                            var postcondition = plan.RenderPostcondition(parameterizer.AddString);
-                            var repairPrecondition = plan.RenderRepairPrecondition(parameterizer.AddString);
+                            var stateExpression = plan.RenderStateExpression(parameterizer.Add);
+                            var postcondition = plan.RenderPostcondition(parameterizer.Add);
+                            var repairPrecondition = plan.RenderRepairPrecondition(parameterizer.Add);
                             var classificationCode = plan.ClassificationCodeExpression is null
                                 ? "NULL"
-                                : plan.RenderClassificationCodeExpression(parameterizer.AddString);
+                                : plan.RenderClassificationCodeExpression(parameterizer.Add);
+
+                            var rowEvidence = plan.ModelManagedRowEvidenceExpression is null
+                                ? "NULL"
+                                : plan.RenderModelManagedRowEvidenceExpression(parameterizer.Add);
+
+                            var dependencyCounts = plan.ModelManagedDependencyCountsExpression is null
+                                ? "NULL"
+                                : plan.RenderModelManagedDependencyCountsExpression(parameterizer.Add);
 
                             var resultOrdinal = operationOffset + ordinal;
                             var selection = $"SELECT {resultOrdinal.ToString(CultureInfo.InvariantCulture)}, "
                                 + $"({stateExpression}), "
                                 + $"COALESCE(({postcondition}), FALSE), "
                                 + $"COALESCE(({repairPrecondition}), FALSE), "
-                                + $"({classificationCode})";
+                                + $"({classificationCode}), "
+                                + $"({rowEvidence}), "
+                                + $"({dependencyCounts})";
 
                             var selectionBytes = Encoding.UTF8.GetByteCount(selection)
                                 + (selections.Count == 0 ? 0 : separatorBytes);
@@ -268,7 +282,7 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
         return capture.Complete();
     }
 
-    private static async Task<SafeMigrationObservedState?[]> FindShortCircuitStatesAsync(
+    private async Task<SafeMigrationObservedState?[]> FindShortCircuitStatesAsync(
         DbConnection connection,
         MySqlSafeMigrationRuntimePlan[] plans,
         int maximumPayloadBytes,
@@ -304,7 +318,7 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
         return states;
     }
 
-    private static async Task FindPrerequisiteStatesAsync(
+    private async Task FindPrerequisiteStatesAsync(
         DbConnection connection,
         MySqlSafeMigrationRuntimePlan[] plans,
         SafeMigrationObservedState?[] states,
@@ -330,7 +344,7 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
                    && ordinal < plans.Length)
             {
                 var command = batch.CreateCommand();
-                var parameterizer = new MySqlCatalogQueryParameterizer(command);
+                var parameterizer = new MySqlCatalogQueryParameterizer(command, _typeMappingSource);
                 var selections = new List<string>(
                     Math.Min(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement, plans.Length - ordinal));
 
@@ -340,7 +354,7 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
                 {
                     var checkpoint = parameterizer.Capture();
                     var plan = plans[ordinal];
-                    var prerequisite = plan.RenderPrerequisiteExpression(parameterizer.AddString);
+                    var prerequisite = plan.RenderPrerequisiteExpression(parameterizer.Add);
 
                     var selection = $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, CASE "
                         + $"WHEN NOT COALESCE(({prerequisite}), FALSE) THEN 'prerequisite_missing' "
@@ -404,7 +418,7 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
         }
     }
 
-    private static async Task FindStateEvaluationGuardStatesAsync(
+    private async Task FindStateEvaluationGuardStatesAsync(
         DbConnection connection,
         MySqlSafeMigrationRuntimePlan[] plans,
         SafeMigrationObservedState?[] states,
@@ -446,7 +460,7 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
                    && ordinal < plans.Length)
             {
                 var command = batch.CreateCommand();
-                var parameterizer = new MySqlCatalogQueryParameterizer(command);
+                var parameterizer = new MySqlCatalogQueryParameterizer(command, _typeMappingSource);
                 var selections = new List<string>(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement);
                 var statementOrdinals = new List<int>(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement);
                 var sqlBytes = trailerBytes;
@@ -463,8 +477,8 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
 
                     var checkpoint = parameterizer.Capture();
                     var plan = plans[ordinal];
-                    var stateEvaluationGuard = plan.RenderStateEvaluationGuardExpression(parameterizer.AddString);
-                    var guardFailure = plan.RenderStateEvaluationGuardFailureExpression(parameterizer.AddString);
+                    var stateEvaluationGuard = plan.RenderStateEvaluationGuardExpression(parameterizer.Add);
+                    var guardFailure = plan.RenderStateEvaluationGuardFailureExpression(parameterizer.Add);
 
                     var selection = $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, CASE "
                         + $"WHEN NOT COALESCE(({stateEvaluationGuard}), FALSE) THEN ({guardFailure}) "
@@ -588,7 +602,28 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
                             : $"classified_{StateCode(state)}"
                         : reader.GetString(4);
 
-                    results.Add(new SafeMigrationProviderAnalysis(state, repairCapability, reader.GetBoolean(2), code));
+                    var plan = plans[ordinal - operationOffset];
+                    var evidence = plan.ModelManagedRowEvidenceExpression is null
+                        ? null
+                        : SafeMigrationModelManagedDataEvidence.Parse(
+                                reader.GetString(5),
+                                plan.ModelManagedRowCount,
+                                plan.ModelManagedDependencyCountsExpression is null
+                                    ? string.Empty
+                                    : reader.GetString(6),
+                                plan.ModelManagedDependencyCount,
+                                "MySQL");
+
+                    var analysis = new SafeMigrationProviderAnalysis(
+                        state,
+                        repairCapability,
+                        reader.GetBoolean(2),
+                        code)
+                    {
+                        ModelManagedDataEvidence = evidence,
+                    };
+
+                    results.Add(analysis);
                 }
             },
             cancellationToken);
@@ -720,7 +755,7 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
 
                 await using var command = connection.CreateCommand();
                 ApplyCommandTimeout(command, commandTimeout);
-                var parameters = new MySqlCatalogQueryParameterizer(command);
+                var parameters = new MySqlCatalogQueryParameterizer(command, _typeMappingSource);
                 var tableScope = string.Join(", ", tableBatch.Select(parameters.AddString));
                 command.CommandText = BuildUnexpectedChildObjectSql(tableScope, serverVersion.IsMariaDb);
                 await ReadUnexpectedAsync(command, expected, findings, seen, cancellationToken);
@@ -840,6 +875,7 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
         "unsupported" => SafeMigrationObservedState.Unsupported,
         "data_blocked" => SafeMigrationObservedState.DataBlocked,
         "prerequisite_missing" => SafeMigrationObservedState.PrerequisiteMissing,
+        "transition_ready" => SafeMigrationObservedState.TransitionReady,
         _ => throw new InvalidOperationException("The MySQL SafeMigrations classifier returned an unknown state."),
     };
 
@@ -853,6 +889,7 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
         SafeMigrationObservedState.Unsupported => "unsupported",
         SafeMigrationObservedState.DataBlocked => "data_blocked",
         SafeMigrationObservedState.PrerequisiteMissing => "prerequisite_missing",
+        SafeMigrationObservedState.TransitionReady => "transition_ready",
         _ => throw new ArgumentOutOfRangeException(nameof(state)),
     };
 
@@ -967,14 +1004,14 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProvide
                                                                   """;
 
     private const string MariaDbImplicitJsonCheckInventoryExpression = """
-                                                                       CASE WHEN tc.CONSTRAINT_TYPE = 'CHECK'
-                                                                         AND json_column.DATA_TYPE = 'longtext'
-                                                                         AND LOWER(json_column.COLLATION_NAME) = 'utf8mb4_bin'
-                                                                         AND LOWER(REPLACE(REPLACE(REPLACE(REPLACE(
-                                                                               cc.CHECK_CLAUSE, '`', ''), ' ', ''), '(', ''), ')', ''))
-                                                                             = CONCAT('json_valid', LOWER(json_column.COLUMN_NAME))
-                                                                       THEN TRUE ELSE FALSE END
-                                                                       """;
+        CASE WHEN tc.CONSTRAINT_TYPE = 'CHECK'
+          AND json_column.DATA_TYPE = 'longtext'
+          AND LOWER(json_column.COLLATION_NAME) = 'utf8mb4_bin'
+          AND LOWER(REPLACE(REPLACE(REPLACE(REPLACE(
+                cc.CHECK_CLAUSE, '`', ''), ' ', ''), '(', ''), ')', ''))
+              = CONCAT('json_valid', LOWER(json_column.COLUMN_NAME))
+        THEN TRUE ELSE FALSE END
+        """;
 
     private sealed class AnalysisScope : IAsyncDisposable
     {

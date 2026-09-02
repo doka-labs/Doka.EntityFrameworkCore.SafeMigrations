@@ -15,7 +15,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
 )
 {
     /// <summary>Gets the captured parameter values in placeholder order.</summary>
-    public string[] ParameterValues { get; init; } = [];
+    public MySqlCatalogParameterValue[] ParameterValues { get; init; } = [];
 
     /// <summary>Gets the catalog-only prerequisite expression.</summary>
     public string PrerequisiteExpression { get; init; } = "TRUE";
@@ -41,32 +41,47 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     /// </summary>
     public bool IsStaticallyUnsupported { get; init; }
 
+    /// <summary>Gets the guarded data-mutation SQL template, when the operation mutates model-managed data.</summary>
+    public string? MutationSql { get; init; }
+
+    /// <summary>Gets optional compact row-state evidence for ordered model-data projection.</summary>
+    public string? ModelManagedRowEvidenceExpression { get; init; }
+
+    /// <summary>Gets optional live dependency counts for ordered model-data projection.</summary>
+    public string? ModelManagedDependencyCountsExpression { get; init; }
+
+    /// <summary>Gets the expected number of compact row-state entries.</summary>
+    public int ModelManagedRowCount { get; init; }
+
+    /// <summary>Gets the expected number of dependency-count entries.</summary>
+    public int ModelManagedDependencyCount { get; init; }
+
     /// <summary>Renders the prerequisite expression with provider literals.</summary>
     /// <param name="renderValue">The provider literal renderer.</param>
     /// <returns>The rendered expression.</returns>
     public string RenderPrerequisiteExpression(
-        Func<string, string> renderValue
+        Func<MySqlCatalogParameterValue, string> renderValue
     ) => MySqlCatalogSqlTemplate.Render(PrerequisiteExpression, ParameterValues, renderValue);
 
     /// <summary>Renders the state expression with provider literals.</summary>
     /// <param name="renderValue">The provider literal renderer.</param>
     /// <returns>The rendered expression.</returns>
     public string RenderStateExpression(
-        Func<string, string> renderValue
+        Func<MySqlCatalogParameterValue, string> renderValue
     ) => MySqlCatalogSqlTemplate.Render(StateExpression, ParameterValues, renderValue);
 
     /// <summary>Renders the state-evaluation guard with provider literals.</summary>
     /// <param name="renderValue">The provider literal renderer.</param>
     /// <returns>The rendered expression.</returns>
     public string RenderStateEvaluationGuardExpression(
-        Func<string, string> renderValue
+        Func<MySqlCatalogParameterValue, string> renderValue
     ) => MySqlCatalogSqlTemplate.Render(StateEvaluationGuardExpression, ParameterValues, renderValue);
 
     /// <summary>Renders the guard-failure state expression with provider literals.</summary>
     /// <param name="renderValue">The provider literal renderer.</param>
     /// <returns>The rendered expression.</returns>
     public string RenderStateEvaluationGuardFailureExpression(
-        Func<string, string> renderValue
+        Func<MySqlCatalogParameterValue, string> renderValue
     ) => MySqlCatalogSqlTemplate.Render(
         StateEvaluationGuardFailureExpression
             ?? throw new InvalidOperationException("The state-evaluation guard has no failure expression."),
@@ -77,10 +92,32 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     /// <param name="renderValue">The provider literal renderer.</param>
     /// <returns>The rendered expression.</returns>
     public string RenderClassificationCodeExpression(
-        Func<string, string> renderValue
+        Func<MySqlCatalogParameterValue, string> renderValue
     ) => MySqlCatalogSqlTemplate.Render(
         ClassificationCodeExpression
             ?? throw new InvalidOperationException("The runtime plan has no classification-code expression."),
+        ParameterValues,
+        renderValue);
+
+    /// <summary>Renders compact model-managed row evidence.</summary>
+    /// <param name="renderValue">The provider literal renderer.</param>
+    /// <returns>The rendered expression.</returns>
+    public string RenderModelManagedRowEvidenceExpression(
+        Func<MySqlCatalogParameterValue, string> renderValue
+    ) => MySqlCatalogSqlTemplate.Render(
+        ModelManagedRowEvidenceExpression
+            ?? throw new InvalidOperationException("The runtime plan has no model-managed row evidence."),
+        ParameterValues,
+        renderValue);
+
+    /// <summary>Renders compact model-managed dependency counts.</summary>
+    /// <param name="renderValue">The provider literal renderer.</param>
+    /// <returns>The rendered expression.</returns>
+    public string RenderModelManagedDependencyCountsExpression(
+        Func<MySqlCatalogParameterValue, string> renderValue
+    ) => MySqlCatalogSqlTemplate.Render(
+        ModelManagedDependencyCountsExpression
+            ?? throw new InvalidOperationException("The runtime plan has no model-managed dependency evidence."),
         ParameterValues,
         renderValue);
 
@@ -88,14 +125,14 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     /// <param name="renderValue">The provider literal renderer.</param>
     /// <returns>The rendered expression.</returns>
     public string RenderPostcondition(
-        Func<string, string> renderValue
+        Func<MySqlCatalogParameterValue, string> renderValue
     ) => MySqlCatalogSqlTemplate.Render(Postcondition, ParameterValues, renderValue);
 
     /// <summary>Renders the repair precondition with provider literals.</summary>
     /// <param name="renderValue">The provider literal renderer.</param>
     /// <returns>The rendered expression.</returns>
     public string RenderRepairPrecondition(
-        Func<string, string> renderValue
+        Func<MySqlCatalogParameterValue, string> renderValue
     ) => MySqlCatalogSqlTemplate.Render(RepairPrecondition, ParameterValues, renderValue);
 
     /// <summary>Renders the prerequisite expression with prepared literal values.</summary>
@@ -142,4 +179,14 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     public string RenderPreparedRepairPrecondition(
         IReadOnlyList<string> renderedValues
     ) => MySqlCatalogSqlTemplate.RenderPrepared(RepairPrecondition, renderedValues);
+
+    /// <summary>Renders the model-managed data mutation with prepared literal values.</summary>
+    /// <param name="renderedValues">The rendered literal values in placeholder order.</param>
+    /// <returns>The rendered mutation SQL.</returns>
+    public string RenderPreparedMutationSql(
+        IReadOnlyList<string> renderedValues
+    ) => MySqlCatalogSqlTemplate.RenderPrepared(
+        MutationSql
+            ?? throw new InvalidOperationException("The runtime plan has no model-managed data mutation."),
+        renderedValues);
 }

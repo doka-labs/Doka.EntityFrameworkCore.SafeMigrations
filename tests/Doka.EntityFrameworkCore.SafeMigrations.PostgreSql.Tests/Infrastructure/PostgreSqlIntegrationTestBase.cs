@@ -15,7 +15,8 @@ public abstract class PostgreSqlIntegrationTestBase : IClassFixture<PostgreSqlCo
 
     protected static async Task ExecuteOperationsAsync(
         DbContext context,
-        IReadOnlyList<MigrationOperation> operations
+        IReadOnlyList<MigrationOperation> operations,
+        CancellationToken cancellationToken = default
     )
     {
         var generator = context.GetService<IMigrationsSqlGenerator>();
@@ -23,14 +24,14 @@ public abstract class PostgreSqlIntegrationTestBase : IClassFixture<PostgreSqlCo
         var connection = context.Database.GetDbConnection();
         if (connection.State != System.Data.ConnectionState.Open)
         {
-            await connection.OpenAsync(CancellationToken.None);
+            await connection.OpenAsync(cancellationToken);
         }
 
         foreach (var command in commands)
         {
             await using var dbCommand = connection.CreateCommand();
             dbCommand.CommandText = command.CommandText;
-            await dbCommand.ExecuteNonQueryAsync(CancellationToken.None);
+            await dbCommand.ExecuteNonQueryAsync(cancellationToken);
         }
     }
 
@@ -73,7 +74,10 @@ public abstract class PostgreSqlIntegrationTestBase : IClassFixture<PostgreSqlCo
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
 
-        return Convert.ToString(await command.ExecuteScalarAsync(CancellationToken.None), CultureInfo.InvariantCulture) ?? "<null>";
+        return Convert.ToString(
+                await command.ExecuteScalarAsync(CancellationToken.None),
+                CultureInfo.InvariantCulture)
+            ?? "<null>";
     }
 
     protected static async Task<string> ReadCheckExpressionAsync(
@@ -89,6 +93,9 @@ public abstract class PostgreSqlIntegrationTestBase : IClassFixture<PostgreSqlCo
             + "FROM pg_catalog.pg_constraint co WHERE co.conname = @name;";
         command.Parameters.AddWithValue("name", constraintName);
 
-        return Convert.ToString(await command.ExecuteScalarAsync(CancellationToken.None), CultureInfo.InvariantCulture) ?? "<null>";
+        return Convert.ToString(
+                await command.ExecuteScalarAsync(CancellationToken.None),
+                CultureInfo.InvariantCulture)
+            ?? "<null>";
     }
 }

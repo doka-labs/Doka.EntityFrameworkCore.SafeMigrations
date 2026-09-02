@@ -5,8 +5,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     private readonly IRelationalTypeMappingSource _typeMappingSource;
     private readonly ISqlGenerationHelper _sqlGenerationHelper;
     private readonly MySqlSafeMigrationSqlExpressionRenderer _expressionRenderer;
-    private Dictionary<string, string>? _parameterMarkers;
-    private List<string>? _parameterValues;
+    private Dictionary<string, string>? _identifierMarkers;
+    private Dictionary<MySqlCatalogParameterValue, string>? _valueMarkers;
+    private List<MySqlCatalogParameterValue>? _parameterValues;
 
     public MySqlSafeMigrationCatalogSqlBuilder(
         IRelationalTypeMappingSource typeMappingSource,
@@ -36,7 +37,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 "The MySQL catalog plan builder does not support reentrant generation.");
         }
 
-        _parameterMarkers = new Dictionary<string, string>(StringComparer.Ordinal);
+        _identifierMarkers = new Dictionary<string, string>(StringComparer.Ordinal);
+        _valueMarkers = new Dictionary<MySqlCatalogParameterValue, string>(MySqlCatalogParameterValueComparer.Instance);
         _parameterValues = [];
         try
         {
@@ -76,6 +78,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                     DropCheckConstraintIntent value => BuildDropCheckConstraint(value),
                     EnsureForeignKeyIntent value => BuildEnsureForeignKey(value, context.ServerVersion),
                     DropForeignKeyIntent value => BuildDropForeignKey(value),
+                    EnsureModelManagedDataIntent value => BuildEnsureModelManagedData(value),
+                    UpdateModelManagedDataIntent value => BuildUpdateModelManagedData(value),
+                    DeleteModelManagedDataIntent value => BuildDeleteModelManagedData(value),
                     _ => throw new ArgumentOutOfRangeException(
                         nameof(operation),
                         operation.Intent.GetType()
@@ -98,7 +103,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         }
         finally
         {
-            _parameterMarkers = null;
+            _identifierMarkers = null;
+            _valueMarkers = null;
             _parameterValues = null;
         }
     }
@@ -126,6 +132,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             + $"AND ({TableAndColumnsExist(
                 value.Definition.PrincipalTable,
                 SafeMigrationPrerequisiteColumns.Principal(value))})",
+        ModelManagedDataIntent value => BuildModelManagedDataPrerequisite(value),
         _ => "TRUE",
     };
 
@@ -166,6 +173,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         EnsureUniqueConstraintIntent => true,
         EnsureCheckConstraintIntent => true,
         EnsureForeignKeyIntent => true,
+        ModelManagedDataIntent => true,
         _ => false,
     };
 
@@ -296,20 +304,42 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         string value
     )
     {
-        if (_parameterMarkers is null
+        if (_identifierMarkers is null
             || _parameterValues is null)
         {
             throw new InvalidOperationException("No MySQL catalog plan generation is active.");
         }
 
-        if (_parameterMarkers.TryGetValue(value, out var existingMarker))
+        if (_identifierMarkers.TryGetValue(value, out var existingMarker))
         {
             return existingMarker;
         }
 
         var marker = MySqlCatalogSqlTemplate.Marker(_parameterValues.Count);
-        _parameterValues.Add(value);
-        _parameterMarkers.Add(value, marker);
+        _parameterValues.Add(new MySqlCatalogParameterValue(value, StoreType: null));
+        _identifierMarkers.Add(value, marker);
+
+        return marker;
+    }
+
+    private string ValueLiteral(
+        object? value,
+        string storeType
+    )
+    {
+        if (_valueMarkers is null
+            || _parameterValues is null)
+        {
+            throw new InvalidOperationException("No MySQL catalog plan generation is active.");
+        }
+
+        var parameter = new MySqlCatalogParameterValue(value, storeType);
+        if (!_valueMarkers.TryGetValue(parameter, out var marker))
+        {
+            marker = MySqlCatalogSqlTemplate.Marker(_parameterValues.Count);
+            _parameterValues.Add(parameter);
+            _valueMarkers.Add(parameter, marker);
+        }
 
         return marker;
     }

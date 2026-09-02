@@ -31,4 +31,16 @@ internal sealed record PostgreSqlSafeMigrationRuntimePlan(
     /// catalog state and therefore has no executable baseline.
     /// </summary>
     public bool IsStaticallyUnsupported { get; init; }
+
+    /// <summary>Gets optional compact row-state evidence for ordered model-data projection.</summary>
+    public string? ModelManagedRowEvidenceExpression { get; init; }
+
+    /// <summary>Gets optional live dependency counts for ordered model-data projection.</summary>
+    public string? ModelManagedDependencyCountsExpression { get; init; }
+
+    /// <summary>Gets the expected number of compact row-state entries.</summary>
+    public int ModelManagedRowCount { get; init; }
+
+    /// <summary>Gets the expected number of dependency-count entries.</summary>
+    public int ModelManagedDependencyCount { get; init; }
 }

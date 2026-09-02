@@ -34,6 +34,26 @@ internal static class LargeMigrationStressContract
         return new LargeMigrationStressExpectation(scenarios);
     }
 
+    public static IEnumerable<int> ModelManagedUpdateOrdinals(
+        LargeMigrationStressDialect dialect
+    )
+    {
+        var scenarios = CreateScenarios(dialect);
+        var scenarioIndex = scenarios.FindIndex(static scenario =>
+            scenario.OperationKind == SafeMigrationOperationKind.UpdateModelManagedData
+            && scenario.ObservedState == SafeMigrationObservedState.TransitionReady);
+
+        if (scenarioIndex < 0)
+        {
+            throw new InvalidOperationException(
+                "The large migration contract has no source-state model-managed update scenario.");
+        }
+
+        return Enumerable
+            .Range(0, OperationCount)
+            .Where(ordinal => ordinal % scenarios.Count == scenarioIndex);
+    }
+
     private static List<LargeMigrationStressScenario> CreateScenarios(
         LargeMigrationStressDialect dialect
     )
@@ -333,6 +353,124 @@ internal static class LargeMigrationStressContract
                 SafeMigrationOperationKind.EnsureForeignKey,
                 SafeMigrationObservedState.Missing,
                 SafeMigrationAction.Apply),
+            Scenario(
+                (migrationBuilder, ordinal) => migrationBuilder.EnsureModelManagedDataFromModel(
+                    TargetTable,
+                    ["id"],
+                    [integerStoreType],
+                    [
+                        "id",
+                        "matching_value",
+                        "repair_value",
+                        "blocked_value",
+                        "indexed_value",
+                        "unique_value",
+                        "check_value",
+                        "parent_id",
+                        "parent_tenant_id",
+                        "secondary_parent_id",
+                        "secondary_parent_tenant_id",
+                    ],
+                    [
+                        integerStoreType,
+                        integerStoreType,
+                        textStoreType,
+                        textStoreType,
+                        integerStoreType,
+                        integerStoreType,
+                        integerStoreType,
+                        integerStoreType,
+                        integerStoreType,
+                        integerStoreType,
+                        integerStoreType,
+                    ],
+                    new object?[,]
+                    {
+                        {
+                            ModelManagedEnsureKey(ordinal),
+                            ordinal,
+                            "canonical",
+                            null,
+                            ordinal,
+                            ModelManagedEnsureKey(ordinal),
+                            ordinal,
+                            1,
+                            1,
+                            1,
+                            1,
+                        },
+                    }),
+                _ => TargetTable,
+                SafeMigrationOperationKind.EnsureModelManagedData,
+                SafeMigrationObservedState.Missing,
+                SafeMigrationAction.Apply),
+            Scenario(
+                (migrationBuilder, ordinal) => migrationBuilder.UpdateModelManagedDataFromModel(
+                    TargetTable,
+                    ["id"],
+                    [integerStoreType],
+                    new object?[,] { { ModelManagedUpdateKey(ordinal) } },
+                    ["matching_value"],
+                    [integerStoreType],
+                    new object?[,] { { ordinal } },
+                    new object?[,] { { checked(ordinal + 1) } }),
+                _ => TargetTable,
+                SafeMigrationOperationKind.UpdateModelManagedData,
+                SafeMigrationObservedState.TransitionReady,
+                SafeMigrationAction.Apply),
+            Scenario(
+                (migrationBuilder, ordinal) => migrationBuilder.DeleteModelManagedDataFromModel(
+                    TargetTable,
+                    ["id"],
+                    [integerStoreType],
+                    new object?[,] { { ModelManagedDeleteKey(ordinal) } },
+                    [
+                        "id",
+                        "matching_value",
+                        "repair_value",
+                        "blocked_value",
+                        "indexed_value",
+                        "unique_value",
+                        "check_value",
+                        "parent_id",
+                        "parent_tenant_id",
+                        "secondary_parent_id",
+                        "secondary_parent_tenant_id",
+                    ],
+                    [
+                        integerStoreType,
+                        integerStoreType,
+                        textStoreType,
+                        textStoreType,
+                        integerStoreType,
+                        integerStoreType,
+                        integerStoreType,
+                        integerStoreType,
+                        integerStoreType,
+                        integerStoreType,
+                        integerStoreType,
+                    ],
+                    new object?[,]
+                    {
+                        {
+                            ModelManagedDeleteKey(ordinal),
+                            ordinal,
+                            "canonical",
+                            null,
+                            ordinal,
+                            ModelManagedDeleteKey(ordinal),
+                            ordinal,
+                            1,
+                            1,
+                            1,
+                            1,
+                        },
+                    }),
+                _ => TargetTable,
+                SafeMigrationOperationKind.DeleteModelManagedData,
+                SafeMigrationObservedState.Missing,
+                SafeMigrationAction.NoOp,
+                postconditionSatisfied: true),
         };
 
         scenarios.Add(UnsupportedScenario(dialect));
@@ -486,6 +624,18 @@ internal static class LargeMigrationStressContract
     private static string UnsupportedIndex(
         int ordinal
     ) => $"ix_stress_unsupported_{ordinal:D6}";
+
+    private static int ModelManagedEnsureKey(
+        int ordinal
+    ) => checked(1_000_000 + ordinal);
+
+    public static int ModelManagedUpdateKey(
+        int ordinal
+    ) => checked(2_000_000 + ordinal);
+
+    private static int ModelManagedDeleteKey(
+        int ordinal
+    ) => checked(3_000_000 + ordinal);
 }
 
 internal sealed class LargeMigrationStressExpectation

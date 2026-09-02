@@ -139,6 +139,15 @@ public static partial class SafeMigrationContractFingerprint
             case DropForeignKeyIntent value:
                 WriteIntent(writer, value);
                 break;
+            case EnsureModelManagedDataIntent value:
+                WriteIntent(writer, value);
+                break;
+            case UpdateModelManagedDataIntent value:
+                WriteIntent(writer, value);
+                break;
+            case DeleteModelManagedDataIntent value:
+                WriteIntent(writer, value);
+                break;
             default:
                 throw new ArgumentOutOfRangeException(
                     nameof(intent),

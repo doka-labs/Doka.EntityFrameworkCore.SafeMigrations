@@ -1,8 +1,8 @@
 # Documentation
 
 This is the task-oriented entry point for SafeMigrations documentation. The
-repository contains the complete source prepared for the 10.1.2 stable
-maintenance release; package availability and OpenSSF status are established
+repository contains the complete source prepared for the 10.2.0 stable
+feature release; package availability and OpenSSF status are established
 by their linked external registries, not by source documentation alone.
 
 ## Use and deploy
@@ -10,10 +10,11 @@ by their linked external registries, not by source documentation alone.
 | Task | Canonical guide |
 | --- | --- |
 | Install, register a provider, and scaffold strict or legacy-convergence migrations | [Project README](../README.md) and [runnable sample](../samples/Doka.EntityFrameworkCore.SafeMigrations.Sample/README.md) |
-| Compare generated strict, generated legacy-convergence, and hand-authored migration source | [Migration authoring paths](migration-authoring.md) |
+| Compare generated strict, generated legacy-convergence, model-managed data, and hand-authored migration source | [Migration authoring paths](migration-authoring.md) |
 | Find public inputs, outputs, and failure boundaries | [API reference](api-reference.md) |
 | Check engines, dependency ranges, qualified boundaries, and evidence | [Support and qualification](support-and-qualification.md) |
 | Understand MySQL/MariaDB session guards and implicit commits | [MySQL and MariaDB DDL](mysql-mariadb-ddl-behavior.md) |
+| Understand PostgreSQL analysis, model-managed data, and transaction behavior | [PostgreSQL behavior](postgresql-behavior.md) |
 | Deploy independently to heterogeneous instances and recover safely | [Deployment and recovery](runbooks/deployment-and-recovery.md) |
 | Interpret a blocked report or stable error | [Failure codes](runbooks/failure-codes.md) |
 | Collect metrics without exposing protected reports | [Observability](runbooks/observability.md) |

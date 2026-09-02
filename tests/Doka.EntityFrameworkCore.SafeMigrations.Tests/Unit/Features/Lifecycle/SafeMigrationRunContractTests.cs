@@ -253,6 +253,9 @@ public sealed class SafeMigrationRunContractTests
             (Value: SafeMigrationOperationKind.DropCheckConstraint, Code: "drop_check_constraint"),
             (Value: SafeMigrationOperationKind.EnsureForeignKey, Code: "ensure_foreign_key"),
             (Value: SafeMigrationOperationKind.DropForeignKey, Code: "drop_foreign_key"),
+            (Value: SafeMigrationOperationKind.EnsureModelManagedData, Code: "ensure_model_managed_data"),
+            (Value: SafeMigrationOperationKind.UpdateModelManagedData, Code: "update_model_managed_data"),
+            (Value: SafeMigrationOperationKind.DeleteModelManagedData, Code: "delete_model_managed_data"),
         };
 
         var states = new[]
@@ -263,6 +266,7 @@ public sealed class SafeMigrationRunContractTests
             (Value: SafeMigrationObservedState.Unsupported, Code: "unsupported"),
             (Value: SafeMigrationObservedState.DataBlocked, Code: "data_blocked"),
             (Value: SafeMigrationObservedState.PrerequisiteMissing, Code: "prerequisite_missing"),
+            (Value: SafeMigrationObservedState.TransitionReady, Code: "transition_ready"),
         };
 
         var actions = new[]
@@ -416,6 +420,7 @@ public sealed class SafeMigrationRunContractTests
             .GetProperty("modelFingerprint")
             .GetProperty("pattern")
             .GetString()!;
+
         var contractPattern = schemaRoot
             .GetProperty("properties")
             .GetProperty("contractFingerprint")
@@ -689,11 +694,13 @@ public sealed class SafeMigrationRunContractTests
             .EnumerateObject()
             .Select(static property => property.Name)
             .Order(StringComparer.Ordinal);
+
         var required = schema
             .GetProperty("required")
             .EnumerateArray()
             .Select(static property => property.GetString()!)
             .Order(StringComparer.Ordinal);
+
         var serialized = value
             .EnumerateObject()
             .Select(static property => property.Name)
@@ -799,6 +806,7 @@ public sealed class SafeMigrationRunContractTests
                 .Select(static item => item.GetString()!)
                 .ToArray()
             : [schemaType.GetString()!];
+
         var actualType = value.ValueKind switch
         {
             JsonValueKind.Object => "object",

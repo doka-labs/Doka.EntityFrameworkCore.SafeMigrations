@@ -92,6 +92,9 @@
             "drop_check_constraint",
             "ensure_foreign_key",
             "drop_foreign_key",
+            "ensure_model_managed_data",
+            "update_model_managed_data",
+            "delete_model_managed_data",
             null
           ]
         },
@@ -104,6 +107,7 @@
             "unsupported",
             "data_blocked",
             "prerequisite_missing",
+            "transition_ready",
             null
           ]
         },

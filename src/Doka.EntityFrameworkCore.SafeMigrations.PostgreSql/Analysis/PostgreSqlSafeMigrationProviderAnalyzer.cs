@@ -169,7 +169,7 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
                 cancellationToken);
 
             var results = new List<SafeMigrationProviderAnalysis>(operations.Count);
-            var unsupportedCodes = new string?[operations.Count];
+            var plans = new PostgreSqlSafeMigrationRuntimePlan?[operations.Count];
             var ordinal = 0;
             var separatorBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Separator);
             var trailerBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Trailer);
@@ -198,11 +198,12 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
                        && shortCircuitStates[ordinal] is null)
                 {
                     var command = batch.CreateCommand();
-                    var parameters = new PostgreSqlCatalogQueryParameters(command);
+                    var parameters = new PostgreSqlCatalogQueryParameters(command, _typeMappingSource);
                     var builder = new PostgreSqlSafeMigrationCatalogSqlBuilder(
                         _typeMappingSource,
                         _sqlGenerationHelper,
-                        parameters.AddString);
+                        parameters.AddString,
+                        parameters.Add);
 
                     var selections = new List<string>(
                         Math.Min(
@@ -225,13 +226,17 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
 
                         var checkpoint = parameters.Capture();
                         var plan = builder.Build(operation);
-                        unsupportedCodes[ordinal] = plan.UnsupportedCode;
+                        plans[ordinal] = plan;
                         var classificationCode = plan.ClassificationCodeExpression ?? "NULL";
+                        var rowEvidence = plan.ModelManagedRowEvidenceExpression ?? "NULL";
+                        var dependencyCounts = plan.ModelManagedDependencyCountsExpression ?? "NULL";
                         var selection = $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, "
                             + $"({plan.StateExpression})::text, "
                             + $"COALESCE(({plan.Postcondition}), FALSE), "
                             + $"COALESCE(({plan.RepairPrecondition}), FALSE), "
-                            + $"({classificationCode})";
+                            + $"({classificationCode}), "
+                            + $"({rowEvidence}), "
+                            + $"({dependencyCounts})";
 
                         var selectionBytes = Encoding.UTF8.GetByteCount(selection)
                             + (selections.Count == 0 ? 0 : separatorBytes);
@@ -281,7 +286,7 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
                     batchPayloadBytes += sqlBytes + parameters.Utf8PayloadBytes;
                 }
 
-                await ReadAnalysisAsync(batch, results, unsupportedCodes, cancellationToken);
+                await ReadAnalysisAsync(batch, results, plans, cancellationToken);
             }
 
             if (results.Count != operations.Count)
@@ -344,11 +349,12 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
                    && ordinal < operations.Count)
             {
                 var command = batch.CreateCommand();
-                var parameters = new PostgreSqlCatalogQueryParameters(command);
+                var parameters = new PostgreSqlCatalogQueryParameters(command, _typeMappingSource);
                 var builder = new PostgreSqlSafeMigrationCatalogSqlBuilder(
                     _typeMappingSource,
                     _sqlGenerationHelper,
-                    parameters.AddString);
+                    parameters.AddString,
+                    parameters.Add);
 
                 var selections = new List<string>(
                     Math.Min(
@@ -457,11 +463,12 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
                    && ordinal < operations.Count)
             {
                 var command = batch.CreateCommand();
-                var parameters = new PostgreSqlCatalogQueryParameters(command);
+                var parameters = new PostgreSqlCatalogQueryParameters(command, _typeMappingSource);
                 var builder = new PostgreSqlSafeMigrationCatalogSqlBuilder(
                     _typeMappingSource,
                     _sqlGenerationHelper,
-                    parameters.AddString);
+                    parameters.AddString,
+                    parameters.Add);
 
                 var selections = new List<string>(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement);
                 var statementOrdinals = new List<int>(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement);
@@ -555,7 +562,7 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
     private static async Task ReadAnalysisAsync(
         SafeMigrationCatalogBatch batch,
         List<SafeMigrationProviderAnalysis> results,
-        string?[] unsupportedCodes,
+        PostgreSqlSafeMigrationRuntimePlan?[] plans,
         CancellationToken cancellationToken
     )
     {
@@ -576,13 +583,37 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
                         ? SafeMigrationRepairCapability.Safe
                         : SafeMigrationRepairCapability.None;
 
+                    var plan = plans[ordinal]
+                        ?? throw new InvalidOperationException(
+                            "The PostgreSQL SafeMigrations classifier has no runtime plan for its result ordinal.");
+
                     var code = reader.IsDBNull(4)
                         ? state == SafeMigrationObservedState.Unsupported
-                            ? unsupportedCodes[ordinal] ?? "classified_unsupported"
+                            ? plan.UnsupportedCode ?? "classified_unsupported"
                             : $"classified_{StateCode(state)}"
                         : reader.GetString(4);
 
-                    results.Add(new SafeMigrationProviderAnalysis(state, repairCapability, reader.GetBoolean(2), code));
+                    var evidence = plan.ModelManagedRowEvidenceExpression is null
+                        ? null
+                        : SafeMigrationModelManagedDataEvidence.Parse(
+                                reader.GetString(5),
+                                plan.ModelManagedRowCount,
+                                plan.ModelManagedDependencyCountsExpression is null
+                                    ? string.Empty
+                                    : reader.GetString(6),
+                                plan.ModelManagedDependencyCount,
+                                "PostgreSQL");
+
+                    var analysis = new SafeMigrationProviderAnalysis(
+                        state,
+                        repairCapability,
+                        reader.GetBoolean(2),
+                        code)
+                    {
+                        ModelManagedDataEvidence = evidence,
+                    };
+
+                    results.Add(analysis);
                 }
             },
             cancellationToken);
@@ -634,7 +665,8 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
                         || resultOrdinal != selectedOrdinals[row])
                     {
                         throw new InvalidOperationException(
-                            "The PostgreSQL SafeMigrations state-evaluation guard classifier returned an invalid ordinal.");
+                            "The PostgreSQL SafeMigrations state-evaluation guard classifier "
+                            + "returned an invalid ordinal.");
                     }
 
                     states[resultOrdinal] = reader.IsDBNull(1) ? null : ParseState(reader.GetString(1));
@@ -869,6 +901,7 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
         "unsupported" => SafeMigrationObservedState.Unsupported,
         "data_blocked" => SafeMigrationObservedState.DataBlocked,
         "prerequisite_missing" => SafeMigrationObservedState.PrerequisiteMissing,
+        "transition_ready" => SafeMigrationObservedState.TransitionReady,
         _ => throw new InvalidOperationException("The PostgreSQL SafeMigrations classifier returned an unknown state."),
     };
 
@@ -882,6 +915,7 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
         SafeMigrationObservedState.Unsupported => "unsupported",
         SafeMigrationObservedState.DataBlocked => "data_blocked",
         SafeMigrationObservedState.PrerequisiteMissing => "prerequisite_missing",
+        SafeMigrationObservedState.TransitionReady => "transition_ready",
         _ => throw new ArgumentOutOfRangeException(nameof(state)),
     };
 

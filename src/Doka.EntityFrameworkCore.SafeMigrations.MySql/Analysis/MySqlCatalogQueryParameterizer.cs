@@ -4,53 +4,61 @@ internal sealed class MySqlCatalogQueryParameterizer
 {
     private readonly Func<DbParameter> _createParameter;
     private readonly DbParameterCollection _parametersCollection;
+    private readonly IRelationalTypeMappingSource? _typeMappingSource;
     private readonly Dictionary<string, string> _parameters = new(StringComparer.Ordinal);
-    private readonly List<string> _values = [];
+    private readonly Dictionary<MySqlCatalogParameterValue, string> _typedParameters = new(
+        MySqlCatalogParameterValueComparer.Instance);
     private int _utf8PayloadBytes;
 
     public MySqlCatalogQueryParameterizer(
-        DbCommand command
+        DbCommand command,
+        IRelationalTypeMappingSource? typeMappingSource = null
     )
     {
         ArgumentNullException.ThrowIfNull(command);
 
         _createParameter = command.CreateParameter;
         _parametersCollection = command.Parameters;
+        _typeMappingSource = typeMappingSource;
     }
 
     public MySqlCatalogQueryParameterizer(
-        SafeMigrationCatalogCommand command
+        SafeMigrationCatalogCommand command,
+        IRelationalTypeMappingSource? typeMappingSource = null
     )
     {
         ArgumentNullException.ThrowIfNull(command);
 
         _createParameter = command.CreateParameter;
         _parametersCollection = command.Parameters;
+        _typeMappingSource = typeMappingSource;
     }
 
-    public int Count => _values.Count;
+    public int Count => _parametersCollection.Count;
 
     public int Utf8PayloadBytes => _utf8PayloadBytes;
 
-    public Checkpoint Capture() => new(_values.Count, _utf8PayloadBytes);
+    public Checkpoint Capture() => new(_parametersCollection.Count, _utf8PayloadBytes);
 
     public void Rollback(
         Checkpoint checkpoint
     )
     {
-        if ((uint)checkpoint.Count > (uint)_values.Count)
+        if ((uint)checkpoint.Count > (uint)_parametersCollection.Count)
         {
             throw new ArgumentOutOfRangeException(nameof(checkpoint));
         }
 
-        while (_values.Count > checkpoint.Count)
+        while (_parametersCollection.Count > checkpoint.Count)
         {
-            var last = _values.Count - 1;
-            _parameters.Remove(_values[last]);
-            _values.RemoveAt(last);
-            _parametersCollection.RemoveAt(last);
+            _parametersCollection.RemoveAt(_parametersCollection.Count - 1);
         }
 
+        _parameters.Clear();
+        _typedParameters.Clear();
+
+        // Rebuild both lookup maps lazily. Retaining entries for parameters
+        // removed by an oversized statement would allow stale marker reuse.
         _utf8PayloadBytes = checkpoint.Utf8PayloadBytes;
     }
 
@@ -71,11 +79,64 @@ internal sealed class MySqlCatalogQueryParameterizer
         parameter.Value = value;
         _parametersCollection.Add(parameter);
         _parameters.Add(value, name);
-        _values.Add(value);
         _utf8PayloadBytes += Encoding.UTF8.GetByteCount(value) + 32;
 
         return name;
     }
+
+    public string Add(
+        MySqlCatalogParameterValue value
+    )
+    {
+        if (value.StoreType is null)
+        {
+            return AddString((string)value.Value!);
+        }
+
+        if (_typedParameters.TryGetValue(value, out var existing))
+        {
+            return existing;
+        }
+
+        var name = $"@doka_sm_p{_parametersCollection.Count.ToString(CultureInfo.InvariantCulture)}";
+        var parameter = _createParameter();
+        parameter.ParameterName = name;
+
+        var mappingSource = _typeMappingSource
+            ?? throw new InvalidOperationException(
+                "Typed MySQL catalog values require a relational type-mapping source.");
+
+        var mapping = value.Value is null
+            ? mappingSource.FindMapping(value.StoreType)
+            : mappingSource.FindMapping(value.Value.GetType(), value.StoreType);
+
+        if (mapping is null)
+        {
+            throw new NotSupportedException($"MySQL has no type mapping for store type '{value.StoreType}'.");
+        }
+
+        parameter.Value = mapping.Converter?.ConvertToProvider(value.Value) ?? value.Value ?? DBNull.Value;
+        if (mapping.DbType is { } dbType)
+        {
+            parameter.DbType = dbType;
+        }
+
+        _parametersCollection.Add(parameter);
+        _typedParameters.Add(value, name);
+        _utf8PayloadBytes += EstimatePayloadBytes(value.Value) + 32;
+
+        return name;
+    }
+
+    private static int EstimatePayloadBytes(
+        object? value
+    ) => value switch
+    {
+        null => 4,
+        string text => Encoding.UTF8.GetByteCount(text),
+        byte[] bytes => bytes.Length,
+        _ => 32,
+    };
 
     public readonly record struct Checkpoint(
         int Count,

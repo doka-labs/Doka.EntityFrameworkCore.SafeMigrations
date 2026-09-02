@@ -213,6 +213,134 @@ semantically with the live catalog. SQL outside the grammar remains opaque and
 fails closed with `opaque_sql_expression`; SafeMigrations never executes an
 unknown expression merely to infer equivalence.
 
+## Model-managed data from `HasData`
+
+EF Core calls `HasData` model-managed data. Keep its declaration in
+`OnModelCreating` and create migrations normally:
+
+```csharp
+modelBuilder.Entity<Role>().HasData(
+    new Role
+    {
+        Id = 1,
+        Name = "Administrator",
+    });
+```
+
+```bash
+dotnet ef migrations add AddAdministratorRole
+```
+
+With SafeMigrations scaffolding enabled, the generated `Up` method does not
+contain raw `InsertData`, `UpdateData`, or `DeleteData` calls. A new row has
+this representative source-frozen shape:
+
+```csharp
+migrationBuilder.EnsureModelManagedDataFromModel(
+    table: "Roles",
+    keyColumns: ["Id"],
+    keyColumnTypes: ["int"],
+    columns: ["Id", "Name"],
+    columnTypes: ["int", "varchar(128)"],
+    values: new object[,]
+    {
+        { 1, "Administrator" },
+    });
+```
+
+Changing the same row in the model produces a compare-and-swap update. The
+old values come from the inverse model difference; they are not read from a
+developer database while the migration is scaffolded:
+
+```csharp
+migrationBuilder.UpdateModelManagedDataFromModel(
+    table: "Roles",
+    keyColumns: ["Id"],
+    keyColumnTypes: ["int"],
+    keyValues: new object[,]
+    {
+        { 1 },
+    },
+    columns: ["Name"],
+    columnTypes: ["varchar(128)"],
+    oldValues: new object[,]
+    {
+        { "Administrator" },
+    },
+    newValues: new object[,]
+    {
+        { "System administrator" },
+    });
+```
+
+Removing the row produces a delete containing its complete captured source
+state and source-model incoming dependencies:
+
+```csharp
+migrationBuilder.DeleteModelManagedDataFromModel(
+    table: "Roles",
+    keyColumns: ["Id"],
+    keyColumnTypes: ["int"],
+    keyValues: new object[,]
+    {
+        { 1 },
+    },
+    columns: ["Id", "Name"],
+    columnTypes: ["int", "varchar(128)"],
+    oldValues: new object[,]
+    {
+        { 1, "Administrator" },
+    },
+    foreignKeys:
+    [
+        new ExpectedModelManagedDataForeignKeyDefinition(
+            table: "UserRoles",
+            columns: ["RoleId"],
+            principalColumns: ["Id"]),
+    ]);
+```
+
+The generated calls have fixed fail-closed semantics in both scaffolding
+modes:
+
+- ensure inserts only an absent primary-key row; an equal row is a no-op and a
+  different row is rejected;
+- update changes only a row whose key and captured old managed values still
+  match; an already-target row is a no-op;
+- delete removes only a row whose complete captured source values still match
+  and whose incoming dependencies would not be changed implicitly;
+- every applied transition validates its target state before completing;
+- multiple rows are partitioned deterministically into at most 128 rows and
+  4,096 value cells per generated operation.
+
+An initial migration may create a table and populate its `HasData` rows in the
+same ordered operation stream. Preflight treats a preceding accepted table
+creation as proof that the complete projected table is empty, so the generated
+ensure is `Missing`/`Apply`. That proof is intentionally narrow: existing
+tables remain catalog-backed, and ordinary data operations, opaque SQL,
+incomplete columns, or a partially known row invalidate the inference.
+
+The providers use null-safe comparisons for captured values. MySQL and MariaDB
+use `<=>`; PostgreSQL uses `IS NOT DISTINCT FROM`. SafeMigrations deliberately
+does not use `INSERT IGNORE`, `ON DUPLICATE KEY UPDATE`, `ON CONFLICT DO
+UPDATE`, or a generic merge operation. Those shortcuts can select a different
+unique conflict or change trigger behavior without proving the model-managed
+primary-key contract.
+
+The values are source-controlled in the EF model, snapshot, generated
+migration, and generated SQL script. Do not place secrets, per-environment
+values, mutable operational data, temporary test data, or large datasets in
+`HasData`. Use EF Core `UseSeeding`/`UseAsyncSeeding` or an application-owned
+bootstrap workflow for those cases. See the official
+[EF Core model-managed-data guidance](https://learn.microsoft.com/en-us/ef/core/modeling/data-seeding).
+
+SafeMigrations does not reinterpret existing migration files. If an unapplied
+migration still contains raw model-managed data calls, remove it and scaffold
+it again after upgrading. Never replace an already applied migration; express
+the correction as a new forward migration. A hand-authored raw data operation
+remains `provider_owned_not_analyzed` because SafeMigrations cannot prove its
+model origin or reconstruct missing old values.
+
 ## Generated legacy convergence
 
 Select legacy convergence only while scaffolding a reviewed baseline for
@@ -344,15 +472,16 @@ example, an ordinary `AddColumnOperation` followed by a safe index can produce
 independent review and postcondition for that operation. Projection describes
 the state only if the earlier provider operation succeeds; it does not convert
 ordinary DDL into a SafeMigrations operation.
-Typed EF insert, update, and delete-data operations preserve structural
-table/column prerequisites for a later non-unique index, but invalidate every
-earlier projected or live pre-batch data-safety proof. A later unique index or
-additive data-validating constraint therefore remains blocked rather than
-assuming that unanalyzed seed or update values are safe. Later structural DDL
-does not re-establish row-level certainty. An unrecognized provider operation
-or raw SQL still invalidates all in-memory projection facts; represent the
-required state explicitly or reorder the safe operation after a separately
-reviewed boundary.
+Raw hand-authored or previously compiled typed EF insert, update, and
+delete-data operations preserve structural table/column prerequisites for a
+later non-unique index, but invalidate every earlier projected or live
+pre-batch data-safety proof. Newly scaffolded HasData operations instead use
+the source-frozen model-managed contract above. A later unique index or additive
+data-validating constraint after raw data therefore remains blocked rather than
+assuming that unanalyzed values are safe. Later structural DDL does not
+re-establish row-level certainty. An unrecognized provider operation or raw SQL
+still invalidates all in-memory projection facts; represent the required state
+explicitly or reorder the safe operation after a separately reviewed boundary.
 
 For unique indexes on an existing table, projection applies a stricter data
 safety proof. A newly added key column must be nullable, non-computed, and have

@@ -91,6 +91,7 @@ internal sealed partial class SafeMigrationPreflightProjection
             var key = new TableKey(intent.Table, intent.Schema);
             _tables.Remove(key);
             _prerequisites.Remove(key);
+            InvalidateModelManagedDataProjection();
         }
     }
 
@@ -103,6 +104,8 @@ internal sealed partial class SafeMigrationPreflightProjection
         {
             return;
         }
+
+        InvalidateModelManagedDataProjection();
 
         var source = new TableKey(intent.Name, intent.Schema);
         var targetTable = intent.NewName ?? intent.Name;

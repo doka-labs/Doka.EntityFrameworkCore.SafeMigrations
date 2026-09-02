@@ -78,6 +78,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         // Discard complete shapes because those cascade effects are provider-owned.
         _tables.Clear();
         _droppedIndexes.Clear();
+        InvalidateModelManagedDataProjection();
 
         if (_prerequisites.TryGetValue(new TableKey(operation.Table, operation.Schema), out var prerequisites))
         {
@@ -93,6 +94,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         // Compact prerequisites remain movable; complete shapes do not.
         _tables.Clear();
         _droppedIndexes.Clear();
+        InvalidateModelManagedDataProjection();
 
         var prerequisites = GetOrCreateProviderPrerequisites(operation.Table, operation.Schema);
         var column = prerequisites.Columns.Remove(operation.Name, out var projected)
@@ -132,6 +134,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         _tables.Clear();
         _prerequisites.Remove(new TableKey(operation.Name, operation.Schema));
         RemoveDroppedIndexes(operation.Name, operation.Schema);
+        InvalidateModelManagedDataProjection();
     }
 
     private void ObserveProviderPostcondition(
@@ -140,6 +143,7 @@ internal sealed partial class SafeMigrationPreflightProjection
     {
         _tables.Clear();
         _droppedIndexes.Clear();
+        InvalidateModelManagedDataProjection();
 
         var source = new TableKey(operation.Name, operation.Schema);
         if (!_prerequisites.Remove(source, out var prerequisites))

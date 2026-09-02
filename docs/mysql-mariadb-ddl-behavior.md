@@ -85,6 +85,38 @@ evaluation without adding EF command boundaries. This shape reduces executor
 dispatch while retaining independent SQL commands inside the provider-owned
 scope.
 
+## Model-managed data
+
+Newly scaffolded model-managed data uses typed parameters and MySQL/MariaDB's
+null-safe `<=>` operator for key, captured-source, and target comparisons.
+Ensure emits conditional plain inserts. Update and delete are compare-and-swap
+operations whose predicates include the captured source row and whose guarded
+scope validates the final state. The implementation does not use `INSERT
+IGNORE` or `INSERT ... ON DUPLICATE KEY UPDATE`: those forms can hide integrity
+errors or select the first matching unique index without proving that the
+model-managed primary-key row is the intended row.
+
+Model-managed mutation requires a transactional table engine. A
+non-transactional target is `Unsupported` before DML. The normal EF migrator
+owns transaction creation. Doka's handler scope participates in that transaction
+and performs its session-local cleanup, but it does not begin an independent
+nested transaction.
+
+Delete analysis reads live incoming foreign keys and compares them with the
+source-model dependency maps frozen into the migration. `RESTRICT`, `NO ACTION`,
+`CASCADE`, and `SET NULL` are all treated as potentially observable dependent
+effects unless every affected model-managed dependent row was removed by an
+earlier accepted operation. InnoDB rejects `SET DEFAULT`, so SafeMigrations does
+not invent that action for MySQL/MariaDB. A concurrent source change, dependent
+insert, or trigger-created target drift fails the DML or its postcondition; it
+never becomes a successful overwrite or cascade.
+
+The values appear in migration source and generated scripts because that is
+EF's model-managed-data contract. SafeMigrations excludes them from reports,
+telemetry, stable reason codes, and exception messages. See
+[migration authoring](migration-authoring.md#model-managed-data-from-hasdata)
+for the consumer boundary.
+
 ## Automatic legacy column repair
 
 A generated legacy-convergence migration retains `ThrowIfDifferent` unless its
@@ -325,6 +357,10 @@ unqualified future engine line is admitted implicitly.
 - [MySQL implicit commit statements](https://dev.mysql.com/doc/refman/8.4/en/implicit-commit.html)
 - [MySQL prepared statement restrictions](https://dev.mysql.com/doc/refman/8.4/en/sql-prepared-statements.html)
 - [MySQL ALTER TABLE](https://dev.mysql.com/doc/refman/8.4/en/alter-table.html)
+- [MySQL INSERT ON DUPLICATE KEY UPDATE](https://dev.mysql.com/doc/refman/8.4/en/insert-on-duplicate.html)
+- [MySQL foreign-key actions](https://dev.mysql.com/doc/refman/8.4/en/constraint-foreign-key.html)
+- [MariaDB null-safe equal operator](https://mariadb.com/docs/server/reference/sql-structure/operators/comparison-operators/null-safe-equal)
+- [MariaDB INSERT ON DUPLICATE KEY UPDATE](https://mariadb.com/docs/server/reference/sql-statements/data-manipulation/inserting-loading-data/insert-on-duplicate-key-update)
 - [MySQL InnoDB limits](https://dev.mysql.com/doc/refman/8.4/en/innodb-limits.html)
 - [MySQL CREATE INDEX](https://dev.mysql.com/doc/refman/8.4/en/create-index.html)
 - [MySQL invisible indexes](https://dev.mysql.com/doc/refman/8.4/en/invisible-indexes.html)

@@ -6,6 +6,66 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+## [10.2.0] - 2026-09-02
+
+Prepared a stable minor release for automatic, source-frozen EF Core
+model-managed-data convergence. Newly scaffolded `HasData` changes no longer
+remain unconditional provider-owned inserts, updates, or deletes. The release
+preserves existing migration source and structural behavior while adding a
+guarded data contract for MySQL, MariaDB, and PostgreSQL.
+
+These notes do not establish publication. Require the successful stable
+release run, the authorized signed `v10.2.0` tag, and verified public package,
+symbol, GitHub Release, provenance, SBOM, and attestation readback before
+selecting 10.2.0. All three package IDs must be published at the exact same
+version.
+
+### Added
+
+- Add `EnsureModelManagedData`, `UpdateModelManagedData`, and
+  `DeleteModelManagedData` operation kinds plus the `TransitionReady` observed
+  state. The generated public entry points freeze key/store-type/source/target
+  metadata, candidate keys, and incoming dependencies without exposing an
+  overwrite policy.
+- Decorate EF Core's public model-differ contract and pair forward/inverse
+  model-managed rows exactly before C# rendering. New migrations emit
+  `EnsureModelManagedDataFromModel`, `UpdateModelManagedDataFromModel`, or
+  `DeleteModelManagedDataFromModel`; ambiguous or incomplete pairs stop
+  scaffolding without falling back to raw data operations.
+- Add deterministic 128-row/4,096-cell partitioning, canonical typed-value
+  hashing, compact row evidence, ordered row/dependency projection, and stable
+  JSON/report mappings for the new operation family.
+- Add Core, MySQL/MariaDB, and PostgreSQL unit/live coverage for single and
+  composite keys, mixed row states, unique/check conflicts, all supported
+  incoming foreign-key actions, trigger postconditions, cancellation,
+  compare-and-swap races, retry, and idempotent replay. Real EF tooling and
+  package-only consumers assert safe generated calls and reject raw
+  HasData-derived calls.
+- Add model-managed allocation benchmarks plus live 100,000-operation analysis
+  and 50,000-row execution/replay evidence using production batching limits.
+
+### Changed
+
+- Convert newly scaffolded HasData inserts into conditional plain inserts.
+  Existing equal primary-key rows are no-ops; different rows reject instead of
+  reaching a duplicate-key insert or being overwritten.
+- Convert newly scaffolded HasData updates and deletes into source-frozen
+  compare-and-swap transitions with target postconditions. Concurrent source
+  drift, trigger-produced drift, unmatched dependencies, and implicit cascade,
+  nulling, or defaulting effects fail closed.
+- Use MySQL/MariaDB `<=>` and PostgreSQL `IS NOT DISTINCT FROM` for null-safe
+  model-managed comparisons. Generic upsert, insert-ignore, and merge syntax is
+  deliberately not used.
+- Treat model-managed values as protected source-controlled material. They
+  remain visible in the EF model, snapshot, migration source, and generated SQL
+  but are excluded from reports, telemetry, stable reason codes, and exception
+  messages.
+- Project an earlier accepted creation of a complete, still-empty table into a
+  following model-managed ensure. Initial HasData migrations now preflight as
+  ready without weakening catalog-backed classification for existing tables.
+  Ordinary provider DML, opaque SQL, incomplete column knowledge, and partially
+  known projected rows invalidate or reject that inference.
+
 ## [10.1.2] - 2026-09-02
 
 Prepared a stable patch release for deterministic semantic identity and
@@ -635,7 +695,8 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.1.2...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.2.0...HEAD
+[10.2.0]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.1.2...v10.2.0
 [10.1.2]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.1.1...v10.1.2
 [10.1.1]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.1.0...v10.1.1
 [10.1.0]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.0.2...v10.1.0

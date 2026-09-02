@@ -44,4 +44,6 @@ public sealed class SafeMigrationProviderAnalysis
 
     /// <summary>Gets a stable, low-cardinality provider code.</summary>
     public string Code { get; }
+
+    internal SafeMigrationModelManagedDataEvidence? ModelManagedDataEvidence { get; init; }
 }

@@ -187,6 +187,9 @@ public static class SafeMigrationReportJson
         SafeMigrationOperationKind.DropCheckConstraint => "drop_check_constraint",
         SafeMigrationOperationKind.EnsureForeignKey => "ensure_foreign_key",
         SafeMigrationOperationKind.DropForeignKey => "drop_foreign_key",
+        SafeMigrationOperationKind.EnsureModelManagedData => "ensure_model_managed_data",
+        SafeMigrationOperationKind.UpdateModelManagedData => "update_model_managed_data",
+        SafeMigrationOperationKind.DeleteModelManagedData => "delete_model_managed_data",
         _ => throw new ArgumentOutOfRangeException(nameof(value)),
     };
 
@@ -200,6 +203,7 @@ public static class SafeMigrationReportJson
         SafeMigrationObservedState.Unsupported => "unsupported",
         SafeMigrationObservedState.DataBlocked => "data_blocked",
         SafeMigrationObservedState.PrerequisiteMissing => "prerequisite_missing",
+        SafeMigrationObservedState.TransitionReady => "transition_ready",
         _ => throw new ArgumentOutOfRangeException(nameof(value)),
     };
 

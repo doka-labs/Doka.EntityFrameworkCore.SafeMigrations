@@ -95,10 +95,12 @@ public sealed class MySqlGuardCommandPlanTests
             context
                 .GetService<IMigrationsSqlGenerator>()
                 .Generate([operation], context.Model));
+
         var captureIndex = command.CommandText.IndexOf("@__doka_previous_sql_mode", StringComparison.Ordinal);
         var bodyIndex = command.CommandText.IndexOf(
             "PREPARE doka_sm_statement FROM @doka_sm_sql",
             StringComparison.Ordinal);
+
         var cleanupIndex = command.CommandText.LastIndexOf("SET SESSION sql_mode", StringComparison.OrdinalIgnoreCase);
         var guardCleanupIndex = command.CommandText.LastIndexOf(
             "DROP TEMPORARY TABLE IF EXISTS `__doka_sm_assert`",
@@ -193,6 +195,44 @@ public sealed class MySqlGuardCommandPlanTests
         Assert.Equal(4, Count(command.CommandText, "PREPARE doka_sm_statement FROM"));
         Assert.Equal(3, Count(command.CommandText, "EXECUTE doka_sm_statement"));
         Assert.Equal(3, Count(command.CommandText, "DEALLOCATE PREPARE doka_sm_statement"));
+    }
+
+    [Fact]
+    public void ModelManagedUpdateUsesTypedCompareAndSetBehindTheGuard()
+    {
+        var options = new DbContextOptionsBuilder<DbContext>();
+        options.UseMySql(
+            "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
+            MySqlServerVersion.MySql(new Version(8, 4, 11)));
+        ((DbContextOptionsBuilder)options).UseMySqlSafeMigrations();
+
+        using var context = new DbContext(options.Options);
+        var operation = new SafeMigrationOperation(
+            new UpdateModelManagedDataIntent(
+                "roles",
+                ["id"],
+                ["int"],
+                new object?[,] { { 1 } },
+                ["name"],
+                ["varchar(64)"],
+                new object?[,] { { "administrator" } },
+                new object?[,] { { "owner" } },
+                schema: null,
+                uniqueKeys: null),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var command = Assert.Single(
+            context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model));
+
+        var payloads = DecodeHexPayloads(command.CommandText);
+
+        Assert.Contains("WHEN 'transition_ready' THEN 'apply'", command.CommandText, StringComparison.Ordinal);
+        Assert.Contains(
+            payloads,
+            payload => payload.StartsWith("UPDATE `roles` AS doka_actual JOIN", StringComparison.Ordinal)
+                && payload.Contains("SET doka_actual.`name` = doka_expected.`n0`", StringComparison.Ordinal)
+                && payload.Contains("doka_actual.`name` <=> doka_expected.`o0`", StringComparison.Ordinal)
+                && payload.Contains("NOT (doka_actual.`name` <=> doka_expected.`n0`)", StringComparison.Ordinal));
     }
 
     private static int Count(

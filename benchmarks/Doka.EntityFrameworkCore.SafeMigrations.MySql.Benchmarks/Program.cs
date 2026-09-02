@@ -43,6 +43,19 @@ runner.Measure(
     "mysql_repair_analyzer_build_1000",
     () => CapturePlans(generator, planCapture, context.Model, repairOperations));
 
+var modelManagedOperations = ModelManagedDataBenchmarkWorkload.CreateOperations(
+    context.Database.ProviderName!,
+    "int",
+    "varchar(64)");
+
+runner.Measure(
+    "mysql_model_data_generation_384",
+    () => generator.Generate(modelManagedOperations, context.Model)
+        .Count);
+runner.Measure(
+    "mysql_model_data_analyzer_build_384",
+    () => CapturePlans(generator, planCapture, context.Model, modelManagedOperations));
+
 using var fingerprint10 = new MySqlFingerprintContext<Fingerprint10>(10);
 using var fingerprint100 = new MySqlFingerprintContext<Fingerprint100>(100);
 using var fingerprint1000 = new MySqlFingerprintContext<Fingerprint1000>(1000);
@@ -75,6 +88,7 @@ static int CapturePlans(
     var safeOperations = operations
         .Cast<SafeMigrationOperation>()
         .ToArray();
+
     using var lease = planCapture.Begin(safeOperations);
     _ = generator.Generate(operations, model);
 

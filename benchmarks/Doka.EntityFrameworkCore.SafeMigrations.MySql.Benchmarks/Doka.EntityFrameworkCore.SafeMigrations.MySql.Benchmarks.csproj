@@ -9,6 +9,8 @@
              Link="Infrastructure\BenchmarkRunner.cs" />
     <Compile Include="..\Doka.EntityFrameworkCore.SafeMigrations.Benchmarks\Features\Columns\ColumnBenchmarkWorkload.cs"
              Link="Features\Columns\ColumnBenchmarkWorkload.cs" />
+    <Compile Include="..\Doka.EntityFrameworkCore.SafeMigrations.Benchmarks\Features\ModelManagedData\ModelManagedDataBenchmarkWorkload.cs"
+             Link="Features\ModelManagedData\ModelManagedDataBenchmarkWorkload.cs" />
     <ProjectReference Include="..\..\src\Doka.EntityFrameworkCore.SafeMigrations\Doka.EntityFrameworkCore.SafeMigrations.csproj" />
     <ProjectReference Include="..\..\src\Doka.EntityFrameworkCore.SafeMigrations.MySql\Doka.EntityFrameworkCore.SafeMigrations.MySql.csproj" />
   </ItemGroup>
