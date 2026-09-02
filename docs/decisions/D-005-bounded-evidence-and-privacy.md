@@ -34,7 +34,8 @@ surface.
 
 ## Decision Drivers
 
-- Explicit operation, parameter, and UTF-8 payload limits per query.
+- Explicit operation limits per optimizer-visible statement and explicit
+  statement, parameter, and UTF-8 payload limits per transport batch.
 - Stable global ordering and all-or-failure publication of classifications.
 - Expected definitions cannot change after caller-owned collections mutate.
 - Fingerprints represent semantic contracts, not unstable debug output.
@@ -56,17 +57,25 @@ Chosen option: "Bounded batches with immutable reports and separate telemetry",
 because it limits each database request while preserving ordered evidence and
 a distinct privacy boundary for diagnostics.
 
-The current classification limits are 512 operations per MySQL/MariaDB chunk,
-128 per PostgreSQL chunk, 16,000 parameters, and 4 MiB of UTF-8 SQL plus
-parameter payload. MySQL/MariaDB also caps payload at half the observed
-max_allowed_packet. These are explicit repository constants and qualified
-budgets, not universal database limits.
+The current classification limits are 32 operations per optimizer-visible
+statement, eight statements per ADO.NET transport batch, 16,000 parameters,
+and 4 MiB of UTF-8 SQL plus parameter payload across the batch.
+MySQL/MariaDB also cap payload at half the observed `max_allowed_packet` and
+capture provider runtime plans in 512-operation windows while retaining the
+complete migration-level unique-index catalog. These are explicit repository
+constants and qualified budgets, not universal database limits.
 
 A single operation that cannot fit is rejected before executing its
-classification query. Repeated typed parameter values are shared within a
-chunk. Global ordinals span chunks, and a report is not published with only
-the successful prefix of a failed analysis. Provider analysis ownership in
-D-004 preserves the applicable consistency window.
+classification statement. Repeated typed parameter values are shared within a
+statement. Global ordinals span statements, transport batches, and provider-
+plan capture windows. A report is not published with only the successful
+prefix of a failed analysis. The configured EF command timeout is propagated
+to every raw catalog command and `DbBatch`; provider analysis ownership in
+D-004 preserves the applicable consistency window. Native transport batching
+is selected only when `DbConnection.CanCreateBatch` is true. Otherwise the
+same bounded statements execute sequentially through ordinary `DbCommand`
+instances, preserving compatibility without parsing or concatenating provider
+SQL.
 
 Definitions snapshot enumerable inputs into owned read-only collections.
 Model fingerprints stream length-prefixed canonical relational metadata into
@@ -114,8 +123,13 @@ runner invocation.
 Run the Core catalog-limit, definition, fingerprint, and run-contract tests.
 Require exact-boundary success, oversized parameter/payload rejection,
 single enumeration, immutable snapshots, stable ordering, and invalid
-annotation rejection. Serialization and telemetry tests must prove that
-changes to protected report detail do not add it to telemetry tags.
+annotation rejection. Provider tests must exercise `DbBatchCommand`
+parameterization, multiple result sets, cancellation, configured command
+timeouts, and 100,000 deterministically ordered mixed live operations on every
+qualified engine profile. The large-scale workload must exercise every
+observed state and planned action rather than repeating one matching object.
+Serialization and telemetry tests must prove that changes to protected report
+detail do not add it to telemetry tags.
 
 Run both provider fingerprint suites and PostgreSQL facet-isolation cases
 under the qualified dependency profiles. A stable digest in one provider or
@@ -188,10 +202,14 @@ window. Neither a hash nor a report proves the database server is honest.
 - 2026-08-26: Status changed from accepted to implemented. Bounded catalog work, immutable definitions, fingerprints, reports, and telemetry privacy are implemented with the referenced regression coverage and measurement boundaries.
 - 2026-08-26: Clarified the existing fingerprint boundary for ordinary provider operations; their content identity requires the deployment artifact digest and separate review.
 - 2026-08-31: Added the public `IColumn` facet path for property-less JSON container columns while retaining the established scalar property-mapping path and its allocation profile.
+- 2026-09-02: Bounded optimizer-visible statements independently from ADO.NET transport batches, propagated EF command timeouts to raw catalog work, and added 100,000-operation mixed-state live qualification.
+- 2026-09-02: Capability-gated native batching and added the bounded sequential command fallback for compatible ADO.NET wrappers that do not implement `DbBatch`.
 
 ### Implementation References
 
 - [Catalog query limits](../../src/Doka.EntityFrameworkCore.SafeMigrations/Analysis/SafeMigrationCatalogQueryLimits.cs)
+- [Catalog batch adapter](../../src/Doka.EntityFrameworkCore.SafeMigrations/Analysis/SafeMigrationCatalogBatch.cs)
+- [Sequential fallback integration tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Integration/SafeMigrationCatalogBatchIntegrationTests.cs)
 - [Catalog-limit tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Unit/Analysis/SafeMigrationCatalogQueryLimitsTests.cs)
 - [Definition ownership and validation tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Unit/Features/Lifecycle/SafeMigrationDefinitionTests.Lifecycle.cs)
 - [Model fingerprint implementation](../../src/Doka.EntityFrameworkCore.SafeMigrations/Analysis/SafeMigrationModelFingerprint.cs)
@@ -211,4 +229,8 @@ window. Neither a hash nor a report proves the database server is honest.
 
 ### Sources
 
-- No external sources; repository evidence only.
+- [.NET 10 `DbBatch`](https://learn.microsoft.com/en-us/dotnet/api/system.data.common.dbbatch?view=net-10.0) (standard batch, command, timeout, and provider-specific execution contract; retrieved 2026-09-02)
+- [.NET 10 `DbConnection.CanCreateBatch`](https://learn.microsoft.com/en-us/dotnet/api/system.data.common.dbconnection.cancreatebatch?view=net-10.0) (default false and provider capability contract; retrieved 2026-09-02)
+- [Npgsql batching](https://www.npgsql.org/doc/basic-usage.html#batching) (parameterized multi-command batching and result-set behavior; retrieved 2026-09-02)
+- [MySqlConnector `MySqlBatch`](https://mysqlconnector.net/api/mysqlconnector/mysqlbatchtype/) (MariaDB batching behavior, timeout, and multi-result reader contract; retrieved 2026-09-02)
+- [EF Core 10 `GetCommandTimeout`](https://learn.microsoft.com/en-us/dotnet/api/microsoft.entityframeworkcore.relationaldatabasefacadeextensions.getcommandtimeout?view=efcore-10.0) (configured context command-timeout contract; retrieved 2026-09-02)

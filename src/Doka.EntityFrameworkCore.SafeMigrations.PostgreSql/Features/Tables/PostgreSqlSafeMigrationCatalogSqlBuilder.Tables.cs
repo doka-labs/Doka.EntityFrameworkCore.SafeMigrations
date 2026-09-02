@@ -60,9 +60,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             + $"WHERE n.nspname = {schema} AND c.relname = {Literal(definition.Table)} "
             + "AND a.attnum > 0 AND NOT a.attisdropped) "
             + $"= {definition.Columns.Count.ToString(CultureInfo.InvariantCulture)}",
-            ConstraintCount(definition.Table, definition.Schema, 'u', definition.UniqueConstraints.Count),
-            ConstraintCount(definition.Table, definition.Schema, 'c', definition.CheckConstraints.Count),
-            ConstraintCount(definition.Table, definition.Schema, 'f', definition.ForeignKeys.Count),
+            AllUniqueConstraintsModeled(definition),
+            AllCheckConstraintsModeled(definition),
+            AllForeignKeysModeled(definition),
             TableCommentMatches(definition),
         };
 
@@ -75,7 +75,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         conditions.Add(
             definition.PrimaryKey is null
                 ? $"NOT {AnyConstraint(definition.Table, definition.Schema, 'p')}"
-                : ConstraintColumnsMatch(
+                : ConstraintColumnsSatisfied(
                     definition.Table,
                     definition.Schema,
                     definition.PrimaryKey.Name,
@@ -83,19 +83,57 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                     definition.PrimaryKey.Columns));
 
         conditions.AddRange(
-            definition.UniqueConstraints.Select(value => ConstraintColumnsMatch(
+            definition.UniqueConstraints.Select(value => ConstraintColumnsSatisfied(
                 value.Table,
                 value.Schema,
                 value.Name,
                 'u',
                 value.Columns)));
 
-        conditions.AddRange(definition.CheckConstraints.Select(check => CheckMatches(check)));
-        conditions.AddRange(definition.ForeignKeys.Select(foreignKey =>
-            ForeignKeyMatches(foreignKey, requireExpectedName: true)));
+        conditions.AddRange(definition.CheckConstraints.Select(CheckSatisfied));
+        conditions.AddRange(definition.ForeignKeys.Select(ForeignKeySatisfied));
 
         return $"({string.Join(" AND ", conditions)})";
     }
+
+    private string AllUniqueConstraintsModeled(
+        ExpectedTableDefinition definition
+    ) => AllConstraintsModeled(
+        definition.Table,
+        definition.Schema,
+        'u',
+        definition.UniqueConstraints
+            .Select(uniqueConstraint => ConstraintColumnsMatch(
+                uniqueConstraint.Table,
+                uniqueConstraint.Schema,
+                'u',
+                uniqueConstraint.Columns,
+                "co.conname = candidate_co.conname"))
+            .ToArray());
+
+    private string AllCheckConstraintsModeled(
+        ExpectedTableDefinition definition
+    ) => AllConstraintsModeled(
+        definition.Table,
+        definition.Schema,
+        'c',
+        definition.CheckConstraints
+            .Select(checkConstraint => CheckMatches(
+                checkConstraint,
+                "co.conname = candidate_co.conname"))
+            .ToArray());
+
+    private string AllForeignKeysModeled(
+        ExpectedTableDefinition definition
+    ) => AllConstraintsModeled(
+        definition.Table,
+        definition.Schema,
+        'f',
+        definition.ForeignKeys
+            .Select(foreignKey => ForeignKeyMatches(
+                foreignKey,
+                "co.conname = candidate_co.conname"))
+            .ToArray());
 
     private string TableCommentMatches(
         ExpectedTableDefinition definition

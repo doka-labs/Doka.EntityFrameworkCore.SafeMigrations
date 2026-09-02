@@ -116,7 +116,8 @@ When EF scaffolds an index replacement as `DropIndex` followed by
 appropriate safe create helper. Preflight preserves this operation order: an
 accepted exact-name drop makes the replacement target missing, but it does not
 override a data-blocked unique index, an unsupported physical key, a missing
-prerequisite, or a differently named semantic conflict.
+prerequisite, or an exact-name definition mismatch that is unrelated to the
+accepted drop.
 
 The composite example assumes that Doka attached `.HasPrefixLength(0, 191)` to
 the EF model. SafeMigrations reads that metadata through Doka's typed public

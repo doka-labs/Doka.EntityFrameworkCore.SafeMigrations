@@ -8,12 +8,23 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         IReadOnlyList<string> columns,
         string type,
         bool requireExpectedName = true
+    ) => ConstraintColumnsMatch(
+        table,
+        columns,
+        type,
+        $"tc.CONSTRAINT_NAME {(requireExpectedName ? "=" : "<>")} {Literal(name)}");
+
+    private string ConstraintColumnsMatch(
+        string table,
+        IReadOnlyList<string> columns,
+        string type,
+        string namePredicate
     ) => $"EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc "
         + "JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu "
         + "ON kcu.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA "
         + "AND kcu.TABLE_NAME = tc.TABLE_NAME AND kcu.CONSTRAINT_NAME = tc.CONSTRAINT_NAME "
         + $"WHERE tc.CONSTRAINT_SCHEMA = DATABASE() AND tc.TABLE_NAME = {Literal(table)} "
-        + $"AND tc.CONSTRAINT_NAME {(requireExpectedName ? "=" : "<>")} {Literal(name)} "
+        + $"AND {namePredicate} "
         + $"AND tc.CONSTRAINT_TYPE = {Literal(type)} "
         + $"GROUP BY tc.CONSTRAINT_NAME HAVING COUNT(*) = {columns.Count.ToString(CultureInfo.InvariantCulture)} "
         + $"AND GROUP_CONCAT(kcu.COLUMN_NAME ORDER BY kcu.ORDINAL_POSITION SEPARATOR ',') "
@@ -39,12 +50,15 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         + $"WHERE tc.CONSTRAINT_SCHEMA = DATABASE() AND tc.TABLE_NAME = {Literal(table)} "
         + $"AND tc.CONSTRAINT_NAME = {Literal(name)} AND tc.CONSTRAINT_TYPE = {Literal(type)})";
 
+    private string DatabaseConstraintNameExists(
+        string name,
+        string type
+    ) => "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc "
+        + "WHERE tc.CONSTRAINT_SCHEMA = DATABASE() "
+        + $"AND tc.CONSTRAINT_NAME = {Literal(name)} "
+        + $"AND tc.CONSTRAINT_TYPE = {Literal(type)})";
+
     private static string OrderedColumnsSql(
-        IReadOnlyList<string> columns,
-        string expression = "kcu.COLUMN_NAME"
-    )
-    {
-        _ = expression;
-        return string.Join(",", columns);
-    }
+        IReadOnlyList<string> columns
+    ) => string.Join(",", columns);
 }

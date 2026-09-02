@@ -124,11 +124,12 @@ Provider tests use real Docker servers and cover:
   roundtrips, physical InnoDB key-limit boundaries, and unsupported branches;
 - ordered ordinary and safe index drop/create replacement, including preserved
   duplicate-data, prerequisite, physical-key, and semantic-conflict rejection;
-- InnoDB foreign-key support indexes followed by an explicit reviewed named
-  index, without weakening independent differently named index conflicts;
-- differently named equivalent foreign-key, unique-constraint,
-  check-constraint, and index conflicts on both providers, plus the PostgreSQL
-  singleton primary-key identity conflict;
+- InnoDB foreign-key support indexes as semantic matches for equivalent index
+  ensures, without weakening exact-name or physical-facet drift;
+- differently named equivalent primary-key, foreign-key, unique-constraint,
+  check-constraint, and index no-ops, including composite definitions and
+  multiple physical aliases, plus exact-name precedence and different-shape
+  creation;
 - MySQL check enforcement, MySQL index visibility, MariaDB ignored indexes and
   table-scoped check names, plus PostgreSQL index health, partition ownership,
   constraint backing, and partitioned-parent indexes;
@@ -152,12 +153,23 @@ Provider tests use real Docker servers and cover:
 
 The provider-analyzer contract accepts the ordered safe-operation batch. Each
 provider first classifies table and referenced-column prerequisites, then
-executes classification in
-deterministic parameterized chunks bounded by operation count, parameter
-count, and UTF-8 payload. The unexpected-object inventory remains scoped to
-the expected table set for child objects while retaining complete table
-discovery. Projection applies global ordered results without per-operation
-catalog roundtrips, and no partial report is published after a later failure.
+executes classification in parameterized ADO.NET batches. Optimizer-visible
+statements, statements per transport batch, parameters, and UTF-8 payload are
+bounded independently. MySQL/MariaDB provider plans are captured in bounded
+windows. The unexpected-object inventory remains scoped to the expected table
+set for child objects while retaining complete table discovery and provider-
+verified semantic-alias reconciliation. Projection applies global ordered
+results without per-operation catalog roundtrips, and no partial report is
+published after a later failure. Every engine profile also qualifies 100,000
+deterministically ordered mixed operations. That workload covers `Missing`,
+`Matching`, `Different`, `Unsupported`, `DataBlocked`, and
+`PrerequisiteMissing`, all seven planned actions, and heterogeneous table,
+column, index, primary-key, unique, check, and foreign-key operations. Native
+`DbBatch` execution and the sequential fallback for connections with
+`CanCreateBatch == false` share the same bounded command adapter; live fallback
+tests verify command order, timeout propagation, and cancellation. Coverage
+jobs exclude the large-scale test because every supported engine matrix cell
+already executes it against a live server.
 
 Every engine matrix cell also runs:
 
@@ -204,6 +216,13 @@ cases stop before target DDL instead of being compared or applied heuristically:
   indexes do not satisfy the visible index shape emitted by ordinary EF
   operations. MariaDB check clauses are correlated by table and constraint
   name so the table-scoped names available from MariaDB 12.1 remain isolated.
+- MySQL schema-wide CHECK and foreign-key symbol collisions reject before DDL.
+  MariaDB foreign-key symbols reject database-wide collisions through 11.x;
+  MariaDB 12.1 and later retain their documented table-scoped behavior.
+- PostgreSQL rejects a non-equivalent second primary key and any schema relation
+  name that prevents index creation, index rename, or creation of a primary-key
+  or unique-constraint backing index. These paths produce the controlled
+  different-object guard instead of a raw duplicate-relation failure.
 - MariaDB's Doka-emitted JSON alias is the physical triple `longtext`,
   `utf8mb4_bin`, and the exact inline `JSON_VALID` check. Only that
   provider-generated check is excluded from strict child-object ownership.
@@ -343,12 +362,16 @@ and release-asset verification.
   [MySQL 8.4 CREATE INDEX](https://dev.mysql.com/doc/refman/8.4/en/create-index.html),
   [MySQL 8.4 invisible indexes](https://dev.mysql.com/doc/refman/8.4/en/invisible-indexes.html),
   [MySQL 8.4 CHECK constraints](https://dev.mysql.com/doc/refman/8.4/en/create-table-check-constraints.html),
+  [MySQL 8.4 foreign keys](https://dev.mysql.com/doc/refman/8.4/en/create-table-foreign-keys.html),
   [MariaDB InnoDB limitations](https://mariadb.com/docs/server/server-usage/storage-engines/innodb/innodb-limitations),
   [MariaDB InnoDB row formats](https://mariadb.com/docs/server/server-usage/storage-engines/innodb/innodb-row-formats/innodb-row-formats-overview),
   and [MariaDB ignored indexes](https://mariadb.com/docs/server/ha-and-performance/optimization-and-tuning/optimization-and-indexes/ignored-indexes),
   retrieved 2026-09-01.
+- [MariaDB 12.1 changes](https://mariadb.com/docs/release-notes/community-server/12.1/changes-and-improvements-in-mariadb-12.1),
+  retrieved 2026-09-02.
 - [PostgreSQL 17 `pg_constraint`](https://www.postgresql.org/docs/17/catalog-pg-constraint.html),
-  retrieved 2026-08-31.
+  and [PostgreSQL 18 `CREATE INDEX`](https://www.postgresql.org/docs/18/sql-createindex.html),
+  retrieved 2026-09-02.
 - [PostgreSQL 18 `pg_index`](https://www.postgresql.org/docs/18/catalog-pg-index.html),
   [`pg_class`](https://www.postgresql.org/docs/18/catalog-pg-class.html), and
   [`pg_inherits`](https://www.postgresql.org/docs/18/catalog-pg-inherits.html),

@@ -7,6 +7,60 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     private const int PerformanceFixtureCommandTimeoutSeconds = 180;
 
     [Fact]
+    [Trait("Category", "LargeScale")]
+    public async Task Analyzer_OneHundredThousandMixedOperationsRemainBoundedOrderedAndComplete()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            BuildLargeMigrationStressCatalog());
+
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        var expectation = LargeMigrationStressContract.Populate(builder, LargeMigrationStressDialect.PostgreSql);
+
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("large-mixed-migration"),
+                CancellationToken.None);
+
+        expectation.AssertReport(report);
+    }
+
+    [Fact]
+    public async Task Analyzer_AppliesConfiguredCommandTimeoutToCatalogBatches()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE catalog_timeout (id integer NOT NULL); "
+            + "INSERT INTO catalog_timeout (id) VALUES (1);");
+
+        await using var context = CreateContext(connectionString);
+        context.Database.SetCommandTimeout(1);
+
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureCheckConstraint(
+            ExpectedCheckConstraintDefinition.FromExpression(
+                "ck_catalog_timeout",
+                "catalog_timeout",
+                SafeMigrationSql.IsNull(
+                    SafeMigrationSql.Function("pg_sleep", SafeMigrationSql.Literal(5)))),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        _ = await Assert.ThrowsAsync<NpgsqlException>(() => context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("catalog-timeout"),
+                CancellationToken.None));
+    }
+
+    [Fact]
     public async Task FullRunner_LiveCatalogP95RemainsBoundedWithForeignObjectsAndPooling()
     {
         var templateConnectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
@@ -16,6 +70,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             NoResetOnClose = false,
             MaxPoolSize = 4,
         }.ConnectionString;
+
         var fixtureConnectionString = new NpgsqlConnectionStringBuilder(connectionString)
         {
             CommandTimeout = PerformanceFixtureCommandTimeoutSeconds,
@@ -82,6 +137,40 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
 
         return builder.Operations.ToList();
     }
+
+    private static string BuildLargeMigrationStressCatalog() =>
+        "CREATE TABLE large_migration_parent ("
+        + "id integer NOT NULL, tenant_id integer NOT NULL, "
+        + "CONSTRAINT pk_large_migration_parent PRIMARY KEY (id, tenant_id)); "
+        + "CREATE TABLE large_migration_secondary_parent ("
+        + "id integer NOT NULL, tenant_id integer NOT NULL, "
+        + "CONSTRAINT pk_large_migration_secondary_parent PRIMARY KEY (id, tenant_id)); "
+        + "CREATE TABLE large_migration_target ("
+        + "id integer NOT NULL, matching_value integer NULL, "
+        + "repair_value character varying(40) NULL DEFAULT 'legacy', "
+        + "blocked_value character varying(40) NULL, indexed_value integer NOT NULL, "
+        + "unique_value integer NOT NULL, check_value integer NOT NULL, "
+        + "parent_id integer NOT NULL, parent_tenant_id integer NOT NULL, "
+        + "secondary_parent_id integer NOT NULL, secondary_parent_tenant_id integer NOT NULL, "
+        + "CONSTRAINT pk_large_migration_target PRIMARY KEY (id), "
+        + "CONSTRAINT uq_large_migration_target_value UNIQUE (unique_value, matching_value), "
+        + "CONSTRAINT ck_large_migration_target_value CHECK (check_value >= 0), "
+        + "CONSTRAINT fk_large_migration_target_parent "
+        + "FOREIGN KEY (parent_id, parent_tenant_id) "
+        + "REFERENCES large_migration_parent (id, tenant_id)); "
+        + "CREATE INDEX ix_large_migration_target_indexed "
+        + "ON large_migration_target (indexed_value, matching_value); "
+        + "CREATE INDEX ix_large_migration_target_parent "
+        + "ON large_migration_target (parent_id, parent_tenant_id); "
+        + "CREATE INDEX ix_large_migration_target_secondary_parent "
+        + "ON large_migration_target (secondary_parent_id, secondary_parent_tenant_id); "
+        + "INSERT INTO large_migration_parent (id, tenant_id) VALUES (1, 1); "
+        + "INSERT INTO large_migration_secondary_parent (id, tenant_id) VALUES (1, 1); "
+        + "INSERT INTO large_migration_target ("
+        + "id, matching_value, repair_value, blocked_value, indexed_value, "
+        + "unique_value, check_value, parent_id, parent_tenant_id, "
+        + "secondary_parent_id, secondary_parent_tenant_id) "
+        + "VALUES (1, 1, 'legacy', NULL, 1, 1, 1, 1, 1, 1, 1);";
 
     private static string BuildPostgreSqlPerformanceTables(
         string prefix,

@@ -89,11 +89,49 @@ public sealed class MySqlSafeMigrationPlanCaptureTests
 
         using (capture.Begin([table, unique, nonUnique]))
         {
-            Assert.Equal(["ux_users_email"], capture.GetExpectedUniqueIndexes("users"));
+            Assert.Equal(
+                ["ux_users_email"],
+                capture
+                    .GetExpectedUniqueIndexes("users")
+                    .Select(static index => index.Name));
             Assert.Empty(capture.GetExpectedUniqueIndexes("other"));
         }
 
         Assert.Throws<InvalidOperationException>(() => capture.GetExpectedUniqueIndexes("users"));
+    }
+
+    [Fact]
+    public void BoundedCapture_UsesTheCompleteMigrationIndexCatalog()
+    {
+        var capture = new MySqlSafeMigrationPlanCapture();
+        var table = new SafeMigrationOperation(
+            new EnsureTableIntent(
+                new ExpectedTableDefinition(
+                    "users",
+                    [new ExpectedColumnDefinition("email", typeof(string), isNullable: true)]),
+                SafeMigrationTableMode.StrictDefinition),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var unique = new SafeMigrationOperation(
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "ux_users_email",
+                    "users",
+                    [new ExpectedIndexKeyDefinition(column: "email")],
+                    unique: true)),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var completeCatalog = MySqlSafeMigrationPlanCapture.CreateExpectedUniqueIndexes([table, unique]);
+        using var lease = capture.Begin([table], completeCatalog);
+
+        Assert.Equal(
+            ["ux_users_email"],
+            capture
+                .GetExpectedUniqueIndexes("users")
+                .Select(static index => index.Name));
+
+        capture.Record(0, table, Plan("table"));
+        Assert.Single(lease.Complete());
     }
 
     private static SafeMigrationOperation Operation(

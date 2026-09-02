@@ -3,40 +3,55 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 public sealed partial class MySqlSafeMigrationIntegrationTests
 {
     [Fact]
-    public async Task EquivalentIndexWithDifferentName_IsRejectedBeforeDdl()
+    public async Task EquivalentIndexWithDifferentName_IsAnIdempotentNoOp()
     {
         var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `index_identity` (`code` int NOT NULL, "
-            + "INDEX `ix_index_identity_legacy` (`code`));");
+            "CREATE TABLE `index_identity` (`code` int NOT NULL, `tenant_id` int NOT NULL, "
+            + "INDEX `ix_index_identity_legacy_a` (`code`, `tenant_id`), "
+            + "INDEX `ix_index_identity_legacy_b` (`code`, `tenant_id`));");
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
+        _ = builder.EnsureTable(
+            new ExpectedTableDefinition(
+                "index_identity",
+                [
+                    new ExpectedColumnDefinition("code", typeof(int), isNullable: false, storeType: "int"),
+                    new ExpectedColumnDefinition("tenant_id", typeof(int), isNullable: false, storeType: "int"),
+                ]),
+            SafeMigrationTableMode.ConvergenceContainer,
+            SafeMigrationPolicy.ThrowIfDifferent);
         builder.CreateIndexIfNotExists(
             "ix_index_identity_expected",
             "index_identity",
-            ["code"]);
+            ["code", "tenant_id"]);
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("index-identity"));
 
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
-            ExecuteOperationsAsync(context, builder.Operations));
-        var assessment = Assert.Single(report.Assessments);
+        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations);
 
-        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
-        Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
-        Assert.Contains("doka_sm_different", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
+        Assert.All(
+            report.Assessments,
+            assessment =>
+            {
+                Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState);
+                Assert.Equal(SafeMigrationAction.NoOp, assessment.Action);
+            });
+        Assert.Empty(report.UnexpectedObjects);
         Assert.Equal(
-            1,
+            2,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
+                "SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'index_identity' "
-                + "AND INDEX_NAME IN ('ix_index_identity_legacy', 'ix_index_identity_expected');"));
+                + "AND INDEX_NAME IN ('ix_index_identity_legacy_a', "
+                + "'ix_index_identity_legacy_b', 'ix_index_identity_expected');"));
     }
 
     [Fact]
@@ -65,6 +80,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var postflight = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("index-nonidentity-post"));
+
         var assessment = Assert.Single(preflight.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -98,6 +114,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         var exception = await Assert.ThrowsAsync<MySqlException>(() =>
             ExecuteOperationsAsync(context, builder.Operations));
+
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -166,6 +183,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         var exception = await Assert.ThrowsAsync<MySqlException>(() =>
             ExecuteOperationsAsync(context, builder.Operations));
+
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -202,6 +220,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         var exception = await Assert.ThrowsAsync<MySqlException>(() =>
             ExecuteOperationsAsync(context, builder.Operations));
+
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
@@ -299,6 +318,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
             var exception = await Assert.ThrowsAsync<MySqlException>(() =>
                 ExecuteOperationsAsync(context, builder.Operations));
+
             var assessment = Assert.Single(report.Assessments);
 
             Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
@@ -460,6 +480,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 new ExpectedIndexKeyDefinition(column: "id"),
             ],
             method: "BTREE");
+
         var create = new MigrationBuilder(context.Database.ProviderName!);
         create.EnsureIndex(canonical, SafeMigrationPolicy.ThrowIfDifferent);
 
@@ -624,6 +645,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             "ix_functional_drift",
             "functional_drift",
             [new ExpectedIndexKeyDefinition(structuredExpression: SqlFunction("lower", "value"))]);
+
         var create = new MigrationBuilder(context.Database.ProviderName!);
         create.EnsureIndex(canonical, SafeMigrationPolicy.ThrowIfDifferent);
 

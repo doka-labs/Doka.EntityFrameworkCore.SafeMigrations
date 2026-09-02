@@ -330,7 +330,12 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var expectedIndex = new ExpectedIndexDefinition(
             "ux_strict_unique_index_email",
             "strict_unique_index",
-            [new ExpectedIndexKeyDefinition(column: "email")],
+            [
+                new ExpectedIndexKeyDefinition(
+                    column: "email",
+                    sortOrder: SafeMigrationIndexSortOrder.Descending,
+                    prefixLength: 100),
+            ],
             unique: true);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -360,6 +365,21 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         await ExecuteSqlAsync(
             connectionString,
+            "ALTER TABLE `strict_unique_index` RENAME INDEX "
+            + "`ux_strict_unique_index_email` TO `ux_strict_unique_index_legacy`;");
+
+        var alias = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("strict-unique-index-alias"));
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, alias.Status);
+        Assert.All(alias.Assessments, static assessment =>
+            Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
+        Assert.Empty(alias.UnexpectedObjects);
+
+        await ExecuteSqlAsync(
+            connectionString,
             "ALTER TABLE `strict_unique_index` "
             + "ADD CONSTRAINT `uq_strict_unique_index_unknown` UNIQUE (`id`, `email`);");
 
@@ -383,6 +403,55 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 ObjectKind: SafeMigrationDatabaseObjectKind.UniqueConstraint,
                 Table: "strict_unique_index",
                 Name: "uq_strict_unique_index_unknown",
+            });
+    }
+
+    [Fact]
+    public async Task StrictTableDefinition_DoesNotTradeMissingExpectedUniqueIndexForUnknownShape()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `strict_unique_substitution` ("
+            + "`id` int NOT NULL, `email` varchar(200) NULL, "
+            + "PRIMARY KEY (`id`), UNIQUE KEY `ux_unknown_shape` (`id`, `email`));");
+
+        await using var context = CreateContext(connectionString);
+        var definition = new ExpectedTableDefinition(
+            "strict_unique_substitution",
+            [
+                new ExpectedColumnDefinition("id", typeof(int), false, "int"),
+                new ExpectedColumnDefinition("email", typeof(string), true, "varchar(200)", maxLength: 200),
+            ],
+            primaryKey: new ExpectedPrimaryKeyDefinition("PRIMARY", "strict_unique_substitution", ["id"]));
+
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureTable(
+            definition,
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureIndex(
+            new ExpectedIndexDefinition(
+                "ux_expected_email",
+                "strict_unique_substitution",
+                [new ExpectedIndexKeyDefinition(column: "email")],
+                unique: true),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("strict-unique-substitution"));
+
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(SafeMigrationObservedState.Different, report.Assessments[0].ObservedState);
+        Assert.Equal(SafeMigrationObservedState.Missing, report.Assessments[1].ObservedState);
+        Assert.Contains(
+            report.UnexpectedObjects,
+            static value => value is
+            {
+                ObjectKind: SafeMigrationDatabaseObjectKind.UniqueConstraint,
+                Table: "strict_unique_substitution",
+                Name: "ux_unknown_shape",
             });
     }
 
@@ -454,6 +523,8 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                     .HasMaxLength(200);
                 entity.HasIndex(entry => entry.Email)
                     .IsUnique()
+                    .IsDescending()
+                    .HasPrefixLength(100)
                     .HasDatabaseName("ux_strict_unique_index_email");
             });
         }

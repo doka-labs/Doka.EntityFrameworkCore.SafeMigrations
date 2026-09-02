@@ -127,12 +127,16 @@ is an ownership boundary and does not create an API namespace migration.
 The architecture adds no runtime feature registries, per-operation dependency
 injection, reflection, or dynamic dispatch. Partial classes are a source-level
 ownership mechanism only and compile into the same static or sealed runtime
-types. Catalog classification remains ordered across deterministic bounded
-chunks. Whole-run allocations also depend on input/model size, generated
-commands, assessments, and returned catalog inventory; bounded requests do
-not imply constant memory or an operation-count-only bound. Provider matrix
-tests retain same-runner live p95 evidence for clean and 1,000-table noisy
-catalogs, including pooled connection open/reset/close costs.
+types. Catalog classification remains ordered across bounded optimizer
+statements, ADO.NET transport batches, and MySQL/MariaDB provider-plan capture
+windows. Connections without advertised `DbBatch` support retain the same
+bounds through sequential commands. Whole-run allocations also depend on
+input/model size, assessments,
+and returned catalog inventory; bounded requests do not imply constant memory
+or an operation-count-only bound. Provider matrix tests retain same-runner live
+p95 evidence for clean and 1,000-table noisy catalogs, plus qualification with
+100,000 ordered mixed operations spanning every observed state and planned
+action on every supported engine profile.
 
 ## Verification
 

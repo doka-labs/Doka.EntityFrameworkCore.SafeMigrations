@@ -220,6 +220,16 @@ schema, ordered members, and expected facets. Explicit ensure APIs require a
 `ThrowIfDifferent`. Schema and drop/rename helpers select their defined policy
 internally. Check the overload rather than assuming every method takes policy.
 
+Named ensure operations use semantic identity with exact-name precedence. If
+the expected name exists, all modeled facets must match. If it is absent, a
+differently named equivalent primary key, unique constraint, check constraint,
+foreign key, or index satisfies the operation as `Matching`; multiple aliases
+remain a no-op. A differently named object with a different definition remains
+independent and does not suppress normal safe creation unless its singleton or
+physical provider namespace makes the requested object impossible to create.
+That conflict is `Different` and rejects before DDL. Drop and rename helpers
+always use the exact physical name and never select a semantic alias.
+
 `EnsureTable` additionally requires `SafeMigrationTableMode`: strict owned
 definition or convergence container. `ConvergeTable` always emits an
 existence-only container followed by granular children under the supplied

@@ -3,6 +3,18 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 public sealed class SafeMigrationCatalogQueryLimitsTests
 {
     [Fact]
+    public void StatementBatchAndCaptureBounds_RemainIndependentAndNested()
+    {
+        Assert.Equal(32, SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement);
+        Assert.Equal(8, SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch);
+        Assert.Equal(512, SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture);
+        Assert.True(
+            SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement
+            * SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch
+            <= SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture);
+    }
+
+    [Fact]
     public void Exceeded_AcceptsExactBoundariesAndRejectsTheFirstExcessValue()
     {
         Assert.False(

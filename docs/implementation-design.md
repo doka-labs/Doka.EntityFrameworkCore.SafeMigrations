@@ -233,20 +233,33 @@ before baseline DDL. Existing provider-supported indexes remain comparable,
 because comparison does not imply that SafeMigrations can reproduce an
 unmodeled creation shape.
 
-Constraint and index matching preserves explicit names while also guarding
-semantic identity. If an expected name is absent but a differently named
-active object has the complete modeled shape, creation rejects instead of
-duplicating it. The comparison covers ordered keys, principal identity,
-referential actions, expressions, index method, uniqueness, ordering,
-prefixes, and supported visibility facets. PostgreSQL primary-key ensure also
-rejects when the table already owns a differently named primary key.
+Constraint and index ensure operations use semantic identity with exact-name
+precedence. If the expected name exists, its complete definition must match;
+another equivalent alias cannot hide drift under that name. If the expected
+name is absent, any differently named active object with the complete modeled
+shape satisfies the ensure as `Matching`. Different-name/different-shape
+objects remain independent and do not suppress safe creation. The comparison
+covers ordered keys, principal identity, referential actions, expressions,
+index method, uniqueness, ordering, prefixes, filters, included columns, null
+semantics, and supported visibility facets. Multiple equivalent aliases are a
+deterministic no-op. Drop and rename retain exact physical-name identity.
+
+Semantic identity and physical achievability are separate checks. A
+differently shaped primary key conflicts with PostgreSQL's one-primary-key
+table invariant. PostgreSQL indexes, index rename targets, and primary or
+unique constraint backing indexes require a free name in the schema relation
+namespace. MySQL CHECK and foreign-key symbols are schema-wide. MariaDB
+foreign-key symbols are database-wide before 12.1 and table-scoped from 12.1.
+These collisions classify `Different` after local semantic-alias matching and
+before data probes, so a valid legacy alias remains a no-op while impossible
+DDL fails with the normal SafeMigrations guard.
 
 InnoDB can create a supporting index for a foreign key and later replace it
-with another suitable explicit index. MySQL/MariaDB index identity analysis
-therefore correlates candidate key columns with local foreign keys through
-`KEY_COLUMN_USAGE`; such provider infrastructure does not suppress creation of
-the reviewed named index. A semantically identical index without that
-foreign-key role remains `Different`.
+with another suitable index. SafeMigrations therefore compares the complete
+physical index shape rather than inferring ownership from its name or from the
+foreign key that currently uses it. An equivalent supporting index satisfies
+an ensure; a different key order, prefix, method, uniqueness, sort direction,
+or visibility remains a distinct object.
 
 MySQL checks must be enforced; MariaDB check catalog rows are correlated by
 table as well as constraint name. MySQL invisible and MariaDB ignored indexes
@@ -418,13 +431,21 @@ timestamp as a new data proof. A later non-unique index can still project
 unsafe column addition, or nullability-tightening repair remains blocked until
 its post-DML data state is independently provable.
 
-Each chunk contains at most 512 MySQL/MariaDB operations or 128 PostgreSQL
-operations, 16,000 bound parameters, and 4 MiB of UTF-8 SQL plus parameter
-payload. The lower PostgreSQL cap prevents planner-memory exhaustion on the
-supported PostgreSQL 14 baseline. MySQL/MariaDB additionally uses half the live
-`max_allowed_packet` as an upper bound. Repeated typed values are interned
-within a chunk, global ordinals span chunks, and results are published only
-after every chunk succeeds. PostgreSQL holds one read-only `RepeatableRead`
+Each optimizer-visible statement contains at most 32 operations. At most eight
+statements travel in one ADO.NET batch, bounded by 16,000 parameters and 4 MiB
+of UTF-8 SQL plus parameter payload across the batch. MySQL/MariaDB also use
+half the live `max_allowed_packet` as an upper bound and capture Doka runtime
+plans in 512-operation windows. The complete migration-level unique-index
+catalog is retained across those windows. Repeated typed values are interned
+within a statement, global ordinals span every statement, batch, and capture
+window, and results are published only after all work succeeds. Every raw
+catalog command and batch receives the configured EF command timeout.
+Connections use native `DbBatch` only when `CanCreateBatch` is true. A
+compatible wrapper that does not forward provider batching executes the same
+bounded statements through sequential `DbCommand` instances. The fallback
+does not concatenate provider SQL and preserves statement order, parameters,
+timeouts, cancellation, and all-or-nothing report publication.
+PostgreSQL holds one read-only `RepeatableRead`
 snapshot and transaction-scoped analysis advisory lock across analysis. This
 analysis lock is not an application write fence. A caller-owned
 transaction is accepted only when it is read-only and uses `RepeatableRead` or

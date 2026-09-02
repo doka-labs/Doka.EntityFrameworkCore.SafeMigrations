@@ -347,11 +347,13 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             typeof(int),
             isNullable: true,
             storeType: "int");
+
         var requiredColumn = new ExpectedColumnDefinition(
             "customer_id",
             typeof(int),
             isNullable: false,
             storeType: "int");
+
         var operation = new SafeMigrationOperation(
             new AlterColumnIntent("shipments", requiredColumn, oldColumn),
             SafeMigrationPolicy.RepairIfSafe);
@@ -671,7 +673,25 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     }
 
     [Fact]
-    public void ProviderDropIndexDoesNotEraseADifferentlyNamedSemanticConflict()
+    public void ProviderDropIndexProjectsAnExactNameReplacementAfterSemanticAliasAnalysis()
+    {
+        var projection = new SafeMigrationPreflightProjection();
+        projection.ObserveProviderPostcondition(
+            new DropIndexOperation
+            {
+                Name = "ix_shipments_customer_id",
+                Table = "shipments",
+            });
+        var live = Live(SafeMigrationObservedState.Different);
+
+        var analysis = ProjectIndex(projection, "shipments", "customer_id", unique: false, live);
+
+        Assert.Equal(SafeMigrationObservedState.Missing, analysis.ObservedState);
+        Assert.Equal("projected_missing", analysis.Code);
+    }
+
+    [Fact]
+    public void ProviderDropIndexPreservesDuplicateRowEvidenceForUniqueReplacement()
     {
         var projection = new SafeMigrationPreflightProjection();
         projection.ObserveProviderPostcondition(
@@ -684,11 +704,12 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             SafeMigrationObservedState.Different,
             SafeMigrationRepairCapability.None,
             postconditionSatisfied: false,
-            "index_semantic_identity_conflict");
+            "index_replacement_data_blocked");
 
-        var analysis = ProjectIndex(projection, "shipments", "customer_id", unique: false, live);
+        var analysis = ProjectIndex(projection, "shipments", "customer_id", unique: true, live);
 
-        Assert.Same(live, analysis);
+        Assert.Equal(SafeMigrationObservedState.DataBlocked, analysis.ObservedState);
+        Assert.Equal("index_replacement_data_blocked", analysis.Code);
     }
 
     [Fact]

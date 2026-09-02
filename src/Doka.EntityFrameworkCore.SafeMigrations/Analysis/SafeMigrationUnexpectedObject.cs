@@ -27,8 +27,8 @@ public enum SafeMigrationDatabaseObjectKind
 
 /// <summary>
 /// Describes an additive live object outside the supplied canonical table
-/// definitions. Unexpected objects are reported but are never deleted or
-/// treated as semantically equivalent automatically.
+/// definitions after provider-verified semantic aliases have been reconciled.
+/// Unexpected objects are reported but are never deleted automatically.
 /// </summary>
 public sealed class SafeMigrationUnexpectedObject
 {

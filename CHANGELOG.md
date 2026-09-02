@@ -6,6 +6,51 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Treat a differently named primary key, unique constraint, check constraint,
+  foreign key, or index as an idempotent semantic match when every modeled
+  facet is equivalent. Exact-name drift remains authoritative and rejects even
+  when another alias matches; different-name/different-shape objects remain
+  independent and can be added when their normal safety checks pass. Multiple
+  equivalent aliases are deterministic no-ops, unexpected-object inventory
+  reconciles them through the same provider comparator, and destructive drop
+  or rename operations remain strictly name-bound.
+- Replace operation-count-sized catalog statements with bounded ADO.NET
+  batches. Each optimizer-visible statement contains at most 32 operations,
+  each transport batch contains at most eight statements, and MySQL/MariaDB
+  provider-plan capture uses 512-operation windows while retaining the complete
+  expected unique-index catalog. Parameter, UTF-8 payload, and live MySQL packet
+  bounds remain enforced; configured EF command timeouts now apply to every raw
+  catalog command and batch. Live provider tests qualify 100,000 ordered mixed
+  operations across every observed state and planned action without publishing
+  partial results.
+- Use native `DbBatch` transport only when the supplied ADO.NET connection
+  advertises `CanCreateBatch`. Compatible tracing, proxy, and delegated
+  connections that retain the base `false` capability execute the same bounded
+  statements sequentially with identical timeout, cancellation, ordering, and
+  all-or-nothing report semantics.
+
+### Fixed
+
+- Prevent differently named equivalent objects from being reported as
+  conflicts that invite destructive manual cleanup. This closes the legacy
+  foreign-key-name case without dropping, renaming, or duplicating the live
+  constraint or its supporting index.
+- Prevent large migrations from producing one correspondingly large catalog
+  `UNION ALL` plan that can exhaust optimizer resources or hit the command
+  timeout before classification completes.
+- Preserve duplicate-row evidence across an accepted exact-name
+  `DropIndex -> EnsureIndex` replacement on both providers, so preflight blocks
+  before the existing index is removed.
+- Reject physical object-name collisions before provider DDL. PostgreSQL
+  now rejects a differently shaped existing primary key and schema-relation
+  collisions for ordinary indexes, index rename targets, and primary-key or
+  unique backing indexes. MySQL rejects
+  schema-wide CHECK and foreign-key symbol collisions. MariaDB rejects
+  database-wide foreign-key symbol collisions before 12.1 while preserving the
+  table-scoped names supported by 12.1 and later.
+
 ## [10.1.1] - 2026-09-01
 
 Prepared a stable patch release for provider-safe missing-table convergence

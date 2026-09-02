@@ -23,6 +23,9 @@ internal sealed record PostgreSqlSafeMigrationRuntimePlan(
     /// <summary>Gets the state expression used when the evaluation guard fails.</summary>
     public string? StateEvaluationGuardFailureExpression { get; init; }
 
+    /// <summary>Gets an optional stable classification-code expression.</summary>
+    public string? ClassificationCodeExpression { get; init; }
+
     /// <summary>
     /// Gets whether the complete operation is unsupported independently of
     /// catalog state and therefore has no executable baseline.

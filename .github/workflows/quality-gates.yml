@@ -201,12 +201,15 @@ jobs:
           --collect "Code Coverage;Format=cobertura"
           --results-directory artifacts/coverage/core -m:1 /nodeReuse:false
 
+      # Every live engine matrix cell below runs LargeScale. Coverage excludes
+      # the same test to avoid duplicating eleven expensive live executions.
       - name: Collect MySQL and MariaDB adapter coverage
         run: >-
           dotnet test
           tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests.csproj
           --configuration Release --no-build --no-restore --disable-build-servers
           --collect "Code Coverage;Format=cobertura"
+          --filter "Category!=LargeScale"
           --results-directory artifacts/coverage/mysql -m:1 /nodeReuse:false
 
       - name: Collect PostgreSQL adapter coverage
@@ -215,6 +218,7 @@ jobs:
           tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.csproj
           --configuration Release --no-build --no-restore --disable-build-servers
           --collect "Code Coverage;Format=cobertura"
+          --filter "Category!=LargeScale"
           --results-directory artifacts/coverage/postgresql -m:1 /nodeReuse:false
 
       - name: Enforce merged product coverage

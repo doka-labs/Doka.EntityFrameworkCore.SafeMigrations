@@ -16,10 +16,17 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         var table = TableExists(definition.Table, definition.Schema);
         var exists = IndexExists(definition.Name, definition.Schema);
         var matching = IndexMatches(definition, requireExpectedName: true);
-        var identityConflict = IndexMatches(
+        var semanticAlias = IndexMatches(definition, requireExpectedName: false);
+        var nonCanonicalAlias = IndexMatches(
             definition,
             requireExpectedName: false,
             requireIndependentIdentity: false);
+
+        // PostgreSQL indexes share the schema relation namespace with tables,
+        // views, sequences, and materialized views. Catalog classification must
+        // reject any occupied name before CREATE INDEX can raise raw 42P07.
+        var namespaceCollision = RelationNameExists(definition.Name, definition.Schema);
+
         var dataBlocked = definition.Unique ? UniqueIndexDataBlocked(definition) : "FALSE";
         var unsupportedConditions = new List<string>();
         if (definition.NullsDistinct == false)
@@ -40,14 +47,27 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             ? "FALSE"
             : $"({string.Join(" OR ", unsupportedConditions)})";
 
+        var satisfied = $"({matching}) OR (NOT ({exists}) AND ({semanticAlias}))";
+
         return Plan(
             $"CASE WHEN {unsupported} THEN 'unsupported' "
             + $"WHEN NOT {table} THEN 'prerequisite_missing' "
-            + $"WHEN NOT {exists} AND {identityConflict} THEN 'different' "
-            + $"WHEN NOT {exists} AND {dataBlocked} THEN 'data_blocked' "
-            + $"WHEN NOT {exists} THEN 'missing' "
-            + $"WHEN {matching} THEN 'matching' ELSE 'different' END",
-            matching);
+            + $"WHEN {exists} AND {matching} THEN 'matching' "
+            + $"WHEN {exists} THEN 'different' "
+            + $"WHEN {semanticAlias} THEN 'matching' "
+            + $"WHEN {nonCanonicalAlias} THEN 'different' "
+            + $"WHEN {namespaceCollision} THEN 'different' "
+            + $"WHEN {dataBlocked} THEN 'data_blocked' ELSE 'missing' END",
+            satisfied) with
+        {
+            // Ordered DropIndex -> EnsureIndex projection still needs the
+            // duplicate-row proof hidden by an exact-name shape clash. The
+            // code carries evidence into Core and never authorizes mutation.
+            ClassificationCodeExpression = definition.Unique
+                ? $"CASE WHEN {exists} AND NOT ({matching}) AND {dataBlocked} "
+                    + "THEN 'index_replacement_data_blocked' ELSE NULL END"
+                : null,
+        };
     }
 
     private PostgreSqlSafeMigrationRuntimePlan BuildDropIndex(
@@ -71,7 +91,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         var source = IndexExists(intent.Name, intent.Schema);
         var sourceOnTable = IndexExists(intent.Name, intent.Schema, intent.Table);
         var independentlyOwned = IndependentIndexExists(intent.Name, intent.Schema, intent.Table);
-        var target = IndexExists(intent.NewName, intent.Schema);
+        var target = RelationNameExists(intent.NewName, intent.Schema);
 
         return Plan(
             $"CASE WHEN NOT {source} THEN 'missing' WHEN NOT {sourceOnTable} THEN 'different' "
@@ -283,6 +303,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             (expression, false),
             ($"({expression})", false),
         };
+
         if (key.StructuredExpression is not null)
         {
             var catalogCandidate = _expressionRenderer.RenderCatalogCandidateSql(key.StructuredExpression, Literal);

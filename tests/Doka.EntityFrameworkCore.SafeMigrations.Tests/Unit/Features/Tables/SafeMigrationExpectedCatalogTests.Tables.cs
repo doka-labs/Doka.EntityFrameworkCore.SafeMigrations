@@ -49,10 +49,52 @@ public sealed partial class SafeMigrationExpectedCatalogTests
         Assert.Null(inventory.ColumnStoreTypes["name"]);
         Assert.Equal(["ix_name", "ix_non_unique"], inventory.Indexes.Order());
         Assert.Equal(["ix_name"], inventory.UniqueIndexes);
+        Assert.Equal(["ix_name", "ix_non_unique"], inventory.IndexDefinitions.Keys.Order());
+        Assert.Equal(
+            "name",
+            inventory.IndexDefinitions["ix_name"].Keys[0].Column);
         Assert.Equal(
             SafeMigrationDatabaseObjectKind.PrimaryKey,
             Assert.Single(inventory.Constraints)
                 .Value);
+    }
+
+    [Fact]
+    public void Catalog_ProjectsIndexDefinitionsAcrossColumnAndTableRenames()
+    {
+        IReadOnlyList<MigrationOperation> operations =
+        [
+            Envelope(
+                new EnsureTableIntent(
+                    new ExpectedTableDefinition(
+                        "legacy_items",
+                        [new ExpectedColumnDefinition("legacy_code", typeof(string), true)],
+                        schema: "legacy"),
+                    SafeMigrationTableMode.StrictDefinition)),
+            Envelope(
+                new EnsureIndexIntent(
+                    new ExpectedIndexDefinition(
+                        "ux_items_code",
+                        "legacy_items",
+                        [new ExpectedIndexKeyDefinition(column: "legacy_code", prefixLength: 32)],
+                        schema: "legacy",
+                        unique: true))),
+            Envelope(new RenameColumnIntent("legacy_code", "legacy_items", "code", "legacy")),
+            Envelope(
+                new RenameTableIntent(
+                    "legacy_items",
+                    newName: "items",
+                    schema: "legacy",
+                    newSchema: "app")),
+        ];
+
+        var inventory = Assert.Single(SafeMigrationExpectedCatalog.Create(operations));
+        var index = Assert.Single(inventory.IndexDefinitions.Values);
+
+        Assert.Equal("items", index.Table);
+        Assert.Equal("app", index.Schema);
+        Assert.Equal("code", Assert.Single(index.Keys).Column);
+        Assert.Equal(32, index.Keys[0].PrefixLength);
     }
 
     [Fact]

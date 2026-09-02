@@ -110,8 +110,8 @@ uses the live analyzer result.
 An accepted exact-name index drop can project a following ordinary column
 BTREE ensure to `projected_missing`. It cannot override
 `projected_data_state_unknown`, a physical-key unsupported result,
-`data_blocked`, `prerequisite_missing`, or a differently named semantic index
-conflict. If replacement preflight blocks, do not execute the preceding
+`data_blocked`, `prerequisite_missing`, or unrelated exact-name index drift.
+If replacement preflight blocks, do not execute the preceding
 ordinary drop independently; correct the target definition or live data first.
 
 ## Accepting planner decision codes
@@ -146,10 +146,7 @@ code, not a claim that the feature is absent from every version of that engine.
 | `index_prefix_length` | Both | Prefix-length keys are not supported by the selected provider/capability. |
 | `index_prefix_required_for_key_limit` | MySQL/MariaDB | A missing ordinary BTREE index exceeds the live InnoDB key limit, or a declared prefix is invalid for the key column. SafeMigrations does not invent a semantics-changing prefix. |
 | `index_key_length_unverifiable` | MySQL/MariaDB | A missing expression, non-BTREE, text/blob, unknown-type, or otherwise unbounded index shape has no provable physical key width. |
-| `foreign_key_semantic_identity_conflict` | Both | The expected foreign-key name is absent, but one or more differently named constraints already have the same ordered columns, principal identity, and referential actions. |
-| `unique_constraint_semantic_identity_conflict` | Both | The expected unique-constraint name is absent, but a differently named active constraint already enforces the same ordered columns and null semantics. |
-| `check_constraint_semantic_identity_conflict` | Both | The expected check-constraint name is absent, but a differently named active constraint already enforces the same expression. |
-| `primary_key_identity_conflict` | PostgreSQL | The expected primary-key name is absent while the table already owns a differently named primary key. A second primary key cannot be added. |
+| `index_replacement_data_blocked` | Both | An accepted exact-name index drop is followed by a unique replacement whose live key values contain duplicates. Preflight preserves this evidence and blocks before executing the drop. |
 | `schema_operations` | MySQL/MariaDB | PostgreSQL-style schema ensure/drop is not a supported namespace operation. |
 | `schema_qualified_object` | MySQL/MariaDB | An object expectation supplies a PostgreSQL-style schema namespace. |
 | `schema_qualified_collation` | MySQL/MariaDB | A column collation supplies a schema-qualified identity. |
@@ -179,13 +176,21 @@ For an unknown reason, stop automated rollout, record the actual package/engine
 versions, and investigate a documentation gap, version mismatch, or defect.
 Do not assume that an undocumented string alone proves a new runtime contract.
 
-## Diagnose index and constraint identity conflicts
+## Diagnose index and constraint definition drift
 
 The assessment code remains low-cardinality and therefore never embeds live
 object names, widths, or SQL fragments. The protected assessment still carries
 the expected table/index/constraint identity. Retrieve live candidates only in
 the controlled deployment session and retain the result with the deployment
-record; do not copy it into metric labels.
+record; do not copy it into metric labels. A differently named object with the
+same complete semantic definition is `Matching`; never drop or rename it merely
+to align naming. An object with the expected name and a different definition is
+authoritative drift and cannot be hidden by a second matching alias. A
+`Different` result can also mean that a provider-required physical namespace is
+occupied: PostgreSQL index, index-rename target, or primary/unique backing-index
+relation names; MySQL CHECK or foreign-key symbols; or MariaDB foreign-key
+symbols before 12.1. Inspect the owning object; do not drop it automatically
+merely to free the name.
 
 For `index_prefix_required_for_key_limit` or
 `index_key_length_unverifiable`, inspect the live MySQL/MariaDB table and key
@@ -220,14 +225,13 @@ from another installation: character set, row format, page size, and intended
 uniqueness semantics are part of the decision.
 
 If an expected index is reported `Different` while an equivalent differently
-named index exists, inspect whether the candidate is an independent index or
-the engine-created support for a local foreign key. SafeMigrations correlates
-foreign-key columns through `KEY_COLUMN_USAGE`; only that bounded support role
-is exempt from semantic-identity rejection. Never rename or drop a candidate
-solely because it has the same columns.
+named index exists, inspect the object with the exact expected name first. Its
+definition takes precedence. An equivalent alias, including an InnoDB foreign-
+key support index, satisfies the ensure only when the expected name itself is
+absent. Never rename or drop a candidate solely because it has the same keys.
 
-For `foreign_key_semantic_identity_conflict` on MySQL/MariaDB, list each
-physical candidate independently:
+To diagnose MySQL/MariaDB foreign-key definition drift, list each physical
+candidate independently:
 
 ```sql
 SELECT
@@ -333,11 +337,11 @@ WHERE n.nspname = '<expected_schema>'
 ORDER BY idx.relname;
 ```
 
-Resolve ownership explicitly. If the legacy identity is canonical, rename it
-in a reviewed migration and rerun preflight. If the expected name is canonical,
-remove or replace the legacy constraint only after its dependencies and data
-integrity have been independently verified. Never bypass the conflict by
-allowing the provider to create a second semantic copy.
+Resolve definition drift explicitly. If the exact expected name is wrong,
+repair or replace that object only after its dependencies and data integrity
+have been independently verified. If only the physical name differs and every
+modeled facet matches, retain the object: the ensure is already satisfied and
+must remain a non-destructive no-op.
 
 ## Unexpected-object inventory codes
 

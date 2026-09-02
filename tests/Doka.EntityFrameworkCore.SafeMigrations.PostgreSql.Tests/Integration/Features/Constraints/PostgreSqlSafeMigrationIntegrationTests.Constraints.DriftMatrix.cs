@@ -3,22 +3,30 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 public sealed partial class PostgreSqlSafeMigrationIntegrationTests
 {
     [Fact]
-    public async Task EquivalentUniqueAndCheckConstraintsWithDifferentNames_AreRejectedBeforeDdl()
+    public async Task EquivalentUniqueAndCheckConstraintsWithDifferentNames_AreIdempotentNoOps()
     {
         var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE constraint_identity ("
-            + "code integer NULL, quantity integer NOT NULL, "
-            + "CONSTRAINT uq_constraint_identity_legacy UNIQUE (code), "
-            + "CONSTRAINT ck_constraint_identity_legacy CHECK (quantity >= 0));");
+            + "code integer NULL, tenant_id integer NULL, quantity integer NOT NULL, "
+            + "CONSTRAINT uq_constraint_identity_legacy_a UNIQUE (code, tenant_id), "
+            + "CONSTRAINT uq_constraint_identity_legacy_b UNIQUE (code, tenant_id), "
+            + "CONSTRAINT ck_constraint_identity_legacy_a CHECK (quantity >= 0), "
+            + "CONSTRAINT ck_constraint_identity_legacy_b CHECK (quantity >= 0));");
+
+        var legacyConstraintCount = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM pg_catalog.pg_constraint co "
+            + "JOIN pg_catalog.pg_class c ON c.oid = co.conrelid "
+            + "WHERE c.relname = 'constraint_identity' AND co.contype IN ('u', 'c');");
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddUniqueConstraintIfNotExists(
             "uq_constraint_identity_expected",
             "constraint_identity",
-            ["code"]);
+            ["code", "tenant_id"]);
         builder.EnsureCheckConstraint(
             ExpectedCheckConstraintDefinition.FromExpression(
                 "ck_constraint_identity_expected",
@@ -30,31 +38,21 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("constraint-identity"));
 
-        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Collection(
+        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations);
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
+        Assert.All(
             report.Assessments,
             assessment =>
             {
-                Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
-                Assert.Equal(SafeMigrationAction.RejectUnsupported, assessment.Action);
-                Assert.Equal("unique_constraint_semantic_identity_conflict", assessment.Code);
-            },
-            assessment =>
-            {
-                Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
-                Assert.Equal(SafeMigrationAction.RejectUnsupported, assessment.Action);
-                Assert.Equal("check_constraint_semantic_identity_conflict", assessment.Code);
+                Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState);
+                Assert.Equal(SafeMigrationAction.NoOp, assessment.Action);
             });
-
-        foreach (var operation in builder.Operations)
-        {
-            var exception = await Assert.ThrowsAsync<PostgresException>(() =>
-                ExecuteOperationsAsync(context, [operation]));
-
-            Assert.Equal("P1002", exception.SqlState);
-            Assert.Equal("doka_sm_unsupported", exception.MessageText);
-        }
-
+        Assert.DoesNotContain(
+            report.UnexpectedObjects,
+            static unexpected => unexpected.ObjectKind is SafeMigrationDatabaseObjectKind.UniqueConstraint
+                or SafeMigrationDatabaseObjectKind.CheckConstraint);
         Assert.Equal(
             0,
             await ScalarIntAsync(
@@ -64,6 +62,14 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 + "WHERE c.relname = 'constraint_identity' "
                 + "AND co.conname IN ('uq_constraint_identity_expected', "
                 + "'ck_constraint_identity_expected');"));
+        Assert.Equal(
+            legacyConstraintCount,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM pg_catalog.pg_constraint co "
+                + "JOIN pg_catalog.pg_class c ON c.oid = co.conrelid "
+                + "WHERE c.relname = 'constraint_identity' AND co.contype IN ('u', 'c');"));
+        Assert.True(legacyConstraintCount >= 3);
     }
 
     [Fact]
@@ -114,34 +120,37 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     }
 
     [Fact]
-    public async Task ExistingPrimaryKeyWithDifferentName_IsRejectedBeforeDdl()
+    public async Task ExistingPrimaryKeyWithDifferentName_IsAnIdempotentNoOp()
     {
         var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE primary_key_identity ("
-            + "id integer NOT NULL, CONSTRAINT pk_primary_key_legacy PRIMARY KEY (id));");
+            + "id integer NOT NULL, tenant_id integer NOT NULL, "
+            + "CONSTRAINT pk_primary_key_legacy PRIMARY KEY (id, tenant_id));");
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddPrimaryKeyIfNotExists(
             "pk_primary_key_expected",
             "primary_key_identity",
-            ["id"]);
+            ["id", "tenant_id"]);
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("primary-key-identity"));
 
-        var exception = await Assert.ThrowsAsync<PostgresException>(() =>
-            ExecuteOperationsAsync(context, builder.Operations));
+        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations);
+
         var assessment = Assert.Single(report.Assessments);
 
-        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
-        Assert.Equal(SafeMigrationAction.RejectUnsupported, assessment.Action);
-        Assert.Equal("primary_key_identity_conflict", assessment.Code);
-        Assert.Equal("P1002", exception.SqlState);
+        Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
+        Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.NoOp, assessment.Action);
+        Assert.DoesNotContain(
+            report.UnexpectedObjects,
+            static unexpected => unexpected.ObjectKind == SafeMigrationDatabaseObjectKind.PrimaryKey);
         Assert.Equal(
             1,
             await ScalarIntAsync(
@@ -151,10 +160,109 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 + "WHERE c.relname = 'primary_key_identity' AND co.contype = 'p';"));
     }
 
+    [Fact]
+    public async Task DifferentlyNamedPrimaryKeyWithDifferentShape_IsRejectedBeforeDdl()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE primary_key_singleton ("
+            + "id integer NOT NULL, alternate_id integer NOT NULL, "
+            + "CONSTRAINT pk_primary_key_singleton_legacy PRIMARY KEY (id));");
+
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.AddPrimaryKeyIfNotExists(
+            "pk_primary_key_singleton_expected",
+            "primary_key_singleton",
+            ["alternate_id"]);
+
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("primary-key-singleton"));
+
+        var exception = await Assert.ThrowsAsync<PostgresException>(() =>
+            ExecuteOperationsAsync(context, builder.Operations));
+        var assessment = Assert.Single(report.Assessments);
+
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
+        Assert.Equal("P1001", exception.SqlState);
+        Assert.Equal("doka_sm_different", exception.MessageText);
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM pg_catalog.pg_constraint co "
+                + "JOIN pg_catalog.pg_class c ON c.oid = co.conrelid "
+                + "WHERE c.relname = 'primary_key_singleton' AND co.contype = 'p';"));
+    }
+
+    [Fact]
+    public async Task BackingIndexNamespaceCollisions_AreRejectedBeforeDdl()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE constraint_namespace_owner (id integer NOT NULL, code integer NULL);"
+            + "CREATE INDEX pk_constraint_namespace_target ON constraint_namespace_owner (id);"
+            + "CREATE INDEX uq_constraint_namespace_target ON constraint_namespace_owner (code);"
+            + "CREATE TABLE constraint_namespace_target (id integer NOT NULL, code integer NULL);");
+
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.AddPrimaryKeyIfNotExists(
+            "pk_constraint_namespace_target",
+            "constraint_namespace_target",
+            ["id"]);
+        builder.AddUniqueConstraintIfNotExists(
+            "uq_constraint_namespace_target",
+            "constraint_namespace_target",
+            ["code"]);
+
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("constraint-namespace"));
+
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.All(
+            report.Assessments,
+            assessment =>
+            {
+                Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
+                Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
+            });
+
+        foreach (var operation in builder.Operations)
+        {
+            var exception = await Assert.ThrowsAsync<PostgresException>(() =>
+                ExecuteOperationsAsync(context, [operation]));
+
+            Assert.Equal("P1001", exception.SqlState);
+            Assert.Equal("doka_sm_different", exception.MessageText);
+        }
+
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM pg_catalog.pg_constraint co "
+                + "JOIN pg_catalog.pg_class c ON c.oid = co.conrelid "
+                + "WHERE c.relname = 'constraint_namespace_target' AND co.contype IN ('p', 'u');"));
+        Assert.Equal(
+            2,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM pg_catalog.pg_class c "
+                + "WHERE c.relname IN ('pk_constraint_namespace_target', "
+                + "'uq_constraint_namespace_target');"));
+    }
+
     [Theory]
     [InlineData(1)]
     [InlineData(2)]
-    public async Task EquivalentForeignKeyWithDifferentName_IsRejectedBeforeDdl(
+    public async Task EquivalentForeignKeyWithDifferentName_IsAnIdempotentNoOp(
         int legacyConstraintCount
     )
     {
@@ -163,42 +271,42 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         var secondLegacyName = new string('s', 63);
         var expectedName = new string('e', 63);
         var secondConstraint = legacyConstraintCount == 2
-            ? $", CONSTRAINT \"{secondLegacyName}\" FOREIGN KEY (parent_id) "
-                + "REFERENCES identity_parents (id) ON DELETE CASCADE"
+            ? $", CONSTRAINT \"{secondLegacyName}\" FOREIGN KEY (parent_id, tenant_id) "
+                + "REFERENCES identity_parents (id, tenant_id) ON DELETE CASCADE"
             : string.Empty;
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE identity_parents (id integer NOT NULL PRIMARY KEY);"
+            "CREATE TABLE identity_parents (id integer NOT NULL, tenant_id integer NOT NULL, "
+            + "PRIMARY KEY (id, tenant_id));"
             + "CREATE TABLE identity_children ("
-            + "id integer NOT NULL PRIMARY KEY, parent_id integer NOT NULL, "
-            + $"CONSTRAINT \"{legacyName}\" FOREIGN KEY (parent_id) "
-            + $"REFERENCES identity_parents (id) ON DELETE CASCADE{secondConstraint});");
+            + "id integer NOT NULL PRIMARY KEY, parent_id integer NOT NULL, tenant_id integer NOT NULL, "
+            + $"CONSTRAINT \"{legacyName}\" FOREIGN KEY (parent_id, tenant_id) "
+            + $"REFERENCES identity_parents (id, tenant_id) ON DELETE CASCADE{secondConstraint});");
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddForeignKeyIfNotExists(
             expectedName,
             "identity_children",
-            ["parent_id"],
+            ["parent_id", "tenant_id"],
             "identity_parents",
-            ["id"],
+            ["id", "tenant_id"],
             onDelete: ReferentialAction.Cascade);
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("foreign-key-identity"));
 
-        var exception = await Assert.ThrowsAsync<PostgresException>(() =>
-            ExecuteOperationsAsync(context, builder.Operations));
+        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations);
+
         var assessment = Assert.Single(report.Assessments);
 
-        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
-        Assert.Equal(SafeMigrationAction.RejectUnsupported, assessment.Action);
-        Assert.Equal("foreign_key_semantic_identity_conflict", assessment.Code);
-        Assert.Equal("P1002", exception.SqlState);
-        Assert.Equal("doka_sm_unsupported", exception.MessageText);
+        Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
+        Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.NoOp, assessment.Action);
+        Assert.Empty(report.UnexpectedObjects);
         Assert.Equal(
             legacyConstraintCount,
             await ScalarIntAsync(
@@ -206,6 +314,83 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 "SELECT COUNT(*) FROM pg_catalog.pg_constraint co "
                 + "JOIN pg_catalog.pg_class c ON c.oid = co.conrelid "
                 + "WHERE c.relname = 'identity_children' AND co.contype = 'f';"));
+    }
+
+    [Fact]
+    public async Task ExactNameDrift_IsNeverHiddenByEquivalentAliases()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE identity_precedence_parents (id integer NOT NULL PRIMARY KEY);"
+            + "CREATE TABLE identity_precedence_children ("
+            + "id integer NOT NULL PRIMARY KEY, code integer NULL, alternate_code integer NULL, "
+            + "quantity integer NOT NULL, parent_id integer NULL, "
+            + "CONSTRAINT uq_identity_precedence_expected UNIQUE (alternate_code), "
+            + "CONSTRAINT uq_identity_precedence_legacy UNIQUE (code), "
+            + "CONSTRAINT ck_identity_precedence_expected CHECK (quantity <= 100), "
+            + "CONSTRAINT ck_identity_precedence_legacy CHECK (quantity >= 0), "
+            + "CONSTRAINT fk_identity_precedence_expected FOREIGN KEY (parent_id) "
+            + "REFERENCES identity_precedence_parents (id) ON DELETE RESTRICT, "
+            + "CONSTRAINT fk_identity_precedence_legacy FOREIGN KEY (parent_id) "
+            + "REFERENCES identity_precedence_parents (id) ON DELETE CASCADE);"
+            + "CREATE INDEX ix_identity_precedence_expected "
+            + "ON identity_precedence_children (alternate_code);"
+            + "CREATE INDEX ix_identity_precedence_legacy ON identity_precedence_children (code);");
+
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.AddUniqueConstraintIfNotExists(
+            "uq_identity_precedence_expected",
+            "identity_precedence_children",
+            ["code"]);
+        builder.EnsureCheckConstraint(
+            ExpectedCheckConstraintDefinition.FromExpression(
+                "ck_identity_precedence_expected",
+                "identity_precedence_children",
+                SqlColumnAndInt("quantity", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0)),
+            SafeMigrationPolicy.ThrowIfDifferent);
+        builder.AddForeignKeyIfNotExists(
+            "fk_identity_precedence_expected",
+            "identity_precedence_children",
+            ["parent_id"],
+            "identity_precedence_parents",
+            ["id"],
+            onDelete: ReferentialAction.Cascade);
+        builder.CreateIndexIfNotExists(
+            "ix_identity_precedence_expected",
+            "identity_precedence_children",
+            ["code"]);
+
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("identity-precedence"));
+
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.All(
+            report.Assessments,
+            assessment =>
+            {
+                Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
+                Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
+            });
+
+        foreach (var operation in builder.Operations)
+        {
+            var exception = await Assert.ThrowsAsync<PostgresException>(() =>
+                ExecuteOperationsAsync(context, [operation]));
+
+            Assert.Equal("P1001", exception.SqlState);
+            Assert.Equal("doka_sm_different", exception.MessageText);
+        }
+
+        Assert.Equal(
+            2,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM pg_catalog.pg_constraint co "
+                + "JOIN pg_catalog.pg_class c ON c.oid = co.conrelid "
+                + "WHERE c.relname = 'identity_precedence_children' AND co.contype = 'f';"));
     }
 
     [Theory]
@@ -372,25 +557,8 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("partition-constraint-identity"));
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Collection(
+        Assert.All(
             report.Assessments,
-            assessment =>
-            {
-                Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
-                Assert.Equal(SafeMigrationAction.RejectUnsupported, assessment.Action);
-                Assert.Equal("primary_key_identity_conflict", assessment.Code);
-            },
-            assessment =>
-            {
-                Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
-                Assert.Equal(SafeMigrationAction.RejectUnsupported, assessment.Action);
-                Assert.Equal("unique_constraint_semantic_identity_conflict", assessment.Code);
-            },
-            assessment =>
-            {
-                Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
-                Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
-            },
             assessment =>
             {
                 Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
@@ -402,8 +570,8 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             var exception = await Assert.ThrowsAsync<PostgresException>(() =>
                 ExecuteOperationsAsync(context, [builder.Operations[index]]));
 
-            Assert.Equal(index < 2 ? "P1002" : "P1001", exception.SqlState);
-            Assert.Equal(index < 2 ? "doka_sm_unsupported" : "doka_sm_different", exception.MessageText);
+            Assert.Equal("P1001", exception.SqlState);
+            Assert.Equal("doka_sm_different", exception.MessageText);
         }
     }
 
@@ -479,6 +647,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
 
         var exception = await Assert.ThrowsAsync<PostgresException>(() =>
             ExecuteOperationsAsync(context, builder.Operations));
+
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -521,6 +690,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
 
         var exception = await Assert.ThrowsAsync<PostgresException>(() =>
             ExecuteOperationsAsync(context, builder.Operations));
+
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -638,6 +808,16 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             canonicalReport.Assessments,
             assessment => Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState));
 
+        await ExecuteSqlAsync(
+            connectionString,
+            "ALTER TABLE constraint_matrix_children "
+            + "ADD CONSTRAINT uq_constraint_matrix_duplicate UNIQUE (code, alternate_code), "
+            + "ADD CONSTRAINT ck_constraint_matrix_duplicate CHECK (quantity >= 0), "
+            + "ADD CONSTRAINT fk_constraint_matrix_duplicate "
+            + "FOREIGN KEY (parent_id, alternate_parent_id) "
+            + "REFERENCES constraint_matrix_parents (id, alternate_id) "
+            + "ON UPDATE CASCADE ON DELETE SET NULL;");
+
         var strictDefinition = CreateStrictConstraintMatrixTable(ReferentialAction.SetNull);
         var strict = new MigrationBuilder(context.Database.ProviderName!);
         strict.EnsureTable(
@@ -654,6 +834,31 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             SafeMigrationObservedState.Matching,
             Assert.Single(strictReport.Assessments)
                 .ObservedState);
+
+        var strictAliases = new MigrationBuilder(context.Database.ProviderName!);
+        strictAliases.EnsureTable(
+            CreateStrictConstraintMatrixTable(ReferentialAction.SetNull, useAliasNames: true),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var strictAliasReport = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                strictAliases.Operations,
+                new SafeMigrationRunOptions("constraint-matrix-strict-aliases"));
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, strictAliasReport.Status);
+        Assert.Equal(
+            SafeMigrationObservedState.Matching,
+            Assert.Single(strictAliasReport.Assessments)
+                .ObservedState);
+        Assert.DoesNotContain(
+            strictAliasReport.UnexpectedObjects,
+            static unexpected => StringComparer.Ordinal.Equals(unexpected.Table, "constraint_matrix_children")
+                && (unexpected.ObjectKind is SafeMigrationDatabaseObjectKind.UniqueConstraint
+                    or SafeMigrationDatabaseObjectKind.CheckConstraint
+                    or SafeMigrationDatabaseObjectKind.ForeignKey));
 
         var strictDrift = new MigrationBuilder(context.Database.ProviderName!);
         strictDrift.EnsureTable(
@@ -769,7 +974,8 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     }
 
     private static ExpectedTableDefinition CreateStrictConstraintMatrixTable(
-        ReferentialAction onDelete
+        ReferentialAction onDelete,
+        bool useAliasNames = false
     ) => new(
         "constraint_matrix_children",
         [
@@ -788,28 +994,28 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         ],
         primaryKey:
         new ExpectedPrimaryKeyDefinition(
-            "pk_constraint_matrix_children",
+            useAliasNames ? "pk_constraint_matrix_alias" : "pk_constraint_matrix_children",
             "constraint_matrix_children",
             ["id", "alternate_id"]),
         uniqueConstraints
         :
         [
             new ExpectedUniqueConstraintDefinition(
-                "uq_constraint_matrix_code",
+                useAliasNames ? "uq_constraint_matrix_alias" : "uq_constraint_matrix_code",
                 "constraint_matrix_children",
                 ["code", "alternate_code"]),
         ],
         checkConstraints:
         [
             ExpectedCheckConstraintDefinition.FromExpression(
-                "ck_constraint_matrix_quantity",
+                useAliasNames ? "ck_constraint_matrix_alias" : "ck_constraint_matrix_quantity",
                 "constraint_matrix_children",
                 SqlColumnAndInt("quantity", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0)),
         ],
         foreignKeys:
         [
             new ExpectedForeignKeyDefinition(
-                "fk_constraint_matrix_parent",
+                useAliasNames ? "fk_constraint_matrix_alias" : "fk_constraint_matrix_parent",
                 "constraint_matrix_children",
                 ["parent_id", "alternate_parent_id"],
                 "constraint_matrix_parents",
