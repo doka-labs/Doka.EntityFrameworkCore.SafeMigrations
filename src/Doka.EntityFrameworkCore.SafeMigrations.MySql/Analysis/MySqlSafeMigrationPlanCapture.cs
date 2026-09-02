@@ -9,10 +9,10 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 /// </remarks>
 internal sealed class MySqlSafeMigrationPlanCapture
 {
-    private static readonly IReadOnlySet<string> s_emptyUniqueIndexes = new HashSet<string>(StringComparer.Ordinal);
+    private static readonly IReadOnlyList<ExpectedIndexDefinition> s_emptyUniqueIndexes = [];
 
     private SafeMigrationOperation[]? _expected;
-    private Dictionary<string, IReadOnlySet<string>>? _expectedUniqueIndexes;
+    private IReadOnlyDictionary<string, IReadOnlyList<ExpectedIndexDefinition>>? _expectedUniqueIndexes;
     private MySqlSafeMigrationRuntimePlan?[]? _plans;
     private bool _completed;
 
@@ -24,9 +24,19 @@ internal sealed class MySqlSafeMigrationPlanCapture
     /// <returns>A lease that owns capture completion and cleanup.</returns>
     public Lease Begin(
         IReadOnlyList<SafeMigrationOperation> operations
+    ) => Begin(operations, CreateExpectedUniqueIndexes(operations));
+
+    /// <summary>Begins one bounded capture against a complete expected-index catalog.</summary>
+    /// <param name="operations">The bounded operation window captured in order.</param>
+    /// <param name="expectedUniqueIndexes">The complete migration's expected unique-index catalog.</param>
+    /// <returns>A lease that owns capture completion and cleanup.</returns>
+    public Lease Begin(
+        IReadOnlyList<SafeMigrationOperation> operations,
+        IReadOnlyDictionary<string, IReadOnlyList<ExpectedIndexDefinition>> expectedUniqueIndexes
     )
     {
         ArgumentNullException.ThrowIfNull(operations);
+        ArgumentNullException.ThrowIfNull(expectedUniqueIndexes);
 
         if (_expected is not null)
         {
@@ -41,20 +51,40 @@ internal sealed class MySqlSafeMigrationPlanCapture
         }
 
         _plans = new MySqlSafeMigrationRuntimePlan?[_expected.Length];
-        _expectedUniqueIndexes = SafeMigrationExpectedCatalog
-            .Create(_expected)
-            .Where(static table => table.Schema is null && table.UniqueIndexes.Count > 0)
-            .ToDictionary(static table => table.Table, static table => table.UniqueIndexes, StringComparer.Ordinal);
+        _expectedUniqueIndexes = expectedUniqueIndexes;
 
         _completed = false;
 
         return new Lease(this);
     }
 
-    /// <summary>Gets expected unique-index names for a table in the active batch.</summary>
+    /// <summary>Builds the unique-index catalog shared by every bounded capture window.</summary>
+    /// <param name="operations">The complete ordered SafeMigrations operation set.</param>
+    /// <returns>The expected unique-index definitions keyed by unqualified table name.</returns>
+    public static IReadOnlyDictionary<string, IReadOnlyList<ExpectedIndexDefinition>> CreateExpectedUniqueIndexes(
+        IReadOnlyList<SafeMigrationOperation> operations
+    )
+    {
+        ArgumentNullException.ThrowIfNull(operations);
+
+        return SafeMigrationExpectedCatalog
+            .Create(operations)
+            .Where(static table => table.Schema is null && table.UniqueIndexes.Count > 0)
+            .ToDictionary(
+                static table => table.Table,
+                static table => (IReadOnlyList<ExpectedIndexDefinition>)table
+                    .IndexDefinitions
+                    .Values
+                    .Where(static index => index.Unique)
+                    .OrderBy(static index => index.Name, StringComparer.Ordinal)
+                    .ToArray(),
+                StringComparer.Ordinal);
+    }
+
+    /// <summary>Gets expected unique-index definitions for a table in the active batch.</summary>
     /// <param name="table">The unqualified MySQL or MariaDB table name.</param>
-    /// <returns>The expected unique-index names, or an empty set.</returns>
-    public IReadOnlySet<string> GetExpectedUniqueIndexes(
+    /// <returns>The expected unique-index definitions, or an empty list.</returns>
+    public IReadOnlyList<ExpectedIndexDefinition> GetExpectedUniqueIndexes(
         string table
     )
     {

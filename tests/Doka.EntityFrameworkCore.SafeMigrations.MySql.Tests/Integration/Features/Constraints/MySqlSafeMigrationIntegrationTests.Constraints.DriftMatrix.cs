@@ -3,22 +3,30 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 public sealed partial class MySqlSafeMigrationIntegrationTests
 {
     [Fact]
-    public async Task EquivalentUniqueAndCheckConstraintsWithDifferentNames_AreRejectedBeforeDdl()
+    public async Task EquivalentUniqueAndCheckConstraintsWithDifferentNames_AreIdempotentNoOps()
     {
         var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `constraint_identity` ("
-            + "`code` int NULL, `quantity` int NOT NULL, "
-            + "CONSTRAINT `uq_constraint_identity_legacy` UNIQUE (`code`), "
-            + "CONSTRAINT `ck_constraint_identity_legacy` CHECK (`quantity` >= 0));");
+            + "`code` int NULL, `tenant_id` int NULL, `quantity` int NOT NULL, "
+            + "CONSTRAINT `uq_constraint_identity_legacy_a` UNIQUE (`code`, `tenant_id`), "
+            + "CONSTRAINT `uq_constraint_identity_legacy_b` UNIQUE (`code`, `tenant_id`), "
+            + "CONSTRAINT `ck_constraint_identity_legacy_a` CHECK (`quantity` >= 0), "
+            + "CONSTRAINT `ck_constraint_identity_legacy_b` CHECK (`quantity` >= 0));");
+
+        var legacyConstraintCount = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS "
+            + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'constraint_identity' "
+            + "AND CONSTRAINT_TYPE IN ('UNIQUE', 'CHECK');");
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddUniqueConstraintIfNotExists(
             "uq_constraint_identity_expected",
             "constraint_identity",
-            ["code"]);
+            ["code", "tenant_id"]);
         builder.EnsureCheckConstraint(
             ExpectedCheckConstraintDefinition.FromExpression(
                 "ck_constraint_identity_expected",
@@ -30,30 +38,21 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("constraint-identity"));
 
-        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Collection(
+        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations);
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
+        Assert.All(
             report.Assessments,
             assessment =>
             {
-                Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
-                Assert.Equal(SafeMigrationAction.RejectUnsupported, assessment.Action);
-                Assert.Equal("unique_constraint_semantic_identity_conflict", assessment.Code);
-            },
-            assessment =>
-            {
-                Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
-                Assert.Equal(SafeMigrationAction.RejectUnsupported, assessment.Action);
-                Assert.Equal("check_constraint_semantic_identity_conflict", assessment.Code);
+                Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState);
+                Assert.Equal(SafeMigrationAction.NoOp, assessment.Action);
             });
-
-        foreach (var operation in builder.Operations)
-        {
-            var exception = await Assert.ThrowsAsync<MySqlException>(() =>
-                ExecuteOperationsAsync(context, [operation]));
-
-            Assert.Contains("doka_sm_unsupported", exception.Message, StringComparison.OrdinalIgnoreCase);
-        }
-
+        Assert.DoesNotContain(
+            report.UnexpectedObjects,
+            static unexpected => unexpected.ObjectKind is SafeMigrationDatabaseObjectKind.UniqueConstraint
+                or SafeMigrationDatabaseObjectKind.CheckConstraint);
         Assert.Equal(
             0,
             await ScalarIntAsync(
@@ -62,6 +61,14 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'constraint_identity' "
                 + "AND CONSTRAINT_NAME IN ('uq_constraint_identity_expected', "
                 + "'ck_constraint_identity_expected');"));
+        Assert.Equal(
+            legacyConstraintCount,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS "
+                + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'constraint_identity' "
+                + "AND CONSTRAINT_TYPE IN ('UNIQUE', 'CHECK');"));
+        Assert.True(legacyConstraintCount >= 3);
     }
 
     [Fact]
@@ -142,6 +149,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         var exception = await Assert.ThrowsAsync<MySqlException>(() =>
             ExecuteOperationsAsync(context, builder.Operations));
+
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -179,6 +187,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         var exception = await Assert.ThrowsAsync<MySqlException>(() =>
             ExecuteOperationsAsync(context, builder.Operations));
+
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -232,10 +241,151 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(SafeMigrationAction.NoOp, postflightAssessment.Action);
     }
 
+    [Fact]
+    public async Task MySqlSchemaScopedConstraintNameCollisions_AreRejectedBeforeDdl()
+    {
+        if (Fixture.IsMariaDb)
+        {
+            return;
+        }
+
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `namespace_owner_parent` (`id` int NOT NULL, PRIMARY KEY (`id`));"
+            + "CREATE TABLE `namespace_target_parent` (`id` int NOT NULL, PRIMARY KEY (`id`));"
+            + "CREATE TABLE `namespace_owner` ("
+            + "`id` int NOT NULL, `quantity` int NOT NULL, `parent_id` int NULL, PRIMARY KEY (`id`), "
+            + "CONSTRAINT `ck_namespace_collision` CHECK (`quantity` >= 0), "
+            + "CONSTRAINT `fk_namespace_collision` FOREIGN KEY (`parent_id`) "
+            + "REFERENCES `namespace_owner_parent` (`id`));"
+            + "CREATE TABLE `namespace_target` ("
+            + "`id` int NOT NULL, `quantity` int NOT NULL, `parent_id` int NULL, PRIMARY KEY (`id`));");
+
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureCheckConstraint(
+            ExpectedCheckConstraintDefinition.FromExpression(
+                "ck_namespace_collision",
+                "namespace_target",
+                SqlColumnAndInt("quantity", SafeMigrationSqlBinaryOperator.LessThanOrEqual, 100)),
+            SafeMigrationPolicy.ThrowIfDifferent);
+        builder.AddForeignKeyIfNotExists(
+            "fk_namespace_collision",
+            "namespace_target",
+            ["parent_id"],
+            "namespace_target_parent",
+            ["id"]);
+
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("constraint-namespace"));
+
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.All(
+            report.Assessments,
+            assessment =>
+            {
+                Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
+                Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
+            });
+
+        foreach (var operation in builder.Operations)
+        {
+            var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+                ExecuteOperationsAsync(context, [operation], CancellationToken.None));
+
+            Assert.Contains("doka_sm_different", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS "
+                + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'namespace_target' "
+                + "AND CONSTRAINT_NAME IN ('ck_namespace_collision', 'fk_namespace_collision');"));
+    }
+
+    [Fact]
+    public async Task MariaDbForeignKeyNameScope_FollowsTheServerVersionBoundary()
+    {
+        if (!Fixture.IsMariaDb)
+        {
+            return;
+        }
+
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `fk_scope_owner_parent` (`id` int NOT NULL, PRIMARY KEY (`id`));"
+            + "CREATE TABLE `fk_scope_target_parent` (`id` int NOT NULL, PRIMARY KEY (`id`));"
+            + "CREATE TABLE `fk_scope_owner` ("
+            + "`id` int NOT NULL, `parent_id` int NULL, PRIMARY KEY (`id`), "
+            + "CONSTRAINT `fk_scope_shared` FOREIGN KEY (`parent_id`) "
+            + "REFERENCES `fk_scope_owner_parent` (`id`));"
+            + "CREATE TABLE `fk_scope_target` ("
+            + "`id` int NOT NULL, `parent_id` int NULL, PRIMARY KEY (`id`));");
+
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.AddForeignKeyIfNotExists(
+            "fk_scope_shared",
+            "fk_scope_target",
+            ["parent_id"],
+            "fk_scope_target_parent",
+            ["id"]);
+
+        var preflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("foreign-key-name-scope"));
+        var preflightAssessment = Assert.Single(preflight.Assessments);
+
+        if (Fixture.ServerVersion.Version < new Version(12, 1))
+        {
+            var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+                ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
+
+            Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
+            Assert.Equal(SafeMigrationObservedState.Different, preflightAssessment.ObservedState);
+            Assert.Equal(SafeMigrationAction.RejectDifferent, preflightAssessment.Action);
+            Assert.Contains("doka_sm_different", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(
+                1,
+                await ScalarIntAsync(
+                    connectionString,
+                    "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
+                    + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND CONSTRAINT_NAME = 'fk_scope_shared';"));
+
+            return;
+        }
+
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+
+        var postflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("foreign-key-name-scope-post"));
+        var postflightAssessment = Assert.Single(postflight.Assessments);
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
+        Assert.Equal(SafeMigrationObservedState.Missing, preflightAssessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.Apply, preflightAssessment.Action);
+        Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
+        Assert.Equal(SafeMigrationObservedState.Matching, postflightAssessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.NoOp, postflightAssessment.Action);
+        Assert.Equal(
+            2,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
+                + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND CONSTRAINT_NAME = 'fk_scope_shared';"));
+    }
+
     [Theory]
     [InlineData(1)]
     [InlineData(2)]
-    public async Task EquivalentForeignKeyWithDifferentName_IsRejectedBeforeDdl(
+    public async Task EquivalentForeignKeyWithDifferentName_IsAnIdempotentNoOp(
         int legacyConstraintCount
     )
     {
@@ -244,47 +394,125 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var secondLegacyName = new string('s', 64);
         var expectedName = new string('e', 64);
         var secondConstraint = legacyConstraintCount == 2
-            ? $", CONSTRAINT `{secondLegacyName}` FOREIGN KEY (`parent_id`) "
-                + "REFERENCES `identity_parents` (`id`) ON DELETE CASCADE"
+            ? $", CONSTRAINT `{secondLegacyName}` FOREIGN KEY (`parent_id`, `tenant_id`) "
+                + "REFERENCES `identity_parents` (`id`, `tenant_id`) ON DELETE CASCADE"
             : string.Empty;
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `identity_parents` (`id` int NOT NULL, PRIMARY KEY (`id`));"
+            "CREATE TABLE `identity_parents` (`id` int NOT NULL, `tenant_id` int NOT NULL, "
+            + "PRIMARY KEY (`id`, `tenant_id`));"
             + "CREATE TABLE `identity_children` ("
-            + "`id` int NOT NULL, `parent_id` int NOT NULL, PRIMARY KEY (`id`), "
-            + $"CONSTRAINT `{legacyName}` FOREIGN KEY (`parent_id`) "
-            + $"REFERENCES `identity_parents` (`id`) ON DELETE CASCADE{secondConstraint});");
+            + "`id` int NOT NULL, `parent_id` int NOT NULL, `tenant_id` int NOT NULL, PRIMARY KEY (`id`), "
+            + $"CONSTRAINT `{legacyName}` FOREIGN KEY (`parent_id`, `tenant_id`) "
+            + $"REFERENCES `identity_parents` (`id`, `tenant_id`) ON DELETE CASCADE{secondConstraint});");
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddForeignKeyIfNotExists(
             expectedName,
             "identity_children",
-            ["parent_id"],
+            ["parent_id", "tenant_id"],
             "identity_parents",
-            ["id"],
+            ["id", "tenant_id"],
             onDelete: ReferentialAction.Cascade);
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("foreign-key-identity"));
 
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
-            ExecuteOperationsAsync(context, builder.Operations));
+        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations);
+
         var assessment = Assert.Single(report.Assessments);
 
-        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
-        Assert.Equal(SafeMigrationAction.RejectUnsupported, assessment.Action);
-        Assert.Equal("foreign_key_semantic_identity_conflict", assessment.Code);
-        Assert.Contains("doka_sm_unsupported", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
+        Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.NoOp, assessment.Action);
+        Assert.DoesNotContain(
+            report.UnexpectedObjects,
+            static unexpected => unexpected.ObjectKind == SafeMigrationDatabaseObjectKind.ForeignKey);
         Assert.Equal(
             legacyConstraintCount,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
                 + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'identity_children';"));
+    }
+
+    [Fact]
+    public async Task ExactNameDrift_IsNeverHiddenByEquivalentAliases()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `identity_precedence_parents` (`id` int NOT NULL, PRIMARY KEY (`id`));"
+            + "CREATE TABLE `identity_precedence_children` ("
+            + "`id` int NOT NULL, `code` int NULL, `alternate_code` int NULL, "
+            + "`quantity` int NOT NULL, `parent_id` int NULL, PRIMARY KEY (`id`), "
+            + "CONSTRAINT `uq_identity_precedence_expected` UNIQUE (`alternate_code`), "
+            + "CONSTRAINT `uq_identity_precedence_legacy` UNIQUE (`code`), "
+            + "CONSTRAINT `ck_identity_precedence_expected` CHECK (`quantity` <= 100), "
+            + "CONSTRAINT `ck_identity_precedence_legacy` CHECK (`quantity` >= 0), "
+            + "CONSTRAINT `fk_identity_precedence_expected` FOREIGN KEY (`parent_id`) "
+            + "REFERENCES `identity_precedence_parents` (`id`) ON DELETE RESTRICT, "
+            + "CONSTRAINT `fk_identity_precedence_legacy` FOREIGN KEY (`parent_id`) "
+            + "REFERENCES `identity_precedence_parents` (`id`) ON DELETE CASCADE, "
+            + "INDEX `ix_identity_precedence_expected` (`alternate_code`), "
+            + "INDEX `ix_identity_precedence_legacy` (`code`));");
+
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.AddUniqueConstraintIfNotExists(
+            "uq_identity_precedence_expected",
+            "identity_precedence_children",
+            ["code"]);
+        builder.EnsureCheckConstraint(
+            ExpectedCheckConstraintDefinition.FromExpression(
+                "ck_identity_precedence_expected",
+                "identity_precedence_children",
+                SqlColumnAndInt("quantity", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0)),
+            SafeMigrationPolicy.ThrowIfDifferent);
+        builder.AddForeignKeyIfNotExists(
+            "fk_identity_precedence_expected",
+            "identity_precedence_children",
+            ["parent_id"],
+            "identity_precedence_parents",
+            ["id"],
+            onDelete: ReferentialAction.Cascade);
+        builder.CreateIndexIfNotExists(
+            "ix_identity_precedence_expected",
+            "identity_precedence_children",
+            ["code"]);
+
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("identity-precedence"));
+
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.All(
+            report.Assessments,
+            assessment =>
+            {
+                Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
+                Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
+            });
+
+        foreach (var operation in builder.Operations)
+        {
+            var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+                ExecuteOperationsAsync(context, [operation]));
+
+            Assert.Contains("doka_sm_different", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        Assert.Equal(
+            2,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
+                + "WHERE CONSTRAINT_SCHEMA = DATABASE() "
+                + "AND TABLE_NAME = 'identity_precedence_children';"));
     }
 
     [Theory]
@@ -388,6 +616,16 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             canonicalReport.Assessments,
             assessment => Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState));
 
+        await ExecuteSqlAsync(
+            connectionString,
+            "ALTER TABLE `constraint_matrix_children` "
+            + "ADD CONSTRAINT `uq_constraint_matrix_duplicate` UNIQUE (`code`, `alternate_code`), "
+            + "ADD CONSTRAINT `ck_constraint_matrix_duplicate` CHECK (`quantity` >= 0), "
+            + "ADD CONSTRAINT `fk_constraint_matrix_duplicate` "
+            + "FOREIGN KEY (`parent_id`, `alternate_parent_id`) "
+            + "REFERENCES `constraint_matrix_parents` (`id`, `alternate_id`) "
+            + "ON UPDATE CASCADE ON DELETE SET NULL;");
+
         var strictDefinition = CreateStrictConstraintMatrixTable(ReferentialAction.SetNull);
         var strict = new MigrationBuilder(context.Database.ProviderName!);
         strict.EnsureTable(
@@ -404,6 +642,31 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             SafeMigrationObservedState.Matching,
             Assert.Single(strictReport.Assessments)
                 .ObservedState);
+
+        var strictAliases = new MigrationBuilder(context.Database.ProviderName!);
+        strictAliases.EnsureTable(
+            CreateStrictConstraintMatrixTable(ReferentialAction.SetNull, useAliasNames: true),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var strictAliasReport = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                strictAliases.Operations,
+                new SafeMigrationRunOptions("constraint-matrix-strict-aliases"));
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, strictAliasReport.Status);
+        Assert.Equal(
+            SafeMigrationObservedState.Matching,
+            Assert.Single(strictAliasReport.Assessments)
+                .ObservedState);
+        Assert.DoesNotContain(
+            strictAliasReport.UnexpectedObjects,
+            static unexpected => StringComparer.Ordinal.Equals(unexpected.Table, "constraint_matrix_children")
+                && (unexpected.ObjectKind is SafeMigrationDatabaseObjectKind.UniqueConstraint
+                    or SafeMigrationDatabaseObjectKind.CheckConstraint
+                    or SafeMigrationDatabaseObjectKind.ForeignKey));
 
         var strictDrift = new MigrationBuilder(context.Database.ProviderName!);
         strictDrift.EnsureTable(
@@ -519,7 +782,8 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     }
 
     private static ExpectedTableDefinition CreateStrictConstraintMatrixTable(
-        ReferentialAction onDelete
+        ReferentialAction onDelete,
+        bool useAliasNames = false
     ) => new(
         "constraint_matrix_children",
         [
@@ -533,28 +797,28 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         ],
         primaryKey:
         new ExpectedPrimaryKeyDefinition(
-            "pk_constraint_matrix_children",
+            useAliasNames ? "pk_constraint_matrix_alias" : "pk_constraint_matrix_children",
             "constraint_matrix_children",
             ["id", "alternate_id"]),
         uniqueConstraints
         :
         [
             new ExpectedUniqueConstraintDefinition(
-                "uq_constraint_matrix_code",
+                useAliasNames ? "uq_constraint_matrix_alias" : "uq_constraint_matrix_code",
                 "constraint_matrix_children",
                 ["code", "alternate_code"]),
         ],
         checkConstraints:
         [
             ExpectedCheckConstraintDefinition.FromExpression(
-                "ck_constraint_matrix_quantity",
+                useAliasNames ? "ck_constraint_matrix_alias" : "ck_constraint_matrix_quantity",
                 "constraint_matrix_children",
                 SqlColumnAndInt("quantity", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0)),
         ],
         foreignKeys:
         [
             new ExpectedForeignKeyDefinition(
-                "fk_constraint_matrix_parent",
+                useAliasNames ? "fk_constraint_matrix_alias" : "fk_constraint_matrix_parent",
                 "constraint_matrix_children",
                 ["parent_id", "alternate_parent_id"],
                 "constraint_matrix_parents",

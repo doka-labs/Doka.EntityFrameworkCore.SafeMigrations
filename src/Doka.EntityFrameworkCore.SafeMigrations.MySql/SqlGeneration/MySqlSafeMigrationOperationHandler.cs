@@ -3,28 +3,33 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrationOperationHandler
 {
     private const string HandlerIdentifier = "Doka.EntityFrameworkCore.SafeMigrations.MySql.SafeMigrationOperation";
+    private const string IndexPrefixLengthAnnotation = "Doka:MySql:IndexPrefixLength";
     private const string PreparedStatementName = "doka_sm_statement";
-    private static readonly IReadOnlySet<string> s_emptyUniqueIndexes = new HashSet<string>(StringComparer.Ordinal);
+    private static readonly IReadOnlyList<ExpectedIndexDefinition> s_emptyUniqueIndexes = [];
 
     private readonly MySqlSafeMigrationCatalogSqlBuilder _catalogSqlBuilder;
+    private readonly IModel _designTimeModel;
     private readonly MySqlSafeMigrationPlanCapture _planCapture;
     private readonly ISqlGenerationHelper _sqlGenerationHelper;
     private readonly MySqlSafeMigrationSqlExpressionRenderer _expressionRenderer;
     private readonly RelationalTypeMapping _stringMapping;
-    private Dictionary<ModelTableKey, IReadOnlySet<string>>? _modelUniqueIndexes;
+    private Dictionary<ModelTableKey, IReadOnlyList<ExpectedIndexDefinition>>? _modelUniqueIndexes;
     private IModel? _modelUniqueIndexSource;
 
     public MySqlSafeMigrationOperationHandler(
         IRelationalTypeMappingSource typeMappingSource,
         ISqlGenerationHelper sqlGenerationHelper,
-        MySqlSafeMigrationPlanCapture planCapture
+        MySqlSafeMigrationPlanCapture planCapture,
+        IDesignTimeModel designTimeModel
     )
     {
         ArgumentNullException.ThrowIfNull(typeMappingSource);
         ArgumentNullException.ThrowIfNull(sqlGenerationHelper);
         ArgumentNullException.ThrowIfNull(planCapture);
+        ArgumentNullException.ThrowIfNull(designTimeModel);
 
         _catalogSqlBuilder = new MySqlSafeMigrationCatalogSqlBuilder(typeMappingSource, sqlGenerationHelper);
+        _designTimeModel = designTimeModel.Model;
         _planCapture = planCapture;
         _sqlGenerationHelper = sqlGenerationHelper;
         _expressionRenderer = new MySqlSafeMigrationSqlExpressionRenderer(typeMappingSource, sqlGenerationHelper);
@@ -48,7 +53,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
                 nameof(context));
 
         var expectedUniqueIndexes = operation.Intent is EnsureTableIntent table
-            ? GetExpectedUniqueIndexes(table, context.Model)
+            ? GetExpectedUniqueIndexes(table)
             : null;
 
         var runtimePlan = _catalogSqlBuilder.Build(operation, context, expectedUniqueIndexes);
@@ -166,9 +171,8 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         return MySqlMigrationOperationResult.Generated([scopedCommand], "safe_guarded_operation");
     }
 
-    private IReadOnlySet<string> GetExpectedUniqueIndexes(
-        EnsureTableIntent intent,
-        IModel? model
+    private IReadOnlyList<ExpectedIndexDefinition> GetExpectedUniqueIndexes(
+        EnsureTableIntent intent
     )
     {
         // Analysis owns an exact operation-batch catalog. Runtime generation
@@ -179,15 +183,10 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             return _planCapture.GetExpectedUniqueIndexes(intent.Definition.Table);
         }
 
-        if (model is null)
+        if (!ReferenceEquals(_designTimeModel, _modelUniqueIndexSource))
         {
-            return s_emptyUniqueIndexes;
-        }
-
-        if (!ReferenceEquals(model, _modelUniqueIndexSource))
-        {
-            _modelUniqueIndexes = BuildModelUniqueIndexes(model);
-            _modelUniqueIndexSource = model;
+            _modelUniqueIndexes = BuildModelUniqueIndexes(_designTimeModel);
+            _modelUniqueIndexSource = _designTimeModel;
         }
 
         return _modelUniqueIndexes!.GetValueOrDefault(
@@ -195,27 +194,101 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             ?? s_emptyUniqueIndexes;
     }
 
-    private static Dictionary<ModelTableKey, IReadOnlySet<string>> BuildModelUniqueIndexes(
+    private static Dictionary<ModelTableKey, IReadOnlyList<ExpectedIndexDefinition>> BuildModelUniqueIndexes(
         IModel model
     )
     {
-        var result = new Dictionary<ModelTableKey, IReadOnlySet<string>>();
+        var result = new Dictionary<ModelTableKey, IReadOnlyList<ExpectedIndexDefinition>>();
         foreach (var table in model.GetRelationalModel().Tables)
         {
-            var names = table
+            var indexes = table
                 .Indexes
                 .Where(static index => index.IsUnique)
-                .Select(static index => index.Name)
-                .ToHashSet(StringComparer.Ordinal);
+                .Select(index => CreateModelIndexDefinition(table, index))
+                .OrderBy(static index => index.Name, StringComparer.Ordinal)
+                .ToArray();
 
-            if (names.Count > 0)
+            if (indexes.Length > 0)
             {
-                result.Add(new ModelTableKey(table.Name, table.Schema), names);
+                result.Add(new ModelTableKey(table.Name, table.Schema), indexes);
             }
         }
 
         return result;
     }
+
+    private static ExpectedIndexDefinition CreateModelIndexDefinition(
+        ITable table,
+        ITableIndex index
+    )
+    {
+        IReadOnlyList<int>? prefixLengths = null;
+        foreach (var mappedIndex in index.MappedIndexes)
+        {
+            // Doka's migration contract exposes prefix lengths through this
+            // stable provider annotation. Reading the relational model avoids
+            // coupling SafeMigrations to Doka's internal metadata extensions.
+            var mappedPrefixLengths = mappedIndex
+                .FindAnnotation(IndexPrefixLengthAnnotation)
+                ?.Value as IReadOnlyList<int>;
+
+            if (mappedPrefixLengths is null)
+            {
+                continue;
+            }
+
+            if (prefixLengths is not null
+                && !prefixLengths.SequenceEqual(mappedPrefixLengths))
+            {
+                throw new InvalidOperationException(
+                    $"Mapped indexes for '{table.Name}.{index.Name}' have conflicting prefix lengths.");
+            }
+
+            prefixLengths = mappedPrefixLengths;
+        }
+
+        if (prefixLengths is not null
+            && prefixLengths.Count != index.Columns.Count)
+        {
+            throw new InvalidOperationException(
+                $"Index '{table.Name}.{index.Name}' has an invalid prefix-length vector.");
+        }
+
+        if (index.IsDescending is { Count: > 0 } sortOrders
+            && sortOrders.Count != index.Columns.Count)
+        {
+            throw new InvalidOperationException(
+                $"Index '{table.Name}.{index.Name}' has an invalid sort-order vector.");
+        }
+
+        var keys = index.Columns
+            .Select((column, ordinal) => new ExpectedIndexKeyDefinition(
+                column: column.Name,
+                sortOrder: ModelSortOrder(index.IsDescending, ordinal),
+                prefixLength: prefixLengths?[ordinal] is > 0 ? prefixLengths[ordinal] : null))
+            .ToArray();
+
+        return new ExpectedIndexDefinition(
+            index.Name,
+            table.Name,
+            keys,
+            table.Schema,
+            index.IsUnique,
+            index.Filter);
+    }
+
+    private static SafeMigrationIndexSortOrder ModelSortOrder(
+        IReadOnlyList<bool>? sortOrders,
+        int ordinal
+    ) => sortOrders switch
+    {
+        null => SafeMigrationIndexSortOrder.ProviderDefault,
+        // EF represents IsDescending() without arguments as an empty vector,
+        // meaning every key is descending rather than no key being descending.
+        { Count: 0 } => SafeMigrationIndexSortOrder.Descending,
+        _ when sortOrders[ordinal] => SafeMigrationIndexSortOrder.Descending,
+        _ => SafeMigrationIndexSortOrder.Ascending,
+    };
 
     private readonly record struct ModelTableKey(
         string Table,

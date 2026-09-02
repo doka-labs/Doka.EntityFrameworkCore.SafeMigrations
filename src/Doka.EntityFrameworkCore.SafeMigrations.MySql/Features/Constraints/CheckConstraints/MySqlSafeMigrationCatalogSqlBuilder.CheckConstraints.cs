@@ -11,25 +11,26 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
     private MySqlSafeMigrationRuntimePlan BuildEnsureCheckConstraint(
         EnsureCheckConstraintIntent intent,
-        bool isMariaDb
+        MySqlServerVersion serverVersion
     )
     {
         var definition = intent.Definition;
+        var isMariaDb = serverVersion.IsMariaDb;
         var exists = ConstraintExists(definition.Table, definition.Name, "CHECK");
         var matching = CheckConstraintMatches(definition, isMariaDb, requireExpectedName: true);
-        var identityConflict = CheckConstraintMatches(definition, isMariaDb, requireExpectedName: false);
+        var semanticAlias = CheckConstraintMatches(definition, isMariaDb, requireExpectedName: false);
+        var nameCollision = isMariaDb ? "FALSE" : DatabaseConstraintNameExists(definition.Name, "CHECK");
         var dataBlocked = CheckConstraintDataBlocked(definition);
+        var satisfied = $"({matching}) OR (NOT ({exists}) AND ({semanticAlias}))";
 
         return Plan(
             $"CASE WHEN NOT {BaseTableExists(definition.Table)} THEN 'prerequisite_missing' "
-            + $"WHEN NOT {exists} AND {identityConflict} THEN 'unsupported' "
-            + $"WHEN NOT {exists} AND {dataBlocked} THEN 'data_blocked' "
-            + $"WHEN NOT {exists} THEN 'missing' "
-            + $"WHEN {matching} THEN 'matching' ELSE 'different' END",
-            matching) with
-        {
-            UnsupportedCode = "check_constraint_semantic_identity_conflict",
-        };
+            + $"WHEN {exists} AND {matching} THEN 'matching' "
+            + $"WHEN {exists} THEN 'different' "
+            + $"WHEN {semanticAlias} THEN 'matching' "
+            + $"WHEN {nameCollision} THEN 'different' "
+            + $"WHEN {dataBlocked} THEN 'data_blocked' ELSE 'missing' END",
+            satisfied);
     }
 
     private MySqlSafeMigrationRuntimePlan BuildDropCheckConstraint(
@@ -46,6 +47,15 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         ExpectedCheckConstraintDefinition definition,
         bool isMariaDb,
         bool requireExpectedName = true
+    ) => CheckConstraintMatches(
+        definition,
+        isMariaDb,
+        $"tc.CONSTRAINT_NAME {(requireExpectedName ? "=" : "<>")} {Literal(definition.Name)}");
+
+    private string CheckConstraintMatches(
+        ExpectedCheckConstraintDefinition definition,
+        bool isMariaDb,
+        string namePredicate
     )
     {
         var expression = definition.Sql ?? _expressionRenderer.Render(definition.Expression!);
@@ -65,12 +75,24 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             // MySQL's catalog omits TABLE_NAME because names remain schema-wide.
             + (isMariaDb ? "AND cc.TABLE_NAME = tc.TABLE_NAME " : string.Empty)
             + $"WHERE tc.CONSTRAINT_SCHEMA = DATABASE() AND tc.TABLE_NAME = {Literal(definition.Table)} "
-            + $"AND tc.CONSTRAINT_NAME {(requireExpectedName ? "=" : "<>")} {Literal(definition.Name)} "
+            + $"AND {namePredicate} "
             + "AND tc.CONSTRAINT_TYPE = 'CHECK' "
             // A disabled MySQL check has the same catalog expression but does
             // not enforce the contract. MariaDB does not expose this facet.
             + (isMariaDb ? string.Empty : "AND tc.ENFORCED = 'YES' ")
             + $"AND cc.CHECK_CLAUSE IN ({string.Join(", ", candidates)}))";
+    }
+
+    private string CheckConstraintSatisfied(
+        ExpectedCheckConstraintDefinition definition,
+        bool isMariaDb
+    )
+    {
+        var exists = ConstraintExists(definition.Table, definition.Name, "CHECK");
+        var exact = CheckConstraintMatches(definition, isMariaDb, requireExpectedName: true);
+        var semanticAlias = CheckConstraintMatches(definition, isMariaDb, requireExpectedName: false);
+
+        return $"({exact}) OR (NOT ({exists}) AND ({semanticAlias}))";
     }
 
     private string CheckConstraintDataBlocked(

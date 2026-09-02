@@ -29,15 +29,22 @@ internal sealed partial class SafeMigrationPreflightProjection
             && CanProjectProviderNeutralIndexReplacement(intent.Definition)
             && liveAnalysis.ObservedState is SafeMigrationObservedState.Missing
                 or SafeMigrationObservedState.Matching
-                or SafeMigrationObservedState.Different
-            && !StringComparer.Ordinal.Equals(
-                liveAnalysis.Code,
-                "index_semantic_identity_conflict"))
+                or SafeMigrationObservedState.Different)
         {
-            // The provider analyzed the original catalog. For ordinary column
-            // indexes it has already checked prerequisites, key width, and
-            // unique-data safety, so an accepted preceding exact-name drop
-            // leaves a deterministically missing replacement target.
+            if (StringComparer.Ordinal.Equals(
+                    liveAnalysis.Code,
+                    "index_replacement_data_blocked"))
+            {
+                return new SafeMigrationProviderAnalysis(
+                    SafeMigrationObservedState.DataBlocked,
+                    SafeMigrationRepairCapability.None,
+                    postconditionSatisfied: false,
+                    liveAnalysis.Code);
+            }
+
+            // The accepted preceding exact-name drop makes a structurally
+            // compatible replacement target missing. Unique replacements use
+            // the provider's independent duplicate-row evidence above.
             return Analysis(SafeMigrationObservedState.Missing);
         }
 

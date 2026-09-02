@@ -74,16 +74,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var tableExists = BaseTableExists(definition.Table);
         var indexExists = IndexExists(definition.Table, definition.Name);
         var matching = BuildIndexMatches(definition, isMariaDb, requireExpectedName: true);
-        var identityConflict = BuildIndexMatches(
-            definition,
-            isMariaDb,
-            requireExpectedName: false,
-            excludeForeignKeySupportIndexes: true);
+        var semanticAlias = BuildIndexMatches(definition, isMariaDb, requireExpectedName: false);
         var dataBlocked = definition.Unique ? UniqueIndexDataBlocked(definition) : "FALSE";
         var physicallyAchievable = BuildIndexPhysicalShapeSupported(definition);
-        var hasProviderNeutralPhysicalShape = definition.Keys.All(static key => key.Column is not null)
-            && (definition.Method is null
-                || StringComparer.OrdinalIgnoreCase.Equals(definition.Method, "BTREE"));
+
         var physicalFailureCode = definition.Keys.Any(
                 static key => key.Expression is not null || key.StructuredExpression is not null)
             || definition.Method is not null
@@ -91,21 +85,27 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 ? "index_key_length_unverifiable"
                 : "index_prefix_required_for_key_limit";
 
+        var satisfied = $"({matching}) OR (NOT ({indexExists}) AND ({semanticAlias}))";
+
         return Plan(
             $"CASE WHEN NOT {tableExists} THEN 'prerequisite_missing' "
-            + $"WHEN {identityConflict} THEN 'different' "
-            + (hasProviderNeutralPhysicalShape
-                ? $"WHEN NOT ({physicallyAchievable}) THEN 'unsupported' "
-                    + $"WHEN {dataBlocked} THEN 'data_blocked' "
-                : $"WHEN NOT {indexExists} AND NOT ({physicallyAchievable}) THEN 'unsupported' "
-                    + $"WHEN NOT {indexExists} AND {dataBlocked} THEN 'data_blocked' ")
-            + $"WHEN NOT {indexExists} THEN 'missing' "
-            + $"WHEN {matching} THEN 'matching' ELSE 'different' END",
-            matching) with
+            + $"WHEN {indexExists} AND {matching} THEN 'matching' "
+            + $"WHEN {indexExists} THEN 'different' "
+            + $"WHEN {semanticAlias} THEN 'matching' "
+            + $"WHEN NOT ({physicallyAchievable}) THEN 'unsupported' "
+            + $"WHEN {dataBlocked} THEN 'data_blocked' "
+            + "ELSE 'missing' END",
+            satisfied) with
         {
             UnsupportedCode = physicalFailureCode,
-            ClassificationCodeExpression = $"CASE WHEN {identityConflict} "
-                + "THEN 'index_semantic_identity_conflict' ELSE NULL END",
+            // Ordered DropIndex -> EnsureIndex projection still needs the
+            // live duplicate-row proof hidden by an exact-name shape clash.
+            // The operation remains Different until the preceding drop is
+            // accepted; this code carries evidence, not mutation authority.
+            ClassificationCodeExpression = definition.Unique
+                ? $"CASE WHEN {indexExists} AND NOT ({matching}) AND {dataBlocked} "
+                    + "THEN 'index_replacement_data_blocked' ELSE NULL END"
+                : null,
         };
     }
 
@@ -136,11 +136,26 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     private string BuildIndexMatches(
         ExpectedIndexDefinition definition,
         bool isMariaDb,
-        bool requireExpectedName = true,
-        bool excludeForeignKeySupportIndexes = false
+        bool requireExpectedName = true
     )
     {
         const string candidate = "candidate";
+        var matching = BuildIndexCandidateMatches(definition, isMariaDb, candidate);
+        var nameOperator = requireExpectedName ? "=" : "<>";
+
+        return $"EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS {candidate} "
+            + $"WHERE {candidate}.TABLE_SCHEMA = DATABASE() "
+            + $"AND {candidate}.TABLE_NAME = {Literal(definition.Table)} "
+            + $"AND {candidate}.INDEX_NAME {nameOperator} {Literal(definition.Name)} "
+            + $"AND {candidate}.SEQ_IN_INDEX = 1 AND {matching})";
+    }
+
+    private string BuildIndexCandidateMatches(
+        ExpectedIndexDefinition definition,
+        bool isMariaDb,
+        string candidate
+    )
+    {
         var conditions = new List<string>
         {
             $"(SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS s "
@@ -190,47 +205,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 + $"AND {string.Join(" AND ", keyConditions)})");
         }
 
-        var nameOperator = requireExpectedName ? "=" : "<>";
-        var foreignKeySupportFilter = excludeForeignKeySupportIndexes
-            ? BuildForeignKeySupportIndexExclusion(definition, candidate)
-            : string.Empty;
-
-        return $"EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS {candidate} "
-            + $"WHERE {candidate}.TABLE_SCHEMA = DATABASE() "
-            + $"AND {candidate}.TABLE_NAME = {Literal(definition.Table)} "
-            + $"AND {candidate}.INDEX_NAME {nameOperator} {Literal(definition.Name)} "
-            + foreignKeySupportFilter
-            + $"AND {candidate}.SEQ_IN_INDEX = 1 AND {string.Join(" AND ", conditions)})";
-    }
-
-    private string BuildForeignKeySupportIndexExclusion(
-        ExpectedIndexDefinition definition,
-        string candidate
-    )
-    {
-        if (definition.Unique
-            || definition.Keys.Any(static key => key.Column is null))
-        {
-            return string.Empty;
-        }
-
-        var expectedColumns = OrderedColumnsSql(
-            definition.Keys.Select(static key => key.Column!).ToArray());
-
-        // InnoDB may create a non-unique supporting index for a foreign key and
-        // may later replace it with a suitable explicit index. Such an index
-        // is provider infrastructure, not a conflicting user-owned identity.
-        // KEY_COLUMN_USAGE is the portable catalog link: the FK symbol and
-        // supporting index name are not required to be equal. A unique
-        // candidate remains user-owned because InnoDB does not need to invent
-        // uniqueness to enforce the foreign key.
-        return "AND NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE fk "
-            + $"WHERE fk.CONSTRAINT_SCHEMA = {candidate}.TABLE_SCHEMA "
-            + $"AND fk.TABLE_NAME = {candidate}.TABLE_NAME "
-            + "AND fk.REFERENCED_TABLE_NAME IS NOT NULL "
-            + "GROUP BY fk.CONSTRAINT_NAME "
-            + "HAVING GROUP_CONCAT(fk.COLUMN_NAME ORDER BY fk.ORDINAL_POSITION SEPARATOR ',') "
-            + $"= {Literal(expectedColumns)}) ";
+        return $"({string.Join(" AND ", conditions)})";
     }
 
     private static string BuildIndexSortMatches(

@@ -2,8 +2,12 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 internal static class SafeMigrationCatalogQueryLimits
 {
-    public const int MaximumMySqlOperations = 512;
-    public const int MaximumPostgreSqlOperations = 128;
+    // A statement is the database optimizer's unit of work. Keeping this
+    // bound independent from the transport batch prevents one large
+    // migration from becoming one correspondingly large optimizer plan.
+    public const int MaximumOperationsPerStatement = 32;
+    public const int MaximumStatementsPerBatch = 8;
+    public const int MaximumOperationsPerPlanCapture = 512;
     public const int MaximumInventoryValues = 512;
     public const int MaximumParameters = 16_000;
     public const int MaximumUtf8PayloadBytes = 4 * 1024 * 1024;

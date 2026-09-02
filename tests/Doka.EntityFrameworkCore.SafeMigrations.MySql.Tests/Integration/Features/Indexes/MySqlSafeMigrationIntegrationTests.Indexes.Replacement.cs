@@ -145,6 +145,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             builder.Operations,
             options,
             CancellationToken.None);
+
         var replacement = Assert.Single(
             preflight.Assessments,
             static assessment => assessment.OperationKind == SafeMigrationOperationKind.EnsureIndex);
@@ -156,9 +157,11 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             builder.Operations,
             options,
             CancellationToken.None);
+
         var postflightDrop = Assert.Single(
             postflight.Assessments,
             static assessment => assessment.OperationKind == SafeMigrationOperationKind.DropIndex);
+
         var postflightReplacement = Assert.Single(
             postflight.Assessments,
             static assessment => assessment.OperationKind == SafeMigrationOperationKind.EnsureIndex);
@@ -168,6 +171,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             builder.Operations,
             options,
             CancellationToken.None);
+
         var replayReplacement = Assert.Single(
             replay.Assessments,
             static assessment => assessment.OperationKind == SafeMigrationOperationKind.EnsureIndex);
@@ -241,7 +245,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     }
 
     [Fact]
-    public async Task ForeignKeySupportIndex_DoesNotConflictWithAnExplicitOwnedIndex()
+    public async Task ForeignKeySupportIndexWithEquivalentShape_IsAnIdempotentNoOp()
     {
         var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
@@ -261,8 +265,14 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             new SafeMigrationRunOptions("foreign-key-support-index"),
             CancellationToken.None);
 
+        var assessment = Assert.Single(preflight.Assessments);
+
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
-        Assert.Equal(SafeMigrationObservedState.Missing, Assert.Single(preflight.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.NoOp, assessment.Action);
+        Assert.DoesNotContain(
+            preflight.UnexpectedObjects,
+            static unexpected => unexpected.ObjectKind == SafeMigrationDatabaseObjectKind.Index);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
@@ -276,7 +286,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
         Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(postflight.Assessments).Action);
         Assert.Equal(
-            1,
+            0,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS "
@@ -285,7 +295,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     }
 
     [Fact]
-    public async Task ForeignKeyDoesNotHideADifferentlyNamedUniqueIndexConflict()
+    public async Task EquivalentUniqueIndexWithForeignKey_IsAnIdempotentNoOp()
     {
         var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
@@ -313,9 +323,15 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         var assessment = Assert.Single(report.Assessments);
 
-        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
-        Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
+        Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.NoOp, assessment.Action);
+        Assert.DoesNotContain(
+            report.UnexpectedObjects,
+            static unexpected => unexpected.ObjectKind == SafeMigrationDatabaseObjectKind.Index);
         Assert.Equal(
             0,
             await ScalarIntAsync(

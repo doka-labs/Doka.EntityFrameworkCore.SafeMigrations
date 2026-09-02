@@ -2,7 +2,8 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 
 internal sealed class PostgreSqlCatalogQueryParameters
 {
-    private readonly DbCommand _command;
+    private readonly Func<DbParameter> _createParameter;
+    private readonly DbParameterCollection _parametersCollection;
     private readonly Dictionary<string, string> _parameters = new(StringComparer.Ordinal);
     private readonly List<string> _values = [];
     private int _utf8PayloadBytes;
@@ -13,7 +14,18 @@ internal sealed class PostgreSqlCatalogQueryParameters
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        _command = command;
+        _createParameter = command.CreateParameter;
+        _parametersCollection = command.Parameters;
+    }
+
+    public PostgreSqlCatalogQueryParameters(
+        SafeMigrationCatalogCommand command
+    )
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        _createParameter = command.CreateParameter;
+        _parametersCollection = command.Parameters;
     }
 
     public int Count => _values.Count;
@@ -36,7 +48,7 @@ internal sealed class PostgreSqlCatalogQueryParameters
             var last = _values.Count - 1;
             _parameters.Remove(_values[last]);
             _values.RemoveAt(last);
-            _command.Parameters.RemoveAt(last);
+            _parametersCollection.RemoveAt(last);
         }
 
         _utf8PayloadBytes = checkpoint.Utf8PayloadBytes;
@@ -51,11 +63,11 @@ internal sealed class PostgreSqlCatalogQueryParameters
             return existing;
         }
 
-        var name = $"@doka_sm_p{_command.Parameters.Count.ToString(CultureInfo.InvariantCulture)}";
-        var parameter = _command.CreateParameter();
+        var name = $"@doka_sm_p{_parametersCollection.Count.ToString(CultureInfo.InvariantCulture)}";
+        var parameter = _createParameter();
         parameter.ParameterName = name;
         parameter.Value = value;
-        _command.Parameters.Add(parameter);
+        _parametersCollection.Add(parameter);
         _parameters.Add(value, name);
         _values.Add(value);
         _utf8PayloadBytes += Encoding.UTF8.GetByteCount(value) + 32;

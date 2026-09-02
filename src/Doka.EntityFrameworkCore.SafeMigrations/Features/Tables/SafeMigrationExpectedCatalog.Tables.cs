@@ -25,6 +25,15 @@ internal static partial class SafeMigrationExpectedCatalog
 
         table.Table = intent.NewName ?? intent.Name;
         table.Schema = intent.NewSchema ?? intent.Schema;
+
+        foreach (var pair in table.IndexDefinitions.ToArray())
+        {
+            table.IndexDefinitions[pair.Key] = Copy(
+                pair.Value,
+                table: table.Table,
+                schema: table.Schema);
+        }
+
         tables[new TableKey(table.Schema, table.Table)] = table;
     }
 }

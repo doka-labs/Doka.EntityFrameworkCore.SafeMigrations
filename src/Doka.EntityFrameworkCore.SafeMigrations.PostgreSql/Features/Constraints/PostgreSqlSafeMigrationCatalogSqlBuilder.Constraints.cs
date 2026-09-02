@@ -10,23 +10,29 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         string matching,
         string dataBlocked,
         string additionalPrerequisite = "TRUE",
-        string identityConflict = "FALSE",
-        string? identityConflictCode = null
+        string semanticAlias = "FALSE",
+        string nonCanonicalAlias = "FALSE",
+        string singletonConflict = "FALSE",
+        string namespaceCollision = "FALSE"
     )
     {
         var tableExists = TableExists(table, schema);
         var exists = ConstraintExists(table, schema, name, type);
+        var satisfied = $"({matching}) OR (NOT ({exists}) AND ({semanticAlias}))";
 
+        // Local ownership is part of semantic identity. A partition-derived or
+        // inherited object with the same visible shape is neither a safe alias
+        // nor an absent target, because SafeMigrations cannot own its lifecycle.
         return Plan(
             $"CASE WHEN NOT {tableExists} OR NOT ({additionalPrerequisite}) THEN 'prerequisite_missing' "
-            + $"WHEN NOT {exists} AND ({identityConflict}) THEN 'unsupported' "
-            + $"WHEN NOT {exists} AND {dataBlocked} THEN 'data_blocked' "
-            + $"WHEN NOT {exists} THEN 'missing' "
-            + $"WHEN {matching} THEN 'matching' ELSE 'different' END",
-            matching) with
-        {
-            UnsupportedCode = identityConflictCode,
-        };
+            + $"WHEN {exists} AND {matching} THEN 'matching' "
+            + $"WHEN {exists} THEN 'different' "
+            + $"WHEN ({semanticAlias}) THEN 'matching' "
+            + $"WHEN ({nonCanonicalAlias}) THEN 'different' "
+            + $"WHEN ({singletonConflict}) THEN 'different' "
+            + $"WHEN ({namespaceCollision}) THEN 'different' "
+            + $"WHEN {dataBlocked} THEN 'data_blocked' ELSE 'missing' END",
+            satisfied);
     }
 
     private PostgreSqlSafeMigrationRuntimePlan BuildDropConstraint(
@@ -52,8 +58,23 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         IReadOnlyList<string> columns,
         bool requireExpectedName = true,
         bool requireLocalIdentity = true
+    ) => ConstraintColumnsMatch(
+        table,
+        schema,
+        type,
+        columns,
+        $"co.conname {(requireExpectedName ? "=" : "<>")} {Literal(name)}",
+        requireLocalIdentity);
+
+    private string ConstraintColumnsMatch(
+        string table,
+        string? schema,
+        char type,
+        IReadOnlyList<string> columns,
+        string namePredicate,
+        bool requireLocalIdentity = true
     ) => ConstraintBaseWithoutName(table, schema, type)
-        + $" AND co.conname {(requireExpectedName ? "=" : "<>")} {Literal(name)}"
+        + $" AND {namePredicate}"
         + StandardConstraintSemantics(requireLocalIdentity)
         + (type == 'u' ? UniqueNullSemanticsMatch() : string.Empty)
         + $" AND ARRAY(SELECT a.attname FROM unnest(co.conkey) WITH ORDINALITY AS key(attnum, ord) "
@@ -136,17 +157,54 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         + $"WHERE n.nspname = {SchemaExpression(schema)} AND c.relname = {Literal(table)} "
         + $"AND co.contype = {Literal(type.ToString())}::\"char\")";
 
-    private string ConstraintCount(
+    private string RelationNameExists(
+        string name,
+        string? schema
+    ) => "EXISTS (SELECT 1 FROM pg_catalog.pg_class relation "
+        + "JOIN pg_catalog.pg_namespace n ON n.oid = relation.relnamespace "
+        + $"WHERE n.nspname = {SchemaExpression(schema)} "
+        + $"AND relation.relname = {Literal(name)})";
+
+    private string ConstraintColumnsSatisfied(
+        string table,
+        string? schema,
+        string name,
+        char type,
+        IReadOnlyList<string> columns
+    )
+    {
+        var exists = ConstraintExists(table, schema, name, type);
+        var exact = ConstraintColumnsMatch(table, schema, name, type, columns);
+        var semanticAlias = ConstraintColumnsMatch(
+            table,
+            schema,
+            name,
+            type,
+            columns,
+            requireExpectedName: false);
+
+        return $"({exact}) OR (NOT ({exists}) AND ({semanticAlias}))";
+    }
+
+    private string AllConstraintsModeled(
         string table,
         string? schema,
         char type,
-        int expected
-    ) => "(SELECT COUNT(*) FROM pg_catalog.pg_constraint co "
-        + "JOIN pg_catalog.pg_class c ON c.oid = co.conrelid "
-        + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
-        + $"WHERE n.nspname = {SchemaExpression(schema)} AND c.relname = {Literal(table)} "
-        + $"AND co.contype = {Literal(type.ToString())}::\"char\") "
-        + $"= {expected.ToString(CultureInfo.InvariantCulture)}";
+        string[] expectedMatches
+    )
+    {
+        var modeled = expectedMatches.Length == 0
+            ? "FALSE"
+            : $"({string.Join(" OR ", expectedMatches)})";
+
+        return "NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint candidate_co "
+            + "JOIN pg_catalog.pg_class candidate_c ON candidate_c.oid = candidate_co.conrelid "
+            + "JOIN pg_catalog.pg_namespace candidate_n ON candidate_n.oid = candidate_c.relnamespace "
+            + $"WHERE candidate_n.nspname = {SchemaExpression(schema)} "
+            + $"AND candidate_c.relname = {Literal(table)} "
+            + $"AND candidate_co.contype = {Literal(type.ToString())}::\"char\" "
+            + $"AND NOT ({modeled}))";
+    }
 
     private string NameArray(
         IReadOnlyList<string> values

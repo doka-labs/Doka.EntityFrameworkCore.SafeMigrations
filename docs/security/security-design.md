@@ -103,12 +103,19 @@ must both pass; success on one engine is not evidence for the other.
 ### S4 - Resource and failure bounds remain explicit
 
 [Query limits](../../src/Doka.EntityFrameworkCore.SafeMigrations/Analysis/SafeMigrationCatalogQueryLimits.cs)
-bound each classification request by operations, parameters, and UTF-8 payload.
-Oversized single operations reject; partial reports are not published after a
-later chunk fails. Inputs, final reports, and complete table discovery still
-grow with cardinality. There is no global constant-memory or runtime-duration
-guarantee; callers need cancellation, appropriate database timeouts, and
-bounded deployment concurrency.
+bound each optimizer-visible statement by operation count and each ADO.NET
+transport batch by statement count, parameters, and UTF-8 payload. Provider
+plan capture is separately windowed. Oversized single operations reject;
+partial reports are not published after a later batch fails. Inputs, final
+reports, and complete table discovery still grow with cardinality. There is no
+global constant-memory or runtime-duration guarantee; callers need
+cancellation, appropriate database timeouts, and bounded deployment
+concurrency. SafeMigrations applies the configured EF command timeout to its
+raw catalog commands and batches.
+Native ADO.NET batching is capability-gated by `CanCreateBatch`. Compatible
+wrappers without batch support use bounded sequential commands instead of
+concatenated provider SQL, retaining parameterization, cancellation, timeout,
+ordinal validation, and atomic report publication.
 
 Evidence: [query-limit tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Unit/Analysis/SafeMigrationCatalogQueryLimitsTests.cs),
 provider edge-case oversized/chunk-order tests, and

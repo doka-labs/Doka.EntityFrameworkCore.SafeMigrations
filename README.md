@@ -43,11 +43,11 @@ when that matrix executes. The exact successful run, not this table, is release
 evidence. See [Support and qualification](docs/support-and-qualification.md).
 
 The initial complete stable delivery is 10.0.0. The latest confirmed published
-release is 10.1.0. This source is prepared for stable 10.1.1: it prevents data
-probes from resolving missing legacy tables, emits portable structured CAST
-targets, and recognizes provider-normalized computed-column expressions as
+release is 10.1.1. This source is prepared for stable 10.1.2: it reconciles
+equivalent legacy object names without destructive cleanup, bounds large
+catalog analysis, and rejects provider namespace collisions before DDL as
 documented in the [release notes](CHANGELOG.md). Only a successful release run
-and verified public packages establish 10.1.1 availability or qualification.
+and verified public packages establish 10.1.2 availability or qualification.
 
 ## Installation
 
@@ -58,14 +58,14 @@ published release and all three NuGet package pages before installation; source
 or changelog entries alone do not establish package availability.
 
 ```bash
-package_version='10.1.1'
+package_version='10.1.2'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.MySql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.1.1'
+package_version='10.1.2'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version "$package_version"
 ```
 
@@ -546,6 +546,19 @@ Instance-specific schema extensions require a separate `DbContext`, migration
 assembly, and history table. A different target model per instance cannot share
 one deterministic Core migration sequence.
 
+Ensure operations use semantic database-object identity. If the requested name
+is absent but a differently named primary key, unique constraint, check
+constraint, foreign key, or index has the same complete modeled definition, the
+operation is `Matching` and executes as a no-op. If the requested name exists,
+its definition is authoritative: any facet drift is `Different` even when a
+second alias matches. A differently named object with a different definition
+does not suppress normal safe creation. Multiple equivalent aliases remain
+non-destructive no-ops. Drop and rename operations always target the exact
+physical name; SafeMigrations never drops or renames an alias to enforce a
+naming convention. A non-equivalent singleton or an occupied physical
+namespace required by provider DDL is `Different`, not `Missing`; the guard
+rejects before the server can raise a raw duplicate-object error.
+
 ## Operational contract
 
 - Run one migrator per database. Provider migration locks serialize competing
@@ -569,11 +582,22 @@ one deterministic Core migration sequence.
   by the caller.
 - Always run postflight and retain its report with deployment evidence.
 
-Analyzer commands are deterministically chunked at 512 MySQL/MariaDB operations
-or 128 PostgreSQL operations, 16,000 bound parameters, and 4 MiB of UTF-8
-payload. MySQL/MariaDB also cap a chunk at half the live
-`max_allowed_packet`. A single operation that exceeds a bound is rejected
-before query execution; partial multi-chunk reports are never published.
+Analyzer work is deterministically bounded at 32 operations per statement that
+the optimizer sees and eight statements per ADO.NET transport batch. MySQL and
+MariaDB capture provider plans in 512-operation windows while retaining the
+complete expected unique-index catalog. Every transport batch remains bounded
+by 16,000 parameters and 4 MiB of UTF-8 payload; MySQL/MariaDB additionally cap
+a batch at half the live `max_allowed_packet`.
+Configured EF command timeouts apply to catalog commands and batches. A single
+operation that exceeds a bound is rejected before query execution; a failed
+later batch never publishes a partial report. The live provider suites qualify
+100,000 deterministically ordered mixed operations on every supported server
+profile. The workload covers every observed state and planned action across
+tables, columns, indexes, and primary-key, unique, check, and foreign-key
+constraints. Native ADO.NET batching is used only when
+`DbConnection.CanCreateBatch` is true. Compatible connection wrappers without
+batch support execute the same bounded statements sequentially and retain
+timeout, cancellation, ordinal, and report-atomicity guarantees.
 
 See [Deployment and recovery](docs/runbooks/deployment-and-recovery.md) and
 [Failure codes](docs/runbooks/failure-codes.md).

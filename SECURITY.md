@@ -92,8 +92,8 @@ changes.
 
 This policy covers all three SafeMigrations packages. Stable 10.1.x is the
 supported line; a dated changelog entry is not proof that a particular version
-has been published. Version 10.1.0 is the latest confirmed published release,
-and source is prepared for the 10.1.1 maintenance release.
+has been published. Version 10.1.1 is the latest confirmed published release,
+and source is prepared for the 10.1.2 maintenance release.
 
 | Release state | Security support |
 | --- | --- |

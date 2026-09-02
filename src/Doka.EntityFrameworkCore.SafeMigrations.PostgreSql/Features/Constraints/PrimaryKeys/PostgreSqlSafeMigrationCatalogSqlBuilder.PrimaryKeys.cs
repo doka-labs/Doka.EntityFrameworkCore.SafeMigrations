@@ -16,8 +16,28 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             'p',
             intent.Definition.Columns),
         PrimaryKeyDataBlocked(intent.Definition),
-        identityConflict: AnyConstraint(intent.Definition.Table, intent.Definition.Schema, 'p'),
-        identityConflictCode: "primary_key_identity_conflict");
+        semanticAlias: ConstraintColumnsMatch(
+            intent.Definition.Table,
+            intent.Definition.Schema,
+            intent.Definition.Name,
+            'p',
+            intent.Definition.Columns,
+            requireExpectedName: false),
+        nonCanonicalAlias: ConstraintColumnsMatch(
+            intent.Definition.Table,
+            intent.Definition.Schema,
+            intent.Definition.Name,
+            'p',
+            intent.Definition.Columns,
+            requireExpectedName: false,
+            requireLocalIdentity: false),
+        singletonConflict: AnyConstraint(
+            intent.Definition.Table,
+            intent.Definition.Schema,
+            'p'),
+        namespaceCollision: RelationNameExists(
+            intent.Definition.Name,
+            intent.Definition.Schema));
 
     private PostgreSqlSafeMigrationRuntimePlan BuildDropPrimaryKey(
         DropPrimaryKeyIntent intent

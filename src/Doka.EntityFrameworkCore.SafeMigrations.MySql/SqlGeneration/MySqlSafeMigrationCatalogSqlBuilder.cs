@@ -24,7 +24,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     public MySqlSafeMigrationRuntimePlan Build(
         SafeMigrationOperation operation,
         MySqlMigrationOperationContext context,
-        IReadOnlySet<string>? expectedUniqueIndexes = null
+        IReadOnlyList<ExpectedIndexDefinition>? expectedUniqueIndexes = null
     )
     {
         ArgumentNullException.ThrowIfNull(operation);
@@ -72,9 +72,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                     DropUniqueConstraintIntent value => BuildDropUniqueConstraint(value),
                     EnsureCheckConstraintIntent value => BuildEnsureCheckConstraint(
                         value,
-                        context.ServerVersion.IsMariaDb),
+                        context.ServerVersion),
                     DropCheckConstraintIntent value => BuildDropCheckConstraint(value),
-                    EnsureForeignKeyIntent value => BuildEnsureForeignKey(value),
+                    EnsureForeignKeyIntent value => BuildEnsureForeignKey(value, context.ServerVersion),
                     DropForeignKeyIntent value => BuildDropForeignKey(value),
                     _ => throw new ArgumentOutOfRangeException(
                         nameof(operation),

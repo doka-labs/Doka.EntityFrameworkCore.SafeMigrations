@@ -13,7 +13,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     private MySqlSafeMigrationRuntimePlan BuildEnsureTable(
         EnsureTableIntent intent,
         bool isMariaDb,
-        IReadOnlySet<string>? expectedUniqueIndexes
+        IReadOnlyList<ExpectedIndexDefinition>? expectedUniqueIndexes
     )
     {
         var definition = intent.Definition;
@@ -56,34 +56,18 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     private string BuildTableMatches(
         ExpectedTableDefinition definition,
         bool isMariaDb,
-        IReadOnlySet<string>? expectedUniqueIndexes
+        IReadOnlyList<ExpectedIndexDefinition>? expectedUniqueIndexes
     )
     {
-        var expectedUniqueNames = definition
-            .UniqueConstraints
-            .Select(static constraint => constraint.Name)
-            .Concat(expectedUniqueIndexes ?? Enumerable.Empty<string>())
-            .Distinct(StringComparer.Ordinal)
-            .Order(StringComparer.Ordinal)
-            .ToArray();
-
         var conditions = new List<string>
         {
             BaseTableExists(definition.Table),
             $"(SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS c "
             + $"WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = {Literal(definition.Table)}) "
             + $"= {definition.Columns.Count.ToString(CultureInfo.InvariantCulture)}",
-            $"NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc "
-            + $"WHERE tc.CONSTRAINT_SCHEMA = DATABASE() AND tc.TABLE_NAME = {Literal(definition.Table)} "
-            + "AND tc.CONSTRAINT_TYPE = 'UNIQUE'"
-            + (expectedUniqueNames.Length == 0
-                ? ")"
-                : $" AND tc.CONSTRAINT_NAME NOT IN ({string.Join(", ", expectedUniqueNames.Select(Literal))}))"),
-            BuildCheckConstraintCountMatches(definition, isMariaDb),
-            $"(SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc "
-            + $"WHERE tc.CONSTRAINT_SCHEMA = DATABASE() AND tc.TABLE_NAME = {Literal(definition.Table)} "
-            + "AND tc.CONSTRAINT_TYPE = 'FOREIGN KEY') "
-            + $"= {definition.ForeignKeys.Count.ToString(CultureInfo.InvariantCulture)}",
+            BuildAllUniqueKeysModeled(definition, isMariaDb, expectedUniqueIndexes),
+            BuildAllCheckConstraintsModeled(definition, isMariaDb),
+            BuildAllForeignKeysModeled(definition),
             $"COALESCE((SELECT t.TABLE_COMMENT FROM INFORMATION_SCHEMA.TABLES t "
             + $"WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_NAME = {Literal(definition.Table)}), '') "
             + $"= {Literal(definition.Comment ?? string.Empty)}",
@@ -99,16 +83,79 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 ? $"NOT {PrimaryKeyExists(definition.Table)}"
                 : ConstraintColumnsMatch(definition.Table, "PRIMARY", definition.PrimaryKey.Columns, "PRIMARY KEY"));
 
-        conditions.AddRange(definition.UniqueConstraints.Select(ConstraintMatches));
+        conditions.AddRange(definition.UniqueConstraints.Select(UniqueConstraintSatisfied));
         conditions.AddRange(
-            definition.CheckConstraints.Select(checkConstraint => CheckConstraintMatches(checkConstraint, isMariaDb)));
-        conditions.AddRange(definition.ForeignKeys.Select(foreignKey =>
-            ForeignKeyMatches(foreignKey, requireExpectedName: true)));
+            definition.CheckConstraints.Select(checkConstraint =>
+                CheckConstraintSatisfied(checkConstraint, isMariaDb)));
+        conditions.AddRange(definition.ForeignKeys.Select(ForeignKeySatisfied));
 
         return $"({string.Join(" AND ", conditions)})";
     }
 
-    private string BuildCheckConstraintCountMatches(
+    private string BuildAllUniqueKeysModeled(
+        ExpectedTableDefinition definition,
+        bool isMariaDb,
+        IReadOnlyList<ExpectedIndexDefinition>? expectedUniqueIndexes
+    )
+    {
+        var expectedConstraintShapes = definition.UniqueConstraints.Select(constraint =>
+            BuildUniqueConstraintIndexCandidateMatches(constraint, "candidate_unique"));
+
+        var expectedIndexShapes =
+            (expectedUniqueIndexes ?? []).Select(index => BuildIndexCandidateMatches(
+                index,
+                isMariaDb,
+                "candidate_unique"));
+
+        var modeledShapes = expectedConstraintShapes
+            .Concat(expectedIndexShapes)
+            .ToArray();
+
+        var modeled = modeledShapes.Length == 0 ? "FALSE" : $"({string.Join(" OR ", modeledShapes)})";
+
+        // MySQL exposes unique constraints and unique indexes through the same
+        // physical index catalog. Check each live object against the complete
+        // target definitions: a later EnsureIndex may still be absent here,
+        // while any number of semantically equivalent aliases is legitimate.
+        return "NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS candidate_unique "
+            + $"WHERE candidate_unique.TABLE_SCHEMA = DATABASE() "
+            + $"AND candidate_unique.TABLE_NAME = {Literal(definition.Table)} "
+            + "AND candidate_unique.NON_UNIQUE = 0 "
+            + "AND candidate_unique.INDEX_NAME <> 'PRIMARY' "
+            + "AND candidate_unique.SEQ_IN_INDEX = 1 "
+            + $"AND NOT ({modeled}))";
+    }
+
+    private string BuildUniqueConstraintIndexCandidateMatches(
+        ExpectedUniqueConstraintDefinition definition,
+        string candidate
+    )
+    {
+        var conditions = new List<string>
+        {
+            $"(SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS s "
+            + $"WHERE s.TABLE_SCHEMA = DATABASE() AND s.TABLE_NAME = {Literal(definition.Table)} "
+            + $"AND s.INDEX_NAME = {candidate}.INDEX_NAME) "
+            + $"= {definition.Columns.Count.ToString(CultureInfo.InvariantCulture)}",
+        };
+
+        for (var ordinal = 0; ordinal < definition.Columns.Count; ordinal++)
+        {
+            var position = (ordinal + 1).ToString(CultureInfo.InvariantCulture);
+
+            conditions.Add(
+                "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS s "
+                + $"WHERE s.TABLE_SCHEMA = DATABASE() AND s.TABLE_NAME = {Literal(definition.Table)} "
+                + $"AND s.INDEX_NAME = {candidate}.INDEX_NAME "
+                + $"AND s.SEQ_IN_INDEX = {position} "
+                + $"AND s.COLUMN_NAME = {Literal(definition.Columns[ordinal])} "
+                + "AND s.SUB_PART IS NULL)");
+        }
+
+        return $"({string.Join(" AND ", conditions)})";
+    }
+
+    private string BuildAllCheckConstraintsModeled(
         ExpectedTableDefinition definition,
         bool isMariaDb
     )
@@ -120,21 +167,53 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 .ToArray()
             : [];
 
+        var expectedMatches = definition.CheckConstraints
+            .Select(checkConstraint => CheckConstraintMatches(
+                checkConstraint,
+                isMariaDb,
+                "tc.CONSTRAINT_NAME = candidate_tc.CONSTRAINT_NAME"))
+            .ToArray();
+
         var providerGeneratedFilter = implicitJsonChecks.Length == 0
             ? string.Empty
             : $"AND NOT ({string.Join(" OR ", implicitJsonChecks)}) ";
 
-        return $"(SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc "
+        var modeled = expectedMatches.Length == 0
+            ? "FALSE"
+            : $"({string.Join(" OR ", expectedMatches)})";
+
+        return "NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS candidate_tc "
             + (implicitJsonChecks.Length == 0
                 ? string.Empty
                 : "JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc "
-                    + "ON cc.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA "
-                    + "AND cc.TABLE_NAME = tc.TABLE_NAME "
-                    + "AND cc.CONSTRAINT_NAME = tc.CONSTRAINT_NAME ")
-            + $"WHERE tc.CONSTRAINT_SCHEMA = DATABASE() AND tc.TABLE_NAME = {Literal(definition.Table)} "
-            + "AND tc.CONSTRAINT_TYPE = 'CHECK' "
+                    + "ON cc.CONSTRAINT_SCHEMA = candidate_tc.CONSTRAINT_SCHEMA "
+                    + "AND cc.TABLE_NAME = candidate_tc.TABLE_NAME "
+                    + "AND cc.CONSTRAINT_NAME = candidate_tc.CONSTRAINT_NAME ")
+            + $"WHERE candidate_tc.CONSTRAINT_SCHEMA = DATABASE() "
+            + $"AND candidate_tc.TABLE_NAME = {Literal(definition.Table)} "
+            + "AND candidate_tc.CONSTRAINT_TYPE = 'CHECK' "
             + providerGeneratedFilter
-            + $") = {definition.CheckConstraints.Count.ToString(CultureInfo.InvariantCulture)}";
+            + $"AND NOT ({modeled}))";
+    }
+
+    private string BuildAllForeignKeysModeled(
+        ExpectedTableDefinition definition
+    )
+    {
+        var expectedMatches = definition.ForeignKeys
+            .Select(foreignKey => ForeignKeyMatches(
+                foreignKey,
+                "rc.CONSTRAINT_NAME = candidate_rc.CONSTRAINT_NAME"))
+            .ToArray();
+
+        var modeled = expectedMatches.Length == 0
+            ? "FALSE"
+            : $"({string.Join(" OR ", expectedMatches)})";
+
+        return "NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS candidate_rc "
+            + $"WHERE candidate_rc.CONSTRAINT_SCHEMA = DATABASE() "
+            + $"AND candidate_rc.TABLE_NAME = {Literal(definition.Table)} "
+            + $"AND NOT ({modeled}))";
     }
 
     private string MariaDbImplicitJsonCheckMatches(
@@ -144,7 +223,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         // MariaDB names an inline column CHECK after its column. Requiring the
         // expected JSON store type plus the exact JSON_VALID expression keeps
         // unrelated user-authored checks visible to strict comparison.
-        return $"(tc.CONSTRAINT_NAME = {Literal(column.Name)} "
+        return $"(candidate_tc.CONSTRAINT_NAME = {Literal(column.Name)} "
             + "AND LOWER(REPLACE(REPLACE(REPLACE(REPLACE("
             + "cc.CHECK_CLAUSE, '`', ''), ' ', ''), '(', ''), ')', '')) "
             + $"= CONCAT('json_valid', LOWER({Literal(column.Name)})))";

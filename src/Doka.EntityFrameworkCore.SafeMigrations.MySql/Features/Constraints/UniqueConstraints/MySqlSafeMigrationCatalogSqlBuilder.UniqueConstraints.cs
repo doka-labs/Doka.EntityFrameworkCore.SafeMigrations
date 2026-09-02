@@ -9,24 +9,23 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var definition = intent.Definition;
         var exists = ConstraintExists(definition.Table, definition.Name, "UNIQUE");
         var matching = ConstraintColumnsMatch(definition.Table, definition.Name, definition.Columns, "UNIQUE");
-        var identityConflict = ConstraintColumnsMatch(
+        var semanticAlias = ConstraintColumnsMatch(
             definition.Table,
             definition.Name,
             definition.Columns,
             "UNIQUE",
             requireExpectedName: false);
+
         var dataBlocked = UniqueConstraintDataBlocked(definition);
+        var satisfied = $"({matching}) OR (NOT ({exists}) AND ({semanticAlias}))";
 
         return Plan(
             $"CASE WHEN NOT {BaseTableExists(definition.Table)} THEN 'prerequisite_missing' "
-            + $"WHEN NOT {exists} AND {identityConflict} THEN 'unsupported' "
-            + $"WHEN NOT {exists} AND {dataBlocked} THEN 'data_blocked' "
-            + $"WHEN NOT {exists} THEN 'missing' "
-            + $"WHEN {matching} THEN 'matching' ELSE 'different' END",
-            matching) with
-        {
-            UnsupportedCode = "unique_constraint_semantic_identity_conflict",
-        };
+            + $"WHEN {exists} AND {matching} THEN 'matching' "
+            + $"WHEN {exists} THEN 'different' "
+            + $"WHEN {semanticAlias} THEN 'matching' "
+            + $"WHEN {dataBlocked} THEN 'data_blocked' ELSE 'missing' END",
+            satisfied);
     }
 
     private MySqlSafeMigrationRuntimePlan BuildDropUniqueConstraint(
@@ -43,6 +42,22 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     private string ConstraintMatches(
         ExpectedUniqueConstraintDefinition definition
     ) => ConstraintColumnsMatch(definition.Table, definition.Name, definition.Columns, "UNIQUE");
+
+    private string UniqueConstraintSatisfied(
+        ExpectedUniqueConstraintDefinition definition
+    )
+    {
+        var exists = ConstraintExists(definition.Table, definition.Name, "UNIQUE");
+        var exact = ConstraintMatches(definition);
+        var semanticAlias = ConstraintColumnsMatch(
+            definition.Table,
+            definition.Name,
+            definition.Columns,
+            "UNIQUE",
+            requireExpectedName: false);
+
+        return $"({exact}) OR (NOT ({exists}) AND ({semanticAlias}))";
+    }
 
     private string UniqueConstraintDataBlocked(
         ExpectedUniqueConstraintDefinition definition

@@ -11,11 +11,11 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         'c',
         CheckMatches(intent.Definition, requireExpectedName: true, requireLocalIdentity: true),
         CheckConstraintDataBlocked(intent.Definition),
-        identityConflict: CheckMatches(
+        semanticAlias: CheckMatches(intent.Definition, requireExpectedName: false),
+        nonCanonicalAlias: CheckMatches(
             intent.Definition,
             requireExpectedName: false,
-            requireLocalIdentity: false),
-        identityConflictCode: "check_constraint_semantic_identity_conflict");
+            requireLocalIdentity: false));
 
     private PostgreSqlSafeMigrationRuntimePlan BuildDropCheck(
         DropCheckConstraintIntent intent
@@ -35,12 +35,32 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         ExpectedCheckConstraintDefinition definition,
         bool requireExpectedName = true,
         bool requireLocalIdentity = true
+    ) => CheckMatches(
+        definition,
+        $"co.conname {(requireExpectedName ? "=" : "<>")} {Literal(definition.Name)}",
+        requireLocalIdentity);
+
+    private string CheckMatches(
+        ExpectedCheckConstraintDefinition definition,
+        string namePredicate,
+        bool requireLocalIdentity = true
     ) => ConstraintBaseWithoutName(definition.Table, definition.Schema, 'c')
-        + $" AND co.conname {(requireExpectedName ? "=" : "<>")} {Literal(definition.Name)}"
+        + $" AND {namePredicate}"
         + (requireLocalIdentity ? LocalConstraintIdentity() : string.Empty)
         + " AND co.convalidated AND NOT co.connoinherit"
         + " AND COALESCE((to_jsonb(co) ->> 'conenforced')::boolean, TRUE)"
         + $" AND {(definition.Expression is not null
             ? ExpressionMatches("pg_catalog.pg_get_expr(co.conbin, co.conrelid)", definition.Expression)
             : ExpressionMatches("pg_catalog.pg_get_expr(co.conbin, co.conrelid)", definition.Sql!))})";
+
+    private string CheckSatisfied(
+        ExpectedCheckConstraintDefinition definition
+    )
+    {
+        var exists = ConstraintExists(definition.Table, definition.Schema, definition.Name, 'c');
+        var exact = CheckMatches(definition, requireExpectedName: true);
+        var semanticAlias = CheckMatches(definition, requireExpectedName: false);
+
+        return $"({exact}) OR (NOT ({exists}) AND ({semanticAlias}))";
+    }
 }

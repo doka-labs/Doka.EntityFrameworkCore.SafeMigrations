@@ -18,11 +18,13 @@ source promotes that exact public contract without a public API or generated
 migration-source delta. The published 10.0.1 and 10.0.2 maintenance releases
 preserve that public API. Stable 10.1.0 source adds two scaffolder-facing
 index-prefix methods while qualifying Doka 10.3.0's typed migration metadata;
-all earlier signatures remain compatible. Prepared stable 10.1.1 preserves
+all earlier signatures remain compatible. Published stable 10.1.1 preserves
 that complete public surface while correcting internal provider analysis and
-structured-expression rendering. Strict scaffolding remains the default. A
-successful release run and exact-version public package readback remain the
-authority for a published API.
+structured-expression rendering. Prepared stable 10.1.2 preserves it again
+while correcting semantic identity, bounded catalog analysis, provider
+namespace guards, and ordered index replacement. Strict scaffolding remains
+the default. A successful release run and exact-version public package
+readback remain the authority for a published API.
 
 ## Packages and registration
 
@@ -219,6 +221,16 @@ schema, ordered members, and expected facets. Explicit ensure APIs require a
 `SafeMigrationPolicy`; familiar create/add overloads generally default to
 `ThrowIfDifferent`. Schema and drop/rename helpers select their defined policy
 internally. Check the overload rather than assuming every method takes policy.
+
+Named ensure operations use semantic identity with exact-name precedence. If
+the expected name exists, all modeled facets must match. If it is absent, a
+differently named equivalent primary key, unique constraint, check constraint,
+foreign key, or index satisfies the operation as `Matching`; multiple aliases
+remain a no-op. A differently named object with a different definition remains
+independent and does not suppress normal safe creation unless its singleton or
+physical provider namespace makes the requested object impossible to create.
+That conflict is `Different` and rejects before DDL. Drop and rename helpers
+always use the exact physical name and never select a semantic alias.
 
 `EnsureTable` additionally requires `SafeMigrationTableMode`: strict owned
 definition or convergence container. `ConvergeTable` always emits an

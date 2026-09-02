@@ -3,40 +3,54 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 public sealed partial class PostgreSqlSafeMigrationIntegrationTests
 {
     [Fact]
-    public async Task EquivalentIndexWithDifferentName_IsRejectedBeforeDdl()
+    public async Task EquivalentIndexWithDifferentName_IsAnIdempotentNoOp()
     {
         var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE index_identity (code integer NOT NULL);"
-            + "CREATE INDEX ix_index_identity_legacy ON index_identity (code);");
+            "CREATE TABLE index_identity (code integer NOT NULL, tenant_id integer NOT NULL);"
+            + "CREATE INDEX ix_index_identity_legacy_a ON index_identity (code, tenant_id);"
+            + "CREATE INDEX ix_index_identity_legacy_b ON index_identity (code, tenant_id);");
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
+        _ = builder.EnsureTable(
+            new ExpectedTableDefinition(
+                "index_identity",
+                [
+                    new ExpectedColumnDefinition("code", typeof(int), isNullable: false, storeType: "integer"),
+                    new ExpectedColumnDefinition("tenant_id", typeof(int), isNullable: false, storeType: "integer"),
+                ]),
+            SafeMigrationTableMode.ConvergenceContainer,
+            SafeMigrationPolicy.ThrowIfDifferent);
         builder.CreateIndexIfNotExists(
             "ix_index_identity_expected",
             "index_identity",
-            ["code"]);
+            ["code", "tenant_id"]);
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("index-identity"));
 
-        var exception = await Assert.ThrowsAsync<PostgresException>(() =>
-            ExecuteOperationsAsync(context, builder.Operations));
-        var assessment = Assert.Single(report.Assessments);
+        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations);
 
-        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
-        Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
-        Assert.Equal("P1001", exception.SqlState);
-        Assert.Equal("doka_sm_different", exception.MessageText);
+        Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
+        Assert.All(
+            report.Assessments,
+            assessment =>
+            {
+                Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState);
+                Assert.Equal(SafeMigrationAction.NoOp, assessment.Action);
+            });
+        Assert.Empty(report.UnexpectedObjects);
         Assert.Equal(
-            1,
+            2,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM pg_catalog.pg_class "
-                + "WHERE relname IN ('ix_index_identity_legacy', 'ix_index_identity_expected');"));
+                + "WHERE relname IN ('ix_index_identity_legacy_a', "
+                + "'ix_index_identity_legacy_b', 'ix_index_identity_expected');"));
     }
 
     [Fact]
@@ -65,6 +79,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         var postflight = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("index-nonidentity-post"));
+
         var assessment = Assert.Single(preflight.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -110,6 +125,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
 
         var exception = await Assert.ThrowsAsync<PostgresException>(() =>
             ExecuteOperationsAsync(context, builder.Operations));
+
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -297,6 +313,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             includedColumns: ["payload"],
             method: "btree",
             nullsDistinct: true);
+
         var collated = new ExpectedIndexDefinition(
             "ix_index_facets_collated",
             "index_facets",
@@ -307,6 +324,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                     operatorClass: "text_pattern_ops")
             ],
             method: "btree");
+
         var create = new MigrationBuilder(context.Database.ProviderName!);
         create.EnsureIndex(canonical, SafeMigrationPolicy.ThrowIfDifferent);
         create.EnsureIndex(collated, SafeMigrationPolicy.ThrowIfDifferent);
@@ -439,6 +457,66 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 : SafeMigrationObservedState.Different,
             Assert.Single(nullReport.Assessments)
                 .ObservedState);
+    }
+
+    [Fact]
+    public async Task RelationNamespaceCollisions_AreRejectedBeforeIndexDdl()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE index_namespace_owner (code integer NOT NULL);"
+            + "CREATE TABLE ix_index_namespace_target (id integer NOT NULL);"
+            + "CREATE TABLE rename_index_owner (code integer NOT NULL);"
+            + "CREATE INDEX rename_index_source ON rename_index_owner (code);"
+            + "CREATE TABLE rename_index_relation_target (id integer NOT NULL);");
+
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.CreateIndexIfNotExists(
+            "ix_index_namespace_target",
+            "index_namespace_owner",
+            ["code"]);
+        builder.RenameIndexIfExists(
+            "rename_index_source",
+            "rename_index_owner",
+            "rename_index_relation_target");
+
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("index-relation-collisions"));
+
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.All(
+            report.Assessments,
+            assessment =>
+            {
+                Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
+                Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
+            });
+
+        foreach (var operation in builder.Operations)
+        {
+            var exception = await Assert.ThrowsAsync<PostgresException>(() =>
+                ExecuteOperationsAsync(context, [operation]));
+
+            Assert.Equal("P1001", exception.SqlState);
+            Assert.Equal("doka_sm_different", exception.MessageText);
+        }
+
+        Assert.Equal(
+            2,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM pg_catalog.pg_class "
+                + "WHERE relkind IN ('r', 'p') "
+                + "AND relname IN ('ix_index_namespace_target', 'rename_index_relation_target');"));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM pg_catalog.pg_class "
+                + "WHERE relkind IN ('i', 'I') AND relname = 'rename_index_source';"));
     }
 
     [Fact]

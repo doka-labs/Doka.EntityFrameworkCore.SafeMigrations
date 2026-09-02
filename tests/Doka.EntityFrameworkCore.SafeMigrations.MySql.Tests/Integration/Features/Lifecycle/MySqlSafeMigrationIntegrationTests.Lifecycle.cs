@@ -407,6 +407,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             context.GetService<IDesignTimeModel>()
                 .Model,
             context.Database.ProviderName!);
+
         var runOptions = new SafeMigrationRunOptions("test-instance", expectedModelFingerprint: fingerprint);
 
         var preflight = await runner.AnalyzeAsync(context, builder.Operations, runOptions);
@@ -756,9 +757,11 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             builder.Operations,
             options,
             CancellationToken.None);
+
         var providerAssessments = preflight.Assessments
             .Where(static assessment => !assessment.IsSafeOperation)
             .ToArray();
+
         var indexAssessment = preflight.Assessments.Single(assessment =>
             assessment.OperationKind == SafeMigrationOperationKind.EnsureIndex
             && assessment.ObjectName == "ix_seed_journey_dependents_principal_id");
@@ -786,6 +789,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             : await ScalarStringAsync(
                 connectionString,
                 "SELECT LOWER(`id`) FROM `seed_journey_principals`;");
+
         var storedPublicId = guidFormat == DokaMySqlGuidFormat.Binary16
             ? await ScalarStringAsync(
                 connectionString,
@@ -793,6 +797,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             : await ScalarStringAsync(
                 connectionString,
                 "SELECT LOWER(`public_id`) FROM `seed_journey_scalars`;");
+
         var storedOptionalGuid = guidFormat == DokaMySqlGuidFormat.Binary16
             ? await ScalarStringAsync(
                 connectionString,
@@ -800,6 +805,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             : await ScalarStringAsync(
                 connectionString,
                 "SELECT LOWER(`optional_guid`) FROM `seed_journey_scalars`;");
+
         var expectedFormat = guidFormat == DokaMySqlGuidFormat.Binary16 ? "N" : "D";
 
         Assert.Equal(principalId.ToString(expectedFormat), storedPrincipalId);
@@ -816,9 +822,9 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
+                "SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'seed_journey_dependents' "
-                + "AND INDEX_NAME = 'ix_seed_journey_dependents_principal_id';"));
+                + "AND COLUMN_NAME = 'principal_id' AND SEQ_IN_INDEX = 1;"));
 
         await ExecuteSqlAsync(connectionString, "DELETE FROM `seed_journey_principals`;");
 
@@ -1228,6 +1234,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             ConnectionReset = false,
             MaximumPoolSize = 1,
         }.ConnectionString;
+
         var services = new ServiceCollection();
         services.AddEntityFrameworkDokaMySql();
         services.AddScoped<IMySqlMigrationOperationHandler, CleanupFailureHandler>();
@@ -1236,6 +1243,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             .UseInternalServiceProvider(serviceProvider)
             .UseMySql(connectionString, Fixture.ServerVersion)
             .Options;
+
         await using var context = new DbContext(options);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         var originalConnectionId = await ContextScalarIntAsync(context, "SELECT CONNECTION_ID();");
@@ -1275,6 +1283,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var connectionString = await Fixture.CreateLeastPrivilegeConnectionStringAsync(
             rootConnectionString,
             CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<int>("guarded_value", "least_privilege_target", type: "int", nullable: true);

@@ -12,11 +12,11 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         ForeignKeyMatches(intent.Definition, requireExpectedName: true),
         ForeignKeyDataBlocked(intent.Definition),
         TableExists(intent.Definition.PrincipalTable, intent.Definition.PrincipalSchema),
+        ForeignKeyMatches(intent.Definition, requireExpectedName: false),
         ForeignKeyMatches(
             intent.Definition,
             requireExpectedName: false,
-            requireLocalIdentity: false),
-        "foreign_key_semantic_identity_conflict");
+            requireLocalIdentity: false));
 
     private PostgreSqlSafeMigrationRuntimePlan BuildDropForeignKey(
         DropForeignKeyIntent intent
@@ -45,10 +45,17 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         ExpectedForeignKeyDefinition definition,
         bool requireExpectedName,
         bool requireLocalIdentity = true
+    ) => ForeignKeyMatches(
+        definition,
+        $"co.conname {(requireExpectedName ? "=" : "<>")} {Literal(definition.Name)}",
+        requireLocalIdentity);
+
+    private string ForeignKeyMatches(
+        ExpectedForeignKeyDefinition definition,
+        string namePredicate,
+        bool requireLocalIdentity = true
     ) => ConstraintBaseWithoutName(definition.Table, definition.Schema, 'f')
-        + (requireExpectedName
-            ? $" AND co.conname = {Literal(definition.Name)}"
-            : $" AND co.conname <> {Literal(definition.Name)}")
+        + $" AND {namePredicate}"
         + StandardConstraintSemantics(requireLocalIdentity)
         + $" AND ARRAY(SELECT a.attname FROM unnest(co.conkey) WITH ORDINALITY AS key(attnum, ord) "
         + "JOIN pg_catalog.pg_attribute a ON a.attrelid = co.conrelid AND a.attnum = key.attnum "
@@ -63,6 +70,17 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         // A column-list SET NULL/DEFAULT action changes which dependent
         // columns are updated and is not expressible by the EF operation.
         + "AND (to_jsonb(co) ->> 'confdelsetcols') IS NULL)";
+
+    private string ForeignKeySatisfied(
+        ExpectedForeignKeyDefinition definition
+    )
+    {
+        var exists = ConstraintExists(definition.Table, definition.Schema, definition.Name, 'f');
+        var exact = ForeignKeyMatches(definition, requireExpectedName: true);
+        var semanticAlias = ForeignKeyMatches(definition, requireExpectedName: false);
+
+        return $"({exact}) OR (NOT ({exists}) AND ({semanticAlias}))";
+    }
 
     private static string ReferentialCode(
         ReferentialAction action

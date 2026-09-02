@@ -3,26 +3,37 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 {
     private MySqlSafeMigrationRuntimePlan BuildEnsureForeignKey(
-        EnsureForeignKeyIntent intent
+        EnsureForeignKeyIntent intent,
+        MySqlServerVersion serverVersion
     )
     {
         var definition = intent.Definition;
         var exists = ConstraintExists(definition.Table, definition.Name, "FOREIGN KEY");
         var matching = ForeignKeyMatches(definition, requireExpectedName: true);
-        var identityConflict = ForeignKeyMatches(definition, requireExpectedName: false);
+        var semanticAlias = ForeignKeyMatches(definition, requireExpectedName: false);
+        // MySQL and MariaDB before 12.1 allocate FK symbols in the database
+        // namespace. MariaDB 12.1 deliberately changed that boundary to the
+        // owning table, so a same-name FK on another table is then harmless.
+        var usesDatabaseScopedNames = !serverVersion.IsMariaDb
+            || serverVersion.Version < new Version(12, 1);
+
+        var nameCollision = usesDatabaseScopedNames
+            ? DatabaseConstraintNameExists(definition.Name, "FOREIGN KEY")
+            : "FALSE";
         var dataBlocked = ForeignKeyDataBlocked(definition);
+        var satisfied = $"({matching}) OR (NOT ({exists}) AND ({semanticAlias}))";
 
         return Plan(
             $"CASE WHEN NOT {BaseTableExists(definition.Table)} "
             + $"OR NOT {BaseTableExists(definition.PrincipalTable)} THEN 'prerequisite_missing' "
-            + $"WHEN NOT {exists} AND {identityConflict} THEN 'unsupported' "
-            + $"WHEN NOT {exists} AND {dataBlocked} THEN 'data_blocked' "
-            + $"WHEN NOT {exists} THEN 'missing' "
-            + $"WHEN {matching} THEN 'matching' ELSE 'different' END",
-            matching) with
-        {
-            UnsupportedCode = "foreign_key_semantic_identity_conflict",
-        };
+            // An exact-name collision remains authoritative. A second object
+            // must never hide drift on the identity owned by this operation.
+            + $"WHEN {exists} AND {matching} THEN 'matching' "
+            + $"WHEN {exists} THEN 'different' "
+            + $"WHEN {semanticAlias} THEN 'matching' "
+            + $"WHEN {nameCollision} THEN 'different' "
+            + $"WHEN {dataBlocked} THEN 'data_blocked' ELSE 'missing' END",
+            satisfied);
     }
 
     private MySqlSafeMigrationRuntimePlan BuildDropForeignKey(
@@ -39,16 +50,19 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     private string ForeignKeyMatches(
         ExpectedForeignKeyDefinition definition,
         bool requireExpectedName
+    ) => ForeignKeyMatches(
+        definition,
+        $"rc.CONSTRAINT_NAME {(requireExpectedName ? "=" : "<>")} {Literal(definition.Name)}");
+
+    private string ForeignKeyMatches(
+        ExpectedForeignKeyDefinition definition,
+        string namePredicate
     )
     {
         var localColumns = OrderedColumnsSql(definition.Columns);
-        var principalColumns = OrderedColumnsSql(definition.PrincipalColumns, "kcu.REFERENCED_COLUMN_NAME");
+        var principalColumns = OrderedColumnsSql(definition.PrincipalColumns);
         var updateRules = ReferentialRules(definition.OnUpdate);
         var deleteRules = ReferentialRules(definition.OnDelete);
-        var namePredicate = requireExpectedName
-            ? $"rc.CONSTRAINT_NAME = {Literal(definition.Name)}"
-            : $"rc.CONSTRAINT_NAME <> {Literal(definition.Name)}";
-
         return $"EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc "
             + "JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu "
             + "ON kcu.CONSTRAINT_SCHEMA = rc.CONSTRAINT_SCHEMA "
@@ -66,6 +80,17 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             + $"AND kcu.REFERENCED_TABLE_NAME = {Literal(definition.PrincipalTable)} "
             + $"AND rc.UPDATE_RULE IN ({string.Join(", ", updateRules.Select(Literal))}) "
             + $"AND rc.DELETE_RULE IN ({string.Join(", ", deleteRules.Select(Literal))}))";
+    }
+
+    private string ForeignKeySatisfied(
+        ExpectedForeignKeyDefinition definition
+    )
+    {
+        var exists = ConstraintExists(definition.Table, definition.Name, "FOREIGN KEY");
+        var exact = ForeignKeyMatches(definition, requireExpectedName: true);
+        var semanticAlias = ForeignKeyMatches(definition, requireExpectedName: false);
+
+        return $"({exact}) OR (NOT ({exists}) AND ({semanticAlias}))";
     }
 
     private string ForeignKeyDataBlocked(
