@@ -1,8 +1,8 @@
 # Documentation
 
 This is the task-oriented entry point for SafeMigrations documentation. The
-repository contains the complete source prepared for the 10.2.0 stable
-feature release; package availability and OpenSSF status are established
+repository contains the complete source prepared for the 10.2.1 stable
+maintenance release; package availability and OpenSSF status are established
 by their linked external registries, not by source documentation alone.
 
 ## Use and deploy

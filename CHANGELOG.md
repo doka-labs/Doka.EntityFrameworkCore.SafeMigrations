@@ -6,6 +6,26 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+## [10.2.1] - 2026-09-03
+
+Prepared a stable patch release that preserves the 10.2.0 public API,
+model-managed operation contract, provider SQL, and runtime behavior while
+correcting generated C# statement termination.
+
+These notes do not establish publication. Require the successful stable
+release run, the authorized signed `v10.2.1` tag, and verified public package,
+symbol, GitHub Release, provenance, SBOM, and attestation readback before
+selecting 10.2.1. All three package IDs must be published at the exact same
+version.
+
+### Fixed
+
+- Generate scaffolded `EnsureModelManagedDataFromModel`,
+  `UpdateModelManagedDataFromModel`, and `DeleteModelManagedDataFromModel`
+  calls with exactly one statement terminator. The custom operation generator
+  now leaves termination to EF Core's containing generator instead of emitting
+  a second empty statement as `});;`.
+
 ## [10.2.0] - 2026-09-02
 
 Prepared a stable minor release for automatic, source-frozen EF Core
@@ -695,7 +715,8 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.2.0...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.2.1...HEAD
+[10.2.1]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.2.0...v10.2.1
 [10.2.0]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.1.2...v10.2.0
 [10.1.2]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.1.1...v10.1.2
 [10.1.1]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.1.0...v10.1.1

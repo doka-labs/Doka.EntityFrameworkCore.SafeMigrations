@@ -42,11 +42,13 @@ convergence defects. Published stable 10.1.1 closes verified missing-table and
 structured-expression defects without changing the public API. Published stable
 10.1.2 closes verified semantic-identity, catalog-scalability, provider
 namespace-collision, and ordered index-replacement defects while preserving
-the same public surface. Prepared stable 10.2.0 responds to the confirmed
+the same public surface. Published stable 10.2.0 responds to the confirmed
 duplicate-key failure of raw HasData inserts by adding automatic source-frozen,
-compare-and-swap model-managed-data convergence. These releases follow changed
-dependency conditions and confirmed correctness requirements; they are not
-deferred initial scope.
+compare-and-swap model-managed-data convergence. Prepared stable 10.2.1
+corrects duplicate statement terminators in scaffolded model-managed calls
+without changing their public or runtime contract. These releases follow
+changed dependency conditions and confirmed correctness requirements; they are
+not deferred initial scope.
 
 Requalify affected behavior before adopting a provider, EF Core, database,
 SDK, action, or tooling update. Preserve public API, report, migration, data
