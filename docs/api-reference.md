@@ -22,8 +22,10 @@ all earlier signatures remain compatible. Published stable 10.1.1 preserves
 that complete public surface while correcting internal provider analysis and
 structured-expression rendering. Published stable 10.1.2 preserves it again
 while correcting semantic identity, bounded catalog analysis, provider
-namespace guards, and ordered index replacement. Prepared stable 10.2.0 adds
+namespace guards, and ordered index replacement. Published stable 10.2.0 adds
 source-frozen model-managed-data operations and the transition-ready state.
+Prepared stable 10.2.1 preserves that public API and operation contract while
+correcting statement-terminator ownership in generated model-managed calls.
 Strict scaffolding remains the default. A successful release run and
 exact-version public package readback remain the authority for a published API.
 

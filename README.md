@@ -43,11 +43,11 @@ when that matrix executes. The exact successful run, not this table, is release
 evidence. See [Support and qualification](docs/support-and-qualification.md).
 
 The initial complete stable delivery is 10.0.0. The latest confirmed published
-release is 10.1.2. This source is prepared for stable 10.2.0: newly scaffolded
-EF model-managed data is source-frozen into guarded, idempotent ensure, update,
-and delete operations as documented in the [release notes](CHANGELOG.md). Only
-a successful release run and verified public packages establish 10.2.0
-availability or qualification.
+release is 10.2.0. This source is prepared for stable 10.2.1: scaffolded
+model-managed ensure, update, and delete calls now contain exactly one statement
+terminator as documented in the [release notes](CHANGELOG.md). Only a successful
+release run and verified public packages establish 10.2.1 availability or
+qualification.
 
 ## Installation
 
@@ -58,14 +58,14 @@ published release and all three NuGet package pages before installation; source
 or changelog entries alone do not establish package availability.
 
 ```bash
-package_version='10.2.0'
+package_version='10.2.1'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.MySql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.2.0'
+package_version='10.2.1'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version "$package_version"
 ```
 
