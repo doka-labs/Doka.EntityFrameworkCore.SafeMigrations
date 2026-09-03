@@ -226,7 +226,7 @@ internal sealed class SafeMigrationCSharpMigrationOperationGenerator : CSharpMig
 
         builder
             .DecrementIndent()
-            .Append(");");
+            .Append(')');
     }
 
     private void AppendModelMetadata(

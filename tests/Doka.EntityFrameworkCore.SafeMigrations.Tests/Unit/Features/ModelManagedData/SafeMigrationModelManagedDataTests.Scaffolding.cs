@@ -68,6 +68,8 @@ public sealed partial class SafeMigrationModelManagedDataTests
         Assert.Contains("keyValues: new object[,]", source, StringComparison.Ordinal);
         Assert.Contains("{ 1, \"administrator\", null }", source, StringComparison.Ordinal);
         Assert.DoesNotContain("object?[,]", source, StringComparison.Ordinal);
+        Assert.DoesNotContain(";;", source, StringComparison.Ordinal);
+        Assert.Equal(3, source.Count(static character => character == ';'));
     }
 
     [Fact]
