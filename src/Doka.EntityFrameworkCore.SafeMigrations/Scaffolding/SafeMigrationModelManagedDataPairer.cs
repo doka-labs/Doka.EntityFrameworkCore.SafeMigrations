@@ -15,19 +15,22 @@ internal static class SafeMigrationModelManagedDataPairer
         ArgumentNullException.ThrowIfNull(inverseOperations);
 
         var inverseRows = new InverseRowIndex(inverseOperations);
+        var columnTransitions = new ColumnTransitionIndex(operations);
         var result = new List<MigrationOperation>(operations.Count);
 
         inverseRows.ConsumeRowsSubsumedByDroppedTables(operations);
 
         foreach (var operation in operations)
         {
+            columnTransitions.Observe(operation);
+
             switch (operation)
             {
                 case InsertDataOperation insert:
                     AddInsert(result, insert, inverseRows);
                     break;
                 case UpdateDataOperation update:
-                    AddUpdate(result, update, inverseRows);
+                    AddUpdate(result, update, inverseRows, columnTransitions);
                     break;
                 case DeleteDataOperation delete:
                     AddDelete(result, delete, inverseRows);
@@ -150,7 +153,8 @@ internal static class SafeMigrationModelManagedDataPairer
     private static void AddUpdate(
         List<MigrationOperation> result,
         UpdateDataOperation operation,
-        InverseRowIndex inverseRows
+        InverseRowIndex inverseRows,
+        ColumnTransitionIndex columnTransitions
     )
     {
         ValidateOwnedShape(operation, operation.KeyValues.GetLength(0));
@@ -166,28 +170,76 @@ internal static class SafeMigrationModelManagedDataPairer
             matches[row] = inverseRows.FindForUpdate(operation, row);
         }
 
+        var firstInverse = (UpdateDataOperation)matches[0].Operation;
+        var inverseColumnTypes = RequiredTypes(
+            firstInverse.ColumnTypes,
+            firstInverse.Columns.Length,
+            "inverse update");
+
+        var inverseOrdinals = ColumnOrdinals(firstInverse.Columns);
+        var oldValues = new object?[matches.Length, operation.Columns.Length];
+        for (var column = 0; column < operation.Columns.Length; column++)
+        {
+            var columnName = operation.Columns[column];
+            if (inverseOrdinals.TryGetValue(columnName, out var inverseOrdinal))
+            {
+                if (!StringComparer.OrdinalIgnoreCase.Equals(
+                        inverseColumnTypes[inverseOrdinal],
+                        columnTypes[column]))
+                {
+                    throw new InvalidOperationException(
+                        $"Inverse update column '{columnName}' uses an inconsistent store type.");
+                }
+
+                for (var row = 0; row < matches.Length; row++)
+                {
+                    var inverse = (UpdateDataOperation)matches[row].Operation;
+                    oldValues[row, column] = inverse.Values[matches[row].Row, inverseOrdinal];
+                }
+
+                continue;
+            }
+
+            // EF omits a newly mapped column from the inverse data operation.
+            // Only the preceding AddColumn operation can prove the value that
+            // existing rows hold before the forward data update executes.
+            var initialValue = columnTransitions.AddedColumnInitialValue(
+                operation,
+                columnName,
+                columnTypes[column]);
+
+            for (var row = 0; row < matches.Length; row++)
+            {
+                oldValues[row, column] = initialValue;
+            }
+        }
+
+        foreach (var inverseColumn in firstInverse.Columns)
+        {
+            if (!operation.Columns.Contains(inverseColumn, StringComparer.Ordinal))
+            {
+                columnTransitions.RequireDrop(operation, inverseColumn);
+            }
+        }
+
         foreach (var match in matches)
         {
             var inverse = (UpdateDataOperation)match.Operation;
             ValidateParallelRows(inverse.KeyValues, inverse.Values, "inverse update");
 
-            if (!inverse.Columns.SequenceEqual(operation.Columns, StringComparer.Ordinal)
+            if (!inverse.Columns.SequenceEqual(firstInverse.Columns, StringComparer.Ordinal)
+                || !RequiredTypes(inverse.ColumnTypes, inverse.Columns.Length, "inverse update")
+                    .SequenceEqual(inverseColumnTypes, StringComparer.OrdinalIgnoreCase)
                 || !RequiredTypes(inverse.KeyColumnTypes, inverse.KeyColumns.Length, "inverse update key")
                     .SequenceEqual(keyColumnTypes, StringComparer.OrdinalIgnoreCase)
-                || !RequiredTypes(inverse.ColumnTypes, inverse.Columns.Length, "inverse update")
-                    .SequenceEqual(columnTypes, StringComparer.OrdinalIgnoreCase))
+                || !inverse.KeyColumns.SequenceEqual(operation.KeyColumns, StringComparer.Ordinal))
             {
                 throw new InvalidOperationException(
-                    "Inverse update rows use inconsistent columns or store types.");
+                    "Inverse update rows use inconsistent columns, keys, or store types.");
             }
 
             match.Consumed = true;
         }
-
-        var oldValues = CopyRows(
-            matches,
-            static row => ((UpdateDataOperation)row.Operation).Values,
-            operation.Columns.Length);
 
         AddBatches(
             result,
@@ -380,6 +432,23 @@ internal static class SafeMigrationModelManagedDataPairer
         return result;
     }
 
+    private static Dictionary<string, int> ColumnOrdinals(
+        string[] columns
+    )
+    {
+        var result = new Dictionary<string, int>(columns.Length, StringComparer.Ordinal);
+        for (var ordinal = 0; ordinal < columns.Length; ordinal++)
+        {
+            if (!result.TryAdd(columns[ordinal], ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"An inverse update repeats column '{columns[ordinal]}'.");
+            }
+        }
+
+        return result;
+    }
+
     private static string[] RequiredTypes(
         string[]? types,
         int expectedCount,
@@ -463,6 +532,110 @@ internal static class SafeMigrationModelManagedDataPairer
         public int Row { get; } = row;
 
         public bool Consumed { get; set; }
+    }
+
+    private sealed class ColumnTransitionIndex
+    {
+        private readonly Dictionary<ColumnIdentity, (AddColumnOperation Operation, bool Ambiguous)> _added = [];
+        private readonly HashSet<ColumnIdentity> _dropped = [];
+
+        public ColumnTransitionIndex(
+            IReadOnlyList<MigrationOperation> operations
+        )
+        {
+            foreach (var operation in operations)
+            {
+                if (operation is DropColumnOperation drop)
+                {
+                    _dropped.Add(Identity(drop.Table, drop.Schema, drop.Name));
+                }
+            }
+        }
+
+        public void Observe(
+            MigrationOperation operation
+        )
+        {
+            switch (operation)
+            {
+                case AddColumnOperation add:
+                {
+                    var identity = Identity(add.Table, add.Schema, add.Name);
+                    var ambiguous = _added.ContainsKey(identity);
+                    _added[identity] = (add, ambiguous);
+                    break;
+                }
+
+                case DropColumnOperation drop:
+                    _added.Remove(Identity(drop.Table, drop.Schema, drop.Name));
+                    break;
+            }
+        }
+
+        public object? AddedColumnInitialValue(
+            UpdateDataOperation update,
+            string column,
+            string expectedStoreType
+        )
+        {
+            var identity = Identity(update.Table, update.Schema, column);
+            if (!_added.TryGetValue(identity, out var addition)
+                || addition.Ambiguous)
+            {
+                throw new InvalidOperationException(
+                    $"Model-managed update column '{column}' has no inverse value or preceding column addition.");
+            }
+
+            var operation = addition.Operation;
+            if (operation.ColumnType is not null
+                && !StringComparer.OrdinalIgnoreCase.Equals(operation.ColumnType, expectedStoreType))
+            {
+                throw new InvalidOperationException(
+                    $"Added model-managed column '{column}' uses an inconsistent store type.");
+            }
+
+            if (operation.ComputedColumnSql is not null
+                || operation.DefaultValueSql is not null)
+            {
+                throw new InvalidOperationException(
+                    $"Added model-managed column '{column}' has no deterministic source-frozen initial value.");
+            }
+
+            if (operation.DefaultValue is not null)
+            {
+                return operation.DefaultValue;
+            }
+
+            return operation.IsNullable
+                ? null
+                : throw new InvalidOperationException(
+                    $"Required model-managed column '{column}' has no explicit initial value.");
+        }
+
+        public void RequireDrop(
+            UpdateDataOperation update,
+            string column
+        )
+        {
+            var identity = Identity(update.Table, update.Schema, column);
+            if (!_dropped.Contains(identity))
+            {
+                throw new InvalidOperationException(
+                    $"Inverse update column '{column}' is absent without a column drop.");
+            }
+        }
+
+        private static ColumnIdentity Identity(
+            string table,
+            string? schema,
+            string column
+        ) => new(schema, table, column);
+
+        private readonly record struct ColumnIdentity(
+            string? Schema,
+            string Table,
+            string Column
+        );
     }
 
     private sealed class InverseRowIndex

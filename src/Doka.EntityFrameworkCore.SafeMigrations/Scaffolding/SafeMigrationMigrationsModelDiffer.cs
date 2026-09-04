@@ -69,14 +69,14 @@ internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffe
                     update.KeyColumnTypes,
                     sourceTable,
                     "update key");
-                update.ColumnTypes = CompleteTypes(
+                update.ColumnTypes = CompleteTransitionTypes(
                     update.Columns,
                     update.ColumnTypes,
+                    sourceTable,
                     targetTable,
-                    "update target");
+                    "update");
 
                 ValidateTypes(update.KeyColumns, update.KeyColumnTypes, targetTable, "update target key");
-                ValidateTypes(update.Columns, update.ColumnTypes, sourceTable, "update source");
                 SafeMigrationModelManagedDataMetadataStore.Set(
                     update,
                     new SafeMigrationModelManagedDataMetadata(
@@ -173,6 +173,70 @@ internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffe
             }
         }
     }
+
+    private static string[] CompleteTransitionTypes(
+        string[] columns,
+        string[]? existingTypes,
+        ITable sourceTable,
+        ITable targetTable,
+        string context
+    )
+    {
+        var providedTypes = existingTypes is { Length: > 0 }
+            ? existingTypes
+            : null;
+
+        if (providedTypes is not null
+            && (providedTypes.Length != columns.Length
+                || providedTypes.Any(string.IsNullOrWhiteSpace)))
+        {
+            throw new InvalidOperationException(
+                $"The provider emitted an incomplete {context} store-type vector.");
+        }
+
+        var result = new string[columns.Length];
+        for (var ordinal = 0; ordinal < columns.Length; ordinal++)
+        {
+            var column = columns[ordinal];
+            var sourceType = FindStoreType(sourceTable, column);
+            var targetType = FindStoreType(targetTable, column);
+
+            if (sourceType is not null
+                && targetType is not null
+                && !StringComparer.OrdinalIgnoreCase.Equals(sourceType, targetType))
+            {
+                throw new InvalidOperationException(
+                    $"The {context} column '{column}' changes store type while model-managed data also changes.");
+            }
+
+            // A newly mapped member exists only in the forward target model.
+            // The reverse diff therefore resolves its operation type from the
+            // reverse source model before the migration source is generated.
+            var modelType = targetType
+                ?? sourceType
+                ?? throw new InvalidOperationException(
+                    $"SafeMigrations could not resolve {context} column '{column}' in either relational model.");
+
+            if (providedTypes is not null
+                && !StringComparer.OrdinalIgnoreCase.Equals(providedTypes[ordinal], modelType))
+            {
+                throw new InvalidOperationException(
+                    $"The provider-emitted {context} store type for column '{column}' "
+                    + "does not match the relational model.");
+            }
+
+            result[ordinal] = modelType;
+        }
+
+        return result;
+    }
+
+    private static string? FindStoreType(
+        ITable table,
+        string column
+    ) => table.Columns.SingleOrDefault(candidate =>
+            StringComparer.Ordinal.Equals(candidate.Name, column))
+        ?.StoreType;
 
     private static ExpectedModelManagedDataUniqueKeyDefinition[] UniqueKeys(
         ITable table,
