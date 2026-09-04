@@ -209,11 +209,19 @@ unset SAFE_MIGRATIONS_MODEL_MANAGED_DATA_STATE
 
 strict_migration="$(find "${project_directory}/${strict_output}" -type f -name '*_StrictScaffoldingProbe.cs' -print -quit)"
 legacy_migration="$(find "${project_directory}/${legacy_output}" -type f -name '*_LegacyScaffoldingProbe.cs' -print -quit)"
+strict_snapshot="$(find "${project_directory}/${strict_output}" -type f -name '*ModelSnapshot.cs' -print -quit)"
+legacy_snapshot="$(find "${project_directory}/${legacy_output}" -type f -name '*ModelSnapshot.cs' -print -quit)"
+strict_transition_baseline="$(find "${project_directory}/${strict_transition_output}" -type f -name '*_StrictDataTransitionBaseline.cs' -print -quit)"
+legacy_transition_baseline="$(find "${project_directory}/${legacy_transition_output}" -type f -name '*_LegacyDataTransitionBaseline.cs' -print -quit)"
 strict_transition_migration="$(find "${project_directory}/${strict_transition_output}" -type f -name '*_StrictDataTransitionProbe.cs' -print -quit)"
 legacy_transition_migration="$(find "${project_directory}/${legacy_transition_output}" -type f -name '*_LegacyDataTransitionProbe.cs' -print -quit)"
 
 if [[ -z "${strict_migration}" \
   || -z "${legacy_migration}" \
+  || -z "${strict_snapshot}" \
+  || -z "${legacy_snapshot}" \
+  || -z "${strict_transition_baseline}" \
+  || -z "${legacy_transition_baseline}" \
   || -z "${strict_transition_migration}" \
   || -z "${legacy_transition_migration}" ]]; then
   echo "EF tooling did not create every SafeMigrations scaffolding probe." >&2
@@ -230,7 +238,57 @@ for expected in \
   fi
 done
 
+for snapshot in "${strict_snapshot}" "${legacy_snapshot}"; do
+  for numeric_discriminator_contract in \
+    'HasDiscriminator<int>("Discriminator")' \
+    '.IsComplete(false)' \
+    '.HasValue(0)' \
+    '.HasValue(1)'; do
+    if ! grep -Fq "${numeric_discriminator_contract}" "${snapshot}"; then
+      echo "Scaffolding snapshot lost numeric discriminator metadata: ${numeric_discriminator_contract}" >&2
+      exit 1
+    fi
+  done
+
+  for string_discriminator_contract in \
+    'HasDiscriminator<string>("AttributedDiscriminator")' \
+    '.HasValue("json-named")' \
+    '.HasValue("contract-named")' \
+    '.HasValue("Fallback")'; do
+    if ! grep -Fq "${string_discriminator_contract}" "${snapshot}"; then
+      echo "Scaffolding snapshot lost converted discriminator metadata: ${string_discriminator_contract}" >&2
+      exit 1
+    fi
+  done
+done
+
+for migration in \
+  "${strict_migration}" \
+  "${legacy_migration}" \
+  "${strict_transition_baseline}" \
+  "${legacy_transition_baseline}"; do
+  for ignored_member in \
+    'RequestMetadata' \
+    'RequestId' \
+    'scaffolding_transition_requests'; do
+    if grep -Fq "${ignored_member}" "${migration}"; then
+      echo "Ignored model member leaked into scaffolding output: ${ignored_member}" >&2
+      exit 1
+    fi
+  done
+done
+
 for migration in "${strict_transition_migration}" "${legacy_transition_migration}"; do
+  for mapped_member in \
+    'RequestMetadata' \
+    'RequestId' \
+    'scaffolding_transition_requests'; do
+    if ! grep -Fq "${mapped_member}" "${migration}"; then
+      echo "Mapped model member is missing from transition output: ${mapped_member}" >&2
+      exit 1
+    fi
+  done
+
   for expected in \
     'migrationBuilder.EnsureModelManagedDataFromModel(' \
     'migrationBuilder.UpdateModelManagedDataFromModel(' \
@@ -280,6 +338,17 @@ else
 fi
 
 for migration in "${strict_migration}" "${legacy_migration}"; do
+  for hierarchy_contract in \
+    'scaffolding_work_items' \
+    'Discriminator' \
+    'scaffolding_attributed_work_items' \
+    'AttributedDiscriminator'; do
+    if ! grep -Fq "${hierarchy_contract}" "${migration}"; then
+      echo "Scaffolding output is missing its incomplete discriminator hierarchy: ${hierarchy_contract}" >&2
+      exit 1
+    fi
+  done
+
   if ! grep -Fq "${composite_index_call}" "${migration}"; then
     echo "Scaffolding output is missing: ${composite_index_call}" >&2
     exit 1
@@ -400,8 +469,56 @@ assert_transition_state() {
   fi
 }
 
+read_transition_model_state() {
+  local database="$1"
+
+  if [[ "${engine}" == "postgres" ]]; then
+    docker exec -e PGPASSWORD=postgrespw "${container_name}" \
+      psql -h 127.0.0.1 -p 5432 -U postgres -d "${database}" -Atc \
+      "SELECT format('%s:%s:%s:%s',
+        to_regclass('public.scaffolding_transition_requests') IS NOT NULL,
+        EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'scaffolding_transition_users' AND column_name = 'RequestMetadata'),
+        EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'scaffolding_transition_users' AND column_name = 'RequestId'),
+        EXISTS (
+          SELECT 1 FROM pg_constraint c
+          INNER JOIN pg_class dependent ON dependent.oid = c.conrelid
+          INNER JOIN pg_class principal ON principal.oid = c.confrelid
+          INNER JOIN pg_namespace n ON n.oid = dependent.relnamespace
+          WHERE c.contype = 'f' AND n.nspname = 'public'
+            AND dependent.relname = 'scaffolding_transition_users'
+            AND principal.relname = 'scaffolding_transition_requests'));"
+  else
+    docker exec "${container_name}" "${client}" -h127.0.0.1 -uroot -prootpw -N -B "${database}" \
+      -e "SELECT CONCAT(
+        EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'scaffolding_transition_requests'), ':',
+        EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'scaffolding_transition_users' AND column_name = 'RequestMetadata'), ':',
+        EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'scaffolding_transition_users' AND column_name = 'RequestId'), ':',
+        EXISTS (SELECT 1 FROM information_schema.key_column_usage WHERE constraint_schema = DATABASE() AND table_name = 'scaffolding_transition_users' AND referenced_table_name = 'scaffolding_transition_requests'));"
+  fi
+}
+
+assert_transition_model_state() {
+  local database="$1"
+  local expected="$2"
+  local phase="$3"
+  local actual
+
+  actual="$(read_transition_model_state "${database}")"
+  if [[ "${actual}" != "${expected}" ]]; then
+    echo "EF tooling ${phase} model verification failed for ${engine}: ${actual}" >&2
+    exit 1
+  fi
+}
+
 source_transition_state="1:administrator@example.test,2:member@example.test"
 target_transition_state="1:owner@example.test,3:auditor@example.test"
+if [[ "${engine}" == "postgres" ]]; then
+  ignored_transition_model_state="f:f:f:f"
+  mapped_transition_model_state="t:t:t:t"
+else
+  ignored_transition_model_state="0:0:0:0"
+  mapped_transition_model_state="1:1:1:1"
+fi
 
 export SAFE_MIGRATIONS_MODEL_MANAGED_DATA_STATE="target"
 export SAFE_MIGRATIONS_CONNECTION_STRING="${strict_transition_connection}"
@@ -409,28 +526,34 @@ dotnet ef database update --project "${project}" \
   --context StrictSafeMigrationDataTransitionScaffoldingDbContext \
   --configuration Release --no-build
 assert_transition_state "tooling_transition_strict" "${target_transition_state}" "strict target"
+assert_transition_model_state "tooling_transition_strict" "${mapped_transition_model_state}" "strict target"
 dotnet ef database update StrictDataTransitionBaseline --project "${project}" \
   --context StrictSafeMigrationDataTransitionScaffoldingDbContext \
   --configuration Release --no-build
 assert_transition_state "tooling_transition_strict" "${source_transition_state}" "strict rollback"
+assert_transition_model_state "tooling_transition_strict" "${ignored_transition_model_state}" "strict rollback"
 dotnet ef database update --project "${project}" \
   --context StrictSafeMigrationDataTransitionScaffoldingDbContext \
   --configuration Release --no-build
 assert_transition_state "tooling_transition_strict" "${target_transition_state}" "strict replay"
+assert_transition_model_state "tooling_transition_strict" "${mapped_transition_model_state}" "strict replay"
 dotnet ef database update --project "${project}" \
   --context StrictSafeMigrationDataTransitionScaffoldingDbContext \
   --configuration Release --no-build
 assert_transition_state "tooling_transition_strict" "${target_transition_state}" "strict idempotent replay"
+assert_transition_model_state "tooling_transition_strict" "${mapped_transition_model_state}" "strict idempotent replay"
 
 export SAFE_MIGRATIONS_CONNECTION_STRING="${legacy_transition_connection}"
 dotnet ef database update --project "${project}" \
   --context LegacySafeMigrationDataTransitionScaffoldingDbContext \
   --configuration Release --no-build
 assert_transition_state "tooling_transition_legacy" "${target_transition_state}" "legacy target"
+assert_transition_model_state "tooling_transition_legacy" "${mapped_transition_model_state}" "legacy target"
 dotnet ef database update --project "${project}" \
   --context LegacySafeMigrationDataTransitionScaffoldingDbContext \
   --configuration Release --no-build
 assert_transition_state "tooling_transition_legacy" "${target_transition_state}" "legacy idempotent replay"
+assert_transition_model_state "tooling_transition_legacy" "${mapped_transition_model_state}" "legacy idempotent replay"
 unset SAFE_MIGRATIONS_MODEL_MANAGED_DATA_STATE
 
 export SAFE_MIGRATIONS_CONNECTION_STRING="${cli_connection}"

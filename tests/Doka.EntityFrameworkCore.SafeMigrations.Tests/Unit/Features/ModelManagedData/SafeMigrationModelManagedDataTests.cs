@@ -131,6 +131,223 @@ public sealed partial class SafeMigrationModelManagedDataTests
     }
 
     [Fact]
+    public void PairerSourceFreezesNullableColumnsAddedAroundModelManagedUpdates()
+    {
+        var addColumn = new AddColumnOperation
+        {
+            Table = "roles",
+            Name = "request_id",
+            ClrType = typeof(int),
+            ColumnType = "int",
+            IsNullable = true,
+        };
+
+        var update = new UpdateDataOperation
+        {
+            Table = "roles",
+            KeyColumns = ["id"],
+            KeyColumnTypes = ["int"],
+            KeyValues = new object?[,] { { 1 } },
+            Columns = ["name", "request_id"],
+            ColumnTypes = ["varchar(64)", "int"],
+            Values = new object?[,] { { "owner", null } },
+        };
+
+        var inverseUpdate = new UpdateDataOperation
+        {
+            Table = "roles",
+            KeyColumns = ["id"],
+            KeyColumnTypes = ["int"],
+            KeyValues = new object?[,] { { 1 } },
+            Columns = ["name"],
+            ColumnTypes = ["varchar(64)"],
+            Values = new object?[,] { { "administrator" } },
+        };
+
+        var dropColumn = new DropColumnOperation
+        {
+            Table = "roles",
+            Name = "request_id",
+        };
+
+        var forward = SafeMigrationModelManagedDataPairer.Pair(
+            [addColumn, update],
+            [dropColumn, inverseUpdate]);
+
+        var forwardUpdate = Assert.IsType<UpdateModelManagedDataScaffoldingOperation>(forward[1]);
+        var forwardIntent = Assert.IsType<UpdateModelManagedDataIntent>(forwardUpdate.Intent);
+
+        Assert.Equal(["name", "request_id"], forwardIntent.Columns);
+        Assert.Equal("administrator", forwardIntent.OldValues.GetValue(0, 0));
+        Assert.Null(forwardIntent.OldValues.GetValue(0, 1));
+        Assert.Equal("owner", forwardIntent.NewValues.GetValue(0, 0));
+        Assert.Null(forwardIntent.NewValues.GetValue(0, 1));
+
+        var inverse = SafeMigrationModelManagedDataPairer.Pair(
+            [dropColumn, inverseUpdate],
+            [addColumn, update]);
+
+        var inverseResult = Assert.IsType<UpdateModelManagedDataScaffoldingOperation>(inverse[1]);
+        var inverseIntent = Assert.IsType<UpdateModelManagedDataIntent>(inverseResult.Intent);
+
+        Assert.Equal(["name"], inverseIntent.Columns);
+        Assert.Equal("owner", inverseIntent.OldValues.GetValue(0, 0));
+        Assert.Equal("administrator", inverseIntent.NewValues.GetValue(0, 0));
+    }
+
+    [Fact]
+    public void PairerSourceFreezesExplicitDefaultsForRequiredAddedColumns()
+    {
+        var addColumn = new AddColumnOperation
+        {
+            Table = "roles",
+            Name = "request_id",
+            ClrType = typeof(int),
+            ColumnType = "int",
+            IsNullable = false,
+            DefaultValue = 0,
+        };
+
+        var update = new UpdateDataOperation
+        {
+            Table = "roles",
+            KeyColumns = ["id"],
+            KeyColumnTypes = ["int"],
+            KeyValues = new object?[,] { { 1 } },
+            Columns = ["request_id"],
+            ColumnTypes = ["int"],
+            Values = new object?[,] { { 7 } },
+        };
+
+        var inverseUpdate = new UpdateDataOperation
+        {
+            Table = "roles",
+            KeyColumns = ["id"],
+            KeyColumnTypes = ["int"],
+            KeyValues = new object?[,] { { 1 } },
+            Columns = [],
+            ColumnTypes = [],
+            Values = new object?[1, 0],
+        };
+
+        var result = SafeMigrationModelManagedDataPairer.Pair(
+            [addColumn, update],
+            [inverseUpdate]);
+
+        var pairedUpdate = Assert.IsType<UpdateModelManagedDataScaffoldingOperation>(result[1]);
+        var intent = Assert.IsType<UpdateModelManagedDataIntent>(pairedUpdate.Intent);
+
+        Assert.Equal(0, intent.OldValues.GetValue(0, 0));
+        Assert.Equal(7, intent.NewValues.GetValue(0, 0));
+    }
+
+    [Theory]
+    [InlineData((int)AddedColumnInitialValue.Absent)]
+    [InlineData((int)AddedColumnInitialValue.OpaqueSql)]
+    [InlineData((int)AddedColumnInitialValue.OpaqueComputedSql)]
+    [InlineData((int)AddedColumnInitialValue.MissingRequiredValue)]
+    [InlineData((int)AddedColumnInitialValue.FollowingAddition)]
+    [InlineData((int)AddedColumnInitialValue.InconsistentStoreType)]
+    public void PairerRejectsUnprovenInitialValuesForNewModelManagedColumns(
+        int initialValueValue
+    )
+    {
+        var initialValue = (AddedColumnInitialValue)initialValueValue;
+        var update = new UpdateDataOperation
+        {
+            Table = "roles",
+            KeyColumns = ["id"],
+            KeyColumnTypes = ["int"],
+            KeyValues = new object?[,] { { 1 } },
+            Columns = ["request_id"],
+            ColumnTypes = ["int"],
+            Values = new object?[,] { { 7 } },
+        };
+
+        var inverseUpdate = new UpdateDataOperation
+        {
+            Table = "roles",
+            KeyColumns = ["id"],
+            KeyColumnTypes = ["int"],
+            KeyValues = new object?[,] { { 1 } },
+            Columns = [],
+            ColumnTypes = [],
+            Values = new object?[1, 0],
+        };
+
+        var operations = new List<MigrationOperation>();
+        if (initialValue != AddedColumnInitialValue.Absent)
+        {
+            var addColumn = new AddColumnOperation
+            {
+                Table = "roles",
+                Name = "request_id",
+                ClrType = typeof(int),
+                ColumnType = initialValue == AddedColumnInitialValue.InconsistentStoreType
+                    ? "bigint"
+                    : "int",
+                IsNullable = false,
+                DefaultValueSql = initialValue == AddedColumnInitialValue.OpaqueSql ? "RAND()" : null,
+                ComputedColumnSql = initialValue == AddedColumnInitialValue.OpaqueComputedSql
+                    ? "id + 1"
+                    : null,
+            };
+
+            if (initialValue == AddedColumnInitialValue.FollowingAddition)
+            {
+                operations.Add(update);
+                operations.Add(addColumn);
+            }
+            else
+            {
+                operations.Add(addColumn);
+                operations.Add(update);
+            }
+        }
+        else
+        {
+            operations.Add(update);
+        }
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            SafeMigrationModelManagedDataPairer.Pair(operations, [inverseUpdate]));
+
+        Assert.Contains("request_id", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PairerRejectsInverseOnlyColumnsWithoutAColumnDrop()
+    {
+        var update = new UpdateDataOperation
+        {
+            Table = "roles",
+            KeyColumns = ["id"],
+            KeyColumnTypes = ["int"],
+            KeyValues = new object?[,] { { 1 } },
+            Columns = ["name"],
+            ColumnTypes = ["varchar(64)"],
+            Values = new object?[,] { { "administrator" } },
+        };
+
+        var inverseUpdate = new UpdateDataOperation
+        {
+            Table = "roles",
+            KeyColumns = ["id"],
+            KeyColumnTypes = ["int"],
+            KeyValues = new object?[,] { { 1 } },
+            Columns = ["name", "request_id"],
+            ColumnTypes = ["varchar(64)", "int"],
+            Values = new object?[,] { { "owner", null } },
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            SafeMigrationModelManagedDataPairer.Pair([update], [inverseUpdate]));
+
+        Assert.Contains("request_id", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("column drop", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PairerRejectsMissingAmbiguousAndAnnotatedInverseEvidence()
     {
         var insert = new InsertDataOperation
@@ -510,5 +727,15 @@ public sealed partial class SafeMigrationModelManagedDataTests
             analysis.RepairCapability);
 
         projection.Observe(operation, analysis, decision);
+    }
+
+    private enum AddedColumnInitialValue
+    {
+        Absent,
+        OpaqueSql,
+        OpaqueComputedSql,
+        MissingRequiredValue,
+        FollowingAddition,
+        InconsistentStoreType,
     }
 }

@@ -61,6 +61,67 @@ public sealed class GeneratedInitialMigrationPreflightTests
             context,
             "SELECT COUNT(*) FROM `scaffolding_users` "
             + "WHERE `Id` = 1 AND `TenantId` = 7 AND `Email` = 'administrator@example.test';"));
+
+        _ = await context.Database.ExecuteSqlRawAsync(
+            "INSERT INTO `scaffolding_work_items` (`Id`, `Caption`, `Discriminator`) "
+            + "VALUES (1, 'Known', 0), (2, 'External', 1), (3, 'Future', 2);",
+            CancellationToken.None);
+
+        Assert.Equal(
+            2,
+            await context.Set<SafeMigrationScaffoldingWorkItem>().CountAsync(CancellationToken.None));
+        Assert.Equal(
+            1,
+            await context.Set<SafeMigrationScaffoldingTask>().CountAsync(CancellationToken.None));
+        Assert.Equal(
+            1,
+            await context.Set<SafeMigrationScaffoldingExternalWorkItem>().CountAsync(CancellationToken.None));
+
+        _ = await context.Database.ExecuteSqlRawAsync(
+            "INSERT INTO `scaffolding_attributed_work_items` "
+            + "(`Id`, `Caption`, `AttributedDiscriminator`) VALUES "
+            + "(11, 'Json', 'json-named'), "
+            + "(12, 'Contract', 'contract-named'), "
+            + "(13, 'Fallback', 'Fallback'), "
+            + "(14, 'Future', 'future-value');",
+            CancellationToken.None);
+
+        context.AddRange(
+            new SafeMigrationJsonNamedWorkItem
+            {
+                Id = 15,
+                Caption = "Converted JSON name",
+            },
+            new SafeMigrationContractNamedWorkItem
+            {
+                Id = 16,
+                Caption = "Converted contract name",
+            },
+            new SafeMigrationFallbackNamedWorkItem
+            {
+                Id = 17,
+                Caption = "Converted fallback name",
+            });
+        _ = await context.SaveChangesAsync(CancellationToken.None);
+
+        Assert.Equal(
+            6,
+            await context.Set<SafeMigrationAttributedWorkItem>().CountAsync(CancellationToken.None));
+        Assert.Equal(
+            2,
+            await context.Set<SafeMigrationJsonNamedWorkItem>().CountAsync(CancellationToken.None));
+        Assert.Equal(
+            2,
+            await context.Set<SafeMigrationContractNamedWorkItem>().CountAsync(CancellationToken.None));
+        Assert.Equal(
+            2,
+            await context.Set<SafeMigrationFallbackNamedWorkItem>().CountAsync(CancellationToken.None));
+        Assert.Equal(3, await ScalarIntAsync(
+            context,
+            "SELECT COUNT(*) FROM `scaffolding_attributed_work_items` "
+            + "WHERE (`Id` = 15 AND `AttributedDiscriminator` = 'json-named') "
+            + "OR (`Id` = 16 AND `AttributedDiscriminator` = 'contract-named') "
+            + "OR (`Id` = 17 AND `AttributedDiscriminator` = 'Fallback');"));
     }
 
     private static IReadOnlyList<MigrationOperation> GeneratedOperations(
