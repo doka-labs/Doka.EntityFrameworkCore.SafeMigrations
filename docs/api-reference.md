@@ -24,10 +24,13 @@ structured-expression rendering. Published stable 10.1.2 preserves it again
 while correcting semantic identity, bounded catalog analysis, provider
 namespace guards, and ordered index replacement. Published stable 10.2.0 adds
 source-frozen model-managed-data operations and the transition-ready state.
-Prepared stable 10.2.1 preserves that public API and operation contract while
+Published stable 10.2.1 preserves that public API and operation contract while
 correcting statement-terminator ownership in generated model-managed calls.
-Strict scaffolding remains the default. A successful release run and
-exact-version public package readback remain the authority for a published API.
+Prepared stable 10.3.0 adds explicit model-managed-data ownership for excluded
+tables, provider-proven lossless column repair, report schema version 2, and
+typed diagnostic evidence. Strict scaffolding remains the default. A successful
+release run and exact-version public package readback remain the authority for
+a published API.
 
 ## Packages and registration
 

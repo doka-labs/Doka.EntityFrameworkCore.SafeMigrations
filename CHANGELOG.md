@@ -6,6 +6,19 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+## [10.3.0] - 2026-09-06
+
+Prepared a stable minor release for explicit model-managed-data ownership,
+provider-proven lossless legacy column repair, and actionable report evidence.
+The release also closes the typed-literal, ordered-projection, and native JSON
+comparison defects found during complete provider qualification.
+
+These notes do not establish publication. Require the successful stable
+release run, the authorized signed `v10.3.0` tag, and verified public package,
+symbol, GitHub Release, provenance, SBOM, and attestation readback before
+selecting 10.3.0. All three package IDs must be published at the exact same
+version.
+
 ### Added
 
 - Add the explicit `ExcludeModelManagedDataForExcludedTables()` scaffolding
@@ -54,6 +67,9 @@ All notable changes are documented here. The format follows
   created objects. The exemption requires an explicit provider proof;
   PostgreSQL and unknown uses of that EF operation remain fail-closed because
   it can own broader provider artifacts.
+- Preserve model-managed unique-key evidence when a newly projected table is
+  renamed, so subsequent index decisions use the target table identity without
+  weakening evidence for existing tables.
 
 ### Security
 
@@ -770,7 +786,8 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.2.1...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.3.0...HEAD
+[10.3.0]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.2.1...v10.3.0
 [10.2.1]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.2.0...v10.2.1
 [10.2.0]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.1.2...v10.2.0
 [10.1.2]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.1.1...v10.1.2

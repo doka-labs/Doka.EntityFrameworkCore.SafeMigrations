@@ -43,10 +43,11 @@ when that matrix executes. The exact successful run, not this table, is release
 evidence. See [Support and qualification](docs/support-and-qualification.md).
 
 The initial complete stable delivery is 10.0.0. The latest confirmed published
-release is 10.2.1. This source also contains unreleased ownership, lossless
-column-repair, and actionable-diagnostics work documented in the
-[changelog](CHANGELOG.md). Only a successful release run and verified public
-packages establish availability or qualification for a later version.
+release is 10.2.1. This source is prepared for stable 10.3.0 with explicit
+Core/custom model-managed-data ownership, provider-proven lossless column
+repair, report schema version 2, and semantic native JSON comparison as
+documented in the [changelog](CHANGELOG.md). Only a successful release run and
+verified public packages establish 10.3.0 availability or qualification.
 
 ## Installation
 
@@ -57,14 +58,14 @@ published release and all three NuGet package pages before installation; source
 or changelog entries alone do not establish package availability.
 
 ```bash
-package_version='10.2.1'
+package_version='10.3.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.MySql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.2.1'
+package_version='10.3.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version "$package_version"
 ```
 
