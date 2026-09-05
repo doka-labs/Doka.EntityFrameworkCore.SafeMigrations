@@ -30,7 +30,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     }
 
     public PostgreSqlSafeMigrationRuntimePlan Build(
-        SafeMigrationOperation operation
+        SafeMigrationOperation operation,
+        bool includeAnalysisEvidence = false,
+        bool includeTransitionEvidence = false
     )
     {
         ArgumentNullException.ThrowIfNull(operation);
@@ -53,7 +55,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             RenameTableIntent value => BuildRenameTable(value),
             EnsureColumnIntent value => BuildEnsureColumn(
                 value,
-                operation.Policy == SafeMigrationPolicy.RepairIfSafe),
+                operation.Policy == SafeMigrationPolicy.RepairIfSafe,
+                includeAnalysisEvidence,
+                includeTransitionEvidence),
             DropColumnIntent value => BuildDropColumn(value),
             RenameColumnIntent value => BuildRenameColumn(value),
             AlterColumnIntent value => BuildAlterColumn(value),

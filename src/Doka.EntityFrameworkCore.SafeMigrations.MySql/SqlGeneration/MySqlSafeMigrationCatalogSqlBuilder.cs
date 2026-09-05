@@ -5,9 +5,11 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     private readonly IRelationalTypeMappingSource _typeMappingSource;
     private readonly ISqlGenerationHelper _sqlGenerationHelper;
     private readonly MySqlSafeMigrationSqlExpressionRenderer _expressionRenderer;
+    private readonly RelationalTypeMapping _stringMapping;
     private Dictionary<string, string>? _identifierMarkers;
     private Dictionary<MySqlCatalogParameterValue, string>? _valueMarkers;
     private List<MySqlCatalogParameterValue>? _parameterValues;
+    private bool _renderValuesInline;
 
     public MySqlSafeMigrationCatalogSqlBuilder(
         IRelationalTypeMappingSource typeMappingSource,
@@ -20,12 +22,17 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         _typeMappingSource = typeMappingSource;
         _sqlGenerationHelper = sqlGenerationHelper;
         _expressionRenderer = new MySqlSafeMigrationSqlExpressionRenderer(typeMappingSource, sqlGenerationHelper);
+        _stringMapping = typeMappingSource.FindMapping(typeof(string))
+            ?? throw new InvalidOperationException("The MySQL provider has no string type mapping.");
     }
 
     public MySqlSafeMigrationRuntimePlan Build(
         SafeMigrationOperation operation,
         MySqlMigrationOperationContext context,
-        IReadOnlyList<ExpectedIndexDefinition>? expectedUniqueIndexes = null
+        IReadOnlyList<ExpectedIndexDefinition>? expectedUniqueIndexes = null,
+        bool includeAnalysisEvidence = true,
+        bool includeTransitionEvidence = true,
+        bool parameterizeValues = true
     )
     {
         ArgumentNullException.ThrowIfNull(operation);
@@ -40,6 +47,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         _identifierMarkers = new Dictionary<string, string>(StringComparer.Ordinal);
         _valueMarkers = new Dictionary<MySqlCatalogParameterValue, string>(MySqlCatalogParameterValueComparer.Instance);
         _parameterValues = [];
+        _renderValuesInline = !parameterizeValues;
         try
         {
             var featureFailure = operation.GetAnnotations().Any()
@@ -61,7 +69,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                     EnsureColumnIntent value => BuildEnsureColumn(
                         value,
                         context.ServerVersion.IsMariaDb,
-                        operation.Policy == SafeMigrationPolicy.RepairIfSafe),
+                        operation.Policy == SafeMigrationPolicy.RepairIfSafe,
+                        includeAnalysisEvidence,
+                        includeTransitionEvidence),
                     DropColumnIntent value => BuildDropColumn(value),
                     RenameColumnIntent value => BuildRenameColumn(value),
                     AlterColumnIntent value => BuildAlterColumn(value, context.ServerVersion.IsMariaDb),
@@ -78,9 +88,15 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                     DropCheckConstraintIntent value => BuildDropCheckConstraint(value),
                     EnsureForeignKeyIntent value => BuildEnsureForeignKey(value, context.ServerVersion),
                     DropForeignKeyIntent value => BuildDropForeignKey(value),
-                    EnsureModelManagedDataIntent value => BuildEnsureModelManagedData(value),
-                    UpdateModelManagedDataIntent value => BuildUpdateModelManagedData(value),
-                    DeleteModelManagedDataIntent value => BuildDeleteModelManagedData(value),
+                    EnsureModelManagedDataIntent value => BuildEnsureModelManagedData(
+                        value,
+                        context.ServerVersion.IsMariaDb),
+                    UpdateModelManagedDataIntent value => BuildUpdateModelManagedData(
+                        value,
+                        context.ServerVersion.IsMariaDb),
+                    DeleteModelManagedDataIntent value => BuildDeleteModelManagedData(
+                        value,
+                        context.ServerVersion.IsMariaDb),
                     _ => throw new ArgumentOutOfRangeException(
                         nameof(operation),
                         operation.Intent.GetType()
@@ -95,7 +111,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                     PrerequisiteExpression = BuildPrerequisiteExpression(operation.Intent),
                     RequiresLazyStateEvaluation = RequiresLazyStateEvaluation(
                         operation.Intent,
-                        plan.RepairCapability),
+                        plan.RepairCapability)
+                        || plan.RequiresDataProbe,
                 };
             }
 
@@ -106,6 +123,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             _identifierMarkers = null;
             _valueMarkers = null;
             _parameterValues = null;
+            _renderValuesInline = false;
         }
     }
 
@@ -304,6 +322,24 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         string value
     )
     {
+        if (_renderValuesInline)
+        {
+            if (_identifierMarkers is null)
+            {
+                throw new InvalidOperationException("No MySQL catalog plan generation is active.");
+            }
+
+            if (_identifierMarkers.TryGetValue(value, out var renderedLiteral))
+            {
+                return renderedLiteral;
+            }
+
+            renderedLiteral = _stringMapping.GenerateSqlLiteral(value);
+            _identifierMarkers.Add(value, renderedLiteral);
+
+            return renderedLiteral;
+        }
+
         if (_identifierMarkers is null
             || _parameterValues is null)
         {
@@ -327,6 +363,27 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         string storeType
     )
     {
+        if (_renderValuesInline)
+        {
+            if (_valueMarkers is null)
+            {
+                throw new InvalidOperationException("No MySQL catalog plan generation is active.");
+            }
+
+            var inlineValue = new MySqlCatalogParameterValue(value, storeType);
+            if (_valueMarkers.TryGetValue(inlineValue, out var renderedLiteral))
+            {
+                return renderedLiteral;
+            }
+
+            var mapping = MySqlCatalogTypeMapping.Resolve(_typeMappingSource, value, storeType);
+
+            renderedLiteral = mapping.GenerateSqlLiteral(value);
+            _valueMarkers.Add(inlineValue, renderedLiteral);
+
+            return renderedLiteral;
+        }
+
         if (_valueMarkers is null
             || _parameterValues is null)
         {

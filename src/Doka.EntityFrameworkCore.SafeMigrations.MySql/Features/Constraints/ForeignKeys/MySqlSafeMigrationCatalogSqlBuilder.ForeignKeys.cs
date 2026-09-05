@@ -20,6 +20,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var nameCollision = usesDatabaseScopedNames
             ? DatabaseConstraintNameExists(definition.Name, "FOREIGN KEY")
             : "FALSE";
+
         var dataBlocked = ForeignKeyDataBlocked(definition);
         var satisfied = $"({matching}) OR (NOT ({exists}) AND ({semanticAlias}))";
 
@@ -33,7 +34,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             + $"WHEN {semanticAlias} THEN 'matching' "
             + $"WHEN {nameCollision} THEN 'different' "
             + $"WHEN {dataBlocked} THEN 'data_blocked' ELSE 'missing' END",
-            satisfied);
+            satisfied) with
+        {
+            DiagnosticEvidenceExpression = BuildForeignKeyDiagnosticEvidence(definition),
+        };
     }
 
     private MySqlSafeMigrationRuntimePlan BuildDropForeignKey(
@@ -59,10 +63,17 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         string namePredicate
     )
     {
-        var localColumns = OrderedColumnsSql(definition.Columns);
-        var principalColumns = OrderedColumnsSql(definition.PrincipalColumns);
+        var localColumnsMatch = OrderedForeignKeyColumnsMatch(
+            definition.Columns,
+            "kcu.COLUMN_NAME");
+
+        var principalColumnsMatch = OrderedForeignKeyColumnsMatch(
+            definition.PrincipalColumns,
+            "kcu.REFERENCED_COLUMN_NAME");
+
         var updateRules = ReferentialRules(definition.OnUpdate);
         var deleteRules = ReferentialRules(definition.OnDelete);
+
         return $"EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc "
             + "JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu "
             + "ON kcu.CONSTRAINT_SCHEMA = rc.CONSTRAINT_SCHEMA "
@@ -74,8 +85,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             // their key rows and can evade the semantic-candidate predicate.
             + $"GROUP BY rc.CONSTRAINT_NAME, rc.UPDATE_RULE, rc.DELETE_RULE, "
             + "kcu.REFERENCED_TABLE_SCHEMA, kcu.REFERENCED_TABLE_NAME "
-            + $"HAVING GROUP_CONCAT(kcu.COLUMN_NAME ORDER BY kcu.ORDINAL_POSITION SEPARATOR ',') = {Literal(localColumns)} "
-            + $"AND GROUP_CONCAT(kcu.REFERENCED_COLUMN_NAME ORDER BY kcu.ORDINAL_POSITION SEPARATOR ',') = {Literal(principalColumns)} "
+            + $"HAVING {localColumnsMatch} "
+            + $"AND {principalColumnsMatch} "
             + $"AND kcu.REFERENCED_TABLE_SCHEMA = DATABASE() "
             + $"AND kcu.REFERENCED_TABLE_NAME = {Literal(definition.PrincipalTable)} "
             + $"AND rc.UPDATE_RULE IN ({string.Join(", ", updateRules.Select(Literal))}) "
@@ -114,6 +125,133 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             + $"LEFT JOIN {Delimited(definition.PrincipalTable)} p ON {join} "
             + $"WHERE {localNotNull} AND p.{Delimited(definition.PrincipalColumns[0])} IS NULL LIMIT 1)";
     }
+
+    private string BuildForeignKeyDiagnosticEvidence(
+        ExpectedForeignKeyDefinition definition
+    )
+    {
+        var expectedColumns = OrderedColumnsSql(definition.Columns);
+        var expectedPrincipalColumns = OrderedColumnsSql(definition.PrincipalColumns);
+        var expectedUpdateRules = ReferentialRules(definition.OnUpdate);
+        var expectedDeleteRules = ReferentialRules(definition.OnDelete);
+        var localColumnsMatch = OrderedForeignKeyColumnsMatch(
+            definition.Columns,
+            "kcu.COLUMN_NAME");
+
+        var principalColumnsMatch = OrderedForeignKeyColumnsMatch(
+            definition.PrincipalColumns,
+            "kcu.REFERENCED_COLUMN_NAME");
+
+        var actualColumns = "GROUP_CONCAT(kcu.COLUMN_NAME ORDER BY kcu.ORDINAL_POSITION SEPARATOR ',')";
+        var actualPrincipalColumns = "GROUP_CONCAT(kcu.REFERENCED_COLUMN_NAME "
+            + "ORDER BY kcu.ORDINAL_POSITION SEPARATOR ',')";
+
+        var columnDiagnostics = BoundedOrderedListDiagnostics(
+            expectedColumns,
+            actualColumns,
+            definition.Columns.Count,
+            "kcu.COLUMN_NAME");
+
+        var principalColumnDiagnostics = BoundedOrderedListDiagnostics(
+            expectedPrincipalColumns,
+            actualPrincipalColumns,
+            definition.PrincipalColumns.Count,
+            "kcu.REFERENCED_COLUMN_NAME");
+
+        return "(SELECT NULLIF(CONCAT_WS(CHAR(30), "
+            + DiagnosticRecord(
+                $"NOT ({localColumnsMatch})",
+                "foreign_key_column_order",
+                columnDiagnostics.Expected,
+                columnDiagnostics.Actual)
+            + ", "
+            + DiagnosticRecord(
+                $"NOT ({principalColumnsMatch})",
+                "foreign_key_principal_column_order",
+                principalColumnDiagnostics.Expected,
+                principalColumnDiagnostics.Actual)
+            + ", "
+            + DiagnosticRecord(
+                $"rc.DELETE_RULE NOT IN ({string.Join(", ", expectedDeleteRules.Select(Literal))})",
+                "foreign_key_delete_behavior",
+                Literal(ReferentialDiagnosticCode(definition.OnDelete)),
+                "LOWER(REPLACE(rc.DELETE_RULE, ' ', '_'))")
+            + ", "
+            + DiagnosticRecord(
+                $"rc.UPDATE_RULE NOT IN ({string.Join(", ", expectedUpdateRules.Select(Literal))})",
+                "foreign_key_update_behavior",
+                Literal(ReferentialDiagnosticCode(definition.OnUpdate)),
+                "LOWER(REPLACE(rc.UPDATE_RULE, ' ', '_'))")
+            + "), '') FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc "
+            + "JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu "
+            + "ON kcu.CONSTRAINT_SCHEMA = rc.CONSTRAINT_SCHEMA "
+            + "AND kcu.TABLE_NAME = rc.TABLE_NAME AND kcu.CONSTRAINT_NAME = rc.CONSTRAINT_NAME "
+            + $"WHERE rc.CONSTRAINT_SCHEMA = DATABASE() AND rc.TABLE_NAME = {Literal(definition.Table)} "
+            + $"AND rc.CONSTRAINT_NAME = {Literal(definition.Name)} "
+            + "GROUP BY rc.CONSTRAINT_NAME, rc.UPDATE_RULE, rc.DELETE_RULE LIMIT 1)";
+    }
+
+    private string OrderedForeignKeyColumnsMatch(
+        IReadOnlyList<string> columns,
+        string columnExpression
+    )
+    {
+        var conditions = new List<string>(columns.Count + 1)
+        {
+            $"COUNT(*) = {columns.Count.ToString(CultureInfo.InvariantCulture)}",
+        };
+
+        for (var ordinal = 0; ordinal < columns.Count; ordinal++)
+        {
+            conditions.Add(
+                $"SUM(CASE WHEN kcu.ORDINAL_POSITION = {(ordinal + 1).ToString(CultureInfo.InvariantCulture)} "
+                + $"AND {columnExpression} = {Literal(columns[ordinal])} THEN 1 ELSE 0 END) = 1");
+        }
+
+        // WHY: GROUP_CONCAT is bounded by the session's group_concat_max_len.
+        // Per-ordinal aggregates keep semantic identity correct at maximum key widths.
+        return $"({string.Join(" AND ", conditions)})";
+    }
+
+    private (string Expected, string Actual) BoundedOrderedListDiagnostics(
+        string expected,
+        string actualExpression,
+        int expectedCount,
+        string columnExpression
+    )
+    {
+        if (expected.Length <= SafeMigrationFacetDifference.MaximumValueLength)
+        {
+            return (
+                Literal(expected),
+                $"LEFT({actualExpression}, {SafeMigrationFacetDifference.MaximumValueLength})");
+        }
+
+        var positions = Enumerable
+            .Range(1, expectedCount)
+            .Select(position =>
+                $"MAX(CASE WHEN kcu.ORDINAL_POSITION = {position.ToString(CultureInfo.InvariantCulture)} "
+                + $"THEN {columnExpression} END)");
+
+        var expectedPayload = $"count={expectedCount.ToString(CultureInfo.InvariantCulture)};{expected}";
+        var actualPayload = $"CONCAT('count=', COUNT(*), ';', CONCAT_WS(',', {string.Join(", ", positions)}))";
+
+        return (
+            $"CONCAT('sha256:', LOWER(SHA2({Literal(expectedPayload)}, 256)))",
+            $"CONCAT('sha256:', LOWER(SHA2({actualPayload}, 256)))");
+    }
+
+    private static string ReferentialDiagnosticCode(
+        ReferentialAction action
+    ) => action switch
+    {
+        ReferentialAction.NoAction => "no_action_or_restrict",
+        ReferentialAction.Restrict => "restrict",
+        ReferentialAction.Cascade => "cascade",
+        ReferentialAction.SetNull => "set_null",
+        ReferentialAction.SetDefault => "set_default",
+        _ => throw new ArgumentOutOfRangeException(nameof(action)),
+    };
 
     private static IReadOnlyList<string> ReferentialRules(
         ReferentialAction action

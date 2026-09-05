@@ -26,6 +26,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 IsNullable = true,
             },
         };
+
         var generator = context.GetService<IMigrationsSqlGenerator>();
 
         var exception = Assert.Throws<InvalidOperationException>(() => generator.Generate([operation], context.Model));
@@ -276,10 +277,21 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 new SafeMigrationRunOptions("legacy-repair"),
                 CancellationToken.None);
 
+        var providerAnalysis = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations.Cast<SafeMigrationOperation>().ToArray(),
+                CancellationToken.None);
+
         var assessment = Assert.Single(report.Assessments);
+        var providerAssessment = Assert.Single(providerAnalysis);
+
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
         Assert.Equal(SafeMigrationAction.Repair, assessment.Action);
+        Assert.Equal(SafeMigrationOperationalImpact.TableRewritePossible, assessment.OperationalImpact);
+        Assert.True(providerAssessment.RequiresLiveDataProof);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
@@ -343,13 +355,24 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 new SafeMigrationRunOptions("legacy-null-block"),
                 CancellationToken.None);
 
+        var providerAnalysis = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations.Cast<SafeMigrationOperation>().ToArray(),
+                CancellationToken.None);
+
         var exception = await Assert.ThrowsAsync<MySqlException>(() =>
             ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
         var assessment = Assert.Single(report.Assessments);
+        var providerAssessment = Assert.Single(providerAnalysis);
+
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationObservedState.DataBlocked, assessment.ObservedState);
         Assert.Equal(SafeMigrationAction.RejectDataBlocked, assessment.Action);
+        Assert.Equal(SafeMigrationOperationalImpact.TableRewritePossible, assessment.OperationalImpact);
+        Assert.True(providerAssessment.RequiresLiveDataProof);
         Assert.Contains("doka_sm_data_blocked", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(
             1,
@@ -366,7 +389,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `legacy_type_drift` (`value` varchar(30) NULL COMMENT 'legacy');");
+            "CREATE TABLE `legacy_type_drift` (`value` char(30) NULL COMMENT 'legacy');");
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -403,7 +426,8 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 connectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'legacy_type_drift' "
-                + "AND COLUMN_NAME = 'value' AND CHARACTER_MAXIMUM_LENGTH = 30 AND COLUMN_COMMENT = 'legacy';"));
+                + "AND COLUMN_NAME = 'value' AND DATA_TYPE = 'char' "
+                + "AND CHARACTER_MAXIMUM_LENGTH = 30 AND COLUMN_COMMENT = 'legacy';"));
     }
 
     [Fact]

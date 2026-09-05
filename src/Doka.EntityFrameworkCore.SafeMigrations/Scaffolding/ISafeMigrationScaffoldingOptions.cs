@@ -10,4 +10,7 @@ internal interface ISafeMigrationScaffoldingOptions
 
     /// <summary>Gets the policy frozen into legacy-convergence table operations.</summary>
     SafeMigrationPolicy LegacyConvergencePolicy { get; }
+
+    /// <summary>Gets whether excluded tables also exclude model-managed-data differences.</summary>
+    bool ExcludeModelManagedDataForExcludedTablesEnabled { get; }
 }

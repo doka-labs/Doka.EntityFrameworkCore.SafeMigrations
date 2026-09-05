@@ -32,6 +32,27 @@ public sealed class PostgreSqlServiceCompositionTests
     }
 
     [Fact]
+    public void ExcludedTableDataOwnership_IsPersistedAndSeparatesServiceProviders()
+    {
+        var defaults = new DbContextOptionsBuilder();
+        defaults.UsePostgreSqlSafeMigrations();
+
+        var ownership = new DbContextOptionsBuilder();
+        ownership.UsePostgreSqlSafeMigrations(options =>
+            options.ExcludeModelManagedDataForExcludedTables());
+
+        var defaultExtension = defaults.Options.FindExtension<PostgreSqlSafeMigrationsOptionsExtension>()!;
+        var ownershipExtension = ownership.Options.FindExtension<PostgreSqlSafeMigrationsOptionsExtension>()!;
+
+        Assert.False(defaultExtension.ExcludeModelManagedDataForExcludedTablesEnabled);
+        Assert.True(ownershipExtension.ExcludeModelManagedDataForExcludedTablesEnabled);
+        Assert.False(defaultExtension.Info.ShouldUseSameServiceProvider(ownershipExtension.Info));
+        Assert.NotEqual(
+            defaultExtension.Info.GetServiceProviderHashCode(),
+            ownershipExtension.Info.GetServiceProviderHashCode());
+    }
+
+    [Fact]
     public void RepairPolicyWithoutLegacyModeIsRejectedBeforeOptionsMutation()
     {
         var options = new DbContextOptionsBuilder();
@@ -187,6 +208,83 @@ public sealed class PostgreSqlServiceCompositionTests
         Assert.Contains("IF doka_action = 'apply'", command.CommandText, StringComparison.Ordinal);
         Assert.Contains("-- custom baseline: AddColumnOperation", command.CommandText, StringComparison.Ordinal);
         Assert.Contains("-- custom baseline: AlterColumnOperation", command.CommandText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RepairableVarcharEnsureColumn_ReusesOneClassifierAcrossLockedEvaluation()
+    {
+        var options = new DbContextOptionsBuilder<SafeMigrationDbContext>();
+        options.UseNpgsql("Host=localhost;Database=composition;Username=test;Password=test");
+        ((DbContextOptionsBuilder)options).UsePostgreSqlSafeMigrations();
+
+        using var context = new SafeMigrationDbContext(options.Options);
+        var migrationBuilder = new MigrationBuilder(context.Database.ProviderName!);
+        migrationBuilder.EnsureColumn(
+            "items",
+            new ExpectedColumnDefinition(
+                "value",
+                typeof(string),
+                isNullable: true,
+                storeType: "character varying(40)",
+                maxLength: 40),
+            SafeMigrationPolicy.RepairIfSafe);
+
+        var command = Assert.Single(
+            context
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate(migrationBuilder.Operations, context.Model));
+
+        const string loop = "FOR doka_evaluation_pass IN 1..2 LOOP";
+        const string classifier = "doka_transition_eligible := COALESCE((";
+        const string action = "doka_action := CASE doka_state";
+        const string exit = "EXIT WHEN doka_action <> 'repair' OR doka_evaluation_pass = 2;";
+        const string tableLock = " IN ACCESS EXCLUSIVE MODE;";
+        const string mutationBranch = "IF doka_action = 'reject_different' THEN";
+
+        var loopIndex = command.CommandText.IndexOf(loop, StringComparison.Ordinal);
+        var classifierIndex = command.CommandText.IndexOf(classifier, StringComparison.Ordinal);
+        var actionIndex = command.CommandText.IndexOf(action, StringComparison.Ordinal);
+        var exitIndex = command.CommandText.IndexOf(exit, StringComparison.Ordinal);
+        var lockIndex = command.CommandText.IndexOf(tableLock, StringComparison.Ordinal);
+        var mutationBranchIndex = command.CommandText.IndexOf(mutationBranch, StringComparison.Ordinal);
+
+        Assert.True(loopIndex >= 0);
+        Assert.True(classifierIndex > loopIndex);
+        Assert.True(actionIndex > classifierIndex);
+        Assert.True(exitIndex > actionIndex);
+        Assert.True(lockIndex > exitIndex);
+        Assert.True(mutationBranchIndex > lockIndex);
+        Assert.Equal(loopIndex, command.CommandText.LastIndexOf(loop, StringComparison.Ordinal));
+        Assert.Equal(classifierIndex, command.CommandText.LastIndexOf(classifier, StringComparison.Ordinal));
+        Assert.DoesNotContain("__DOKA_SM_", command.CommandText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EnsureColumnWithoutDataProof_DoesNotEmitEvaluationLoopOrTableLock()
+    {
+        var options = new DbContextOptionsBuilder<SafeMigrationDbContext>();
+        options.UseNpgsql("Host=localhost;Database=composition;Username=test;Password=test");
+        ((DbContextOptionsBuilder)options).UsePostgreSqlSafeMigrations();
+
+        using var context = new SafeMigrationDbContext(options.Options);
+        var migrationBuilder = new MigrationBuilder(context.Database.ProviderName!);
+        migrationBuilder.EnsureColumn(
+            "items",
+            new ExpectedColumnDefinition(
+                "value",
+                typeof(int),
+                isNullable: true,
+                storeType: "integer"),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var command = Assert.Single(
+            context
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate(migrationBuilder.Operations, context.Model));
+
+        Assert.DoesNotContain("FOR doka_evaluation_pass", command.CommandText, StringComparison.Ordinal);
+        Assert.DoesNotContain("ACCESS EXCLUSIVE", command.CommandText, StringComparison.Ordinal);
+        Assert.DoesNotContain("__DOKA_SM_", command.CommandText, StringComparison.Ordinal);
     }
 
     [Fact]

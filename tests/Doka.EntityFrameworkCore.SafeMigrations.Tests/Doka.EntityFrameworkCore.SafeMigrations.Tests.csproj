@@ -9,6 +9,9 @@
     <None Include="..\..\schemas\safe-migration-run-report-v1.schema.json"
           Link="schemas\safe-migration-run-report-v1.schema.json"
           CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\schemas\safe-migration-run-report-v2.schema.json"
+          Link="schemas\safe-migration-run-report-v2.schema.json"
+          CopyToOutputDirectory="PreserveNewest" />
     <ProjectReference Include="..\..\src\Doka.EntityFrameworkCore.SafeMigrations\Doka.EntityFrameworkCore.SafeMigrations.csproj" />
     <PackageReference Include="FsCheck.Xunit" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design"

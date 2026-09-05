@@ -109,6 +109,10 @@ Provider tests use real Docker servers and cover:
 - source-frozen legacy convergence policy selection, mutable column repair,
   matching rerun, null-data blocking, invariant-drift rejection, and
   MySQL/MariaDB preservation of unmodeled `EXTRA` modifiers;
+- provider-proven ordinary `VARCHAR` widening, grouped and deduplicated
+  live-data narrowing proofs, execution-time race rejection, complete
+  postflight, idempotent replay, operational-impact evidence, and exact
+  MySQL/MariaDB `BIT(1) -> TINYINT(1)` Boolean repair;
 - typed Doka column-metadata acceptance and rejection, plus exact repair of
   historical CLR defaults without retaining a permanent model default;
 - granular heterogeneous table convergence and pairwise legacy-state
@@ -151,6 +155,9 @@ Provider tests use real Docker servers and cover:
 - Strict and legacy initial migrations generated through the real provider
   design-time differ, compiled, preflighted against an empty database, executed
   twice as the identical operation stream, and verified through postflight;
+- independent Core and derived custom migration projects, snapshots,
+  assemblies, and history tables, including exact excluded-table
+  model-managed-data ownership and retained custom-to-Core relationships;
 - incoming model-managed delete dependencies for every supported referential
   action, including accepted ordered child/parent removal and rejection of one
   remaining or concurrently inserted dependent row;
@@ -316,10 +323,13 @@ cross-machine latency promise.
 
 Every provider engine cell also analyzes 100,000 ordered mixed operations whose
 observations cover every state and planner action, including model-managed
-ensure, update, and delete. Separate live execution tests apply and replay at
-least 50,000 mixed absent, source, and already-target row transitions using the
-production 128-row/4,096-cell partitioning. Their JSON evidence records elapsed
-time, managed allocations, command count, maximum batch rows/cells, and maximum
+ensure, update, and delete. The analysis workload also includes accepted
+`VARCHAR` widening, accepted narrowing, data-blocked narrowing, and the
+MySQL/MariaDB Boolean repair; it is not a matching/no-op-only benchmark.
+Separate live execution tests apply and replay at least 50,000 mixed absent,
+source, and already-target row transitions using the production
+128-row/4,096-cell partitioning. Their JSON evidence records elapsed time,
+managed allocations, command count, maximum batch rows/cells, and maximum
 generated command bytes. These are scalability and allocation gates, not an
 absolute wall-clock promise across different runner hardware.
 

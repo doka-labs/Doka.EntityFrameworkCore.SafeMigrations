@@ -87,8 +87,13 @@ scope.
 
 ## Model-managed data
 
-Newly scaffolded model-managed data uses typed parameters and MySQL/MariaDB's
-null-safe `<=>` operator for key, captured-source, and target comparisons.
+Newly scaffolded model-managed data uses typed parameters. Keys and ordinary
+scalar values use MySQL/MariaDB's null-safe `<=>` operator. Native JSON values
+use engine-specific document equality: MySQL casts the expected relation value
+to JSON before `<=>`, while MariaDB combines explicit SQL-NULL branches with
+`JSON_EQUALS` because its JSON type is LONGTEXT. Equivalent whitespace and
+object-member order are idempotent; array order, duplicate elements, JSON
+`null`, SQL `NULL`, and JSON-like text retain distinct contracts.
 Ensure emits conditional plain inserts. Update and delete are compare-and-swap
 operations whose predicates include the captured source row and whose guarded
 scope validates the final state. The implementation does not use `INSERT
@@ -117,16 +122,63 @@ telemetry, stable reason codes, and exception messages. See
 [migration authoring](migration-authoring.md#model-managed-data-from-hasdata)
 for the consumer boundary.
 
+Catalog parameters and inline guard SQL share one mapping resolver. A non-null
+model-managed value is resolved by its original CLR type and captured store
+type, then converted by the provider mapping. This keeps `char(1)`, enum,
+Char36 Guid, Binary16 Guid, date/time, binary, JSON, and nullable values
+consistent between analysis and guarded execution. Unsupported CLR/store-type
+pairs fail before target DML.
+
+## Database-default projection
+
+Doka 10.3.x renders `AlterDatabaseOperation` only as an optional
+`ALTER DATABASE CHARACTER SET` default. That operation does not rewrite an
+existing table, column, index, constraint, or row, so the MySQL/MariaDB analyzer
+retains table-scoped preflight facts across it. It remains visible as
+`provider_owned_not_analyzed` and therefore retains the
+`ReadyWithProviderOperations` review boundary. The exemption belongs to the
+versioned Doka adapter rather than provider-neutral Core; another provider's
+operation with the same EF type remains opaque unless that provider proves its
+own effect.
+
 ## Automatic legacy column repair
 
 A generated legacy-convergence migration retains `ThrowIfDifferent` unless its
-source explicitly selects `RepairIfSafe`. That policy can repair only
-nullability, default, and comment drift on an ordinary existing column. Store
-type, collation, generated-value state, row-version state, and provider
-metadata must already match. Doka's typed metadata contract must recognize
-every provider annotation and prove that Guid storage and value-generation
-metadata are consistent with the complete column shape. Existing `NULL` values
-block a repair to `NOT NULL` before target DDL.
+source explicitly selects `RepairIfSafe`. That policy can repair nullability,
+default, and comment drift on an ordinary existing column. It can also accept a
+provider-proven ordinary `VARCHAR` widening, a live-data-verified `VARCHAR`
+narrowing, or the exact compatible Boolean transition from `BIT(1)` to
+`TINYINT(1)`.
+
+A `VARCHAR` length repair requires the same nonbinary character family,
+character set, effective collation, generated/identity/row-version state,
+provider metadata, and compatible dependent indexes. A column on either side
+of a foreign key remains blocked because MySQL/MariaDB require a coupled type
+transition and a single-column repair cannot own both sides. Widening needs no
+row-value query. Narrowing groups and deduplicates candidates for the same table
+into one bounded character-length scan. It uses `CHAR_LENGTH`, not byte
+`LENGTH`, returns only whether a violating row exists, and never returns a value
+or key. The successful proof can require a complete table scan. A normal B-tree
+index does not make that predicate a seek automatically.
+
+The narrowing proof is repeated immediately before mutation. Strict conversion
+behavior plus the complete target postcondition remains authoritative if a
+concurrent writer reaches the table after preflight. SafeMigrations never emits
+`IGNORE`; one overlength or concurrently inserted value fails without
+truncation. Cancellation, timeout, an incomplete result, or changed catalog
+shape is failure, not evidence that the data fits.
+
+`BIT(1)` has only the non-null values zero and one, both exactly representable
+by `TINYINT(1)`. The repair is available only for a CLR `bool`/nullable `bool`
+target with compatible nullability, literal Boolean default, provider metadata,
+and dependencies. It does not add a database check constraint. `BIT(2..64)`, a
+non-Boolean target, and the reverse `TINYINT(1) -> BIT(1)` remain blocked.
+
+Doka's typed metadata contract must recognize every provider annotation and
+prove that Guid storage and value-generation metadata are consistent with the
+complete column shape. Existing `NULL` values block a repair to `NOT NULL`
+before target DDL. Other store-family, collation, generated-value, row-version,
+and unsupported provider-metadata differences remain fail-closed.
 
 MySQL and MariaDB require `MODIFY COLUMN` to carry the complete target column
 definition. SafeMigrations therefore asks Doka to render that complete
@@ -139,6 +191,13 @@ and both must satisfy the same full catalog postcondition. A session-local
 prepared classifier reads column data only after a catalog-only guard has
 proved that the target exists. Missing safe additions remain `Missing`; an
 unsafe missing `NOT NULL` addition to a populated table remains `DataBlocked`.
+
+Every accepted length or Boolean repair reports
+`SafeMigrationOperationalImpact.TableRewritePossible`. Lossless does not mean
+instant or online: a `VARCHAR` widening can cross the one-byte/two-byte encoded
+length boundary, and either widening or narrowing may copy or rebuild a table,
+rebuild indexes, or wait for a metadata lock. Review table size, row format,
+page size, key limits, server profile, and maintenance window independently.
 
 ## Index prefixes and physical key limits
 
@@ -360,6 +419,9 @@ unqualified future engine line is admitted implicitly.
 - [MySQL INSERT ON DUPLICATE KEY UPDATE](https://dev.mysql.com/doc/refman/8.4/en/insert-on-duplicate.html)
 - [MySQL foreign-key actions](https://dev.mysql.com/doc/refman/8.4/en/constraint-foreign-key.html)
 - [MariaDB null-safe equal operator](https://mariadb.com/docs/server/reference/sql-structure/operators/comparison-operators/null-safe-equal)
+- [MySQL JSON data type](https://dev.mysql.com/doc/refman/8.4/en/json.html)
+- [MariaDB JSON data type](https://mariadb.com/docs/server/reference/data-types/string-data-types/json)
+- [MariaDB JSON_EQUALS](https://mariadb.com/docs/server/reference/sql-functions/special-functions/json-functions/json_equals)
 - [MariaDB INSERT ON DUPLICATE KEY UPDATE](https://mariadb.com/docs/server/reference/sql-statements/data-manipulation/inserting-loading-data/insert-on-duplicate-key-update)
 - [MySQL InnoDB limits](https://dev.mysql.com/doc/refman/8.4/en/innodb-limits.html)
 - [MySQL CREATE INDEX](https://dev.mysql.com/doc/refman/8.4/en/create-index.html)

@@ -63,12 +63,29 @@ internal static class LargeMigrationStressContract
             ? "varchar(40)"
             : "character varying(40)";
 
+        var wideningStoreType = dialect == LargeMigrationStressDialect.MySql
+            ? "varchar(80)"
+            : "character varying(80)";
+
+        var narrowingStoreType = dialect == LargeMigrationStressDialect.MySql
+            ? "varchar(10)"
+            : "character varying(10)";
+
+        var blockedNarrowingStoreType = dialect == LargeMigrationStressDialect.MySql
+            ? "varchar(5)"
+            : "character varying(5)";
+
+        var booleanStoreType = dialect == LargeMigrationStressDialect.MySql
+            ? "bit(1)"
+            : "boolean";
+
         var parentDefinition = ParentDefinition(ParentTable, integerStoreType);
         var secondaryParentDefinition = ParentDefinition(SecondaryParentTable, integerStoreType);
-        var targetDefinition = TargetDefinition(integerStoreType, textStoreType);
+        var targetDefinition = TargetDefinition(integerStoreType, textStoreType, booleanStoreType);
         var differentTableDefinition = TargetDefinition(
             integerStoreType,
             textStoreType,
+            booleanStoreType,
             comment: "expected stress comment");
 
         var repairDefinition = new ExpectedColumnDefinition(
@@ -85,6 +102,33 @@ internal static class LargeMigrationStressContract
             isNullable: false,
             textStoreType,
             maxLength: 40);
+
+        var wideningDefinition = new ExpectedColumnDefinition(
+            "widening_value",
+            typeof(string),
+            isNullable: true,
+            wideningStoreType,
+            maxLength: 80);
+
+        var narrowingDefinition = new ExpectedColumnDefinition(
+            "narrowing_value",
+            typeof(string),
+            isNullable: true,
+            narrowingStoreType,
+            maxLength: 10);
+
+        var blockedNarrowingDefinition = new ExpectedColumnDefinition(
+            "blocked_narrowing_value",
+            typeof(string),
+            isNullable: true,
+            blockedNarrowingStoreType,
+            maxLength: 5);
+
+        var booleanDefinition = new ExpectedColumnDefinition(
+            "boolean_value",
+            typeof(bool),
+            isNullable: true,
+            storeType: "tinyint(1)");
 
         var matchingIndex = Index(
             "ix_large_migration_target_indexed",
@@ -217,7 +261,9 @@ internal static class LargeMigrationStressContract
                 _ => repairDefinition.Name,
                 SafeMigrationOperationKind.EnsureColumn,
                 SafeMigrationObservedState.Different,
-                SafeMigrationAction.Repair),
+                SafeMigrationAction.Repair,
+                requiresLiveDataProof: true,
+                convergesOnFirstAcceptedMutation: true),
             Scenario(
                 (migrationBuilder, _) => migrationBuilder.EnsureColumn(
                     TargetTable,
@@ -226,7 +272,8 @@ internal static class LargeMigrationStressContract
                 _ => blockedDefinition.Name,
                 SafeMigrationOperationKind.EnsureColumn,
                 SafeMigrationObservedState.DataBlocked,
-                SafeMigrationAction.RejectDataBlocked),
+                SafeMigrationAction.RejectDataBlocked,
+                requiresLiveDataProof: true),
             Scenario(
                 (migrationBuilder, _) => migrationBuilder.EnsureColumn(
                     "large_migration_absent_parent",
@@ -236,6 +283,40 @@ internal static class LargeMigrationStressContract
                 SafeMigrationOperationKind.EnsureColumn,
                 SafeMigrationObservedState.PrerequisiteMissing,
                 SafeMigrationAction.RejectPrerequisiteMissing),
+            Scenario(
+                (migrationBuilder, _) => migrationBuilder.EnsureColumn(
+                    TargetTable,
+                    wideningDefinition,
+                    SafeMigrationPolicy.RepairIfSafe),
+                _ => wideningDefinition.Name,
+                SafeMigrationOperationKind.EnsureColumn,
+                SafeMigrationObservedState.Different,
+                SafeMigrationAction.Repair,
+                operationalImpact: SafeMigrationOperationalImpact.TableRewritePossible,
+                convergesOnFirstAcceptedMutation: true),
+            Scenario(
+                (migrationBuilder, _) => migrationBuilder.EnsureColumn(
+                    TargetTable,
+                    narrowingDefinition,
+                    SafeMigrationPolicy.RepairIfSafe),
+                _ => narrowingDefinition.Name,
+                SafeMigrationOperationKind.EnsureColumn,
+                SafeMigrationObservedState.Different,
+                SafeMigrationAction.Repair,
+                operationalImpact: SafeMigrationOperationalImpact.TableRewritePossible,
+                requiresLiveDataProof: true,
+                convergesOnFirstAcceptedMutation: true),
+            Scenario(
+                (migrationBuilder, _) => migrationBuilder.EnsureColumn(
+                    TargetTable,
+                    blockedNarrowingDefinition,
+                    SafeMigrationPolicy.RepairIfSafe),
+                _ => blockedNarrowingDefinition.Name,
+                SafeMigrationOperationKind.EnsureColumn,
+                SafeMigrationObservedState.DataBlocked,
+                SafeMigrationAction.RejectDataBlocked,
+                operationalImpact: SafeMigrationOperationalImpact.TableRewritePossible,
+                requiresLiveDataProof: true),
             Scenario(
                 (migrationBuilder, _) => migrationBuilder.EnsureIndex(
                     matchingIndex,
@@ -307,7 +388,8 @@ internal static class LargeMigrationStressContract
                 MissingUniqueConstraint,
                 SafeMigrationOperationKind.EnsureUniqueConstraint,
                 SafeMigrationObservedState.Missing,
-                SafeMigrationAction.Apply),
+                SafeMigrationAction.Apply,
+                requiresLiveDataProof: true),
             Scenario(
                 (migrationBuilder, _) => migrationBuilder.EnsureCheckConstraint(
                     checkConstraint,
@@ -330,7 +412,8 @@ internal static class LargeMigrationStressContract
                 MissingCheckConstraint,
                 SafeMigrationOperationKind.EnsureCheckConstraint,
                 SafeMigrationObservedState.Missing,
-                SafeMigrationAction.Apply),
+                SafeMigrationAction.Apply,
+                requiresLiveDataProof: true),
             Scenario(
                 (migrationBuilder, _) => migrationBuilder.EnsureForeignKey(
                     foreignKey,
@@ -352,7 +435,8 @@ internal static class LargeMigrationStressContract
                 MissingForeignKey,
                 SafeMigrationOperationKind.EnsureForeignKey,
                 SafeMigrationObservedState.Missing,
-                SafeMigrationAction.Apply),
+                SafeMigrationAction.Apply,
+                requiresLiveDataProof: true),
             Scenario(
                 (migrationBuilder, ordinal) => migrationBuilder.EnsureModelManagedDataFromModel(
                     TargetTable,
@@ -473,6 +557,21 @@ internal static class LargeMigrationStressContract
                 postconditionSatisfied: true),
         };
 
+        if (dialect == LargeMigrationStressDialect.MySql)
+        {
+            scenarios.Add(Scenario(
+                (migrationBuilder, _) => migrationBuilder.EnsureColumn(
+                    TargetTable,
+                    booleanDefinition,
+                    SafeMigrationPolicy.RepairIfSafe),
+                _ => booleanDefinition.Name,
+                SafeMigrationOperationKind.EnsureColumn,
+                SafeMigrationObservedState.Different,
+                SafeMigrationAction.Repair,
+                operationalImpact: SafeMigrationOperationalImpact.TableRewritePossible,
+                convergesOnFirstAcceptedMutation: true));
+        }
+
         scenarios.Add(UnsupportedScenario(dialect));
 
         return scenarios;
@@ -492,6 +591,7 @@ internal static class LargeMigrationStressContract
     private static ExpectedTableDefinition TargetDefinition(
         string integerStoreType,
         string textStoreType,
+        string booleanStoreType,
         string? comment = null
     ) => new(
         TargetTable,
@@ -506,6 +606,15 @@ internal static class LargeMigrationStressContract
                 maxLength: 40,
                 defaultValue: SafeMigrationDefaultValue.Literal("legacy")),
             new ExpectedColumnDefinition("blocked_value", typeof(string), true, textStoreType, maxLength: 40),
+            new ExpectedColumnDefinition("widening_value", typeof(string), true, textStoreType, maxLength: 40),
+            new ExpectedColumnDefinition("narrowing_value", typeof(string), true, textStoreType, maxLength: 40),
+            new ExpectedColumnDefinition(
+                "blocked_narrowing_value",
+                typeof(string),
+                true,
+                textStoreType,
+                maxLength: 40),
+            new ExpectedColumnDefinition("boolean_value", typeof(bool), true, booleanStoreType),
             new ExpectedColumnDefinition("indexed_value", typeof(int), false, integerStoreType),
             new ExpectedColumnDefinition("unique_value", typeof(int), false, integerStoreType),
             new ExpectedColumnDefinition("check_value", typeof(int), false, integerStoreType),
@@ -584,14 +693,20 @@ internal static class LargeMigrationStressContract
         SafeMigrationOperationKind operationKind,
         SafeMigrationObservedState observedState,
         SafeMigrationAction action,
-        bool postconditionSatisfied = false
+        bool postconditionSatisfied = false,
+        SafeMigrationOperationalImpact? operationalImpact = null,
+        bool requiresLiveDataProof = false,
+        bool convergesOnFirstAcceptedMutation = false
     ) => new(
         addOperation,
         objectName,
         operationKind,
         observedState,
         action,
-        postconditionSatisfied);
+        postconditionSatisfied,
+        operationalImpact,
+        requiresLiveDataProof,
+        convergesOnFirstAcceptedMutation);
 
     private static string MissingTable(
         int ordinal
@@ -664,10 +779,37 @@ internal sealed class LargeMigrationStressExpectation
 
         var stateCounts = new int[Enum.GetValues<SafeMigrationObservedState>().Length];
         var actionCounts = new int[Enum.GetValues<SafeMigrationAction>().Length];
+        var convergedScenarios = new bool[_scenarios.Count];
+        var projectedDataMutationSeen = false;
+
         for (var ordinal = 0; ordinal < report.Assessments.Count; ordinal++)
         {
-            var scenario = _scenarios[ordinal % _scenarios.Count];
+            var scenarioIndex = ordinal % _scenarios.Count;
+            var scenario = _scenarios[scenarioIndex];
             var assessment = report.Assessments[ordinal];
+            var alreadyConverged = convergedScenarios[scenarioIndex];
+            var proofInvalidated = !alreadyConverged
+                && scenario.RequiresLiveDataProof
+                && projectedDataMutationSeen;
+
+            var expectedState = alreadyConverged
+                ? SafeMigrationObservedState.Matching
+                : proofInvalidated
+                    ? SafeMigrationObservedState.PrerequisiteMissing
+                    : scenario.ObservedState;
+
+            var expectedAction = alreadyConverged
+                ? SafeMigrationAction.NoOp
+                : proofInvalidated
+                    ? SafeMigrationAction.RejectPrerequisiteMissing
+                    : scenario.Action;
+
+            var expectedPostcondition = alreadyConverged
+                || (!proofInvalidated && scenario.PostconditionSatisfied);
+
+            var expectedOperationalImpact = alreadyConverged || proofInvalidated
+                ? SafeMigrationOperationalImpact.NotApplicable
+                : scenario.OperationalImpact;
 
             if (assessment.Ordinal != ordinal)
             {
@@ -685,23 +827,48 @@ internal sealed class LargeMigrationStressExpectation
                 Assert.Equal(expectedObjectName, assessment.ObjectName);
             }
 
-            if (assessment.ObservedState != scenario.ObservedState)
+            if (assessment.ObservedState != expectedState)
             {
-                Assert.Equal(scenario.ObservedState, assessment.ObservedState);
+                Assert.Fail(
+                    $"Operation {ordinal} ({scenario.OperationKind} {expectedObjectName}) "
+                    + $"expected state {expectedState}, actual {assessment.ObservedState}.");
             }
 
-            if (assessment.Action != scenario.Action)
+            if (assessment.Action != expectedAction)
             {
-                Assert.Equal(scenario.Action, assessment.Action);
+                Assert.Equal(expectedAction, assessment.Action);
             }
 
-            if (assessment.PostconditionSatisfied != scenario.PostconditionSatisfied)
+            if (assessment.PostconditionSatisfied != expectedPostcondition)
             {
-                Assert.Equal(scenario.PostconditionSatisfied, assessment.PostconditionSatisfied);
+                Assert.Equal(expectedPostcondition, assessment.PostconditionSatisfied);
             }
 
-            stateCounts[(int)scenario.ObservedState]++;
-            actionCounts[(int)scenario.Action]++;
+            if (expectedOperationalImpact is not null
+                && assessment.OperationalImpact != expectedOperationalImpact)
+            {
+                Assert.Equal(expectedOperationalImpact, assessment.OperationalImpact);
+            }
+
+            stateCounts[(int)expectedState]++;
+            actionCounts[(int)expectedAction]++;
+
+            if (scenario.ConvergesOnFirstAcceptedMutation
+                && (expectedAction is SafeMigrationAction.Apply or SafeMigrationAction.Repair))
+            {
+                convergedScenarios[scenarioIndex] = true;
+            }
+
+            var mutatesModelManagedData = scenario.OperationKind is
+                SafeMigrationOperationKind.EnsureModelManagedData
+                or SafeMigrationOperationKind.UpdateModelManagedData
+                or SafeMigrationOperationKind.DeleteModelManagedData;
+
+            if (mutatesModelManagedData
+                && expectedAction == SafeMigrationAction.Apply)
+            {
+                projectedDataMutationSeen = true;
+            }
         }
 
         Assert.DoesNotContain(0, stateCounts);
@@ -715,5 +882,8 @@ internal sealed record LargeMigrationStressScenario(
     SafeMigrationOperationKind OperationKind,
     SafeMigrationObservedState ObservedState,
     SafeMigrationAction Action,
-    bool PostconditionSatisfied
+    bool PostconditionSatisfied,
+    SafeMigrationOperationalImpact? OperationalImpact,
+    bool RequiresLiveDataProof,
+    bool ConvergesOnFirstAcceptedMutation
 );

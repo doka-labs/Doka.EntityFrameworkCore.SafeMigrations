@@ -16,6 +16,8 @@
              Link="Infrastructure\SafeMigrationSqlExpressionPropertyCases.cs" />
     <ProjectReference Include="..\..\src\Doka.EntityFrameworkCore.SafeMigrations\Doka.EntityFrameworkCore.SafeMigrations.csproj" />
     <ProjectReference Include="..\..\src\Doka.EntityFrameworkCore.SafeMigrations.MySql\Doka.EntityFrameworkCore.SafeMigrations.MySql.csproj" />
+    <ProjectReference Include="..\..\eng\ef-ownership\Core\Doka.EntityFrameworkCore.SafeMigrations.EfOwnership.Core.csproj" />
+    <ProjectReference Include="..\..\eng\ef-ownership\Custom\Doka.EntityFrameworkCore.SafeMigrations.EfOwnership.Custom.csproj" />
     <PackageReference Include="FsCheck.Xunit" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
       <PrivateAssets>all</PrivateAssets>

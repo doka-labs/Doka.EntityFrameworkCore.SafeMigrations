@@ -362,6 +362,14 @@
         "resolved": "13.0.4",
         "contentHash": "pdgNNMai3zv51W5aq268sujXUyx7SNdE2bj1wZcWjAQrKMFZV260lbqYop1d2GM67JI1huLRwxo9ZqnfF/lC6A=="
       },
+      "Npgsql": {
+        "type": "Transitive",
+        "resolved": "10.0.3",
+        "contentHash": "7nb5YzXuvWWJxB0J8DiyL3we+X4FOctZrt0fIBnucOIaIevFEEwGQVZKtiu9olXdlNAK1eNgqSral6r/jlhI4w==",
+        "dependencies": {
+          "Microsoft.Extensions.Logging.Abstractions": "10.0.0"
+        }
+      },
       "SharpZipLib": {
         "type": "Transitive",
         "resolved": "1.4.2",
@@ -492,12 +500,35 @@
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.11, 10.1.0)"
         }
       },
+      "doka.entityframeworkcore.safemigrations.efownership.core": {
+        "type": "Project",
+        "dependencies": {
+          "Doka.EntityFrameworkCore.SafeMigrations": "[10.2.1-dev, )",
+          "Doka.EntityFrameworkCore.SafeMigrations.MySql": "[10.2.1-dev, )",
+          "Doka.EntityFrameworkCore.SafeMigrations.PostgreSql": "[10.2.1-dev, )"
+        }
+      },
+      "doka.entityframeworkcore.safemigrations.efownership.custom": {
+        "type": "Project",
+        "dependencies": {
+          "Doka.EntityFrameworkCore.SafeMigrations": "[10.2.1-dev, )",
+          "Doka.EntityFrameworkCore.SafeMigrations.EfOwnership.Core": "[1.0.0, )"
+        }
+      },
       "doka.entityframeworkcore.safemigrations.mysql": {
         "type": "Project",
         "dependencies": {
           "Doka.EntityFrameworkCore.MySql": "[10.3.0, 10.4.0)",
           "Doka.EntityFrameworkCore.SafeMigrations": "[10.2.1-dev, )",
           "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.0.11, 10.1.0)"
+        }
+      },
+      "doka.entityframeworkcore.safemigrations.postgresql": {
+        "type": "Project",
+        "dependencies": {
+          "Doka.EntityFrameworkCore.SafeMigrations": "[10.2.1-dev, )",
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.0.11, 10.1.0)",
+          "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, 11.0.0)"
         }
       },
       "Doka.EntityFrameworkCore.MySql": {
@@ -528,6 +559,17 @@
         "requested": "[10.0.11, 10.1.0)",
         "resolved": "10.0.11",
         "contentHash": "/a1aJz4m7ylhEDf25ugQChLQoN5XwoGjWw/BoR/ZWWKsO1v4DdJElS1uyngahz4B/eOzjFk1KNTkarRLE5wsIg=="
+      },
+      "Npgsql.EntityFrameworkCore.PostgreSQL": {
+        "type": "CentralTransitive",
+        "requested": "[10.0.3, 11.0.0)",
+        "resolved": "10.0.3",
+        "contentHash": "IPGrrZnRkuW7OlHDhUESZz4G5DLkW7Nej/O3Cx+0iTsgyU5XJxBgpsvTHLloo3WWuAKKbDHXBvWPVkX1deRh1Q==",
+        "dependencies": {
+          "Microsoft.EntityFrameworkCore": "[10.0.4, 11.0.0)",
+          "Microsoft.EntityFrameworkCore.Relational": "[10.0.4, 11.0.0)",
+          "Npgsql": "10.0.3"
+        }
       }
     }
   }

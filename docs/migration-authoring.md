@@ -321,11 +321,26 @@ tables remain catalog-backed, and ordinary data operations, opaque SQL,
 incomplete columns, or a partially known row invalidate the inference.
 
 The providers use null-safe comparisons for captured values. MySQL and MariaDB
-use `<=>`; PostgreSQL uses `IS NOT DISTINCT FROM`. SafeMigrations deliberately
-does not use `INSERT IGNORE`, `ON DUPLICATE KEY UPDATE`, `ON CONFLICT DO
-UPDATE`, or a generic merge operation. Those shortcuts can select a different
-unique conflict or change trigger behavior without proving the model-managed
-primary-key contract.
+use `<=>` for keys and ordinary scalar values; PostgreSQL uses `IS NOT DISTINCT
+FROM`. Native JSON uses document equality: MySQL compares the stored document
+with the expected value cast to JSON, MariaDB wraps `JSON_EQUALS` in explicit
+SQL-NULL branches, and PostgreSQL casts both `json` and `jsonb` operands to
+`jsonb` before comparison. Formatting and object-member order are therefore
+insignificant, but array order, duplicate elements, JSON `null`, and SQL `NULL`
+remain distinct. A text column containing JSON-like text remains textual.
+SafeMigrations deliberately does not use `INSERT IGNORE`, `ON DUPLICATE KEY
+UPDATE`, `ON CONFLICT DO UPDATE`, or a generic merge operation. Those shortcuts
+can select a different unique conflict or change trigger behavior without
+proving the model-managed primary-key contract.
+
+Each non-null value selects its relational mapping from the captured store type
+and its original CLR type. The provider mapping then applies its configured
+converter before producing a command parameter or SQL literal. This is required
+for shapes such as `char(1)`, enum values, and Doka Char36 or Binary16 Guid
+storage; choosing a mapping from the store type alone can select an incompatible
+provider CLR type. This follows EF Core 10.0.11's
+[`RelationalTypeMapping.GenerateSqlLiteral`](https://github.com/dotnet/efcore/blob/v10.0.11/src/EFCore.Relational/Storage/RelationalTypeMapping.cs)
+contract (retrieved 2026-09-05).
 
 The values are source-controlled in the EF model, snapshot, generated
 migration, and generated SQL script. Do not place secrets, per-environment
@@ -340,6 +355,21 @@ it again after upgrading. Never replace an already applied migration; express
 the correction as a new forward migration. A hand-authored raw data operation
 remains `provider_owned_not_analyzed` because SafeMigrations cannot prove its
 model origin or reconstruct missing old values.
+
+### Excluded-table ownership in a derived custom context
+
+A custom context that inherits Core mappings may exclude those relational
+tables from its own migration lineage. EF can still calculate model-managed
+operations from inherited `HasData` declarations, so table exclusion alone is
+not a complete data-ownership statement.
+
+Configure `ExcludeModelManagedDataForExcludedTables()` on that custom context
+when another migration lineage owns both the excluded schema and its managed
+data. The option is default-off, applies symmetrically to forward and inverse
+model differences, and fails closed on unresolved or changing ownership. It
+does not modify existing migrations or remove Core entities from the runtime
+model. The [ownership guide](model-managed-data-ownership.md) defines the
+context, project, snapshot, history, command, and review boundaries.
 
 ## Generated legacy convergence
 
@@ -452,15 +482,30 @@ forced onto existing rows.
 The policy is a literal part of the generated migration. Without
 `UseLegacyConvergencePolicy`, the generated argument is
 `SafeMigrationPolicy.ThrowIfDifferent`. With the explicit `RepairIfSafe`
-configuration above, ordinary existing columns can converge only nullability,
-default, and comment drift. The live catalog must already prove identical store
-type, collation, generated/identity state, and row-version state. Doka's typed
-metadata contract must recognize every MySQL/MariaDB annotation and prove it
-consistent with the column shape. Existing `NULL` rows make a `NOT NULL` repair
-`DataBlocked`. Invariant, malformed, contradictory, or unsupported drift
-rejects before target DDL. MySQL and MariaDB use the Doka provider's complete
-`MODIFY COLUMN` definition; PostgreSQL uses its provider-generated
-`SET`/`DROP DEFAULT`, `SET`/`DROP NOT NULL`, and comment statements.
+configuration above, ordinary existing columns can converge nullability,
+default, and comment drift plus a provider-proven ordinary `VARCHAR` widening
+or live-data-verified narrowing. MySQL/MariaDB can also repair only the exact
+compatible Boolean transition `BIT(1) -> TINYINT(1)`. PostgreSQL independently
+qualifies `character varying` length transitions and has no equivalent Boolean
+conversion.
+
+A widening needs no row scan but must preserve the character family,
+collation, generated/identity/row-version state, provider metadata, and all
+dependent indexes or constraints. A narrowing groups and deduplicates
+`CHAR_LENGTH`/`char_length` existence probes by table and repeats its proof
+immediately before DDL. One overlength value is
+`DataBlocked / varchar_narrowing_value_too_long`; the value itself is never
+returned. A timeout, cancellation, incomplete proof, or concurrent violating
+write cannot become approval or truncation.
+
+Doka's typed metadata contract must recognize every MySQL/MariaDB annotation
+and prove it consistent with the column shape. Existing `NULL` rows make a
+`NOT NULL` repair `DataBlocked`. Character-family, collation, generated,
+identity, row-version, malformed, contradictory, or unsupported drift rejects
+before target DDL. MySQL and MariaDB use Doka's complete `MODIFY COLUMN`
+definition; PostgreSQL uses its provider-rendered type and facet statements.
+Accepted length and Boolean repairs report `TableRewritePossible`, so a
+maintenance-window decision remains separate from the losslessness decision.
 
 Ordered preflight projects deterministic structural postconditions of preceding
 ordinary EF table and column operations into later safe prerequisites. For

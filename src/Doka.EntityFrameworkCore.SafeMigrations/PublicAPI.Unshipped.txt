@@ -1,4 +1,26 @@
 #nullable enable
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationFacetDifference
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationFacetDifference.Actual.get -> string!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationFacetDifference.Expected.get -> string!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationFacetDifference.Facet.get -> string!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationFacetDifference.SafeMigrationFacetDifference(string! facet, string! expected, string! actual) -> void
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperationalImpact
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperationalImpact.NotApplicable = 0 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperationalImpact
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperationalImpact.TableRewritePossible = 1 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperationalImpact
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperationalImpact.Unknown = 2 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperationalImpact
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationPreflightException
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationPreflightException.Report.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationRunReport!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationPreflightException.SafeMigrationPreflightException(Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationRunReport! report) -> void
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAssessment.AnalysisCode.get -> string!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAssessment.DecisionCode.get -> string!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAssessment.Differences.get -> System.Collections.Generic.IReadOnlyList<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationFacetDifference!>!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAssessment.OperationalImpact.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperationalImpact
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAssessment.SafeMigrationAssessment(int ordinal, string! operationType, bool isSafeOperation, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperationKind? operationKind, string? objectName, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationObservedState? observedState, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAction? action, bool? postconditionSatisfied, string! code, string! analysisCode, string! decisionCode, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperationalImpact operationalImpact, System.Collections.Generic.IEnumerable<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationFacetDifference!>? differences) -> void
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOptionsBuilder.ExcludeModelManagedDataForExcludedTables() -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOptionsBuilder!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationProviderAnalysis.Differences.get -> System.Collections.Generic.IReadOnlyList<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationFacetDifference!>!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationProviderAnalysis.OperationalImpact.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperationalImpact
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationProviderAnalysis.SafeMigrationProviderAnalysis(Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationObservedState observedState, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationRepairCapability repairCapability, bool postconditionSatisfied, string! code, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperationalImpact operationalImpact, System.Collections.Generic.IEnumerable<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationFacetDifference!>? differences) -> void
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationRunReport.ThrowIfBlocked() -> void
 Doka.EntityFrameworkCore.SafeMigrations.ExpectedModelManagedDataForeignKeyDefinition
 Doka.EntityFrameworkCore.SafeMigrations.ExpectedModelManagedDataForeignKeyDefinition.Columns.get -> System.Collections.Generic.IReadOnlyList<string!>!
 Doka.EntityFrameworkCore.SafeMigrations.ExpectedModelManagedDataForeignKeyDefinition.ExpectedModelManagedDataForeignKeyDefinition(string! table, System.Collections.Generic.IEnumerable<string!>! columns, System.Collections.Generic.IEnumerable<string!>! principalColumns, string? schema = null) -> void

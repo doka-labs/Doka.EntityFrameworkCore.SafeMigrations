@@ -16,6 +16,9 @@ public sealed class SafeMigrationOptionsBuilder
     /// <summary>Gets the policy frozen into legacy-convergence table operations.</summary>
     internal SafeMigrationPolicy LegacyConvergencePolicy { get; private set; } = SafeMigrationPolicy.ThrowIfDifferent;
 
+    /// <summary>Gets whether excluded tables also exclude model-managed-data differences.</summary>
+    internal bool ExcludeModelManagedDataForExcludedTablesEnabled { get; private set; }
+
     /// <summary>
     /// Selects the table strategy written into newly scaffolded migrations.
     /// </summary>
@@ -61,6 +64,23 @@ public sealed class SafeMigrationOptionsBuilder
         }
 
         LegacyConvergencePolicy = policy;
+        return this;
+    }
+
+    /// <summary>
+    /// Excludes provider-generated model-managed-data differences for relational
+    /// tables which the active context explicitly excludes from migrations.
+    /// </summary>
+    /// <returns>The same builder so additional SafeMigrations options can be chained.</returns>
+    /// <remarks>
+    /// Use this option only when another migration lineage owns both the schema
+    /// and model-managed data of every excluded table. Included tables, existing
+    /// compiled migrations, and hand-authored migration operations are unaffected.
+    /// </remarks>
+    public SafeMigrationOptionsBuilder ExcludeModelManagedDataForExcludedTables()
+    {
+        ExcludeModelManagedDataForExcludedTablesEnabled = true;
+
         return this;
     }
 

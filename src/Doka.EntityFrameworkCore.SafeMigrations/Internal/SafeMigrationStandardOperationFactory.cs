@@ -73,7 +73,39 @@ internal static partial class SafeMigrationStandardOperationFactory
             intent,
             renderExpression,
             renderCollation,
-            declareNullabilityDifference: true);
+            declareNullabilityDifference: true,
+            previousStoreType: null);
+    }
+
+    /// <summary>
+    /// Creates an alter-column repair operation that declares a provider-proven
+    /// previous store type to the provider SQL generator.
+    /// </summary>
+    /// <param name="intent">The ensure-column intent to repair.</param>
+    /// <param name="previousStoreType">A valid provider store type that differs from the target type.</param>
+    /// <param name="renderExpression">The provider expression renderer, when expressions are present.</param>
+    /// <param name="renderCollation">The provider collation renderer, when collations are present.</param>
+    /// <param name="providerRepairValidator">
+    /// The provider-owned metadata validator, or null when no provider annotations are permitted.
+    /// </param>
+    /// <returns>An ordinary EF Core alter-column operation.</returns>
+    public static MigrationOperation CreateStoreTypeRepair(
+        EnsureColumnIntent intent,
+        string previousStoreType,
+        Func<SafeMigrationSqlExpression, string>? renderExpression = null,
+        Func<SafeMigrationCollationIdentifier, string?>? renderCollation = null,
+        Func<ExpectedColumnDefinition, bool>? providerRepairValidator = null
+    )
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(previousStoreType);
+        ValidateRepairIntent(intent, providerRepairValidator);
+
+        return CreateRepairOperation(
+            intent,
+            renderExpression,
+            renderCollation,
+            declareNullabilityDifference: true,
+            previousStoreType);
     }
 
     /// <summary>
@@ -100,7 +132,8 @@ internal static partial class SafeMigrationStandardOperationFactory
             intent,
             renderExpression,
             renderCollation,
-            declareNullabilityDifference: false);
+            declareNullabilityDifference: false,
+            previousStoreType: null);
     }
 
     private static void ValidateRepairIntent(
@@ -114,7 +147,7 @@ internal static partial class SafeMigrationStandardOperationFactory
             ? intent.Definition.ProviderAnnotations.Count == 0
             : providerRepairValidator(intent.Definition);
 
-        // A provider may narrow repair eligibility for its own metadata, but
+        // WHY: A provider may narrow repair eligibility for its own metadata, but
         // it cannot override Core's intrinsic exclusions for computed,
         // row-version, or otherwise incomplete replacement definitions.
         var isRepairable = SafeMigrationColumnRepairHelper.HasRepairableIntrinsicShape(intent.Definition)

@@ -17,8 +17,10 @@ public sealed class SafeMigrationRunContractTests
         "enum",
         "format",
         "minLength",
+        "maxLength",
         "pattern",
         "items",
+        "maxItems",
         "minimum",
     };
 
@@ -147,7 +149,7 @@ public sealed class SafeMigrationRunContractTests
         var root = document.RootElement;
 
         Assert.Equal(
-            1,
+            SafeMigrationRunReport.CurrentSchemaVersion,
             root
                 .GetProperty("schemaVersion")
                 .GetInt32());
@@ -279,6 +281,13 @@ public sealed class SafeMigrationRunContractTests
             (Value: SafeMigrationAction.RejectPrerequisiteMissing, Code: "reject_prerequisite_missing"),
         };
 
+        var operationalImpacts = new[]
+        {
+            (Value: SafeMigrationOperationalImpact.NotApplicable, Code: "not_applicable"),
+            (Value: SafeMigrationOperationalImpact.TableRewritePossible, Code: "table_rewrite_possible"),
+            (Value: SafeMigrationOperationalImpact.Unknown, Code: "unknown"),
+        };
+
         var objectKinds = new[]
         {
             (Value: SafeMigrationDatabaseObjectKind.Table, Code: "table"),
@@ -303,7 +312,13 @@ public sealed class SafeMigrationRunContractTests
                 states[index % states.Length].Value,
                 actions[index % actions.Length].Value,
                 index % 2 == 0,
-                "stable_code"))
+                "stable_code",
+                "provider_analysis",
+                "policy_decision",
+                operationalImpacts[index % operationalImpacts.Length].Value,
+                index == 0
+                    ? [new SafeMigrationFacetDifference("column_max_length", "200", "10")]
+                    : null))
             .Append(
                 new SafeMigrationAssessment(
                     operationKinds.Length,
@@ -356,6 +371,14 @@ public sealed class SafeMigrationRunContractTests
                     .GetProperty("action")
                     .GetString()));
         Assert.Equal(
+            operationalImpacts.Select(static value => value.Code),
+            assessmentElements
+                .EnumerateArray()
+                .Take(operationalImpacts.Length)
+                .Select(static value => value
+                    .GetProperty("operationalImpact")
+                    .GetString()));
+        Assert.Equal(
             objectKinds.Select(static value => value.Code),
             unexpectedElements
                 .EnumerateArray()
@@ -403,6 +426,12 @@ public sealed class SafeMigrationRunContractTests
             actions.Select(static value => value.Code));
         AssertSchemaEnum(
             definitions
+                .GetProperty("assessment")
+                .GetProperty("properties")
+                .GetProperty("operationalImpact"),
+            operationalImpacts.Select(static value => value.Code));
+        AssertSchemaEnum(
+            definitions
                 .GetProperty("unexpectedObject")
                 .GetProperty("properties")
                 .GetProperty("objectKind"),
@@ -413,6 +442,10 @@ public sealed class SafeMigrationRunContractTests
             definitions.GetProperty("environment"),
             completeDocument.RootElement.GetProperty("environment"));
         AssertClosedObjectSurface(definitions.GetProperty("assessment"), assessmentElements[0]);
+        AssertClosedObjectSurface(
+            definitions.GetProperty("difference"),
+            assessmentElements[0]
+                .GetProperty("differences")[0]);
         AssertClosedObjectSurface(definitions.GetProperty("unexpectedObject"), unexpectedElements[0]);
 
         var modelPattern = schemaRoot
@@ -533,6 +566,20 @@ public sealed class SafeMigrationRunContractTests
             (SafeMigrationAction)int.MaxValue,
             postconditionSatisfied: true,
             "invalid_action"));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new SafeMigrationAssessment(
+            0,
+            "operation",
+            isSafeOperation: true,
+            SafeMigrationOperationKind.EnsureTable,
+            "object",
+            SafeMigrationObservedState.Matching,
+            SafeMigrationAction.NoOp,
+            postconditionSatisfied: true,
+            "invalid_impact",
+            "classified_matching",
+            "matching_no_op",
+            (SafeMigrationOperationalImpact)int.MaxValue,
+            differences: null));
     }
 
     [Fact]
@@ -660,9 +707,17 @@ public sealed class SafeMigrationRunContractTests
     private static string ModelFingerprint() =>
         $"safe-relational-model:v1:npgsql_postgresql:sha256:{new string('a', 64)}";
 
-    private static JsonDocument LoadReportSchema() => JsonDocument.Parse(
+    private static JsonDocument LoadReportSchema() => LoadReportSchema(
+        SafeMigrationRunReport.CurrentSchemaVersion);
+
+    private static JsonDocument LoadReportSchema(
+        int version
+    ) => JsonDocument.Parse(
         File.ReadAllBytes(
-            Path.Combine(AppContext.BaseDirectory, "schemas", "safe-migration-run-report-v1.schema.json")));
+            Path.Combine(
+                AppContext.BaseDirectory,
+                "schemas",
+                $"safe-migration-run-report-v{version}.schema.json")));
 
     private static void AssertSchemaEnum(
         JsonElement schema,
@@ -757,6 +812,11 @@ public sealed class SafeMigrationRunContractTests
                 Assert.True(stringValue.Length >= minimumLength.GetInt32());
             }
 
+            if (schema.TryGetProperty("maxLength", out var maximumLength))
+            {
+                Assert.True(stringValue.Length <= maximumLength.GetInt32());
+            }
+
             if (schema.TryGetProperty("pattern", out var pattern))
             {
                 Assert.Matches(new Regex(pattern.GetString()!, RegexOptions.CultureInvariant), stringValue);
@@ -788,6 +848,11 @@ public sealed class SafeMigrationRunContractTests
         if (value.ValueKind == JsonValueKind.Array
             && schema.TryGetProperty("items", out var items))
         {
+            if (schema.TryGetProperty("maxItems", out var maximumItems))
+            {
+                Assert.True(value.GetArrayLength() <= maximumItems.GetInt32());
+            }
+
             foreach (var item in value.EnumerateArray())
             {
                 AssertMatchesSchema(items, item, rootSchema);

@@ -106,14 +106,7 @@ internal sealed class MySqlCatalogQueryParameterizer
             ?? throw new InvalidOperationException(
                 "Typed MySQL catalog values require a relational type-mapping source.");
 
-        var mapping = value.Value is null
-            ? mappingSource.FindMapping(value.StoreType)
-            : mappingSource.FindMapping(value.Value.GetType(), value.StoreType);
-
-        if (mapping is null)
-        {
-            throw new NotSupportedException($"MySQL has no type mapping for store type '{value.StoreType}'.");
-        }
+        var mapping = MySqlCatalogTypeMapping.Resolve(mappingSource, value.Value, value.StoreType);
 
         parameter.Value = mapping.Converter?.ConvertToProvider(value.Value) ?? value.Value ?? DBNull.Value;
         if (mapping.DbType is { } dbType)

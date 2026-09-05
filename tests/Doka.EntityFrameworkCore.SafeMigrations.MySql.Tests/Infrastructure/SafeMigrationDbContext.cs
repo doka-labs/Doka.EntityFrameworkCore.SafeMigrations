@@ -3,6 +3,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 public class SafeMigrationDbContext : DbContext
 {
     private readonly string? _connectionString;
+    private readonly bool _excludeModelManagedDataForExcludedTables;
     private readonly bool _registerSafeMigrations;
     private readonly MySqlServerVersion? _serverVersion;
 
@@ -16,12 +17,14 @@ public class SafeMigrationDbContext : DbContext
     public SafeMigrationDbContext(
         string connectionString,
         MySqlServerVersion serverVersion,
-        bool registerSafeMigrations = true
+        bool registerSafeMigrations = true,
+        bool excludeModelManagedDataForExcludedTables = false
     )
     {
         _connectionString = connectionString;
         _serverVersion = serverVersion;
         _registerSafeMigrations = registerSafeMigrations;
+        _excludeModelManagedDataForExcludedTables = excludeModelManagedDataForExcludedTables;
     }
 
     protected override void OnConfiguring(
@@ -42,7 +45,13 @@ public class SafeMigrationDbContext : DbContext
 
         if (_registerSafeMigrations)
         {
-            optionsBuilder.UseMySqlSafeMigrations<SafeMigrationDbContext>();
+            optionsBuilder.UseMySqlSafeMigrations<SafeMigrationDbContext>(safeMigrations =>
+            {
+                if (_excludeModelManagedDataForExcludedTables)
+                {
+                    safeMigrations.ExcludeModelManagedDataForExcludedTables();
+                }
+            });
         }
     }
 }

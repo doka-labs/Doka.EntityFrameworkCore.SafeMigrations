@@ -1,6 +1,8 @@
 global using System;
 global using System.Collections;
 global using System.Collections.Generic;
+global using System.Data;
+global using System.Data.Common;
 global using System.Diagnostics;
 global using System.Globalization;
 global using System.IO;
@@ -11,6 +13,7 @@ global using System.Text;
 global using System.Text.Json.Serialization;
 global using System.Threading;
 global using System.Threading.Tasks;
+global using Doka.EntityFrameworkCore.SafeMigrations.EfOwnership;
 global using Doka.EntityFrameworkCore.SafeMigrations.Testing;
 global using FsCheck.Xunit;
 global using Microsoft.EntityFrameworkCore;

@@ -68,7 +68,9 @@ internal sealed class PackageScaffoldingDbContext : DbContext
         optionsBuilder.UseMySql(
             "Server=127.0.0.1;User ID=package;Password=package;Database=package;Allow User Variables=true",
             MySqlServerVersion.MySql(new Version(8, 4, 0)));
-        optionsBuilder.UseMySqlSafeMigrations();
+        optionsBuilder.UseMySqlSafeMigrations(options => options
+            .UseScaffoldingMode(SafeMigrationScaffoldingMode.LegacyConvergence)
+            .UseLegacyConvergencePolicy(SafeMigrationPolicy.RepairIfSafe));
     }
 
     protected override void OnModelCreating(
@@ -79,6 +81,7 @@ internal sealed class PackageScaffoldingDbContext : DbContext
             new PackageScaffoldingEntity
             {
                 Id = 1,
+                IsActive = true,
                 Name = "package-consumer",
             });
     }
@@ -87,6 +90,8 @@ internal sealed class PackageScaffoldingDbContext : DbContext
 internal sealed class PackageScaffoldingEntity
 {
     public int Id { get; set; }
+
+    public bool IsActive { get; set; }
 
     public string Name { get; set; } = string.Empty;
 }

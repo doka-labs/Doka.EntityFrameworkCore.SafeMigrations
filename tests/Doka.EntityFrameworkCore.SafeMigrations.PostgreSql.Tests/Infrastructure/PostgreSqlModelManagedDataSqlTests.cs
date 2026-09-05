@@ -75,4 +75,44 @@ public sealed class PostgreSqlModelManagedDataSqlTests
         Assert.DoesNotContain("ON CONFLICT", command.CommandText, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("UPDATE SET", command.CommandText, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void ModelManagedJsonUsesDocumentComparisonWithoutReclassifyingText()
+    {
+        var options = new DbContextOptionsBuilder<DbContext>();
+        options.UseNpgsql("Host=127.0.0.1;Port=1;Username=test;Password=test;Database=test");
+        ((DbContextOptionsBuilder)options).UsePostgreSqlSafeMigrations();
+
+        using var context = new DbContext(options.Options);
+        var operation = new SafeMigrationOperation(
+            new EnsureModelManagedDataIntent(
+                "documents",
+                ["id"],
+                ["integer"],
+                ["id", "json_payload", "jsonb_payload", "json_like_text"],
+                ["integer", "json", "jsonb", "text"],
+                new object?[,]
+                {
+                    { 1, "{\"b\":2,\"a\":1}", "{\"b\":2,\"a\":1}", "{\"b\":2,\"a\":1}" },
+                },
+                schema: null,
+                uniqueKeys: null),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var command = Assert.Single(
+            context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model));
+
+        Assert.Contains(
+            "(doka_actual.json_payload)::jsonb IS NOT DISTINCT FROM (doka_expected.t1)::jsonb",
+            command.CommandText,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "(doka_actual.jsonb_payload)::jsonb IS NOT DISTINCT FROM (doka_expected.t2)::jsonb",
+            command.CommandText,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "doka_actual.json_like_text IS NOT DISTINCT FROM doka_expected.t3",
+            command.CommandText,
+            StringComparison.Ordinal);
+    }
 }

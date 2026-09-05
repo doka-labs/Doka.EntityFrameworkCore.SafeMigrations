@@ -272,7 +272,8 @@ public sealed partial class SafeMigrationModelManagedDataTests
 
         var projected = projection.Project(RoleEnsure(), live);
 
-        Assert.Same(live, projected);
+        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, projected.ObservedState);
+        Assert.Equal("projected_structure_state_unknown", projected.Code);
     }
 
     [Fact]
@@ -406,32 +407,172 @@ public sealed partial class SafeMigrationModelManagedDataTests
                 [SafeMigrationModelManagedRowState.Source],
                 [1]));
 
-        Assert.Equal(SafeMigrationObservedState.DataBlocked, projected.ObservedState);
-        Assert.Equal("test_live", projected.Code);
+        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, projected.ObservedState);
+        Assert.Equal("projected_structure_state_unknown", projected.Code);
     }
 
     [Fact]
     public void StructuralIdentityChangesInvalidateModelManagedRowProjection()
     {
-        var structuralOperations = new MigrationOperation[]
+        var structuralOperations = new (MigrationOperation Operation, string ExpectedCode)[]
         {
-            new DropColumnOperation { Table = "roles", Name = "name", },
-            new RenameColumnOperation { Table = "roles", Name = "name", NewName = "display_name", },
-            new DropTableOperation { Name = "roles", },
-            new RenameTableOperation { Name = "roles", NewName = "renamed_roles", },
+            (new DropColumnOperation { Table = "roles", Name = "name", }, "test_live"),
+            (
+                new RenameColumnOperation
+                {
+                    Table = "roles",
+                    Name = "name",
+                    NewName = "display_name",
+                },
+                "projected_structure_state_unknown"),
+            (new DropTableOperation { Name = "roles", }, "test_live"),
+            (
+                new RenameTableOperation
+                {
+                    Name = "roles",
+                    NewName = "renamed_roles",
+                },
+                "projected_structure_state_unknown"),
         };
 
-        foreach (var structuralOperation in structuralOperations)
+        foreach (var (operation, expectedCode) in structuralOperations)
         {
             var projection = ProjectionWithAcceptedRole();
 
-            projection.ObserveProviderPostcondition(structuralOperation);
+            projection.ObserveProviderPostcondition(operation);
 
             var projected = projection.Project(RoleUpdate(), Live(SafeMigrationObservedState.PrerequisiteMissing));
 
             Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, projected.ObservedState);
-            Assert.Equal("test_live", projected.Code);
+            Assert.Equal(expectedCode, projected.Code);
         }
+    }
+
+    [Fact]
+    public void AcceptedModelManagedCandidateKeyAuthorizesFollowingUniqueIndexOnNewTable()
+    {
+        var projection = ProjectionWithNewRoleTable();
+        var administrator = RoleEnsure(
+            1,
+            "administrator",
+            includeNameUniqueKey: true);
+        var member = RoleEnsure(
+            2,
+            "member",
+            includeNameUniqueKey: true);
+
+        Accept(projection, administrator, SafeMigrationObservedState.PrerequisiteMissing);
+        Accept(projection, member, SafeMigrationObservedState.PrerequisiteMissing);
+
+        var index = Operation(
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "ux_roles_name",
+                    "roles",
+                    [new ExpectedIndexKeyDefinition(column: "name")],
+                    unique: true)));
+
+        var projected = projection.Project(
+            index,
+            Live(SafeMigrationObservedState.PrerequisiteMissing));
+
+        Assert.Equal(SafeMigrationObservedState.Missing, projected.ObservedState);
+        Assert.Equal("projected_missing", projected.Code);
+    }
+
+    [Fact]
+    public void AcceptedModelManagedCandidateKeySurvivesNewTableRename()
+    {
+        var projection = ProjectionWithNewRoleTable();
+        var administrator = RoleEnsure(
+            1,
+            "administrator",
+            includeNameUniqueKey: true);
+        var member = RoleEnsure(
+            2,
+            "member",
+            includeNameUniqueKey: true);
+
+        Accept(projection, administrator, SafeMigrationObservedState.PrerequisiteMissing);
+        Accept(projection, member, SafeMigrationObservedState.PrerequisiteMissing);
+        Accept(
+            projection,
+            Operation(new RenameTableIntent("roles", newName: "application_roles")),
+            SafeMigrationObservedState.Matching);
+
+        var index = Operation(
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "ux_application_roles_name",
+                    "application_roles",
+                    [new ExpectedIndexKeyDefinition(column: "name")],
+                    unique: true)));
+
+        var projected = projection.Project(
+            index,
+            Live(SafeMigrationObservedState.PrerequisiteMissing));
+
+        Assert.Equal(SafeMigrationObservedState.Missing, projected.ObservedState);
+        Assert.Equal("projected_missing", projected.Code);
+    }
+
+    [Fact]
+    public void ModelManagedBatchWithoutCandidateKeyInvalidatesFollowingUniqueIndexProof()
+    {
+        var projection = ProjectionWithNewRoleTable();
+        var administrator = RoleEnsure(
+            1,
+            "administrator",
+            includeNameUniqueKey: true);
+        var member = RoleEnsure(
+            2,
+            "member",
+            includeNameUniqueKey: false);
+
+        Accept(projection, administrator, SafeMigrationObservedState.PrerequisiteMissing);
+        Accept(projection, member, SafeMigrationObservedState.PrerequisiteMissing);
+
+        var index = Operation(
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "ux_roles_name",
+                    "roles",
+                    [new ExpectedIndexKeyDefinition(column: "name")],
+                    unique: true)));
+        var live = Live(SafeMigrationObservedState.PrerequisiteMissing);
+
+        var projected = projection.Project(index, live);
+
+        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, projected.ObservedState);
+        Assert.Equal("projected_data_state_unknown", projected.Code);
+    }
+
+    [Fact]
+    public void ModelManagedCandidateKeyDoesNotAuthorizeNullsNotDistinctIndex()
+    {
+        var projection = ProjectionWithNewRoleTable();
+        var administrator = RoleEnsure(
+            1,
+            "administrator",
+            includeNameUniqueKey: true);
+
+        Accept(projection, administrator, SafeMigrationObservedState.PrerequisiteMissing);
+
+        var index = Operation(
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "ux_roles_name",
+                    "roles",
+                    [new ExpectedIndexKeyDefinition(column: "name")],
+                    unique: true,
+                    nullsDistinct: false)));
+
+        var projected = projection.Project(
+            index,
+            Live(SafeMigrationObservedState.PrerequisiteMissing));
+
+        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, projected.ObservedState);
+        Assert.Equal("projected_data_state_unknown", projected.Code);
     }
 
     private static SafeMigrationPreflightProjection ProjectionWithAcceptedRole()
@@ -507,6 +648,23 @@ public sealed partial class SafeMigrationModelManagedDataTests
             new object?[,] { { 1, "administrator" } },
             schema: null,
             uniqueKeys: null));
+
+    private static SafeMigrationOperation RoleEnsure(
+        int id,
+        string name,
+        bool includeNameUniqueKey
+    ) => Operation(
+        new EnsureModelManagedDataIntent(
+            "roles",
+            ["id"],
+            ["int"],
+            ["id", "name"],
+            ["int", "varchar(64)"],
+            new object?[,] { { id, name } },
+            schema: null,
+            uniqueKeys: includeNameUniqueKey
+                ? [new ExpectedModelManagedDataUniqueKeyDefinition(["name"])]
+                : null));
 
     private static SafeMigrationOperation RoleEnsureWithDisplayName() => Operation(
         new EnsureModelManagedDataIntent(

@@ -13,7 +13,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         string semanticAlias = "FALSE",
         string nonCanonicalAlias = "FALSE",
         string singletonConflict = "FALSE",
-        string namespaceCollision = "FALSE"
+        string namespaceCollision = "FALSE",
+        string? diagnosticEvidence = null
     )
     {
         var tableExists = TableExists(table, schema);
@@ -32,7 +33,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             + $"WHEN ({singletonConflict}) THEN 'different' "
             + $"WHEN ({namespaceCollision}) THEN 'different' "
             + $"WHEN {dataBlocked} THEN 'data_blocked' ELSE 'missing' END",
-            satisfied);
+            satisfied) with
+        {
+            DiagnosticEvidenceExpression = diagnosticEvidence,
+        };
     }
 
     private PostgreSqlSafeMigrationRuntimePlan BuildDropConstraint(

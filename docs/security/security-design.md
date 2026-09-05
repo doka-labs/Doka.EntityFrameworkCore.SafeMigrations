@@ -205,6 +205,20 @@ package-only consumers; and large-run allocation evidence. EF's migration
 transaction is the rollback boundary for transactional DML. SafeMigrations does
 not create a nested transaction inside the provider handler.
 
+An explicitly configured custom migration lineage may remove provider-generated
+model-managed differences only for exact relational tables marked excluded from
+migrations. Missing metadata and changing source/target ownership fail closed.
+The ownership diagnostic never contains managed keys or values. The owning Core
+lineage remains responsible for those schema and data transitions.
+
+Report schema version 2 adds bounded typed catalog-facet evidence. Detailed
+expected/actual values remain protected report fields and are never metric
+labels. Model-managed drift uses only the category
+`model_managed_row_content`. Narrowing probes return only whether a violating
+row exists and never return the value, key, or a derived fragment. The typed
+preflight exception retains the immutable report while limiting its message to
+one deterministic bounded conflict summary.
+
 ## Residual risks and response
 
 Threats include malicious schema metadata, inconsistent legacy data, privileged

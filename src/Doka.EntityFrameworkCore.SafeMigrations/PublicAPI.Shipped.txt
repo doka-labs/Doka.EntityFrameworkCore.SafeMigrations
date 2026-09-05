@@ -435,7 +435,7 @@ const Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDiagnostics.RunCountM
 const Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDiagnostics.RunDurationMetricName = "safe_migrations.run.duration" -> string!
 const Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDiagnostics.RunFailureCountMetricName = "safe_migrations.run.failure.count" -> string!
 const Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDiagnostics.RunbookBaseUrl = "https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/blob/main/docs/runbooks/" -> string!
-const Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationRunReport.CurrentSchemaVersion = 1 -> int
+const Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationRunReport.CurrentSchemaVersion = 2 -> int
 override Doka.EntityFrameworkCore.SafeMigrations.AlterColumnIntent.ObjectName.get -> string!
 override Doka.EntityFrameworkCore.SafeMigrations.DropCheckConstraintIntent.ObjectName.get -> string!
 override Doka.EntityFrameworkCore.SafeMigrations.DropColumnIntent.ObjectName.get -> string!

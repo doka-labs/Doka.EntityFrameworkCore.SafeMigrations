@@ -7,8 +7,46 @@ internal sealed partial class SafeMigrationPreflightProjection
         SafeMigrationProviderAnalysis liveAnalysis
     )
     {
+        var key = new TableKey(intent.Definition.Table, intent.Definition.Schema);
+        if (_projectedMissingTables.Contains(key))
+        {
+            return Analysis(SafeMigrationObservedState.Missing);
+        }
+
+        if (IsProjectedTableStructureUnknown(intent.Definition.Table, intent.Definition.Schema))
+        {
+            return intent.Mode == SafeMigrationTableMode.ConvergenceContainer
+                ? Analysis(SafeMigrationObservedState.Matching)
+                : StructureStateUnknown();
+        }
+
         if (!TryGet(intent.Definition.Table, intent.Definition.Schema, out var table))
         {
+            if (_prerequisites.TryGetValue(key, out var prerequisites))
+            {
+                if (intent.Mode == SafeMigrationTableMode.ConvergenceContainer)
+                {
+                    return Analysis(SafeMigrationObservedState.Matching);
+                }
+
+                // WHY: A matching convergence container is only an existence
+                // proof and does not itself stale the provider's live strict
+                // analysis. A created or structurally changed table does.
+                if (prerequisites.NewlyCreated)
+                {
+                    return StructureStateUnknown();
+                }
+
+                if (!_projectedStructurallyModifiedTables.Contains(key))
+                {
+                    return liveAnalysis;
+                }
+
+                return HasProjectedStrictTableDifference(intent.Definition)
+                    ? Analysis(SafeMigrationObservedState.Different)
+                    : StructureStateUnknown();
+            }
+
             return liveAnalysis;
         }
 
@@ -22,20 +60,42 @@ internal sealed partial class SafeMigrationPreflightProjection
     private SafeMigrationProviderAnalysis Project(
         DropTableIntent intent,
         SafeMigrationProviderAnalysis liveAnalysis
-    ) => TryGet(intent.Table, intent.Schema, out _) ? Analysis(SafeMigrationObservedState.Matching) : liveAnalysis;
+    )
+    {
+        var key = new TableKey(intent.Table, intent.Schema);
+        if (_projectedMissingTables.Contains(key))
+        {
+            return Analysis(SafeMigrationObservedState.Missing);
+        }
+
+        return TryGet(intent.Table, intent.Schema, out _)
+            || _prerequisites.ContainsKey(key)
+                ? Analysis(SafeMigrationObservedState.Matching)
+                : liveAnalysis;
+    }
 
     private SafeMigrationProviderAnalysis Project(
         RenameTableIntent intent,
         SafeMigrationProviderAnalysis liveAnalysis
     )
     {
-        if (!TryGet(intent.Name, intent.Schema, out _))
+        var source = new TableKey(intent.Name, intent.Schema);
+        if (_projectedMissingTables.Contains(source))
+        {
+            return Analysis(SafeMigrationObservedState.Missing);
+        }
+
+        if (!TryGet(intent.Name, intent.Schema, out _)
+            && !_prerequisites.ContainsKey(source))
         {
             return liveAnalysis;
         }
 
+        var target = new TableKey(intent.NewName ?? intent.Name, intent.NewSchema ?? intent.Schema);
+
         return Analysis(
             Contains(intent.NewName ?? intent.Name, intent.NewSchema ?? intent.Schema)
+            || _prerequisites.ContainsKey(target)
                 ? SafeMigrationObservedState.Different
                 : SafeMigrationObservedState.Matching);
     }
@@ -49,6 +109,16 @@ internal sealed partial class SafeMigrationPreflightProjection
         var key = new TableKey(intent.Definition.Table, intent.Definition.Schema);
         if (analysis.ObservedState == SafeMigrationObservedState.Missing)
         {
+            _projectedMissingTables.Remove(key);
+            _projectedUnknownTableStructures.Remove(key);
+            _projectedStructurallyModifiedTables.Remove(key);
+            _projectedChangedColumns.Remove(key);
+            RemoveProjectedColumnDefinitions(intent.Definition.Table, intent.Definition.Schema);
+            foreach (var column in intent.Definition.Columns)
+            {
+                SetProjectedColumnDefinition(intent.Definition.Table, intent.Definition.Schema, column);
+            }
+
             _tables[key] = new ProjectedTable(
                 intent.Definition,
                 dataMutationVersion: _providerDataMutationVersion);
@@ -68,14 +138,27 @@ internal sealed partial class SafeMigrationPreflightProjection
             return;
         }
 
+        if (intent.Mode == SafeMigrationTableMode.StrictDefinition
+            && analysis.ObservedState == SafeMigrationObservedState.Matching)
+        {
+            _projectedMissingTables.Remove(key);
+            _projectedUnknownTableStructures.Remove(key);
+            RemoveProjectedColumnDefinitions(intent.Definition.Table, intent.Definition.Schema);
+            foreach (var column in intent.Definition.Columns)
+            {
+                SetProjectedColumnDefinition(intent.Definition.Table, intent.Definition.Schema, column);
+            }
+        }
+
         if (intent.Mode == SafeMigrationTableMode.ConvergenceContainer
             && analysis.ObservedState == SafeMigrationObservedState.Matching)
         {
+            _projectedMissingTables.Remove(key);
             _prerequisites.TryAdd(
                 key,
                 new ProjectedPrerequisites(
                     newlyCreated: false,
-                    // Matching proves that the table exists; it does not
+                    // WHY: Matching proves that the table exists; it does not
                     // re-establish row-level safety after provider data DML.
                     dataMutationVersion: 0));
         }
@@ -91,6 +174,13 @@ internal sealed partial class SafeMigrationPreflightProjection
             var key = new TableKey(intent.Table, intent.Schema);
             _tables.Remove(key);
             _prerequisites.Remove(key);
+            _projectedDataMutationTables.Remove(key);
+            _projectedModelManagedUniqueKeys.Remove(key);
+            _projectedUnknownTableStructures.Remove(key);
+            _projectedStructurallyModifiedTables.Remove(key);
+            _projectedChangedColumns.Remove(key);
+            RemoveProjectedColumnDefinitions(intent.Table, intent.Schema);
+            _projectedMissingTables.Add(key);
             InvalidateModelManagedDataProjection();
         }
     }
@@ -105,29 +195,60 @@ internal sealed partial class SafeMigrationPreflightProjection
             return;
         }
 
-        InvalidateModelManagedDataProjection();
-
         var source = new TableKey(intent.Name, intent.Schema);
-        var targetTable = intent.NewName ?? intent.Name;
-        var targetSchema = intent.NewSchema ?? intent.Schema;
-        var target = new TableKey(targetTable, targetSchema);
-        if (_prerequisites.Remove(source, out var prerequisites))
+        if (_prerequisites.TryGetValue(source, out var prerequisites)
+            && prerequisites.NewlyCreated
+            && _tables.Remove(source, out var table))
         {
-            _prerequisites[target] = prerequisites;
-        }
+            _projectedModelManagedUniqueKeys.Remove(source, out var projectedUniqueKeys);
+            InvalidateModelManagedDataProjection();
 
-        if (!_tables.Remove(source, out var table))
-        {
+            var targetTable = intent.NewName ?? intent.Name;
+            var targetSchema = intent.NewSchema ?? intent.Schema;
+            var target = new TableKey(targetTable, targetSchema);
+            _projectedMissingTables.Add(source);
+            _projectedMissingTables.Remove(target);
+
+            if (_projectedUnknownTableStructures.Remove(source))
+            {
+                _projectedUnknownTableStructures.Add(target);
+            }
+
+            RenameProjectedTableColumnDefinitions(
+                intent.Name,
+                intent.Schema,
+                targetTable,
+                targetSchema);
+
+            if (_projectedDataMutationTables.Remove(source))
+            {
+                _projectedDataMutationTables.Add(target);
+            }
+
+            if (projectedUniqueKeys is not null)
+            {
+                // WHY: Renaming a table cannot change the uniqueness of rows
+                // accepted earlier in this batch. Retain that exact proof so a
+                // following unique index does not fail on stale table identity.
+                _projectedModelManagedUniqueKeys.Add(target, projectedUniqueKeys);
+            }
+
+            _prerequisites.Remove(source);
+            _prerequisites[target] = prerequisites;
+            table.RenameTable(targetTable, targetSchema);
+            foreach (var projection in _tables.Values)
+            {
+                projection.RenamePrincipalTable(intent.Name, intent.Schema, targetTable, targetSchema);
+            }
+
+            _tables[target] = table;
             return;
         }
 
-        table.RenameTable(targetTable, targetSchema);
-        foreach (var projection in _tables.Values)
-        {
-            projection.RenamePrincipalTable(intent.Name, intent.Schema, targetTable, targetSchema);
-        }
-
-        _tables[target] = table;
+        // WHY: A rename on an existing table can rewrite provider-owned foreign
+        // keys outside the locally projected table. Retaining the pre-batch
+        // snapshot would let a later safe operation act on stale identities.
+        SetOpaqueProviderPostcondition(mayMutateData: false);
     }
 
     private sealed partial class ProjectedTable

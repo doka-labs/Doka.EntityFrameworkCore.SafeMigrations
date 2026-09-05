@@ -218,7 +218,9 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         + "CREATE TABLE `large_migration_target` ("
         + "`id` int NOT NULL, `matching_value` int NULL, "
         + "`repair_value` varchar(40) NULL DEFAULT 'legacy', "
-        + "`blocked_value` varchar(40) NULL, `indexed_value` int NOT NULL, "
+        + "`blocked_value` varchar(40) NULL, `widening_value` varchar(40) NULL, "
+        + "`narrowing_value` varchar(40) NULL, `blocked_narrowing_value` varchar(40) NULL, "
+        + "`boolean_value` bit(1) NULL, `indexed_value` int NOT NULL, "
         + "`unique_value` int NOT NULL, `check_value` int NOT NULL, "
         + "`parent_id` int NOT NULL, `parent_tenant_id` int NOT NULL, "
         + "`secondary_parent_id` int NOT NULL, `secondary_parent_tenant_id` int NOT NULL, "
@@ -235,10 +237,11 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         + "INSERT INTO `large_migration_parent` (`id`, `tenant_id`) VALUES (1, 1); "
         + "INSERT INTO `large_migration_secondary_parent` (`id`, `tenant_id`) VALUES (1, 1); "
         + "INSERT INTO `large_migration_target` ("
-        + "`id`, `matching_value`, `repair_value`, `blocked_value`, `indexed_value`, "
+        + "`id`, `matching_value`, `repair_value`, `blocked_value`, `widening_value`, "
+        + "`narrowing_value`, `blocked_narrowing_value`, `boolean_value`, `indexed_value`, "
         + "`unique_value`, `check_value`, `parent_id`, `parent_tenant_id`, "
         + "`secondary_parent_id`, `secondary_parent_tenant_id`) "
-        + "VALUES (1, 1, 'legacy', NULL, 1, 1, 1, 1, 1, 1, 1);"
+        + "VALUES (1, 1, 'legacy', NULL, 'wide', 'fits', 'too-long-value', b'1', 1, 1, 1, 1, 1, 1, 1);"
         + BuildLargeMigrationModelManagedRows();
 
     private static string BuildLargeMigrationModelManagedRows() =>

@@ -7,33 +7,52 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffer
 {
     private readonly IMigrationsModelDiffer _providerDiffer;
+    private readonly bool _excludeModelManagedDataForExcludedTables;
 
     public SafeMigrationMigrationsModelDiffer(
-        IMigrationsModelDiffer providerDiffer
+        IMigrationsModelDiffer providerDiffer,
+        SafeMigrationScaffoldingConfiguration configuration
     )
     {
         ArgumentNullException.ThrowIfNull(providerDiffer);
+        ArgumentNullException.ThrowIfNull(configuration);
 
         _providerDiffer = providerDiffer;
+        _excludeModelManagedDataForExcludedTables = configuration.ExcludeModelManagedDataForExcludedTables;
     }
 
     public bool HasDifferences(
         IRelationalModel? source,
         IRelationalModel? target
-    ) => _providerDiffer.HasDifferences(source, target);
+    ) => !_excludeModelManagedDataForExcludedTables
+        ? _providerDiffer.HasDifferences(source, target)
+        : GetOwnedDifferences(source, target).Count > 0;
 
     public IReadOnlyList<MigrationOperation> GetDifferences(
         IRelationalModel? source,
         IRelationalModel? target
     )
     {
-        var operations = _providerDiffer.GetDifferences(source, target);
+        var operations = GetOwnedDifferences(source, target);
+
         foreach (var operation in operations)
         {
             Enrich(operation, source, target);
         }
 
         return operations;
+    }
+
+    private IReadOnlyList<MigrationOperation> GetOwnedDifferences(
+        IRelationalModel? source,
+        IRelationalModel? target
+    )
+    {
+        var operations = _providerDiffer.GetDifferences(source, target);
+
+        return _excludeModelManagedDataForExcludedTables
+            ? SafeMigrationModelManagedDataOwnershipFilter.Filter(operations, source, target)
+            : operations;
     }
 
     private static void Enrich(

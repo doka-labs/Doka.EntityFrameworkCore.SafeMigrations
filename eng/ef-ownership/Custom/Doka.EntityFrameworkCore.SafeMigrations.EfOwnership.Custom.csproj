@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup Label="Engineering fixture">
+    <OutputType>Library</OutputType>
+    <RootNamespace>Doka.EntityFrameworkCore.SafeMigrations.EfOwnership</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup Label="Production">
+    <ProjectReference Include="../Core/Doka.EntityFrameworkCore.SafeMigrations.EfOwnership.Core.csproj" />
+    <ProjectReference Include="../../../src/Doka.EntityFrameworkCore.SafeMigrations/Doka.EntityFrameworkCore.SafeMigrations.csproj" />
+  </ItemGroup>
+</Project>

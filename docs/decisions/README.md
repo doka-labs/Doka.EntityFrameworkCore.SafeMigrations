@@ -12,7 +12,9 @@ implementation. D-007 records the maintainer's explicit choice of documentation
 format and tooling boundary. D-008 records the implemented automatic
 scaffolding contract selected on 2026-08-27. D-009 records the implemented
 source-frozen model-managed-data contract selected on 2026-09-02. The dated
-transitions are retained in each record's Decision History.
+transitions are retained in each record's Decision History. D-010 and D-011
+record the implemented ownership and lossless-repair contracts selected on
+2026-09-05.
 
 | Record | Bounded decision |
 | --- | --- |
@@ -25,6 +27,8 @@ transitions are retained in each record's Decision History.
 | [D-007](D-007-documentation-and-madr.md) | Shared Doka document standard without a repository-specific ADR toolchain |
 | [D-008](D-008-automatic-safe-migration-scaffolding.md) | Source-frozen automatic strict and legacy-convergence scaffolding through EF design-time services |
 | [D-009](D-009-model-managed-data-convergence.md) | Automatic guarded convergence of source-frozen EF model-managed data |
+| [D-010](D-010-excluded-table-model-managed-data-ownership.md) | Explicit model-managed-data ownership for excluded tables in independent lineages |
+| [D-011](D-011-lossless-column-repair-and-actionable-diagnostics.md) | Provider-proven lossless column repair and bounded actionable preflight evidence |
 
 ## Authoring and review
 

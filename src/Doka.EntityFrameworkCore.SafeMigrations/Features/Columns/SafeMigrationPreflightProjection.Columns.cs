@@ -7,11 +7,38 @@ internal sealed partial class SafeMigrationPreflightProjection
         SafeMigrationProviderAnalysis liveAnalysis
     )
     {
+        if (TryGetProjectedColumnDefinition(
+                intent.Table,
+                intent.Schema,
+                intent.Definition.Name,
+                out var projectedDefinition))
+        {
+            // WHY: Provider repair evidence describes the historical live
+            // definition. Once an earlier operation changes the projected
+            // definition, only exact target equality remains proven.
+            return Analysis(
+                SafeMigrationDefinitionEquivalence.Column(projectedDefinition, intent.Definition)
+                    ? SafeMigrationObservedState.Matching
+                    : SafeMigrationObservedState.Different);
+        }
+
+        if (IsProjectedColumnMissing(intent.Table, intent.Schema, intent.Definition.Name))
+        {
+            return Analysis(SafeMigrationObservedState.Missing);
+        }
+
+        if (IsProjectedColumnUnknown(intent.Table, intent.Schema, intent.Definition.Name))
+        {
+            return StructureStateUnknown();
+        }
+
         if (!TryGet(intent.Table, intent.Schema, out var table))
         {
-            return SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(intent.Definition)
+            var unprojectedAnalysis = SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(intent.Definition)
                 ? liveAnalysis
                 : InvalidateDataDependentMissing(intent.Table, intent.Schema, liveAnalysis);
+
+            return InvalidateStaleLiveDataProof(intent.Table, intent.Schema, unprojectedAnalysis);
         }
 
         var analysis = AnalyzeDefinition(
@@ -20,9 +47,11 @@ internal sealed partial class SafeMigrationPreflightProjection
             intent.Definition,
             SafeMigrationDefinitionEquivalence.Column);
 
-        return SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(intent.Definition)
+        analysis = SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(intent.Definition)
             ? analysis
             : InvalidateDataDependentMissing(table.Table, table.Schema, analysis);
+
+        return InvalidateStaleLiveDataProof(table.Table, table.Schema, analysis);
     }
 
     private SafeMigrationProviderAnalysis Project(
@@ -30,6 +59,25 @@ internal sealed partial class SafeMigrationPreflightProjection
         SafeMigrationProviderAnalysis liveAnalysis
     )
     {
+        if (TryGetProjectedColumnDefinition(
+                intent.Table,
+                intent.Schema,
+                intent.Definition.Name,
+                out var projectedDefinition))
+        {
+            return AnalyzeAlterColumn(projectedDefinition, intent);
+        }
+
+        if (IsProjectedColumnMissing(intent.Table, intent.Schema, intent.Definition.Name))
+        {
+            return Analysis(SafeMigrationObservedState.Missing);
+        }
+
+        if (IsProjectedColumnUnknown(intent.Table, intent.Schema, intent.Definition.Name))
+        {
+            return StructureStateUnknown();
+        }
+
         if (!TryGet(intent.Table, intent.Schema, out var table))
         {
             return HasUnanalyzedDataChanges(intent.Table, intent.Schema)
@@ -53,24 +101,65 @@ internal sealed partial class SafeMigrationPreflightProjection
     private SafeMigrationProviderAnalysis Project(
         DropColumnIntent intent,
         SafeMigrationProviderAnalysis liveAnalysis
-    ) => TryGet(intent.Table, intent.Schema, out var table)
-        ? Analysis(
-            table.Columns.ContainsKey(intent.Name)
-                ? SafeMigrationObservedState.Matching
-                : SafeMigrationObservedState.Missing)
-        : liveAnalysis;
+    )
+    {
+        if (TryGetProjectedColumnDefinition(intent.Table, intent.Schema, intent.Name, out _))
+        {
+            return Analysis(SafeMigrationObservedState.Matching);
+        }
+
+        if (IsProjectedColumnMissing(intent.Table, intent.Schema, intent.Name))
+        {
+            return Analysis(SafeMigrationObservedState.Missing);
+        }
+
+        if (IsProjectedColumnUnknown(intent.Table, intent.Schema, intent.Name))
+        {
+            return StructureStateUnknown();
+        }
+
+        return TryGet(intent.Table, intent.Schema, out var table)
+            ? Analysis(
+                table.Columns.ContainsKey(intent.Name)
+                    ? SafeMigrationObservedState.Matching
+                    : SafeMigrationObservedState.Missing)
+            : liveAnalysis;
+    }
 
     private SafeMigrationProviderAnalysis Project(
         RenameColumnIntent intent,
         SafeMigrationProviderAnalysis liveAnalysis
-    ) => TryGet(intent.Table, intent.Schema, out var table)
-        ? Analysis(
-            !table.Columns.ContainsKey(intent.Name)
-                ? SafeMigrationObservedState.Missing
-                : table.Columns.ContainsKey(intent.NewName)
+    )
+    {
+        if (IsProjectedColumnMissing(intent.Table, intent.Schema, intent.Name))
+        {
+            return Analysis(SafeMigrationObservedState.Missing);
+        }
+
+        if (IsProjectedColumnUnknown(intent.Table, intent.Schema, intent.Name)
+            || IsProjectedColumnUnknown(intent.Table, intent.Schema, intent.NewName))
+        {
+            return StructureStateUnknown();
+        }
+
+        if (TryGetProjectedColumnDefinition(intent.Table, intent.Schema, intent.Name, out _))
+        {
+            return Analysis(
+                TryGetProjectedColumnDefinition(intent.Table, intent.Schema, intent.NewName, out _)
+                && !IsProjectedColumnMissing(intent.Table, intent.Schema, intent.NewName)
                     ? SafeMigrationObservedState.Different
-                    : SafeMigrationObservedState.Matching)
-        : liveAnalysis;
+                    : SafeMigrationObservedState.Matching);
+        }
+
+        return TryGet(intent.Table, intent.Schema, out var table)
+            ? Analysis(
+                !table.Columns.ContainsKey(intent.Name)
+                    ? SafeMigrationObservedState.Missing
+                    : table.Columns.ContainsKey(intent.NewName)
+                        ? SafeMigrationObservedState.Different
+                        : SafeMigrationObservedState.Matching)
+            : liveAnalysis;
+    }
 
     private void Observe(
         EnsureColumnIntent intent,
@@ -86,10 +175,20 @@ internal sealed partial class SafeMigrationPreflightProjection
                 addedToExistingTable: decision.Action == SafeMigrationAction.Apply && !prerequisites.NewlyCreated);
         }
 
+        if (decision.Action is SafeMigrationAction.Apply or SafeMigrationAction.NoOp or SafeMigrationAction.Repair)
+        {
+            SetProjectedColumnDefinition(intent.Table, intent.Schema, intent.Definition);
+        }
+
         if (decision.Action is SafeMigrationAction.Apply or SafeMigrationAction.Repair
             && TryGet(intent.Table, intent.Schema, out var table))
         {
             table.AddColumn(intent.Definition);
+        }
+
+        if (decision.Action is SafeMigrationAction.Apply or SafeMigrationAction.Repair)
+        {
+            MarkProjectedColumnChanged(intent.Table, intent.Schema, intent.Definition.Name);
         }
     }
 
@@ -106,10 +205,20 @@ internal sealed partial class SafeMigrationPreflightProjection
                 addedToExistingTable: false);
         }
 
+        if (decision.Action is SafeMigrationAction.NoOp or SafeMigrationAction.Repair)
+        {
+            SetProjectedColumnDefinition(intent.Table, intent.Schema, intent.Definition);
+        }
+
         if (decision.Action == SafeMigrationAction.Repair
             && TryGet(intent.Table, intent.Schema, out var table))
         {
             table.Columns[intent.Definition.Name] = intent.Definition;
+        }
+
+        if (decision.Action == SafeMigrationAction.Repair)
+        {
+            MarkProjectedColumnChanged(intent.Table, intent.Schema, intent.Definition.Name);
         }
     }
 
@@ -120,19 +229,18 @@ internal sealed partial class SafeMigrationPreflightProjection
     {
         if (decision.Action == SafeMigrationAction.Apply)
         {
+            // WHY: The provider may remove local indexes or constraints together
+            // with the column. Their exact post-state must remain unknown.
             InvalidateModelManagedDataProjection();
+            SetProjectedTableStructureUnknown(intent.Table, intent.Schema);
+            RemoveDroppedIndexes(intent.Table, intent.Schema);
+            SetProjectedColumnMissing(intent.Table, intent.Schema, intent.Name);
         }
 
         if (decision.Action == SafeMigrationAction.Apply
             && _prerequisites.TryGetValue(new TableKey(intent.Table, intent.Schema), out var prerequisites))
         {
             prerequisites.Columns.Remove(intent.Name);
-        }
-
-        if (decision.Action == SafeMigrationAction.Apply
-            && TryGet(intent.Table, intent.Schema, out var table))
-        {
-            table.RemoveColumn(intent.Name);
         }
     }
 
@@ -146,24 +254,37 @@ internal sealed partial class SafeMigrationPreflightProjection
             return;
         }
 
-        InvalidateModelManagedDataProjection();
-
-        if (_prerequisites.TryGetValue(new TableKey(intent.Table, intent.Schema), out var prerequisites)
-            && prerequisites.Columns.Remove(intent.Name, out var prerequisite))
+        var key = new TableKey(intent.Table, intent.Schema);
+        if (_prerequisites.TryGetValue(key, out var prerequisites)
+            && prerequisites.NewlyCreated
+            && _tables.TryGetValue(key, out var table))
         {
-            prerequisites.Columns[intent.NewName] = prerequisite;
-        }
+            InvalidateModelManagedDataProjection();
+            RenameProjectedColumnDefinition(
+                intent.Table,
+                intent.Schema,
+                intent.Name,
+                intent.NewName);
 
-        if (!TryGet(intent.Table, intent.Schema, out var table))
-        {
+            if (prerequisites.Columns.Remove(intent.Name, out var prerequisite))
+            {
+                prerequisites.Columns[intent.NewName] = prerequisite;
+            }
+
+            table.RenameColumn(intent.Name, intent.NewName);
+            foreach (var projection in _tables.Values)
+            {
+                projection.RenamePrincipalColumn(table.Table, table.Schema, intent.Name, intent.NewName);
+            }
+
             return;
         }
 
-        table.RenameColumn(intent.Name, intent.NewName);
-        foreach (var projection in _tables.Values)
-        {
-            projection.RenamePrincipalColumn(table.Table, table.Schema, intent.Name, intent.NewName);
-        }
+        // WHY: A rename on an existing table can rewrite provider-owned indexes,
+        // expressions, and foreign keys outside the locally projected table.
+        // Later safe operations must not trust the catalog snapshot captured
+        // before the ordered migration started.
+        SetOpaqueProviderPostcondition(mayMutateData: false);
     }
 
     private static SafeMigrationProviderAnalysis AnalyzeAlterColumn(
@@ -175,6 +296,16 @@ internal sealed partial class SafeMigrationPreflightProjection
         {
             return Analysis(SafeMigrationObservedState.Missing);
         }
+
+        return AnalyzeAlterColumn(actual, intent);
+    }
+
+    private static SafeMigrationProviderAnalysis AnalyzeAlterColumn(
+        ExpectedColumnDefinition actual,
+        AlterColumnIntent intent
+    )
+    {
+        ArgumentNullException.ThrowIfNull(actual);
 
         if (SafeMigrationDefinitionEquivalence.Column(actual, intent.Definition))
         {

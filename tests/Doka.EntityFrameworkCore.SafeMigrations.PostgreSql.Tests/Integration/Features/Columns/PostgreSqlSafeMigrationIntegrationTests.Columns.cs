@@ -24,6 +24,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         var inheritedReport = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, inherited.Operations, new SafeMigrationRunOptions("inherited-collation"));
+
         var driftReport = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, explicitDrift.Operations, new SafeMigrationRunOptions("explicit-collation"));
@@ -181,10 +182,21 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 new SafeMigrationRunOptions("legacy-repair"),
                 CancellationToken.None);
 
+        var providerAnalysis = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations.Cast<SafeMigrationOperation>().ToArray(),
+                CancellationToken.None);
+
         var assessment = Assert.Single(report.Assessments);
+        var providerAssessment = Assert.Single(providerAnalysis);
+
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
         Assert.Equal(SafeMigrationAction.Repair, assessment.Action);
+        Assert.Equal(SafeMigrationOperationalImpact.TableRewritePossible, assessment.OperationalImpact);
+        Assert.True(providerAssessment.RequiresLiveDataProof);
 
         await ExecuteOperationsAsync(context, builder.Operations);
 
@@ -257,13 +269,24 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 new SafeMigrationRunOptions("legacy-null-block"),
                 CancellationToken.None);
 
+        var providerAnalysis = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations.Cast<SafeMigrationOperation>().ToArray(),
+                CancellationToken.None);
+
         var exception = await Assert.ThrowsAsync<PostgresException>(() =>
             ExecuteOperationsAsync(context, builder.Operations));
 
         var assessment = Assert.Single(report.Assessments);
+        var providerAssessment = Assert.Single(providerAnalysis);
+
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationObservedState.DataBlocked, assessment.ObservedState);
         Assert.Equal(SafeMigrationAction.RejectDataBlocked, assessment.Action);
+        Assert.Equal(SafeMigrationOperationalImpact.TableRewritePossible, assessment.OperationalImpact);
+        Assert.True(providerAssessment.RequiresLiveDataProof);
         Assert.Equal("P1003", exception.SqlState);
         Assert.Equal(
             1,
@@ -290,7 +313,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE legacy_type_drift (value character varying(30) NULL); "
+            "CREATE TABLE legacy_type_drift (value character(30) NULL); "
             + "COMMENT ON COLUMN legacy_type_drift.value IS 'legacy';");
 
         await using var context = CreateContext(connectionString);
@@ -323,12 +346,13 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
         Assert.Equal("P1001", exception.SqlState);
         Assert.Equal(
-            30,
+            1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT character_maximum_length FROM information_schema.columns "
+                "SELECT COUNT(*) FROM information_schema.columns "
                 + "WHERE table_schema = current_schema() AND table_name = 'legacy_type_drift' "
-                + "AND column_name = 'value';"));
+                + "AND column_name = 'value' AND data_type = 'character' "
+                + "AND character_maximum_length = 30;"));
         Assert.Equal(
             "legacy",
             await ScalarStringAsync(

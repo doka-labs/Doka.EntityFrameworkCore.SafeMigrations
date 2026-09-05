@@ -16,7 +16,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         ForeignKeyMatches(
             intent.Definition,
             requireExpectedName: false,
-            requireLocalIdentity: false));
+            requireLocalIdentity: false),
+        diagnosticEvidence: BuildForeignKeyDiagnosticEvidence(intent.Definition));
 
     private PostgreSqlSafeMigrationRuntimePlan BuildDropForeignKey(
         DropForeignKeyIntent intent
@@ -70,6 +71,94 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         // A column-list SET NULL/DEFAULT action changes which dependent
         // columns are updated and is not expressible by the EF operation.
         + "AND (to_jsonb(co) ->> 'confdelsetcols') IS NULL)";
+
+    private string BuildForeignKeyDiagnosticEvidence(
+        ExpectedForeignKeyDefinition definition
+    )
+    {
+        var expectedColumns = string.Join(",", definition.Columns);
+        var expectedPrincipalColumns = string.Join(",", definition.PrincipalColumns);
+        var actualColumns = "array_to_string(ARRAY(SELECT a.attname "
+            + "FROM unnest(co.conkey) WITH ORDINALITY AS key(attnum, ord) "
+            + "JOIN pg_catalog.pg_attribute a "
+            + "ON a.attrelid = co.conrelid AND a.attnum = key.attnum ORDER BY key.ord), ',')";
+
+        var actualPrincipalColumns = "array_to_string(ARRAY(SELECT a.attname "
+            + "FROM unnest(co.confkey) WITH ORDINALITY AS key(attnum, ord) "
+            + "JOIN pg_catalog.pg_attribute a "
+            + "ON a.attrelid = co.confrelid AND a.attnum = key.attnum ORDER BY key.ord), ',')";
+
+        var columnDiagnostics = BoundedOrderedListDiagnostics(expectedColumns, actualColumns);
+        var principalColumnDiagnostics = BoundedOrderedListDiagnostics(
+            expectedPrincipalColumns,
+            actualPrincipalColumns);
+
+        var records = new[]
+        {
+            DiagnosticRecord(
+                $"ARRAY(SELECT a.attname FROM unnest(co.conkey) WITH ORDINALITY AS key(attnum, ord) "
+                    + "JOIN pg_catalog.pg_attribute a "
+                    + "ON a.attrelid = co.conrelid AND a.attnum = key.attnum "
+                    + $"ORDER BY key.ord) <> {NameArray(definition.Columns)}",
+                "foreign_key_column_order",
+                columnDiagnostics.Expected,
+                columnDiagnostics.Actual),
+            DiagnosticRecord(
+                $"ARRAY(SELECT a.attname FROM unnest(co.confkey) WITH ORDINALITY AS key(attnum, ord) "
+                    + "JOIN pg_catalog.pg_attribute a "
+                    + "ON a.attrelid = co.confrelid AND a.attnum = key.attnum "
+                    + $"ORDER BY key.ord) <> {NameArray(definition.PrincipalColumns)}",
+                "foreign_key_principal_column_order",
+                principalColumnDiagnostics.Expected,
+                principalColumnDiagnostics.Actual),
+            DiagnosticRecord(
+                $"co.confdeltype <> {Literal(ReferentialCode(definition.OnDelete))}::\"char\"",
+                "foreign_key_delete_behavior",
+                Literal(ReferentialDiagnosticCode(definition.OnDelete)),
+                ReferentialDiagnosticSql("co.confdeltype")),
+            DiagnosticRecord(
+                $"co.confupdtype <> {Literal(ReferentialCode(definition.OnUpdate))}::\"char\"",
+                "foreign_key_update_behavior",
+                Literal(ReferentialDiagnosticCode(definition.OnUpdate)),
+                ReferentialDiagnosticSql("co.confupdtype")),
+        };
+
+        return "(SELECT NULLIF(concat_ws(chr(30), "
+            + string.Join(", ", records)
+            + "), '') FROM pg_catalog.pg_constraint co "
+            + "JOIN pg_catalog.pg_class c ON c.oid = co.conrelid "
+            + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
+            + $"WHERE n.nspname = {SchemaExpression(definition.Schema)} "
+            + $"AND c.relname = {Literal(definition.Table)} "
+            + $"AND co.conname = {Literal(definition.Name)} AND co.contype = 'f'::\"char\" LIMIT 1)";
+    }
+
+    private (string Expected, string Actual) BoundedOrderedListDiagnostics(
+        string expected,
+        string actualExpression
+    ) => expected.Length <= SafeMigrationFacetDifference.MaximumValueLength
+        ? (Literal(expected), $"LEFT({actualExpression}, {SafeMigrationFacetDifference.MaximumValueLength})")
+        : (
+            $"'md5:' || pg_catalog.md5({Literal(expected)})",
+            $"'md5:' || pg_catalog.md5({actualExpression})");
+
+    private static string ReferentialDiagnosticCode(
+        ReferentialAction action
+    ) => action switch
+    {
+        ReferentialAction.NoAction => "no_action",
+        ReferentialAction.Restrict => "restrict",
+        ReferentialAction.Cascade => "cascade",
+        ReferentialAction.SetNull => "set_null",
+        ReferentialAction.SetDefault => "set_default",
+        _ => throw new ArgumentOutOfRangeException(nameof(action)),
+    };
+
+    private static string ReferentialDiagnosticSql(
+        string expression
+    ) => $"CASE {expression} WHEN 'a'::\"char\" THEN 'no_action' WHEN 'r'::\"char\" THEN 'restrict' "
+        + "WHEN 'c'::\"char\" THEN 'cascade' WHEN 'n'::\"char\" THEN 'set_null' "
+        + "WHEN 'd'::\"char\" THEN 'set_default' ELSE 'unknown' END";
 
     private string ForeignKeySatisfied(
         ExpectedForeignKeyDefinition definition

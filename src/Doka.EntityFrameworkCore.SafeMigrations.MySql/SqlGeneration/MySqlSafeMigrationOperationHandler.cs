@@ -58,7 +58,13 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             ? GetExpectedUniqueIndexes(table)
             : null;
 
-        var runtimePlan = _catalogSqlBuilder.Build(operation, context, expectedUniqueIndexes);
+        var runtimePlan = _catalogSqlBuilder.Build(
+            operation,
+            context,
+            expectedUniqueIndexes,
+            includeAnalysisEvidence: _planCapture.IncludeAnalysisEvidence,
+            includeTransitionEvidence: !_planCapture.IsActive || _planCapture.IncludeTransitionEvidence,
+            parameterizeValues: _planCapture.IsActive);
         if (_planCapture.IsActive)
         {
             _planCapture.Record(context.OperationOrdinal, operation, runtimePlan);
@@ -87,7 +93,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         // A connection-local temporary table turns rejected decisions and a
         // failed postcondition into deterministic server errors without a
         // persistent stored routine or shared database object.
-        var setupCommands = new List<string>(12 + baselineFragments.SetupCommands.Count)
+        var setupCommands = new List<string>(24 + baselineFragments.SetupCommands.Count)
         {
             BuildAssertionSetupSql(),
         };
@@ -102,6 +108,16 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             if (runtimePlan.StateEvaluationGuardFailureExpression is not null)
             {
                 setupCommands.Add(BuildGuardEvaluationAssignment(runtimePlan, renderedParameterValues));
+                setupCommands.Add($"PREPARE {PreparedStatementName} FROM @doka_sm_sql;");
+                setupCommands.Add($"EXECUTE {PreparedStatementName};");
+                setupCommands.Add($"DEALLOCATE PREPARE {PreparedStatementName};");
+            }
+
+            if (runtimePlan.DataProbe is not null)
+            {
+                setupCommands.Add(BuildTransitionEligibilityAssignment(runtimePlan, renderedParameterValues));
+                setupCommands.Add(BuildDataProbeRequiredAssignment(runtimePlan, renderedParameterValues));
+                setupCommands.Add(BuildDataProbeEvaluationAssignment(runtimePlan, renderedParameterValues));
                 setupCommands.Add($"PREPARE {PreparedStatementName} FROM @doka_sm_sql;");
                 setupCommands.Add($"EXECUTE {PreparedStatementName};");
                 setupCommands.Add($"DEALLOCATE PREPARE {PreparedStatementName};");
@@ -302,15 +318,62 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         IReadOnlyList<string> renderedParameterValues
     )
     {
+        var stateExpression = runtimePlan.DataProbe is null
+            ? runtimePlan.RenderPreparedStateExpression(renderedParameterValues)
+            : runtimePlan.RenderPreparedStateExpression(
+                renderedParameterValues,
+                "@doka_sm_data_blocked",
+                "@doka_sm_transition_eligible");
+
+        var repairPrecondition = runtimePlan.DataProbe is null
+            ? runtimePlan.RenderPreparedRepairPrecondition(renderedParameterValues)
+            : runtimePlan.RenderPreparedRepairPrecondition(
+                renderedParameterValues,
+                "@doka_sm_data_blocked",
+                "@doka_sm_transition_eligible");
+
         var statement = "SELECT ("
-            + runtimePlan.RenderPreparedStateExpression(renderedParameterValues)
+            + stateExpression
             + "), COALESCE(("
-            + runtimePlan.RenderPreparedRepairPrecondition(renderedParameterValues)
+            + repairPrecondition
             + "), FALSE) INTO @doka_sm_state, @doka_sm_repair_ok";
 
-        return "SET @doka_sm_sql = CASE WHEN @doka_sm_state IS NULL "
-            + $"THEN CONVERT(0x{Convert.ToHexString(Encoding.UTF8.GetBytes(statement))} USING utf8mb4) "
-            + "ELSE 'DO 0' END;";
+        return BuildHexAssignment(
+            "SET @doka_sm_sql = CASE WHEN @doka_sm_state IS NULL THEN CONVERT(0x",
+            statement,
+            " USING utf8mb4) ELSE 'DO 0' END;");
+    }
+
+    private static string BuildTransitionEligibilityAssignment(
+        MySqlSafeMigrationRuntimePlan runtimePlan,
+        IReadOnlyList<string> renderedParameterValues
+    ) => "SET @doka_sm_transition_eligible = CASE WHEN @doka_sm_state IS NULL THEN COALESCE(("
+        + runtimePlan.RenderPreparedTransitionInvariantExpression(renderedParameterValues)
+        + "), FALSE) ELSE FALSE END;";
+
+    private static string BuildDataProbeRequiredAssignment(
+        MySqlSafeMigrationRuntimePlan runtimePlan,
+        IReadOnlyList<string> renderedParameterValues
+    ) => "SET @doka_sm_data_probe_required = CASE WHEN @doka_sm_transition_eligible THEN COALESCE(("
+        + runtimePlan.RenderPreparedDataProbeRequiredExpression(renderedParameterValues)
+        + "), FALSE) ELSE FALSE END, @doka_sm_data_blocked = FALSE;";
+
+    private static string BuildDataProbeEvaluationAssignment(
+        MySqlSafeMigrationRuntimePlan runtimePlan,
+        IReadOnlyList<string> renderedParameterValues
+    )
+    {
+        var statement = "SELECT COALESCE(("
+            + runtimePlan.RenderPreparedDataProbeBlockedExpression(renderedParameterValues)
+            + "), FALSE) INTO @doka_sm_data_blocked";
+
+        // WHY: PREPARE resolves target identifiers before execution. Materialize
+        // the bounded row query only after the catalog proved this is a varchar
+        // narrowing transition on an existing column.
+        return BuildHexAssignment(
+            "SET @doka_sm_sql = CASE WHEN @doka_sm_data_probe_required THEN CONVERT(0x",
+            statement,
+            " USING utf8mb4) ELSE 'DO 0' END;");
     }
 
     private static string BuildGuardEvaluationAssignment(
@@ -326,9 +389,10 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
 
         // PREPARE performs identifier resolution. Materialize the data-reading
         // guard only after the catalog-only prerequisite has succeeded.
-        return "SET @doka_sm_sql = CASE WHEN @doka_sm_state IS NULL "
-            + $"THEN CONVERT(0x{Convert.ToHexString(Encoding.UTF8.GetBytes(statement))} USING utf8mb4) "
-            + "ELSE 'DO 0' END;";
+        return BuildHexAssignment(
+            "SET @doka_sm_sql = CASE WHEN @doka_sm_state IS NULL THEN CONVERT(0x",
+            statement,
+            " USING utf8mb4) ELSE 'DO 0' END;");
     }
 
     private static string BuildInitialLazyStateAssignment() => "SET @doka_sm_state = CASE "
@@ -338,14 +402,117 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
     private static string BuildPreparedSqlAssignment(
         string applyDdl,
         string? repairDdl
-    ) => "SET @doka_sm_sql = CASE "
-        + "WHEN @doka_sm_action = 'apply' "
-        + $"THEN CONVERT(0x{Convert.ToHexString(Encoding.UTF8.GetBytes(applyDdl))} USING utf8mb4) "
-        + (repairDdl is null
-            ? string.Empty
-            : "WHEN @doka_sm_action = 'repair' "
-            + $"THEN CONVERT(0x{Convert.ToHexString(Encoding.UTF8.GetBytes(repairDdl))} USING utf8mb4) ")
-        + "ELSE 'DO 0' END;";
+    )
+    {
+        const string applyPrefix = "SET @doka_sm_sql = CASE WHEN @doka_sm_action = 'apply' THEN CONVERT(0x";
+        const string repairPrefix = " USING utf8mb4) WHEN @doka_sm_action = 'repair' THEN CONVERT(0x";
+        const string suffix = " USING utf8mb4) ELSE 'DO 0' END;";
+
+        var repairMaximumByteCount = repairDdl is null ? 0 : Encoding.UTF8.GetMaxByteCount(repairDdl.Length);
+        var maximumByteCount = checked(
+            Encoding.UTF8.GetMaxByteCount(applyDdl.Length)
+            + repairMaximumByteCount);
+        var buffer = ArrayPool<byte>.Shared.Rent(maximumByteCount);
+
+        try
+        {
+            var applyByteCount = Encoding.UTF8.GetBytes(applyDdl.AsSpan(), buffer);
+            var repairByteCount = repairDdl is null
+                ? 0
+                : Encoding.UTF8.GetBytes(repairDdl.AsSpan(), buffer.AsSpan(applyByteCount));
+
+            var resultLength = checked(
+                applyPrefix.Length
+                + (applyByteCount * 2)
+                + (repairDdl is null ? 0 : repairPrefix.Length + (repairByteCount * 2))
+                + suffix.Length);
+
+            return string.Create(
+                resultLength,
+                (
+                    Buffer: buffer,
+                    ApplyByteCount: applyByteCount,
+                    RepairByteCount: repairByteCount,
+                    HasRepair: repairDdl is not null),
+                static (destination, state) =>
+                {
+                    applyPrefix.AsSpan().CopyTo(destination);
+                    var offset = applyPrefix.Length;
+
+                    WriteHexadecimal(
+                        state.Buffer.AsSpan(0, state.ApplyByteCount),
+                        destination.Slice(offset, state.ApplyByteCount * 2));
+                    offset += state.ApplyByteCount * 2;
+
+                    if (state.HasRepair)
+                    {
+                        repairPrefix.AsSpan().CopyTo(destination[offset..]);
+                        offset += repairPrefix.Length;
+
+                        WriteHexadecimal(
+                            state.Buffer.AsSpan(state.ApplyByteCount, state.RepairByteCount),
+                            destination.Slice(offset, state.RepairByteCount * 2));
+                        offset += state.RepairByteCount * 2;
+                    }
+
+                    suffix.AsSpan().CopyTo(destination[offset..]);
+                });
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
+    }
+
+    private static string BuildHexAssignment(
+        string prefix,
+        string statement,
+        string suffix
+    )
+    {
+        var maximumByteCount = Encoding.UTF8.GetMaxByteCount(statement.Length);
+        var buffer = ArrayPool<byte>.Shared.Rent(maximumByteCount);
+
+        try
+        {
+            var byteCount = Encoding.UTF8.GetBytes(statement.AsSpan(), buffer);
+            var hexadecimalLength = checked(byteCount * 2);
+
+            // WHY: PREPARE requires one SQL string, but allocating a temporary
+            // UTF-8 array and a second hexadecimal string triples peak traffic
+            // for large guarded migrations. Write both representations into
+            // the final immutable command while retaining byte-exact SQL-mode-
+            // independent prepared statements.
+            return string.Create(
+                checked(prefix.Length + hexadecimalLength + suffix.Length),
+                (Prefix: prefix, Buffer: buffer, ByteCount: byteCount, Suffix: suffix),
+                static (destination, state) =>
+                {
+                    state.Prefix.AsSpan().CopyTo(destination);
+                    var hexadecimal = destination.Slice(state.Prefix.Length, state.ByteCount * 2);
+                    WriteHexadecimal(state.Buffer.AsSpan(0, state.ByteCount), hexadecimal);
+
+                    state.Suffix.AsSpan().CopyTo(destination[(state.Prefix.Length + hexadecimal.Length)..]);
+                });
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
+    }
+
+    private static void WriteHexadecimal(
+        ReadOnlySpan<byte> source,
+        Span<char> destination
+    )
+    {
+        if (!Convert.TryToHexString(source, destination, out var charsWritten)
+            || charsWritten != destination.Length)
+        {
+            throw new InvalidOperationException(
+                "The MySQL prepared statement could not be encoded as hexadecimal UTF-8.");
+        }
+    }
 
     private static MySqlMigrationCommandSpec GetSingleBaselineCommand(
         IReadOnlyList<MySqlMigrationCommandSpec> baseline
@@ -431,7 +598,8 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
 
     private static string BuildGuardCleanupSql() => "SET @doka_sm_state = NULL, @doka_sm_action = NULL, "
         + "@doka_sm_repair_ok = NULL, @doka_sm_prerequisite_ok = NULL, @doka_sm_sql = NULL, "
-        + "@doka_sm_post_ok = NULL; "
+        + "@doka_sm_post_ok = NULL, @doka_sm_data_probe_required = NULL, @doka_sm_data_blocked = NULL; "
+        + "SET @doka_sm_transition_eligible = NULL; "
         + "DROP TEMPORARY TABLE IF EXISTS `__doka_sm_assert`;";
 
     private IReadOnlyList<MySqlMigrationCommandSpec> RenderBaseline(
@@ -633,14 +801,12 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             return Literal((string)parameter.Value!);
         }
 
-        var mapping = parameter.Value is null
-            ? _typeMappingSource.FindMapping(parameter.StoreType)
-            : _typeMappingSource.FindMapping(parameter.Value.GetType(), parameter.StoreType);
+        var mapping = MySqlCatalogTypeMapping.Resolve(
+            _typeMappingSource,
+            parameter.Value,
+            parameter.StoreType);
 
-        return (mapping
-                ?? throw new NotSupportedException(
-                    $"MySQL has no type mapping for store type '{parameter.StoreType}'."))
-            .GenerateSqlLiteral(parameter.Value);
+        return mapping.GenerateSqlLiteral(parameter.Value);
     }
 
     private static MySqlMigrationCommandSpec Command(

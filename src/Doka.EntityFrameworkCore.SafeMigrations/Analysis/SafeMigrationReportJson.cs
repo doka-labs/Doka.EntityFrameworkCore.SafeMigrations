@@ -3,6 +3,14 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// <summary>Writes the versioned SafeMigrations report JSON contract.</summary>
 public static class SafeMigrationReportJson
 {
+    private const int MaximumInitialBufferSize = 16 * 1024 * 1024;
+
+    private const int EstimatedAssessmentSize = 512;
+
+    private const int EstimatedUnexpectedObjectSize = 192;
+
+    private const int EstimatedReportEnvelopeSize = 1024;
+
     /// <summary>Serializes a report to a compact UTF-8 JSON document.</summary>
     /// <param name="report">The report to serialize.</param>
     /// <returns>A compact UTF-8 JSON document.</returns>
@@ -12,7 +20,16 @@ public static class SafeMigrationReportJson
     {
         ArgumentNullException.ThrowIfNull(report);
 
-        var buffer = new ArrayBufferWriter<byte>();
+        var estimatedSize = EstimatedReportEnvelopeSize
+            + ((long)report.Assessments.Count * EstimatedAssessmentSize)
+            + ((long)report.UnexpectedObjects.Count * EstimatedUnexpectedObjectSize);
+
+        // WHY: Report v2 adds bounded diagnostic fields to every assessment.
+        // A proportional first buffer avoids repeated full-buffer copies while
+        // the cap prevents a caller-controlled count from forcing one huge
+        // speculative allocation before the first JSON token is written.
+        var initialBufferSize = (int)Math.Min(estimatedSize, MaximumInitialBufferSize);
+        var buffer = new ArrayBufferWriter<byte>(initialBufferSize);
         using var writer = new Utf8JsonWriter(buffer);
         Write(writer, report);
         writer.Flush();
@@ -108,6 +125,21 @@ public static class SafeMigrationReportJson
         }
 
         writer.WriteString("code", assessment.Code);
+        writer.WriteString("analysisCode", assessment.AnalysisCode);
+        writer.WriteString("decisionCode", assessment.DecisionCode);
+        writer.WriteString("operationalImpact", OperationalImpactCode(assessment.OperationalImpact));
+        writer.WriteStartArray("differences");
+
+        foreach (var difference in assessment.Differences)
+        {
+            writer.WriteStartObject();
+            writer.WriteString("facet", difference.Facet);
+            writer.WriteString("expected", difference.Expected);
+            writer.WriteString("actual", difference.Actual);
+            writer.WriteEndObject();
+        }
+
+        writer.WriteEndArray();
         writer.WriteEndObject();
     }
 
@@ -232,6 +264,16 @@ public static class SafeMigrationReportJson
         SafeMigrationDatabaseObjectKind.UniqueConstraint => "unique_constraint",
         SafeMigrationDatabaseObjectKind.CheckConstraint => "check_constraint",
         SafeMigrationDatabaseObjectKind.ForeignKey => "foreign_key",
+        _ => throw new ArgumentOutOfRangeException(nameof(value)),
+    };
+
+    private static string OperationalImpactCode(
+        SafeMigrationOperationalImpact value
+    ) => value switch
+    {
+        SafeMigrationOperationalImpact.NotApplicable => "not_applicable",
+        SafeMigrationOperationalImpact.TableRewritePossible => "table_rewrite_possible",
+        SafeMigrationOperationalImpact.Unknown => "unknown",
         _ => throw new ArgumentOutOfRangeException(nameof(value)),
     };
 }

@@ -51,7 +51,10 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
                 continue;
             }
 
-            var runtimePlan = _catalogSqlBuilder.Build(safeOperation);
+            var runtimePlan = _catalogSqlBuilder.Build(
+                safeOperation,
+                includeAnalysisEvidence: false,
+                includeTransitionEvidence: true);
             var baseline = RenderBaseline(safeOperation, runtimePlan, model, options);
             var repairBaseline = RenderRepairBaseline(safeOperation, runtimePlan, model, options);
 
@@ -141,10 +144,12 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             return [];
         }
 
-        var repairOperation = SafeMigrationStandardOperationFactory.CreateRepair(
+        var repairOperation = SafeMigrationStandardOperationFactory.CreateStoreTypeRepair(
             intent,
+            "text",
             _expressionRenderer.Render,
-            static collation => collation.Schema is null ? collation.Name : null);
+            static collation => collation.Schema is null ? collation.Name : null,
+            PostgreSqlSafeMigrationColumnMetadata.CanSafelyConverge);
 
         return _baselineGenerator.Generate([repairOperation], model, options);
     }
@@ -208,17 +213,23 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         IReadOnlyList<MigrationCommand> repairBaseline
     )
     {
+        const string dataBlockedExpression = "doka_data_blocked";
+        const string transitionEligibleExpression = "doka_transition_eligible";
+
         var baselineSql = BuildBaselineSql(baseline);
         var repairSql = BuildBaselineSql(repairBaseline);
+        var actionCase = BuildActionCase(operation, runtimePlan.RepairCapability);
+        var evaluationIndentation = runtimePlan.DataProbe is null ? "    " : "        ";
+        var evaluationBodyIndentation = evaluationIndentation + "    ";
         var stateEvaluationGuardBranch = runtimePlan.StateEvaluationGuardFailureExpression is null
             ? string.Empty
-            : "    ELSIF NOT COALESCE(("
+            : evaluationIndentation + "ELSIF NOT COALESCE(("
             + runtimePlan.StateEvaluationGuardExpression
             + "), FALSE) THEN\n"
-            + "        doka_state := ("
+            + evaluationBodyIndentation + "doka_state := ("
             + runtimePlan.StateEvaluationGuardFailureExpression
             + ");\n"
-            + "        doka_repair_ok := FALSE;\n";
+            + evaluationBodyIndentation + "doka_repair_ok := FALSE;\n";
 
         var tag = SelectDollarTag(
             baselineSql,
@@ -228,6 +239,10 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             runtimePlan.StateEvaluationGuardFailureExpression ?? string.Empty,
             runtimePlan.StateExpression,
             runtimePlan.RepairPrecondition,
+            runtimePlan.DataProbe?.TransitionInvariantExpression ?? string.Empty,
+            runtimePlan.DataProbe?.NarrowingExpression ?? string.Empty,
+            runtimePlan.DataProbe?.BuildBlockedExpression() ?? string.Empty,
+            runtimePlan.DataProbe?.QualifiedTable ?? string.Empty,
             runtimePlan.Postcondition);
 
         // The selected dollar tag cannot occur in embedded SQL, so provider
@@ -239,24 +254,80 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             .Append("    doka_state text;\n")
             .Append("    doka_action text;\n")
             .Append("    doka_repair_ok boolean;\n")
-            .Append("BEGIN\n")
-            .Append("    IF NOT COALESCE((")
+            .Append(runtimePlan.DataProbe is null
+                ? string.Empty
+                : "    doka_data_probe_required boolean := FALSE;\n"
+                + "    doka_data_blocked boolean := FALSE;\n"
+                + "    doka_transition_eligible boolean := FALSE;\n")
+            .Append("BEGIN\n");
+
+        if (runtimePlan.DataProbe is not null)
+        {
+            // WHY: Pass one avoids taking an ACCESS EXCLUSIVE lock for no-op
+            // and rejected operations. Only a planned Repair takes the lock;
+            // pass two then executes this same complete classifier under it.
+            builder.Append("    FOR doka_evaluation_pass IN 1..2 LOOP\n");
+        }
+
+        builder
+            .Append(evaluationIndentation)
+            .Append("IF NOT COALESCE((")
             .Append(runtimePlan.PrerequisiteExpression)
             .Append("), FALSE) THEN\n")
-            .Append("        doka_state := 'prerequisite_missing';\n")
-            .Append("        doka_repair_ok := FALSE;\n")
+            .Append(evaluationBodyIndentation)
+            .Append("doka_state := 'prerequisite_missing';\n")
+            .Append(evaluationBodyIndentation)
+            .Append("doka_repair_ok := FALSE;\n")
             .Append(stateEvaluationGuardBranch)
-            .Append("    ELSE\n")
-            .Append("        doka_state := (")
-            .Append(runtimePlan.StateExpression)
+            .Append(evaluationIndentation)
+            .Append("ELSE\n");
+
+        if (runtimePlan.DataProbe is not null)
+        {
+            AppendDataProbeEvaluationSql(builder, runtimePlan.DataProbe, evaluationBodyIndentation);
+        }
+
+        builder
+            .Append(evaluationBodyIndentation)
+            .Append("doka_state := (");
+
+        runtimePlan.AppendStateExpression(
+            builder,
+            dataBlockedExpression,
+            transitionEligibleExpression);
+
+        builder
             .Append(");\n")
-            .Append("        doka_repair_ok := COALESCE((")
-            .Append(runtimePlan.RepairPrecondition)
+            .Append(evaluationBodyIndentation)
+            .Append("doka_repair_ok := COALESCE((");
+
+        runtimePlan.AppendRepairPrecondition(
+            builder,
+            dataBlockedExpression,
+            transitionEligibleExpression);
+
+        builder
             .Append("), FALSE);\n")
-            .Append("    END IF;\n")
-            .Append("    doka_action := ")
-            .Append(BuildActionCase(operation, runtimePlan.RepairCapability))
-            .Append(";\n")
+            .Append(evaluationIndentation)
+            .Append("END IF;\n")
+            .Append(evaluationIndentation)
+            .Append("doka_action := ")
+            .Append(actionCase)
+            .Append(";\n");
+
+        if (runtimePlan.DataProbe is not null)
+        {
+            builder
+                .Append(evaluationIndentation)
+                .Append("EXIT WHEN doka_action <> 'repair' OR doka_evaluation_pass = 2;\n")
+                .Append(evaluationIndentation)
+                .Append("LOCK TABLE ")
+                .Append(runtimePlan.DataProbe.QualifiedTable)
+                .Append(" IN ACCESS EXCLUSIVE MODE;\n")
+                .Append("    END LOOP;\n");
+        }
+
+        builder
             .Append("    IF doka_action = 'reject_different' THEN\n")
             .Append("        RAISE EXCEPTION USING ERRCODE = 'P1001', MESSAGE = 'doka_sm_different';\n")
             .Append("    ELSIF doka_action = 'reject_unsupported' THEN\n")
@@ -288,6 +359,38 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             .Append(';');
 
         return builder.ToString();
+    }
+
+    private static void AppendDataProbeEvaluationSql(
+        StringBuilder builder,
+        PostgreSqlSafeMigrationDataProbe dataProbe,
+        string indentation
+    )
+    {
+        var transitionInvariant = dataProbe.TransitionInvariantExpression
+            ?? throw new InvalidOperationException("The runtime plan has no transition evidence.");
+
+        // WHY: Resolve the catalog-only transition first. PostgreSQL must not
+        // plan a row query against a missing or unrelated target relation.
+        builder
+            .Append(indentation)
+            .Append("doka_transition_eligible := COALESCE((")
+            .Append(transitionInvariant)
+            .Append("), FALSE);\n")
+            .Append(indentation)
+            .Append("doka_data_probe_required := doka_transition_eligible AND COALESCE((")
+            .Append(dataProbe.NarrowingExpression)
+            .Append("), FALSE);\n")
+            .Append(indentation)
+            .Append("doka_data_blocked := FALSE;\n")
+            .Append(indentation)
+            .Append("IF doka_data_probe_required THEN\n")
+            .Append(indentation)
+            .Append("    doka_data_blocked := COALESCE((")
+            .Append(dataProbe.BuildBlockedExpression())
+            .Append("), FALSE);\n")
+            .Append(indentation)
+            .Append("END IF;\n");
     }
 
     private static string BuildBaselineSql(

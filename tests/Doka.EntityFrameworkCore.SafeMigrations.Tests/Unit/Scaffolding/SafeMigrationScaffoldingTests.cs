@@ -9,12 +9,24 @@ public sealed class SafeMigrationScaffoldingTests
 
         Assert.Equal(SafeMigrationScaffoldingMode.Strict, builder.Mode);
         Assert.Equal(SafeMigrationPolicy.ThrowIfDifferent, builder.LegacyConvergencePolicy);
+        Assert.False(builder.ExcludeModelManagedDataForExcludedTablesEnabled);
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             builder.UseScaffoldingMode((SafeMigrationScaffoldingMode)int.MaxValue));
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             builder.UseLegacyConvergencePolicy(SafeMigrationPolicy.ExistenceOnly));
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             builder.UseLegacyConvergencePolicy((SafeMigrationPolicy)int.MaxValue));
+    }
+
+    [Fact]
+    public void OptionsBuilder_EnablesExcludedTableDataOwnershipFluently()
+    {
+        var builder = new SafeMigrationOptionsBuilder();
+
+        var returned = builder.ExcludeModelManagedDataForExcludedTables();
+
+        Assert.Same(builder, returned);
+        Assert.True(builder.ExcludeModelManagedDataForExcludedTablesEnabled);
     }
 
     [Fact]
@@ -196,6 +208,7 @@ public sealed class SafeMigrationScaffoldingTests
         var generator = CreateOperationGenerator(
             SafeMigrationScaffoldingMode.Strict,
             createIndexProjectors: [new TestIndexProjector([0, 64])]);
+
         var sourceBuilder = new IndentedStringBuilder();
         var operation = new CreateIndexOperation
         {
@@ -369,6 +382,7 @@ public sealed class SafeMigrationScaffoldingTests
 
         var withImport = SafeMigrationCSharpMigrationsGenerator
             .EnsureSafeMigrationsUsingDirective(source);
+
         var repeated = SafeMigrationCSharpMigrationsGenerator
             .EnsureSafeMigrationsUsingDirective(withImport);
 
@@ -476,12 +490,14 @@ public sealed class SafeMigrationScaffoldingTests
         var generator = provider
             .GetRequiredService<IMigrationsCodeGeneratorSelector>()
             .Select("C#");
+
         var metadata = generator.GenerateMetadata(
             "Company.Migrations",
             typeof(SafeMigrationScaffoldingTests),
             "CreateUsers",
             "202608310001_CreateUsers",
             targetModel: null!);
+
         var snapshot = generator.GenerateSnapshot(
             "Company.Migrations",
             typeof(SafeMigrationScaffoldingTests),
@@ -608,6 +624,7 @@ public sealed class SafeMigrationScaffoldingTests
         var generator = provider
             .GetRequiredService<IMigrationsCodeGeneratorSelector>()
             .Select("C#");
+
         var snapshot = generator.GenerateSnapshot(
             "Company.Migrations",
             typeof(SafeMigrationScaffoldingTests),

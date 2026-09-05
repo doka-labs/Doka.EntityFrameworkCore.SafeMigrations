@@ -32,6 +32,27 @@ public sealed class MySqlServiceCompositionTests
     }
 
     [Fact]
+    public void ExcludedTableDataOwnership_IsPersistedAndSeparatesServiceProviders()
+    {
+        var defaults = new DbContextOptionsBuilder();
+        defaults.UseMySqlSafeMigrations();
+
+        var ownership = new DbContextOptionsBuilder();
+        ownership.UseMySqlSafeMigrations(options =>
+            options.ExcludeModelManagedDataForExcludedTables());
+
+        var defaultExtension = defaults.Options.FindExtension<MySqlSafeMigrationsOptionsExtension>()!;
+        var ownershipExtension = ownership.Options.FindExtension<MySqlSafeMigrationsOptionsExtension>()!;
+
+        Assert.False(defaultExtension.ExcludeModelManagedDataForExcludedTablesEnabled);
+        Assert.True(ownershipExtension.ExcludeModelManagedDataForExcludedTablesEnabled);
+        Assert.False(defaultExtension.Info.ShouldUseSameServiceProvider(ownershipExtension.Info));
+        Assert.NotEqual(
+            defaultExtension.Info.GetServiceProviderHashCode(),
+            ownershipExtension.Info.GetServiceProviderHashCode());
+    }
+
+    [Fact]
     public void RepairPolicyWithoutLegacyModeIsRejectedBeforeOptionsMutation()
     {
         var options = new DbContextOptionsBuilder();

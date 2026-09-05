@@ -97,6 +97,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             + "ELSE 'missing' END",
             satisfied) with
         {
+            DiagnosticEvidenceExpression = BuildIndexDiagnosticEvidence(definition),
             UnsupportedCode = physicalFailureCode,
             // Ordered DropIndex -> EnsureIndex projection still needs the
             // live duplicate-row proof hidden by an exact-name shape clash.
@@ -107,6 +108,108 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                     + "THEN 'index_replacement_data_blocked' ELSE NULL END"
                 : null,
         };
+    }
+
+    private string BuildIndexDiagnosticEvidence(
+        ExpectedIndexDefinition definition
+    )
+    {
+        var expectedKeys = string.Join(
+            ",",
+            definition.Keys.Select(static key => key.Column ?? "[expression]"));
+
+        var expectedPrefixes = string.Join(
+            ",",
+            definition.Keys.Select(static key => key.PrefixLength?.ToString(CultureInfo.InvariantCulture) ?? "full"));
+
+        var actualKeysExpression = "GROUP_CONCAT(COALESCE(s.COLUMN_NAME, '[expression]') "
+            + "ORDER BY s.SEQ_IN_INDEX SEPARATOR ',')";
+
+        var keyDiagnostics = BoundedIndexKeyDiagnostics(definition, expectedKeys, actualKeysExpression);
+
+        var keyOrderMatches = BuildIndexDiagnosticKeyOrderMatches(definition);
+
+        var actualPrefixes = "LEFT(GROUP_CONCAT(COALESCE(CAST(s.SUB_PART AS CHAR), 'full') "
+            + "ORDER BY s.SEQ_IN_INDEX SEPARATOR ','), 256)";
+
+        return "(SELECT NULLIF(CONCAT_WS(CHAR(30), "
+            + DiagnosticRecord(
+                $"NOT ({keyOrderMatches})",
+                "index_key_order",
+                keyDiagnostics.Expected,
+                keyDiagnostics.Actual)
+            + ", "
+            + DiagnosticRecord(
+                $"{actualPrefixes} <> {Literal(expectedPrefixes)}",
+                "index_prefix_length",
+                Literal(expectedPrefixes),
+                actualPrefixes)
+            + ", "
+            + DiagnosticRecord(
+                $"MIN(s.NON_UNIQUE) <> {(definition.Unique ? "0" : "1")}",
+                "index_uniqueness",
+                definition.Unique ? "'unique'" : "'non_unique'",
+                "CASE MIN(s.NON_UNIQUE) WHEN 0 THEN 'unique' WHEN 1 THEN 'non_unique' ELSE 'unknown' END")
+            + ", "
+            + DiagnosticRecord(
+                $"UPPER(MIN(s.INDEX_TYPE)) <> {Literal((definition.Method ?? "BTREE").ToUpperInvariant())}",
+                "index_method",
+                Literal((definition.Method ?? "BTREE").ToLowerInvariant()),
+                "LOWER(LEFT(MIN(s.INDEX_TYPE), 256))")
+            + "), '') FROM INFORMATION_SCHEMA.STATISTICS s "
+            + $"WHERE s.TABLE_SCHEMA = DATABASE() AND s.TABLE_NAME = {Literal(definition.Table)} "
+            + $"AND s.INDEX_NAME = {Literal(definition.Name)} GROUP BY s.INDEX_NAME LIMIT 1)";
+    }
+
+    private string BuildIndexDiagnosticKeyOrderMatches(
+        ExpectedIndexDefinition definition
+    )
+    {
+        var conditions = new List<string>(definition.Keys.Count + 1)
+        {
+            $"COUNT(*) = {definition.Keys.Count.ToString(CultureInfo.InvariantCulture)}",
+        };
+
+        for (var ordinal = 0; ordinal < definition.Keys.Count; ordinal++)
+        {
+            var key = definition.Keys[ordinal];
+            var keyPredicate = key.Column is null
+                ? "s.COLUMN_NAME IS NULL"
+                : $"s.COLUMN_NAME = {Literal(key.Column)}";
+
+            conditions.Add(
+                $"SUM(CASE WHEN s.SEQ_IN_INDEX = {(ordinal + 1).ToString(CultureInfo.InvariantCulture)} "
+                + $"AND {keyPredicate} THEN 1 ELSE 0 END) = 1");
+        }
+
+        return $"({string.Join(" AND ", conditions)})";
+    }
+
+    private (string Expected, string Actual) BoundedIndexKeyDiagnostics(
+        ExpectedIndexDefinition definition,
+        string expected,
+        string actualExpression
+    )
+    {
+        if (expected.Length <= SafeMigrationFacetDifference.MaximumValueLength)
+        {
+            return (
+                Literal(expected),
+                $"LEFT({actualExpression}, {SafeMigrationFacetDifference.MaximumValueLength})");
+        }
+
+        var positions = Enumerable
+            .Range(1, definition.Keys.Count)
+            .Select(position =>
+                $"MAX(CASE WHEN s.SEQ_IN_INDEX = {position.ToString(CultureInfo.InvariantCulture)} "
+                + "THEN COALESCE(s.COLUMN_NAME, '[expression]') END)");
+
+        var expectedPayload = $"count={definition.Keys.Count.ToString(CultureInfo.InvariantCulture)};{expected}";
+        var actualPayload = $"CONCAT('count=', COUNT(*), ';', CONCAT_WS(',', {string.Join(", ", positions)}))";
+
+        return (
+            $"CONCAT('sha256:', LOWER(SHA2({Literal(expectedPayload)}, 256)))",
+            $"CONCAT('sha256:', LOWER(SHA2({actualPayload}, 256)))");
     }
 
     private MySqlSafeMigrationRuntimePlan BuildDropIndex(
@@ -287,16 +390,20 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             .ToArray();
 
         var totalWidth = string.Join(" + ", keyWidths.Select(static width => $"COALESCE(({width}), 2147483647)"));
-        var maximumWidth = "CASE "
-            + "WHEN UPPER(COALESCE(t.ROW_FORMAT, '')) IN ('COMPACT', 'REDUNDANT') THEN 767 "
-            + "WHEN @@innodb_page_size = 4096 THEN 768 "
-            + "WHEN @@innodb_page_size = 8192 THEN 1536 "
-            + "ELSE 3072 END";
+        var maximumWidth = BuildMaximumIndexKeyWidth("t");
 
         return $"EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES t "
             + $"WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_NAME = {Literal(definition.Table)} "
             + $"AND UPPER(t.ENGINE) = 'INNODB' AND ({totalWidth}) <= ({maximumWidth}))";
     }
+
+    private static string BuildMaximumIndexKeyWidth(
+        string tableAlias
+    ) => "CASE "
+        + $"WHEN UPPER(COALESCE({tableAlias}.ROW_FORMAT, '')) IN ('COMPACT', 'REDUNDANT') THEN 767 "
+        + "WHEN @@innodb_page_size = 4096 THEN 768 "
+        + "WHEN @@innodb_page_size = 8192 THEN 1536 "
+        + "ELSE 3072 END";
 
     private string BuildIndexKeyWidth(
         string table,
@@ -348,12 +455,16 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         // a provider DDL command can discover that error after mutation begins.
         var width = prefixLength is null
             ? "CASE "
-                + $"WHEN c.DATA_TYPE IN ('char', 'varchar', 'tinytext', 'text', 'mediumtext', 'longtext') THEN {characterWidth} "
-                + $"WHEN c.DATA_TYPE IN ('binary', 'varbinary', 'tinyblob', 'blob', 'mediumblob', 'longblob') THEN {binaryWidth} "
+                + "WHEN c.DATA_TYPE IN ('char', 'varchar', 'tinytext', 'text', 'mediumtext', 'longtext') "
+                + $"THEN {characterWidth} "
+                + "WHEN c.DATA_TYPE IN ('binary', 'varbinary', 'tinyblob', 'blob', 'mediumblob', 'longblob') "
+                + $"THEN {binaryWidth} "
                 + $"ELSE {scalarWidth} END"
             : "CASE "
-                + $"WHEN c.DATA_TYPE IN ('char', 'varchar', 'tinytext', 'text', 'mediumtext', 'longtext') THEN {characterWidth} "
-                + $"WHEN c.DATA_TYPE IN ('binary', 'varbinary', 'tinyblob', 'blob', 'mediumblob', 'longblob') THEN {binaryWidth} "
+                + "WHEN c.DATA_TYPE IN ('char', 'varchar', 'tinytext', 'text', 'mediumtext', 'longtext') "
+                + $"THEN {characterWidth} "
+                + "WHEN c.DATA_TYPE IN ('binary', 'varbinary', 'tinyblob', 'blob', 'mediumblob', 'longblob') "
+                + $"THEN {binaryWidth} "
                 + "ELSE NULL END";
 
         return $"SELECT {width} FROM INFORMATION_SCHEMA.COLUMNS c "

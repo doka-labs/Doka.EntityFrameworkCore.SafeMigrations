@@ -82,12 +82,19 @@ current public configuration surface is:
 | `UseScaffoldingMode(SafeMigrationScaffoldingMode.LegacyConvergence)` | Selects object-granular generated convergence for a reviewed legacy baseline |
 | `UseLegacyConvergencePolicy(SafeMigrationPolicy.ThrowIfDifferent)` | Explicitly selects the fail-closed default for generated legacy child operations |
 | `UseLegacyConvergencePolicy(SafeMigrationPolicy.RepairIfSafe)` | Allows generated legacy child operations to apply only provider-proven allowlisted repairs |
+| `ExcludeModelManagedDataForExcludedTables()` | Excludes newly calculated model-managed data differences for exact relational tables explicitly excluded from the active context's migration lineage |
 
-Both methods return the same builder for fluent composition. A null configure
+All methods return the same builder for fluent composition. A null configure
 callback, undefined enum value, `ExistenceOnly` as the legacy policy, or a
 non-default legacy policy without `LegacyConvergence` is rejected during options
 configuration. Both selected values are written into new migration source; they
 are not consulted when an existing migration executes.
+
+The ownership option is different: it changes the provider model-differ result
+and pending-model detection for the active context. Configure it identically at
+design time and runtime. It is disabled by default and never rewrites an
+existing migration. See the complete
+[Core/custom ownership contract](model-managed-data-ownership.md).
 
 The callback is available on every registration shape that can select a
 scaffolding mode:
@@ -157,12 +164,19 @@ mapping is:
 
 Every generated `ConvergeTableFromModel` call contains an explicit `policy`
 argument. The compatibility default is `ThrowIfDifferent`. `RepairIfSafe`
-allows only nullability, default, and comment changes on an ordinary column
-whose invariant provider catalog shape already matches. Doka's typed contract
-must recognize every MySQL/MariaDB column annotation. Nullability tightening
-with existing `NULL` values is `DataBlocked`; type, collation, generated,
-identity, row-version, contradictory metadata, and unsupported drift remains
-fail-closed.
+allows nullability, default, and comment changes plus provider-proven ordinary
+`VARCHAR` widening or live-data-verified narrowing. MySQL/MariaDB also permit
+the exact compatible Boolean transition `BIT(1) -> TINYINT(1)`. PostgreSQL
+qualifies `character varying` independently and has no equivalent Boolean
+transition. Narrowing uses character length, groups and deduplicates table
+probes, repeats its proof during execution, and blocks on one overlength value
+without exposing it. Accepted repair DDL reports `TableRewritePossible`; it is
+not an online-DDL guarantee.
+
+Doka's typed contract must recognize every MySQL/MariaDB column annotation.
+Nullability tightening with existing `NULL` values is `DataBlocked`. Other
+type-family, collation, generated, identity, row-version, contradictory
+metadata, and unsupported drift remains fail-closed.
 
 The [migration authoring guide](migration-authoring.md) contains complete
 generated strict and legacy-convergence migrations plus the equivalent
@@ -437,6 +451,27 @@ fingerprints, ordered `SafeMigrationAssessment` entries, and unexpected objects.
 Collections are immutable. `SafeMigrationUnexpectedObject` identifies preserved
 objects; it is not an instruction to remove them.
 
+Each schema-version-2 assessment exposes:
+
+| Member | Contract |
+| --- | --- |
+| `Code` | Backward-compatible aggregate assessment code |
+| `AnalysisCode` | Provider observation or capability code |
+| `DecisionCode` | Provider-neutral policy-decision code |
+| `Differences` | At most 16 typed catalog-facet differences with bounded printable ASCII metadata |
+| `OperationalImpact` | `NotApplicable`, `TableRewritePossible`, or `Unknown` |
+
+Representative difference facets include `column_store_type`,
+`column_max_length`, `column_collation`, `foreign_key_delete_behavior`,
+`index_key_order`, `index_prefix_length`, and
+`model_managed_row_content`. The latter identifies only the mismatch category;
+managed keys and values are never copied into the report. Detailed differences
+are not telemetry dimensions. Compound catalog identities remain bounded; when
+an ordered name list would exceed 256 characters, the expected and actual lists
+are represented by deterministic, explicitly labelled diagnostic digests.
+These digests are comparison evidence, not security signatures and not
+migration identity.
+
 `SafeMigrationContractFingerprint.Create(operations)` fingerprints ordered
 safe intents, definitions, policies, and operation annotations. Ordinary
 provider operations contribute only their CLR type name, not their properties
@@ -462,9 +497,11 @@ snake-case values.
 `SafeMigrationReportJson.SerializeToUtf8Bytes(report)` returns a new
 byte array. `Write(writer, report)` uses a caller-owned `Utf8JsonWriter` and
 does not replace the caller's lifetime management. The packaged
-[JSON Schema](../schemas/safe-migration-run-report-v1.schema.json)
-defines wire codes and nullable fields. Treat the report as sensitive; it can
-identify schema objects even though telemetry excludes them.
+[version 2 JSON Schema](../schemas/safe-migration-run-report-v2.schema.json)
+defines the current wire contract. The
+[version 1 schema](../schemas/safe-migration-run-report-v1.schema.json) remains
+available for previously persisted reports. Treat every report as sensitive;
+it can identify schema objects even though telemetry excludes them.
 
 Invalid input can throw `ArgumentException`/derived exceptions; canonical model
 drift throws `SafeMigrationModelMismatchException`; invalid integration can
@@ -473,7 +510,10 @@ provider exception category. Cancellation is not converted into a successful
 partial report. Stable assessment and runtime categories are documented in
 [failure codes](runbooks/failure-codes.md). A blocked report is a result, not
 necessarily an exception. Never interpret absence of an exception as permission
-to ignore its status.
+to ignore its status. Call `report.ThrowIfBlocked()` when an exception-oriented
+host boundary is required. It throws `SafeMigrationPreflightException` only for
+a blocked preflight, attaches that exact immutable report through `Report`, and
+renders only a bounded deterministic first-conflict summary.
 
 `SafeMigrationDiagnostics` publishes ActivitySource/Meter and metric names.
 See [observability](runbooks/observability.md) for supported tags, measurement
