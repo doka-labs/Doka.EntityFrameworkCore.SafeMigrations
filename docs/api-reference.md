@@ -26,11 +26,12 @@ namespace guards, and ordered index replacement. Published stable 10.2.0 adds
 source-frozen model-managed-data operations and the transition-ready state.
 Published stable 10.2.1 preserves that public API and operation contract while
 correcting statement-terminator ownership in generated model-managed calls.
-Prepared stable 10.3.0 adds explicit model-managed-data ownership for excluded
+Published stable 10.3.0 adds explicit model-managed-data ownership for excluded
 tables, provider-proven lossless column repair, report schema version 2, and
-typed diagnostic evidence. Strict scaffolding remains the default. A successful
-release run and exact-version public package readback remain the authority for
-a published API.
+typed diagnostic evidence. Prepared stable 10.3.1 preserves the complete public
+API and generated operation contract. Strict scaffolding remains the default. A
+successful release run and exact-version public package readback remain the
+authority for a published API.
 
 ## Packages and registration
 
@@ -97,7 +98,7 @@ The ownership option is different: it changes the provider model-differ result
 and pending-model detection for the active context. Configure it identically at
 design time and runtime. It is disabled by default and never rewrites an
 existing migration. See the complete
-[Core/custom ownership contract](model-managed-data-ownership.md).
+[Application/extended ownership contract](model-managed-data-ownership.md).
 
 The callback is available on every registration shape that can select a
 scaffolding mode:
@@ -111,7 +112,7 @@ options.UseMySqlSafeMigrations(configuration =>
         .UseLegacyConvergencePolicy(SafeMigrationPolicy.RepairIfSafe);
 });
 
-options.UseMySqlSafeMigrations<CoreDbContext>(configuration =>
+options.UseMySqlSafeMigrations<ApplicationDbContext>(configuration =>
 {
     configuration
         .UseScaffoldingMode(
@@ -127,7 +128,7 @@ options.UsePostgreSqlSafeMigrations(configuration =>
         .UseLegacyConvergencePolicy(SafeMigrationPolicy.RepairIfSafe);
 });
 
-options.UsePostgreSqlSafeMigrations<CoreDbContext>(configuration =>
+options.UsePostgreSqlSafeMigrations<ApplicationDbContext>(configuration =>
 {
     configuration
         .UseScaffoldingMode(
@@ -135,7 +136,7 @@ options.UsePostgreSqlSafeMigrations<CoreDbContext>(configuration =>
         .UseLegacyConvergencePolicy(SafeMigrationPolicy.RepairIfSafe);
 });
 
-options.UsePostgreSqlSafeMigrations<CustomNpgsqlMigrationsSqlGenerator, CoreDbContext>(
+options.UsePostgreSqlSafeMigrations<CustomNpgsqlMigrationsSqlGenerator, ApplicationDbContext>(
     configuration =>
     {
         configuration

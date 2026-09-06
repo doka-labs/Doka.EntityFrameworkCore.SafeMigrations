@@ -21,7 +21,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 Fixture.ServerVersion,
                 provider => provider
                     .MigrationsAssembly(typeof(SafeMigrationDbContext).Assembly.FullName)
-                    .MigrationsHistoryTable("__CoreDbContextMigrationsHistory"))
+                    .MigrationsHistoryTable("__ApplicationDbContextMigrationsHistory"))
             .AddInterceptors(interceptor)
             .UseMySqlSafeMigrations<SafeMigrationDbContext>()
             .Options;
@@ -415,7 +415,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             1,
             await ScalarIntAsync(
                 connectionString,
-                $"SELECT COUNT(*) FROM `__CoreDbContextMigrationsHistory` "
+                $"SELECT COUNT(*) FROM `__ApplicationDbContextMigrationsHistory` "
                 + $"WHERE `MigrationId` = '{CoreConvergenceMigration.MigrationIdentifier}';"));
     }
 
@@ -464,7 +464,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 connectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
                 + "WHERE TABLE_SCHEMA = DATABASE() "
-                + "AND TABLE_NAME = '__CoreDbContextMigrationsHistory';"));
+                + "AND TABLE_NAME = '__ApplicationDbContextMigrationsHistory';"));
     }
 
     [Fact]
@@ -512,7 +512,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         await ExecuteSqlAsync(
             connectionString,
-            "INSERT INTO `__CoreDbContextMigrationsHistory` (`MigrationId`, `ProductVersion`) "
+            "INSERT INTO `__ApplicationDbContextMigrationsHistory` (`MigrationId`, `ProductVersion`) "
             + "VALUES ('209901010000_Future', '10.0.0');");
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => runner.AnalyzePendingMigrationsAsync(
@@ -670,7 +670,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             1,
             await ScalarIntAsync(
                 connectionString,
-                $"SELECT COUNT(*) FROM `__CoreDbContextMigrationsHistory` "
+                $"SELECT COUNT(*) FROM `__ApplicationDbContextMigrationsHistory` "
                 + $"WHERE `MigrationId` = '{CoreConvergenceMigration.MigrationIdentifier}';"));
         Assert.Equal(
             1,

@@ -5,7 +5,7 @@ date: 2026-08-26
 decision-makers: [Dominic Kalkbrenner]
 consulted: []
 informed: ["@doka-labs/core-maintainers"]
-scope: "Convergence of heterogeneous legacy schemas into one canonical Core migration path"
+scope: "Convergence of heterogeneous legacy schemas into one canonical application migration path"
 supersedes: []
 superseded-by: []
 amends: []
@@ -14,7 +14,7 @@ madr-version: "4.0.0"
 doka-profile-version: "1.0"
 ---
 
-# D-002 -- Converge explicit owned objects to one canonical Core model
+# D-002 -- Converge explicit owned objects to one canonical application model
 
 ## Context and Problem Statement
 
@@ -34,26 +34,26 @@ or claiming that unrelated historical migrations actually ran.
 
 ## Decision Drivers
 
-- One canonical CoreDbContext model and ordered Core migration path for all
-  installations, despite different observed starting states.
+- One canonical ApplicationDbContext model and ordered application migration
+  path for all installations, despite different observed starting states.
 - Explicit ownership and definition checks at the object level.
 - Unknown additive legacy objects survive convergence and remain visible.
 - Missing, incompatible, unsupported, and data-blocked states must not be
   collapsed into a generic already-exists success.
 - Repairs require proven, allowlisted semantics rather than inferred intent.
 - Instance-specific runtime context classes must not redefine the shared
-  Core schema or silently select a different migration history.
+  application schema or silently select a different migration history.
 
 ## Considered Options
 
-- Explicit granular convergence against one canonical Core model
+- Explicit granular convergence against one canonical application model
 - Table-existence checks with a synthetic baseline history
 - Per-installation schema inference and generated migration paths
 - Rebuild every installation into a fresh database
 
 ## Decision Outcome
 
-Chosen option: "Explicit granular convergence against one canonical Core model",
+Chosen option: "Explicit granular convergence against one canonical application model",
 because it fixes the shared destination while making each installation's
 observed state an input to explicit, fail-closed operations.
 
@@ -76,7 +76,7 @@ rejects incompatible definitions. `RepairIfSafe` can authorize only the
 adapter's demonstrated allowlist; it is not general schema synchronization.
 Unsupported expressions and violated data prerequisites remain blocked.
 
-The canonical context, migration assembly, snapshot, and Core history are
+The canonical context, migration assembly, snapshot, and application history are
 shared across installations. This canonical snapshot describes the new
 target, not a claim that all legacy databases once matched it. A derived
 runtime context is supported when it is assignable to the configured canonical
@@ -84,8 +84,9 @@ context and preserves its relational model. The model guard uses EF's model
 differ; an expected fingerprint can additionally bind deployment evidence.
 
 Schema-bearing instance extensions use a separate context and history.
-An installation-specific derived type is not permission to alter Core columns
-or substitute an instance-specific Core migration sequence.
+An installation-specific derived type is not permission to alter shared
+application columns or substitute an instance-specific application migration
+sequence.
 
 EF records successful execution of the new sequence through normal migration
 history. SafeMigrations does not fabricate the installation's missing past.

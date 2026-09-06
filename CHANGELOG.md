@@ -6,6 +6,30 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+## [10.3.1] - 2026-09-06
+
+Prepared a stable documentation and package-metadata maintenance release. It
+documents independent migration lineages with generic application-context
+names and removes redundant release-notes metadata from all three packages.
+The packaged repository README and standard repository links remain available.
+There is no public API, runtime, SQL, report, migration-source, or data-contract
+change.
+
+These notes do not establish publication. Require the successful stable
+release run, the authorized signed `v10.3.1` tag, and verified public package,
+symbol, GitHub Release, provenance, SBOM, and attestation readback before
+selecting 10.3.1. All three package IDs must be published at the exact same
+version.
+
+### Fixed
+
+- Document independent migration lineages with `ApplicationDbContext` and
+  `ExtendedApplicationDbContext` as the shared and instance-specific example
+  contexts.
+- Remove synthetic NuGet release-notes metadata from all three packages. Their
+  package pages retain the packaged repository README and standard repository
+  links without rendering a bare changelog sentence.
+
 ## [10.3.0] - 2026-09-06
 
 Prepared a stable minor release for explicit model-managed-data ownership,
@@ -786,7 +810,8 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.3.0...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.3.1...HEAD
+[10.3.1]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.3.0...v10.3.1
 [10.3.0]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.2.1...v10.3.0
 [10.2.1]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.2.0...v10.2.1
 [10.2.0]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.1.2...v10.2.0

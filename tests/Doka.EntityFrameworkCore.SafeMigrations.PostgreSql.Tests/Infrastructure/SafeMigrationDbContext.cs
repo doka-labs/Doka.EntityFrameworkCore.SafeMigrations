@@ -34,7 +34,7 @@ public class SafeMigrationDbContext : DbContext
             _connectionString ?? throw new InvalidOperationException("A PostgreSQL connection string is required."),
             provider => provider
                 .MigrationsAssembly(typeof(SafeMigrationDbContext).Assembly.FullName)
-                .MigrationsHistoryTable("__CoreDbContextMigrationsHistory"));
+                .MigrationsHistoryTable("__ApplicationDbContextMigrationsHistory"));
         if (_registerSafeMigrations)
         {
             optionsBuilder.UsePostgreSqlSafeMigrations<SafeMigrationDbContext>();

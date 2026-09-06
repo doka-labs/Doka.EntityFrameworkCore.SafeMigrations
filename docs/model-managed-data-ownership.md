@@ -1,33 +1,34 @@
-# Model-managed-data ownership across Core and custom contexts
+# Model-managed-data ownership across application contexts
 
 ## When this option applies
 
 Use this contract when one database has independent migration lineages:
 
-- a shared `CoreDbContext` owns the Core schema and Core `HasData` changes; and
-- an instance-specific context derives from `CoreDbContext`, retains its model
-  for queries and relationships, but owns only the instance-specific schema and
-  model-managed data.
+- a shared `ApplicationDbContext` owns the shared schema and shared `HasData`
+  changes; and
+- an instance-specific `ExtendedApplicationDbContext` derives from
+  `ApplicationDbContext`, retains its model for queries and relationships, but
+  owns only the instance-specific schema and model-managed data.
 
 Each lineage needs its own concrete context, migration project and snapshot,
 migration assembly, design-time factory, and migrations-history table. Sharing
 a connection string does not combine ownership.
 
 Do not enable the option merely to bypass an inverse-pairing error. Every table
-excluded by the custom context must have another identified migration owner.
+excluded by the extended context must have another identified migration owner.
 
 ## Model boundary
 
-Build the shared model first, mark every inherited Core table as excluded from
-the custom migration lineage, and then add custom mappings. Exclusion keeps the
-entity available to the runtime model; it prevents the custom migration line
-from owning that table's DDL.
+Build the shared model first, mark every inherited application table as excluded
+from the extended migration lineage, and then add instance-specific mappings.
+Exclusion keeps the entity available to the runtime model; it prevents the
+extended migration line from owning that table's DDL.
 
 ```csharp
-public sealed class KraftanlagenDbContext : CoreDbContext
+public sealed class ExtendedApplicationDbContext : ApplicationDbContext
 {
-    public KraftanlagenDbContext(
-        DbContextOptions<KraftanlagenDbContext> options
+    public ExtendedApplicationDbContext(
+        DbContextOptions<ExtendedApplicationDbContext> options
     ) : base(options)
     {
     }
@@ -36,28 +37,28 @@ public sealed class KraftanlagenDbContext : CoreDbContext
         ModelBuilder modelBuilder
     )
     {
-        ExcludeCoreModelFromMigrations(modelBuilder);
+        ExcludeApplicationModelFromMigrations(modelBuilder);
 
         modelBuilder.ApplyConfigurationsFromAssembly(
-            typeof(KraftanlagenDbContext).Assembly);
+            typeof(ExtendedApplicationDbContext).Assembly);
     }
 }
 ```
 
-The exact exclusion helper belongs to the application's Core/custom context
-architecture. It must cover every Core table mapping, including mapping
-fragments, before custom-only entities are added. SafeMigrations consumes EF's
-relational `IsExcludedFromMigrations` metadata; it does not infer ownership from
-the CLR base type, assembly name, table prefix, connection-string key, or
+The exact exclusion helper belongs to the application's shared/extended context
+architecture. It must cover every shared table mapping, including mapping
+fragments, before instance-specific entities are added. SafeMigrations consumes
+EF's relational `IsExcludedFromMigrations` metadata; it does not infer ownership
+from the CLR base type, assembly name, table prefix, connection-string key, or
 history-table name.
 
 ## SafeMigrations configuration
 
-Enable the ownership extension on the custom context at both design time and
+Enable the ownership extension on the extended context at both design time and
 runtime:
 
 ```csharp
-var optionsBuilder = new DbContextOptionsBuilder<KraftanlagenDbContext>();
+var optionsBuilder = new DbContextOptionsBuilder<ExtendedApplicationDbContext>();
 
 optionsBuilder.UseMySql(
     connectionString,
@@ -65,7 +66,7 @@ optionsBuilder.UseMySql(
     mySql =>
     {
         mySql.MigrationsHistoryTable(
-            "__EFMigrationsHistory_KraftanlagenDbContext");
+            "__EFMigrationsHistory_ExtendedApplicationDbContext");
     });
 
 optionsBuilder.UseMySqlSafeMigrations(safeMigrations =>
@@ -76,8 +77,9 @@ optionsBuilder.UseMySqlSafeMigrations(safeMigrations =>
 
 For PostgreSQL, use the same callback on
 `UsePostgreSqlSafeMigrations(...)`. The typed options builder already identifies
-`KraftanlagenDbContext` as the canonical migration context. Do not select
-`CoreDbContext` in a generic SafeMigrations overload for the custom lineage.
+`ExtendedApplicationDbContext` as the canonical migration context. Do not select
+`ApplicationDbContext` in a generic SafeMigrations overload for the extended
+lineage.
 
 The option is disabled by default. When enabled, the decorated
 `IMigrationsModelDiffer` removes only provider-generated
@@ -96,34 +98,34 @@ closed. Included-table operations retain their order and continue through
 store-type completion and exact inverse pairing.
 
 The option affects newly calculated differences only. It does not edit or
-reinterpret an existing migration file. Snapshots retain inherited Core entity
-metadata and model-managed values so runtime mapping and custom-to-Core
-relationships remain complete.
+reinterpret an existing migration file. Snapshots retain inherited application
+entity metadata and model-managed values so runtime mapping and relationships
+between shared and instance-specific entities remain complete.
 
 ## Project and command layout
 
 A minimal layout is:
 
 ```text
-src/CoreDbContext/
-|-- CoreDbContext.cs
+src/ApplicationDbContext/
+|-- ApplicationDbContext.cs
 `-- Migrations/
 
-src/KraftanlagenDbContext/
-|-- KraftanlagenDbContext.cs
+src/ExtendedApplicationDbContext/
+|-- ExtendedApplicationDbContext.cs
 `-- Migrations/
 
 eng/MigrationGenerator/
-|-- CoreDbContextDesignFactory.cs
-`-- KraftanlagenDbContextDesignFactory.cs
+|-- ApplicationDbContextDesignFactory.cs
+`-- ExtendedApplicationDbContextDesignFactory.cs
 ```
 
-Create the custom migration in the project that owns the custom context:
+Create the extended migration in the project that owns the extended context:
 
 ```bash
 dotnet ef migrations add "$migration_name" \
-  --context KraftanlagenDbContext \
-  --project ../../src/KraftanlagenDbContext \
+  --context ExtendedApplicationDbContext \
+  --project ../../src/ExtendedApplicationDbContext \
   --startup-project .
 ```
 
@@ -133,17 +135,20 @@ history-table name changes database bookkeeping, not generated file placement.
 
 ## Required review
 
-Before accepting a custom migration, verify all of the following:
+Before accepting an extended migration, verify all of the following:
 
-1. The Core migration contains Core schema and Core model-managed changes.
-2. The custom migration contains no Core schema or Core model-managed change.
-3. The custom migration contains every intended custom schema and
+1. The application migration contains shared schema and shared model-managed
+   changes.
+2. The extended migration contains no shared schema or shared model-managed
+   change.
+3. The extended migration contains every intended instance-specific schema and
    model-managed change.
-4. The custom snapshot retains inherited Core mappings and exclusion markers.
-5. The custom SQL does not create, alter, seed, or remove a Core table.
-6. Core and custom migrations update only their own history tables.
-7. Applying Core and then custom succeeds; rolling back custom does not change
-   Core schema, data, or history.
+4. The extended snapshot retains inherited application mappings and exclusion
+   markers.
+5. The extended SQL does not create, alter, seed, or remove a shared table.
+6. Application and extended migrations update only their own history tables.
+7. Applying application and then extended migrations succeeds; rolling back the
+   extended migration does not change shared schema, data, or history.
 8. Pending-model detection uses the same ownership configuration as
    scaffolding.
 

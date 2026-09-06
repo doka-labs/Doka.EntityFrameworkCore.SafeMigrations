@@ -816,18 +816,23 @@ dotnet ef migrations bundle --project "${project}" --context SafeMigrationDbCont
 "${artifacts_dir}/efbundle" --connection "${bundle_connection}"
 "${artifacts_dir}/efbundle" --connection "${bundle_connection}"
 
+history_table="__ApplicationDbContextMigrationsHistory"
+migration_id="202608170001_CoreConvergence"
+postgres_history_query="SELECT COUNT(*) FROM \"${history_table}\" WHERE \"MigrationId\" = '${migration_id}';"
+mysql_history_query="SELECT COUNT(*) FROM \`${history_table}\` WHERE \`MigrationId\` = '${migration_id}';"
+
 if [[ "${engine}" == "postgres" ]]; then
   cli_count="$(docker exec -e PGPASSWORD=postgrespw "${container_name}" \
     psql -h 127.0.0.1 -p 5432 -U postgres -d tooling_cli -Atc \
-    'SELECT COUNT(*) FROM "__CoreDbContextMigrationsHistory" WHERE "MigrationId" = '\''202608170001_CoreConvergence'\'';')"
+    "${postgres_history_query}")"
   bundle_count="$(docker exec -e PGPASSWORD=postgrespw "${container_name}" \
     psql -h 127.0.0.1 -p 5432 -U postgres -d tooling_bundle -Atc \
-    'SELECT COUNT(*) FROM "__CoreDbContextMigrationsHistory" WHERE "MigrationId" = '\''202608170001_CoreConvergence'\'';')"
+    "${postgres_history_query}")"
 else
   cli_count="$(docker exec "${container_name}" "${client}" -h127.0.0.1 -uroot -prootpw -N -B tooling_cli \
-    -e "SELECT COUNT(*) FROM \`__CoreDbContextMigrationsHistory\` WHERE \`MigrationId\` = '202608170001_CoreConvergence';")"
+    -e "${mysql_history_query}")"
   bundle_count="$(docker exec "${container_name}" "${client}" -h127.0.0.1 -uroot -prootpw -N -B tooling_bundle \
-    -e "SELECT COUNT(*) FROM \`__CoreDbContextMigrationsHistory\` WHERE \`MigrationId\` = '202608170001_CoreConvergence';")"
+    -e "${mysql_history_query}")"
 fi
 
 if [[ "${cli_count}" != "1" || "${bundle_count}" != "1" ]]; then

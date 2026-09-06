@@ -41,7 +41,7 @@ public class SafeMigrationDbContext : DbContext
             _serverVersion ?? throw new InvalidOperationException("A MySQL server version is required."),
             provider => provider
                 .MigrationsAssembly(typeof(SafeMigrationDbContext).Assembly.FullName)
-                .MigrationsHistoryTable("__CoreDbContextMigrationsHistory"));
+                .MigrationsHistoryTable("__ApplicationDbContextMigrationsHistory"));
 
         if (_registerSafeMigrations)
         {

@@ -43,11 +43,11 @@ when that matrix executes. The exact successful run, not this table, is release
 evidence. See [Support and qualification](docs/support-and-qualification.md).
 
 The initial complete stable delivery is 10.0.0. The latest confirmed published
-release is 10.2.1. This source is prepared for stable 10.3.0 with explicit
-Core/custom model-managed-data ownership, provider-proven lossless column
-repair, report schema version 2, and semantic native JSON comparison as
-documented in the [changelog](CHANGELOG.md). Only a successful release run and
-verified public packages establish 10.3.0 availability or qualification.
+release is 10.3.0. This source is prepared for stable 10.3.1, a documentation
+and package-metadata maintenance release that preserves the 10.3.0 public API,
+runtime, SQL, report, migration-source, and data contracts. Only a successful
+release run and verified public packages establish 10.3.1 availability or
+qualification. See the [changelog](CHANGELOG.md).
 
 ## Installation
 
@@ -58,14 +58,14 @@ published release and all three NuGet package pages before installation; source
 or changelog entries alone do not establish package availability.
 
 ```bash
-package_version='10.3.0'
+package_version='10.3.1'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.MySql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.3.0'
+package_version='10.3.1'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version "$package_version"
 ```
 
@@ -137,15 +137,15 @@ canonical context. The non-generic overload keeps EF's exact runtime-context
 behavior. A derived instance context must name its canonical base explicitly:
 
 ```csharp
-options.UseMySqlSafeMigrations<CoreDbContext>();
-options.UsePostgreSqlSafeMigrations<CoreDbContext>();
+options.UseMySqlSafeMigrations<ApplicationDbContext>();
+options.UsePostgreSqlSafeMigrations<ApplicationDbContext>();
 ```
 
 The canonical type must be assignable from the runtime context. PostgreSQL
 applications with a custom migrations generator must compose it explicitly:
 
 ```csharp
-options.UsePostgreSqlSafeMigrations<CustomNpgsqlMigrationsSqlGenerator, CoreDbContext>();
+options.UsePostgreSqlSafeMigrations<CustomNpgsqlMigrationsSqlGenerator, ApplicationDbContext>();
 ```
 
 ## Automatic safe migration scaffolding
@@ -256,7 +256,7 @@ option never reinterprets an existing migration.
 The configure callback is available on the canonical-context overloads too:
 
 ```csharp
-options.UseMySqlSafeMigrations<CoreDbContext>(safeMigrations =>
+options.UseMySqlSafeMigrations<ApplicationDbContext>(safeMigrations =>
 {
     safeMigrations
         .UseScaffoldingMode(
@@ -264,7 +264,7 @@ options.UseMySqlSafeMigrations<CoreDbContext>(safeMigrations =>
         .UseLegacyConvergencePolicy(SafeMigrationPolicy.RepairIfSafe);
 });
 
-options.UsePostgreSqlSafeMigrations<CoreDbContext>(safeMigrations =>
+options.UsePostgreSqlSafeMigrations<ApplicationDbContext>(safeMigrations =>
 {
     safeMigrations
         .UseScaffoldingMode(
@@ -277,7 +277,7 @@ An application that composes a custom PostgreSQL baseline generator can select
 the mode on that overload as well:
 
 ```csharp
-options.UsePostgreSqlSafeMigrations<CustomNpgsqlMigrationsSqlGenerator, CoreDbContext>(
+options.UsePostgreSqlSafeMigrations<CustomNpgsqlMigrationsSqlGenerator, ApplicationDbContext>(
     safeMigrations =>
     {
         safeMigrations
@@ -371,11 +371,12 @@ correct an already applied migration only through a new forward migration.
 See [Model-managed data authoring](docs/migration-authoring.md#model-managed-data-from-hasdata)
 for the generated ensure, update, and delete source and conflict behavior.
 
-### Independent Core and custom migration ownership
+### Independent application and extended migration ownership
 
-A derived custom context can retain shared Core entities for runtime queries and
-relationships while another migration lineage owns their tables. Mark those
-tables as excluded from migrations, then opt in once on the custom context:
+A derived `ExtendedApplicationDbContext` can retain shared application entities
+for runtime queries and relationships while `ApplicationDbContext` owns their
+tables. Mark those tables as excluded from migrations, then opt in once on the
+extended context:
 
 ```csharp
 options.UseMySqlSafeMigrations(safeMigrations =>
@@ -629,9 +630,10 @@ engines do not expose PostgreSQL-style collation namespaces.
 ## Multiple DbContext instances
 
 All application instances may use a runtime class derived from one canonical
-`CoreDbContext`, but its effective relational model must equal the canonical
-migration snapshot. SafeMigrations checks that equality before preflight when
-the configured migrations assembly supplies a snapshot. Without a snapshot,
+`ApplicationDbContext`, but its effective relational model must equal the
+canonical migration snapshot. SafeMigrations checks that equality before
+preflight when the configured migrations assembly supplies a snapshot. Without
+a snapshot,
 the runner still fingerprints the runtime model but cannot compare it to a
 canonical snapshot. Supply an independently established
 `expectedModelFingerprint` when using a snapshot-free explicit contract; a
@@ -640,7 +642,7 @@ proof. Keep the canonical snapshot in normal EF migration deployments.
 
 Instance-specific schema extensions require a separate `DbContext`, migration
 assembly, and history table. A different target model per instance cannot share
-one deterministic Core migration sequence.
+one deterministic application migration sequence.
 
 Ensure operations use semantic database-object identity. If the requested name
 is absent but a differently named primary key, unique constraint, check

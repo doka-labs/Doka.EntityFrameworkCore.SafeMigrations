@@ -356,18 +356,18 @@ the correction as a new forward migration. A hand-authored raw data operation
 remains `provider_owned_not_analyzed` because SafeMigrations cannot prove its
 model origin or reconstruct missing old values.
 
-### Excluded-table ownership in a derived custom context
+### Excluded-table ownership in an extended application context
 
-A custom context that inherits Core mappings may exclude those relational
-tables from its own migration lineage. EF can still calculate model-managed
-operations from inherited `HasData` declarations, so table exclusion alone is
-not a complete data-ownership statement.
+An `ExtendedApplicationDbContext` that inherits `ApplicationDbContext` mappings
+may exclude those relational tables from its own migration lineage. EF can
+still calculate model-managed operations from inherited `HasData` declarations,
+so table exclusion alone is not a complete data-ownership statement.
 
-Configure `ExcludeModelManagedDataForExcludedTables()` on that custom context
+Configure `ExcludeModelManagedDataForExcludedTables()` on that extended context
 when another migration lineage owns both the excluded schema and its managed
 data. The option is default-off, applies symmetrically to forward and inverse
 model differences, and fails closed on unresolved or changing ownership. It
-does not modify existing migrations or remove Core entities from the runtime
+does not modify existing migrations or remove shared entities from the runtime
 model. The [ownership guide](model-managed-data-ownership.md) defines the
 context, project, snapshot, history, command, and review boundaries.
 
