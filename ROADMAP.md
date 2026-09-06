@@ -46,11 +46,13 @@ the same public surface. Published stable 10.2.0 responds to the confirmed
 duplicate-key failure of raw HasData inserts by adding automatic source-frozen,
 compare-and-swap model-managed-data convergence. Published stable 10.2.1
 corrects duplicate statement terminators in scaffolded model-managed calls.
-Prepared stable 10.3.0 adds explicit Core/custom model-managed-data ownership,
-provider-proven lossless column repair, actionable report evidence, and the
-provider correctness fixes found during complete qualification. These releases
-follow changed dependency conditions and confirmed correctness requirements;
-they are not deferred initial scope.
+Published stable 10.3.0 adds explicit shared/extended model-managed-data
+ownership, provider-proven lossless column repair, actionable report evidence,
+and the provider correctness fixes found during complete qualification.
+Prepared stable 10.3.1 clarifies the generic application-context ownership
+examples and removes redundant package release-notes metadata without changing
+runtime contracts. These releases follow changed dependency conditions and
+confirmed correctness requirements; they are not deferred initial scope.
 
 Requalify affected behavior before adopting a provider, EF Core, database,
 SDK, action, or tooling update. Preserve public API, report, migration, data

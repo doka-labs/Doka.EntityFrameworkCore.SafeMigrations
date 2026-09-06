@@ -63,7 +63,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             1,
             await ScalarIntAsync(
                 connectionString,
-                $"SELECT COUNT(*) FROM \"__CoreDbContextMigrationsHistory\" "
+                $"SELECT COUNT(*) FROM \"__ApplicationDbContextMigrationsHistory\" "
                 + $"WHERE \"MigrationId\" = '{CoreConvergenceMigration.MigrationIdentifier}';"));
     }
 
@@ -87,7 +87,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             0,
             await ScalarIntAsync(
                 connectionString,
-                $"SELECT COUNT(*) FROM \"__CoreDbContextMigrationsHistory\" "
+                $"SELECT COUNT(*) FROM \"__ApplicationDbContextMigrationsHistory\" "
                 + $"WHERE \"MigrationId\" = '{CoreConvergenceMigration.MigrationIdentifier}';"));
 
         await ExecuteSqlAsync(connectionString, "DROP VIEW pipeline_state;");
@@ -97,7 +97,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             1,
             await ScalarIntAsync(
                 connectionString,
-                $"SELECT COUNT(*) FROM \"__CoreDbContextMigrationsHistory\" "
+                $"SELECT COUNT(*) FROM \"__ApplicationDbContextMigrationsHistory\" "
                 + $"WHERE \"MigrationId\" = '{CoreConvergenceMigration.MigrationIdentifier}';"));
     }
 
@@ -115,7 +115,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 connectionString,
                 provider => provider
                     .MigrationsAssembly(typeof(SafeMigrationDbContext).Assembly.FullName)
-                    .MigrationsHistoryTable("__CoreDbContextMigrationsHistory"))
+                    .MigrationsHistoryTable("__ApplicationDbContextMigrationsHistory"))
             .UsePostgreSqlSafeMigrations()
             .Options;
 
@@ -167,7 +167,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 1,
                 await ScalarIntAsync(
                     connectionString,
-                    $"SELECT COUNT(*) FROM \"__CoreDbContextMigrationsHistory\" "
+                    $"SELECT COUNT(*) FROM \"__ApplicationDbContextMigrationsHistory\" "
                     + $"WHERE \"MigrationId\" = '{CoreConvergenceMigration.MigrationIdentifier}';"));
         }
     }
@@ -192,7 +192,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             1,
             await ScalarIntAsync(
                 sharedConnectionString,
-                $"SELECT COUNT(*) FROM \"__CoreDbContextMigrationsHistory\" "
+                $"SELECT COUNT(*) FROM \"__ApplicationDbContextMigrationsHistory\" "
                 + $"WHERE \"MigrationId\" = '{CoreConvergenceMigration.MigrationIdentifier}';"));
         Assert.Equal(
             1,
@@ -261,7 +261,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 connectionString,
                 "SELECT COUNT(*) FROM information_schema.tables "
                 + "WHERE table_schema = current_schema() "
-                + "AND table_name = '__CoreDbContextMigrationsHistory';"));
+                + "AND table_name = '__ApplicationDbContextMigrationsHistory';"));
 
         await ExecuteOperationsAsync(context, builder.Operations);
         var postflight = await runner.VerifyAsync(context, builder.Operations, runOptions);

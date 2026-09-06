@@ -85,9 +85,20 @@ for package_id in "${package_ids[@]}"; do
 
     grep -Fq "<id>$package_id</id>" <<<"$nuspec_content"
     grep -Fq "<version>$package_version</version>" <<<"$nuspec_content"
+    grep -Fq '<readme>README.md</readme>' <<<"$nuspec_content"
     grep -Fq '<group targetFramework="net10.0">' <<<"$nuspec_content"
     grep -Fq '<repository type="git" url="https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations"' \
         <<<"$nuspec_content"
+
+    if grep -Fq '<releaseNotes>' <<<"$nuspec_content"; then
+        echo "Unexpected release-notes metadata found in $nupkg." >&2
+        exit 1
+    fi
+
+    if ! cmp -s "$script_dir/../README.md" <(unzip -p "$nupkg" README.md); then
+        echo "Packaged README.md differs from the repository contract in $nupkg." >&2
+        exit 1
+    fi
 
     if grep -Eq '<dependency id="(Pomelo\.EntityFrameworkCore\.MySql|Doka\.EntityFrameworkCore\.SafeMigrations\.MariaDb)"' \
         <<<"$nuspec_content"; then

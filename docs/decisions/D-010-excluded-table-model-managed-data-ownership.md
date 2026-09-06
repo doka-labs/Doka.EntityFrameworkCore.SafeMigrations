@@ -18,29 +18,32 @@ doka-profile-version: "1.0"
 
 ## Context and Problem Statement
 
-A derived instance context can retain a shared Core model while owning a
-separate migration project, snapshot, assembly, and history table. EF excludes
-the inherited tables from structural migrations, but can still calculate
-model-managed data operations for their inherited `HasData` declarations.
-SafeMigrations then correctly rejects an insert without exact inverse evidence.
+A derived `ExtendedApplicationDbContext` can retain the shared
+`ApplicationDbContext` model while owning a separate migration project,
+snapshot, assembly, and history table. EF excludes the inherited tables from
+structural migrations, but can still calculate model-managed data operations
+for their inherited `HasData` declarations. SafeMigrations then correctly
+rejects an insert without exact inverse evidence.
 
-The decision is how a custom migration lineage declares that another lineage
+The decision is how an extended migration lineage declares that another lineage
 owns both the schema and model-managed data of its excluded tables without
 requiring a second entity-configuration system or weakening inverse pairing.
 
 ## Decision Drivers
 
 - Existing behavior must remain fail-closed by default.
-- Runtime mappings and custom-to-Core relationships must stay available.
+- Runtime mappings and relationships between shared and extended entities must
+  stay available.
 - Ownership must use exact relational metadata, not naming or inheritance.
-- Included custom data must retain exact inverse pairing and operation order.
+- Included instance-specific data must retain exact inverse pairing and
+  operation order.
 - Design-time and runtime pending-model behavior must agree.
 - Filtering must remain linear and avoid copying model-managed row matrices.
 
 ## Considered Options
 
 - Add an explicit option extending excluded-table ownership to data differences
-- Introduce a separate marker interface for every Core `HasData` configuration
+- Introduce a separate marker interface for every shared `HasData` configuration
 - Filter every excluded table implicitly
 - Infer ownership from context inheritance, assemblies, or history names
 
@@ -65,8 +68,8 @@ reinterpreted.
 
 ### Consequences
 
-- Good, because a custom context can keep the complete Core runtime model
-  without taking ownership of Core seed migrations.
+- Good, because an extended context can keep the complete shared application
+  model without taking ownership of shared seed migrations.
 - Good, because the compatibility default and exact inverse contract remain
   unchanged.
 - Good, because one option replaces per-entity ownership lists and parallel
@@ -83,7 +86,7 @@ reinterpreted.
 
 - Run Core and provider tests for default-off, inserts, updates, deletes,
   ambiguity, schema identity, retained order, and no-removal identity.
-- Run real EF tooling with separate Core/custom projects, snapshots,
+- Run real EF tooling with separate application/extended projects, snapshots,
   migrations, histories, application, rollback, replay, and SQL inspection.
 - Qualify MySQL 8.4/9.7, MariaDB 10.11/11.4/11.8/12.3, and PostgreSQL 14-18.
 - Run large mixed-operation tests and verify no model-managed row values enter
@@ -94,10 +97,10 @@ reinterpreted.
 ### Add an explicit option extending excluded-table ownership to data differences
 
 - Good, because the choice is local, typed, reviewable, and default-off.
-- Bad, because every custom lineage must configure it consistently at design
+- Bad, because every extended lineage must configure it consistently at design
   time and runtime.
 
-### Introduce a separate marker interface for every Core `HasData` configuration
+### Introduce a separate marker interface for every shared `HasData` configuration
 
 - Good, because data ownership would be visible at every configuration type.
 - Bad, because it duplicates the existing `IEntityTypeConfiguration<TEntity>`

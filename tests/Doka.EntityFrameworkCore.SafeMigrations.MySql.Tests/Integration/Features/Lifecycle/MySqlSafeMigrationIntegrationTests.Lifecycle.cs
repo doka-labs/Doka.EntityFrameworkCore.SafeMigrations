@@ -159,7 +159,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             1,
             await ScalarIntAsync(
                 connectionString,
-                $"SELECT COUNT(*) FROM `__CoreDbContextMigrationsHistory` "
+                $"SELECT COUNT(*) FROM `__ApplicationDbContextMigrationsHistory` "
                 + $"WHERE `MigrationId` = '{CoreConvergenceMigration.MigrationIdentifier}';"));
     }
 
@@ -197,7 +197,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 1,
                 await ScalarIntAsync(
                     connectionString,
-                    $"SELECT COUNT(*) FROM `__CoreDbContextMigrationsHistory` "
+                    $"SELECT COUNT(*) FROM `__ApplicationDbContextMigrationsHistory` "
                     + $"WHERE `MigrationId` = '{CoreConvergenceMigration.MigrationIdentifier}';"));
         }
     }
@@ -225,12 +225,12 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 connectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
                 + "WHERE TABLE_SCHEMA = DATABASE() "
-                + "AND TABLE_NAME = '__CoreDbContextMigrationsHistory';"));
+                + "AND TABLE_NAME = '__ApplicationDbContextMigrationsHistory';"));
         Assert.Equal(
             0,
             await ScalarIntAsync(
                 connectionString,
-                $"SELECT COUNT(*) FROM `__CoreDbContextMigrationsHistory` "
+                $"SELECT COUNT(*) FROM `__ApplicationDbContextMigrationsHistory` "
                 + $"WHERE `MigrationId` = '{CoreConvergenceMigration.MigrationIdentifier}';"));
     }
 
@@ -255,7 +255,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             0,
             await ScalarIntAsync(
                 connectionString,
-                $"SELECT COUNT(*) FROM `__CoreDbContextMigrationsHistory` "
+                $"SELECT COUNT(*) FROM `__ApplicationDbContextMigrationsHistory` "
                 + $"WHERE `MigrationId` = '{CoreConvergenceMigration.MigrationIdentifier}';"));
 
         await ExecuteSqlAsync(connectionString, "DROP VIEW `pipeline_state`; DROP TABLE `pipeline_probe`;");
@@ -265,7 +265,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             1,
             await ScalarIntAsync(
                 connectionString,
-                $"SELECT COUNT(*) FROM `__CoreDbContextMigrationsHistory` "
+                $"SELECT COUNT(*) FROM `__ApplicationDbContextMigrationsHistory` "
                 + $"WHERE `MigrationId` = '{CoreConvergenceMigration.MigrationIdentifier}';"));
     }
 
@@ -284,7 +284,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 Fixture.ServerVersion,
                 provider => provider
                     .MigrationsAssembly(typeof(SafeMigrationDbContext).Assembly.FullName)
-                    .MigrationsHistoryTable("__CoreDbContextMigrationsHistory"))
+                    .MigrationsHistoryTable("__ApplicationDbContextMigrationsHistory"))
             .UseMySqlSafeMigrations()
             .Options;
 
@@ -318,7 +318,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 Fixture.ServerVersion,
                 provider => provider
                     .MigrationsAssembly(typeof(SafeMigrationDbContext).Assembly.FullName)
-                    .MigrationsHistoryTable("__CoreDbContextMigrationsHistory"))
+                    .MigrationsHistoryTable("__ApplicationDbContextMigrationsHistory"))
             .UseMySqlSafeMigrations()
             .Options;
 
@@ -340,7 +340,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 connectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
                 + "WHERE TABLE_SCHEMA = DATABASE() "
-                + "AND TABLE_NAME = '__CoreDbContextMigrationsHistory';"));
+                + "AND TABLE_NAME = '__ApplicationDbContextMigrationsHistory';"));
     }
 
     [Fact]
@@ -363,7 +363,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             1,
             await ScalarIntAsync(
                 sharedConnectionString,
-                $"SELECT COUNT(*) FROM `__CoreDbContextMigrationsHistory` "
+                $"SELECT COUNT(*) FROM `__ApplicationDbContextMigrationsHistory` "
                 + $"WHERE `MigrationId` = '{CoreConvergenceMigration.MigrationIdentifier}';"));
         Assert.Equal(
             1,
@@ -434,7 +434,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 connectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
                 + "WHERE TABLE_SCHEMA = DATABASE() "
-                + "AND TABLE_NAME = '__CoreDbContextMigrationsHistory';"));
+                + "AND TABLE_NAME = '__ApplicationDbContextMigrationsHistory';"));
 
         await ExecuteOperationsAsync(context, builder.Operations);
         var postflight = await runner.VerifyAsync(context, builder.Operations, runOptions);

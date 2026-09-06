@@ -155,9 +155,9 @@ Provider tests use real Docker servers and cover:
 - Strict and legacy initial migrations generated through the real provider
   design-time differ, compiled, preflighted against an empty database, executed
   twice as the identical operation stream, and verified through postflight;
-- independent Core and derived custom migration projects, snapshots,
+- independent application and derived extended migration projects, snapshots,
   assemblies, and history tables, including exact excluded-table
-  model-managed-data ownership and retained custom-to-Core relationships;
+  model-managed-data ownership and retained shared-to-extended relationships;
 - incoming model-managed delete dependencies for every supported referential
   action, including accepted ordered child/parent removal and rejection of one
   remaining or concurrently inserted dependent row;
