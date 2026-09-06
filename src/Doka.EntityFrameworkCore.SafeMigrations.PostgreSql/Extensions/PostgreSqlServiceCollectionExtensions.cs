@@ -44,7 +44,8 @@ public static class PostgreSqlServiceCollectionExtensions
             || baselineGeneratorType == typeof(PostgreSqlSafeMigrationsSqlGenerator))
         {
             throw new InvalidOperationException(
-                "The PostgreSQL baseline generator must implement IMigrationsSqlGenerator and must not be the SafeMigrations wrapper.");
+                "The PostgreSQL baseline generator must implement IMigrationsSqlGenerator "
+                + "and must not be the SafeMigrations wrapper.");
         }
 
         SafeMigrationCanonicalContextConfiguration.Register(
@@ -62,6 +63,7 @@ public static class PostgreSqlServiceCollectionExtensions
         services.TryAddScoped<ISafeMigrationRunner, SafeMigrationRunner>();
         services.Replace(ServiceDescriptor.Scoped<IMigrationsAssembly, SafeMigrationMigrationsAssembly>());
         services.Replace(ServiceDescriptor.Scoped<IMigrationsSqlGenerator, PostgreSqlSafeMigrationsSqlGenerator>());
+        SafeMigrationServiceCollectionDecorator.DecorateMigrationsModelDiffer(services);
 
         return services;
     }

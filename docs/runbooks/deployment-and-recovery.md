@@ -80,6 +80,14 @@ predicate and every model-managed mutation verifies its target postcondition.
 The write fence remains required because an application or trigger can still
 race after preflight; the guard converts that race into failure, not approval.
 
+For a data-verified `VARCHAR` narrowing, review the table-level scan evidence
+and `OperationalImpact` before execution. A successful preflight proves only
+that observed values fit during that analysis window. SafeMigrations repeats
+the character-length proof during execution, and the provider conversion must
+still reject a concurrent overlength write without truncation. Keep the write
+fence active. `TableRewritePossible` requires an independent maintenance-window,
+lock-duration, storage, and rollback assessment; it is not an online-DDL claim.
+
 ## Migration
 
 1. Capture the pre-migration Core history rows.
@@ -168,6 +176,7 @@ Only then release the write fence and mark the instance complete.
 | Process lost after DDL | History may or may not contain the row | Read catalog and history; never infer success from process exit alone; rerun guarded pending migration or postflight applied migration. |
 | Postflight failed with history present | Migration is recorded but target contract is not satisfied | Stop traffic, preserve evidence, issue a reviewed forward-fix migration or restore backup. Do not edit history as a shortcut. |
 | Model-managed compare-and-swap or postcondition failed | A row, dependent row, trigger result, or constraint changed after the approved source state | Keep writes fenced, inspect the affected key through protected operator tooling, correct the conflict or author a new forward migration, then rerun preflight. Never weaken the operation into an upsert or edit an applied migration. |
+| Narrowing runtime proof or conversion failed | Data or catalog state changed after preflight, or an overlength value remains | Keep writes fenced; inspect values through protected operator tooling, correct data or target length, then rerun preflight. Never enable truncation or retry unchanged. |
 | Data corruption or unbounded destructive effect | State cannot be proven safe | Isolate instance and restore the tested backup/snapshot under incident control. |
 
 An unapplied migration containing raw HasData-derived `InsertData`,

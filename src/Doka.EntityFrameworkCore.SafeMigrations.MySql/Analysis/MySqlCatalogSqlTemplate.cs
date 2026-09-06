@@ -69,6 +69,12 @@ internal static class MySqlCatalogSqlTemplate
     {
         ArgumentNullException.ThrowIfNull(renderedValues);
 
+        if (renderedValues.Count == 0
+            && template.IndexOf(StartMarker, StringComparison.Ordinal) < 0)
+        {
+            return template;
+        }
+
         var builder = new StringBuilder(template.Length);
         var position = 0;
         while (position < template.Length)

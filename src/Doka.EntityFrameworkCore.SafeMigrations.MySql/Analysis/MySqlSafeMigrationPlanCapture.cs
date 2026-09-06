@@ -14,25 +14,41 @@ internal sealed class MySqlSafeMigrationPlanCapture
     private SafeMigrationOperation[]? _expected;
     private IReadOnlyDictionary<string, IReadOnlyList<ExpectedIndexDefinition>>? _expectedUniqueIndexes;
     private MySqlSafeMigrationRuntimePlan?[]? _plans;
+    private bool _includeAnalysisEvidence;
+    private bool _includeTransitionEvidence;
     private bool _completed;
 
     /// <summary>Gets whether an incomplete analysis capture is active.</summary>
     public bool IsActive => _expected is not null && !_completed;
+
+    /// <summary>Gets whether the active capture requests detailed diagnostic SQL.</summary>
+    public bool IncludeAnalysisEvidence => IsActive && _includeAnalysisEvidence;
+
+    /// <summary>Gets whether the active capture requests physical transition SQL.</summary>
+    public bool IncludeTransitionEvidence => IsActive && _includeTransitionEvidence;
 
     /// <summary>Begins an ordered capture for one immutable operation batch.</summary>
     /// <param name="operations">The safe operations expected from Doka's handler pipeline.</param>
     /// <returns>A lease that owns capture completion and cleanup.</returns>
     public Lease Begin(
         IReadOnlyList<SafeMigrationOperation> operations
-    ) => Begin(operations, CreateExpectedUniqueIndexes(operations));
+    ) => Begin(
+        operations,
+        CreateExpectedUniqueIndexes(operations),
+        includeAnalysisEvidence: false,
+        includeTransitionEvidence: false);
 
     /// <summary>Begins one bounded capture against a complete expected-index catalog.</summary>
     /// <param name="operations">The bounded operation window captured in order.</param>
     /// <param name="expectedUniqueIndexes">The complete migration's expected unique-index catalog.</param>
+    /// <param name="includeAnalysisEvidence">Whether to build detailed diagnostic SQL.</param>
+    /// <param name="includeTransitionEvidence">Whether to build physical transition SQL.</param>
     /// <returns>A lease that owns capture completion and cleanup.</returns>
     public Lease Begin(
         IReadOnlyList<SafeMigrationOperation> operations,
-        IReadOnlyDictionary<string, IReadOnlyList<ExpectedIndexDefinition>> expectedUniqueIndexes
+        IReadOnlyDictionary<string, IReadOnlyList<ExpectedIndexDefinition>> expectedUniqueIndexes,
+        bool includeAnalysisEvidence = false,
+        bool includeTransitionEvidence = false
     )
     {
         ArgumentNullException.ThrowIfNull(operations);
@@ -52,6 +68,8 @@ internal sealed class MySqlSafeMigrationPlanCapture
 
         _plans = new MySqlSafeMigrationRuntimePlan?[_expected.Length];
         _expectedUniqueIndexes = expectedUniqueIndexes;
+        _includeAnalysisEvidence = includeAnalysisEvidence;
+        _includeTransitionEvidence = includeTransitionEvidence;
 
         _completed = false;
 
@@ -175,6 +193,8 @@ internal sealed class MySqlSafeMigrationPlanCapture
         _expected = null;
         _expectedUniqueIndexes = null;
         _plans = null;
+        _includeAnalysisEvidence = false;
+        _includeTransitionEvidence = false;
         _completed = false;
     }
 

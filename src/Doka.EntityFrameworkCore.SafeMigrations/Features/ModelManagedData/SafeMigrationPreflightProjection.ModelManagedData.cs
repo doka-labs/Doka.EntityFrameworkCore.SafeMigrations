@@ -268,7 +268,8 @@ internal sealed partial class SafeMigrationPreflightProjection
 
     private void Observe(
         ModelManagedDataIntent intent,
-        SafeMigrationProviderAnalysis analysis
+        SafeMigrationProviderAnalysis analysis,
+        SafeMigrationDecision decision
     )
     {
         for (var row = 0; row < intent.RowCount; row++)
@@ -304,6 +305,50 @@ internal sealed partial class SafeMigrationPreflightProjection
 
             _modelManagedRows[key] = projected;
         }
+
+        if (decision.Action == SafeMigrationAction.Apply)
+        {
+            // WHY: A later data-dependent column repair was analyzed against
+            // the pre-migration rows. Track the exact mutated table so that
+            // proof cannot authorize DDL after ordered model-managed changes.
+            var table = new TableKey(intent.Table, intent.Schema);
+
+            _projectedDataMutationTables.Add(table);
+            ObserveProjectedUniqueKeys(table, intent);
+        }
+    }
+
+    private void ObserveProjectedUniqueKeys(
+        TableKey table,
+        ModelManagedDataIntent intent
+    )
+    {
+        if (intent is DeleteModelManagedDataIntent)
+        {
+            return;
+        }
+
+        var intentUniqueKeys = intent switch
+        {
+            EnsureModelManagedDataIntent ensure => ensure.UniqueKeys,
+            UpdateModelManagedDataIntent update => update.UniqueKeys,
+            _ => throw new UnreachableException(),
+        };
+
+        var fingerprints = intentUniqueKeys
+            .Select(static uniqueKey => ModelManagedUniqueKeyFingerprint(uniqueKey.Columns))
+            .ToHashSet(StringComparer.Ordinal);
+
+        if (_projectedModelManagedUniqueKeys.TryGetValue(table, out var provenUniqueKeys))
+        {
+            // WHY: A candidate key remains proven only when every accepted
+            // insert or update batch carried the same target-model metadata.
+            // Missing metadata must narrow the proof set, never widen it.
+            provenUniqueKeys.IntersectWith(fingerprints);
+            return;
+        }
+
+        _projectedModelManagedUniqueKeys.Add(table, fingerprints);
     }
 
     private void InvalidateModelManagedDataProjection()
@@ -313,6 +358,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         // mutation invalidates both collections as one proof boundary.
         _modelManagedRows.Clear();
         _acceptedModelManagedDeletes.Clear();
+        _projectedModelManagedUniqueKeys.Clear();
     }
 
     private bool IsSourceRow(

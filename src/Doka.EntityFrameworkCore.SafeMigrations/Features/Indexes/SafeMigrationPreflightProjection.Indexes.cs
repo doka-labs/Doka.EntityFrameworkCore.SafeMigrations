@@ -15,9 +15,13 @@ internal sealed partial class SafeMigrationPreflightProjection
                 intent.Definition,
                 SafeMigrationDefinitionEquivalence.Index);
 
-            return intent.Definition.Unique
+            var tableAnalysis = intent.Definition.Unique
                 ? InvalidateDataDependentMissing(table.Table, table.Schema, analysis)
                 : analysis;
+
+            return CanProjectMissingIndex(intent, tableAnalysis)
+                ? Analysis(SafeMigrationObservedState.Missing)
+                : tableAnalysis;
         }
 
         var indexKey = new IndexKey(
@@ -48,6 +52,11 @@ internal sealed partial class SafeMigrationPreflightProjection
             return Analysis(SafeMigrationObservedState.Missing);
         }
 
+        if (IsProjectedTableStructureUnknown(intent.Definition.Table, intent.Definition.Schema))
+        {
+            return StructureStateUnknown();
+        }
+
         var projectedAnalysis = intent.Definition.Unique
             ? InvalidateDataDependentMissing(
                 intent.Definition.Table,
@@ -63,24 +72,28 @@ internal sealed partial class SafeMigrationPreflightProjection
     private SafeMigrationProviderAnalysis Project(
         DropIndexIntent intent,
         SafeMigrationProviderAnalysis liveAnalysis
-    ) => TryGet(intent.Table, intent.Schema, out var table)
-        ? Analysis(
-            table.Indexes.ContainsKey(intent.Name)
-                ? SafeMigrationObservedState.Matching
-                : SafeMigrationObservedState.Missing)
-        : liveAnalysis;
+    ) => IsProjectedTableStructureUnknown(intent.Table, intent.Schema)
+        ? StructureStateUnknown()
+        : TryGet(intent.Table, intent.Schema, out var table)
+            ? Analysis(
+                table.Indexes.ContainsKey(intent.Name)
+                    ? SafeMigrationObservedState.Matching
+                    : SafeMigrationObservedState.Missing)
+            : liveAnalysis;
 
     private SafeMigrationProviderAnalysis Project(
         RenameIndexIntent intent,
         SafeMigrationProviderAnalysis liveAnalysis
-    ) => TryGet(intent.Table, intent.Schema, out var table)
-        ? Analysis(
-            !table.Indexes.ContainsKey(intent.Name)
-                ? SafeMigrationObservedState.Missing
-                : table.Indexes.ContainsKey(intent.NewName)
-                    ? SafeMigrationObservedState.Different
-                    : SafeMigrationObservedState.Matching)
-        : liveAnalysis;
+    ) => IsProjectedTableStructureUnknown(intent.Table, intent.Schema)
+        ? StructureStateUnknown()
+        : TryGet(intent.Table, intent.Schema, out var table)
+            ? Analysis(
+                !table.Indexes.ContainsKey(intent.Name)
+                    ? SafeMigrationObservedState.Missing
+                    : table.Indexes.ContainsKey(intent.NewName)
+                        ? SafeMigrationObservedState.Different
+                        : SafeMigrationObservedState.Matching)
+            : liveAnalysis;
 
     private void Observe(
         EnsureIndexIntent intent,
@@ -174,7 +187,9 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         if (prerequisites.NewlyCreated)
         {
-            return true;
+            return !_projectedDataMutationTables.Contains(
+                    new TableKey(intent.Definition.Table, intent.Definition.Schema))
+                || HasProjectedModelManagedUniqueKey(intent.Definition);
         }
 
         if (intent.Definition.NullsDistinct == false)

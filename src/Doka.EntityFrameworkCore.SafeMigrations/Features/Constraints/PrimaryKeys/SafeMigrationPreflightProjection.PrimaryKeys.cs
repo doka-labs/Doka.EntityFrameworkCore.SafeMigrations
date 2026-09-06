@@ -7,6 +7,11 @@ internal sealed partial class SafeMigrationPreflightProjection
         SafeMigrationProviderAnalysis liveAnalysis
     )
     {
+        if (IsProjectedTableStructureUnknown(intent.Definition.Table, intent.Definition.Schema))
+        {
+            return StructureStateUnknown();
+        }
+
         if (!TryGet(intent.Definition.Table, intent.Definition.Schema, out var table))
         {
             return InvalidateDataDependentMissing(
@@ -26,9 +31,14 @@ internal sealed partial class SafeMigrationPreflightProjection
     private SafeMigrationProviderAnalysis Project(
         DropPrimaryKeyIntent intent,
         SafeMigrationProviderAnalysis liveAnalysis
-    ) => TryGet(intent.Table, intent.Schema, out var table)
-        ? Analysis(table.PrimaryKey is null ? SafeMigrationObservedState.Missing : SafeMigrationObservedState.Matching)
-        : liveAnalysis;
+    ) => IsProjectedTableStructureUnknown(intent.Table, intent.Schema)
+        ? StructureStateUnknown()
+        : TryGet(intent.Table, intent.Schema, out var table)
+            ? Analysis(
+                table.PrimaryKey is null
+                    ? SafeMigrationObservedState.Missing
+                    : SafeMigrationObservedState.Matching)
+            : liveAnalysis;
 
     private void Observe(
         EnsurePrimaryKeyIntent intent,

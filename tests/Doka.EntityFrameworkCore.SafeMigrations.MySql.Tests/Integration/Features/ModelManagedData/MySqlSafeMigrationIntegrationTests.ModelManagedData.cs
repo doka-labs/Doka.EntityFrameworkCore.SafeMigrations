@@ -379,8 +379,13 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             Assert.Single(updatePreflight.Assessments).ObservedState);
         Assert.Equal(SafeMigrationObservedState.TransitionReady,
             Assert.Single(deletePreflight.Assessments).ObservedState);
+        var driftAssessment = Assert.Single(driftPreflight.Assessments);
+
         Assert.Equal(SafeMigrationReportStatus.Blocked, driftPreflight.Status);
-        Assert.Equal(SafeMigrationObservedState.Different, Assert.Single(driftPreflight.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.Different, driftAssessment.ObservedState);
+        Assert.Collection(
+            driftAssessment.Differences,
+            difference => Assert.Equal("model_managed_row_content", difference.Facet));
         Assert.Equal(0, await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM `model_roles` WHERE `id` = 1;"));

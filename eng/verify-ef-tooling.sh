@@ -103,6 +103,8 @@ if [[ "${engine}" == "postgres" ]]; then
     createdb -h 127.0.0.1 -p 5432 -U postgres tooling_generated_strict
   docker exec -e PGPASSWORD=postgrespw "${container_name}" \
     createdb -h 127.0.0.1 -p 5432 -U postgres tooling_generated_legacy
+  docker exec -e PGPASSWORD=postgrespw "${container_name}" \
+    createdb -h 127.0.0.1 -p 5432 -U postgres tooling_ownership
   port="$(docker port "${container_name}" 5432/tcp | head -n 1 | awk -F: '{print $NF}')"
   project="tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.csproj"
   cli_connection="Host=127.0.0.1;Port=${port};Username=postgres;Password=postgrespw;Database=tooling_cli"
@@ -111,6 +113,7 @@ if [[ "${engine}" == "postgres" ]]; then
   legacy_transition_connection="Host=127.0.0.1;Port=${port};Username=postgres;Password=postgrespw;Database=tooling_transition_legacy"
   generated_strict_connection="Host=127.0.0.1;Port=${port};Username=postgres;Password=postgrespw;Database=tooling_generated_strict"
   generated_legacy_connection="Host=127.0.0.1;Port=${port};Username=postgres;Password=postgrespw;Database=tooling_generated_legacy"
+  ownership_connection="Host=127.0.0.1;Port=${port};Username=postgres;Password=postgrespw;Database=tooling_ownership"
 else
   if [[ "${engine}" == "mariadb" ]]; then
     database_variable="MARIADB_DATABASE"
@@ -132,6 +135,8 @@ else
     -e "CREATE DATABASE tooling_cli; CREATE DATABASE tooling_bundle; CREATE DATABASE tooling_transition_strict; CREATE DATABASE tooling_transition_legacy;"
   docker exec "${container_name}" "${client}" -h127.0.0.1 -uroot -prootpw \
     -e "CREATE DATABASE tooling_generated_strict; CREATE DATABASE tooling_generated_legacy;"
+  docker exec "${container_name}" "${client}" -h127.0.0.1 -uroot -prootpw \
+    -e "CREATE DATABASE tooling_ownership;"
   port="$(docker port "${container_name}" 3306/tcp | head -n 1 | awk -F: '{print $NF}')"
   project="tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests.csproj"
   cli_connection="Server=127.0.0.1;Port=${port};User ID=root;Password=rootpw;Database=tooling_cli;Allow User Variables=true"
@@ -140,6 +145,7 @@ else
   legacy_transition_connection="Server=127.0.0.1;Port=${port};User ID=root;Password=rootpw;Database=tooling_transition_legacy;Allow User Variables=true"
   generated_strict_connection="Server=127.0.0.1;Port=${port};User ID=root;Password=rootpw;Database=tooling_generated_strict;Allow User Variables=true"
   generated_legacy_connection="Server=127.0.0.1;Port=${port};User ID=root;Password=rootpw;Database=tooling_generated_legacy;Allow User Variables=true"
+  ownership_connection="Server=127.0.0.1;Port=${port};User ID=root;Password=rootpw;Database=tooling_ownership;Allow User Variables=true"
   export SAFE_MIGRATIONS_MYSQL_ENGINE="${engine}"
   export SAFE_MIGRATIONS_MYSQL_VERSION="${version}"
 fi
@@ -154,6 +160,11 @@ dotnet tool restore --tool-manifest "${repository_root}/.config/dotnet-tools.jso
 export SAFE_MIGRATIONS_CONNECTION_STRING="${cli_connection}"
 
 project_directory="$(dirname "${project}")"
+ownership_core_project="eng/ef-ownership/Core/Doka.EntityFrameworkCore.SafeMigrations.EfOwnership.Core.csproj"
+ownership_custom_project="eng/ef-ownership/Custom/Doka.EntityFrameworkCore.SafeMigrations.EfOwnership.Custom.csproj"
+ownership_core_directory="$(dirname "${ownership_core_project}")"
+ownership_custom_directory="$(dirname "${ownership_custom_project}")"
+ownership_output="Migrations/${engine}"
 strict_output="ScaffoldingProbes/${engine}/Strict"
 legacy_output="ScaffoldingProbes/${engine}/Legacy"
 strict_transition_output="ScaffoldingProbes/${engine}/StrictDataTransition"
@@ -186,6 +197,22 @@ dotnet ef migrations add LegacyDataTransitionBaseline \
   --configuration Release \
   --no-build
 
+export SAFE_MIGRATIONS_OWNERSHIP_STATE="source"
+dotnet ef migrations add CoreOwnershipBaseline \
+  --project "${ownership_core_project}" \
+  --startup-project "${project}" \
+  --context CoreOwnershipDbContext \
+  --output-dir "${ownership_output}" \
+  --configuration Release \
+  --no-build
+dotnet ef migrations add CustomOwnershipBaseline \
+  --project "${ownership_custom_project}" \
+  --startup-project "${project}" \
+  --context CustomOwnershipDbContext \
+  --output-dir "${ownership_output}" \
+  --configuration Release \
+  --no-build
+
 # The second scaffold must load the generated baseline snapshot from the compiled
 # migrations assembly. Reusing the pre-baseline assembly would compare the target
 # model with an empty model and would not qualify UpdateData/DeleteData pairing.
@@ -207,18 +234,105 @@ dotnet ef migrations add LegacyDataTransitionProbe \
   --no-build
 unset SAFE_MIGRATIONS_MODEL_MANAGED_DATA_STATE
 
+export SAFE_MIGRATIONS_OWNERSHIP_STATE="target"
+dotnet ef migrations add CoreOwnershipTransition \
+  --project "${ownership_core_project}" \
+  --startup-project "${project}" \
+  --context CoreOwnershipDbContext \
+  --output-dir "${ownership_output}" \
+  --configuration Release \
+  --no-build
+dotnet ef migrations add CustomOwnershipTransition \
+  --project "${ownership_custom_project}" \
+  --startup-project "${project}" \
+  --context CustomOwnershipDbContext \
+  --output-dir "${ownership_output}" \
+  --configuration Release \
+  --no-build
+unset SAFE_MIGRATIONS_OWNERSHIP_STATE
+
 strict_migration="$(find "${project_directory}/${strict_output}" -type f -name '*_StrictScaffoldingProbe.cs' -print -quit)"
 legacy_migration="$(find "${project_directory}/${legacy_output}" -type f -name '*_LegacyScaffoldingProbe.cs' -print -quit)"
+strict_snapshot="$(find "${project_directory}/${strict_output}" -type f -name '*ModelSnapshot.cs' -print -quit)"
+legacy_snapshot="$(find "${project_directory}/${legacy_output}" -type f -name '*ModelSnapshot.cs' -print -quit)"
+strict_transition_baseline="$(find "${project_directory}/${strict_transition_output}" -type f -name '*_StrictDataTransitionBaseline.cs' -print -quit)"
+legacy_transition_baseline="$(find "${project_directory}/${legacy_transition_output}" -type f -name '*_LegacyDataTransitionBaseline.cs' -print -quit)"
 strict_transition_migration="$(find "${project_directory}/${strict_transition_output}" -type f -name '*_StrictDataTransitionProbe.cs' -print -quit)"
 legacy_transition_migration="$(find "${project_directory}/${legacy_transition_output}" -type f -name '*_LegacyDataTransitionProbe.cs' -print -quit)"
+ownership_core_baseline="$(find "${ownership_core_directory}/${ownership_output}" -type f -name '*_CoreOwnershipBaseline.cs' -print -quit)"
+ownership_core_transition="$(find "${ownership_core_directory}/${ownership_output}" -type f -name '*_CoreOwnershipTransition.cs' -print -quit)"
+ownership_core_snapshot="$(find "${ownership_core_directory}/${ownership_output}" -type f -name '*ModelSnapshot.cs' -print -quit)"
+ownership_custom_baseline="$(find "${ownership_custom_directory}/${ownership_output}" -type f -name '*_CustomOwnershipBaseline.cs' -print -quit)"
+ownership_custom_transition="$(find "${ownership_custom_directory}/${ownership_output}" -type f -name '*_CustomOwnershipTransition.cs' -print -quit)"
+ownership_custom_snapshot="$(find "${ownership_custom_directory}/${ownership_output}" -type f -name '*ModelSnapshot.cs' -print -quit)"
 
 if [[ -z "${strict_migration}" \
   || -z "${legacy_migration}" \
+  || -z "${strict_snapshot}" \
+  || -z "${legacy_snapshot}" \
+  || -z "${strict_transition_baseline}" \
+  || -z "${legacy_transition_baseline}" \
   || -z "${strict_transition_migration}" \
-  || -z "${legacy_transition_migration}" ]]; then
+  || -z "${legacy_transition_migration}" \
+  || -z "${ownership_core_baseline}" \
+  || -z "${ownership_core_transition}" \
+  || -z "${ownership_core_snapshot}" \
+  || -z "${ownership_custom_baseline}" \
+  || -z "${ownership_custom_transition}" \
+  || -z "${ownership_custom_snapshot}" ]]; then
   echo "EF tooling did not create every SafeMigrations scaffolding probe." >&2
   exit 1
 fi
+
+for migration in "${ownership_core_baseline}" "${ownership_core_transition}"; do
+  if ! grep -Fq 'table: "ownership_core_roles"' "${migration}"; then
+    echo "Core ownership migration is missing Core model-managed data: ${migration}" >&2
+    exit 1
+  fi
+
+  if grep -Fq 'ownership_custom_profiles' "${migration}"; then
+    echo "Core ownership migration contains custom-lineage operations: ${migration}" >&2
+    exit 1
+  fi
+done
+
+for migration in "${ownership_custom_baseline}" "${ownership_custom_transition}"; do
+  if grep -Fq 'table: "ownership_core_roles"' "${migration}" \
+    || grep -Fq 'name: "ownership_core_roles"' "${migration}"; then
+    echo "Custom ownership migration contains Core schema or data operations: ${migration}" >&2
+    exit 1
+  fi
+
+  if ! grep -Fq 'ownership_custom_profiles' "${migration}"; then
+    echo "Custom ownership migration is missing its instance-owned operations: ${migration}" >&2
+    exit 1
+  fi
+done
+
+for expected in \
+  'ownership_core_roles' \
+  'ExcludeFromMigrations'; do
+  if ! grep -Fq "${expected}" "${ownership_custom_snapshot}"; then
+    echo "Custom ownership snapshot is missing inherited metadata: ${expected}" >&2
+    exit 1
+  fi
+done
+
+generated_ownership_files="$(find "${repository_root}" -type f \
+  \( -name '*_CoreOwnershipBaseline.cs' \
+    -o -name '*_CoreOwnershipTransition.cs' \
+    -o -name '*_CustomOwnershipBaseline.cs' \
+    -o -name '*_CustomOwnershipTransition.cs' \))"
+while IFS= read -r generated_ownership_file; do
+  case "${generated_ownership_file}" in
+    "${repository_root}/${ownership_core_directory}/${ownership_output}/"* \
+      | "${repository_root}/${ownership_custom_directory}/${ownership_output}/"*) ;;
+    *)
+      echo "Ownership migration was generated outside its target project: ${generated_ownership_file}" >&2
+      exit 1
+      ;;
+  esac
+done <<<"${generated_ownership_files}"
 
 for expected in \
   'migrationBuilder.CreateTableIfNotExists(' \
@@ -230,7 +344,57 @@ for expected in \
   fi
 done
 
+for snapshot in "${strict_snapshot}" "${legacy_snapshot}"; do
+  for numeric_discriminator_contract in \
+    'HasDiscriminator<int>("Discriminator")' \
+    '.IsComplete(false)' \
+    '.HasValue(0)' \
+    '.HasValue(1)'; do
+    if ! grep -Fq "${numeric_discriminator_contract}" "${snapshot}"; then
+      echo "Scaffolding snapshot lost numeric discriminator metadata: ${numeric_discriminator_contract}" >&2
+      exit 1
+    fi
+  done
+
+  for string_discriminator_contract in \
+    'HasDiscriminator<string>("AttributedDiscriminator")' \
+    '.HasValue("json-named")' \
+    '.HasValue("contract-named")' \
+    '.HasValue("Fallback")'; do
+    if ! grep -Fq "${string_discriminator_contract}" "${snapshot}"; then
+      echo "Scaffolding snapshot lost converted discriminator metadata: ${string_discriminator_contract}" >&2
+      exit 1
+    fi
+  done
+done
+
+for migration in \
+  "${strict_migration}" \
+  "${legacy_migration}" \
+  "${strict_transition_baseline}" \
+  "${legacy_transition_baseline}"; do
+  for ignored_member in \
+    'RequestMetadata' \
+    'RequestId' \
+    'scaffolding_transition_requests'; do
+    if grep -Fq "${ignored_member}" "${migration}"; then
+      echo "Ignored model member leaked into scaffolding output: ${ignored_member}" >&2
+      exit 1
+    fi
+  done
+done
+
 for migration in "${strict_transition_migration}" "${legacy_transition_migration}"; do
+  for mapped_member in \
+    'RequestMetadata' \
+    'RequestId' \
+    'scaffolding_transition_requests'; do
+    if ! grep -Fq "${mapped_member}" "${migration}"; then
+      echo "Mapped model member is missing from transition output: ${mapped_member}" >&2
+      exit 1
+    fi
+  done
+
   for expected in \
     'migrationBuilder.EnsureModelManagedDataFromModel(' \
     'migrationBuilder.UpdateModelManagedDataFromModel(' \
@@ -280,6 +444,17 @@ else
 fi
 
 for migration in "${strict_migration}" "${legacy_migration}"; do
+  for hierarchy_contract in \
+    'scaffolding_work_items' \
+    'Discriminator' \
+    'scaffolding_attributed_work_items' \
+    'AttributedDiscriminator'; do
+    if ! grep -Fq "${hierarchy_contract}" "${migration}"; then
+      echo "Scaffolding output is missing its incomplete discriminator hierarchy: ${hierarchy_contract}" >&2
+      exit 1
+    fi
+  done
+
   if ! grep -Fq "${composite_index_call}" "${migration}"; then
     echo "Scaffolding output is missing: ${composite_index_call}" >&2
     exit 1
@@ -366,6 +541,143 @@ done
 dotnet build "${project}" \
   --configuration Release --no-restore --disable-build-servers -m:1 /nodeReuse:false
 
+export SAFE_MIGRATIONS_OWNERSHIP_STATE="target"
+export SAFE_MIGRATIONS_CONNECTION_STRING="${ownership_connection}"
+dotnet ef migrations has-pending-model-changes \
+  --project "${ownership_core_project}" \
+  --startup-project "${project}" \
+  --context CoreOwnershipDbContext \
+  --configuration Release \
+  --no-build
+dotnet ef migrations has-pending-model-changes \
+  --project "${ownership_custom_project}" \
+  --startup-project "${project}" \
+  --context CustomOwnershipDbContext \
+  --configuration Release \
+  --no-build
+
+dotnet ef database update \
+  --project "${ownership_core_project}" \
+  --startup-project "${project}" \
+  --context CoreOwnershipDbContext \
+  --configuration Release \
+  --no-build
+dotnet ef database update \
+  --project "${ownership_custom_project}" \
+  --startup-project "${project}" \
+  --context CustomOwnershipDbContext \
+  --configuration Release \
+  --no-build
+
+if [[ "${engine}" == "postgres" ]]; then
+  ownership_core_state="$(docker exec -e PGPASSWORD=postgrespw "${container_name}" \
+    psql -h 127.0.0.1 -p 5432 -U postgres -d tooling_ownership -Atc \
+    "SELECT COALESCE(string_agg(\"Id\"::text || ':' || \"Name\", ',' ORDER BY \"Id\"), '') FROM ownership_core_roles;")"
+  ownership_custom_state="$(docker exec -e PGPASSWORD=postgrespw "${container_name}" \
+    psql -h 127.0.0.1 -p 5432 -U postgres -d tooling_ownership -Atc \
+    "SELECT COALESCE(string_agg(\"Id\"::text || ':' || \"CoreRoleId\"::text || ':' || \"Name\", ',' ORDER BY \"Id\"), '') FROM ownership_custom_profiles;")"
+  ownership_core_history="$(docker exec -e PGPASSWORD=postgrespw "${container_name}" \
+    psql -h 127.0.0.1 -p 5432 -U postgres -d tooling_ownership -Atc \
+    'SELECT COUNT(*) FROM "__SafeMigrationsCoreHistory";')"
+  ownership_custom_history="$(docker exec -e PGPASSWORD=postgrespw "${container_name}" \
+    psql -h 127.0.0.1 -p 5432 -U postgres -d tooling_ownership -Atc \
+    'SELECT COUNT(*) FROM "__SafeMigrationsCustomHistory";')"
+else
+  ownership_core_state="$(docker exec "${container_name}" "${client}" -h127.0.0.1 -uroot -prootpw -N -B tooling_ownership \
+    -e "SELECT COALESCE(GROUP_CONCAT(CONCAT(\`Id\`, ':', \`Name\`) ORDER BY \`Id\` SEPARATOR ','), '') FROM \`ownership_core_roles\`;")"
+  ownership_custom_state="$(docker exec "${container_name}" "${client}" -h127.0.0.1 -uroot -prootpw -N -B tooling_ownership \
+    -e "SELECT COALESCE(GROUP_CONCAT(CONCAT(\`Id\`, ':', \`CoreRoleId\`, ':', \`Name\`) ORDER BY \`Id\` SEPARATOR ','), '') FROM \`ownership_custom_profiles\`;")"
+  ownership_core_history="$(docker exec "${container_name}" "${client}" -h127.0.0.1 -uroot -prootpw -N -B tooling_ownership \
+    -e "SELECT COUNT(*) FROM \`__SafeMigrationsCoreHistory\`;")"
+  ownership_custom_history="$(docker exec "${container_name}" "${client}" -h127.0.0.1 -uroot -prootpw -N -B tooling_ownership \
+    -e "SELECT COUNT(*) FROM \`__SafeMigrationsCustomHistory\`;")"
+fi
+
+if [[ "${ownership_core_state}" != "1:owner,3:auditor" \
+  || "${ownership_custom_state}" != "10:1:premium,12:3:audit" \
+  || "${ownership_core_history}" != "2" \
+  || "${ownership_custom_history}" != "2" ]]; then
+  echo "EF ownership lineage verification failed for ${engine}." >&2
+  exit 1
+fi
+
+dotnet ef database update 0 \
+  --project "${ownership_custom_project}" \
+  --startup-project "${project}" \
+  --context CustomOwnershipDbContext \
+  --configuration Release \
+  --no-build
+
+if [[ "${engine}" == "postgres" ]]; then
+  ownership_core_after_rollback="$(docker exec -e PGPASSWORD=postgrespw "${container_name}" \
+    psql -h 127.0.0.1 -p 5432 -U postgres -d tooling_ownership -Atc \
+    'SELECT COUNT(*) FROM ownership_core_roles;')"
+  ownership_core_history_after_rollback="$(docker exec -e PGPASSWORD=postgrespw "${container_name}" \
+    psql -h 127.0.0.1 -p 5432 -U postgres -d tooling_ownership -Atc \
+    'SELECT COUNT(*) FROM "__SafeMigrationsCoreHistory";')"
+  ownership_custom_history_after_rollback="$(docker exec -e PGPASSWORD=postgrespw "${container_name}" \
+    psql -h 127.0.0.1 -p 5432 -U postgres -d tooling_ownership -Atc \
+    'SELECT COUNT(*) FROM "__SafeMigrationsCustomHistory";')"
+  ownership_custom_table_after_rollback="$(docker exec -e PGPASSWORD=postgrespw "${container_name}" \
+    psql -h 127.0.0.1 -p 5432 -U postgres -d tooling_ownership -Atc \
+    "SELECT COUNT(*) FROM pg_catalog.pg_class c INNER JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relname = 'ownership_custom_profiles' AND c.relkind = 'r';")"
+else
+  ownership_core_after_rollback="$(docker exec "${container_name}" "${client}" -h127.0.0.1 -uroot -prootpw -N -B tooling_ownership \
+    -e "SELECT COUNT(*) FROM \`ownership_core_roles\`;")"
+  ownership_core_history_after_rollback="$(docker exec "${container_name}" "${client}" -h127.0.0.1 -uroot -prootpw -N -B tooling_ownership \
+    -e "SELECT COUNT(*) FROM \`__SafeMigrationsCoreHistory\`;")"
+  ownership_custom_history_after_rollback="$(docker exec "${container_name}" "${client}" -h127.0.0.1 -uroot -prootpw -N -B tooling_ownership \
+    -e "SELECT COUNT(*) FROM \`__SafeMigrationsCustomHistory\`;")"
+  ownership_custom_table_after_rollback="$(docker exec "${container_name}" "${client}" -h127.0.0.1 -uroot -prootpw -N -B tooling_ownership \
+    -e "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ownership_custom_profiles';")"
+fi
+
+if [[ "${ownership_core_after_rollback}" != "2" \
+  || "${ownership_core_history_after_rollback}" != "2" \
+  || "${ownership_custom_history_after_rollback}" != "0" \
+  || "${ownership_custom_table_after_rollback}" != "0" ]]; then
+  echo "Custom ownership rollback changed the Core lineage for ${engine}." >&2
+  exit 1
+fi
+
+dotnet ef database update \
+  --project "${ownership_custom_project}" \
+  --startup-project "${project}" \
+  --context CustomOwnershipDbContext \
+  --configuration Release \
+  --no-build
+dotnet ef migrations script \
+  --project "${ownership_custom_project}" \
+  --startup-project "${project}" \
+  --context CustomOwnershipDbContext \
+  --configuration Release \
+  --no-build \
+  --output "${artifacts_dir}/ownership-custom.sql"
+unset SAFE_MIGRATIONS_OWNERSHIP_STATE
+
+if [[ "${engine}" == "postgres" ]]; then
+  core_sql_mutations=(
+    'CREATE TABLE IF NOT EXISTS "ownership_core_roles"'
+    'INSERT INTO "ownership_core_roles"'
+    'UPDATE "ownership_core_roles"'
+    'DELETE FROM "ownership_core_roles"'
+  )
+else
+  core_sql_mutations=(
+    'CREATE TABLE `ownership_core_roles`'
+    'INSERT INTO `ownership_core_roles`'
+    'UPDATE `ownership_core_roles`'
+    'DELETE FROM `ownership_core_roles`'
+  )
+fi
+
+for core_sql_mutation in "${core_sql_mutations[@]}"; do
+  if grep -Fq "${core_sql_mutation}" "${artifacts_dir}/ownership-custom.sql"; then
+    echo "Custom ownership SQL mutates the Core lineage for ${engine}: ${core_sql_mutation}" >&2
+    exit 1
+  fi
+done
+
 export SAFE_MIGRATIONS_GENERATED_STRICT_CONNECTION_STRING="${generated_strict_connection}"
 export SAFE_MIGRATIONS_GENERATED_LEGACY_CONNECTION_STRING="${generated_legacy_connection}"
 dotnet test "${project}" \
@@ -400,8 +712,56 @@ assert_transition_state() {
   fi
 }
 
+read_transition_model_state() {
+  local database="$1"
+
+  if [[ "${engine}" == "postgres" ]]; then
+    docker exec -e PGPASSWORD=postgrespw "${container_name}" \
+      psql -h 127.0.0.1 -p 5432 -U postgres -d "${database}" -Atc \
+      "SELECT format('%s:%s:%s:%s',
+        to_regclass('public.scaffolding_transition_requests') IS NOT NULL,
+        EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'scaffolding_transition_users' AND column_name = 'RequestMetadata'),
+        EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'scaffolding_transition_users' AND column_name = 'RequestId'),
+        EXISTS (
+          SELECT 1 FROM pg_constraint c
+          INNER JOIN pg_class dependent ON dependent.oid = c.conrelid
+          INNER JOIN pg_class principal ON principal.oid = c.confrelid
+          INNER JOIN pg_namespace n ON n.oid = dependent.relnamespace
+          WHERE c.contype = 'f' AND n.nspname = 'public'
+            AND dependent.relname = 'scaffolding_transition_users'
+            AND principal.relname = 'scaffolding_transition_requests'));"
+  else
+    docker exec "${container_name}" "${client}" -h127.0.0.1 -uroot -prootpw -N -B "${database}" \
+      -e "SELECT CONCAT(
+        EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'scaffolding_transition_requests'), ':',
+        EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'scaffolding_transition_users' AND column_name = 'RequestMetadata'), ':',
+        EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'scaffolding_transition_users' AND column_name = 'RequestId'), ':',
+        EXISTS (SELECT 1 FROM information_schema.key_column_usage WHERE constraint_schema = DATABASE() AND table_name = 'scaffolding_transition_users' AND referenced_table_name = 'scaffolding_transition_requests'));"
+  fi
+}
+
+assert_transition_model_state() {
+  local database="$1"
+  local expected="$2"
+  local phase="$3"
+  local actual
+
+  actual="$(read_transition_model_state "${database}")"
+  if [[ "${actual}" != "${expected}" ]]; then
+    echo "EF tooling ${phase} model verification failed for ${engine}: ${actual}" >&2
+    exit 1
+  fi
+}
+
 source_transition_state="1:administrator@example.test,2:member@example.test"
 target_transition_state="1:owner@example.test,3:auditor@example.test"
+if [[ "${engine}" == "postgres" ]]; then
+  ignored_transition_model_state="f:f:f:f"
+  mapped_transition_model_state="t:t:t:t"
+else
+  ignored_transition_model_state="0:0:0:0"
+  mapped_transition_model_state="1:1:1:1"
+fi
 
 export SAFE_MIGRATIONS_MODEL_MANAGED_DATA_STATE="target"
 export SAFE_MIGRATIONS_CONNECTION_STRING="${strict_transition_connection}"
@@ -409,28 +769,34 @@ dotnet ef database update --project "${project}" \
   --context StrictSafeMigrationDataTransitionScaffoldingDbContext \
   --configuration Release --no-build
 assert_transition_state "tooling_transition_strict" "${target_transition_state}" "strict target"
+assert_transition_model_state "tooling_transition_strict" "${mapped_transition_model_state}" "strict target"
 dotnet ef database update StrictDataTransitionBaseline --project "${project}" \
   --context StrictSafeMigrationDataTransitionScaffoldingDbContext \
   --configuration Release --no-build
 assert_transition_state "tooling_transition_strict" "${source_transition_state}" "strict rollback"
+assert_transition_model_state "tooling_transition_strict" "${ignored_transition_model_state}" "strict rollback"
 dotnet ef database update --project "${project}" \
   --context StrictSafeMigrationDataTransitionScaffoldingDbContext \
   --configuration Release --no-build
 assert_transition_state "tooling_transition_strict" "${target_transition_state}" "strict replay"
+assert_transition_model_state "tooling_transition_strict" "${mapped_transition_model_state}" "strict replay"
 dotnet ef database update --project "${project}" \
   --context StrictSafeMigrationDataTransitionScaffoldingDbContext \
   --configuration Release --no-build
 assert_transition_state "tooling_transition_strict" "${target_transition_state}" "strict idempotent replay"
+assert_transition_model_state "tooling_transition_strict" "${mapped_transition_model_state}" "strict idempotent replay"
 
 export SAFE_MIGRATIONS_CONNECTION_STRING="${legacy_transition_connection}"
 dotnet ef database update --project "${project}" \
   --context LegacySafeMigrationDataTransitionScaffoldingDbContext \
   --configuration Release --no-build
 assert_transition_state "tooling_transition_legacy" "${target_transition_state}" "legacy target"
+assert_transition_model_state "tooling_transition_legacy" "${mapped_transition_model_state}" "legacy target"
 dotnet ef database update --project "${project}" \
   --context LegacySafeMigrationDataTransitionScaffoldingDbContext \
   --configuration Release --no-build
 assert_transition_state "tooling_transition_legacy" "${target_transition_state}" "legacy idempotent replay"
+assert_transition_model_state "tooling_transition_legacy" "${mapped_transition_model_state}" "legacy idempotent replay"
 unset SAFE_MIGRATIONS_MODEL_MANAGED_DATA_STATE
 
 export SAFE_MIGRATIONS_CONNECTION_STRING="${cli_connection}"
@@ -470,6 +836,7 @@ if [[ "${cli_count}" != "1" || "${bundle_count}" != "1" ]]; then
 fi
 
 for artifact in \
+  "${artifacts_dir}/ownership-custom.sql" \
   "${artifacts_dir}/migration.sql" \
   "${artifacts_dir}/migration-idempotent.sql" \
   "${artifacts_dir}/migration-idempotent-no-transactions.sql" \

@@ -43,6 +43,10 @@ public abstract class SafeMigrationScaffoldingDbContext : DbContext
             entity.ToTable("scaffolding_users");
             entity.HasKey(user => user.Id);
 
+            entity.Ignore(user => user.Request);
+            entity.Ignore(user => user.RequestId);
+            entity.Ignore(user => user.RequestMetadata);
+
             entity
                 .Property(user => user.Email)
                 .HasMaxLength(320)
@@ -65,6 +69,71 @@ public abstract class SafeMigrationScaffoldingDbContext : DbContext
                     Email = "administrator@example.test",
                 });
         });
+
+        modelBuilder.Ignore<SafeMigrationScaffoldingRequest>();
+        modelBuilder.Entity<SafeMigrationScaffoldingTask>();
+        modelBuilder.Entity<SafeMigrationScaffoldingExternalWorkItem>();
+
+        modelBuilder.Entity<SafeMigrationScaffoldingWorkItem>(entity =>
+        {
+            entity.ToTable("scaffolding_work_items");
+            entity.HasKey(workItem => workItem.Id);
+
+            entity
+                .Property(workItem => workItem.Caption)
+                .HasMaxLength(128)
+                .IsRequired();
+
+            entity
+                .Property<SafeMigrationScaffoldingWorkItemKind>("Discriminator")
+                .HasConversion<int>();
+
+            entity
+                .HasDiscriminator<SafeMigrationScaffoldingWorkItemKind>("Discriminator")
+                .HasValue<SafeMigrationScaffoldingTask>(SafeMigrationScaffoldingWorkItemKind.Task)
+                .IsComplete(false);
+        });
+
+        // The metadata path must preserve the same discriminator contract as
+        // the fluent HasValue path when EF scaffolds and reloads its snapshot.
+        modelBuilder
+            .Entity<SafeMigrationScaffoldingExternalWorkItem>()
+            .Metadata
+            .SetDiscriminatorValue(SafeMigrationScaffoldingWorkItemKind.External);
+
+        modelBuilder.Entity<SafeMigrationJsonNamedWorkItem>();
+        modelBuilder.Entity<SafeMigrationContractNamedWorkItem>();
+        modelBuilder.Entity<SafeMigrationFallbackNamedWorkItem>();
+
+        modelBuilder.Entity<SafeMigrationAttributedWorkItem>(entity =>
+        {
+            entity.ToTable("scaffolding_attributed_work_items");
+            entity.HasKey(workItem => workItem.Id);
+
+            entity
+                .Property(workItem => workItem.Caption)
+                .HasMaxLength(128)
+                .IsRequired();
+
+            entity
+                .Property<SafeMigrationAttributedWorkItemKind>("AttributedDiscriminator")
+                .HasConversion<SafeMigrationAttributedEnumValueConverter<SafeMigrationAttributedWorkItemKind>>()
+                .HasMaxLength(
+                    SafeMigrationAttributedEnumName.MaximumLength<SafeMigrationAttributedWorkItemKind>());
+
+            entity
+                .HasDiscriminator<SafeMigrationAttributedWorkItemKind>("AttributedDiscriminator")
+                .HasValue<SafeMigrationJsonNamedWorkItem>(SafeMigrationAttributedWorkItemKind.JsonNamed)
+                .HasValue<SafeMigrationFallbackNamedWorkItem>(SafeMigrationAttributedWorkItemKind.Fallback)
+                .IsComplete(false);
+        });
+
+        // The second metadata value proves that custom provider strings remain
+        // equivalent whether a consumer uses HasValue or SetDiscriminatorValue.
+        modelBuilder
+            .Entity<SafeMigrationContractNamedWorkItem>()
+            .Metadata
+            .SetDiscriminatorValue(SafeMigrationAttributedWorkItemKind.ContractNamed);
     }
 }
 
@@ -91,6 +160,58 @@ public sealed class SafeMigrationScaffoldingUser
     public int TenantId { get; set; }
 
     public string Email { get; set; } = string.Empty;
+
+    public int? RequestId { get; set; }
+
+    public string? RequestMetadata { get; set; }
+
+    public SafeMigrationScaffoldingRequest? Request { get; set; }
+}
+
+public sealed class SafeMigrationScaffoldingRequest
+{
+    public int Id { get; set; }
+}
+
+public abstract class SafeMigrationScaffoldingWorkItem
+{
+    public int Id { get; set; }
+
+    public string Caption { get; set; } = string.Empty;
+}
+
+public sealed class SafeMigrationScaffoldingTask : SafeMigrationScaffoldingWorkItem;
+
+public sealed class SafeMigrationScaffoldingExternalWorkItem : SafeMigrationScaffoldingWorkItem;
+
+public enum SafeMigrationScaffoldingWorkItemKind
+{
+    Task,
+    External,
+}
+
+public abstract class SafeMigrationAttributedWorkItem
+{
+    public int Id { get; set; }
+
+    public string Caption { get; set; } = string.Empty;
+}
+
+public sealed class SafeMigrationJsonNamedWorkItem : SafeMigrationAttributedWorkItem;
+
+public sealed class SafeMigrationContractNamedWorkItem : SafeMigrationAttributedWorkItem;
+
+public sealed class SafeMigrationFallbackNamedWorkItem : SafeMigrationAttributedWorkItem;
+
+public enum SafeMigrationAttributedWorkItemKind
+{
+    [JsonStringEnumMemberName("json-named")]
+    JsonNamed,
+
+    [EnumMember(Value = "contract-named")]
+    ContractNamed,
+
+    Fallback,
 }
 
 public sealed class StrictSafeMigrationScaffoldingDbContextFactory
@@ -170,6 +291,25 @@ public abstract class SafeMigrationDataTransitionScaffoldingDbContext : DbContex
             entity.ToTable("scaffolding_transition_users");
             entity.HasKey(user => user.Id);
 
+            if (targetState)
+            {
+                entity
+                    .Property(user => user.RequestMetadata)
+                    .HasMaxLength(128);
+
+                entity
+                    .HasOne(user => user.Request)
+                    .WithMany()
+                    .HasForeignKey(user => user.RequestId)
+                    .OnDelete(DeleteBehavior.SetNull);
+            }
+            else
+            {
+                entity.Ignore(user => user.Request);
+                entity.Ignore(user => user.RequestId);
+                entity.Ignore(user => user.RequestMetadata);
+            }
+
             entity
                 .Property(user => user.Email)
                 .HasMaxLength(320)
@@ -187,6 +327,24 @@ public abstract class SafeMigrationDataTransitionScaffoldingDbContext : DbContex
                     new SafeMigrationDataTransitionUser { Id = 2, Email = "member@example.test", },
                 ]);
         });
+
+        if (targetState)
+        {
+            modelBuilder.Entity<SafeMigrationDataTransitionRequest>(entity =>
+            {
+                entity.ToTable("scaffolding_transition_requests");
+                entity.HasKey(request => request.Id);
+
+                entity
+                    .Property(request => request.Caption)
+                    .HasMaxLength(128)
+                    .IsRequired();
+            });
+        }
+        else
+        {
+            modelBuilder.Ignore<SafeMigrationDataTransitionRequest>();
+        }
     }
 }
 
@@ -213,6 +371,19 @@ public sealed class SafeMigrationDataTransitionUser
     public int Id { get; set; }
 
     public string Email { get; set; } = string.Empty;
+
+    public int? RequestId { get; set; }
+
+    public string? RequestMetadata { get; set; }
+
+    public SafeMigrationDataTransitionRequest? Request { get; set; }
+}
+
+public sealed class SafeMigrationDataTransitionRequest
+{
+    public int Id { get; set; }
+
+    public string Caption { get; set; } = string.Empty;
 }
 
 public sealed class StrictSafeMigrationDataTransitionScaffoldingDbContextFactory

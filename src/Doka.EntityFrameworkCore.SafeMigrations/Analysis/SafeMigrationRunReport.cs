@@ -52,11 +52,58 @@ public sealed class SafeMigrationAssessment
         SafeMigrationAction? action,
         bool? postconditionSatisfied,
         string code
+    ) : this(
+        ordinal,
+        operationType,
+        isSafeOperation,
+        operationKind,
+        objectName,
+        observedState,
+        action,
+        postconditionSatisfied,
+        code,
+        code,
+        code,
+        SafeMigrationOperationalImpact.NotApplicable,
+        differences: null)
+    {
+    }
+
+    /// <summary>Initializes an assessment with separate analysis, decision, and facet evidence.</summary>
+    /// <param name="ordinal">The zero-based operation ordinal.</param>
+    /// <param name="operationType">The exact CLR migration-operation type name.</param>
+    /// <param name="isSafeOperation">Whether the assessment represents a SafeMigrations operation.</param>
+    /// <param name="operationKind">The SafeMigrations operation family.</param>
+    /// <param name="objectName">The database object name, or null for provider-owned operations.</param>
+    /// <param name="observedState">The provider-classified live state.</param>
+    /// <param name="action">The provider-neutral action selected for the operation.</param>
+    /// <param name="postconditionSatisfied">Whether the operation's final target condition currently holds.</param>
+    /// <param name="code">The backward-compatible aggregate result code.</param>
+    /// <param name="analysisCode">The stable provider analysis code.</param>
+    /// <param name="decisionCode">The stable provider-neutral decision code.</param>
+    /// <param name="operationalImpact">The provider-proven execution-impact classification.</param>
+    /// <param name="differences">The bounded typed facet differences.</param>
+    public SafeMigrationAssessment(
+        int ordinal,
+        string operationType,
+        bool isSafeOperation,
+        SafeMigrationOperationKind? operationKind,
+        string? objectName,
+        SafeMigrationObservedState? observedState,
+        SafeMigrationAction? action,
+        bool? postconditionSatisfied,
+        string code,
+        string analysisCode,
+        string decisionCode,
+        SafeMigrationOperationalImpact operationalImpact,
+        IEnumerable<SafeMigrationFacetDifference>? differences
     )
     {
         ArgumentOutOfRangeException.ThrowIfNegative(ordinal);
         ArgumentException.ThrowIfNullOrWhiteSpace(operationType);
         ArgumentException.ThrowIfNullOrWhiteSpace(code);
+        ArgumentException.ThrowIfNullOrWhiteSpace(analysisCode);
+        ArgumentException.ThrowIfNullOrWhiteSpace(decisionCode);
 
         if (operationKind is not null
             && !Enum.IsDefined(operationKind.Value))
@@ -76,6 +123,25 @@ public sealed class SafeMigrationAssessment
             throw new ArgumentOutOfRangeException(nameof(action));
         }
 
+        if (!Enum.IsDefined(operationalImpact))
+        {
+            throw new ArgumentOutOfRangeException(nameof(operationalImpact));
+        }
+
+        var differenceSnapshot = (differences ?? []).ToArray();
+        if (differenceSnapshot.Any(static difference => difference is null))
+        {
+            throw new ArgumentException("Differences cannot contain null values.", nameof(differences));
+        }
+
+        if (differenceSnapshot.Length > SafeMigrationFacetDifference.MaximumDifferenceCount)
+        {
+            throw new ArgumentException(
+                "An assessment cannot contain more than "
+                + $"{SafeMigrationFacetDifference.MaximumDifferenceCount} differences.",
+                nameof(differences));
+        }
+
         Ordinal = ordinal;
         OperationType = operationType;
         IsSafeOperation = isSafeOperation;
@@ -85,6 +151,10 @@ public sealed class SafeMigrationAssessment
         Action = action;
         PostconditionSatisfied = postconditionSatisfied;
         Code = code;
+        AnalysisCode = analysisCode;
+        DecisionCode = decisionCode;
+        OperationalImpact = operationalImpact;
+        Differences = Array.AsReadOnly(differenceSnapshot);
     }
 
     /// <summary>Gets the zero-based operation ordinal.</summary>
@@ -113,13 +183,25 @@ public sealed class SafeMigrationAssessment
 
     /// <summary>Gets the stable assessment code.</summary>
     public string Code { get; }
+
+    /// <summary>Gets the stable provider analysis code.</summary>
+    public string AnalysisCode { get; }
+
+    /// <summary>Gets the stable provider-neutral decision code.</summary>
+    public string DecisionCode { get; }
+
+    /// <summary>Gets the provider-proven automatic-repair impact classification.</summary>
+    public SafeMigrationOperationalImpact OperationalImpact { get; }
+
+    /// <summary>Gets the bounded typed facet differences.</summary>
+    public IReadOnlyList<SafeMigrationFacetDifference> Differences { get; }
 }
 
 /// <summary>Contains an immutable preflight or postflight report.</summary>
 public sealed class SafeMigrationRunReport
 {
     /// <summary>Gets the current machine-readable report schema version.</summary>
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
 
     /// <summary>Initializes a run report and snapshots its assessments.</summary>
     /// <param name="mode">Whether this is a preflight analysis or postflight verification.</param>
@@ -230,4 +312,20 @@ public sealed class SafeMigrationRunReport
     /// These findings do not authorize deletion or semantic inference.
     /// </summary>
     public IReadOnlyList<SafeMigrationUnexpectedObject> UnexpectedObjects { get; }
+
+    /// <summary>Throws a typed exception when this preflight report is blocked.</summary>
+    /// <exception cref="InvalidOperationException">This report is not a preflight report.</exception>
+    /// <exception cref="SafeMigrationPreflightException">This preflight report is blocked.</exception>
+    public void ThrowIfBlocked()
+    {
+        if (Mode != SafeMigrationReportMode.Preflight)
+        {
+            throw new InvalidOperationException("Only a preflight report can be checked for a preflight block.");
+        }
+
+        if (Status == SafeMigrationReportStatus.Blocked)
+        {
+            throw new SafeMigrationPreflightException(this);
+        }
+    }
 }

@@ -3,13 +3,20 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 {
     private MySqlSafeMigrationRuntimePlan BuildEnsureModelManagedData(
-        EnsureModelManagedDataIntent intent
+        EnsureModelManagedDataIntent intent,
+        bool isMariaDb
     )
     {
         var relation = ExpectedRelation(intent, ("t", intent.Columns, intent.ColumnTypes, intent.Values));
         var table = Delimited(intent.Table);
         var keyMatch = KeyMatch(intent, "doka_actual", "doka_expected");
-        var targetMatch = ColumnMatch(intent.Columns, "doka_actual", "doka_expected", "t");
+        var targetMatch = ColumnMatch(
+            intent.Columns,
+            intent.ColumnTypes,
+            "doka_actual",
+            "doka_expected",
+            "t",
+            isMariaDb);
         var found = $"doka_actual.{Delimited(intent.KeyColumns[0])} IS NOT NULL";
         var uniqueCollision = UniqueCollision(intent, intent.UniqueKeys, relation, "t");
         var engineUnsupported = EngineUnsupported(intent.Table);
@@ -39,13 +46,15 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         return Plan(state, postcondition) with
         {
             MutationSql = mutation,
+            DifferentDifference = ModelManagedRowContentDifference(),
             ModelManagedRowEvidenceExpression = rowEvidence,
             ModelManagedRowCount = intent.RowCount,
         };
     }
 
     private MySqlSafeMigrationRuntimePlan BuildUpdateModelManagedData(
-        UpdateModelManagedDataIntent intent
+        UpdateModelManagedDataIntent intent,
+        bool isMariaDb
     )
     {
         var relation = ExpectedRelation(
@@ -55,8 +64,20 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
         var table = Delimited(intent.Table);
         var keyMatch = KeyMatch(intent, "doka_actual", "doka_expected");
-        var sourceMatch = ColumnMatch(intent.Columns, "doka_actual", "doka_expected", "o");
-        var targetMatch = ColumnMatch(intent.Columns, "doka_actual", "doka_expected", "n");
+        var sourceMatch = ColumnMatch(
+            intent.Columns,
+            intent.ColumnTypes,
+            "doka_actual",
+            "doka_expected",
+            "o",
+            isMariaDb);
+        var targetMatch = ColumnMatch(
+            intent.Columns,
+            intent.ColumnTypes,
+            "doka_actual",
+            "doka_expected",
+            "n",
+            isMariaDb);
         var found = $"doka_actual.{Delimited(intent.KeyColumns[0])} IS NOT NULL";
         var uniqueCollision = UniqueCollision(intent, intent.UniqueKeys, relation, "n");
         var engineUnsupported = EngineUnsupported(intent.Table);
@@ -87,19 +108,27 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         return Plan(state, postcondition) with
         {
             MutationSql = mutation,
+            DifferentDifference = ModelManagedRowContentDifference(),
             ModelManagedRowEvidenceExpression = rowEvidence,
             ModelManagedRowCount = intent.RowCount,
         };
     }
 
     private MySqlSafeMigrationRuntimePlan BuildDeleteModelManagedData(
-        DeleteModelManagedDataIntent intent
+        DeleteModelManagedDataIntent intent,
+        bool isMariaDb
     )
     {
         var relation = ExpectedRelation(intent, ("o", intent.Columns, intent.ColumnTypes, intent.OldValues));
         var table = Delimited(intent.Table);
         var keyMatch = KeyMatch(intent, "doka_actual", "doka_expected");
-        var sourceMatch = ColumnMatch(intent.Columns, "doka_actual", "doka_expected", "o");
+        var sourceMatch = ColumnMatch(
+            intent.Columns,
+            intent.ColumnTypes,
+            "doka_actual",
+            "doka_expected",
+            "o",
+            isMariaDb);
         var found = $"doka_actual.{Delimited(intent.KeyColumns[0])} IS NOT NULL";
         var dependencyExists = DependencyExists(intent, relation);
         var unmodeledDependency = UnmodeledIncomingForeignKey(intent);
@@ -127,12 +156,18 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         return Plan(state, postcondition) with
         {
             MutationSql = mutation,
+            DifferentDifference = ModelManagedRowContentDifference(),
             ModelManagedRowEvidenceExpression = rowEvidence,
             ModelManagedDependencyCountsExpression = DependencyCounts(intent, relation),
             ModelManagedRowCount = intent.RowCount,
             ModelManagedDependencyCount = intent.ForeignKeys.Count,
         };
     }
+
+    private static SafeMigrationFacetDifference ModelManagedRowContentDifference() => new(
+        "model_managed_row_content",
+        "modeled",
+        "different_or_conflicting");
 
     private string BuildModelManagedDataPrerequisite(
         ModelManagedDataIntent intent
@@ -204,13 +239,46 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
     private string ColumnMatch(
         IReadOnlyList<string> columns,
+        IReadOnlyList<string> columnTypes,
         string actualAlias,
         string expectedAlias,
-        string prefix
+        string prefix,
+        bool isMariaDb
     ) => string.Join(
         " AND ",
-        columns.Select((column, ordinal) =>
-            $"{actualAlias}.{Delimited(column)} <=> {expectedAlias}.{Delimited($"{prefix}{ordinal}")}"));
+        columns.Select((column, ordinal) => ColumnValueMatch(
+            $"{actualAlias}.{Delimited(column)}",
+            $"{expectedAlias}.{Delimited($"{prefix}{ordinal}")}",
+            columnTypes[ordinal],
+            isMariaDb)));
+
+    private static string ColumnValueMatch(
+        string actual,
+        string expected,
+        string storeType,
+        bool isMariaDb
+    )
+    {
+        if (!StringComparer.OrdinalIgnoreCase.Equals(storeType.Trim(), "json"))
+        {
+            return $"{actual} <=> {expected}";
+        }
+
+        if (!isMariaDb)
+        {
+            // WHY: MySQL normalizes native JSON at storage time. Casting the
+            // derived expected value selects MySQL's structural comparator,
+            // which ignores object-member order but preserves array identity.
+            return $"{actual} <=> CAST({expected} AS JSON)";
+        }
+
+        // WHY: MariaDB exposes JSON as LONGTEXT, so its ordinary equality is
+        // textual. JSON_EQUALS provides structural equality; the explicit
+        // null branches keep SQL NULL distinct from the JSON null literal.
+        return $"(({actual} IS NULL AND {expected} IS NULL) OR "
+            + $"({actual} IS NOT NULL AND {expected} IS NOT NULL "
+            + $"AND JSON_EQUALS({actual}, {expected})))";
+    }
 
     private IEnumerable<string> ColumnAliases(
         int count,

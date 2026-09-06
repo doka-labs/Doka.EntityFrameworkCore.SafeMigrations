@@ -5,6 +5,32 @@ internal readonly record struct MySqlCatalogParameterValue(
     string? StoreType
 );
 
+internal static class MySqlCatalogTypeMapping
+{
+    public static RelationalTypeMapping Resolve(
+        IRelationalTypeMappingSource typeMappingSource,
+        object? value,
+        string storeType
+    )
+    {
+        ArgumentNullException.ThrowIfNull(typeMappingSource);
+        ArgumentException.ThrowIfNullOrWhiteSpace(storeType);
+
+        // WHY: A store-type-only lookup selects the provider CLR type and can
+        // reject model values such as char or converter-backed Guid. EF applies
+        // the selected mapping's converter while creating literals/parameters,
+        // so both halves of the relational type identity must select it.
+        var mapping = value is null
+            ? typeMappingSource.FindMapping(storeType)
+            : typeMappingSource.FindMapping(value.GetType(), storeType);
+
+        return mapping
+            ?? throw new NotSupportedException(
+                $"MySQL has no type mapping for CLR type '{value?.GetType().FullName ?? "<null>"}' "
+                + $"and store type '{storeType}'.");
+    }
+}
+
 internal sealed class MySqlCatalogParameterValueComparer : IEqualityComparer<MySqlCatalogParameterValue>
 {
     public static MySqlCatalogParameterValueComparer Instance { get; } = new();

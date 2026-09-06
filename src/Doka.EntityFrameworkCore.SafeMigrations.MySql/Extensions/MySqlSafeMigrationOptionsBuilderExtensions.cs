@@ -213,7 +213,8 @@ public static class MySqlSafeMigrationOptionsBuilderExtensions
         DbContextOptionsBuilder optionsBuilder,
         Type? canonicalContextType,
         SafeMigrationScaffoldingMode scaffoldingMode,
-        SafeMigrationPolicy legacyConvergencePolicy = SafeMigrationPolicy.ThrowIfDifferent
+        SafeMigrationPolicy legacyConvergencePolicy = SafeMigrationPolicy.ThrowIfDifferent,
+        bool excludeModelManagedDataForExcludedTables = false
     )
     {
         // SafeMigrations owns the requirement for connection-local user
@@ -225,7 +226,8 @@ public static class MySqlSafeMigrationOptionsBuilderExtensions
             MySqlSafeMigrationsOptionsExtension.WithCanonicalContext(
                 canonicalContextType,
                 scaffoldingMode,
-                legacyConvergencePolicy));
+                legacyConvergencePolicy,
+                excludeModelManagedDataForExcludedTables));
     }
 
     private static void AddOptionsExtension(
@@ -236,7 +238,8 @@ public static class MySqlSafeMigrationOptionsBuilderExtensions
         optionsBuilder,
         canonicalContextType,
         configuration.Mode,
-        configuration.LegacyConvergencePolicy);
+        configuration.LegacyConvergencePolicy,
+        configuration.ExcludeModelManagedDataForExcludedTablesEnabled);
 
     private static SafeMigrationOptionsBuilder Configure(
         Action<SafeMigrationOptionsBuilder> configure

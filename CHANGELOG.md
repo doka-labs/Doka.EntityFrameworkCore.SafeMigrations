@@ -6,6 +6,77 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+## [10.3.0] - 2026-09-06
+
+Prepared a stable minor release for explicit model-managed-data ownership,
+provider-proven lossless legacy column repair, and actionable report evidence.
+The release also closes the typed-literal, ordered-projection, and native JSON
+comparison defects found during complete provider qualification.
+
+These notes do not establish publication. Require the successful stable
+release run, the authorized signed `v10.3.0` tag, and verified public package,
+symbol, GitHub Release, provenance, SBOM, and attestation readback before
+selecting 10.3.0. All three package IDs must be published at the exact same
+version.
+
+### Added
+
+- Add the explicit `ExcludeModelManagedDataForExcludedTables()` scaffolding
+  option for independent Core and derived custom migration lineages. Newly
+  calculated model-managed insert, update, and delete differences for exact
+  relational tables excluded from migrations are removed before enrichment;
+  included tables and existing migration source remain unchanged.
+- Add provider-proven lossless `VARCHAR` widening and live-data-verified
+  narrowing for MySQL, MariaDB, and PostgreSQL under `RepairIfSafe`. Narrowing
+  groups and deduplicates character-length probes, repeats the proof at
+  execution, and fails closed on overlength or concurrent violating data.
+  PostgreSQL treats an unbounded `character varying` source as a narrowing
+  candidate for every bounded target.
+- Add the exact MySQL/MariaDB Boolean repair from `BIT(1)` to `TINYINT(1)` when
+  CLR type, nullability, defaults, provider metadata, and dependencies prove
+  the complete transition. Expression defaults and foreign-key dependencies
+  remain fail-closed.
+- Add report schema version 2 with separate analysis and decision codes,
+  bounded typed facet differences, operational-impact classification, and a
+  typed `SafeMigrationPreflightException` retaining the immutable report.
+
+### Changed
+
+- Extend real EF tooling qualification with independent Core and custom target
+  projects, snapshots, migration assemblies, and history tables while keeping
+  inherited Core structure available to the custom runtime model.
+- Extend 50,000- and 100,000-operation live qualification with matching,
+  missing, accepted widening and narrowing, Boolean repair, and data-blocked
+  narrowing paths while preserving bounded catalog batching and client memory.
+
+### Fixed
+
+- Compare native MySQL, MariaDB, and PostgreSQL JSON model-managed values by
+  document semantics in ensure, update, delete, row-evidence, and postcondition
+  paths. Equivalent formatting and object-member ordering are idempotent, while
+  array order, duplicate elements, JSON `null`, SQL `NULL`, and JSON-like text
+  retain distinct contracts. PostgreSQL `json` is compared through `jsonb`
+  because it has no ordinary equality operator.
+- Select MySQL/MariaDB model-managed literal mappings from both the captured
+  store type and the raw CLR value type. Provider converters now render and
+  parameterize `char`, enum, Char36 Guid, Binary16 Guid, and other typed
+  insert/update/delete values consistently instead of failing during catalog
+  SQL generation.
+- Preserve ordered preflight facts across Doka 10.3.x database-charset
+  operations, whose only effect is the database default for subsequently
+  created objects. The exemption requires an explicit provider proof;
+  PostgreSQL and unknown uses of that EF operation remain fail-closed because
+  it can own broader provider artifacts.
+- Preserve model-managed unique-key evidence when a newly projected table is
+  renamed, so subsequent index decisions use the target table identity without
+  weakening evidence for existing tables.
+
+### Security
+
+- Keep model-managed rows and database values out of ownership and facet
+  diagnostics. Bounded reports identify only catalog metadata, difference
+  categories, deterministic default digests, and stable low-cardinality codes.
+
 ## [10.2.1] - 2026-09-03
 
 Prepared a stable patch release that preserves the 10.2.0 public API,
@@ -715,7 +786,8 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.2.1...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.3.0...HEAD
+[10.3.0]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.2.1...v10.3.0
 [10.2.1]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.2.0...v10.2.1
 [10.2.0]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.1.2...v10.2.0
 [10.1.2]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.1.1...v10.1.2

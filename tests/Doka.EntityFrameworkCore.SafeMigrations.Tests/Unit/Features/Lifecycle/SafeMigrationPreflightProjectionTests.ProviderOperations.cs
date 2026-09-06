@@ -2,6 +2,13 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 public sealed partial class SafeMigrationPreflightProjectionTests
 {
+    private sealed class AlterDatabaseProjection : ISafeMigrationProviderOperationProjection
+    {
+        public bool PreservesExistingTableState(
+            MigrationOperation operation
+        ) => operation is AlterDatabaseOperation;
+    }
+
     [Fact]
     public void ProviderAddColumnProjectsFollowingNonUniqueIndexPrerequisite()
     {
@@ -14,6 +21,272 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         Assert.Equal(SafeMigrationObservedState.Missing, analysis.ObservedState);
         Assert.Equal("projected_missing", analysis.Code);
+    }
+
+    [Fact]
+    public void ProviderAddColumnProjectsItsExactDefinitionForFollowingEnsureColumn()
+    {
+        var projection = new SafeMigrationPreflightProjection();
+        var providerColumn = ProviderColumn(
+            "customer_id",
+            "shipments",
+            isNullable: false,
+            defaultValue: 0);
+
+        projection.ObserveProviderPostcondition(providerColumn);
+
+        var analysis = ProjectColumn(
+            projection,
+            "shipments",
+            SafeMigrationExpectedDefinitionFactory.From(providerColumn),
+            Live(SafeMigrationObservedState.Missing));
+
+        Assert.Equal(SafeMigrationObservedState.Matching, analysis.ObservedState);
+        Assert.Equal("projected_matching", analysis.Code);
+    }
+
+    [Fact]
+    public void ProviderAddColumnDoesNotReuseHistoricalMissingEvidenceForDifferentDefinition()
+    {
+        var projection = new SafeMigrationPreflightProjection();
+        projection.ObserveProviderPostcondition(
+            ProviderColumn("customer_id", "shipments", isNullable: false, defaultValue: 0));
+
+        var analysis = ProjectColumn(
+            projection,
+            "shipments",
+            new ExpectedColumnDefinition(
+                "customer_id",
+                typeof(int),
+                isNullable: true,
+                storeType: "int"),
+            Live(SafeMigrationObservedState.Missing));
+
+        Assert.Equal(SafeMigrationObservedState.Different, analysis.ObservedState);
+        Assert.Equal(SafeMigrationRepairCapability.None, analysis.RepairCapability);
+        Assert.Equal("projected_different", analysis.Code);
+    }
+
+    [Fact]
+    public void ProviderAlterColumnDoesNotReuseHistoricalRepairEvidence()
+    {
+        var projection = new SafeMigrationPreflightProjection();
+        var providerColumn = new AlterColumnOperation
+        {
+            Name = "value",
+            Table = "items",
+            ClrType = typeof(string),
+            ColumnType = "varchar(120)",
+            IsNullable = true,
+            MaxLength = 120,
+        };
+
+        projection.ObserveProviderPostcondition(providerColumn);
+
+        var matching = ProjectColumn(
+            projection,
+            "items",
+            SafeMigrationExpectedDefinitionFactory.From(providerColumn),
+            RepairableVarcharAnalysis());
+
+        var different = ProjectColumn(
+            projection,
+            "items",
+            new ExpectedColumnDefinition(
+                "value",
+                typeof(string),
+                isNullable: true,
+                storeType: "varchar(200)",
+                maxLength: 200),
+            RepairableVarcharAnalysis());
+
+        Assert.Equal(SafeMigrationObservedState.Matching, matching.ObservedState);
+        Assert.Equal(SafeMigrationObservedState.Different, different.ObservedState);
+        Assert.Equal(SafeMigrationRepairCapability.None, different.RepairCapability);
+    }
+
+    [Fact]
+    public void ProviderDropColumnProjectsFollowingEnsureColumnAsMissing()
+    {
+        var projection = new SafeMigrationPreflightProjection();
+        projection.ObserveProviderPostcondition(
+            new DropColumnOperation
+            {
+                Name = "customer_id",
+                Table = "shipments",
+            });
+
+        var analysis = ProjectColumn(
+            projection,
+            "shipments",
+            new ExpectedColumnDefinition(
+                "customer_id",
+                typeof(int),
+                isNullable: true,
+                storeType: "int"),
+            Live(SafeMigrationObservedState.Matching));
+
+        Assert.Equal(SafeMigrationObservedState.Missing, analysis.ObservedState);
+        Assert.Equal("projected_missing", analysis.Code);
+    }
+
+    [Fact]
+    public void ProviderRenameColumnOnExistingTableInvalidatesHistoricalStructure()
+    {
+        var projection = new SafeMigrationPreflightProjection();
+        var providerColumn = ProviderColumn("customer_id", "shipments", isNullable: true);
+
+        projection.ObserveProviderPostcondition(providerColumn);
+        projection.ObserveProviderPostcondition(
+            new RenameColumnOperation
+            {
+                Name = "customer_id",
+                NewName = "account_id",
+                Table = "shipments",
+            });
+
+        var target = SafeMigrationExpectedDefinitionFactory.From(providerColumn);
+        var targetDefinition = new ExpectedColumnDefinition(
+            "account_id",
+            target.ClrType,
+            target.IsNullable,
+            target.StoreType);
+
+        var targetAnalysis = ProjectColumn(
+            projection,
+            "shipments",
+            targetDefinition,
+            Live(SafeMigrationObservedState.Missing));
+
+        var sourceAnalysis = ProjectColumn(
+            projection,
+            "shipments",
+            SafeMigrationExpectedDefinitionFactory.From(providerColumn),
+            Live(SafeMigrationObservedState.Matching));
+
+        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, targetAnalysis.ObservedState);
+        Assert.Equal("projected_structure_state_unknown", targetAnalysis.Code);
+        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, sourceAnalysis.ObservedState);
+        Assert.Equal("projected_structure_state_unknown", sourceAnalysis.Code);
+    }
+
+    [Fact]
+    public void UnsupportedProviderColumnAnnotationBlocksOnlyTheFollowingSafeOperation()
+    {
+        var projection = new SafeMigrationPreflightProjection();
+        var providerColumn = ProviderColumn("customer_id", "shipments", isNullable: true);
+        providerColumn.AddAnnotation("provider:opaque", new object());
+
+        var exception = Record.Exception(() => projection.ObserveProviderPostcondition(providerColumn));
+        var analysis = ProjectColumn(
+            projection,
+            "shipments",
+            new ExpectedColumnDefinition(
+                "customer_id",
+                typeof(int),
+                isNullable: true,
+                storeType: "int"),
+            Live(SafeMigrationObservedState.Matching));
+
+        Assert.Null(exception);
+        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
+        Assert.Equal("projected_structure_state_unknown", analysis.Code);
+    }
+
+    [Fact]
+    public void ProviderDropTableProjectsFollowingEnsureTableAsMissing()
+    {
+        var projection = new SafeMigrationPreflightProjection();
+        var definition = new ExpectedTableDefinition("items", [Column("id")]);
+
+        projection.ObserveProviderPostcondition(new DropTableOperation { Name = "items", });
+
+        var analysis = projection.Project(
+            new SafeMigrationOperation(
+                new EnsureTableIntent(definition, SafeMigrationTableMode.StrictDefinition),
+                SafeMigrationPolicy.ThrowIfDifferent),
+            Live(SafeMigrationObservedState.Matching));
+
+        Assert.Equal(SafeMigrationObservedState.Missing, analysis.ObservedState);
+        Assert.Equal("projected_missing", analysis.Code);
+    }
+
+    [Fact]
+    public void ProviderCreateTableProjectsItsExactDefinitionForFollowingStrictEnsureTable()
+    {
+        var projection = new SafeMigrationPreflightProjection();
+        var createTable = new CreateTableOperation { Name = "items", };
+        createTable.Columns.Add(ProviderColumn("id", "items", isNullable: false, defaultValue: 0));
+
+        projection.ObserveProviderPostcondition(createTable);
+
+        var analysis = projection.Project(
+            new SafeMigrationOperation(
+                new EnsureTableIntent(
+                    SafeMigrationExpectedDefinitionFactory.From(createTable),
+                    SafeMigrationTableMode.StrictDefinition),
+                SafeMigrationPolicy.ThrowIfDifferent),
+            Live(SafeMigrationObservedState.Missing));
+
+        Assert.Equal(SafeMigrationObservedState.Matching, analysis.ObservedState);
+        Assert.Equal("projected_matching", analysis.Code);
+    }
+
+    [Fact]
+    public void ProviderAlterTableRetainsExistenceButInvalidatesHistoricalStrictShape()
+    {
+        var projection = new SafeMigrationPreflightProjection();
+        var definition = new ExpectedTableDefinition("items", [Column("id")]);
+
+        projection.ObserveProviderPostcondition(
+            new AlterTableOperation
+            {
+                Name = "items",
+                Comment = "updated",
+            });
+
+        var strict = projection.Project(
+            new SafeMigrationOperation(
+                new EnsureTableIntent(definition, SafeMigrationTableMode.StrictDefinition),
+                SafeMigrationPolicy.ThrowIfDifferent),
+            Live(SafeMigrationObservedState.Matching));
+
+        var convergence = projection.Project(
+            new SafeMigrationOperation(
+                new EnsureTableIntent(definition, SafeMigrationTableMode.ConvergenceContainer),
+                SafeMigrationPolicy.ThrowIfDifferent),
+            Live(SafeMigrationObservedState.Different));
+
+        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, strict.ObservedState);
+        Assert.Equal("projected_structure_state_unknown", strict.Code);
+        Assert.Equal(SafeMigrationObservedState.Matching, convergence.ObservedState);
+        Assert.Equal("projected_matching", convergence.Code);
+    }
+
+    [Fact]
+    public void ProviderDropColumnDoesNotInvalidateAnIndependentProjectedTable()
+    {
+        var projection = new SafeMigrationPreflightProjection();
+        var independent = new ExpectedTableDefinition("audit_entries", [Column("id")]);
+
+        Apply(
+            projection,
+            new EnsureTableIntent(independent, SafeMigrationTableMode.StrictDefinition));
+        projection.ObserveProviderPostcondition(
+            new DropColumnOperation
+            {
+                Name = "customer_id",
+                Table = "shipments",
+            });
+
+        var analysis = projection.Project(
+            new SafeMigrationOperation(
+                new EnsureTableIntent(independent, SafeMigrationTableMode.StrictDefinition),
+                SafeMigrationPolicy.ThrowIfDifferent),
+            Live(SafeMigrationObservedState.Different));
+
+        Assert.Equal(SafeMigrationObservedState.Matching, analysis.ObservedState);
+        Assert.Equal("projected_matching", analysis.Code);
     }
 
     [Fact]
@@ -50,9 +323,66 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         var indexAnalysis = ProjectIndex(projection, "shipments", "customer_id", unique: false);
 
-        Assert.Same(liveTable, tableAnalysis);
+        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, tableAnalysis.ObservedState);
+        Assert.Equal("projected_structure_state_unknown", tableAnalysis.Code);
         Assert.Equal(SafeMigrationObservedState.Missing, indexAnalysis.ObservedState);
         Assert.Equal("projected_missing", indexAnalysis.Code);
+    }
+
+    [Fact]
+    public void ProviderAlterDatabasePreservesExistingTableScopedEvidence()
+    {
+        var projection = new SafeMigrationPreflightProjection(new AlterDatabaseProjection());
+        var definition = new ExpectedTableDefinition("items", [Column("id")]);
+
+        Apply(
+            projection,
+            new EnsureTableIntent(definition, SafeMigrationTableMode.StrictDefinition));
+        projection.ObserveProviderPostcondition(new AlterDatabaseOperation());
+
+        var analysis = projection.Project(
+            new SafeMigrationOperation(
+                new EnsureTableIntent(definition, SafeMigrationTableMode.StrictDefinition),
+                SafeMigrationPolicy.ThrowIfDifferent),
+            Live(SafeMigrationObservedState.Different));
+
+        Assert.Equal(SafeMigrationObservedState.Matching, analysis.ObservedState);
+        Assert.Equal("projected_matching", analysis.Code);
+    }
+
+    [Fact]
+    public void ProviderAlterDatabaseAllowsFollowingSafeTableAndIndexProjection()
+    {
+        var projection = new SafeMigrationPreflightProjection(new AlterDatabaseProjection());
+        var definition = new ExpectedTableDefinition("artifacts", [Column("id")]);
+
+        projection.ObserveProviderPostcondition(new AlterDatabaseOperation());
+
+        Apply(
+            projection,
+            new EnsureTableIntent(definition, SafeMigrationTableMode.StrictDefinition));
+        var analysis = ProjectIndex(projection, "artifacts", "id", unique: false);
+
+        Assert.Equal(SafeMigrationObservedState.Missing, analysis.ObservedState);
+        Assert.Equal("projected_missing", analysis.Code);
+    }
+
+    [Fact]
+    public void AlterDatabaseWithoutProviderProofInvalidatesAllPrerequisiteFacts()
+    {
+        var projection = new SafeMigrationPreflightProjection();
+
+        projection.ObserveProviderPostcondition(new AlterDatabaseOperation());
+
+        var analysis = ProjectIndex(
+            projection,
+            "artifacts",
+            "id",
+            unique: false,
+            Live(SafeMigrationObservedState.Missing));
+
+        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
+        Assert.Equal("projected_structure_state_unknown", analysis.Code);
     }
 
     [Fact]
@@ -70,7 +400,8 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var live = Live(SafeMigrationObservedState.PrerequisiteMissing);
         var analysis = ProjectIndex(projection, "shipments", "customer_id", unique: false, live);
 
-        Assert.Same(live, analysis);
+        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
+        Assert.Equal("projected_structure_state_unknown", analysis.Code);
     }
 
     [Fact]
@@ -91,7 +422,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             Live(SafeMigrationObservedState.Missing));
 
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
-        Assert.Equal("projected_data_state_unknown", analysis.Code);
+        Assert.Equal("projected_structure_state_unknown", analysis.Code);
     }
 
     [Fact]
@@ -465,11 +796,12 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var live = Live(SafeMigrationObservedState.PrerequisiteMissing);
         var analysis = ProjectIndex(projection, "shipments", "customer_id", unique: false, live);
 
-        Assert.Same(live, analysis);
+        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
+        Assert.Equal("projected_structure_state_unknown", analysis.Code);
     }
 
     [Fact]
-    public void ProviderRenameSequenceMovesOnlyTheProvenPrerequisite()
+    public void ProviderRenameSequenceDoesNotReuseHistoricalPrerequisites()
     {
         var projection = new SafeMigrationPreflightProjection();
         projection.ObserveProviderPostcondition(
@@ -489,11 +821,12 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             });
 
         var projected = ProjectIndex(projection, "deliveries", "account_id", unique: false);
-        var staleLive = Live(SafeMigrationObservedState.PrerequisiteMissing);
-        var stale = ProjectIndex(projection, "shipments", "customer_id", unique: false, staleLive);
+        var stale = ProjectIndex(projection, "shipments", "customer_id", unique: false);
 
-        Assert.Equal(SafeMigrationObservedState.Missing, projected.ObservedState);
-        Assert.Same(staleLive, stale);
+        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, projected.ObservedState);
+        Assert.Equal("projected_structure_state_unknown", projected.Code);
+        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, stale.ObservedState);
+        Assert.Equal("projected_structure_state_unknown", stale.Code);
     }
 
     [Fact]
@@ -647,7 +980,8 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         var analysis = ProjectIndex(projection, "shipments", "customer_id", unique: false, live);
 
-        Assert.Same(live, analysis);
+        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
+        Assert.Equal("projected_structure_state_unknown", analysis.Code);
     }
 
     [Theory]
@@ -749,7 +1083,8 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         var analysis = ProjectIndex(projection, "shipments", "customer_id", unique: false, live);
 
-        Assert.Same(live, analysis);
+        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
+        Assert.Equal("projected_structure_state_unknown", analysis.Code);
     }
 
     private static AddColumnOperation ProviderColumn(
@@ -787,5 +1122,19 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             SafeMigrationPolicy.ThrowIfDifferent);
 
         return projection.Project(operation, live ?? Live(SafeMigrationObservedState.PrerequisiteMissing));
+    }
+
+    private static SafeMigrationProviderAnalysis ProjectColumn(
+        SafeMigrationPreflightProjection projection,
+        string table,
+        ExpectedColumnDefinition definition,
+        SafeMigrationProviderAnalysis live
+    )
+    {
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(table, definition),
+            SafeMigrationPolicy.RepairIfSafe);
+
+        return projection.Project(operation, live);
     }
 }

@@ -7,6 +7,14 @@ internal sealed partial class SafeMigrationPreflightProjection
         SafeMigrationProviderAnalysis liveAnalysis
     )
     {
+        if (IsProjectedTableStructureUnknown(intent.Definition.Table, intent.Definition.Schema)
+            || IsProjectedTableStructureUnknown(
+                intent.Definition.PrincipalTable,
+                intent.Definition.PrincipalSchema))
+        {
+            return StructureStateUnknown();
+        }
+
         if (!TryGet(intent.Definition.Table, intent.Definition.Schema, out var table))
         {
             return InvalidateForeignKeyDataDependentMissing(intent, liveAnalysis);
@@ -43,12 +51,14 @@ internal sealed partial class SafeMigrationPreflightProjection
     private SafeMigrationProviderAnalysis Project(
         DropForeignKeyIntent intent,
         SafeMigrationProviderAnalysis liveAnalysis
-    ) => TryGet(intent.Table, intent.Schema, out var table)
-        ? Analysis(
-            table.ForeignKeys.ContainsKey(intent.Name)
-                ? SafeMigrationObservedState.Matching
-                : SafeMigrationObservedState.Missing)
-        : liveAnalysis;
+    ) => IsProjectedTableStructureUnknown(intent.Table, intent.Schema)
+        ? StructureStateUnknown()
+        : TryGet(intent.Table, intent.Schema, out var table)
+            ? Analysis(
+                table.ForeignKeys.ContainsKey(intent.Name)
+                    ? SafeMigrationObservedState.Matching
+                    : SafeMigrationObservedState.Missing)
+            : liveAnalysis;
 
     private void Observe(
         EnsureForeignKeyIntent intent,

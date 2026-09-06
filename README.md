@@ -43,11 +43,11 @@ when that matrix executes. The exact successful run, not this table, is release
 evidence. See [Support and qualification](docs/support-and-qualification.md).
 
 The initial complete stable delivery is 10.0.0. The latest confirmed published
-release is 10.2.0. This source is prepared for stable 10.2.1: scaffolded
-model-managed ensure, update, and delete calls now contain exactly one statement
-terminator as documented in the [release notes](CHANGELOG.md). Only a successful
-release run and verified public packages establish 10.2.1 availability or
-qualification.
+release is 10.2.1. This source is prepared for stable 10.3.0 with explicit
+Core/custom model-managed-data ownership, provider-proven lossless column
+repair, report schema version 2, and semantic native JSON comparison as
+documented in the [changelog](CHANGELOG.md). Only a successful release run and
+verified public packages establish 10.3.0 availability or qualification.
 
 ## Installation
 
@@ -58,14 +58,14 @@ published release and all three NuGet package pages before installation; source
 or changelog entries alone do not establish package availability.
 
 ```bash
-package_version='10.2.1'
+package_version='10.3.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.MySql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.2.1'
+package_version='10.3.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version "$package_version"
 ```
 
@@ -356,6 +356,9 @@ no-op. An update or delete proceeds only while the complete source-frozen row
 still matches; otherwise it rejects rather than overwriting external changes.
 Delete also rejects unmodeled dependent-row effects. Every mutation verifies
 its target postcondition, and a second successful execution is a no-op.
+Captured values retain their CLR type and store type through provider
+conversion, so converter-backed Guid formats, enums, and `char(1)` values use
+the same relational mapping contract during preflight and guarded execution.
 
 The generated source contains the values by design. Model snapshots and SQL
 scripts already contain the same model-managed data. Do not place secrets,
@@ -367,6 +370,30 @@ correct an already applied migration only through a new forward migration.
 
 See [Model-managed data authoring](docs/migration-authoring.md#model-managed-data-from-hasdata)
 for the generated ensure, update, and delete source and conflict behavior.
+
+### Independent Core and custom migration ownership
+
+A derived custom context can retain shared Core entities for runtime queries and
+relationships while another migration lineage owns their tables. Mark those
+tables as excluded from migrations, then opt in once on the custom context:
+
+```csharp
+options.UseMySqlSafeMigrations(safeMigrations =>
+{
+    safeMigrations.ExcludeModelManagedDataForExcludedTables();
+});
+```
+
+The PostgreSQL registration exposes the same option. It suppresses only newly
+calculated EF model-managed insert, update, and delete differences for exact
+relational tables that the relevant source or target model excludes from
+migrations. It does not remove entities from the runtime model, reinterpret an
+existing migration, or infer ownership from inheritance or naming. The default
+remains fail-closed. Design-time and runtime configuration must agree.
+
+See [Model-managed-data ownership](docs/model-managed-data-ownership.md) for the
+independent context, migration project, snapshot, assembly, history-table, and
+EF CLI contract.
 
 ## Policies
 
@@ -391,15 +418,32 @@ and emits one existence-only table-container operation followed by granular
 operations for every owned column and constraint. Scaffolded indexes follow as
 their own safe operations. Those children use the policy written into the
 generated call; the default is `ThrowIfDifferent`. With explicit
-`RepairIfSafe`, an ordinary existing column is repaired only when its resolved
-store type, collation, generated/identity state, and row-version state already
-match. Doka 10.3.0's typed metadata must recognize every provider annotation;
-unknown, malformed, contradictory, or unsupported metadata rejects. The
-allowlist is limited to nullability, default, and comment. Tightening
-nullability is `DataBlocked` when any row contains `NULL`. Type, collation,
-computed/generated, identity, row-version, and unsupported provider-metadata
-drift rejects without mutation. The table container alone never hides missing
-children.
+`RepairIfSafe`, an ordinary existing column may also use a provider-proven,
+lossless `VARCHAR` widening or data-verified narrowing. MySQL and MariaDB may
+additionally repair the exact Boolean transition `BIT(1) -> TINYINT(1)`.
+PostgreSQL independently qualifies `character varying` widening and narrowing;
+the Boolean transition does not apply there. Narrowing performs a grouped live
+character-length scan and repeats its proof at execution. One overlength value,
+an incomplete proof, or concurrent violating data stops without truncation.
+SafeMigrations separately reports that accepted column DDL may rewrite a table;
+data safety is not an online-DDL promise.
+
+All other pre-existing requirements remain: the resolved character family,
+collation, generated/identity state, row-version state, provider metadata, and
+dependent indexes or constraints must be fully understood and compatible. A
+MySQL/MariaDB `VARCHAR` column on either side of a foreign key remains blocked
+because the required coupled type transition is outside a single-column repair.
+PostgreSQL preserves compatible ordinary foreign keys across its independently
+qualified length change. Doka's exact Boolean conversion accepts only absent,
+null, false, or true literal defaults. An expression default or a foreign-key
+dependency keeps the Boolean transition blocked because a single-column repair
+cannot prove that separate behavioral or coupled-type contract.
+Doka 10.3.0's typed metadata must recognize every MySQL/MariaDB annotation.
+Unknown, malformed, contradictory, or unsupported metadata rejects. Existing
+`NULL` rows make a `NOT NULL` repair `DataBlocked`. Other type-family,
+collation, computed/generated, identity, row-version, and unsupported
+provider-metadata drift rejects without mutation. The table container alone
+never hides missing children.
 
 `ExpectedTableDefinition` and `ConvergeTable` remain available for advanced
 hand-authored contracts, for example when a reviewed migration needs a policy
@@ -476,12 +520,21 @@ binds each contract's fingerprint to the same deployment artifact and target.
 
 Reports include provider and engine identity, model and operation-contract
 SHA-256 fingerprints, ordered assessments, preserved unexpected objects, and
-stable codes. The contract fingerprint covers safe intents, definitions,
-policies, operation annotations, and order; ordinary provider operations
-contribute only their CLR type, not their SQL or other properties. Retain the
-immutable artifact digest and independent review for those operations.
-Serialize with `SafeMigrationReportJson`; the package includes
-`schemas/safe-migration-run-report-v1.schema.json`.
+stable codes. Report schema version 2 separates provider `AnalysisCode` from
+the policy `DecisionCode`, carries bounded typed facet differences, and states
+the known `OperationalImpact`. Detailed evidence remains in the report, never
+in metric labels, and model-managed values remain redacted. A blocked preflight
+can be raised as `SafeMigrationPreflightException` through
+`report.ThrowIfBlocked()` while retaining the complete immutable report.
+
+The contract fingerprint covers safe intents, definitions, policies, operation
+annotations, and order; ordinary provider operations contribute only their CLR
+type, not their SQL or other properties. Retain the immutable artifact digest
+and independent review for those operations. Serialize with
+`SafeMigrationReportJson`; the package includes the current
+[`safe-migration-run-report-v2` schema](schemas/safe-migration-run-report-v2.schema.json).
+The [version 1 schema](schemas/safe-migration-run-report-v1.schema.json) remains
+available for readers of previously persisted reports.
 
 Do not encode a preflight-only operation inside `Migration.Up`. EF would record
 the migration as applied after successful command execution even when the

@@ -60,6 +60,18 @@ exactly paired model-managed data into existing slice entry points. Provider
 remains in each provider's `Columns` slice; scaffolding does not introduce a
 runtime feature registry or a fourth package.
 
+Excluded-table model-managed-data ownership remains in `Scaffolding` because
+it filters provider model differences before any feature slice owns or enriches
+the retained operations. The filter consumes only provider-neutral relational
+metadata and the immutable configuration snapshot. It does not introduce a
+provider-to-provider dependency or a second model-configuration system.
+
+Lossless length repair remains in each provider's `Columns` slice. Core owns
+the report, operational-impact, facet-difference, planner, and ordered
+projection contracts; adapters independently own catalog proof, grouped value
+probes, runtime race guards, and DDL rendering. This keeps common semantics
+shared without treating MySQL behavior as PostgreSQL evidence.
+
 ## Slice ownership
 
 A feature slice owns all behavior specific to its operation family:

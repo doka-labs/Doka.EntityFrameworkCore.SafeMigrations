@@ -3,6 +3,93 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 public sealed partial class SafeMigrationPreflightProjectionTests
 {
     [Fact]
+    public void MatchingConvergenceContainerPreservesFollowingLiveStrictAnalysis()
+    {
+        var projection = new SafeMigrationPreflightProjection();
+        var table = new ExpectedTableDefinition("items", [Column("id")]);
+
+        ObserveAccepted(
+            projection,
+            new EnsureTableIntent(table, SafeMigrationTableMode.ConvergenceContainer),
+            SafeMigrationObservedState.Matching);
+
+        var live = Live(SafeMigrationObservedState.Different);
+        var analysis = projection.Project(
+            new SafeMigrationOperation(
+                new EnsureTableIntent(table, SafeMigrationTableMode.StrictDefinition),
+                SafeMigrationPolicy.ThrowIfDifferent),
+            live);
+
+        Assert.Same(live, analysis);
+        Assert.Equal(SafeMigrationObservedState.Different, analysis.ObservedState);
+    }
+
+    [Fact]
+    public void AppliedUnexpectedColumnAfterConvergenceContainerProvesFollowingStrictDifference()
+    {
+        var projection = new SafeMigrationPreflightProjection();
+        var table = new ExpectedTableDefinition("items", [Column("id")]);
+
+        ObserveAccepted(
+            projection,
+            new EnsureTableIntent(table, SafeMigrationTableMode.ConvergenceContainer),
+            SafeMigrationObservedState.Matching);
+        ObserveAccepted(
+            projection,
+            new EnsureColumnIntent("items", Column("added")),
+            SafeMigrationObservedState.Missing);
+
+        var analysis = projection.Project(
+            new SafeMigrationOperation(
+                new EnsureTableIntent(table, SafeMigrationTableMode.StrictDefinition),
+                SafeMigrationPolicy.ThrowIfDifferent),
+            Live(SafeMigrationObservedState.Matching));
+
+        Assert.Equal(SafeMigrationObservedState.Different, analysis.ObservedState);
+        Assert.Equal("projected_different", analysis.Code);
+    }
+
+    [Fact]
+    public void RepairedExpectedColumnAfterConvergenceContainerInvalidatesFollowingLiveStrictAnalysis()
+    {
+        var projection = new SafeMigrationPreflightProjection();
+        var id = Column("id");
+        var table = new ExpectedTableDefinition("items", [id]);
+
+        ObserveAccepted(
+            projection,
+            new EnsureTableIntent(table, SafeMigrationTableMode.ConvergenceContainer),
+            SafeMigrationObservedState.Matching);
+
+        var repair = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", id),
+            SafeMigrationPolicy.RepairIfSafe);
+
+        var repairAnalysis = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.Safe,
+            postconditionSatisfied: false,
+            "test_repair");
+
+        var repairDecision = SafeMigrationDecisionPlanner.Plan(
+            repair.Intent.Kind,
+            repairAnalysis.ObservedState,
+            repair.Policy,
+            repairAnalysis.RepairCapability);
+
+        projection.Observe(repair, repairAnalysis, repairDecision);
+
+        var analysis = projection.Project(
+            new SafeMigrationOperation(
+                new EnsureTableIntent(table, SafeMigrationTableMode.StrictDefinition),
+                SafeMigrationPolicy.ThrowIfDifferent),
+            Live(SafeMigrationObservedState.Different));
+
+        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
+        Assert.Equal("projected_structure_state_unknown", analysis.Code);
+    }
+
+    [Fact]
     public void ProjectionAllowsUniqueIndexAfterNullableColumnConvergence()
     {
         var projection = new SafeMigrationPreflightProjection();
@@ -365,6 +452,46 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                     ["parent_id"],
                     "canonical_parent",
                     ["canonical_id"])));
+    }
+
+    [Fact]
+    public void ExistingTableColumnRenameInvalidatesPreBatchStructureEvidence()
+    {
+        var projection = new SafeMigrationPreflightProjection();
+        ObserveAccepted(
+            projection,
+            new RenameColumnIntent("legacy_id", "items", "id"),
+            SafeMigrationObservedState.Matching);
+
+        var analysis = projection.Project(
+            new SafeMigrationOperation(
+                new EnsureColumnIntent("items", Column("id")),
+                SafeMigrationPolicy.ThrowIfDifferent),
+            Live(SafeMigrationObservedState.Matching));
+
+        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
+        Assert.Equal("projected_structure_state_unknown", analysis.Code);
+    }
+
+    [Fact]
+    public void ExistingTableRenameInvalidatesPreBatchStructureEvidence()
+    {
+        var projection = new SafeMigrationPreflightProjection();
+        ObserveAccepted(
+            projection,
+            new RenameTableIntent("legacy_items", "items"),
+            SafeMigrationObservedState.Matching);
+
+        var analysis = projection.Project(
+            new SafeMigrationOperation(
+                new EnsureTableIntent(
+                    new ExpectedTableDefinition("items", [Column("id")]),
+                    SafeMigrationTableMode.StrictDefinition),
+                SafeMigrationPolicy.ThrowIfDifferent),
+            Live(SafeMigrationObservedState.Matching));
+
+        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
+        Assert.Equal("projected_structure_state_unknown", analysis.Code);
     }
 
     [Fact]

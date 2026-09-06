@@ -10,10 +10,14 @@
              Link="Infrastructure\LargeMigrationStressContract.cs" />
     <Compile Include="..\Shared\ModelManagedDataLargeExecutionContract.cs"
              Link="Infrastructure\ModelManagedDataLargeExecutionContract.cs" />
+    <Compile Include="..\Shared\SafeMigrationAttributedEnumValueConverter.cs"
+             Link="Infrastructure\SafeMigrationAttributedEnumValueConverter.cs" />
     <Compile Include="..\Shared\SafeMigrationSqlExpressionPropertyCases.cs"
              Link="Infrastructure\SafeMigrationSqlExpressionPropertyCases.cs" />
     <ProjectReference Include="..\..\src\Doka.EntityFrameworkCore.SafeMigrations\Doka.EntityFrameworkCore.SafeMigrations.csproj" />
     <ProjectReference Include="..\..\src\Doka.EntityFrameworkCore.SafeMigrations.PostgreSql\Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.csproj" />
+    <ProjectReference Include="..\..\eng\ef-ownership\Core\Doka.EntityFrameworkCore.SafeMigrations.EfOwnership.Core.csproj" />
+    <ProjectReference Include="..\..\eng\ef-ownership\Custom\Doka.EntityFrameworkCore.SafeMigrations.EfOwnership.Custom.csproj" />
     <PackageReference Include="FsCheck.Xunit" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
       <PrivateAssets>all</PrivateAssets>

@@ -34,6 +34,10 @@
   <Folder Name="/eng/package-consumer/PostgreSQL/">
     <Project Path="eng/package-consumer/PostgreSql/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.PackageConsumer.csproj" />
   </Folder>
+  <Folder Name="/eng/ef-ownership/">
+    <Project Path="eng/ef-ownership/Core/Doka.EntityFrameworkCore.SafeMigrations.EfOwnership.Core.csproj" />
+    <Project Path="eng/ef-ownership/Custom/Doka.EntityFrameworkCore.SafeMigrations.EfOwnership.Custom.csproj" />
+  </Folder>
   <Folder Name="/benchmarks/Core/">
     <Project Path="benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks.csproj" />
   </Folder>

@@ -275,7 +275,8 @@ public static class PostgreSqlSafeMigrationOptionsBuilderExtensions
         Type baselineGeneratorType,
         Type? canonicalContextType,
         SafeMigrationScaffoldingMode scaffoldingMode,
-        SafeMigrationPolicy legacyConvergencePolicy = SafeMigrationPolicy.ThrowIfDifferent
+        SafeMigrationPolicy legacyConvergencePolicy = SafeMigrationPolicy.ThrowIfDifferent,
+        bool excludeModelManagedDataForExcludedTables = false
     )
     {
         ((IDbContextOptionsBuilderInfrastructure)optionsBuilder).AddOrUpdateExtension(
@@ -283,7 +284,8 @@ public static class PostgreSqlSafeMigrationOptionsBuilderExtensions
                 baselineGeneratorType,
                 canonicalContextType,
                 scaffoldingMode,
-                legacyConvergencePolicy));
+                legacyConvergencePolicy,
+                excludeModelManagedDataForExcludedTables));
     }
 
     private static void AddOptionsExtension(
@@ -296,7 +298,8 @@ public static class PostgreSqlSafeMigrationOptionsBuilderExtensions
         baselineGeneratorType,
         canonicalContextType,
         configuration.Mode,
-        configuration.LegacyConvergencePolicy);
+        configuration.LegacyConvergencePolicy,
+        configuration.ExcludeModelManagedDataForExcludedTablesEnabled);
 
     private static SafeMigrationOptionsBuilder Configure(
         Action<SafeMigrationOptionsBuilder> configure

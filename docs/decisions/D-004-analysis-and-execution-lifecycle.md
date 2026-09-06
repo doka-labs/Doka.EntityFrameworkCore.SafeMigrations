@@ -68,6 +68,12 @@ evidence. Provider-owned effects invalidate complete projected shapes that may
 have become stale; an unrecognized operation invalidates all accumulated
 projection facts rather than carrying an unknown effect forward.
 
+A provider adapter may retain existing table-scoped facts only through an
+internal proof for one versioned operation contract. Doka 10.3.x supplies that
+proof for its database-character-set `AlterDatabaseOperation`. Provider-neutral
+Core does not infer the same behavior for Npgsql, which uses the operation for
+additional database artifacts, or for an unknown provider.
+
 The runner opens and closes a connection only when it owns that opening.
 Provider analysis scopes own resources they create; caller-owned transactions
 remain caller-owned. Cancellation is propagated to database operations and
@@ -199,6 +205,9 @@ installations.
 - 2026-09-02: D-009 amended the lifecycle with guarded compare-and-swap
   model-managed transitions and target postconditions while retaining EF
   transaction ownership and external write-fence requirements.
+- 2026-09-05: Restricted database-operation projection to an explicit provider
+  proof. Doka 10.3.x retains existing table-scoped facts across its character-
+  set default; PostgreSQL and unknown providers remain fail-closed.
 
 ### Implementation References
 
@@ -219,3 +228,5 @@ installations.
 - [MariaDB implicit-commit statements](https://mariadb.com/docs/server/reference/sql-statements/transactions/sql-statements-that-cause-an-implicit-commit) (primary source; retrieved 2026-08-26)
 - [PostgreSQL 18 transaction isolation](https://www.postgresql.org/docs/18/transaction-iso.html) (primary source; retrieved 2026-08-26)
 - [Doka 10.2.0 scoped-command cleanup contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.2.0/docs/migration-operation-handlers.md) (primary source; retrieved 2026-08-31)
+- [Doka 10.3.0 AlterDatabase generator](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.3.0/src/Doka.EntityFrameworkCore.MySql/Internal/Migrations/MySqlMigrationsSqlGenerator.Tables.cs) (primary source; retrieved 2026-09-05)
+- [Npgsql 10.0.3 migrations generator](https://github.com/npgsql/efcore.pg/blob/v10.0.3/src/EFCore.PG/Migrations/NpgsqlMigrationsSqlGenerator.cs) (primary source; retrieved 2026-09-05)

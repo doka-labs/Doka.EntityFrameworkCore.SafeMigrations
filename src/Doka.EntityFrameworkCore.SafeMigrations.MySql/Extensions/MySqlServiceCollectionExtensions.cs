@@ -47,6 +47,7 @@ public static class MySqlServiceCollectionExtensions
         services.TryAddScoped<ISafeMigrationRunner, SafeMigrationRunner>();
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IInterceptor, MySqlSafeMigrationConnectionInterceptor>());
         services.Replace(ServiceDescriptor.Scoped<IMigrationsAssembly, SafeMigrationMigrationsAssembly>());
+        SafeMigrationServiceCollectionDecorator.DecorateMigrationsModelDiffer(services);
 
         return services;
     }

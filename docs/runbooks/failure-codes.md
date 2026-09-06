@@ -8,8 +8,15 @@ contract fingerprints, and the protected deployment record.
 ## Which code appears in a report
 
 Provider analysis, the public decision planner, the run report, and database
-errors are distinct contracts. `SafeMigrationAssessment.Code` is selected by
-the runner as follows; do not treat all codes below as interchangeable:
+errors are distinct contracts. Report schema version 2 exposes all three
+layers explicitly:
+
+- `AnalysisCode` is the provider observation or capability result;
+- `DecisionCode` is the provider-neutral planner result; and
+- `Code` is the backward-compatible aggregate code selected for the assessment.
+
+`SafeMigrationAssessment.Code` is selected by the runner as follows; do not
+treat all codes below as interchangeable:
 
 | Assessment | Code source |
 | --- | --- |
@@ -43,6 +50,12 @@ returns a separate `SafeMigrationDecision.Code`.
 `RejectUnsupported`, `RejectDifferent`, `RejectDataBlocked`, and
 `RejectPrerequisiteMissing` are the corresponding `SafeMigrationAction`
 values.
+
+`varchar_narrowing_value_too_long` is an `AnalysisCode` for a specific
+`DataBlocked` result. At least one non-null value exceeds the target character
+length. The report deliberately contains no value, key, or fragment. Correct
+the data through an audited transformation or retain a compatible target
+length, then rerun preflight. Never enable provider truncation or `IGNORE`.
 
 `unsupported` is the planner's generic rejection; a blocked preflight report
 retains the analyzer's more specific reason instead. `postcondition_failed` is
@@ -91,6 +104,7 @@ data/prerequisite result uses its planner rejection code.
 | `projected_matching` | Preflight projection observes a match after earlier accepted operations virtually. |
 | `projected_different` | Preflight projection observes a conflict between ordered operations. |
 | `projected_data_state_unknown` | A typed EF data operation preserved structural facts but invalidated a projected or live pre-batch row-safety proof. The public blocked assessment uses `prerequisite_missing`; do not execute the dependent operation without a separately provable post-DML state. |
+| `projected_structure_state_unknown` | An earlier provider-owned operation used opaque SQL, changed structure with provider-dependent side effects, or carried a column facet that cannot be captured losslessly. Pre-batch catalog evidence is stale for the affected scope, so following SafeMigrations operations are rejected with `prerequisite_missing` instead of guessing the postcondition. Split the migration at that operation or express the transition with supported safe operations. |
 | `postcondition_superseded` | A later safe operation is the final writer for the same exact catalog resource. The earlier ordered assessment remains visible and has a satisfied effective postcondition; provider-owned operations can never produce this code. |
 | `provider_owned_not_analyzed` | Ordinary EF/provider operation is present and is not classified as safe. A recognized deterministic table/column postcondition may be projected conditionally into a later safe prerequisite. Typed insert/update/delete-data operations retain those structural facts but invalidate data-safety proofs; the provider operation itself remains unanalyzed. |
 
@@ -113,6 +127,45 @@ BTREE ensure to `projected_missing`. It cannot override
 `data_blocked`, `prerequisite_missing`, or unrelated exact-name index drift.
 If replacement preflight blocks, do not execute the preceding
 ordinary drop independently; correct the target definition or live data first.
+
+## Facet differences and operational impact
+
+Schema-version-2 assessments may contain up to 16 bounded typed differences.
+Use these to identify the exact mismatch before changing a migration:
+
+Ordered FK or index name lists longer than 256 characters appear as labelled
+`sha256:` values on MySQL/MariaDB and `md5:` values on PostgreSQL. They are
+bounded deterministic diagnostic digests only. Compare them to confirm drift,
+then use the migration definition and protected catalog query to inspect the
+complete ordered identities.
+
+| Facet | Meaning |
+| --- | --- |
+| `column_store_type` | Live and target canonical store types differ. |
+| `column_max_length` | Live and target character limits differ. |
+| `column_nullability` | Live and target nullability differ. |
+| `column_collation` | Live and target effective collations differ. |
+| `column_default_kind` | Default categories differ without rendering arbitrary SQL. |
+| `column_default_digest` | Default content differs; compare only the privacy-safe digest. |
+| `column_value_generation` | Generated, identity, row-version, or provider generation differs. |
+| `foreign_key_delete_behavior` | Referential delete actions differ. |
+| `foreign_key_update_behavior` | Referential update actions differ. |
+| `index_key_order` | Ordered index key identities differ. |
+| `index_prefix_length` | MySQL/MariaDB key-prefix lengths differ. |
+| `model_managed_row_content` | A protected managed row differs; keys and values are redacted. |
+
+`OperationalImpact` is independent of the policy decision. In particular,
+`TableRewritePossible` means the accepted transition is lossless but may copy
+or rebuild a table, rebuild indexes, or wait for a lock. It is not evidence of
+online or zero-downtime DDL. `Unknown` means SafeMigrations can prove the data
+transition but cannot prove a narrower execution shape for the selected server;
+an accepted repair is never reported as `NotApplicable`.
+
+`SafeMigrationPreflightException` is the optional exception-oriented host
+boundary. Call `report.ThrowIfBlocked()` after analysis. The exception message
+contains only a bounded deterministic first-conflict summary; its `Report`
+property retains the complete immutable assessment set. Do not log or publish
+that complete report without applying its protected-evidence controls.
 
 ## Accepting planner decision codes
 

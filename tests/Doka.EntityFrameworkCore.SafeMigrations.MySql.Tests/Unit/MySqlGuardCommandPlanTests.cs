@@ -146,9 +146,9 @@ public sealed class MySqlGuardCommandPlanTests
 
         var payloads = DecodeHexPayloads(command.CommandText);
 
-        Assert.Equal(4, Count(command.CommandText, "PREPARE doka_sm_statement FROM"));
-        Assert.Equal(3, Count(command.CommandText, "EXECUTE doka_sm_statement"));
-        Assert.Equal(3, Count(command.CommandText, "DEALLOCATE PREPARE doka_sm_statement"));
+        Assert.Equal(5, Count(command.CommandText, "PREPARE doka_sm_statement FROM"));
+        Assert.Equal(4, Count(command.CommandText, "EXECUTE doka_sm_statement"));
+        Assert.Equal(4, Count(command.CommandText, "DEALLOCATE PREPARE doka_sm_statement"));
         Assert.Contains("WHEN @doka_sm_action = 'apply'", command.CommandText, StringComparison.Ordinal);
         Assert.Contains("WHEN @doka_sm_action = 'repair'", command.CommandText, StringComparison.Ordinal);
         Assert.Contains("CASE WHEN @doka_sm_state IS NULL", command.CommandText, StringComparison.Ordinal);
@@ -195,6 +195,44 @@ public sealed class MySqlGuardCommandPlanTests
         Assert.Equal(4, Count(command.CommandText, "PREPARE doka_sm_statement FROM"));
         Assert.Equal(3, Count(command.CommandText, "EXECUTE doka_sm_statement"));
         Assert.Equal(3, Count(command.CommandText, "DEALLOCATE PREPARE doka_sm_statement"));
+    }
+
+    [Fact]
+    public void VarcharNarrowing_RequiresStrictSessionModeAndNeverRendersIgnore()
+    {
+        var options = new DbContextOptionsBuilder<DbContext>();
+        options.UseMySql(
+            "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
+            MySqlServerVersion.MySql(new Version(8, 4, 11)));
+        ((DbContextOptionsBuilder)options).UseMySqlSafeMigrations();
+
+        using var context = new DbContext(options.Options);
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "items",
+                new ExpectedColumnDefinition(
+                    "value",
+                    typeof(string),
+                    isNullable: true,
+                    storeType: "varchar(5)",
+                    maxLength: 5)),
+            SafeMigrationPolicy.RepairIfSafe);
+
+        var command = Assert.Single(
+            context
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate([operation], context.Model));
+
+        var payloads = DecodeHexPayloads(command.CommandText);
+
+        Assert.Contains(
+            payloads,
+            payload => payload.Contains("STRICT_TRANS_TABLES", StringComparison.Ordinal)
+                && payload.Contains("STRICT_ALL_TABLES", StringComparison.Ordinal));
+        Assert.DoesNotContain("ALTER IGNORE TABLE", command.CommandText, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(
+            payloads,
+            payload => payload.Contains("ALTER IGNORE TABLE", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

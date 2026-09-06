@@ -260,7 +260,8 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
         var blocked = false;
         var hasProviderOperations = false;
         var preflightProjection = mode == SafeMigrationReportMode.Preflight
-            ? new SafeMigrationPreflightProjection()
+            ? new SafeMigrationPreflightProjection(
+                _providerAnalyzer as ISafeMigrationProviderOperationProjection)
             : null;
 
         var postflightProjection = mode == SafeMigrationReportMode.Postflight
@@ -299,7 +300,11 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
                         observedState: null,
                         action: null,
                         postconditionSatisfied: null,
-                        "provider_owned_not_analyzed"));
+                        "provider_owned_not_analyzed",
+                        analysisCode: "provider_owned_not_analyzed",
+                        decisionCode: "provider_owned_not_analyzed",
+                        SafeMigrationOperationalImpact.NotApplicable,
+                        differences: null));
 
                 preflightProjection?.ObserveProviderPostcondition(operation);
 
@@ -326,6 +331,16 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
 
             blocked |= operationBlocked;
             preflightProjection?.Observe(safeOperation, analysis, decision);
+            var assessmentCode = postconditionSuperseded
+                ? "postcondition_superseded"
+                : operationBlocked
+                    ? mode == SafeMigrationReportMode.Postflight
+                        ? "postcondition_failed"
+                        : analysis.ObservedState == SafeMigrationObservedState.Unsupported
+                            ? analysis.Code
+                            : decision.Code
+                    : analysis.Code;
+
             assessments.Add(
                 new SafeMigrationAssessment(
                     ordinal,
@@ -336,15 +351,11 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
                     analysis.ObservedState,
                     decision.Action,
                     postconditionSatisfied,
-                    postconditionSuperseded
-                        ? "postcondition_superseded"
-                        : operationBlocked
-                        ? mode == SafeMigrationReportMode.Postflight
-                            ? "postcondition_failed"
-                            : analysis.ObservedState == SafeMigrationObservedState.Unsupported
-                                ? analysis.Code
-                                : decision.Code
-                        : analysis.Code));
+                    assessmentCode,
+                    analysis.Code,
+                    decision.Code,
+                    analysis.OperationalImpact,
+                    analysis.Differences));
         }
 
         var status = operations.Count == 0

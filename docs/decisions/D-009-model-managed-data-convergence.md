@@ -80,17 +80,34 @@ predicate in compare-and-swap DML. Delete additionally rejects dependent-row
 effects which were not discharged by an earlier accepted model-managed delete.
 Every mutation validates its target postcondition.
 
-MySQL and MariaDB use `<=>`; PostgreSQL uses `IS NOT DISTINCT FROM`. The
+MySQL and MariaDB use `<=>` for keys and ordinary scalar values; PostgreSQL
+uses `IS NOT DISTINCT FROM`. Native JSON values use document semantics because
+MySQL normalizes JSON during storage, MariaDB exposes JSON as LONGTEXT, and
+PostgreSQL defines ordinary comparison operators for `jsonb` but not `json`.
+MySQL casts the expected relation to JSON before null-safe comparison. MariaDB
+combines explicit SQL-NULL branches with `JSON_EQUALS`. PostgreSQL casts both
+`json` and `jsonb` operands to `jsonb` before `IS NOT DISTINCT FROM`. JSON
+`null` therefore remains distinct from SQL `NULL`; object-member order and
+formatting are insignificant; array order and duplicate elements remain
+significant. JSON-like text retains ordinary textual equality. The
 implementation does not use insert-ignore, upsert, conflict-update, or generic
-merge syntax. MySQL/MariaDB model-managed mutation requires a transactional
-table engine. Normal EF migration transaction ownership remains authoritative;
-provider handlers do not introduce a nested transaction.
+merge syntax.
+MySQL/MariaDB model-managed mutation requires a transactional table engine.
+Normal EF migration transaction ownership remains authoritative; provider
+handlers do not introduce a nested transaction.
 
 Rows retain EF operation order and are partitioned at 128 rows or 4,096 value
 cells, whichever limit is reached first. Ordered preflight projection stores
 only identities touched by the migration. Compact provider evidence and
 fingerprints retain canonical hashes, not a second copy of report-visible raw
 values.
+
+Provider catalog parameters and inline runtime literals select a relational
+mapping from the captured store type plus the original non-null CLR type. EF's
+mapping converter then owns the provider representation. Store-type-only lookup
+is reserved for a null value with no CLR type. This keeps `char`, enum, Char36
+Guid, Binary16 Guid, and the remaining supported model-managed values identical
+across analysis and execution without a duplicate conversion registry.
 
 The transformation applies only to newly scaffolded, exactly paired
 model-managed operations while SafeMigrations scaffolding is enabled. Existing
@@ -200,6 +217,12 @@ adds row/cell limits and value non-disclosure.
   negative, replay, concurrency, resource, and package qualification. Status
   changed from accepted to implemented. Hosted release qualification and public
   package readback remain publication gates.
+- 2026-09-05: Unified MySQL/MariaDB catalog-parameter and inline-literal mapping
+  through EF's CLR/store-type mapping and provider converter contract.
+- 2026-09-05: Amended MySQL/MariaDB value comparison so native JSON follows
+  engine-specific document equality without reclassifying JSON-like text.
+- 2026-09-05: Applied the same document contract to PostgreSQL `json` and
+  `jsonb`, including the missing equality boundary of the textual `json` type.
 
 ### Implementation References
 
@@ -217,7 +240,12 @@ adds row/cell limits and value non-disclosure.
 - [EF Core applying migrations](https://learn.microsoft.com/en-us/ef/core/managing-schemas/migrations/applying) (primary source; retrieved 2026-09-02)
 - [EF Core 10.0.11 MigrationsScaffolder](https://github.com/dotnet/efcore/blob/v10.0.11/src/EFCore.Design/Migrations/Design/MigrationsScaffolder.cs) (primary source; retrieved 2026-09-02)
 - [EF Core 10.0.11 MigrationsModelDiffer](https://github.com/dotnet/efcore/blob/v10.0.11/src/EFCore.Relational/Migrations/Internal/MigrationsModelDiffer.cs) (primary source; retrieved 2026-09-02)
+- [EF Core 10.0.11 RelationalTypeMapping](https://github.com/dotnet/efcore/blob/v10.0.11/src/EFCore.Relational/Storage/RelationalTypeMapping.cs) (primary source; retrieved 2026-09-05)
 - [MySQL 8.4 INSERT ON DUPLICATE KEY UPDATE](https://dev.mysql.com/doc/refman/8.4/en/insert-on-duplicate.html) (primary source; retrieved 2026-09-02)
 - [MariaDB null-safe equal operator](https://mariadb.com/docs/server/reference/sql-structure/operators/comparison-operators/null-safe-equal) (primary source; retrieved 2026-09-02)
+- [MySQL JSON data type](https://dev.mysql.com/doc/refman/8.4/en/json.html) (primary source; retrieved 2026-09-05)
+- [MariaDB JSON data type](https://mariadb.com/docs/server/reference/data-types/string-data-types/json) (primary source; retrieved 2026-09-05)
+- [MariaDB JSON_EQUALS](https://mariadb.com/docs/server/reference/sql-functions/special-functions/json-functions/json_equals) (primary source; retrieved 2026-09-05)
 - [PostgreSQL comparison functions](https://www.postgresql.org/docs/current/functions-comparison.html) (primary source; retrieved 2026-09-02)
+- [PostgreSQL JSON functions and operators](https://www.postgresql.org/docs/18/functions-json.html) (primary source; retrieved 2026-09-05)
 - [PostgreSQL foreign-key actions](https://www.postgresql.org/docs/current/ddl-constraints.html) (primary source; retrieved 2026-09-02)

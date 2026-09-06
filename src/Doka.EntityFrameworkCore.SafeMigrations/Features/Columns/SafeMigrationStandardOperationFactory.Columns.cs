@@ -63,19 +63,29 @@ internal static partial class SafeMigrationStandardOperationFactory
         EnsureColumnIntent intent,
         Func<SafeMigrationSqlExpression, string>? renderExpression,
         Func<SafeMigrationCollationIdentifier, string?>? renderCollation,
-        bool declareNullabilityDifference
+        bool declareNullabilityDifference,
+        string? previousStoreType
     )
     {
         var target = intent.Definition;
         var oldColumn = CreateColumn(intent.Table, intent.Schema, target, renderExpression, renderCollation);
 
-        // Provider SQL generators compare target and old metadata to decide
+        // WHY: Provider SQL generators compare target and old metadata to decide
         // which ALTER clauses to emit. Make every permitted mutable facet
         // observably different while preserving all invariant facets.
         oldColumn.IsNullable = declareNullabilityDifference ? !target.IsNullable : target.IsNullable;
         oldColumn.Comment = target.Comment is null ? "doka_sm_previous_comment" : null;
         oldColumn.DefaultValue = null;
         oldColumn.DefaultValueSql = target.DefaultValue.Kind == SafeMigrationDefaultValueKind.None ? "NULL" : null;
+
+        if (previousStoreType is not null)
+        {
+            // WHY: PostgreSQL's generator emits ALTER COLUMN TYPE only when
+            // old and target store metadata differ. The live catalog guard,
+            // not this renderer hint, remains the authoritative old shape.
+            oldColumn.ColumnType = previousStoreType;
+            oldColumn.MaxLength = null;
+        }
 
         return CreateAlterColumn(
             intent.Table,

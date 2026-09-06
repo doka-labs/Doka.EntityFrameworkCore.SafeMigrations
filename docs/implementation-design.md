@@ -207,6 +207,18 @@ foreign-key maps required by the changed rows. Provider-supplied and relational
 store types must agree; missing, contradictory, or unrepresentable metadata
 stops scaffolding.
 
+When `ExcludeModelManagedDataForExcludedTables()` is explicitly enabled, the
+decorator first applies an ownership filter to the provider-generated
+differences. It indexes source and target tables by exact ordinal schema/name
+identity and scans operations once. Insert uses target exclusion, delete uses
+source exclusion, and update requires both sides to be excluded. Missing table
+metadata or changing exclusion state fails closed. The original operation list
+is returned when nothing is removed; otherwise retained operation instances and
+their order are preserved without copying row matrices. `HasDifferences` uses
+this same filtered set, so pending-model detection and scaffolding cannot
+disagree. The [ownership guide](model-managed-data-ownership.md) owns the
+consumer architecture.
+
 Before rendering, the migration generator pairs forward and inverse data rows
 by schema, table, ordered key columns, and canonical typed key values. An insert
 pairs with its inverse delete to prove key identity, an update pairs with its
@@ -226,20 +238,42 @@ allowlist of provider SQL strings.
 
 The generated table call also freezes either `ThrowIfDifferent` or
 `RepairIfSafe`. Repair-capable `EnsureColumnIntent` analysis separates mutable
-nullability, default, and comment facets from invariant store type, collation,
-generation/identity, and row-version facets. Provider-neutral Core permits no
-annotation-bearing inferred repair. The MySQL/MariaDB adapter can authorize a
-repair only after Doka's typed public metadata contract recognizes every
-annotation and proves its value consistent with the complete column shape. A
-repair is eligible only for an ordinary column with matching invariants.
-Tightening nullability performs a catalog and data precondition and classifies
-existing nulls as `DataBlocked`. MySQL/MariaDB delegates the complete replacement
-definition to Doka's `AlterColumnOperation` renderer; PostgreSQL delegates facet
-deltas to Npgsql. Apply and repair SQL are distinct guarded branches and share
-the same postcondition. Both adapters first prove target-column existence from
-the catalog before compiling or executing a data-reading null probe. A missing
-target therefore remains `Missing` or `DataBlocked` according to add safety and
-never fails with an engine-level unknown-column error. Explicit
+nullability, default, and comment facets from provider-proven type transitions
+and invariant collation, generation/identity, row-version, metadata, and
+dependency facets. Provider-neutral Core permits no annotation-bearing inferred
+repair. MySQL/MariaDB can authorize repair only after Doka's typed metadata
+recognizes every annotation and proves the complete column shape.
+
+Both adapters independently recognize ordinary `VARCHAR` widening and
+data-verified narrowing. Widening needs catalog and dependency proof but no row
+scan. Narrowing candidates are deduplicated and grouped by table into bounded
+character-length probes. The result is one Boolean fact per candidate and no
+row value. The execution guard repeats that proof before DDL; provider strict
+conversion and the complete postcondition close the remaining race. One
+overlength value becomes `DataBlocked`. MySQL/MariaDB additionally recognize
+only the exact CLR-Boolean `BIT(1) -> TINYINT(1)` value-domain expansion.
+PostgreSQL does not reuse that provider-specific proof.
+The Boolean proof accepts only the absent, null, false, and true literal
+default forms understood by the catalog contract. It rejects expression
+defaults and any foreign-key dependency because changing one side cannot prove
+or atomically apply the required coupled type transition. Ordinary indexes,
+primary keys, unique constraints, and checks remain provider-validated parts
+of the complete replacement definition; SafeMigrations never drops or rewrites
+them implicitly.
+
+Tightening nullability performs its own catalog and data precondition and
+classifies existing nulls as `DataBlocked`. MySQL/MariaDB delegates the complete
+replacement definition to Doka's `AlterColumnOperation` renderer; PostgreSQL
+delegates the complete applicable transition to Npgsql. Apply and repair SQL
+are distinct guarded branches and share the same postcondition. Both adapters
+first prove target-column existence from the catalog before compiling or
+executing a data-reading probe. A missing target therefore remains `Missing` or
+`DataBlocked` according to add safety and never fails with an engine-level
+unknown-column error. Accepted length and Boolean repairs report
+`TableRewritePossible`; losslessness is separate from availability. Explicit
+safe nullability, default, or comment repairs report `Unknown` when the provider
+cannot prove a narrower execution shape; `NotApplicable` is reserved for
+assessments that do not plan repair DDL. Explicit
 `AlterColumnIntent` repairs continue to execute their reviewed provider
 baseline; only inferred `EnsureColumnIntent` repair needs a separately rendered
 branch.
@@ -386,11 +420,17 @@ rows, and incoming source-model dependency maps. Values retain canonical type
 identity in fingerprints but are excluded from assessment text, telemetry, and
 exception messages.
 
-Provider classification uses typed parameters and null-safe equality: `<=>` on
-MySQL/MariaDB and `IS NOT DISTINCT FROM` on PostgreSQL. It distinguishes absent,
-target-matching, source-matching, drifted, unique/check blocked, dependent, and
-missing-prerequisite rows without interpolating values into catalog SQL. MySQL
-and MariaDB additionally require a transactional table engine.
+Provider classification uses typed parameters and null-safe equality: `<=>` for
+ordinary MySQL/MariaDB values and `IS NOT DISTINCT FROM` on PostgreSQL. Native
+MySQL JSON casts the expected value to JSON before `<=>`; MariaDB JSON combines
+explicit SQL-NULL branches with `JSON_EQUALS` because its JSON type is LONGTEXT;
+PostgreSQL casts `json` and `jsonb` operands to `jsonb` before comparison. This
+preserves document equality without treating JSON-like text as JSON or relying
+on the equality operator absent from PostgreSQL `json`. The classifier
+distinguishes absent, target-matching, source-matching, drifted, unique/check
+blocked, dependent, and missing-prerequisite rows without interpolating values
+into catalog SQL. MySQL and MariaDB additionally require a transactional table
+engine.
 
 Execution deliberately avoids generic upsert syntax. Ensure uses conditional
 plain inserts. Update and delete repeat the captured source predicate in their
@@ -476,6 +516,16 @@ The [postflight runbook](runbooks/deployment-and-recovery.md#postflight) owns
 these checks. Reports are immutable and can be streamed through a caller-owned
 `Utf8JsonWriter` without reflection or an intermediate DTO graph.
 
+Report schema version 2 separates provider `AnalysisCode` from planner
+`DecisionCode` while retaining the aggregate compatibility `Code`. Each
+assessment can carry at most 16 typed facet differences with bounded printable
+ASCII metadata and one closed `OperationalImpact` value. Provider SQL renders
+only catalog-derived safe metadata; model-managed values are represented by the
+category `model_managed_row_content`, never by keys or row contents. Detailed
+evidence remains out of metrics. `SafeMigrationPreflightException` attaches the
+immutable blocked report and renders one bounded deterministic conflict summary
+for hosts that prefer an exception boundary.
+
 Operation-contract fingerprints include safe intent, expected definitions,
 policy, and ordering. Ordinary provider operations contribute only their CLR
 type marker. Their properties and SQL require separate review and the digest
@@ -538,6 +588,15 @@ evidence. A recognized structural operation invalidates any complete projected
 table image that its provider-owned side effects could make stale. An
 unrecognized operation discards all projection facts, because arbitrary DDL or
 data changes cannot safely carry earlier inferences forward.
+
+Provider-specific exemptions are internal and proof-based. Doka 10.3.x maps
+`AlterDatabaseOperation` only to the database character-set default, which does
+not mutate existing table, column, index, constraint, or row state. The
+MySQL/MariaDB analyzer can therefore retain existing table-scoped facts while still
+reporting the operation as provider-owned. Core does not grant that exemption
+by operation type: Npgsql 10.0.3 also uses `AlterDatabaseOperation` for
+extensions, enums, ranges, and other database artifacts, so PostgreSQL and an
+unknown provider continue to invalidate the projection fail-closed.
 
 `AnalyzePendingMigrationsAsync` calls provider validation before EF's
 `IHistoryRepository.GetAppliedMigrationsAsync` path. This ordering is required

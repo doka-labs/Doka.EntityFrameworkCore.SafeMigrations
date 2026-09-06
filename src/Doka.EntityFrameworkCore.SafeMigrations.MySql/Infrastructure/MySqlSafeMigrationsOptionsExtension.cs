@@ -14,6 +14,9 @@ internal sealed class MySqlSafeMigrationsOptionsExtension : IDbContextOptionsExt
     /// <summary>Gets the policy consumed by legacy-convergence scaffolding.</summary>
     public SafeMigrationPolicy LegacyConvergencePolicy { get; private init; } = SafeMigrationPolicy.ThrowIfDifferent;
 
+    /// <summary>Gets whether excluded tables also exclude model-managed-data differences.</summary>
+    public bool ExcludeModelManagedDataForExcludedTablesEnabled { get; private init; }
+
     public void ApplyServices(
         IServiceCollection services
     ) => services.AddEntityFrameworkDokaMySqlSafeMigrations(CanonicalContextType);
@@ -21,12 +24,14 @@ internal sealed class MySqlSafeMigrationsOptionsExtension : IDbContextOptionsExt
     public static MySqlSafeMigrationsOptionsExtension WithCanonicalContext(
         Type? canonicalContextType,
         SafeMigrationScaffoldingMode scaffoldingMode,
-        SafeMigrationPolicy legacyConvergencePolicy = SafeMigrationPolicy.ThrowIfDifferent
+        SafeMigrationPolicy legacyConvergencePolicy = SafeMigrationPolicy.ThrowIfDifferent,
+        bool excludeModelManagedDataForExcludedTables = false
     ) => new()
     {
         CanonicalContextType = canonicalContextType,
         ScaffoldingMode = scaffoldingMode,
         LegacyConvergencePolicy = legacyConvergencePolicy,
+        ExcludeModelManagedDataForExcludedTablesEnabled = excludeModelManagedDataForExcludedTables,
     };
 
     public void Validate(
@@ -55,18 +60,25 @@ internal sealed class MySqlSafeMigrationsOptionsExtension : IDbContextOptionsExt
         private new MySqlSafeMigrationsOptionsExtension Extension =>
             (MySqlSafeMigrationsOptionsExtension)base.Extension;
 
-        // Scaffolding settings change generated source only. Excluding them
-        // avoids fragmenting EF's runtime service-provider cache without
-        // changing a runtime service registration.
-        public override int GetServiceProviderHashCode() => Extension.CanonicalContextType?.GetHashCode() ?? 0;
+        // WHY: The ownership option changes runtime pending-model detection.
+        // It must participate in EF's service-provider identity so a context
+        // never reuses a differ configured for the opposite ownership rule.
+        public override int GetServiceProviderHashCode() => HashCode.Combine(
+            Extension.CanonicalContextType,
+            Extension.ExcludeModelManagedDataForExcludedTablesEnabled);
 
         public override void PopulateDebugInfo(
             IDictionary<string, string> debugInfo
-        ) => debugInfo["Doka:MySqlSafeMigrations"] = Extension.CanonicalContextType?.FullName ?? "runtime";
+        ) => debugInfo["Doka:MySqlSafeMigrations"] = string.Concat(
+            Extension.CanonicalContextType?.FullName ?? "runtime",
+            ":exclude-model-data=",
+            Extension.ExcludeModelManagedDataForExcludedTablesEnabled);
 
         public override bool ShouldUseSameServiceProvider(
             DbContextOptionsExtensionInfo other
         ) => other is ExtensionInfo otherInfo
-            && otherInfo.Extension.CanonicalContextType == Extension.CanonicalContextType;
+            && otherInfo.Extension.CanonicalContextType == Extension.CanonicalContextType
+            && otherInfo.Extension.ExcludeModelManagedDataForExcludedTablesEnabled
+            == Extension.ExcludeModelManagedDataForExcludedTablesEnabled;
     }
 }

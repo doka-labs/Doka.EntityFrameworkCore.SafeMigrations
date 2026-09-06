@@ -7,10 +7,14 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// <param name="IsEnabled">Whether SafeMigrations scaffolding is active.</param>
 /// <param name="Mode">The mode written into newly scaffolded migrations.</param>
 /// <param name="LegacyConvergencePolicy">The policy written into legacy-convergence table operations.</param>
+/// <param name="ExcludeModelManagedDataForExcludedTables">
+/// Whether excluded relational tables also exclude provider-generated model-managed-data differences.
+/// </param>
 internal sealed record SafeMigrationScaffoldingConfiguration(
     bool IsEnabled,
     SafeMigrationScaffoldingMode Mode,
-    SafeMigrationPolicy LegacyConvergencePolicy = SafeMigrationPolicy.ThrowIfDifferent)
+    SafeMigrationPolicy LegacyConvergencePolicy = SafeMigrationPolicy.ThrowIfDifferent,
+    bool ExcludeModelManagedDataForExcludedTables = false)
 {
     /// <summary>Creates a configuration snapshot from EF Core context options.</summary>
     /// <param name="options">The active context options, or null when unavailable.</param>
@@ -26,6 +30,7 @@ internal sealed record SafeMigrationScaffoldingConfiguration(
             : new SafeMigrationScaffoldingConfiguration(
                 true,
                 extension.ScaffoldingMode,
-                extension.LegacyConvergencePolicy);
+                extension.LegacyConvergencePolicy,
+                extension.ExcludeModelManagedDataForExcludedTablesEnabled);
     }
 }

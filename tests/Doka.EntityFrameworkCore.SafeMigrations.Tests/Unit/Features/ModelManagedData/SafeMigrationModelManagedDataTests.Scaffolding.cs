@@ -192,6 +192,26 @@ public sealed partial class SafeMigrationModelManagedDataTests
         SafeMigrationServiceCollectionDecorator.DecorateMigrationsModelDiffer(decorated);
 
         Assert.Same(descriptor, Assert.Single(decorated));
+
+        var providerFactory = new ServiceCollection();
+        providerFactory.AddSingleton<IMigrationsModelDiffer>(_ => new StubMigrationsModelDiffer());
+        SafeMigrationServiceCollectionDecorator.DecorateMigrationsModelDiffer(providerFactory);
+        var factoryDescriptor = Assert.Single(providerFactory);
+
+        SafeMigrationServiceCollectionDecorator.DecorateMigrationsModelDiffer(providerFactory);
+
+        Assert.Same(factoryDescriptor, Assert.Single(providerFactory));
+    }
+
+    [Fact]
+    public void ModelDifferRequiresExplicitScaffoldingConfiguration()
+    {
+        var providerDiffer = new StubMigrationsModelDiffer();
+
+        var exception = Assert.Throws<ArgumentNullException>(() =>
+            new SafeMigrationMigrationsModelDiffer(providerDiffer, null!));
+
+        Assert.Equal("configuration", exception.ParamName);
     }
 
     private static SafeMigrationCSharpMigrationOperationGenerator CreateModelDataOperationGenerator(

@@ -1,9 +1,10 @@
 # Documentation
 
 This is the task-oriented entry point for SafeMigrations documentation. The
-repository contains the complete source prepared for the 10.2.1 stable
-maintenance release; package availability and OpenSSF status are established
-by their linked external registries, not by source documentation alone.
+latest confirmed published release is 10.2.1. This source is prepared for the
+stable 10.3.0 feature release described in the changelog; package availability
+and OpenSSF status are established by their linked external registries, not by
+source documentation alone.
 
 ## Use and deploy
 
@@ -11,6 +12,7 @@ by their linked external registries, not by source documentation alone.
 | --- | --- |
 | Install, register a provider, and scaffold strict or legacy-convergence migrations | [Project README](../README.md) and [runnable sample](../samples/Doka.EntityFrameworkCore.SafeMigrations.Sample/README.md) |
 | Compare generated strict, generated legacy-convergence, model-managed data, and hand-authored migration source | [Migration authoring paths](migration-authoring.md) |
+| Separate shared Core and instance-owned custom migration lineages | [Model-managed-data ownership](model-managed-data-ownership.md) |
 | Find public inputs, outputs, and failure boundaries | [API reference](api-reference.md) |
 | Check engines, dependency ranges, qualified boundaries, and evidence | [Support and qualification](support-and-qualification.md) |
 | Understand MySQL/MariaDB session guards and implicit commits | [MySQL and MariaDB DDL](mysql-mariadb-ddl-behavior.md) |

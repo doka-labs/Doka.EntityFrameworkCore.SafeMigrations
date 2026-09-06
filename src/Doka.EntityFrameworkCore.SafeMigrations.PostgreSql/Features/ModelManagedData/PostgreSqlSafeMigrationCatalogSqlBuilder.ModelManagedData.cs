@@ -9,7 +9,12 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         var relation = ExpectedRelation(intent, ("t", intent.Columns, intent.ColumnTypes, intent.Values));
         var table = Qualified(intent.Table, intent.Schema);
         var keyMatch = KeyMatch(intent, "doka_actual", "doka_expected");
-        var targetMatch = ColumnMatch(intent.Columns, "doka_actual", "doka_expected", "t");
+        var targetMatch = ColumnMatch(
+            intent.Columns,
+            intent.ColumnTypes,
+            "doka_actual",
+            "doka_expected",
+            "t");
         var found = $"doka_actual.{Delimited(intent.KeyColumns[0])} IS NOT NULL";
         var uniqueCollision = UniqueCollision(intent, intent.UniqueKeys, relation, "t");
         var state = "(SELECT CASE "
@@ -30,6 +35,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
         return Plan(state, postcondition) with
         {
+            DifferentDifference = ModelManagedRowContentDifference(),
             ModelManagedRowEvidenceExpression = rowEvidence,
             ModelManagedRowCount = intent.RowCount,
         };
@@ -46,8 +52,18 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
         var table = Qualified(intent.Table, intent.Schema);
         var keyMatch = KeyMatch(intent, "doka_actual", "doka_expected");
-        var sourceMatch = ColumnMatch(intent.Columns, "doka_actual", "doka_expected", "o");
-        var targetMatch = ColumnMatch(intent.Columns, "doka_actual", "doka_expected", "n");
+        var sourceMatch = ColumnMatch(
+            intent.Columns,
+            intent.ColumnTypes,
+            "doka_actual",
+            "doka_expected",
+            "o");
+        var targetMatch = ColumnMatch(
+            intent.Columns,
+            intent.ColumnTypes,
+            "doka_actual",
+            "doka_expected",
+            "n");
         var found = $"doka_actual.{Delimited(intent.KeyColumns[0])} IS NOT NULL";
         var uniqueCollision = UniqueCollision(intent, intent.UniqueKeys, relation, "n");
         var state = "(SELECT CASE "
@@ -69,6 +85,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
         return Plan(state, postcondition) with
         {
+            DifferentDifference = ModelManagedRowContentDifference(),
             ModelManagedRowEvidenceExpression = rowEvidence,
             ModelManagedRowCount = intent.RowCount,
         };
@@ -81,7 +98,12 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         var relation = ExpectedRelation(intent, ("o", intent.Columns, intent.ColumnTypes, intent.OldValues));
         var table = Qualified(intent.Table, intent.Schema);
         var keyMatch = KeyMatch(intent, "doka_actual", "doka_expected");
-        var sourceMatch = ColumnMatch(intent.Columns, "doka_actual", "doka_expected", "o");
+        var sourceMatch = ColumnMatch(
+            intent.Columns,
+            intent.ColumnTypes,
+            "doka_actual",
+            "doka_expected",
+            "o");
         var found = $"doka_actual.{Delimited(intent.KeyColumns[0])} IS NOT NULL";
         var dependencyExists = DependencyExists(intent, relation);
         var unmodeledDependency = UnmodeledIncomingForeignKey(intent);
@@ -103,12 +125,18 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
         return Plan(state, postcondition) with
         {
+            DifferentDifference = ModelManagedRowContentDifference(),
             ModelManagedRowEvidenceExpression = rowEvidence,
             ModelManagedDependencyCountsExpression = DependencyCounts(intent, relation),
             ModelManagedRowCount = intent.RowCount,
             ModelManagedDependencyCount = intent.ForeignKeys.Count,
         };
     }
+
+    private static SafeMigrationFacetDifference ModelManagedRowContentDifference() => new(
+        "model_managed_row_content",
+        "modeled",
+        "different_or_conflicting");
 
     internal string BuildModelManagedDataMutationSql(
         ModelManagedDataIntent intent
@@ -146,8 +174,18 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
         var table = Qualified(intent.Table, intent.Schema);
         var keyMatch = KeyMatch(intent, "doka_actual", "doka_expected");
-        var sourceMatch = ColumnMatch(intent.Columns, "doka_actual", "doka_expected", "o");
-        var targetMatch = ColumnMatch(intent.Columns, "doka_actual", "doka_expected", "n");
+        var sourceMatch = ColumnMatch(
+            intent.Columns,
+            intent.ColumnTypes,
+            "doka_actual",
+            "doka_expected",
+            "o");
+        var targetMatch = ColumnMatch(
+            intent.Columns,
+            intent.ColumnTypes,
+            "doka_actual",
+            "doka_expected",
+            "n");
         var assignments = string.Join(", ", intent.Columns.Select((column, ordinal) =>
             $"{Delimited(column)} = doka_expected.{Delimited($"n{ordinal}")}"));
 
@@ -162,7 +200,12 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         var relation = ExpectedRelation(intent, ("o", intent.Columns, intent.ColumnTypes, intent.OldValues));
         var table = Qualified(intent.Table, intent.Schema);
         var keyMatch = KeyMatch(intent, "doka_actual", "doka_expected");
-        var sourceMatch = ColumnMatch(intent.Columns, "doka_actual", "doka_expected", "o");
+        var sourceMatch = ColumnMatch(
+            intent.Columns,
+            intent.ColumnTypes,
+            "doka_actual",
+            "doka_expected",
+            "o");
         var dependencyExists = DependencyExists(intent, relation);
 
         return $"DELETE FROM {table} AS doka_actual USING {relation} "
@@ -268,14 +311,35 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
     private string ColumnMatch(
         IReadOnlyList<string> columns,
+        IReadOnlyList<string> columnTypes,
         string actualAlias,
         string expectedAlias,
         string prefix
     ) => string.Join(
         " AND ",
-        columns.Select((column, ordinal) =>
-            $"{actualAlias}.{Delimited(column)} IS NOT DISTINCT FROM "
-            + $"{expectedAlias}.{Delimited($"{prefix}{ordinal}")}"));
+        columns.Select((column, ordinal) => ColumnValueMatch(
+            $"{actualAlias}.{Delimited(column)}",
+            $"{expectedAlias}.{Delimited($"{prefix}{ordinal}")}",
+            columnTypes[ordinal])));
+
+    private static string ColumnValueMatch(
+        string actual,
+        string expected,
+        string storeType
+    )
+    {
+        var normalizedStoreType = storeType.Trim();
+        if (!StringComparer.OrdinalIgnoreCase.Equals(normalizedStoreType, "json")
+            && !StringComparer.OrdinalIgnoreCase.Equals(normalizedStoreType, "jsonb"))
+        {
+            return $"{actual} IS NOT DISTINCT FROM {expected}";
+        }
+
+        // WHY: PostgreSQL defines ordinary comparison operators for jsonb but
+        // not json. Comparing both native JSON types through jsonb provides one
+        // null-safe document contract while preserving SQL NULL separately.
+        return $"({actual})::jsonb IS NOT DISTINCT FROM ({expected})::jsonb";
+    }
 
     private IEnumerable<string> ColumnAliases(
         int count,

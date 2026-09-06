@@ -60,6 +60,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             + $"WHEN {dataBlocked} THEN 'data_blocked' ELSE 'missing' END",
             satisfied) with
         {
+            DiagnosticEvidenceExpression = BuildIndexDiagnosticEvidence(definition),
             // Ordered DropIndex -> EnsureIndex projection still needs the
             // duplicate-row proof hidden by an exact-name shape clash. The
             // code carries evidence into Core and never authorizes mutation.
@@ -68,6 +69,57 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                     + "THEN 'index_replacement_data_blocked' ELSE NULL END"
                 : null,
         };
+    }
+
+    private string BuildIndexDiagnosticEvidence(
+        ExpectedIndexDefinition definition
+    )
+    {
+        var expectedKeys = string.Join(
+            ",",
+            definition.Keys.Select(static key => key.Column ?? "[expression]"));
+
+        var actualKeysExpression = "array_to_string(ARRAY(SELECT CASE WHEN key.attnum = 0 "
+            + "THEN '[expression]' ELSE key_attribute.attname END "
+            + "FROM unnest(i.indkey) WITH ORDINALITY AS key(attnum, ord) "
+            + "LEFT JOIN pg_catalog.pg_attribute key_attribute "
+            + "ON key_attribute.attrelid = i.indrelid AND key_attribute.attnum = key.attnum "
+            + "WHERE key.ord <= i.indnkeyatts ORDER BY key.ord), ',')";
+
+        var actualKeys = expectedKeys.Length <= SafeMigrationFacetDifference.MaximumValueLength
+            ? $"LEFT({actualKeysExpression}, {SafeMigrationFacetDifference.MaximumValueLength})"
+            : $"'md5:' || pg_catalog.md5({actualKeysExpression})";
+
+        var expectedKeysDiagnostic = expectedKeys.Length <= SafeMigrationFacetDifference.MaximumValueLength
+            ? Literal(expectedKeys)
+            : $"'md5:' || pg_catalog.md5({Literal(expectedKeys)})";
+
+        return "(SELECT NULLIF(concat_ws(chr(30), "
+            + DiagnosticRecord(
+                $"{actualKeysExpression} <> {Literal(expectedKeys)}",
+                "index_key_order",
+                expectedKeysDiagnostic,
+                actualKeys)
+            + ", "
+            + DiagnosticRecord(
+                $"i.indisunique <> {definition.Unique.ToString().ToUpperInvariant()}",
+                "index_uniqueness",
+                definition.Unique ? "'unique'" : "'non_unique'",
+                "CASE WHEN i.indisunique THEN 'unique' ELSE 'non_unique' END")
+            + ", "
+            + DiagnosticRecord(
+                $"am.amname <> {Literal(definition.Method ?? "btree")}",
+                "index_method",
+                Literal(definition.Method ?? "btree"),
+                "LEFT(am.amname, 256)")
+            + "), '') FROM pg_catalog.pg_index i "
+            + "JOIN pg_catalog.pg_class idx ON idx.oid = i.indexrelid "
+            + "JOIN pg_catalog.pg_class tbl ON tbl.oid = i.indrelid "
+            + "JOIN pg_catalog.pg_namespace n ON n.oid = idx.relnamespace "
+            + "JOIN pg_catalog.pg_am am ON am.oid = idx.relam "
+            + $"WHERE n.nspname = {SchemaExpression(definition.Schema)} "
+            + $"AND idx.relname = {Literal(definition.Name)} "
+            + $"AND tbl.relname = {Literal(definition.Table)} LIMIT 1)";
     }
 
     private PostgreSqlSafeMigrationRuntimePlan BuildDropIndex(
@@ -114,7 +166,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             "i.indislive",
             $"i.indisunique = {definition.Unique.ToString().ToUpperInvariant()}",
             $"i.indnkeyatts = {definition.Keys.Count.ToString(CultureInfo.InvariantCulture)}",
-            $"i.indnatts = {(definition.Keys.Count + definition.IncludedColumns.Count).ToString(CultureInfo.InvariantCulture)}",
+            "i.indnatts = "
+                + (definition.Keys.Count + definition.IncludedColumns.Count).ToString(CultureInfo.InvariantCulture),
             $"am.amname = {Literal(definition.Method ?? "btree")}",
         };
 
@@ -161,7 +214,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 var expected = IndexExpressionSql(key);
                 conditions.Add($"i.indkey[{optionIndex}] = 0");
                 conditions.Add(
-                    $"pg_catalog.pg_get_indexdef(i.indexrelid, {position.ToString(CultureInfo.InvariantCulture)}, TRUE) "
+                    "pg_catalog.pg_get_indexdef(i.indexrelid, "
+                    + $"{position.ToString(CultureInfo.InvariantCulture)}, TRUE) "
                     + $"IN ({string.Join(", ", expected)})");
             }
 

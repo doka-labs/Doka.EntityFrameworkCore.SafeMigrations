@@ -216,7 +216,10 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         + "CREATE TABLE large_migration_target ("
         + "id integer NOT NULL, matching_value integer NULL, "
         + "repair_value character varying(40) NULL DEFAULT 'legacy', "
-        + "blocked_value character varying(40) NULL, indexed_value integer NOT NULL, "
+        + "blocked_value character varying(40) NULL, widening_value character varying(40) NULL, "
+        + "narrowing_value character varying(40) NULL, "
+        + "blocked_narrowing_value character varying(40) NULL, "
+        + "boolean_value boolean NULL, indexed_value integer NOT NULL, "
         + "unique_value integer NOT NULL, check_value integer NOT NULL, "
         + "parent_id integer NOT NULL, parent_tenant_id integer NOT NULL, "
         + "secondary_parent_id integer NOT NULL, secondary_parent_tenant_id integer NOT NULL, "
@@ -235,10 +238,11 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         + "INSERT INTO large_migration_parent (id, tenant_id) VALUES (1, 1); "
         + "INSERT INTO large_migration_secondary_parent (id, tenant_id) VALUES (1, 1); "
         + "INSERT INTO large_migration_target ("
-        + "id, matching_value, repair_value, blocked_value, indexed_value, "
+        + "id, matching_value, repair_value, blocked_value, widening_value, "
+        + "narrowing_value, blocked_narrowing_value, boolean_value, indexed_value, "
         + "unique_value, check_value, parent_id, parent_tenant_id, "
         + "secondary_parent_id, secondary_parent_tenant_id) "
-        + "VALUES (1, 1, 'legacy', NULL, 1, 1, 1, 1, 1, 1, 1);"
+        + "VALUES (1, 1, 'legacy', NULL, 'wide', 'fits', 'too-long-value', true, 1, 1, 1, 1, 1, 1, 1);"
         + BuildLargeMigrationModelManagedRows();
 
     private static string BuildLargeMigrationModelManagedRows() =>

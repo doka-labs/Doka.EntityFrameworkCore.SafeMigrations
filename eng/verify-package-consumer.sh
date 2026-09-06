@@ -336,8 +336,31 @@ verify_consumer() {
         exit 1
     fi
 
-    grep -Fq 'migrationBuilder.CreateTableIfNotExists(' "$migration_file"
-    grep -Fq 'migrationBuilder.DropTableIfExists(' "$migration_file"
+    case "$consumer_name" in
+        MySql)
+            grep -Fq 'migrationBuilder.ConvergeTableFromModel(' "$migration_file"
+            grep -Fq \
+                'policy: global::Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationPolicy.RepairIfSafe' \
+                "$migration_file"
+            grep -Fq 'IsActive = table.Column<bool>' "$migration_file"
+            grep -Fq 'columns: ["Id", "IsActive", "Name"]' "$migration_file"
+            grep -Fq 'throw new global::System.NotSupportedException(' "$migration_file"
+
+            if grep -Fq 'migrationBuilder.DropTableIfExists(' "$migration_file"; then
+                echo "$consumer_name $tooling_reference consumer scaffolded an unsafe LegacyConvergence down migration." >&2
+                exit 1
+            fi
+            ;;
+        PostgreSql)
+            grep -Fq 'migrationBuilder.CreateTableIfNotExists(' "$migration_file"
+            grep -Fq 'migrationBuilder.DropTableIfExists(' "$migration_file"
+            ;;
+        *)
+            echo "Unknown package consumer: $consumer_name" >&2
+            exit 1
+            ;;
+    esac
+
     grep -Fq 'migrationBuilder.EnsureModelManagedDataFromModel(' "$migration_file"
     grep -Fq 'using Doka.EntityFrameworkCore.SafeMigrations;' "$migration_file"
     grep -Eq '^namespace .+;$' "$migration_file"
