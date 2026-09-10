@@ -13,6 +13,12 @@ All notable changes are documented here. The format follows
   packaged view schema records source identity and total/included counts while
   preserving canonical assessment order and the existing report-v2 contract.
 
+### Fixed
+
+- Report MariaDB JSON column collation drift against Doka's physical
+  `utf8mb4_bin` contract instead of repeating the logical model collation as
+  both expected and actual evidence.
+
 ## [10.3.2] - 2026-09-10
 
 Prepared a stable maintenance release that prevents silent fallback to ordinary
