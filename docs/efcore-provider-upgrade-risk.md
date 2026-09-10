@@ -25,13 +25,17 @@ failure behavior.
 
 The read-only analyzer captures SafeMigrations' typed runtime plan while Doka
 invokes the registered handler with the real server-version, feature, and
-operation-ordinal context. It does not parse generated commands. The locked
-Doka 10.3.0 contract exposes provider-validated `Setup`, `Body`, and `Cleanup`
+operation-ordinal context. It does not parse generated commands. The Doka
+10.4.0 contract exposes provider-validated `Setup`, `Body`, and `Cleanup`
 fragments and a bounded `CreateScoped` command contract. SafeMigrations uses
 those fragments directly and returns one provider-executed scope per guarded
 operation. Doka runs cleanup after success, failure, or cancellation with an
 independent cancellation token; a cleanup failure closes the connection and
 evicts its physical session from the MySqlConnector pool.
+
+Doka 10.4.0 also exposes an explicit commandless consumed result. The internal
+design-time-services guard uses that state so runtime history-model generation
+retains outcome telemetry without emitting a synthetic SQL statement.
 
 Doka 10.3.0 supports two distinct model-level Guid contracts. Application-owned converters
 are preserved through relationship chains; their generated key columns retain
@@ -130,9 +134,12 @@ Provider `buildTransitive` assets recognize both official EF tooling package
 layouts: a direct `Microsoft.EntityFrameworkCore.Design` reference and a direct
 `Microsoft.EntityFrameworkCore.Tools` reference whose package contract supplies
 Design transitively. A runtime-only project with neither package remains free
-of design-time attributes and warnings. Package qualification must prove all
-three layouts for both providers; the first two must scaffold safe source, and
-the runtime-only layout must be rejected by EF tooling before source is written.
+of design-time attributes and warnings. A fourth negative layout retains EF
+Design while excluding the provider package's `buildTransitive` assets. Package
+qualification must prove all four layouts for both providers: the first two
+scaffold safe source, the runtime-only layout is rejected by EF tooling, and the
+excluded-build-assets layout is rejected by the SafeMigrations operation guard.
+Neither negative path may leave migration source behind.
 
 Every EF Core or EF Tools update must therefore rerun strict and legacy
 scaffolding, generated-source compilation, and the package-only dependency
@@ -252,6 +259,12 @@ unless the entry records a later date:
   (rechecked 2026-09-01)
 - [Doka 10.3.0 signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.3.0)
   (rechecked 2026-09-01)
+- [Doka.EntityFrameworkCore.MySql 10.4.0](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.4.0)
+  (rechecked 2026-09-10)
+- [Doka 10.4.0 migration-operation handler contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.4.0/docs/migration-operation-handlers.md)
+  (rechecked 2026-09-10)
+- [Doka 10.4.0 signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.4.0)
+  (rechecked 2026-09-10)
 
 The exact release evidence belongs in the workflow run, lockfiles, package
 SBOM, and final plan-to-ship reconciliation, not in an unchecked comment.

@@ -58,9 +58,9 @@ vulnerability exists.
 
 An EF Design or Tools update also crosses the source-generation trust boundary.
 Re-run strict and legacy scaffolding for both providers, compile the generated
-source, exercise the direct-Design, Tools-only, and runtime-only package
-profiles, and retain negative tests for unexpected generator shapes and
-unmodeled provider annotations.
+source, exercise the direct-Design, Tools-only, runtime-only, and excluded
+SafeMigrations-build-assets package profiles, and retain negative tests for
+unexpected generator shapes and unmodeled provider annotations.
 
 Do not add a library, GitHub Action, scanner, or documentation tool merely to
 improve a badge signal. New dependencies require review of purpose, authority,

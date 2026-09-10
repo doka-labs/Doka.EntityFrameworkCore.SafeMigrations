@@ -167,15 +167,36 @@ implementation. An unexpected upstream output shape stops scaffolding instead
 of producing ambiguous source.
 
 Provider package `buildTransitive` assets add EF's
-`DesignTimeServicesReferenceAttribute` to a consuming startup assembly that
-directly references the EF Design package or the EF Tools package that supplies
-Design transitively. A project with neither package is intentionally treated as
+`DesignTimeServicesReferenceAttribute` to a consuming assembly that directly
+references the EF Design package or the EF Tools package that supplies Design
+transitively. A project with neither package is intentionally treated as
 runtime-only and receives no design-service attribute or warning. Runtime
 service-provider identity excludes scaffolding mode and legacy policy because
 both change generated source only and do not alter runtime service registration.
 The selected values are read from that context's options by the design-time
 service provider and become literal calls and arguments in the generated
 migration.
+
+An MSBuild `ProjectReference` to the provider source does not import the NuGet
+package's `buildTransitive` assets. Source-development generators therefore use
+EF's explicit `DesignTimeServicesReferenceAttribute` in their startup assembly.
+The referenced type remains provider-owned; the generator does not implement or
+replace SafeMigrations design-time services. Package and source-reference split
+fixtures qualify both compositions.
+
+EF Core reads referenced design-time-service attributes from both the migration
+target and startup assemblies. SafeMigrations does not infer which assembly owns
+that reference at runtime. Instead, its runtime-registered model-differ decorator
+prepends one internal guard to every non-empty model difference while scaffolding
+is enabled. Correctly composed design-time services validate and remove the guard
+before delegating to the provider generator. Without them, EF Core dispatches the
+unknown operation to its ordinary generator and fails before source is saved.
+Nested model-differ decoration preserves a single guard, and empty differences
+remain empty. EF Core also calls the runtime differ for migration-history DDL.
+The MySQL/MariaDB handler returns Doka's explicit commandless consumed result,
+while the PostgreSQL adapter removes the marker before Npgsql delegation.
+Neither path generates marker SQL or changes the history schema, and both
+reject a misplaced marker.
 
 The deferred generator selector preserves EF Core's legacy and case-insensitive
 last-match rules. Disabled SafeMigrations scaffolding delegates non-C# provider
@@ -185,7 +206,7 @@ CRLF convention and reject mixed line endings before returning generated code.
 
 Core accepts zero or one provider-owned create-index projector through an
 internal design-time interface. The MySQL/MariaDB package registers the single
-projector and reads Doka 10.3.0's typed migration-operation metadata. It
+projector and reads Doka 10.4.0's typed migration-operation metadata. It
 removes the consumed provider annotation from a copied EF operation and emits
 the ordered prefix values as an explicit SafeMigrations argument. Zero means a
 complete key. Multiple projectors, unrecognized operation metadata, malformed
@@ -638,7 +659,7 @@ global lock or mutable static cache.
 Every multi-command provider plan is idempotent at command boundaries. Tests
 cover failure after earlier standard DDL, same-session recovery after a guard
 failure, cancellation during blocked DDL, cleanup failure with pool eviction,
-and repeat execution. Doka 10.3.0 executes every handler-authored guard as one
+and repeat execution. Doka 10.4.0 executes every handler-authored guard as one
 bounded scope with ordered setup, one body, and reverse-order cleanup. Cleanup
 runs after success, failure, or cancellation with an independent cancellation
 token. A cleanup failure closes the connection and evicts its physical session
@@ -693,7 +714,8 @@ Release qualification covers:
 - `dotnet ef database update` and Migration Bundle;
 - external internal-service-provider registration;
 - package-only consumers with no ProjectReference for direct Design,
-  Tools-only, and runtime-only dependency layouts;
+  Tools-only, runtime-only, and intentionally excluded SafeMigrations build-asset
+  layouts;
 - deterministic pairwise legacy states;
 - every supported PostgreSQL major, every qualified Doka engine profile, and
   locked dependency graph;

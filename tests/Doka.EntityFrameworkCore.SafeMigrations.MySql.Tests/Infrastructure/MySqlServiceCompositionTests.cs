@@ -113,6 +113,59 @@ public sealed class MySqlServiceCompositionTests
     }
 
     [Fact]
+    public void RuntimeSqlGenerator_ConsumesLeadingDesignTimeServicesGuardWithoutChangingNeighborCommands()
+    {
+        var options = new DbContextOptionsBuilder<DbContext>();
+        options.UseMySql(
+            "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test",
+            MySqlServerVersion.MySql(new Version(8, 4, 11)));
+        ((DbContextOptionsBuilder)options).UseMySqlSafeMigrations();
+
+        using var context = new DbContext(options.Options);
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+
+        MigrationOperation[] operations =
+        [
+            new SafeMigrationDesignTimeServicesRequiredOperation(),
+            new SqlOperation { Sql = "SELECT 1;" },
+            new SqlOperation { Sql = "SELECT 2;" },
+        ];
+
+        var commands = generator.Generate(operations, context.Model);
+
+        Assert.Collection(
+            commands,
+            command => Assert.Equal("SELECT 1;", command.CommandText.Trim()),
+            command => Assert.Equal("SELECT 2;", command.CommandText.Trim()));
+    }
+
+    [Fact]
+    public void RuntimeSqlGenerator_RejectsMisplacedDesignTimeServicesGuard()
+    {
+        var options = new DbContextOptionsBuilder<DbContext>();
+        options.UseMySql(
+            "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test",
+            MySqlServerVersion.MySql(new Version(8, 4, 11)));
+        ((DbContextOptionsBuilder)options).UseMySqlSafeMigrations();
+
+        using var context = new DbContext(options.Options);
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+        MigrationOperation[] operations =
+        [
+            new SqlOperation { Sql = "SELECT 1;" },
+            new SafeMigrationDesignTimeServicesRequiredOperation(),
+        ];
+
+        var exception = Assert.Throws<MySqlMigrationOperationHandlerException>(() =>
+            generator.Generate(operations, context.Model));
+
+        Assert.Contains(
+            "must be the first migration operation",
+            exception.InnerException?.Message,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ConflictingRegistrationFailsBeforeChangingTheServiceCollection()
     {
         var services = new ServiceCollection();

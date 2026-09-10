@@ -25,7 +25,7 @@ public static class MySqlServiceCollectionExtensions
         this IServiceCollection services
     )
         where TCanonicalMigrationContext : DbContext =>
-        AddEntityFrameworkDokaMySqlSafeMigrations(services, typeof(TCanonicalMigrationContext));
+        services.AddEntityFrameworkDokaMySqlSafeMigrations(typeof(TCanonicalMigrationContext));
 
     internal static IServiceCollection AddEntityFrameworkDokaMySqlSafeMigrations(
         this IServiceCollection services,
@@ -41,6 +41,9 @@ public static class MySqlServiceCollectionExtensions
 
         services.TryAddEnumerable(
             ServiceDescriptor.Scoped<IMySqlMigrationOperationHandler, MySqlSafeMigrationOperationHandler>());
+        services.TryAddEnumerable(
+            ServiceDescriptor.Scoped<IMySqlMigrationOperationHandler,
+                MySqlSafeMigrationDesignTimeServicesGuardHandler>());
 
         services.TryAddScoped<MySqlSafeMigrationPlanCapture>();
         services.TryAddScoped<ISafeMigrationProviderAnalyzer, MySqlSafeMigrationProviderAnalyzer>();

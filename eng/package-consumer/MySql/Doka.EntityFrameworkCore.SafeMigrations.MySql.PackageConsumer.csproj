@@ -12,7 +12,12 @@
   <ItemGroup Label="Package qualification"
              Condition="'$(SafeMigrationsPackageConsumerMode)' == 'Package'">
     <PackageReference Include="Doka.EntityFrameworkCore.SafeMigrations.MySql"
-                      Version="$(SafeMigrationsPackageVersion)" />
+                      Version="$(SafeMigrationsPackageVersion)">
+      <ExcludeAssets
+        Condition="'$(SafeMigrationsEfToolingReference)' == 'DesignWithoutSafeBuildAssets'">
+        build;buildTransitive
+      </ExcludeAssets>
+    </PackageReference>
   </ItemGroup>
 
   <ItemGroup Label="Source - EF Design"
@@ -33,7 +38,8 @@
 
   <ItemGroup Label="Package qualification - EF Design"
              Condition="'$(SafeMigrationsPackageConsumerMode)' == 'Package'
-                        And '$(SafeMigrationsEfToolingReference)' == 'Design'">
+                        And ('$(SafeMigrationsEfToolingReference)' == 'Design'
+                             Or '$(SafeMigrationsEfToolingReference)' == 'DesignWithoutSafeBuildAssets')">
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design"
                       Version="$(EfCorePackageVersion)"
                       PrivateAssets="all"
@@ -59,8 +65,9 @@
   <Target Name="ValidateSafeMigrationsEfToolingReference"
           BeforeTargets="PrepareForBuild"
           Condition="'$(SafeMigrationsEfToolingReference)' != 'Design'
+                     And '$(SafeMigrationsEfToolingReference)' != 'DesignWithoutSafeBuildAssets'
                      And '$(SafeMigrationsEfToolingReference)' != 'Tools'
                      And '$(SafeMigrationsEfToolingReference)' != 'None'">
-    <Error Text="SafeMigrationsEfToolingReference must be Design, Tools, or None." />
+    <Error Text="SafeMigrationsEfToolingReference must be Design, DesignWithoutSafeBuildAssets, Tools, or None." />
   </Target>
 </Project>

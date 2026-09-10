@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup Label="Engineering">
+    <AssemblyName>Doka.EntityFrameworkCore.SafeMigrations.MySql.SplitTarget</AssemblyName>
+    <RootNamespace>Doka.EntityFrameworkCore.SafeMigrations.MySql.SplitTarget</RootNamespace>
+    <OutputType>Library</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup Label="Source qualification"
+             Condition="'$(SafeMigrationsPackageConsumerMode)' == 'Source'">
+    <ProjectReference Include="../../../../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/Doka.EntityFrameworkCore.SafeMigrations.MySql.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Label="Package qualification"
+             Condition="'$(SafeMigrationsPackageConsumerMode)' == 'Package'">
+    <PackageReference Include="Doka.EntityFrameworkCore.SafeMigrations.MySql">
+      <Version
+        Condition="'$(ManagePackageVersionsCentrally)' != 'true'">$(SafeMigrationsPackageVersion)</Version>
+      <VersionOverride
+        Condition="'$(ManagePackageVersionsCentrally)' == 'true'">$(SafeMigrationsPackageVersion)</VersionOverride>
+      <ExcludeAssets
+        Condition="'$(SafeMigrationsSplitBuildAssets)' == 'Disabled'">build;buildTransitive</ExcludeAssets>
+    </PackageReference>
+  </ItemGroup>
+</Project>

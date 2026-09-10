@@ -143,6 +143,44 @@ public sealed class PostgreSqlServiceCompositionTests
     }
 
     [Fact]
+    public void RuntimeSqlGenerator_ConsumesLeadingDesignTimeServicesGuard()
+    {
+        var options = new DbContextOptionsBuilder<SafeMigrationDbContext>();
+        options.UseNpgsql("Host=localhost;Database=composition;Username=test;Password=test");
+        ((DbContextOptionsBuilder)options).UsePostgreSqlSafeMigrations();
+
+        using var context = new SafeMigrationDbContext(options.Options);
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+
+        var commands = generator.Generate(
+            [new SafeMigrationDesignTimeServicesRequiredOperation()],
+            context.Model);
+
+        Assert.Empty(commands);
+    }
+
+    [Fact]
+    public void RuntimeSqlGenerator_RejectsMisplacedDesignTimeServicesGuard()
+    {
+        var options = new DbContextOptionsBuilder<SafeMigrationDbContext>();
+        options.UseNpgsql("Host=localhost;Database=composition;Username=test;Password=test");
+        ((DbContextOptionsBuilder)options).UsePostgreSqlSafeMigrations();
+
+        using var context = new SafeMigrationDbContext(options.Options);
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+        MigrationOperation[] operations =
+        [
+            new SqlOperation { Sql = "SELECT 1;" },
+            new SafeMigrationDesignTimeServicesRequiredOperation(),
+        ];
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            generator.Generate(operations, context.Model));
+
+        Assert.Contains("must be the first migration operation", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void CustomBaselineGeneratorReceivesOrdinaryAndSafeMigrationBaselines()
     {
         var options = new DbContextOptionsBuilder<SafeMigrationDbContext>();

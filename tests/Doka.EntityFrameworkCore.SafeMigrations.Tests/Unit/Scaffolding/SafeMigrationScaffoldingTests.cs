@@ -586,6 +586,88 @@ public sealed class SafeMigrationScaffoldingTests
     }
 
     [Fact]
+    public void EnabledMigrationsGeneratorConsumesTheGuardBeforeProviderDelegation()
+    {
+        var providerGenerator = new TestMigrationsCodeGenerator(
+            migrationSource: TestMigrationsCodeGenerator.CSharpMigrationSource);
+
+        var generator = CreateMigrationsGenerator(providerGenerator, isEnabled: true);
+        var upOperation = new SqlOperation { Sql = "SELECT 1;" };
+        var downOperation = new SqlOperation { Sql = "SELECT 2;" };
+
+        var source = generator.GenerateMigration(
+            "Company.Migrations",
+            "CreateUsers",
+            [new SafeMigrationDesignTimeServicesRequiredOperation(), upOperation],
+            [new SafeMigrationDesignTimeServicesRequiredOperation(), downOperation]);
+
+        Assert.Contains(
+            "using Doka.EntityFrameworkCore.SafeMigrations;",
+            source,
+            StringComparison.Ordinal);
+        Assert.Collection(providerGenerator.LastUpOperations!, operation => Assert.Same(upOperation, operation));
+        Assert.Collection(providerGenerator.LastDownOperations!, operation => Assert.Same(downOperation, operation));
+    }
+
+    [Fact]
+    public void EnabledMigrationsGeneratorRejectsMissingOrRepeatedGuards()
+    {
+        var providerGenerator = new TestMigrationsCodeGenerator(
+            migrationSource: TestMigrationsCodeGenerator.CSharpMigrationSource);
+
+        var generator = CreateMigrationsGenerator(providerGenerator, isEnabled: true);
+        var operation = new SqlOperation { Sql = "SELECT 1;" };
+
+        var missingException = Assert.Throws<InvalidOperationException>(() =>
+            generator.GenerateMigration(
+                "Company.Migrations",
+                "MissingGuard",
+                [operation],
+                [new SafeMigrationDesignTimeServicesRequiredOperation()]));
+
+        var repeatedException = Assert.Throws<InvalidOperationException>(() =>
+            generator.GenerateMigration(
+                "Company.Migrations",
+                "RepeatedGuard",
+                [
+                    new SafeMigrationDesignTimeServicesRequiredOperation(),
+                    operation,
+                    new SafeMigrationDesignTimeServicesRequiredOperation(),
+                ],
+                [new SafeMigrationDesignTimeServicesRequiredOperation()]));
+
+        Assert.Contains("missing the design-time services guard", missingException.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            "more than one design-time services guard",
+            repeatedException.Message,
+            StringComparison.Ordinal);
+        Assert.Equal(0, providerGenerator.MigrationCallCount);
+    }
+
+    [Fact]
+    public void EfCoreGeneratorRejectsTheGuardWhenSafeMigrationsDesignServicesAreAbsent()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<ITypeMappingSource, NullTypeMappingSource>();
+        services.AddEntityFrameworkDesignTimeServices();
+
+        using var provider = services.BuildServiceProvider();
+        var generator = provider.GetRequiredService<ICSharpMigrationOperationGenerator>();
+        var builder = new IndentedStringBuilder();
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            generator.Generate(
+                "migrationBuilder",
+                [new SafeMigrationDesignTimeServicesRequiredOperation()],
+                builder));
+
+        Assert.Contains(
+            nameof(SafeMigrationDesignTimeServicesRequiredOperation),
+            exception.Message,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void EnabledCodeGeneratorSelectorRejectsUnsupportedLanguage()
     {
         var services = new ServiceCollection();
@@ -930,6 +1012,26 @@ public sealed class SafeMigrationScaffoldingTests
             createIndexProjectors ?? []);
     }
 
+    private static SafeMigrationCSharpMigrationsGenerator CreateMigrationsGenerator(
+        IMigrationsCodeGenerator providerGenerator,
+        bool isEnabled
+    )
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<ITypeMappingSource, NullTypeMappingSource>();
+        services.AddEntityFrameworkDesignTimeServices();
+
+        using var provider = services.BuildServiceProvider();
+        var csharpHelper = provider.GetRequiredService<ICSharpHelper>();
+
+        return new SafeMigrationCSharpMigrationsGenerator(
+            providerGenerator,
+            csharpHelper,
+            new SafeMigrationScaffoldingConfiguration(
+                isEnabled,
+                SafeMigrationScaffoldingMode.Strict));
+    }
+
     private static CreateTableOperation CreateTable()
     {
         var operation = new CreateTableOperation { Name = "users" };
@@ -978,14 +1080,26 @@ public sealed class SafeMigrationScaffoldingTests
     }
 
     private sealed class TestMigrationsCodeGenerator(
-        string? language = "C#"
+        string? language = "C#",
+        string? migrationSource = null
     ) : IMigrationsCodeGenerator
     {
         public const string MigrationSource = "module Company.Migrations.CreateUsers";
+        public const string CSharpMigrationSource = "using Microsoft.EntityFrameworkCore.Migrations;\n\n"
+            + "#nullable disable\n\n"
+            + "namespace Company.Migrations\n"
+            + "{\n"
+            + "    public partial class CreateUsers : Migration\n"
+            + "    {\n"
+            + "    }\n"
+            + "}\n";
+
         public const string MetadataSource = "using System;\npartial class CreateUsers "
             + "{ private readonly Guid _id = new Guid(\"1714e708-5197-44c4-b355-ad0f2bc6cc80\"); }";
         public const string SnapshotSource = "using System;\npartial class ReviewContextModelSnapshot "
             + "{ private readonly Guid _id = new Guid(\"1714e708-5197-44c4-b355-ad0f2bc6cc80\"); }";
+
+        private readonly string _migrationSource = migrationSource ?? MigrationSource;
 
         public string FileExtension => ".cs";
 
@@ -997,6 +1111,10 @@ public sealed class SafeMigrationScaffoldingTests
 
         public int SnapshotCallCount { get; private set; }
 
+        public IReadOnlyList<MigrationOperation>? LastUpOperations { get; private set; }
+
+        public IReadOnlyList<MigrationOperation>? LastDownOperations { get; private set; }
+
         public string GenerateMigration(
             string? migrationNamespace,
             string migrationName,
@@ -1005,8 +1123,10 @@ public sealed class SafeMigrationScaffoldingTests
         )
         {
             MigrationCallCount++;
+            LastUpOperations = upOperations;
+            LastDownOperations = downOperations;
 
-            return MigrationSource;
+            return _migrationSource;
         }
 
         public string GenerateMetadata(

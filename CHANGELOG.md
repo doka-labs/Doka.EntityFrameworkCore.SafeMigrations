@@ -6,6 +6,25 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Raise the MySQL/MariaDB adapter dependency to Doka 10.4.0 and consume its
+  explicit commandless migration-operation result. The design-time-services
+  guard no longer emits the synthetic `DO 0;` statement at runtime.
+- Fail closed during migration scaffolding when SafeMigrations runtime options
+  are active but its design-time package assets were not loaded. A guarded
+  model difference requires the SafeMigrations generator during scaffolding;
+  EF Core's ordinary generator rejects it before writing migration source.
+  Provider runtime adapters consume the same leading guard without SQL or
+  schema effects when EF Core creates migration-history DDL.
+- Qualify the failure path for MySQL/MariaDB and PostgreSQL package consumers
+  that have EF Design available but deliberately exclude SafeMigrations
+  `buildTransitive` assets. The negative gate verifies that no ordinary
+  `CreateTable` migration is left behind.
+- Qualify a separate MySQL/MariaDB migration target and generator startup. The
+  published package supplies its automatic design-time reference, while the
+  local provider source path qualifies the explicit source-only equivalent.
+
 ## [10.3.1] - 2026-09-06
 
 Prepared a stable documentation and package-metadata maintenance release. It
