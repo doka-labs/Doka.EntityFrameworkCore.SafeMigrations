@@ -547,6 +547,15 @@ evidence remains out of metrics. `SafeMigrationPreflightException` attaches the
 immutable blocked report and renders one bounded deterministic conflict summary
 for hosts that prefer an exception boundary.
 
+Explicit report selection writes a separate report-view schema version 1. The
+serializer first counts selected entries and then streams them directly from
+the immutable source report, so it can emit accurate source/included totals and
+size its bounded initial buffer without allocating a filtered array or DTO
+graph. `Complete`, `NonMatching`, and phase-specific `BlockingOnly` selection
+share the canonical assessment writer and therefore retain the same bounded
+field representation. A blocked report with no selected blocker fails closed;
+future status/action contracts cannot become invisible through an old filter.
+
 Operation-contract fingerprints include safe intent, expected definitions,
 policy, and ordering. Ordinary provider operations contribute only their CLR
 type marker. Their properties and SQL require separate review and the digest
@@ -680,11 +689,13 @@ The runtime path has:
 - bounded parameterized classification chunks plus a scoped unexpected-object
   inventory per preflight or postflight;
 - caller-owned report serialization support;
+- allocation-bounded report-view selection without filtered collections;
 - bounded telemetry tags without object names or connection data.
 
 The repository gates construction, planning, both provider generators, and
-report serialization at 1, 100, and 1000 operations against strict allocation
-ceilings and coarse wall-clock ceilings in schema-versioned Core,
+report serialization at 1, 100, and 1000 operations, plus blocker-view
+selection across 50,000 assessments, against strict allocation ceilings and
+coarse wall-clock ceilings in schema-versioned Core,
 MySQL/MariaDB, and PostgreSQL sets in `eng/performance-budgets.json`; missing,
 duplicate, unknown, and orphaned measurements fail the run. The broad duration
 ceilings account for shared hosted-runner CPU variance and only detect gross

@@ -33,8 +33,10 @@ deployment output.
 3. Call `AnalyzePendingMigrationsAsync` with the pseudonymous instance ID,
    intended target migration, and expected model fingerprint when the
    deployment manifest provides one.
-4. Persist JSON through `SafeMigrationReportJson` and validate it against the
-   packaged schema.
+4. Persist the canonical report through `SafeMigrationReportJson` and validate
+   it against the packaged report schema. When operator triage needs a smaller
+   artifact, additionally serialize `BlockingOnly` or `NonMatching` and
+   validate the view against the packaged report-view schema.
 5. Confirm provider ID, engine family, exact server version, model fingerprint,
    contract fingerprint, and target migration.
 6. Review every assessment and unexpected object.
@@ -62,6 +64,9 @@ Gate interpretation:
 
 Unexpected objects are inventory findings, not deletion instructions. Preserve
 them unless a separate reviewed migration explicitly owns their removal.
+`BlockingOnly` intentionally excludes them; use `NonMatching` or the complete
+report when reviewing additive live inventory. A filtered view records source
+totals and fingerprints but does not prove the content of omitted entries.
 
 ## Time-of-check/time-of-use controls
 

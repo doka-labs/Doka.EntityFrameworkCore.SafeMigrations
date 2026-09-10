@@ -323,10 +323,7 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
             var postconditionSatisfied = analysis.PostconditionSatisfied || postconditionSuperseded;
 
             var operationBlocked = mode == SafeMigrationReportMode.Preflight
-                ? decision.Action is SafeMigrationAction.RejectDifferent
-                    or SafeMigrationAction.RejectUnsupported
-                    or SafeMigrationAction.RejectDataBlocked
-                    or SafeMigrationAction.RejectPrerequisiteMissing
+                ? decision.Action.RejectsExecution()
                 : !postconditionSatisfied;
 
             blocked |= operationBlocked;

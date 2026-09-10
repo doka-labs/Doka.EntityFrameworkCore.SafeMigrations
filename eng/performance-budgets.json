@@ -12,7 +12,8 @@
       "model_data_contract_fingerprint_384",
       "report_json_1",
       "report_json_100",
-      "report_json_1000"
+      "report_json_1000",
+      "report_view_blocking_50000"
     ],
     "mysql": [
       "mysql_generation_1",
@@ -96,6 +97,15 @@
     "postgresql_canonical_model_validation": { "baselineDurationMilliseconds": 2, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 200000 },
     "report_json_1": { "baselineDurationMilliseconds": 0.2, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 16384 },
     "report_json_100": { "baselineDurationMilliseconds": 1, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 160000 },
-    "report_json_1000": { "baselineDurationMilliseconds": 5, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 1500000 }
+    "report_json_1000": {
+      "baselineDurationMilliseconds": 5,
+      "regressionTolerancePercent": 200,
+      "maximumAllocatedBytes": 1500000
+    },
+    "report_view_blocking_50000": {
+      "baselineDurationMilliseconds": 10,
+      "regressionTolerancePercent": 200,
+      "maximumAllocatedBytes": 131072
+    }
   }
 }

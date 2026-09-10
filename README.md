@@ -566,6 +566,23 @@ and independent review for those operations. Serialize with
 The [version 1 schema](schemas/safe-migration-run-report-v1.schema.json) remains
 available for readers of previously persisted reports.
 
+For focused operator output, serialize a self-describing report view instead
+of copying or mutating the immutable report:
+
+```csharp
+var blockingJson = SafeMigrationReportJson.SerializeToUtf8Bytes(
+    preflight,
+    SafeMigrationReportSelection.BlockingOnly);
+```
+
+`Complete` includes every entry, `NonMatching` removes only fully converged safe
+assessments, and `BlockingOnly` includes only the assessments that block the
+current preflight or postflight phase. The view retains source identity and
+total/included counts, preserves assessment order, and never includes
+unexpected objects in `BlockingOnly`. It uses the distinct packaged
+[`safe-migration-report-view-v1` schema](schemas/safe-migration-report-view-v1.schema.json);
+the existing one-argument serializer remains the canonical complete report v2.
+
 Do not encode a preflight-only operation inside `Migration.Up`. EF would record
 the migration as applied after successful command execution even when the
 target DDL was intentionally omitted.

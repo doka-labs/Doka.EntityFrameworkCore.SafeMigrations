@@ -14,7 +14,8 @@ scaffolding contract selected on 2026-08-27. D-009 records the implemented
 source-frozen model-managed-data contract selected on 2026-09-02. The dated
 transitions are retained in each record's Decision History. D-010 and D-011
 record the implemented ownership and lossless-repair contracts selected on
-2026-09-05.
+2026-09-05. D-012 records the implemented report-view contract selected on
+2026-09-10.
 
 | Record | Bounded decision |
 | --- | --- |
@@ -29,6 +30,7 @@ record the implemented ownership and lossless-repair contracts selected on
 | [D-009](D-009-model-managed-data-convergence.md) | Automatic guarded convergence of source-frozen EF model-managed data |
 | [D-010](D-010-excluded-table-model-managed-data-ownership.md) | Explicit model-managed-data ownership for excluded tables in independent lineages |
 | [D-011](D-011-lossless-column-repair-and-actionable-diagnostics.md) | Provider-proven lossless column repair and bounded actionable preflight evidence |
+| [D-012](D-012-self-describing-report-views.md) | Bounded report views for operator triage |
 
 ## Authoring and review
 

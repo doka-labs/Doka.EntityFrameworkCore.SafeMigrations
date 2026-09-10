@@ -526,6 +526,25 @@ defines the current wire contract. The
 available for previously persisted reports. Treat every report as sensitive;
 it can identify schema objects even though telemetry excludes them.
 
+The overloads accepting `SafeMigrationReportSelection` write a distinct report
+view rather than changing the canonical report contract:
+
+| Selection | Included assessments | Unexpected objects |
+| --- | --- | --- |
+| `Complete` | Every source assessment | Included |
+| `NonMatching` | Provider-owned and not-fully-converged safe assessments | Included |
+| `BlockingOnly` | Preflight rejects or failed safe postconditions | Excluded |
+
+Every report view uses
+[`safe-migration-report-view-v1`](../schemas/safe-migration-report-view-v1.schema.json)
+and carries `documentKind`, selection, source report identity, source totals,
+included totals, and the selected arrays. Selection scans the immutable source
+without allocating a filtered collection and preserves original order and
+ordinals. A non-blocked source produces a valid empty `BlockingOnly` view. A
+source marked `Blocked` without a selectable blocker fails closed because the
+view could otherwise conceal an unknown or inconsistent blocking contract.
+Zero and undefined enum values throw before output is written.
+
 Invalid input can throw `ArgumentException`/derived exceptions; canonical model
 drift throws `SafeMigrationModelMismatchException`; invalid integration can
 throw `InvalidOperationException`; provider/database failures retain their

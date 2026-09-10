@@ -6,6 +6,13 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Add allocation-bounded, self-describing report-view serialization with
+  `Complete`, `NonMatching`, and phase-specific `BlockingOnly` selection. The
+  packaged view schema records source identity and total/included counts while
+  preserving canonical assessment order and the existing report-v2 contract.
+
 ## [10.3.2] - 2026-09-10
 
 Prepared a stable maintenance release that prevents silent fallback to ordinary

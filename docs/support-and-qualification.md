@@ -295,7 +295,9 @@ MySQL/MariaDB, and PostgreSQL dependency boundaries for:
 - MySQL handler/generator output;
 - PostgreSQL adapter output;
 - canonical snapshot initialization, relational model differ, and fingerprint;
-- report JSON serialization.
+- report JSON serialization;
+- blocker-view serialization across 50,000 assessments with a small selected
+  result and no filtered collection;
 - model-managed intent construction and contract fingerprinting at 384 row
   transitions;
 - provider model-managed command generation and analyzer-plan construction at
@@ -345,7 +347,7 @@ formatter for layout rules that Roslyn cannot represent.
 1. packs the same Release build twice;
 2. compares all three `.nupkg` and three `.snupkg` files byte-for-byte;
 3. verifies the exact file set, metadata, dependency shape, assemblies, XML,
-   symbols, README, license, and report schema;
+   symbols, README, license, and report schemas;
 4. builds and runs an isolated consumer using packages only;
 5. emits sorted SHA-256 checksums.
 
