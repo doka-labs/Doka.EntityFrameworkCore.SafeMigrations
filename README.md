@@ -43,10 +43,10 @@ when that matrix executes. The exact successful run, not this table, is release
 evidence. See [Support and qualification](docs/support-and-qualification.md).
 
 The initial complete stable delivery is 10.0.0. The latest confirmed published
-release is 10.3.0. This source is prepared for stable 10.3.1, a documentation
-and package-metadata maintenance release that preserves the 10.3.0 public API,
-runtime, SQL, report, migration-source, and data contracts. Only a successful
-release run and verified public packages establish 10.3.1 availability or
+release is 10.3.1. This source is prepared for stable 10.3.2, which fails closed
+when SafeMigrations design-time assets are missing and uses Doka 10.4.0's
+commandless handler result for its internal runtime guard. Only a successful
+release run and verified public packages establish 10.3.2 availability or
 qualification. See the [changelog](CHANGELOG.md).
 
 ## Installation
@@ -58,14 +58,14 @@ published release and all three NuGet package pages before installation; source
 or changelog entries alone do not establish package availability.
 
 ```bash
-package_version='10.3.1'
+package_version='10.3.2'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.MySql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.3.1'
+package_version='10.3.2'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version "$package_version"
 ```
 

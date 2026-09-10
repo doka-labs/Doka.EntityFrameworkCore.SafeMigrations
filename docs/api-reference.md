@@ -28,10 +28,12 @@ Published stable 10.2.1 preserves that public API and operation contract while
 correcting statement-terminator ownership in generated model-managed calls.
 Published stable 10.3.0 adds explicit model-managed-data ownership for excluded
 tables, provider-proven lossless column repair, report schema version 2, and
-typed diagnostic evidence. Prepared stable 10.3.1 preserves the complete public
-API and generated operation contract. Strict scaffolding remains the default. A
-successful release run and exact-version public package readback remain the
-authority for a published API.
+typed diagnostic evidence. Published stable 10.3.1 preserves the complete
+public API and generated operation contract. Prepared stable 10.3.2 preserves
+them again while hardening design-time registration detection and consuming
+Doka 10.4.0's commandless operation result. Strict scaffolding remains the
+default. A successful release run and exact-version public package readback
+remain the authority for a published API.
 
 ## Packages and registration
 

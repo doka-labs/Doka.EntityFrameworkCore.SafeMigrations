@@ -503,15 +503,15 @@
       "doka.entityframeworkcore.safemigrations.efownership.core": {
         "type": "Project",
         "dependencies": {
-          "Doka.EntityFrameworkCore.SafeMigrations": "[10.3.1-dev, )",
-          "Doka.EntityFrameworkCore.SafeMigrations.MySql": "[10.3.1-dev, )",
-          "Doka.EntityFrameworkCore.SafeMigrations.PostgreSql": "[10.3.1-dev, )"
+          "Doka.EntityFrameworkCore.SafeMigrations": "[10.3.2-dev, )",
+          "Doka.EntityFrameworkCore.SafeMigrations.MySql": "[10.3.2-dev, )",
+          "Doka.EntityFrameworkCore.SafeMigrations.PostgreSql": "[10.3.2-dev, )"
         }
       },
       "doka.entityframeworkcore.safemigrations.efownership.custom": {
         "type": "Project",
         "dependencies": {
-          "Doka.EntityFrameworkCore.SafeMigrations": "[10.3.1-dev, )",
+          "Doka.EntityFrameworkCore.SafeMigrations": "[10.3.2-dev, )",
           "Doka.EntityFrameworkCore.SafeMigrations.EfOwnership.Core": "[1.0.0, )"
         }
       },
@@ -519,14 +519,14 @@
         "type": "Project",
         "dependencies": {
           "Doka.EntityFrameworkCore.MySql": "[10.4.0, 10.5.0)",
-          "Doka.EntityFrameworkCore.SafeMigrations": "[10.3.1-dev, )",
+          "Doka.EntityFrameworkCore.SafeMigrations": "[10.3.2-dev, )",
           "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.0.11, 10.1.0)"
         }
       },
       "doka.entityframeworkcore.safemigrations.postgresql": {
         "type": "Project",
         "dependencies": {
-          "Doka.EntityFrameworkCore.SafeMigrations": "[10.3.1-dev, )",
+          "Doka.EntityFrameworkCore.SafeMigrations": "[10.3.2-dev, )",
           "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.0.11, 10.1.0)",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, 11.0.0)"
         }
