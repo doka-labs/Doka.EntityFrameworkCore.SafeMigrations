@@ -6,6 +6,20 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+## [10.4.0] - 2026-09-11
+
+Prepared a stable minor release for allocation-bounded, self-describing report
+views. It also corrects MariaDB JSON collation diagnostics so drift evidence
+names the physical contract enforced by analysis. Existing canonical report-v2
+serialization and migration operation, data, history, and recovery contracts
+remain unchanged.
+
+These notes do not establish publication. Require the successful stable
+release run, the authorized signed `v10.4.0` tag, and verified public package,
+symbol, GitHub Release, provenance, SBOM, and attestation readback before
+selecting 10.4.0. All three package IDs must be published at the exact same
+version.
+
 ### Added
 
 - Add allocation-bounded, self-describing report-view serialization with
@@ -856,7 +870,8 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.3.2...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.0...HEAD
+[10.4.0]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.3.2...v10.4.0
 [10.3.2]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.3.1...v10.3.2
 [10.3.1]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.3.0...v10.3.1
 [10.3.0]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.2.1...v10.3.0
