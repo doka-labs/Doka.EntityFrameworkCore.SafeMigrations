@@ -219,6 +219,12 @@ row exists and never return the value, key, or a derived fragment. The typed
 preflight exception retains the immutable report while limiting its message to
 one deterministic bounded conflict summary.
 
+Selected report views retain the same protected assessment fields and are not
+redaction. `BlockingOnly` reduces operator noise and excludes unexpected-object
+inventory, while source fingerprints and total/included counts make the
+derivation explicit. Preserve the canonical complete report wherever audit or
+recovery policy requires evidence for omitted entries.
+
 ## Residual risks and response
 
 Threats include malicious schema metadata, inconsistent legacy data, privileged

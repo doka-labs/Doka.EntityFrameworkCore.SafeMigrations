@@ -17,6 +17,9 @@
   <ItemGroup>
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
     <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+    <None Include="..\..\schemas\safe-migration-report-view-v1.schema.json"
+          Pack="true"
+          PackagePath="schemas\" />
     <None Include="..\..\schemas\safe-migration-run-report-v1.schema.json"
           Pack="true"
           PackagePath="schemas\" />

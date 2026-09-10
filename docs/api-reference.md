@@ -29,11 +29,13 @@ correcting statement-terminator ownership in generated model-managed calls.
 Published stable 10.3.0 adds explicit model-managed-data ownership for excluded
 tables, provider-proven lossless column repair, report schema version 2, and
 typed diagnostic evidence. Published stable 10.3.1 preserves the complete
-public API and generated operation contract. Prepared stable 10.3.2 preserves
+public API and generated operation contract. Published stable 10.3.2 preserves
 them again while hardening design-time registration detection and consuming
-Doka 10.4.0's commandless operation result. Strict scaffolding remains the
-default. A successful release run and exact-version public package readback
-remain the authority for a published API.
+Doka 10.4.0's commandless operation result. Prepared stable 10.4.0 adds
+self-describing report-view serialization without changing canonical report-v2
+bytes and corrects MariaDB JSON collation diagnostics. Strict scaffolding
+remains the default. A successful release run and exact-version public package
+readback remain the authority for a published API.
 
 ## Packages and registration
 
@@ -525,6 +527,25 @@ defines the current wire contract. The
 [version 1 schema](../schemas/safe-migration-run-report-v1.schema.json) remains
 available for previously persisted reports. Treat every report as sensitive;
 it can identify schema objects even though telemetry excludes them.
+
+The overloads accepting `SafeMigrationReportSelection` write a distinct report
+view rather than changing the canonical report contract:
+
+| Selection | Included assessments | Unexpected objects |
+| --- | --- | --- |
+| `Complete` | Every source assessment | Included |
+| `NonMatching` | Provider-owned and not-fully-converged safe assessments | Included |
+| `BlockingOnly` | Preflight rejects or failed safe postconditions | Excluded |
+
+Every report view uses
+[`safe-migration-report-view-v1`](../schemas/safe-migration-report-view-v1.schema.json)
+and carries `documentKind`, selection, source report identity, source totals,
+included totals, and the selected arrays. Selection scans the immutable source
+without allocating a filtered collection and preserves original order and
+ordinals. A non-blocked source produces a valid empty `BlockingOnly` view. A
+source marked `Blocked` without a selectable blocker fails closed because the
+view could otherwise conceal an unknown or inconsistent blocking contract.
+Zero and undefined enum values throw before output is written.
 
 Invalid input can throw `ArgumentException`/derived exceptions; canonical model
 drift throws `SafeMigrationModelMismatchException`; invalid integration can

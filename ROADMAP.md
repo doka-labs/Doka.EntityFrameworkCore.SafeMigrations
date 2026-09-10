@@ -50,11 +50,13 @@ Published stable 10.3.0 adds explicit shared/extended model-managed-data
 ownership, provider-proven lossless column repair, actionable report evidence,
 and the provider correctness fixes found during complete qualification.
 Published stable 10.3.1 clarifies generic application-context ownership
-examples and removes redundant package release-notes metadata. Prepared stable
+examples and removes redundant package release-notes metadata. Published stable
 10.3.2 fails closed when SafeMigrations design-time assets are missing and
 adopts Doka 10.4.0's commandless handler result for the internal runtime guard.
-These releases follow changed dependency conditions and confirmed correctness
-requirements; they are not deferred initial scope.
+Prepared stable 10.4.0 adds allocation-bounded, self-describing report views
+and corrects MariaDB JSON collation diagnostics. These releases follow changed
+dependency conditions and confirmed correctness requirements; they are not
+deferred initial scope.
 
 Requalify affected behavior before adopting a provider, EF Core, database,
 SDK, action, or tooling update. Preserve public API, report, migration, data

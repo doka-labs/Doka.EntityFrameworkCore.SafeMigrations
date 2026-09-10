@@ -106,4 +106,71 @@ internal static class ColumnBenchmarkWorkload
             new string('b', 64),
             assessments);
     }
+
+    public static SafeMigrationRunReport CreateBlockingReportViewWorkload(
+        int count,
+        int blockerCount
+    )
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(blockerCount);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(blockerCount, count);
+
+        var assessments = new SafeMigrationAssessment[count];
+        var firstBlockerIndex = count - blockerCount;
+        for (var index = 0; index < count; index++)
+        {
+            var isBlocking = index >= firstBlockerIndex;
+            var blockerOffset = index - firstBlockerIndex;
+            var outcome = isBlocking
+                ? (blockerOffset % 4) switch
+                {
+                    0 => (
+                        ObservedState: SafeMigrationObservedState.Unsupported,
+                        Action: SafeMigrationAction.RejectUnsupported),
+                    1 => (
+                        ObservedState: SafeMigrationObservedState.Different,
+                        Action: SafeMigrationAction.RejectDifferent),
+                    2 => (
+                        ObservedState: SafeMigrationObservedState.DataBlocked,
+                        Action: SafeMigrationAction.RejectDataBlocked),
+                    _ => (
+                        ObservedState: SafeMigrationObservedState.PrerequisiteMissing,
+                        Action: SafeMigrationAction.RejectPrerequisiteMissing),
+                }
+                : (
+                    ObservedState: SafeMigrationObservedState.Matching,
+                    Action: SafeMigrationAction.NoOp);
+
+            assessments[index] = new SafeMigrationAssessment(
+                index,
+                typeof(SafeMigrationOperation).FullName!,
+                isSafeOperation: true,
+                SafeMigrationOperationKind.EnsureColumn,
+                $"value_{index.ToString(CultureInfo.InvariantCulture)}",
+                outcome.ObservedState,
+                outcome.Action,
+                postconditionSatisfied: !isBlocking,
+                isBlocking ? "different_reject" : "classified_matching");
+        }
+
+        return new SafeMigrationRunReport(
+            SafeMigrationReportMode.Preflight,
+            blockerCount == 0
+                ? SafeMigrationReportStatus.Ready
+                : SafeMigrationReportStatus.Blocked,
+            new DateTimeOffset(
+                2026,
+                9,
+                10,
+                0,
+                0,
+                0,
+                TimeSpan.Zero),
+            "benchmark-instance",
+            new SafeMigrationProviderEnvironment("benchmark", "mysql", "10.0.0"),
+            "202609100001_Benchmark",
+            $"safe-relational-model:v1:benchmark:sha256:{new string('a', 64)}",
+            new string('b', 64),
+            assessments);
+    }
 }

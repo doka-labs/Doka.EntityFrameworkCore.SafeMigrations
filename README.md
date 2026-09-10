@@ -43,11 +43,11 @@ when that matrix executes. The exact successful run, not this table, is release
 evidence. See [Support and qualification](docs/support-and-qualification.md).
 
 The initial complete stable delivery is 10.0.0. The latest confirmed published
-release is 10.3.1. This source is prepared for stable 10.3.2, which fails closed
-when SafeMigrations design-time assets are missing and uses Doka 10.4.0's
-commandless handler result for its internal runtime guard. Only a successful
-release run and verified public packages establish 10.3.2 availability or
-qualification. See the [changelog](CHANGELOG.md).
+release is 10.3.2. This source is prepared for stable 10.4.0, which adds
+allocation-bounded, self-describing report views and corrects MariaDB JSON
+collation diagnostics. Only a successful release run and verified public
+packages establish 10.4.0 availability or qualification. See the
+[changelog](CHANGELOG.md).
 
 ## Installation
 
@@ -58,14 +58,14 @@ published release and all three NuGet package pages before installation; source
 or changelog entries alone do not establish package availability.
 
 ```bash
-package_version='10.3.2'
+package_version='10.4.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.MySql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.3.2'
+package_version='10.4.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version "$package_version"
 ```
 
@@ -565,6 +565,23 @@ and independent review for those operations. Serialize with
 [`safe-migration-run-report-v2` schema](schemas/safe-migration-run-report-v2.schema.json).
 The [version 1 schema](schemas/safe-migration-run-report-v1.schema.json) remains
 available for readers of previously persisted reports.
+
+For focused operator output, serialize a self-describing report view instead
+of copying or mutating the immutable report:
+
+```csharp
+var blockingJson = SafeMigrationReportJson.SerializeToUtf8Bytes(
+    preflight,
+    SafeMigrationReportSelection.BlockingOnly);
+```
+
+`Complete` includes every entry, `NonMatching` removes only fully converged safe
+assessments, and `BlockingOnly` includes only the assessments that block the
+current preflight or postflight phase. The view retains source identity and
+total/included counts, preserves assessment order, and never includes
+unexpected objects in `BlockingOnly`. It uses the distinct packaged
+[`safe-migration-report-view-v1` schema](schemas/safe-migration-report-view-v1.schema.json);
+the existing one-argument serializer remains the canonical complete report v2.
 
 Do not encode a preflight-only operation inside `Migration.Up`. EF would record
 the migration as applied after successful command execution even when the

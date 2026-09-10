@@ -15,6 +15,17 @@ foreach (var size in new[] { 1, 100, 1000 })
             .Length);
 }
 
+var blockingReportViewWorkload = ColumnBenchmarkWorkload.CreateBlockingReportViewWorkload(
+    count: 50_000,
+    blockerCount: 8);
+
+runner.Measure(
+    "report_view_blocking_50000",
+    () => SafeMigrationReportJson.SerializeToUtf8Bytes(
+            blockingReportViewWorkload,
+            SafeMigrationReportSelection.BlockingOnly)
+        .Length);
+
 runner.Measure(
     "model_data_intent_construction_384",
     () => ModelManagedDataBenchmarkWorkload.CreateOperations(

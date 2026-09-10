@@ -79,10 +79,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         ArgumentNullException.ThrowIfNull(analysis);
         ArgumentNullException.ThrowIfNull(decision);
 
-        if (decision.Action is SafeMigrationAction.RejectDifferent
-            or SafeMigrationAction.RejectUnsupported
-            or SafeMigrationAction.RejectDataBlocked
-            or SafeMigrationAction.RejectPrerequisiteMissing)
+        if (decision.Action.RejectsExecution())
         {
             return;
         }

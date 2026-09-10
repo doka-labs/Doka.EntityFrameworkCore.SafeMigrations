@@ -139,6 +139,126 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     }
 
     [Fact]
+    public async Task ExplicitTextCollationDrift_ReportsTheLogicalExpectedCollation()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `text_collation_diagnostic` ("
+            + "`value` varchar(40) COLLATE utf8mb4_bin NULL) "
+            + "DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;");
+
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureColumn(
+            "text_collation_diagnostic",
+            new ExpectedColumnDefinition(
+                "value",
+                typeof(string),
+                true,
+                "varchar(40)",
+                maxLength: 40,
+                collation: new SafeMigrationCollationIdentifier("utf8mb4_unicode_ci")),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("text-collation-diagnostic"));
+        var assessment = Assert.Single(report.Assessments);
+        var difference = Assert.Single(assessment.Differences);
+
+        Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
+        Assert.Equal("column_collation", difference.Facet);
+        Assert.Equal("utf8mb4_unicode_ci", difference.Expected);
+        Assert.Equal("utf8mb4_bin", difference.Actual);
+    }
+
+    [Fact]
+    public async Task MariaDbJsonCollationDrift_ReportsAndMatchesTheProviderPhysicalContract()
+    {
+        if (!Fixture.IsMariaDb)
+        {
+            return;
+        }
+
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `json_collation_diagnostic` ("
+            + "`Config` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL); ");
+
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureColumn(
+            "json_collation_diagnostic",
+            new ExpectedColumnDefinition(
+                "Config",
+                typeof(string),
+                true,
+                "json",
+                collation: new SafeMigrationCollationIdentifier("utf8mb4_unicode_ci")),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var differentReport = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("json-collation-different"));
+        var differentAssessment = Assert.Single(differentReport.Assessments);
+        var difference = Assert.Single(differentAssessment.Differences);
+
+        Assert.Equal(SafeMigrationObservedState.Different, differentAssessment.ObservedState);
+        Assert.Equal("column_collation", difference.Facet);
+        Assert.Equal("utf8mb4_bin", difference.Expected);
+        Assert.Equal("utf8mb4_unicode_ci", difference.Actual);
+
+        await ExecuteSqlAsync(
+            connectionString,
+            "ALTER TABLE `json_collation_diagnostic` MODIFY COLUMN "
+            + "`Config` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NULL;");
+
+        var matchingReport = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("json-collation-matching"));
+        var matchingAssessment = Assert.Single(matchingReport.Assessments);
+
+        Assert.Equal(SafeMigrationObservedState.Matching, matchingAssessment.ObservedState);
+        Assert.Empty(matchingAssessment.Differences);
+    }
+
+    [Fact]
+    public async Task MySqlNativeJson_UsesTheNativeNullCollationContract()
+    {
+        if (Fixture.IsMariaDb)
+        {
+            return;
+        }
+
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `native_json_collation` (`Config` json NULL);");
+
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureColumn(
+            "native_json_collation",
+            new ExpectedColumnDefinition(
+                "Config",
+                typeof(string),
+                true,
+                "json"),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("native-json-collation"));
+        var assessment = Assert.Single(report.Assessments);
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
+        Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState);
+        Assert.Empty(assessment.Differences);
+    }
+
+    [Fact]
     public async Task UnsafeNotNullAdd_FailsBeforeTargetDdl()
     {
         var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);

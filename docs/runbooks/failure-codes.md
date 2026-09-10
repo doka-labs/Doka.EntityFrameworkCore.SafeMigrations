@@ -167,6 +167,16 @@ contains only a bounded deterministic first-conflict summary; its `Report`
 property retains the complete immutable assessment set. Do not log or publish
 that complete report without applying its protected-evidence controls.
 
+For operator-facing failure artifacts, call
+`SafeMigrationReportJson.SerializeToUtf8Bytes(report,
+SafeMigrationReportSelection.BlockingOnly)`. Preflight views contain exactly
+the four reject actions; postflight views contain failed safe postconditions.
+The view preserves source ordinals and difference evidence while excluding
+non-blockers and unexpected objects. Use `NonMatching` when preserved
+unexpected objects or accepted-but-not-converged assessments are relevant.
+Validate the result against `safe-migration-report-view-v1`; it is not a
+schema-v2 report with entries silently removed.
+
 ## Accepting planner decision codes
 
 These are the public planner's decision codes, not the normal code values in

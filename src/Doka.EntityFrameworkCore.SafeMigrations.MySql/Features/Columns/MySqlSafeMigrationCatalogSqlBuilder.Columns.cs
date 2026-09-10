@@ -254,11 +254,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var temporalRowVersion = IsTemporalRowVersion(definition);
         var mariaDbJsonAlias = isMariaDb
             && StringComparer.OrdinalIgnoreCase.Equals(storeType.Trim(), "json");
+        var collationContract = BuildCollationContract(table, definition.Collation, mariaDbJsonAlias);
 
         var conditions = new List<string>
         {
             BuildStoreTypeMatches(storeType, isMariaDb),
-            BuildCollationMatches(table, definition.Collation, mariaDbJsonAlias),
+            collationContract.MatchExpression,
             BuildComputedMatches(definition, isMariaDb),
             BuildValueGenerationMatches(definition, temporalRowVersion),
         };
@@ -325,6 +326,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var temporalRowVersion = IsTemporalRowVersion(definition);
         var mariaDbJsonAlias = isMariaDb
             && StringComparer.OrdinalIgnoreCase.Equals(storeType.Trim(), "json");
+        var collationContract = BuildCollationContract(table, definition.Collation, mariaDbJsonAlias);
 
         var defaultMatches = BuildDefaultMatches(
             "c.COLUMN_DEFAULT",
@@ -357,12 +359,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 definition.IsNullable ? "'nullable'" : "'not_nullable'",
                 "CASE c.IS_NULLABLE WHEN 'YES' THEN 'nullable' WHEN 'NO' THEN 'not_nullable' ELSE 'unknown' END"),
             DiagnosticRecord(
-                $"NOT ({BuildCollationMatches(table, definition.Collation, mariaDbJsonAlias)})",
+                $"NOT ({collationContract.MatchExpression})",
                 "column_collation",
-                definition.Collation is null
-                    ? "COALESCE((SELECT t.TABLE_COLLATION FROM INFORMATION_SCHEMA.TABLES t "
-                        + $"WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_NAME = {Literal(table)}), 'none')"
-                    : Literal(definition.Collation.Name),
+                BuildCollationExpectedExpression(collationContract),
                 "LEFT(COALESCE(c.COLLATION_NAME, 'none'), 256)"),
             DiagnosticRecord(
                 $"NOT ({defaultKindMatches})",
@@ -660,7 +659,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         AppendSupportedVarcharRepairTable(builder, table);
         builder
             .Append(" AND ")
-            .Append(BuildCollationMatches(table, definition.Collation, mariaDbJsonAlias: false))
+            .Append(BuildCollationContract(table, definition.Collation, mariaDbJsonAlias: false).MatchExpression)
             .Append(" AND ")
             .Append(BuildComputedMatches(definition, isMariaDb))
             .Append(" AND ")
@@ -924,7 +923,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         return clrType == typeof(byte[]) || clrType == typeof(DateTime) || clrType == typeof(DateTimeOffset);
     }
 
-    private string BuildCollationMatches(
+    private CollationContract BuildCollationContract(
         string table,
         SafeMigrationCollationIdentifier? expectedCollation,
         bool mariaDbJsonAlias
@@ -935,18 +934,55 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             // Doka materializes MariaDB's JSON alias as LONGTEXT with the
             // binary JSON collation. Compare the provider-owned physical
             // representation, not the table default inherited by ordinary text.
-            return "LOWER(c.COLLATION_NAME) = 'utf8mb4_bin'";
+            return new CollationContract(
+                "LOWER(c.COLLATION_NAME) = 'utf8mb4_bin'",
+                CollationExpectationKind.Expression,
+                "'utf8mb4_bin'");
         }
 
         if (expectedCollation is not null)
         {
-            return $"c.COLLATION_NAME <=> {Literal(expectedCollation.Name)}";
+            var expectedExpression = Literal(expectedCollation.Name);
+
+            return new CollationContract(
+                $"c.COLLATION_NAME <=> {expectedExpression}",
+                CollationExpectationKind.Expression,
+                expectedExpression);
         }
 
-        return "(c.COLLATION_NAME IS NULL OR c.COLLATION_NAME <=> "
+        // WHY: The expected table-default expression is only needed for
+        // diagnostics. Retaining the table name avoids materializing a second
+        // catalog subquery for every comparison-only operation.
+        return new CollationContract(
+            "(c.COLLATION_NAME IS NULL OR c.COLLATION_NAME <=> "
             + "(SELECT t.TABLE_COLLATION FROM INFORMATION_SCHEMA.TABLES t "
-            + $"WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_NAME = {Literal(table)}))";
+            + $"WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_NAME = {Literal(table)}))",
+            CollationExpectationKind.InheritedTableDefault,
+            table);
     }
+
+    private string BuildCollationExpectedExpression(
+        CollationContract contract
+    ) => contract.ExpectationKind switch
+    {
+        CollationExpectationKind.Expression => contract.ExpectationSource,
+        CollationExpectationKind.InheritedTableDefault =>
+            "COALESCE((SELECT t.TABLE_COLLATION FROM INFORMATION_SCHEMA.TABLES t "
+            + $"WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_NAME = {Literal(contract.ExpectationSource)}), 'none')",
+        _ => throw new InvalidOperationException(
+            $"Unsupported collation expectation kind '{contract.ExpectationKind}'."),
+    };
+
+    private enum CollationExpectationKind : byte
+    {
+        Expression = 1,
+        InheritedTableDefault = 2,
+    }
+
+    private readonly record struct CollationContract(
+        string MatchExpression,
+        CollationExpectationKind ExpectationKind,
+        string ExpectationSource);
 
     private string BuildStoreTypeMatches(
         string storeType,

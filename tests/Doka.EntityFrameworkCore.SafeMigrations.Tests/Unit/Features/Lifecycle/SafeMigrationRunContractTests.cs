@@ -489,6 +489,59 @@ public sealed class SafeMigrationRunContractTests
     }
 
     [Fact]
+    public void ReportViewJson_MatchesThePackagedClosedSchema()
+    {
+        var assessment = new SafeMigrationAssessment(
+            7,
+            typeof(SafeMigrationOperation).FullName!,
+            isSafeOperation: true,
+            SafeMigrationOperationKind.EnsureColumn,
+            "Config",
+            SafeMigrationObservedState.Different,
+            SafeMigrationAction.RejectDifferent,
+            postconditionSatisfied: false,
+            "different_reject",
+            "classified_different",
+            "different_no_safe_repair",
+            SafeMigrationOperationalImpact.NotApplicable,
+            [new SafeMigrationFacetDifference("column_collation", "utf8mb4_bin", "utf8mb4_unicode_ci")]);
+
+        var report = CreateReport(
+            status: SafeMigrationReportStatus.Blocked,
+            assessments: [assessment]);
+
+        using var document = JsonDocument.Parse(SafeMigrationReportJson.SerializeToUtf8Bytes(
+            report,
+            SafeMigrationReportSelection.BlockingOnly));
+        using var schema = LoadReportViewSchema();
+        var root = document.RootElement;
+        var schemaRoot = schema.RootElement;
+        var definitions = schemaRoot.GetProperty("$defs");
+
+        AssertSchemaEnum(
+            schemaRoot
+                .GetProperty("properties")
+                .GetProperty("selection"),
+            ["complete", "non_matching", "blocking_only"]);
+        AssertClosedObjectSurface(schemaRoot, root);
+        AssertClosedObjectSurface(
+            definitions.GetProperty("sourceReport"),
+            root.GetProperty("sourceReport"));
+        AssertClosedObjectSurface(
+            definitions.GetProperty("environment"),
+            root.GetProperty("sourceReport")
+                .GetProperty("environment"));
+        AssertClosedObjectSurface(
+            definitions.GetProperty("assessment"),
+            root.GetProperty("assessments")[0]);
+        AssertClosedObjectSurface(
+            definitions.GetProperty("difference"),
+            root.GetProperty("assessments")[0]
+                .GetProperty("differences")[0]);
+        AssertMatchesSchema(schemaRoot, root, schemaRoot);
+    }
+
+    [Fact]
     public void FailureTelemetry_ContainsOnlyBoundedLowCardinalityTags()
     {
         var measurements = new List<KeyValuePair<string, object?>[]>();
@@ -718,6 +771,13 @@ public sealed class SafeMigrationRunContractTests
                 AppContext.BaseDirectory,
                 "schemas",
                 $"safe-migration-run-report-v{version}.schema.json")));
+
+    private static JsonDocument LoadReportViewSchema() => JsonDocument.Parse(
+        File.ReadAllBytes(
+            Path.Combine(
+                AppContext.BaseDirectory,
+                "schemas",
+                "safe-migration-report-view-v1.schema.json")));
 
     private static void AssertSchemaEnum(
         JsonElement schema,

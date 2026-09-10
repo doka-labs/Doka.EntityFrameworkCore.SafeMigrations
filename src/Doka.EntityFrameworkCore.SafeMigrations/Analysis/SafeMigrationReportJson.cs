@@ -3,6 +3,8 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// <summary>Writes the versioned SafeMigrations report JSON contract.</summary>
 public static class SafeMigrationReportJson
 {
+    private const int CurrentReportViewSchemaVersion = 1;
+
     private const int MaximumInitialBufferSize = 16 * 1024 * 1024;
 
     private const int EstimatedAssessmentSize = 512;
@@ -10,6 +12,8 @@ public static class SafeMigrationReportJson
     private const int EstimatedUnexpectedObjectSize = 192;
 
     private const int EstimatedReportEnvelopeSize = 1024;
+
+    private const int EstimatedReportViewEnvelopeSize = 1536;
 
     /// <summary>Serializes a report to a compact UTF-8 JSON document.</summary>
     /// <param name="report">The report to serialize.</param>
@@ -32,6 +36,46 @@ public static class SafeMigrationReportJson
         var buffer = new ArrayBufferWriter<byte>(initialBufferSize);
         using var writer = new Utf8JsonWriter(buffer);
         Write(writer, report);
+        writer.Flush();
+
+        return buffer.WrittenSpan.ToArray();
+    }
+
+    /// <summary>
+    /// Serializes an explicitly selected, self-describing report view to a
+    /// compact UTF-8 JSON document.
+    /// </summary>
+    /// <param name="report">The complete source report to select from.</param>
+    /// <param name="selection">The entries to include in the report view.</param>
+    /// <returns>A compact UTF-8 report-view JSON document.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="selection" /> is not a defined selection.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// A blocked source report contains no assessment selected as blocking.
+    /// </exception>
+    public static byte[] SerializeToUtf8Bytes(
+        SafeMigrationRunReport report,
+        SafeMigrationReportSelection selection
+    )
+    {
+        ArgumentNullException.ThrowIfNull(report);
+
+        var selectionCode = SelectionCode(selection);
+        var counts = CountSelectedContent(report, selection);
+        ValidateBlockingSelection(report, selection, counts.AssessmentCount);
+
+        var estimatedSize = EstimatedReportViewEnvelopeSize
+            + ((long)counts.AssessmentCount * EstimatedAssessmentSize)
+            + ((long)counts.UnexpectedObjectCount * EstimatedUnexpectedObjectSize);
+
+        // WHY: Selection is evaluated without materializing a second report or
+        // filtered collection. The bounded estimate therefore scales with the
+        // emitted view rather than the complete source-report cardinality.
+        var initialBufferSize = (int)Math.Min(estimatedSize, MaximumInitialBufferSize);
+        var buffer = new ArrayBufferWriter<byte>(initialBufferSize);
+        using var writer = new Utf8JsonWriter(buffer);
+        WriteReportView(writer, report, selection, selectionCode, counts);
         writer.Flush();
 
         return buffer.WrittenSpan.ToArray();
@@ -79,6 +123,165 @@ public static class SafeMigrationReportJson
         writer.WriteEndArray();
         writer.WriteEndObject();
     }
+
+    /// <summary>
+    /// Writes an explicitly selected, self-describing report view to a
+    /// caller-owned writer without an intermediate object graph.
+    /// </summary>
+    /// <param name="writer">The caller-owned UTF-8 JSON writer.</param>
+    /// <param name="report">The complete source report to select from.</param>
+    /// <param name="selection">The entries to include in the report view.</param>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="selection" /> is not a defined selection.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// A blocked source report contains no assessment selected as blocking.
+    /// </exception>
+    public static void Write(
+        Utf8JsonWriter writer,
+        SafeMigrationRunReport report,
+        SafeMigrationReportSelection selection
+    )
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+        ArgumentNullException.ThrowIfNull(report);
+
+        var selectionCode = SelectionCode(selection);
+        var counts = CountSelectedContent(report, selection);
+        ValidateBlockingSelection(report, selection, counts.AssessmentCount);
+
+        WriteReportView(writer, report, selection, selectionCode, counts);
+    }
+
+    private static void WriteReportView(
+        Utf8JsonWriter writer,
+        SafeMigrationRunReport report,
+        SafeMigrationReportSelection selection,
+        string selectionCode,
+        ReportSelectionCounts counts
+    )
+    {
+        writer.WriteStartObject();
+        writer.WriteNumber("schemaVersion", CurrentReportViewSchemaVersion);
+        writer.WriteString("documentKind", "safe_migration_report_view");
+        writer.WriteString("selection", selectionCode);
+        writer.WriteStartObject("sourceReport");
+        writer.WriteNumber("schemaVersion", report.SchemaVersion);
+        writer.WriteString("mode", ModeCode(report.Mode));
+        writer.WriteString("status", StatusCode(report.Status));
+        writer.WriteString("generatedAtUtc", report.GeneratedAtUtc);
+        writer.WriteString("instanceId", report.InstanceId);
+        WriteEnvironment(writer, report.Environment);
+        WriteNullableString(writer, "targetMigrationId", report.TargetMigrationId);
+        writer.WriteString("modelFingerprint", report.ModelFingerprint);
+        writer.WriteString("contractFingerprint", report.ContractFingerprint);
+        writer.WriteNumber("totalAssessmentCount", report.Assessments.Count);
+        writer.WriteNumber("totalUnexpectedObjectCount", report.UnexpectedObjects.Count);
+        writer.WriteEndObject();
+        writer.WriteNumber("includedAssessmentCount", counts.AssessmentCount);
+        writer.WriteNumber("includedUnexpectedObjectCount", counts.UnexpectedObjectCount);
+        writer.WriteStartArray("assessments");
+
+        foreach (var assessment in report.Assessments)
+        {
+            if (ShouldIncludeAssessment(report.Mode, assessment, selection))
+            {
+                WriteAssessment(writer, assessment);
+            }
+        }
+
+        writer.WriteEndArray();
+        writer.WriteStartArray("unexpectedObjects");
+
+        if (selection is SafeMigrationReportSelection.Complete or SafeMigrationReportSelection.NonMatching)
+        {
+            foreach (var unexpectedObject in report.UnexpectedObjects)
+            {
+                WriteUnexpectedObject(writer, unexpectedObject);
+            }
+        }
+
+        writer.WriteEndArray();
+        writer.WriteEndObject();
+    }
+
+    private static ReportSelectionCounts CountSelectedContent(
+        SafeMigrationRunReport report,
+        SafeMigrationReportSelection selection
+    )
+    {
+        var assessmentCount = 0;
+        foreach (var assessment in report.Assessments)
+        {
+            if (ShouldIncludeAssessment(report.Mode, assessment, selection))
+            {
+                assessmentCount++;
+            }
+        }
+
+        var unexpectedObjectCount = selection is
+            SafeMigrationReportSelection.Complete or
+            SafeMigrationReportSelection.NonMatching
+                ? report.UnexpectedObjects.Count
+                : 0;
+
+        return new ReportSelectionCounts(assessmentCount, unexpectedObjectCount);
+    }
+
+    private static bool ShouldIncludeAssessment(
+        SafeMigrationReportMode mode,
+        SafeMigrationAssessment assessment,
+        SafeMigrationReportSelection selection
+    ) => selection switch
+    {
+        SafeMigrationReportSelection.Complete => true,
+        SafeMigrationReportSelection.NonMatching => !assessment.IsSafeOperation
+            || assessment.ObservedState != SafeMigrationObservedState.Matching
+            || assessment.Action != SafeMigrationAction.NoOp
+            || assessment.PostconditionSatisfied != true,
+        SafeMigrationReportSelection.BlockingOnly => IsBlockingAssessment(mode, assessment),
+        _ => throw new ArgumentOutOfRangeException(nameof(selection)),
+    };
+
+    private static bool IsBlockingAssessment(
+        SafeMigrationReportMode mode,
+        SafeMigrationAssessment assessment
+    ) => mode switch
+    {
+        SafeMigrationReportMode.Preflight => assessment.Action is { } action
+            && action.RejectsExecution(),
+        SafeMigrationReportMode.Postflight => assessment.IsSafeOperation
+            && assessment.PostconditionSatisfied == false,
+        _ => throw new ArgumentOutOfRangeException(nameof(mode)),
+    };
+
+    private static void ValidateBlockingSelection(
+        SafeMigrationRunReport report,
+        SafeMigrationReportSelection selection,
+        int includedAssessmentCount
+    )
+    {
+        if (selection == SafeMigrationReportSelection.BlockingOnly
+            && report.Status == SafeMigrationReportStatus.Blocked
+            && includedAssessmentCount == 0)
+        {
+            // A blocker view must never make an internally inconsistent source
+            // report appear safe. Future status/action additions therefore fail
+            // closed until their selection semantics are defined explicitly.
+            throw new InvalidOperationException(
+                "A blocked SafeMigrations report contains no assessment selected as blocking.");
+        }
+    }
+
+    private static string SelectionCode(
+        SafeMigrationReportSelection selection
+    ) => selection switch
+    {
+        SafeMigrationReportSelection.Complete => "complete",
+        SafeMigrationReportSelection.NonMatching => "non_matching",
+        SafeMigrationReportSelection.BlockingOnly => "blocking_only",
+        _ => throw new ArgumentOutOfRangeException(nameof(selection)),
+    };
 
     private static void WriteEnvironment(
         Utf8JsonWriter writer,
@@ -276,4 +479,8 @@ public static class SafeMigrationReportJson
         SafeMigrationOperationalImpact.Unknown => "unknown",
         _ => throw new ArgumentOutOfRangeException(nameof(value)),
     };
+
+    private readonly record struct ReportSelectionCounts(
+        int AssessmentCount,
+        int UnexpectedObjectCount);
 }

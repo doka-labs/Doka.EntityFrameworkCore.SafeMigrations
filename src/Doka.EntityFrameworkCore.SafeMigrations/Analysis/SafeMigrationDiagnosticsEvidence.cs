@@ -118,10 +118,8 @@ public sealed class SafeMigrationPreflightException : InvalidOperationException
         var blockedCount = 0;
         foreach (var assessment in report.Assessments)
         {
-            if (assessment.Action is not (SafeMigrationAction.RejectDifferent
-                or SafeMigrationAction.RejectUnsupported
-                or SafeMigrationAction.RejectDataBlocked
-                or SafeMigrationAction.RejectPrerequisiteMissing))
+            if (assessment.Action is not { } action
+                || !action.RejectsExecution())
             {
                 continue;
             }

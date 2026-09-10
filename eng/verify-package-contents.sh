@@ -34,6 +34,7 @@ fi
 package_dir="$(cd "$package_dir" && pwd -P)"
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 report_schemas=(
+    safe-migration-report-view-v1.schema.json
     safe-migration-run-report-v1.schema.json
     safe-migration-run-report-v2.schema.json
 )
