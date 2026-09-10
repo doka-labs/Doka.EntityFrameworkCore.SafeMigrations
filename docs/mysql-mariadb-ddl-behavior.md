@@ -11,7 +11,7 @@ session-local, but MySQL-family DDL is not an atomic migration transaction.
 - The migration principal does not need `CREATE ROUTINE`.
 - Guard state lives in the current session and temporary database objects.
 - Prepared SQL contains provider-rendered DDL, not caller-provided SQL text.
-- SafeMigrations declares its user-variable capability through Doka 10.3.0.
+- SafeMigrations declares its user-variable capability through Doka 10.4.0.
   Doka supplies `AllowUserVariables=true` for a provider-owned string only when
   the option was omitted; contradictory owned values fail closed.
 - Caller-owned `DbConnection` and `MySqlDataSource` inputs are never mutated.
@@ -78,12 +78,13 @@ index names from that model so a completed strict batch remains idempotent.
 When neither batch nor target-model evidence is available, the alias is not
 accepted.
 
-Every safe operation returns exactly one Doka 10.3.0 scoped migration command.
-Its bounded fragment list contains ordered setup, one body, and reverse-order
-cleanup. A data-reading classifier adds setup fragments for lazy state
-evaluation without adding EF command boundaries. This shape reduces executor
-dispatch while retaining independent SQL commands inside the provider-owned
-scope.
+Every schema- or data-bearing safe operation returns exactly one Doka 10.4.0
+scoped migration command. Its bounded fragment list contains ordered setup,
+one body, and reverse-order cleanup. The internal design-time-services guard
+instead returns Doka's explicit commandless consumed result. A data-reading
+classifier adds setup fragments for lazy state evaluation without adding EF
+command boundaries. This shape reduces executor dispatch while retaining
+independent SQL commands inside the provider-owned scope.
 
 ## Model-managed data
 
@@ -300,7 +301,7 @@ names introduced in MariaDB 12.1 cannot cross-match another table. MySQL
 invisible indexes and MariaDB ignored indexes do not satisfy a visible expected
 index and do not block creation under a different name.
 
-## Scoped cleanup in Doka 10.3.0
+## Scoped cleanup in Doka 10.4.0
 
 `RenderStandardOperation` exposes provider-validated `Setup`, `Body`, and
 `Cleanup` fragments. SafeMigrations embeds the exact body as UTF-8 hexadecimal
@@ -442,6 +443,8 @@ unqualified future engine line is admitted implicitly.
 - [Doka ownership-aware connection decision](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.2.0/docs/decisions/D-029-ownership-aware-connection-invariants.md)
 - [Doka 10.3.0 migration-operation metadata](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.3.0/src/Doka.EntityFrameworkCore.MySql/Migrations/MySqlMigrationOperationMetadata.cs)
 - [Doka.EntityFrameworkCore.MySql 10.3.0 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.3.0)
+- [Doka 10.4.0 migration-operation handler contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.4.0/docs/migration-operation-handlers.md)
+- [Doka.EntityFrameworkCore.MySql 10.4.0 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.4.0)
 
 Deployment sequencing and incident response are defined in
 [Deployment and recovery](runbooks/deployment-and-recovery.md).

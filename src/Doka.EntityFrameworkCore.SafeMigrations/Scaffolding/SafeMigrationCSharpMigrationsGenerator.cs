@@ -57,11 +57,19 @@ internal sealed class SafeMigrationCSharpMigrationsGenerator : IMigrationsCodeGe
         }
         else
         {
+            var guardedUpOperations = ConsumeDesignTimeServicesGuard(upOperations, "Up");
+            var guardedDownOperations = ConsumeDesignTimeServicesGuard(downOperations, "Down");
+
             // EF's inverse operations are the only authoritative source for
             // pre-change model-managed values. Pair both directions before a
             // legacy rollback is replaced so Up never loses that evidence.
-            effectiveUpOperations = SafeMigrationModelManagedDataPairer.Pair(upOperations, downOperations);
-            var pairedDownOperations = SafeMigrationModelManagedDataPairer.Pair(downOperations, upOperations);
+            effectiveUpOperations = SafeMigrationModelManagedDataPairer.Pair(
+                guardedUpOperations,
+                guardedDownOperations);
+
+            var pairedDownOperations = SafeMigrationModelManagedDataPairer.Pair(
+                guardedDownOperations,
+                guardedUpOperations);
 
             if (_configuration.Mode != SafeMigrationScaffoldingMode.LegacyConvergence)
             {
@@ -93,6 +101,38 @@ internal sealed class SafeMigrationCSharpMigrationsGenerator : IMigrationsCodeGe
                 source,
                 _csharpHelper.Namespace(migrationNamespace))
             : source;
+    }
+
+    private static IReadOnlyList<MigrationOperation> ConsumeDesignTimeServicesGuard(
+        IReadOnlyList<MigrationOperation> operations,
+        string direction
+    )
+    {
+        if (operations.Count == 0)
+        {
+            return operations;
+        }
+
+        if (operations[0] is not SafeMigrationDesignTimeServicesRequiredOperation)
+        {
+            throw new InvalidOperationException(
+                $"SafeMigrations {direction} operations are missing the design-time services guard. "
+                + "The model differ and migrations code generator must be registered together.");
+        }
+
+        var result = new MigrationOperation[operations.Count - 1];
+        for (var ordinal = 1; ordinal < operations.Count; ordinal++)
+        {
+            if (operations[ordinal] is SafeMigrationDesignTimeServicesRequiredOperation)
+            {
+                throw new InvalidOperationException(
+                    $"SafeMigrations {direction} operations contain more than one design-time services guard.");
+            }
+
+            result[ordinal - 1] = operations[ordinal];
+        }
+
+        return result;
     }
 
     /// <inheritdoc />

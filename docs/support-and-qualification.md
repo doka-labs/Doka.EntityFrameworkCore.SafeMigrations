@@ -8,19 +8,20 @@ with roll-forward disabled. SafeMigrations supports EF Core 10 only.
 | Package | Runtime dependency contract |
 | --- | --- |
 | Core | `Microsoft.EntityFrameworkCore.Relational` `[10.0.11,10.1.0)` |
-| MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` `[10.3.0,10.4.0)` |
+| MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` `[10.4.0,10.5.0)` |
 | PostgreSQL | `Npgsql.EntityFrameworkCore.PostgreSQL` `[10.0.3,11.0.0)` |
 
-The MySQL/MariaDB package requires Doka 10.3.0 or a compatible later 10.3 patch
+The MySQL/MariaDB package requires Doka 10.4.0 or a compatible later 10.4 patch
 release and rejects the next minor line. This boundary avoids an exact
 transitive pin without claiming compatibility across an unqualified behavioral
 SPI revision. CI does not build Doka and never uses a cross-repository
 ProjectReference. The committed lockfiles were regenerated from the public
-Doka 10.3.0 package. Its typed migration-operation metadata was rechecked
-against signed tag `v10.3.0`, commit `1217d087e269c346d41131688925d29ebd6151f7`,
-on 2026-09-01. The complete package, engine, tooling, coverage, and performance
-matrix remains the SafeMigrations release gate; a local Doka ProjectReference
-or locally packed candidate is not release evidence.
+Doka 10.4.0 package. Its commandless operation result and retained typed
+migration metadata were rechecked against signed tag `v10.4.0`, commit
+`dffabcafc74934f2645c9bc4cde43fda37051e28`, on 2026-09-10. The complete
+package, engine, tooling, coverage, and performance matrix remains the
+SafeMigrations release gate; a local Doka ProjectReference or locally packed
+candidate is not release evidence.
 The remaining declared dependency graph and .NET 10 release metadata were
 rechecked on 2026-08-27. Bounded package ranges describe compatibility; the
 committed lockfiles identify the exact graph selected by a particular
@@ -392,6 +393,10 @@ and release-asset verification.
   [migration-operation metadata](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.3.0/src/Doka.EntityFrameworkCore.MySql/Migrations/MySqlMigrationOperationMetadata.cs),
   and [signed release tag](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.3.0),
   retrieved 2026-09-01.
+- [Doka 10.4.0 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.4.0),
+  [migration-operation handler contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.4.0/docs/migration-operation-handlers.md),
+  and [signed release tag](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.4.0),
+  retrieved 2026-09-10.
 - [MySQL 8.4 InnoDB limits](https://dev.mysql.com/doc/refman/8.4/en/innodb-limits.html),
   [MySQL 8.4 CREATE INDEX](https://dev.mysql.com/doc/refman/8.4/en/create-index.html),
   [MySQL 8.4 invisible indexes](https://dev.mysql.com/doc/refman/8.4/en/invisible-indexes.html),

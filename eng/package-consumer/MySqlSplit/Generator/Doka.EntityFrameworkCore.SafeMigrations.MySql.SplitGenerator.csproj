@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup Label="Engineering">
+    <AssemblyName>Doka.EntityFrameworkCore.SafeMigrations.MySql.SplitGenerator</AssemblyName>
+    <RootNamespace>Doka.EntityFrameworkCore.SafeMigrations.MySql.SplitGenerator</RootNamespace>
+    <OutputType>Library</OutputType>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Source qualification"
+                 Condition="'$(SafeMigrationsPackageConsumerMode)' == 'Source'">
+    <DefineConstants>$(DefineConstants);SAFE_MIGRATIONS_SOURCE_REFERENCE</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup Label="Design-time">
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design"
+                      PrivateAssets="all"
+                      IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive; compile">
+      <Version
+        Condition="'$(ManagePackageVersionsCentrally)' != 'true'">$(EfCorePackageVersion)</Version>
+      <VersionOverride
+        Condition="'$(ManagePackageVersionsCentrally)' == 'true'">$(EfCorePackageVersion)</VersionOverride>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup Label="Source qualification"
+             Condition="'$(SafeMigrationsPackageConsumerMode)' == 'Source'">
+    <ProjectReference Include="../../../../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/Doka.EntityFrameworkCore.SafeMigrations.MySql.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Label="Package qualification"
+             Condition="'$(SafeMigrationsPackageConsumerMode)' == 'Package'">
+    <PackageReference Include="Doka.EntityFrameworkCore.SafeMigrations.MySql">
+      <Version
+        Condition="'$(ManagePackageVersionsCentrally)' != 'true'">$(SafeMigrationsPackageVersion)</Version>
+      <VersionOverride
+        Condition="'$(ManagePackageVersionsCentrally)' == 'true'">$(SafeMigrationsPackageVersion)</VersionOverride>
+      <ExcludeAssets
+        Condition="'$(SafeMigrationsSplitBuildAssets)' == 'Disabled'">build;buildTransitive</ExcludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup Label="Migration target">
+    <ProjectReference Include="../MigrationsTarget/Doka.EntityFrameworkCore.SafeMigrations.MySql.SplitTarget.csproj" />
+  </ItemGroup>
+</Project>

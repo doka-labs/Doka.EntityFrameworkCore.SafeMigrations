@@ -30,6 +30,10 @@
   </Folder>
   <Folder Name="/eng/package-consumer/MySQL-MariaDB/">
     <Project Path="eng/package-consumer/MySql/Doka.EntityFrameworkCore.SafeMigrations.MySql.PackageConsumer.csproj" />
+    <Project
+      Path="eng/package-consumer/MySqlSplit/Generator/Doka.EntityFrameworkCore.SafeMigrations.MySql.SplitGenerator.csproj" />
+    <Project
+      Path="eng/package-consumer/MySqlSplit/MigrationsTarget/Doka.EntityFrameworkCore.SafeMigrations.MySql.SplitTarget.csproj" />
   </Folder>
   <Folder Name="/eng/package-consumer/PostgreSQL/">
     <Project Path="eng/package-consumer/PostgreSql/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.PackageConsumer.csproj" />

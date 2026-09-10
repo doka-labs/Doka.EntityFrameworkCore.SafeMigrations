@@ -26,7 +26,7 @@ equivalent.
 - `Doka.EntityFrameworkCore.SafeMigrations`: provider-neutral intent,
   definitions, planning, reports, and `MigrationBuilder` extensions
 - `Doka.EntityFrameworkCore.SafeMigrations.MySql`: MySQL and MariaDB adapter on
-  the public `Doka.EntityFrameworkCore.MySql` 10.3.0 operation-handler and
+  the public `Doka.EntityFrameworkCore.MySql` 10.4.0 operation-handler and
   typed migration-metadata SPI
 - `Doka.EntityFrameworkCore.SafeMigrations.PostgreSql`: PostgreSQL adapter on
   Npgsql 10
@@ -43,10 +43,10 @@ when that matrix executes. The exact successful run, not this table, is release
 evidence. See [Support and qualification](docs/support-and-qualification.md).
 
 The initial complete stable delivery is 10.0.0. The latest confirmed published
-release is 10.3.0. This source is prepared for stable 10.3.1, a documentation
-and package-metadata maintenance release that preserves the 10.3.0 public API,
-runtime, SQL, report, migration-source, and data contracts. Only a successful
-release run and verified public packages establish 10.3.1 availability or
+release is 10.3.1. This source is prepared for stable 10.3.2, which fails closed
+when SafeMigrations design-time assets are missing and uses Doka 10.4.0's
+commandless handler result for its internal runtime guard. Only a successful
+release run and verified public packages establish 10.3.2 availability or
 qualification. See the [changelog](CHANGELOG.md).
 
 ## Installation
@@ -58,14 +58,14 @@ published release and all three NuGet package pages before installation; source
 or changelog entries alone do not establish package availability.
 
 ```bash
-package_version='10.3.1'
+package_version='10.3.2'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.MySql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.3.1'
+package_version='10.3.2'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version "$package_version"
 ```
 
@@ -91,7 +91,7 @@ services.AddDbContext<AppDbContext>(options =>
 ```
 
 `UseMySqlSafeMigrations()` declares its user-variable requirement through Doka
-10.3.0. For a provider-owned connection string, Doka supplies
+10.4.0. For a provider-owned connection string, Doka supplies
 `AllowUserVariables=true` when it was omitted. An explicitly contradictory
 setting is rejected. Caller-owned `DbConnection` and `MySqlDataSource` inputs
 are never mutated and must already use `AllowUserVariables=true` and
@@ -164,6 +164,35 @@ required for its extension methods or policy types.
 A runtime-only project may reference a SafeMigrations provider without either
 design-time package. It builds without a design-service attribute or warning;
 EF's tooling rejects scaffolding until a supported design-time package is added.
+
+A generator that references the SafeMigrations provider source project directly
+does not receive NuGet `buildTransitive` assets. Register the provider-owned
+design-time services explicitly in that generator's `Properties/AssemblyInfo.cs`:
+
+```csharp
+using Microsoft.EntityFrameworkCore.Design;
+
+[assembly: DesignTimeServicesReference(
+    "Doka.EntityFrameworkCore.SafeMigrations.MySql.MySqlSafeMigrationDesignTimeServices, "
+    + "Doka.EntityFrameworkCore.SafeMigrations.MySql",
+    "Doka.EntityFrameworkCore.MySql")]
+```
+
+This source-development registration is not required for an ordinary package
+consumer. Do not implement a second migrations code generator.
+
+EF Core reads referenced design-time services from both the migration target
+assembly and the startup assembly. Keep the provider package's `buildTransitive`
+assets enabled on every path that supplies it to those projects. SafeMigrations
+also places an internal guard at the start of every non-empty model difference.
+Its generator consumes that guard before provider code generation. If the
+design-time assets are missing, excluded, or stale, EF Core's ordinary generator
+rejects `SafeMigrationDesignTimeServicesRequiredOperation` before it can write a
+normal `CreateTable` migration. Remove any partial output, restore, rebuild the
+target and startup projects, and rerun the command; do not accept the ordinary
+migration. SafeMigrations consumes the same marker without generating SQL or
+changing the database when EF Core reuses the decorated runtime model differ
+for migration-history DDL.
 
 ### Configure the scaffolding mode
 
@@ -439,7 +468,7 @@ qualified length change. Doka's exact Boolean conversion accepts only absent,
 null, false, or true literal defaults. An expression default or a foreign-key
 dependency keeps the Boolean transition blocked because a single-column repair
 cannot prove that separate behavioral or coupled-type contract.
-Doka 10.3.0's typed metadata must recognize every MySQL/MariaDB annotation.
+Doka 10.4.0's typed metadata must recognize every MySQL/MariaDB annotation.
 Unknown, malformed, contradictory, or unsupported metadata rejects. Existing
 `NULL` rows make a `NOT NULL` repair `DataBlocked`. Other type-family,
 collation, computed/generated, identity, row-version, and unsupported

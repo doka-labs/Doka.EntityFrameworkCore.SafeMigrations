@@ -43,8 +43,23 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         ArgumentNullException.ThrowIfNull(operations);
 
         var commands = new List<MigrationCommand>();
-        foreach (var operation in operations)
+        for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
+            var operation = operations[ordinal];
+            if (operation is SafeMigrationDesignTimeServicesRequiredOperation)
+            {
+                if (ordinal != 0)
+                {
+                    throw new InvalidOperationException(
+                        "The SafeMigrations design-time-services guard must be the first migration operation.");
+                }
+
+                // WHY: EF Core also uses the runtime model differ to create
+                // migration-history DDL. The marker must reach scaffolding but
+                // has no runtime database effect.
+                continue;
+            }
+
             if (operation is not SafeMigrationOperation safeOperation)
             {
                 commands.AddRange(_baselineGenerator.Generate([operation], model, options));

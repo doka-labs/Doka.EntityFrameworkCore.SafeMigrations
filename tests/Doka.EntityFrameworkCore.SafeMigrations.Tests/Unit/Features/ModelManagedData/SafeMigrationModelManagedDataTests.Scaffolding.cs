@@ -214,6 +214,50 @@ public sealed partial class SafeMigrationModelManagedDataTests
         Assert.Equal("configuration", exception.ParamName);
     }
 
+    [Fact]
+    public void EnabledModelDifferPrependsOneDesignTimeServicesGuardAcrossNestedDecoration()
+    {
+        var providerOperation = new SqlOperation { Sql = "SELECT 1;" };
+        var providerDiffer = new StubMigrationsModelDiffer(
+            [providerOperation],
+            hasDifferences: true);
+
+        var configuration = new SafeMigrationScaffoldingConfiguration(
+            IsEnabled: true,
+            Mode: SafeMigrationScaffoldingMode.Strict);
+
+        var inner = new SafeMigrationMigrationsModelDiffer(providerDiffer, configuration);
+        var outer = new SafeMigrationMigrationsModelDiffer(inner, configuration);
+
+        var operations = outer.GetDifferences(source: null, target: null);
+
+        Assert.Collection(
+            operations,
+            operation => Assert.IsType<SafeMigrationDesignTimeServicesRequiredOperation>(operation),
+            operation => Assert.Same(providerOperation, operation));
+    }
+
+    [Fact]
+    public void DisabledModelDifferPreservesProviderOperationsWithoutAGuard()
+    {
+        var providerOperation = new SqlOperation { Sql = "SELECT 1;" };
+        var providerOperations = new MigrationOperation[] { providerOperation };
+        var providerDiffer = new StubMigrationsModelDiffer(
+            providerOperations,
+            hasDifferences: true);
+
+        var configuration = new SafeMigrationScaffoldingConfiguration(
+            IsEnabled: false,
+            Mode: SafeMigrationScaffoldingMode.Strict);
+
+        var differ = new SafeMigrationMigrationsModelDiffer(providerDiffer, configuration);
+
+        var operations = differ.GetDifferences(source: null, target: null);
+
+        Assert.Same(providerOperations, operations);
+        Assert.Same(providerOperation, Assert.Single(operations));
+    }
+
     private static SafeMigrationCSharpMigrationOperationGenerator CreateModelDataOperationGenerator(
         bool isEnabled
     )

@@ -8,6 +8,7 @@ internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffe
 {
     private readonly IMigrationsModelDiffer _providerDiffer;
     private readonly bool _excludeModelManagedDataForExcludedTables;
+    private readonly bool _isScaffoldingEnabled;
 
     public SafeMigrationMigrationsModelDiffer(
         IMigrationsModelDiffer providerDiffer,
@@ -19,6 +20,7 @@ internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffe
 
         _providerDiffer = providerDiffer;
         _excludeModelManagedDataForExcludedTables = configuration.ExcludeModelManagedDataForExcludedTables;
+        _isScaffoldingEnabled = configuration.IsEnabled;
     }
 
     public bool HasDifferences(
@@ -40,7 +42,32 @@ internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffe
             Enrich(operation, source, target);
         }
 
-        return operations;
+        return AddDesignTimeServicesGuard(operations);
+    }
+
+    private IReadOnlyList<MigrationOperation> AddDesignTimeServicesGuard(
+        IReadOnlyList<MigrationOperation> operations
+    )
+    {
+        if (!_isScaffoldingEnabled
+            || operations.Count == 0
+            || operations[0] is SafeMigrationDesignTimeServicesRequiredOperation)
+        {
+            return operations;
+        }
+
+        // WHY: This differ is also part of the runtime service provider that EF
+        // copies into its design-time provider. A marker in the operation stream
+        // is the only evidence available in both the correctly composed path and
+        // the fallback path where the SafeMigrations generator was never loaded.
+        var guarded = new MigrationOperation[operations.Count + 1];
+        guarded[0] = new SafeMigrationDesignTimeServicesRequiredOperation();
+        for (var ordinal = 0; ordinal < operations.Count; ordinal++)
+        {
+            guarded[ordinal + 1] = operations[ordinal];
+        }
+
+        return guarded;
     }
 
     private IReadOnlyList<MigrationOperation> GetOwnedDifferences(

@@ -92,6 +92,7 @@ verify_consumer() {
     local assets_file
     local consumer_project
     local expects_design_reference
+    local scaffolding_expectation
     local source_project
     local -a msbuild_properties
     local -a restore_args
@@ -99,9 +100,15 @@ verify_consumer() {
     case "$tooling_reference" in
         Design | Tools)
             expects_design_reference=true
+            scaffolding_expectation=Safe
+            ;;
+        DesignWithoutSafeBuildAssets)
+            expects_design_reference=false
+            scaffolding_expectation=GuardRejects
             ;;
         None)
             expects_design_reference=false
+            scaffolding_expectation=EfRejects
             ;;
         *)
             echo "Unknown EF tooling reference: $tooling_reference" >&2
@@ -169,7 +176,7 @@ verify_consumer() {
     grep -Fq 'Doka.EntityFrameworkCore.SafeMigrations/' "$assets_file"
 
     case "$tooling_reference" in
-        Design)
+        Design | DesignWithoutSafeBuildAssets)
             grep -Fq 'Microsoft.EntityFrameworkCore.Design/' "$assets_file"
             if grep -Fq 'Microsoft.EntityFrameworkCore.Tools/' "$assets_file"; then
                 echo "$consumer_name direct-Design consumer unexpectedly resolved EF Tools." >&2
@@ -243,7 +250,7 @@ verify_consumer() {
     local migration_name="Package${tooling_reference}ScaffoldingProbe"
     local scaffolding_dir="$consumer_dir/ScaffoldingProbe"
 
-    if [[ "$expects_design_reference" == false ]]; then
+    if [[ "$scaffolding_expectation" == EfRejects ]]; then
         local failure_output
         if failure_output="$(
             cd "$work_dir"
@@ -288,7 +295,7 @@ verify_consumer() {
 
         printf '%s\n' "$invalid_reference_output"
         grep -Fq \
-            'SafeMigrationsEfToolingReference must be Design, Tools, or None.' \
+            'SafeMigrationsEfToolingReference must be Design, DesignWithoutSafeBuildAssets, Tools, or None.' \
             <<<"$invalid_reference_output"
 
         local invalid_mode_output
@@ -311,6 +318,36 @@ verify_consumer() {
         grep -Fq \
             'SafeMigrationsPackageConsumerMode must be Source or Package.' \
             <<<"$invalid_mode_output"
+
+        return 0
+    fi
+
+    if [[ "$scaffolding_expectation" == GuardRejects ]]; then
+        local failure_output
+        if failure_output="$(
+            cd "$work_dir"
+            SafeMigrationsPackageConsumerMode=Package \
+            SafeMigrationsEfToolingReference="$tooling_reference" \
+            dotnet tool run dotnet-ef -- \
+                migrations add "$migration_name" \
+                --project "$consumer_project" \
+                --context PackageScaffoldingDbContext \
+                --output-dir ScaffoldingProbe \
+                --configuration Release \
+                --no-build 2>&1
+        )"; then
+            echo "$consumer_name consumer without SafeMigrations build assets unexpectedly scaffolded a migration." >&2
+            exit 1
+        fi
+
+        printf '%s\n' "$failure_output"
+        grep -Fq 'SafeMigrationDesignTimeServicesRequiredOperation' <<<"$failure_output"
+
+        if [[ -d "$scaffolding_dir" \
+            && -n "$(find "$scaffolding_dir" -type f -name '*.cs' -print -quit)" ]]; then
+            echo "$consumer_name design-time guard failure left migration source behind." >&2
+            exit 1
+        fi
 
         return 0
     fi
@@ -381,8 +418,87 @@ verify_consumer() {
         "${msbuild_properties[@]}"
 }
 
+verify_split_mysql_consumer() {
+    local split_root="$work_dir/eng/package-consumer/MySqlSplit"
+    local target_project="$split_root/MigrationsTarget/Doka.EntityFrameworkCore.SafeMigrations.MySql.SplitTarget.csproj"
+    local startup_project="$split_root/Generator/Doka.EntityFrameworkCore.SafeMigrations.MySql.SplitGenerator.csproj"
+    local migration_name="SplitPackageScaffoldingProbe"
+    local migration_file
+    local -a msbuild_properties
+    local -a restore_args
+
+    cp -R "$script_dir/package-consumer/MySqlSplit" \
+        "$work_dir/eng/package-consumer/MySqlSplit"
+
+    msbuild_properties=(
+        -p:SafeMigrationsPackageVersion="$package_version"
+        -p:EfCorePackageVersion="$ef_core_version"
+        -p:SafeMigrationsPackageConsumerMode=Package
+        -p:SafeMigrationsSplitBuildAssets=Enabled
+    )
+
+    restore_args=(
+        "$startup_project"
+        --packages "$work_dir/packages"
+        --source "$package_dir"
+        --source "$doka_source"
+        --source "https://api.nuget.org/v3/index.json"
+        --use-lock-file
+        --disable-parallel
+        "${msbuild_properties[@]}"
+    )
+
+    dotnet restore "${restore_args[@]}"
+    dotnet restore "${restore_args[@]}" --locked-mode
+    dotnet build "$startup_project" \
+        --configuration Release \
+        --no-restore \
+        --disable-build-servers \
+        "${msbuild_properties[@]}"
+
+    (
+        cd "$work_dir"
+        SafeMigrationsPackageConsumerMode=Package \
+        SafeMigrationsSplitBuildAssets=Enabled \
+        SafeMigrationsPackageVersion="$package_version" \
+        EfCorePackageVersion="$ef_core_version" \
+        dotnet tool run dotnet-ef -- \
+            migrations add "$migration_name" \
+            --project "$target_project" \
+            --startup-project "$startup_project" \
+            --context SplitPackageDbContext \
+            --output-dir ScaffoldingProbe \
+            --configuration Release \
+            --no-build
+    )
+
+    migration_file="$(find "$split_root/MigrationsTarget/ScaffoldingProbe" \
+        -type f -name "*_${migration_name}.cs" -print -quit)"
+    if [[ -z "$migration_file" ]]; then
+        echo "The split MySQL/MariaDB consumer did not scaffold a migration." >&2
+        exit 1
+    fi
+
+    grep -Fq 'migrationBuilder.ConvergeTableFromModel(' "$migration_file"
+    grep -Fq 'using Doka.EntityFrameworkCore.SafeMigrations;' "$migration_file"
+
+    if grep -Fq 'migrationBuilder.CreateTable(' "$migration_file"; then
+        echo "The split MySQL/MariaDB consumer bypassed SafeMigrations scaffolding." >&2
+        exit 1
+    fi
+
+    dotnet build "$startup_project" \
+        --configuration Release \
+        --no-restore \
+        --disable-build-servers \
+        "${msbuild_properties[@]}"
+}
+
 for consumer_name in MySql PostgreSql; do
     verify_consumer "$consumer_name" Design
     verify_consumer "$consumer_name" Tools
+    verify_consumer "$consumer_name" DesignWithoutSafeBuildAssets
     verify_consumer "$consumer_name" None
 done
+
+verify_split_mysql_consumer

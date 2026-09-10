@@ -28,10 +28,12 @@ Published stable 10.2.1 preserves that public API and operation contract while
 correcting statement-terminator ownership in generated model-managed calls.
 Published stable 10.3.0 adds explicit model-managed-data ownership for excluded
 tables, provider-proven lossless column repair, report schema version 2, and
-typed diagnostic evidence. Prepared stable 10.3.1 preserves the complete public
-API and generated operation contract. Strict scaffolding remains the default. A
-successful release run and exact-version public package readback remain the
-authority for a published API.
+typed diagnostic evidence. Published stable 10.3.1 preserves the complete
+public API and generated operation contract. Prepared stable 10.3.2 preserves
+them again while hardening design-time registration detection and consuming
+Doka 10.4.0's commandless operation result. Strict scaffolding remains the
+default. A successful release run and exact-version public package readback
+remain the authority for a published API.
 
 ## Packages and registration
 
@@ -57,7 +59,7 @@ The external-service-provider overloads can explicitly select canonical
 context/generator configuration as documented in their XML reference.
 
 Registration does not create a database or execute migrations. MySQL/MariaDB
-registration calls Doka 10.3.0's `RequireUserVariables()`. Doka supplies
+registration calls Doka 10.4.0's `RequireUserVariables()`. Doka supplies
 `AllowUserVariables=true` when a provider-owned connection string omitted the
 option and rejects an explicit contradiction. Caller-owned `DbConnection` and
 `MySqlDataSource` instances are never mutated; they must already specify
@@ -195,12 +197,29 @@ classified `Unsupported` before target DDL instead of being ignored.
 The provider package contributes a `buildTransitive` assembly attribute when
 the consuming project directly references `Microsoft.EntityFrameworkCore.Design`
 or `Microsoft.EntityFrameworkCore.Tools`. The latter supplies EF Design as a
-transitive dependency. EF Core then discovers the SafeMigrations
-`IDesignTimeServices` implementation and composes its C# migration generator
-after the selected database provider's design services. A runtime-only project
-with neither package receives no attribute or warning. Changing the mode later
-affects only future scaffolding; existing C# migration files retain their
-original method calls.
+transitive dependency. EF Core discovers referenced services on both the
+migration target and startup assemblies, then composes the SafeMigrations C#
+generator after the selected database provider's design services. A runtime-only
+project with neither package receives no attribute or warning.
+
+Local source references do not import NuGet `buildTransitive` assets. A
+generator that references the provider project directly must place EF's
+`DesignTimeServicesReferenceAttribute` for
+`MySqlSafeMigrationDesignTimeServices` in its startup assembly. This is only a
+registration reference: the provider continues to own the implementation, and
+the generator must not replace `IMigrationsCodeGenerator` itself.
+
+Every non-empty model difference produced while SafeMigrations scaffolding is
+enabled starts with an internal design-time-services guard. The SafeMigrations
+generator validates and removes exactly one leading guard before provider code
+generation. An ordinary EF generator cannot render the guard and therefore
+stops before writing ordinary migration source when SafeMigrations build assets
+are absent. The SafeMigrations provider adapters consume the same leading guard
+without SQL or schema effects when EF Core reuses the runtime model differ for
+history table DDL. A misplaced guard remains invalid. An empty migration has no
+guard because there are no operations to protect. Changing the mode later affects
+only future scaffolding; existing C# migration files retain their original
+method calls.
 
 Every generated migration contains an explicit
 `using Doka.EntityFrameworkCore.SafeMigrations;` directive. Generated source

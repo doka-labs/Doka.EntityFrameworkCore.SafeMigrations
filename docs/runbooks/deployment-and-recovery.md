@@ -188,7 +188,7 @@ old execution appear different.
 ## Partial MySQL/MariaDB retry
 
 `UseMySqlSafeMigrations()` declares the user-variable capability through Doka
-10.3.0. Doka supplies `AllowUserVariables=true` for an owned string only when
+10.4.0. Doka supplies `AllowUserVariables=true` for an owned string only when
 the option was omitted. A caller-owned connection or data source must already
 set it and `GuidFormat=Binary16`; every path must retain
 `UseAffectedRows=false`. SafeMigrations validates the actual connection again

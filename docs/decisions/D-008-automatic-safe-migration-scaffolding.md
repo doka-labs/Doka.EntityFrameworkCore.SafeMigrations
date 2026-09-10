@@ -86,21 +86,34 @@ guarded branches with a shared target postcondition.
 
 SafeMigrations registers `IDesignTimeServices` through EF's
 `DesignTimeServicesReferenceAttribute`. Provider-package `buildTransitive`
-assets add that attribute when the startup project directly references
+assets add that attribute when a consuming project directly references
 `Microsoft.EntityFrameworkCore.Design` or `Microsoft.EntityFrameworkCore.Tools`;
 the latter supplies Design transitively. Runtime-only projects with neither
-package receive no design-time attribute. EF Core invokes referenced services
-before provider and default design-time services, so SafeMigrations registers a
-deferred `IMigrationsCodeGeneratorSelector`. At selection time it preserves EF
-Core's legacy precedence and case-insensitive last-language match, then decorates
-the selected provider `IMigrationsCodeGenerator`. Migration metadata and
-snapshots pass through unchanged, preserving provider-owned model namespace
-discovery and rendering. SafeMigrations asks EF Core to render each supported
-migration operation and replaces only one validated leading method token. Any
-missing, repeated, or non-leading token stops scaffolding. Disabled
-SafeMigrations scaffolding delegates provider languages unchanged. Enabled
-scaffolding accepts C# only and rejects an unsupported language before applying
-the C# decorator. A genuinely missing generator always fails at selection.
+package receive no design-time attribute. A generator using a local provider
+`ProjectReference` supplies the same attribute explicitly because NuGet
+`buildTransitive` assets do not participate in that source-only graph. EF Core
+invokes referenced services before provider and default design-time services, so
+SafeMigrations registers a deferred `IMigrationsCodeGeneratorSelector`. At
+selection time it preserves EF Core's legacy precedence and case-insensitive
+last-language match, then decorates the selected provider
+`IMigrationsCodeGenerator`. Migration metadata and snapshots pass through
+unchanged, preserving provider-owned model namespace discovery and rendering.
+SafeMigrations asks EF Core to render each supported migration operation and
+replaces only one validated leading method token. Any missing, repeated, or
+non-leading token stops scaffolding. Disabled SafeMigrations scaffolding
+delegates provider languages unchanged. Enabled scaffolding accepts C# only and
+rejects an unsupported language before applying the C# decorator. A genuinely
+missing generator always fails at selection.
+
+The runtime-registered model-differ decorator also prepends one internal
+design-time-services guard to every non-empty model difference. The
+SafeMigrations generator validates and removes the guard before provider
+generation. If package build assets are missing or excluded, EF Core's ordinary
+operation generator receives an unknown operation and fails before saving a
+migration. This protects separated target/startup layouts without guessing which
+assembly EF will use as the referenced-service owner. Provider runtime adapters
+consume a leading guard without schema effects when EF Core reuses the decorated
+model differ for migration-history DDL; a misplaced guard remains invalid.
 
 SafeMigrations also converts the validated outer migration namespace to the
 repository's file-scoped form and rewrites only known one-dimensional array
@@ -255,6 +268,9 @@ snapshots already required for catalog comparison and hashing.
 - 2026-09-02: D-009 amended automatic scaffolding to decorate the provider
   model differ, pair forward/inverse model-managed rows, and emit guarded
   ensure/update/delete calls without changing structural mode selection.
+- 2026-09-09: Added an operation-stream guard that prevents EF Core from
+  emitting ordinary migration source when SafeMigrations runtime services are
+  active but its design-time build assets are absent.
 
 ### Implementation References
 
@@ -281,6 +297,8 @@ snapshots already required for catalog comparison and hashing.
 - [EF Core 10.0.11 DesignTimeServicesBuilder ordering](https://github.com/dotnet/efcore/blob/v10.0.11/src/EFCore.Design/Design/Internal/DesignTimeServicesBuilder.cs) (primary source; retrieved 2026-08-31)
 - [EF Core 10.0.11 IMigrationsCodeGeneratorSelector API](https://github.com/dotnet/efcore/blob/v10.0.11/src/EFCore.Design/Migrations/Design/IMigrationsCodeGeneratorSelector.cs) (primary source; retrieved 2026-08-31)
 - [EF Core DesignTimeServicesReferenceAttribute API](https://learn.microsoft.com/en-us/dotnet/api/microsoft.entityframeworkcore.design.designtimeservicesreferenceattribute?view=efcore-10.0) (primary source; retrieved 2026-08-27)
+- [EF Core 10.0.11 unknown-operation rejection](https://github.com/dotnet/efcore/blob/v10.0.11/src/EFCore.Design/Migrations/Design/CSharpMigrationOperationGenerator.cs#L38-L69)
+  (primary source; retrieved 2026-09-09)
 - [NuGet MSBuild props and targets](https://learn.microsoft.com/en-us/nuget/concepts/msbuild-props-and-targets) (primary source; retrieved 2026-08-27)
 - [NuGet package build assets](https://learn.microsoft.com/en-us/nuget/create-packages/creating-a-package) (primary source; retrieved 2026-08-27)
 - [Microsoft.EntityFrameworkCore.Tools 10.0.11 package contract](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.Tools/10.0.11) (primary package metadata; retrieved 2026-08-27)
