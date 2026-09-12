@@ -619,6 +619,55 @@ table image that its provider-owned side effects could make stale. An
 unrecognized operation discards all projection facts, because arbitrary DDL or
 data changes cannot safely carry earlier inferences forward.
 
+Existing convergence tables retain a compact accepted-constraint catalog
+separately from complete table definitions. Exact names detect definition
+drift; semantic aliases remain matching without destructive replacement.
+Primary-key and check creation require an empty-table proof when their live
+analysis could not inspect projected columns. Unique constraints and foreign
+keys can alternatively rely on a newly added nullable, non-computed column that
+preserves `NULL` for existing rows. A projected foreign key also requires an
+accepted primary or unique principal key in the exact declared order and equal
+physical storage facets for every dependent/principal column pair. Provider
+data operations invalidate the row proof in O(1) through the existing monotonic
+mutation version. Semantic hash indexes keep lookup proportional to definition
+arity and retain collision-safe equality checks. Each accepted no-op alias is
+bound to its uniquely resolved physical catalog object. A drop or rename
+invalidates all aliases bound to that identity, while distinct physical objects
+with equal semantics remain independent. Ambiguous or unresolved identities are
+not retained as prerequisite evidence.
+
+Provider analyzers intentionally materialize one bounded result set against the
+initial catalog. The ordered projection therefore owns all later temporal
+state. Accepted drops create physical-identity tombstones which override stale
+live `Matching`, `Different`, or `Missing` observations. A subsequent ensure
+can become projected `Missing` only when the removed definition or provider-
+resolved physical identity matches and the required column, candidate-key, and
+row-safety evidence still holds. Unknown identity or an intervening mutation
+returns the corresponding structure- or data-unknown prerequisite result.
+Re-creating an equivalent object clears its own tombstone without clearing
+unrelated removals. Dictionary and semantic-hash lookups keep each transition
+amortized O(1) apart from the definition's bounded column arity.
+
+An accepted index definition is not immutable evidence. A following index drop
+removes its exact physical name, while a column drop or opaque structural
+mutation invalidates every affected alias. For MySQL and MariaDB, a changed
+index column also invalidates the live physical-width conclusion. The adapter
+then combines exact projected definitions with bounded live shapes for
+unchanged composite parts and re-evaluates the key against the target table's
+InnoDB row format and server page size. Prefix units retain character semantics
+for character keys and byte semantics for binary keys. Unknown store families,
+unsupported engines, overflow, and incomplete evidence remain unsupported.
+
+MySQL and MariaDB expose a unique constraint through the same physical unique-
+index identity. The projection mirrors each representable BTREE unique key in
+both semantic views and invalidates both when either operation family drops the
+physical name. Prefixes, expressions, provider options, and `PRIMARY` are not
+cross-kind aliases. Every missing or replacement ordinary index, primary key,
+and unique constraint is physically qualified before execution, including the
+16-part ceiling. Primary and unique constraint identity uses one bounded
+ordinal predicate per key part; classification never depends on a potentially
+truncated `GROUP_CONCAT` value.
+
 Provider-specific exemptions are internal and proof-based. Doka 10.3.x maps
 `AlterDatabaseOperation` only to the database character-set default, which does
 not mutate existing table, column, index, constraint, or row state. The

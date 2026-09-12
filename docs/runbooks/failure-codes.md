@@ -104,9 +104,16 @@ data/prerequisite result uses its planner rejection code.
 | `projected_matching` | Preflight projection observes a match after earlier accepted operations virtually. |
 | `projected_different` | Preflight projection observes a conflict between ordered operations. |
 | `projected_data_state_unknown` | A typed EF data operation preserved structural facts but invalidated a projected or live pre-batch row-safety proof. The public blocked assessment uses `prerequisite_missing`; do not execute the dependent operation without a separately provable post-DML state. |
-| `projected_structure_state_unknown` | An earlier provider-owned operation used opaque SQL, changed structure with provider-dependent side effects, or carried a column facet that cannot be captured losslessly. Pre-batch catalog evidence is stale for the affected scope, so following SafeMigrations operations are rejected with `prerequisite_missing` instead of guessing the postcondition. Split the migration at that operation or express the transition with supported safe operations. |
+| `projected_structure_state_unknown` | Projected structure is unknown after an opaque or unresolved mutation. |
+| `projected_dependency_handoff` | Ordered model-managed deletes exactly cover the live dependent rows, so the proved dependency transition is handed to the following principal-row delete. |
 | `postcondition_superseded` | A later safe operation is the final writer for the same exact catalog resource. The earlier ordered assessment remains visible and has a satisfied effective postcondition; provider-owned operations can never produce this code. |
 | `provider_owned_not_analyzed` | Ordinary EF/provider operation is present and is not classified as safe. A recognized deterministic table/column postcondition may be projected conditionally into a later safe prerequisite. Typed insert/update/delete-data operations retain those structural facts but invalidate data-safety proofs; the provider operation itself remains unanalyzed. |
+
+`projected_structure_state_unknown` also covers an object removal or rename whose
+physical identity could not be resolved. The live catalog snapshot predates that
+mutation, so later operations are rejected with `prerequisite_missing` instead
+of reusing stale matching or different evidence. Split the migration or express
+the transition with supported safe operations.
 
 When a report is `ReadyWithProviderOperations`, supply independent
 postconditions for every `provider_owned_not_analyzed` operation before
@@ -148,6 +155,8 @@ complete ordered identities.
 | `column_default_kind` | Default categories differ without rendering arbitrary SQL. |
 | `column_default_digest` | Default content differs; compare only the privacy-safe digest. |
 | `column_value_generation` | Generated, identity, row-version, or provider generation differs. |
+| `foreign_key_column_order` | Ordered dependent-column identities differ. |
+| `foreign_key_principal_column_order` | Ordered principal-column identities differ. |
 | `foreign_key_delete_behavior` | Referential delete actions differ. |
 | `foreign_key_update_behavior` | Referential update actions differ. |
 | `index_key_order` | Ordered index key identities differ. |
@@ -207,9 +216,23 @@ code, not a claim that the feature is absent from every version of that engine.
 | `opaque_expression_rename_projection` | Both | An earlier rename affected an opaque facet that cannot be safely rewritten. |
 | `column_type_mapping` | Both | The expected column has no supported relational type mapping. |
 | `index_prefix_length` | Both | Prefix-length keys are not supported by the selected provider/capability. |
-| `index_prefix_required_for_key_limit` | MySQL/MariaDB | A missing ordinary BTREE index exceeds the live InnoDB key limit, or a declared prefix is invalid for the key column. SafeMigrations does not invent a semantics-changing prefix. |
+| `index_prefix_required_for_key_limit` | MySQL/MariaDB | An unprefixed variable-width key exceeds the InnoDB limit. |
+| `index_prefix_exceeds_target_column` | MySQL/MariaDB | A projected prefix exceeds the target column width. |
+| `index_key_exceeds_physical_limit` | MySQL/MariaDB | The projected key exceeds the InnoDB physical limit. |
+| `index_too_many_key_parts` | MySQL/MariaDB | The index exceeds the InnoDB limit of 16 key parts. |
+| `index_storage_engine_unsupported` | MySQL/MariaDB | The target table does not use InnoDB. |
 | `index_key_length_unverifiable` | MySQL/MariaDB | A missing expression, non-BTREE, text/blob, unknown-type, or otherwise unbounded index shape has no provable physical key width. |
 | `index_replacement_data_blocked` | Both | An accepted exact-name index drop is followed by a unique replacement whose live key values contain duplicates. Preflight preserves this evidence and blocks before executing the drop. |
+| `index_name_reserved_primary` | MySQL/MariaDB | An ordinary index uses the provider-reserved primary-key name `PRIMARY`. |
+| `primary_key_exceeds_physical_limit` | MySQL/MariaDB | The full primary key exceeds the target InnoDB byte limit. |
+| `primary_key_too_many_columns` | MySQL/MariaDB | The primary key exceeds the InnoDB limit of 16 columns. |
+| `primary_key_storage_engine_unsupported` | MySQL/MariaDB | The target table does not use InnoDB, so the primary-key feasibility contract cannot be applied. |
+| `primary_key_length_unverifiable` | MySQL/MariaDB | The projected full primary-key width cannot be proved from the available table and column shape. |
+| `unique_constraint_exceeds_physical_limit` | MySQL/MariaDB | The full unique constraint exceeds the target InnoDB byte limit. |
+| `unique_constraint_too_many_columns` | MySQL/MariaDB | The unique constraint exceeds the InnoDB limit of 16 columns. |
+| `unique_constraint_storage_engine_unsupported` | MySQL/MariaDB | The target table does not use InnoDB, so the unique-key feasibility contract cannot be applied. |
+| `unique_constraint_length_unverifiable` | MySQL/MariaDB | The projected full unique-key width cannot be proved from the available table and column shape. |
+| `unique_constraint_replacement_data_blocked` | MySQL/MariaDB | A same-name index or constraint replacement would encounter duplicate target keys after its accepted drop. |
 | `schema_operations` | MySQL/MariaDB | PostgreSQL-style schema ensure/drop is not a supported namespace operation. |
 | `schema_qualified_object` | MySQL/MariaDB | An object expectation supplies a PostgreSQL-style schema namespace. |
 | `schema_qualified_collation` | MySQL/MariaDB | A column collation supplies a schema-qualified identity. |

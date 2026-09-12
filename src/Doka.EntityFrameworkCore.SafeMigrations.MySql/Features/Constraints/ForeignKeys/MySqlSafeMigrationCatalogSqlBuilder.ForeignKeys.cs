@@ -23,6 +23,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
         var dataBlocked = ForeignKeyDataBlocked(definition);
         var satisfied = $"({matching}) OR (NOT ({exists}) AND ({semanticAlias}))";
+        var semanticCandidates = ForeignKeyMatchQuery(
+            definition,
+            $"rc.CONSTRAINT_NAME <> {Literal(definition.Name)}");
 
         return Plan(
             $"CASE WHEN NOT {BaseTableExists(definition.Table)} "
@@ -37,6 +40,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             satisfied) with
         {
             DiagnosticEvidenceExpression = BuildForeignKeyDiagnosticEvidence(definition),
+            MatchedObjectNameExpression = ResolveMatchingObjectName(
+                matching,
+                Literal(definition.Name),
+                semanticCandidates),
         };
     }
 
@@ -61,20 +68,25 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     private string ForeignKeyMatches(
         ExpectedForeignKeyDefinition definition,
         string namePredicate
+    ) => $"EXISTS ({ForeignKeyMatchQuery(definition, namePredicate)})";
+
+    private string ForeignKeyMatchQuery(
+        ExpectedForeignKeyDefinition definition,
+        string namePredicate
     )
     {
-        var localColumnsMatch = OrderedForeignKeyColumnsMatch(
+        var localColumnsMatch = OrderedConstraintColumnsMatch(
             definition.Columns,
             "kcu.COLUMN_NAME");
 
-        var principalColumnsMatch = OrderedForeignKeyColumnsMatch(
+        var principalColumnsMatch = OrderedConstraintColumnsMatch(
             definition.PrincipalColumns,
             "kcu.REFERENCED_COLUMN_NAME");
 
         var updateRules = ReferentialRules(definition.OnUpdate);
         var deleteRules = ReferentialRules(definition.OnDelete);
 
-        return $"EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc "
+        return "SELECT rc.CONSTRAINT_NAME AS candidate_name FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc "
             + "JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu "
             + "ON kcu.CONSTRAINT_SCHEMA = rc.CONSTRAINT_SCHEMA "
             + "AND kcu.TABLE_NAME = rc.TABLE_NAME AND kcu.CONSTRAINT_NAME = rc.CONSTRAINT_NAME "
@@ -90,7 +102,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             + $"AND kcu.REFERENCED_TABLE_SCHEMA = DATABASE() "
             + $"AND kcu.REFERENCED_TABLE_NAME = {Literal(definition.PrincipalTable)} "
             + $"AND rc.UPDATE_RULE IN ({string.Join(", ", updateRules.Select(Literal))}) "
-            + $"AND rc.DELETE_RULE IN ({string.Join(", ", deleteRules.Select(Literal))}))";
+            + $"AND rc.DELETE_RULE IN ({string.Join(", ", deleteRules.Select(Literal))})";
     }
 
     private string ForeignKeySatisfied(
@@ -134,11 +146,11 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var expectedPrincipalColumns = OrderedColumnsSql(definition.PrincipalColumns);
         var expectedUpdateRules = ReferentialRules(definition.OnUpdate);
         var expectedDeleteRules = ReferentialRules(definition.OnDelete);
-        var localColumnsMatch = OrderedForeignKeyColumnsMatch(
+        var localColumnsMatch = OrderedConstraintColumnsMatch(
             definition.Columns,
             "kcu.COLUMN_NAME");
 
-        var principalColumnsMatch = OrderedForeignKeyColumnsMatch(
+        var principalColumnsMatch = OrderedConstraintColumnsMatch(
             definition.PrincipalColumns,
             "kcu.REFERENCED_COLUMN_NAME");
 
@@ -191,7 +203,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             + "GROUP BY rc.CONSTRAINT_NAME, rc.UPDATE_RULE, rc.DELETE_RULE LIMIT 1)";
     }
 
-    private string OrderedForeignKeyColumnsMatch(
+    private string OrderedConstraintColumnsMatch(
         IReadOnlyList<string> columns,
         string columnExpression
     )

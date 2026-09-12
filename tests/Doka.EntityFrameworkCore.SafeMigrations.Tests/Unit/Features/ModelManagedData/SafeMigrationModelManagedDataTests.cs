@@ -572,7 +572,7 @@ public sealed partial class SafeMigrationModelManagedDataTests
             childDelete.Policy,
             childAnalysis.RepairCapability);
 
-        projection.Observe(childDelete, childAnalysis, childDecision);
+        projection.Observe(childDelete, childAnalysis, childAnalysis, childDecision);
 
         var parentDelete = Operation(
             new DeleteModelManagedDataIntent(
@@ -726,7 +726,7 @@ public sealed partial class SafeMigrationModelManagedDataTests
             operation.Policy,
             analysis.RepairCapability);
 
-        projection.Observe(operation, analysis, decision);
+        projection.Observe(operation, analysis, analysis, decision);
     }
 
     private enum AddedColumnInitialValue

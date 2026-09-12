@@ -379,7 +379,7 @@ public sealed partial class SafeMigrationModelManagedDataTests
             childDelete.Policy,
             childAnalysis.RepairCapability);
 
-        projection.Observe(childDelete, childAnalysis, childDecision);
+        projection.Observe(childDelete, childAnalysis, childAnalysis, childDecision);
         projection.ObserveProviderPostcondition(new SqlOperation { Sql = "SELECT 1;" });
 
         var parentDelete = Operation(
@@ -456,6 +456,7 @@ public sealed partial class SafeMigrationModelManagedDataTests
             1,
             "administrator",
             includeNameUniqueKey: true);
+
         var member = RoleEnsure(
             2,
             "member",
@@ -488,6 +489,7 @@ public sealed partial class SafeMigrationModelManagedDataTests
             1,
             "administrator",
             includeNameUniqueKey: true);
+
         var member = RoleEnsure(
             2,
             "member",
@@ -524,6 +526,7 @@ public sealed partial class SafeMigrationModelManagedDataTests
             1,
             "administrator",
             includeNameUniqueKey: true);
+
         var member = RoleEnsure(
             2,
             "member",
@@ -539,6 +542,7 @@ public sealed partial class SafeMigrationModelManagedDataTests
                     "roles",
                     [new ExpectedIndexKeyDefinition(column: "name")],
                     unique: true)));
+
         var live = Live(SafeMigrationObservedState.PrerequisiteMissing);
 
         var projected = projection.Project(index, live);

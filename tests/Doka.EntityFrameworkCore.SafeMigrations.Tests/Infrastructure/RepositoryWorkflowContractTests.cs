@@ -56,6 +56,63 @@ public sealed class RepositoryWorkflowContractTests
         Assert.Contains(license, workflow, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void FailureCodeRunbook_CoversGeneratedConstraintAndDependencyCodes()
+    {
+        var repositoryRoot = RepositoryRoot();
+        var runbook = File.ReadAllText(
+            Path.Combine(repositoryRoot, "docs", "runbooks", "failure-codes.md"));
+
+        var analyzer = File.ReadAllText(
+            Path.Combine(
+                repositoryRoot,
+                "src",
+                "Doka.EntityFrameworkCore.SafeMigrations.MySql",
+                "Analysis",
+                "MySqlSafeMigrationProviderAnalyzer.Indexes.cs"));
+
+        var prefixes = Regex
+            .Matches(
+                analyzer,
+                "QualifyProjectedConstraint\\(\\s*result,\\s*liveAnalysis,\\s*projectedAnalysis,"
+                + "\\s*\"(?<value>[a-z_]+)\"\\);",
+                RegexOptions.CultureInvariant)
+            .Select(static match => match.Groups["value"].Value)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        var suffixes = Regex
+            .Matches(
+                analyzer,
+                "\\$\"\\{codePrefix\\}_(?<value>[a-z_]+)\"",
+                RegexOptions.CultureInvariant)
+            .Select(static match => match.Groups["value"].Value)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(["primary_key", "unique_constraint"], prefixes);
+        Assert.Equal(
+            [
+                "exceeds_physical_limit",
+                "too_many_columns",
+                "storage_engine_unsupported",
+                "length_unverifiable",
+            ],
+            suffixes);
+
+        foreach (var prefix in prefixes)
+        {
+            foreach (var suffix in suffixes)
+            {
+                Assert.Contains($"`{prefix}_{suffix}`", runbook, StringComparison.Ordinal);
+            }
+        }
+
+        Assert.Contains("`foreign_key_column_order`", runbook, StringComparison.Ordinal);
+        Assert.Contains("`foreign_key_principal_column_order`", runbook, StringComparison.Ordinal);
+        Assert.Contains("`projected_dependency_handoff`", runbook, StringComparison.Ordinal);
+    }
+
     private static string RepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

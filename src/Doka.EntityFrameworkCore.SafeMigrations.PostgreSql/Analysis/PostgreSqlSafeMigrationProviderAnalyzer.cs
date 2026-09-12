@@ -261,6 +261,7 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
                         var rowEvidence = plan.ModelManagedRowEvidenceExpression ?? "NULL";
                         var dependencyCounts = plan.ModelManagedDependencyCountsExpression ?? "NULL";
                         var diagnosticEvidence = plan.DiagnosticEvidenceExpression ?? "NULL";
+                        var matchedObjectName = plan.MatchedObjectNameExpression ?? "NULL";
                         var selection = $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, "
                             + $"({stateExpression})::text, "
                             + $"COALESCE(({plan.Postcondition}), FALSE), "
@@ -268,7 +269,8 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
                             + $"({classificationCode}), "
                             + $"({rowEvidence}), "
                             + $"({dependencyCounts}), "
-                            + $"({diagnosticEvidence})";
+                            + $"({diagnosticEvidence}), "
+                            + $"({matchedObjectName})";
 
                         var selectionBytes = Encoding.UTF8.GetByteCount(selection)
                             + (selections.Count == 0 ? 0 : separatorBytes);
@@ -556,6 +558,7 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
             current.OperationalImpact,
             differences)
         {
+            MatchedObjectName = current.MatchedObjectName,
             ModelManagedDataEvidence = current.ModelManagedDataEvidence,
             RequiresLiveDataProof = current.RequiresLiveDataProof
                 || (plan.MayRequireNullabilityDataProof
@@ -1069,6 +1072,10 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
                         operationalImpact,
                         differences)
                     {
+                        MatchedObjectName = state == SafeMigrationObservedState.Matching
+                            && !reader.IsDBNull(8)
+                                ? reader.GetString(8)
+                                : null,
                         ModelManagedDataEvidence = evidence,
                         // WHY: Every VARCHAR transition carries a probe template,
                         // but widening is catalog-only. Only a catalog-confirmed

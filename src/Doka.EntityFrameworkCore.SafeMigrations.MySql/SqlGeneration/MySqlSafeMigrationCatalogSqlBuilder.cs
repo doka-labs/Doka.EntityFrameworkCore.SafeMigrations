@@ -311,6 +311,14 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         string repairPrecondition = "FALSE"
     ) => new(stateExpression, postcondition, repairCapability, repairPrecondition);
 
+    private static string ResolveMatchingObjectName(
+        string exactMatch,
+        string expectedName,
+        string semanticCandidates
+    ) => $"CASE WHEN ({exactMatch}) THEN {expectedName} ELSE "
+        + "(SELECT CASE WHEN COUNT(*) = 1 THEN MIN(candidate_name) ELSE NULL END "
+        + $"FROM ({semanticCandidates}) AS doka_sm_semantic_candidates) END";
+
     private static MySqlSafeMigrationRuntimePlan Unsupported(
         string code
     ) => new("'unsupported'", "FALSE", SafeMigrationRepairCapability.None, "FALSE", code)

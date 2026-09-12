@@ -14,7 +14,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         string nonCanonicalAlias = "FALSE",
         string singletonConflict = "FALSE",
         string namespaceCollision = "FALSE",
-        string? diagnosticEvidence = null
+        string? diagnosticEvidence = null,
+        string? semanticCandidates = null
     )
     {
         var tableExists = TableExists(table, schema);
@@ -36,6 +37,12 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             satisfied) with
         {
             DiagnosticEvidenceExpression = diagnosticEvidence,
+            MatchedObjectNameExpression = semanticCandidates is null
+                ? null
+                : ResolveMatchingObjectName(
+                    matching,
+                    Literal(name),
+                    semanticCandidates),
         };
     }
 
@@ -77,13 +84,28 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         IReadOnlyList<string> columns,
         string namePredicate,
         bool requireLocalIdentity = true
-    ) => ConstraintBaseWithoutName(table, schema, type)
+    ) => $"EXISTS ({ConstraintColumnsMatchQuery(
+        table,
+        schema,
+        type,
+        columns,
+        namePredicate,
+        requireLocalIdentity)})";
+
+    private string ConstraintColumnsMatchQuery(
+        string table,
+        string? schema,
+        char type,
+        IReadOnlyList<string> columns,
+        string namePredicate,
+        bool requireLocalIdentity = true
+    ) => ConstraintRowsWithoutName(table, schema, type)
         + $" AND {namePredicate}"
         + StandardConstraintSemantics(requireLocalIdentity)
         + (type == 'u' ? UniqueNullSemanticsMatch() : string.Empty)
         + $" AND ARRAY(SELECT a.attname FROM unnest(co.conkey) WITH ORDINALITY AS key(attnum, ord) "
         + "JOIN pg_catalog.pg_attribute a ON a.attrelid = co.conrelid AND a.attnum = key.attnum "
-        + $"ORDER BY key.ord) = {NameArray(columns)})";
+        + $"ORDER BY key.ord) = {NameArray(columns)}";
 
     private static string StandardConstraintSemantics(
         bool requireLocalIdentity = true
@@ -135,7 +157,13 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         string table,
         string? schema,
         char type
-    ) => "EXISTS (SELECT 1 FROM pg_catalog.pg_constraint co "
+    ) => $"EXISTS ({ConstraintRowsWithoutName(table, schema, type)}";
+
+    private string ConstraintRowsWithoutName(
+        string table,
+        string? schema,
+        char type
+    ) => "SELECT co.conname AS candidate_name FROM pg_catalog.pg_constraint co "
         + "JOIN pg_catalog.pg_class c ON c.oid = co.conrelid "
         + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
         + $"WHERE n.nspname = {SchemaExpression(schema)} AND c.relname = {Literal(table)} "

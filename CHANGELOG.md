@@ -6,6 +6,40 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Preserve accepted ordered column and candidate-key prerequisites while a
+  legacy convergence baseline processes existing tables. Primary keys, unique
+  constraints, checks, foreign keys, and indexes now observe earlier accepted
+  operations without depending on a complete projected table image. Data-
+  validating constraints remain fail-closed unless an empty-table proof or a
+  null-preserving added column proves existing rows safe.
+- Bind a semantic constraint or index `NoOp` to its uniquely resolved physical
+  catalog object. Dropping or renaming that object now invalidates every bound
+  alias, while genuinely distinct equivalent objects remain independent.
+  Ambiguous or unresolved catalog identity is never retained as prerequisite
+  evidence for a later operation.
+- Override immutable pre-batch catalog matches after an accepted ordered drop.
+  A following primary-key, unique, check, foreign-key, or index ensure now
+  reports `Missing` and `Apply` for both exact names and resolved semantic
+  aliases. Intervening data or unresolved structural mutations retain their
+  fail-closed boundary instead of converting stale evidence into a `NoOp`.
+- Invalidate accepted semantic index evidence after an ordered index drop or
+  column mutation, preventing a removed or rewritten index from being reported
+  as matching later in the same preflight.
+- Model MySQL and MariaDB unique constraints and ordinary unique indexes as one
+  physical identity. Cross-kind drops now invalidate every semantic alias,
+  while the reserved `PRIMARY` index remains exclusively owned by the primary-
+  key contract and exact-name collisions retain precedence over aliases.
+- Revalidate MySQL and MariaDB index, primary-key, and unique-constraint
+  feasibility against ordered target column definitions. Safe replacements
+  cannot drop a working physical key before rejecting an over-limit target;
+  composite widths, the 16-part limit, duplicate-row evidence, storage engines,
+  row formats, page sizes, and invalid target prefixes remain fail-closed.
+- Compare MySQL and MariaDB composite primary and unique-key columns by ordinal
+  catalog rows instead of `GROUP_CONCAT`. Maximum-width 16-column identifiers
+  no longer depend on the session's `group_concat_max_len` value.
+
 ## [10.4.0] - 2026-09-11
 
 Prepared a stable minor release for allocation-bounded, self-describing report

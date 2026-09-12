@@ -14,10 +14,66 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         if (!TryGet(intent.Definition.Table, intent.Definition.Schema, out var table))
         {
-            return InvalidateDataDependentMissing(
+            if (_prerequisites.TryGetValue(
+                    new TableKey(intent.Definition.Table, intent.Definition.Schema),
+                    out var prerequisites)
+                && prerequisites.PrimaryKey is not null)
+            {
+                var accepted = Analysis(
+                    SafeMigrationDefinitionEquivalence.PrimaryKeySemantics(
+                        prerequisites.PrimaryKey,
+                        intent.Definition)
+                        ? SafeMigrationObservedState.Matching
+                        : SafeMigrationObservedState.Different);
+
+                return ValidateProjectedPrimaryKey(intent, liveAnalysis, accepted);
+            }
+
+            if (prerequisites is { PrimaryKeyWasDropped: true, })
+            {
+                var removedDefinitionMatches = prerequisites.RemovedPrimaryKey is not null
+                    && SafeMigrationDefinitionEquivalence.PrimaryKeySemantics(
+                        prerequisites.RemovedPrimaryKey,
+                        intent.Definition);
+
+                var droppedAnalysis = removedDefinitionMatches
+                    || liveAnalysis.ObservedState == SafeMigrationObservedState.Matching
+                        ? Analysis(SafeMigrationObservedState.Missing)
+                        : StructureStateUnknown();
+
+                if (droppedAnalysis.ObservedState == SafeMigrationObservedState.Missing
+                    && !TryGetConstraintPrerequisites(
+                        intent.Definition.Table,
+                        intent.Definition.Schema,
+                        intent.Definition.Columns,
+                        out _)
+                    && !CanReuseMatchingLiveColumnPrerequisites(
+                        intent.Definition.Table,
+                        intent.Definition.Schema,
+                        intent.Definition.Columns,
+                        liveAnalysis))
+                {
+                    return StructureStateUnknown();
+                }
+
+                var droppedResult = InvalidateDataDependentMissing(
+                    intent.Definition.Table,
+                    intent.Definition.Schema,
+                    droppedAnalysis);
+
+                return ValidateProjectedPrimaryKey(intent, liveAnalysis, droppedResult);
+            }
+
+            var projectedAnalysis = CanProjectMissingPrimaryKey(intent, liveAnalysis)
+                ? Analysis(SafeMigrationObservedState.Missing)
+                : liveAnalysis;
+
+            var result = InvalidateDataDependentMissing(
                 intent.Definition.Table,
                 intent.Definition.Schema,
-                liveAnalysis);
+                projectedAnalysis);
+
+            return ValidateProjectedPrimaryKey(intent, liveAnalysis, result);
         }
 
         var analysis = AnalyzeOptional(
@@ -25,7 +81,9 @@ internal sealed partial class SafeMigrationPreflightProjection
             intent.Definition,
             SafeMigrationDefinitionEquivalence.PrimaryKey);
 
-        return InvalidateDataDependentMissing(table.Table, table.Schema, analysis);
+        var tableAnalysis = InvalidateDataDependentMissing(table.Table, table.Schema, analysis);
+
+        return ValidateProjectedPrimaryKey(intent, liveAnalysis, tableAnalysis);
     }
 
     private SafeMigrationProviderAnalysis Project(
@@ -45,10 +103,26 @@ internal sealed partial class SafeMigrationPreflightProjection
         SafeMigrationDecision decision
     )
     {
+        if (decision.Action is SafeMigrationAction.Apply or SafeMigrationAction.NoOp
+            && _prerequisites.TryGetValue(
+                new TableKey(intent.Definition.Table, intent.Definition.Schema),
+                out var prerequisites))
+        {
+            prerequisites.AcceptPrimaryKey(intent.Definition);
+        }
+
         if (decision.Action == SafeMigrationAction.Apply
             && TryGet(intent.Definition.Table, intent.Definition.Schema, out var table))
         {
             table.PrimaryKey = intent.Definition;
+        }
+
+        if (decision.Action == SafeMigrationAction.Apply)
+        {
+            _droppedPhysicalKeys.Remove(
+                new IndexKey(intent.Definition.Table, intent.Definition.Schema, "PRIMARY"));
+            _projectedCandidateKeyMutationTables.Add(
+                new TableKey(intent.Definition.Table, intent.Definition.Schema));
         }
     }
 
@@ -57,10 +131,42 @@ internal sealed partial class SafeMigrationPreflightProjection
         SafeMigrationDecision decision
     )
     {
+        if (decision.Action == SafeMigrationAction.Apply)
+        {
+            var prerequisites = GetOrCreateProviderPrerequisites(intent.Table, intent.Schema);
+
+            prerequisites.DropPrimaryKey();
+            _droppedPhysicalKeys.Add(new IndexKey(intent.Table, intent.Schema, "PRIMARY"));
+            _projectedCandidateKeyMutationTables.Add(new TableKey(intent.Table, intent.Schema));
+        }
+
         if (decision.Action == SafeMigrationAction.Apply
             && TryGet(intent.Table, intent.Schema, out var table))
         {
             table.PrimaryKey = null;
         }
+    }
+
+    private SafeMigrationProviderAnalysis ValidateProjectedPrimaryKey(
+        EnsurePrimaryKeyIntent intent,
+        SafeMigrationProviderAnalysis liveAnalysis,
+        SafeMigrationProviderAnalysis projectedAnalysis
+    )
+    {
+        if (_projectedKeyAnalyzer is null
+            || (projectedAnalysis.ObservedState != SafeMigrationObservedState.Missing
+                && !HasProjectedKeyColumnChange(
+                    intent.Definition.Table,
+                    intent.Definition.Schema,
+                    intent.Definition.Columns)))
+        {
+            return projectedAnalysis;
+        }
+
+        return _projectedKeyAnalyzer.ValidateProjectedPrimaryKey(
+            intent,
+            this,
+            liveAnalysis,
+            projectedAnalysis);
     }
 }

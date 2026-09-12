@@ -150,6 +150,25 @@ Provider tests use real Docker servers and cover:
 - safe table, source-frozen model-managed ensure/update/delete, raw typed
   seed/update/delete-data, and following non-unique-index ordering, plus
   fail-closed unique-index projection after unanalyzed data;
+- existing-table legacy projection for primary, unique, check, foreign-key, and
+  index prerequisites, including empty/null-preserving row proofs, composite-
+  key order, incompatible storage, and proof invalidation after provider data;
+- accepted-index invalidation after ordered drops and column mutations, plus
+  MySQL/MariaDB physical revalidation for single, composite, unique, primary,
+  over-limit, 16-part, missing-table, replacement, row-format, and page-size
+  key shapes;
+- MySQL/MariaDB cross-kind unique-constraint and unique-index identity, including
+  both drop/recreate directions, alias invalidation, exact-name conflicts,
+  `PRIMARY` separation, and duplicate-row controls;
+- maximum-length 16-column primary and unique keys matched by ordinal catalog
+  rows independently of `group_concat_max_len`, with reversed-order controls;
+- physical-identity binding for semantic unique, check, foreign-key, and index
+  aliases, including drop/rename invalidation and ambiguous fail-closed
+  prerequisite projection;
+- exact and semantic-alias `Drop -> Ensure` replacement for primary keys,
+  unique constraints, checks, foreign keys, and indexes, including live
+  execution/postflight and negative intervening-DML controls on both provider
+  families;
 - model-managed single/composite keys, mixed absent/source/target batches,
   unique/check conflicts, source drift, retry, idempotent replay, trigger
   postconditions, cancellation, and compare-and-swap races;

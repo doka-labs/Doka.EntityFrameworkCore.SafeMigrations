@@ -17,7 +17,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             intent.Definition,
             requireExpectedName: false,
             requireLocalIdentity: false),
-        diagnosticEvidence: BuildForeignKeyDiagnosticEvidence(intent.Definition));
+        diagnosticEvidence: BuildForeignKeyDiagnosticEvidence(intent.Definition),
+        semanticCandidates: ForeignKeyMatchQuery(
+            intent.Definition,
+            $"co.conname <> {Literal(intent.Definition.Name)}"));
 
     private PostgreSqlSafeMigrationRuntimePlan BuildDropForeignKey(
         DropForeignKeyIntent intent
@@ -55,7 +58,13 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         ExpectedForeignKeyDefinition definition,
         string namePredicate,
         bool requireLocalIdentity = true
-    ) => ConstraintBaseWithoutName(definition.Table, definition.Schema, 'f')
+    ) => $"EXISTS ({ForeignKeyMatchQuery(definition, namePredicate, requireLocalIdentity)})";
+
+    private string ForeignKeyMatchQuery(
+        ExpectedForeignKeyDefinition definition,
+        string namePredicate,
+        bool requireLocalIdentity = true
+    ) => ConstraintRowsWithoutName(definition.Table, definition.Schema, 'f')
         + $" AND {namePredicate}"
         + StandardConstraintSemantics(requireLocalIdentity)
         + $" AND ARRAY(SELECT a.attname FROM unnest(co.conkey) WITH ORDINALITY AS key(attnum, ord) "
@@ -70,7 +79,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         + "AND co.confmatchtype = 's'::\"char\" "
         // A column-list SET NULL/DEFAULT action changes which dependent
         // columns are updated and is not expressible by the EF operation.
-        + "AND (to_jsonb(co) ->> 'confdelsetcols') IS NULL)";
+        + "AND (to_jsonb(co) ->> 'confdelsetcols') IS NULL";
 
     private string BuildForeignKeyDiagnosticEvidence(
         ExpectedForeignKeyDefinition definition

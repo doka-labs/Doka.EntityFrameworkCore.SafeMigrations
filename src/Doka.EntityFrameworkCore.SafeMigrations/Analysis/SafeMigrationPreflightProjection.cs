@@ -1,18 +1,20 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
-internal sealed partial class SafeMigrationPreflightProjection
+internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationProjectedColumnSource
 {
     private readonly ISafeMigrationProviderOperationProjection? _providerOperationProjection;
+    private readonly ISafeMigrationProjectedKeyAnalyzer? _projectedKeyAnalyzer;
     private readonly Dictionary<TableKey, ProjectedTable> _tables = [];
 
     // WHY: Strict table projections retain complete definitions. This second view
     // records only prerequisites proven by earlier convergence operations, so
     // a later operation cannot infer safety from an object that was rejected.
     private readonly Dictionary<TableKey, ProjectedPrerequisites> _prerequisites = [];
-    private readonly HashSet<IndexKey> _droppedIndexes = [];
+    private readonly HashSet<IndexKey> _droppedPhysicalKeys = [];
     private readonly HashSet<TableKey> _projectedDataMutationTables = [];
     private readonly Dictionary<TableKey, HashSet<string>> _projectedModelManagedUniqueKeys = [];
     private readonly Dictionary<ColumnKey, ExpectedColumnDefinition> _projectedColumnDefinitions = [];
+    private readonly HashSet<TableKey> _projectedCandidateKeyMutationTables = [];
     private readonly HashSet<ColumnKey> _projectedMissingColumns = [];
     private readonly HashSet<ColumnKey> _projectedUnknownColumns = [];
     private readonly HashSet<TableKey> _projectedMissingTables = [];
@@ -23,8 +25,13 @@ internal sealed partial class SafeMigrationPreflightProjection
     private long _providerDataMutationVersion;
 
     public SafeMigrationPreflightProjection(
-        ISafeMigrationProviderOperationProjection? providerOperationProjection = null
-    ) => _providerOperationProjection = providerOperationProjection;
+        ISafeMigrationProviderOperationProjection? providerOperationProjection = null,
+        ISafeMigrationProjectedKeyAnalyzer? projectedKeyAnalyzer = null
+    )
+    {
+        _providerOperationProjection = providerOperationProjection;
+        _projectedKeyAnalyzer = projectedKeyAnalyzer;
+    }
 
     public SafeMigrationProviderAnalysis Project(
         SafeMigrationOperation operation,
@@ -71,11 +78,13 @@ internal sealed partial class SafeMigrationPreflightProjection
 
     public void Observe(
         SafeMigrationOperation operation,
+        SafeMigrationProviderAnalysis liveAnalysis,
         SafeMigrationProviderAnalysis analysis,
         SafeMigrationDecision decision
     )
     {
         ArgumentNullException.ThrowIfNull(operation);
+        ArgumentNullException.ThrowIfNull(liveAnalysis);
         ArgumentNullException.ThrowIfNull(analysis);
         ArgumentNullException.ThrowIfNull(decision);
 
@@ -104,7 +113,7 @@ internal sealed partial class SafeMigrationPreflightProjection
                 Observe(value, decision);
                 break;
             case EnsureColumnIntent value:
-                Observe(value, decision);
+                Observe(value, liveAnalysis, decision);
                 break;
             case AlterColumnIntent value:
                 Observe(value, decision);
@@ -116,7 +125,7 @@ internal sealed partial class SafeMigrationPreflightProjection
                 Observe(value, decision);
                 break;
             case EnsureIndexIntent value:
-                Observe(value, decision);
+                Observe(value, liveAnalysis, decision);
                 break;
             case DropIndexIntent value:
                 Observe(value, decision);
@@ -131,19 +140,19 @@ internal sealed partial class SafeMigrationPreflightProjection
                 Observe(value, decision);
                 break;
             case EnsureUniqueConstraintIntent value:
-                Observe(value, decision);
+                Observe(value, liveAnalysis, decision);
                 break;
             case DropUniqueConstraintIntent value:
                 Observe(value, decision);
                 break;
             case EnsureCheckConstraintIntent value:
-                Observe(value, decision);
+                Observe(value, liveAnalysis, decision);
                 break;
             case DropCheckConstraintIntent value:
                 Observe(value, decision);
                 break;
             case EnsureForeignKeyIntent value:
-                Observe(value, decision);
+                Observe(value, liveAnalysis, decision);
                 break;
             case DropForeignKeyIntent value:
                 Observe(value, decision);
@@ -247,6 +256,13 @@ internal sealed partial class SafeMigrationPreflightProjection
     ) => _projectedColumnDefinitions.TryGetValue(
         new ColumnKey(table, schema, column),
         out definition);
+
+    bool ISafeMigrationProjectedColumnSource.TryGetProjectedColumn(
+        string table,
+        string? schema,
+        string column,
+        [NotNullWhen(true)] out ExpectedColumnDefinition? definition
+    ) => TryGetProjectedColumnDefinition(table, schema, column, out definition);
 
     private void SetProjectedColumnDefinition(
         string table,
@@ -760,11 +776,355 @@ internal sealed partial class SafeMigrationPreflightProjection
         long dataMutationVersion
     )
     {
+        public ProjectedDefinitionSet<ExpectedCheckConstraintDefinition> CheckConstraints { get; } =
+            new(SafeMigrationSemanticDefinitionComparers.CheckConstraint);
+
         public Dictionary<string, ProjectedColumn> Columns { get; } = new(StringComparer.Ordinal);
 
         public long DataMutationVersion { get; } = dataMutationVersion;
 
+        public long? EmptyTableProofVersion { get; set; }
+
+        public ProjectedDefinitionSet<ExpectedForeignKeyDefinition> ForeignKeys { get; } =
+            new(SafeMigrationSemanticDefinitionComparers.ForeignKey);
+
+        public ProjectedDefinitionSet<ExpectedIndexDefinition> Indexes { get; } =
+            new(SafeMigrationSemanticDefinitionComparers.Index);
+
         public bool NewlyCreated { get; } = newlyCreated;
+
+        public ExpectedPrimaryKeyDefinition? PrimaryKey { get; private set; }
+
+        public bool PrimaryKeyWasDropped { get; private set; }
+
+        public ExpectedPrimaryKeyDefinition? RemovedPrimaryKey { get; private set; }
+
+        public ProjectedDefinitionSet<ExpectedUniqueConstraintDefinition> UniqueConstraints { get; } =
+            new(SafeMigrationSemanticDefinitionComparers.UniqueConstraint);
+
+        public void AcceptPrimaryKey(
+            ExpectedPrimaryKeyDefinition definition
+        )
+        {
+            PrimaryKey = definition;
+            PrimaryKeyWasDropped = false;
+            RemovedPrimaryKey = null;
+        }
+
+        public void AcceptUniqueConstraint(
+            ExpectedUniqueConstraintDefinition definition,
+            string physicalName
+        )
+        {
+            UniqueConstraints.AcceptPhysical(physicalName, definition);
+        }
+
+        public void DropPrimaryKey()
+        {
+            RemovedPrimaryKey = PrimaryKey;
+            PrimaryKey = null;
+            PrimaryKeyWasDropped = true;
+        }
+
+        public bool HasCandidateKey(
+            string table,
+            string? schema,
+            IReadOnlyList<string> columns
+        )
+        {
+            if (PrimaryKey is not null
+                && StringComparer.Ordinal.Equals(PrimaryKey.Table, table)
+                && StringComparer.Ordinal.Equals(PrimaryKey.Schema, schema)
+                && SameColumns(PrimaryKey.Columns, columns))
+            {
+                return true;
+            }
+
+            var candidate = new ExpectedUniqueConstraintDefinition(
+                "doka_projected_candidate_key",
+                table,
+                columns,
+                schema);
+
+            return UniqueConstraints.ContainsSemantically(candidate);
+        }
+    }
+
+    private sealed class ProjectedDefinitionSet<T>(
+        IEqualityComparer<T> semanticComparer
+    )
+        where T : class
+    {
+        private readonly Dictionary<string, PhysicalDefinition> _aliases = new(StringComparer.Ordinal);
+        private readonly HashSet<string> _missingNames = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, PhysicalDefinition> _physicalDefinitions = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, T> _removedDefinitions = new(StringComparer.Ordinal);
+        private readonly HashSet<string> _unresolvedMissingNames = new(StringComparer.Ordinal);
+
+        // WHY: A semantic NoOp is an alias for an existing physical object, not
+        // another object. Keeping that binding lets one drop invalidate every
+        // alias without hiding a distinct physical object with the same shape.
+        private readonly Dictionary<T, HashSet<PhysicalDefinition>> _semanticDefinitions = new(semanticComparer);
+        private readonly HashSet<T> _mutatedSemanticDefinitions = new(semanticComparer);
+
+        public void AcceptPhysical(
+            string physicalName,
+            T definition
+        )
+        {
+            if (_physicalDefinitions.Remove(physicalName, out var previous))
+            {
+                RemovePhysical(previous);
+            }
+
+            RemoveAlias(physicalName);
+            RemoveMissingName(physicalName);
+
+            var physical = new PhysicalDefinition(physicalName, definition);
+            physical.Aliases.Add(physicalName);
+            _physicalDefinitions.Add(physicalName, physical);
+            _aliases[physicalName] = physical;
+
+            if (!_semanticDefinitions.TryGetValue(definition, out var definitions))
+            {
+                definitions = [];
+                _semanticDefinitions.Add(definition, definitions);
+            }
+
+            definitions.Add(physical);
+        }
+
+        public bool BindAlias(
+            string alias,
+            string physicalName,
+            T definition
+        )
+        {
+            if (!_physicalDefinitions.TryGetValue(physicalName, out var physical))
+            {
+                AcceptPhysical(physicalName, definition);
+                physical = _physicalDefinitions[physicalName];
+            }
+            else if (!semanticComparer.Equals(physical.Definition, definition))
+            {
+                return false;
+            }
+
+            if (_physicalDefinitions.ContainsKey(alias)
+                && !StringComparer.Ordinal.Equals(alias, physicalName))
+            {
+                return false;
+            }
+
+            RemoveAlias(alias);
+            RemoveMissingName(alias);
+            _aliases[alias] = physical;
+            physical.Aliases.Add(alias);
+
+            return true;
+        }
+
+        public bool BindUniqueSemanticAlias(
+            string alias,
+            T definition
+        )
+        {
+            if (!_semanticDefinitions.TryGetValue(definition, out var definitions)
+                || definitions.Count != 1)
+            {
+                return false;
+            }
+
+            var physical = definitions.Single();
+
+            return BindAlias(alias, physical.Name, definition);
+        }
+
+        public bool ContainsSemantically(
+            T definition
+        ) => _semanticDefinitions.ContainsKey(definition);
+
+        public void MarkPhysicalMissing(
+            string physicalName
+        )
+        {
+            if (RemovePhysical(physicalName, out _))
+            {
+                return;
+            }
+
+            RemoveAlias(physicalName);
+            _missingNames.Add(physicalName);
+            _removedDefinitions.Remove(physicalName);
+            _unresolvedMissingNames.Add(physicalName);
+        }
+
+        public bool SemanticallyEquals(
+            T left,
+            T right
+        ) => semanticComparer.Equals(left, right);
+
+        public bool RemovePhysical(
+            string physicalName,
+            [NotNullWhen(true)] out T? definition
+        )
+        {
+            if (!_physicalDefinitions.Remove(physicalName, out var physical))
+            {
+                definition = null;
+                return false;
+            }
+
+            definition = physical.Definition;
+            RemovePhysical(physical);
+
+            return true;
+        }
+
+        public bool RemoveWhere(
+            Func<T, bool> predicate
+        )
+        {
+            ArgumentNullException.ThrowIfNull(predicate);
+
+            var names = _physicalDefinitions
+                .Where(pair => predicate(pair.Value.Definition))
+                .Select(static pair => pair.Key)
+                .ToArray();
+
+            foreach (var name in names)
+            {
+                _ = RemovePhysical(name, out _);
+            }
+
+            return names.Length > 0;
+        }
+
+        public ProjectedDefinitionMutation ResolveMutation(
+            string name,
+            T expected,
+            SafeMigrationProviderAnalysis liveAnalysis
+        )
+        {
+            if (liveAnalysis.ObservedState is not (
+                    SafeMigrationObservedState.Missing
+                    or SafeMigrationObservedState.Matching
+                    or SafeMigrationObservedState.Different))
+            {
+                return ProjectedDefinitionMutation.None;
+            }
+
+            if (_missingNames.Contains(name))
+            {
+                if (_removedDefinitions.TryGetValue(name, out var removed)
+                    && semanticComparer.Equals(removed, expected))
+                {
+                    return ProjectedDefinitionMutation.Missing;
+                }
+
+                return liveAnalysis.ObservedState == SafeMigrationObservedState.Matching
+                    && StringComparer.Ordinal.Equals(liveAnalysis.MatchedObjectName, name)
+                        ? ProjectedDefinitionMutation.Missing
+                        : ProjectedDefinitionMutation.Unknown;
+            }
+
+            if (liveAnalysis.MatchedObjectName is { } physicalName
+                && _missingNames.Contains(physicalName))
+            {
+                return liveAnalysis.ObservedState == SafeMigrationObservedState.Matching
+                    ? ProjectedDefinitionMutation.Missing
+                    : ProjectedDefinitionMutation.Unknown;
+            }
+
+            // WHY: A missing provider identity means the immutable live match
+            // may have represented more than one semantic candidate. Once one
+            // such candidate was mutated, the remaining live state is unknown.
+            return liveAnalysis.ObservedState == SafeMigrationObservedState.Matching
+                && liveAnalysis.MatchedObjectName is null
+                && (_unresolvedMissingNames.Count > 0
+                    || _mutatedSemanticDefinitions.Contains(expected))
+                    ? ProjectedDefinitionMutation.Unknown
+                    : ProjectedDefinitionMutation.None;
+        }
+
+        public bool TryGetValue(
+            string name,
+            [NotNullWhen(true)] out T? definition
+        )
+        {
+            if (_aliases.TryGetValue(name, out var physical))
+            {
+                definition = physical.Definition;
+                return true;
+            }
+
+            definition = null;
+            return false;
+        }
+
+        private void RemoveAlias(
+            string alias
+        )
+        {
+            if (!_aliases.Remove(alias, out var physical))
+            {
+                return;
+            }
+
+            physical.Aliases.Remove(alias);
+        }
+
+        private void RemoveMissingName(
+            string name
+        )
+        {
+            _missingNames.Remove(name);
+            _removedDefinitions.Remove(name);
+            _unresolvedMissingNames.Remove(name);
+        }
+
+        private void RemovePhysical(
+            PhysicalDefinition physical
+        )
+        {
+            foreach (var alias in physical.Aliases)
+            {
+                _aliases.Remove(alias);
+                _missingNames.Add(alias);
+                _removedDefinitions[alias] = physical.Definition;
+                _unresolvedMissingNames.Remove(alias);
+            }
+
+            _mutatedSemanticDefinitions.Add(physical.Definition);
+
+            if (_semanticDefinitions.TryGetValue(physical.Definition, out var definitions))
+            {
+                definitions.Remove(physical);
+                if (definitions.Count == 0)
+                {
+                    _semanticDefinitions.Remove(physical.Definition);
+                }
+            }
+        }
+
+        private sealed class PhysicalDefinition(
+            string name,
+            T definition
+        )
+        {
+            public HashSet<string> Aliases { get; } = new(StringComparer.Ordinal);
+
+            public T Definition { get; } = definition;
+
+            public string Name { get; } = name;
+        }
+    }
+
+    private enum ProjectedDefinitionMutation : byte
+    {
+        None = 0,
+        Missing = 1,
+        Unknown = 2,
     }
 
     private sealed record ProjectedColumn(

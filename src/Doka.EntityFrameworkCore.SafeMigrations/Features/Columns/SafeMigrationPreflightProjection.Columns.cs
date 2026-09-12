@@ -163,6 +163,7 @@ internal sealed partial class SafeMigrationPreflightProjection
 
     private void Observe(
         EnsureColumnIntent intent,
+        SafeMigrationProviderAnalysis liveAnalysis,
         SafeMigrationDecision decision
     )
     {
@@ -173,6 +174,16 @@ internal sealed partial class SafeMigrationPreflightProjection
             prerequisites.Columns[intent.Definition.Name] = ProjectedColumn.From(
                 intent.Definition,
                 addedToExistingTable: decision.Action == SafeMigrationAction.Apply && !prerequisites.NewlyCreated);
+
+            if (decision.Action == SafeMigrationAction.Apply
+                && liveAnalysis.ObservedState == SafeMigrationObservedState.Missing
+                && !SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(intent.Definition))
+            {
+                // WHY: Both providers classify this otherwise unsafe add as
+                // Missing only after proving that the existing table has no
+                // rows. Retain that bounded proof for later constraints.
+                prerequisites.EmptyTableProofVersion = _providerDataMutationVersion;
+            }
         }
 
         if (decision.Action is SafeMigrationAction.Apply or SafeMigrationAction.NoOp or SafeMigrationAction.Repair)
@@ -188,6 +199,7 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         if (decision.Action is SafeMigrationAction.Apply or SafeMigrationAction.Repair)
         {
+            InvalidateAcceptedIndexesForColumn(intent.Table, intent.Schema, intent.Definition.Name);
             MarkProjectedColumnChanged(intent.Table, intent.Schema, intent.Definition.Name);
         }
     }
@@ -218,6 +230,7 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         if (decision.Action == SafeMigrationAction.Repair)
         {
+            InvalidateAcceptedIndexesForColumn(intent.Table, intent.Schema, intent.Definition.Name);
             MarkProjectedColumnChanged(intent.Table, intent.Schema, intent.Definition.Name);
         }
     }
@@ -233,7 +246,7 @@ internal sealed partial class SafeMigrationPreflightProjection
             // with the column. Their exact post-state must remain unknown.
             InvalidateModelManagedDataProjection();
             SetProjectedTableStructureUnknown(intent.Table, intent.Schema);
-            RemoveDroppedIndexes(intent.Table, intent.Schema);
+            RemoveDroppedPhysicalKeys(intent.Table, intent.Schema);
             SetProjectedColumnMissing(intent.Table, intent.Schema, intent.Name);
         }
 

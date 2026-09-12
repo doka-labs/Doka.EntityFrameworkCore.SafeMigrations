@@ -19,11 +19,17 @@ internal sealed partial class SafeMigrationPreflightProjection
             newlyCreated: true,
             dataMutationVersion: _providerDataMutationVersion);
 
+        ExpectedTableDefinition? definition = null;
+
         try
         {
-            _tables[key] = new ProjectedTable(
-                SafeMigrationExpectedDefinitionFactory.From(operation),
+            definition = SafeMigrationExpectedDefinitionFactory.From(operation);
+            var table = new ProjectedTable(
+                definition,
                 dataMutationVersion: _providerDataMutationVersion);
+
+            CaptureSharedUniqueKeys(table, definition);
+            _tables[key] = table;
         }
         catch (Exception exception) when (exception is ArgumentException or NotSupportedException)
         {
@@ -33,7 +39,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         }
 
         RemoveProjectedColumnDefinitions(operation.Name, operation.Schema);
-        RemoveDroppedIndexes(operation.Name, operation.Schema);
+        RemoveDroppedPhysicalKeys(operation.Name, operation.Schema);
         _projectedMissingTables.Remove(key);
         _projectedUnknownTableStructures.Remove(key);
         _projectedStructurallyModifiedTables.Remove(key);
@@ -49,6 +55,11 @@ internal sealed partial class SafeMigrationPreflightProjection
                 operation.Name,
                 operation.Schema,
                 column);
+        }
+
+        if (definition is not null)
+        {
+            CaptureConstraintPrerequisites(prerequisites, definition);
         }
 
         _prerequisites[key] = prerequisites;
@@ -70,6 +81,7 @@ internal sealed partial class SafeMigrationPreflightProjection
             operation,
             addedToExistingTable: !prerequisites.NewlyCreated);
 
+        InvalidateAcceptedIndexesForColumn(operation.Table, operation.Schema, operation.Name);
         MarkProjectedColumnChanged(operation.Table, operation.Schema, operation.Name);
     }
 
@@ -91,6 +103,7 @@ internal sealed partial class SafeMigrationPreflightProjection
             operation,
             addedToExistingTable: false);
 
+        InvalidateAcceptedIndexesForColumn(operation.Table, operation.Schema, operation.Name);
         MarkProjectedColumnChanged(operation.Table, operation.Schema, operation.Name);
     }
 
@@ -113,7 +126,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         // that table's aggregate structure unknown while retaining exact facts
         // for unrelated tables and the removed column itself.
         SetProjectedTableStructureUnknown(operation.Table, operation.Schema);
-        RemoveDroppedIndexes(operation.Table, operation.Schema);
+        RemoveDroppedPhysicalKeys(operation.Table, operation.Schema);
         InvalidateModelManagedDataProjection();
 
         var prerequisites = GetOrCreateProviderPrerequisites(operation.Table, operation.Schema);
@@ -179,10 +192,26 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         var key = new IndexKey(operation.Table, operation.Schema, operation.Name);
 
-        _droppedIndexes.Add(key);
+        _droppedPhysicalKeys.Add(key);
+        var prerequisites = GetOrCreateProviderPrerequisites(operation.Table, operation.Schema);
+
+        prerequisites.Indexes.MarkPhysicalMissing(operation.Name);
+        if (SharesUniqueConstraintAndIndexIdentity)
+        {
+            _ = DropSharedUniqueIndex(prerequisites, operation.Name);
+            _projectedCandidateKeyMutationTables.Add(
+                new TableKey(operation.Table, operation.Schema));
+        }
+
         if (_tables.TryGetValue(new TableKey(operation.Table, operation.Schema), out var table))
         {
             table.Indexes.Remove(operation.Name);
+            if (SharesUniqueConstraintAndIndexIdentity)
+            {
+                _ = DropSharedUniqueIndex(table, operation.Name);
+                _projectedCandidateKeyMutationTables.Add(
+                    new TableKey(operation.Table, operation.Schema));
+            }
         }
     }
 
@@ -199,7 +228,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         _projectedStructurallyModifiedTables.Remove(key);
         _projectedChangedColumns.Remove(key);
         RemoveProjectedColumnDefinitions(operation.Name, operation.Schema);
-        RemoveDroppedIndexes(operation.Name, operation.Schema);
+        RemoveDroppedPhysicalKeys(operation.Name, operation.Schema);
         InvalidateModelManagedDataProjection();
     }
 
@@ -271,11 +300,60 @@ internal sealed partial class SafeMigrationPreflightProjection
         return prerequisites;
     }
 
-    private void RemoveDroppedIndexes(
+    private void RemoveDroppedPhysicalKeys(
         string table,
         string? schema
-    ) => _droppedIndexes.RemoveWhere(key => StringComparer.Ordinal.Equals(key.Table, table)
+    ) => _droppedPhysicalKeys.RemoveWhere(key => StringComparer.Ordinal.Equals(key.Table, table)
         && StringComparer.Ordinal.Equals(key.Schema, schema));
+
+    private void InvalidateAcceptedIndexesForColumn(
+        string table,
+        string? schema,
+        string column
+    )
+    {
+        var key = new TableKey(table, schema);
+        var candidateKeyInvalidated = false;
+        if (_prerequisites.TryGetValue(key, out var prerequisites))
+        {
+            prerequisites.Indexes.RemoveWhere(
+                index => index.Keys.Any(indexKey => StringComparer.Ordinal.Equals(indexKey.Column, column)));
+
+            if (SharesUniqueConstraintAndIndexIdentity)
+            {
+                candidateKeyInvalidated = prerequisites.UniqueConstraints.RemoveWhere(
+                    constraint => constraint.Columns.Contains(column, StringComparer.Ordinal));
+            }
+        }
+
+        if (!_tables.TryGetValue(key, out var projectedTable))
+        {
+            if (candidateKeyInvalidated)
+            {
+                _projectedCandidateKeyMutationTables.Add(key);
+            }
+
+            return;
+        }
+
+        var names = projectedTable
+            .Indexes
+            .Where(pair => pair.Value.Keys.Any(
+                indexKey => StringComparer.Ordinal.Equals(indexKey.Column, column)))
+            .Select(static pair => pair.Key)
+            .ToArray();
+
+        foreach (var name in names)
+        {
+            projectedTable.Indexes.Remove(name);
+            candidateKeyInvalidated |= DropSharedUniqueIndex(projectedTable, name);
+        }
+
+        if (candidateKeyInvalidated)
+        {
+            _projectedCandidateKeyMutationTables.Add(key);
+        }
+    }
 
     private void CaptureProjectedProviderColumnDefinition(
         string table,
@@ -310,7 +388,8 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         _tables.Clear();
         _prerequisites.Clear();
-        _droppedIndexes.Clear();
+        _droppedPhysicalKeys.Clear();
+        _projectedCandidateKeyMutationTables.Clear();
         _projectedColumnDefinitions.Clear();
         _projectedMissingColumns.Clear();
         _projectedUnknownColumns.Clear();

@@ -10,13 +10,22 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var exists = PrimaryKeyExists(definition.Table);
         var matching = ConstraintColumnsMatch(definition.Table, "PRIMARY", definition.Columns, "PRIMARY KEY");
         var dataBlocked = PrimaryKeyDataBlocked(definition);
+        var physicallyAchievable = BuildUnprefixedKeyPhysicalShapeSupported(
+            definition.Table,
+            definition.Columns);
 
         return Plan(
             $"CASE WHEN NOT {BaseTableExists(definition.Table)} THEN 'prerequisite_missing' "
             + $"WHEN NOT {exists} AND {dataBlocked} THEN 'data_blocked' "
+            + $"WHEN NOT {exists} AND NOT ({physicallyAchievable}) THEN 'unsupported' "
             + $"WHEN NOT {exists} THEN 'missing' "
             + $"WHEN {matching} THEN 'matching' ELSE 'different' END",
-            matching);
+            matching) with
+        {
+            UnsupportedCode = definition.Columns.Count > MySqlProjectedIndexPhysicalShape.MaximumKeyParts
+                ? "primary_key_too_many_columns"
+                : "primary_key_exceeds_physical_limit",
+        };
     }
 
     private MySqlSafeMigrationRuntimePlan BuildDropPrimaryKey(

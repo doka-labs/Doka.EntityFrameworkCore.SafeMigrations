@@ -12,6 +12,14 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             return null;
         }
 
+        if (StringComparer.OrdinalIgnoreCase.Equals(index.Definition.Name, "PRIMARY"))
+        {
+            // WHY: MySQL reserves PRIMARY for the table's primary-key index.
+            // Treating it as an ordinary unique-index alias would merge two
+            // distinct migration contracts and make cross-kind drops unsafe.
+            return "index_name_reserved_primary";
+        }
+
         if ((index.Definition.Filter is not null || index.Definition.StructuredFilter is not null)
             && !Supported(features, MySqlMigrationFeature.FilteredIndexes))
         {
@@ -78,26 +86,36 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var dataBlocked = definition.Unique ? UniqueIndexDataBlocked(definition) : "FALSE";
         var physicallyAchievable = BuildIndexPhysicalShapeSupported(definition);
 
-        var physicalFailureCode = definition.Keys.Any(
-                static key => key.Expression is not null || key.StructuredExpression is not null)
-            || definition.Method is not null
-            && !StringComparer.OrdinalIgnoreCase.Equals(definition.Method, "BTREE")
-                ? "index_key_length_unverifiable"
-                : "index_prefix_required_for_key_limit";
+        var physicalFailureCode = definition.Keys.Count > MySqlProjectedIndexPhysicalShape.MaximumKeyParts
+            ? "index_too_many_key_parts"
+            : definition.Keys.Any(
+                    static key => key.Expression is not null || key.StructuredExpression is not null)
+                || definition.Method is not null
+                && !StringComparer.OrdinalIgnoreCase.Equals(definition.Method, "BTREE")
+                    ? "index_key_length_unverifiable"
+                    : "index_prefix_required_for_key_limit";
 
         var satisfied = $"({matching}) OR (NOT ({indexExists}) AND ({semanticAlias}))";
+        var semanticCandidates = BuildIndexMatchQuery(
+            definition,
+            isMariaDb,
+            requireExpectedName: false);
 
         return Plan(
             $"CASE WHEN NOT {tableExists} THEN 'prerequisite_missing' "
             + $"WHEN {indexExists} AND {matching} THEN 'matching' "
             + $"WHEN {indexExists} THEN 'different' "
             + $"WHEN {semanticAlias} THEN 'matching' "
-            + $"WHEN NOT ({physicallyAchievable}) THEN 'unsupported' "
             + $"WHEN {dataBlocked} THEN 'data_blocked' "
+            + $"WHEN NOT ({physicallyAchievable}) THEN 'unsupported' "
             + "ELSE 'missing' END",
             satisfied) with
         {
             DiagnosticEvidenceExpression = BuildIndexDiagnosticEvidence(definition),
+            MatchedObjectNameExpression = ResolveMatchingObjectName(
+                matching,
+                Literal(definition.Name),
+                semanticCandidates),
             UnsupportedCode = physicalFailureCode,
             // Ordered DropIndex -> EnsureIndex projection still needs the
             // live duplicate-row proof hidden by an exact-name shape clash.
@@ -240,17 +258,24 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         ExpectedIndexDefinition definition,
         bool isMariaDb,
         bool requireExpectedName = true
+    ) => $"EXISTS ({BuildIndexMatchQuery(definition, isMariaDb, requireExpectedName)})";
+
+    private string BuildIndexMatchQuery(
+        ExpectedIndexDefinition definition,
+        bool isMariaDb,
+        bool requireExpectedName
     )
     {
         const string candidate = "candidate";
         var matching = BuildIndexCandidateMatches(definition, isMariaDb, candidate);
         var nameOperator = requireExpectedName ? "=" : "<>";
 
-        return $"EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS {candidate} "
+        return $"SELECT {candidate}.INDEX_NAME AS candidate_name FROM INFORMATION_SCHEMA.STATISTICS {candidate} "
             + $"WHERE {candidate}.TABLE_SCHEMA = DATABASE() "
             + $"AND {candidate}.TABLE_NAME = {Literal(definition.Table)} "
+            + $"AND {candidate}.INDEX_NAME <> 'PRIMARY' "
             + $"AND {candidate}.INDEX_NAME {nameOperator} {Literal(definition.Name)} "
-            + $"AND {candidate}.SEQ_IN_INDEX = 1 AND {matching})";
+            + $"AND {candidate}.SEQ_IN_INDEX = 1 AND {matching}";
     }
 
     private string BuildIndexCandidateMatches(
@@ -375,7 +400,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         ExpectedIndexDefinition definition
     )
     {
-        if (definition.Keys.Any(static key => key.Expression is not null || key.StructuredExpression is not null)
+        if (definition.Keys.Count > MySqlProjectedIndexPhysicalShape.MaximumKeyParts
+            || definition.Keys.Any(static key => key.Expression is not null || key.StructuredExpression is not null)
             || definition.Method is not null
             && !StringComparer.OrdinalIgnoreCase.Equals(definition.Method, "BTREE"))
         {
@@ -386,7 +412,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         }
 
         var keyWidths = definition.Keys
-            .Select(key => BuildIndexKeyWidth(definition.Table, key))
+            .Select(key => BuildIndexKeyWidth(definition.Table, key.Column!, key.PrefixLength))
             .ToArray();
 
         var totalWidth = string.Join(" + ", keyWidths.Select(static width => $"COALESCE(({width}), 2147483647)"));
@@ -394,6 +420,31 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
         return $"EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES t "
             + $"WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_NAME = {Literal(definition.Table)} "
+            + $"AND UPPER(t.ENGINE) = 'INNODB' AND ({totalWidth}) <= ({maximumWidth}))";
+    }
+
+    private string BuildUnprefixedKeyPhysicalShapeSupported(
+        string table,
+        IReadOnlyList<string> columns
+    )
+    {
+        if (columns.Count > MySqlProjectedIndexPhysicalShape.MaximumKeyParts)
+        {
+            return "FALSE";
+        }
+
+        var keyWidths = columns
+            .Select(column => BuildIndexKeyWidth(table, column, prefixLengthValue: null))
+            .ToArray();
+
+        var totalWidth = string.Join(
+            " + ",
+            keyWidths.Select(static width => $"COALESCE(({width}), 2147483647)"));
+
+        var maximumWidth = BuildMaximumIndexKeyWidth("t");
+
+        return $"EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES t "
+            + $"WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_NAME = {Literal(table)} "
             + $"AND UPPER(t.ENGINE) = 'INNODB' AND ({totalWidth}) <= ({maximumWidth}))";
     }
 
@@ -407,10 +458,11 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
     private string BuildIndexKeyWidth(
         string table,
-        ExpectedIndexKeyDefinition key
+        string column,
+        int? prefixLengthValue
     )
     {
-        var prefixLength = key.PrefixLength?.ToString(CultureInfo.InvariantCulture);
+        var prefixLength = prefixLengthValue?.ToString(CultureInfo.InvariantCulture);
         var characterWidth = prefixLength is null
             ? "CASE WHEN c.DATA_TYPE IN ('tinytext', 'text', 'mediumtext', 'longtext') "
                 + "THEN NULL ELSE c.CHARACTER_OCTET_LENGTH END"
@@ -469,6 +521,6 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
         return $"SELECT {width} FROM INFORMATION_SCHEMA.COLUMNS c "
             + $"WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = {Literal(table)} "
-            + $"AND c.COLUMN_NAME = {Literal(key.Column!)}";
+            + $"AND c.COLUMN_NAME = {Literal(column)}";
     }
 }

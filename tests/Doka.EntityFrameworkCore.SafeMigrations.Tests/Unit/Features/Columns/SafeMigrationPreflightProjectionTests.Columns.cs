@@ -59,7 +59,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             operation.Policy,
             analysis.RepairCapability);
 
-        projection.Observe(operation, analysis, decision);
+        projection.Observe(operation, analysis, analysis, decision);
         var replay = projection.Project(operation, live);
 
         Assert.Equal(SafeMigrationAction.Repair, decision.Action);
@@ -83,7 +83,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             operation.Policy,
             analysis.RepairCapability);
 
-        projection.Observe(operation, analysis, decision);
+        projection.Observe(operation, analysis, analysis, decision);
 
         projection.ObserveProviderPostcondition(
             new InsertDataOperation
@@ -117,7 +117,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             operation.Policy,
             analysis.RepairCapability);
 
-        projection.Observe(operation, analysis, decision);
+        projection.Observe(operation, analysis, analysis, decision);
         var replay = projection.Project(operation, live);
 
         Assert.Equal(SafeMigrationAction.RejectDifferent, decision.Action);
@@ -233,7 +233,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         Assert.Equal(SafeMigrationAction.NoOp, decision.Action);
 
-        projection.Observe(operation, analysis, decision);
+        projection.Observe(operation, analysis, analysis, decision);
     }
 
     private static ExpectedColumnDefinition VarcharColumn(

@@ -19,16 +19,21 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         IReadOnlyList<string> columns,
         string type,
         string namePredicate
-    ) => $"EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc "
+    ) => $"EXISTS ({ConstraintColumnsMatchQuery(table, columns, type, namePredicate)})";
+
+    private string ConstraintColumnsMatchQuery(
+        string table,
+        IReadOnlyList<string> columns,
+        string type,
+        string namePredicate
+    ) => "SELECT tc.CONSTRAINT_NAME AS candidate_name FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc "
         + "JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu "
         + "ON kcu.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA "
         + "AND kcu.TABLE_NAME = tc.TABLE_NAME AND kcu.CONSTRAINT_NAME = tc.CONSTRAINT_NAME "
         + $"WHERE tc.CONSTRAINT_SCHEMA = DATABASE() AND tc.TABLE_NAME = {Literal(table)} "
         + $"AND {namePredicate} "
         + $"AND tc.CONSTRAINT_TYPE = {Literal(type)} "
-        + $"GROUP BY tc.CONSTRAINT_NAME HAVING COUNT(*) = {columns.Count.ToString(CultureInfo.InvariantCulture)} "
-        + $"AND GROUP_CONCAT(kcu.COLUMN_NAME ORDER BY kcu.ORDINAL_POSITION SEPARATOR ',') "
-        + $"= {Literal(OrderedColumnsSql(columns))})";
+        + $"GROUP BY tc.CONSTRAINT_NAME HAVING {OrderedConstraintColumnsMatch(columns, "kcu.COLUMN_NAME")}";
 
     private string DuplicateDataExists(
         string table,

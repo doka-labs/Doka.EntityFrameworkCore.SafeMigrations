@@ -45,6 +45,9 @@ internal sealed record PostgreSqlSafeMigrationRuntimePlan(
     /// <summary>Gets optional constant evidence for a privacy-sensitive Different result.</summary>
     public SafeMigrationFacetDifference? DifferentDifference { get; init; }
 
+    /// <summary>Gets the uniquely resolved physical object name for a matching ensure operation.</summary>
+    public string? MatchedObjectNameExpression { get; init; }
+
     /// <summary>Gets the optional bounded live-data probe required by classification.</summary>
     public PostgreSqlSafeMigrationDataProbe? DataProbe { get; init; }
 
