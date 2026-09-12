@@ -90,17 +90,18 @@ changes.
 
 ## Supported Versions
 
-This policy covers all three SafeMigrations packages. Stable 10.3.x is the
+This policy covers all three SafeMigrations packages. Stable 10.4.x is the
 currently supported line; a dated changelog entry is not proof that a
-particular version has been published. Version 10.3.2 is the latest confirmed
-published release, and source is prepared for the 10.4.0 minor release. After
-verified publication, stable 10.4.x becomes the supported line and stable
-10.3.x is superseded.
+particular version has been published. Version 10.4.0 is the latest confirmed
+published release, and source is prepared for the 10.4.1 maintenance release.
+After verified publication, 10.4.1 becomes the latest supported patch in the
+same stable line.
 
 | Release state | Security support |
 | --- | --- |
-| Prepared 10.4.0 source | Not a published support claim until release and package readback succeed |
-| Stable 10.3.x | Currently supported release line until verified 10.4.0 publication |
+| Prepared 10.4.1 source | Not a published support claim until release and package readback succeed |
+| Stable 10.4.x | Supported release line; fixes may require updating to its latest published patch |
+| Stable 10.3.x | Superseded by the stable 10.4.x line |
 | Stable 10.2.x | Superseded by the stable 10.3.x line |
 | Stable 10.1.x | Superseded by later stable release lines |
 | Stable 10.0.x | Superseded by later stable release lines |

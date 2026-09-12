@@ -27,6 +27,13 @@ rechecked on 2026-08-27. Bounded package ranges describe compatibility; the
 committed lockfiles identify the exact graph selected by a particular
 revision.
 
+Published stable 10.4.0 is the latest verified public release. This source is
+prepared for stable 10.4.1 with the same public API, dependency ranges, report
+schemas, and engine matrix. The maintenance release corrects ordered
+prerequisite projection and MySQL/MariaDB physical-key feasibility; only the
+blocking release workflow and exact public package readback establish its
+qualification.
+
 ## Engine matrix
 
 The reusable workflow `.github/workflows/quality-gates.yml` is invoked by CI,

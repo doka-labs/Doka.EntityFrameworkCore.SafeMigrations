@@ -53,8 +53,10 @@ Published stable 10.3.1 clarifies generic application-context ownership
 examples and removes redundant package release-notes metadata. Published stable
 10.3.2 fails closed when SafeMigrations design-time assets are missing and
 adopts Doka 10.4.0's commandless handler result for the internal runtime guard.
-Prepared stable 10.4.0 adds allocation-bounded, self-describing report views
-and corrects MariaDB JSON collation diagnostics. These releases follow changed
+Published stable 10.4.0 adds allocation-bounded, self-describing report views
+and corrects MariaDB JSON collation diagnostics. Prepared stable 10.4.1 closes
+ordered prerequisite-state, semantic-alias, physical-key feasibility, and
+composite-key catalog-matching defects. These releases follow changed
 dependency conditions and confirmed correctness requirements; they are not
 deferred initial scope.
 

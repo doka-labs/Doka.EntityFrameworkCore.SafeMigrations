@@ -31,11 +31,13 @@ tables, provider-proven lossless column repair, report schema version 2, and
 typed diagnostic evidence. Published stable 10.3.1 preserves the complete
 public API and generated operation contract. Published stable 10.3.2 preserves
 them again while hardening design-time registration detection and consuming
-Doka 10.4.0's commandless operation result. Prepared stable 10.4.0 adds
+Doka 10.4.0's commandless operation result. Published stable 10.4.0 adds
 self-describing report-view serialization without changing canonical report-v2
-bytes and corrects MariaDB JSON collation diagnostics. Strict scaffolding
-remains the default. A successful release run and exact-version public package
-readback remain the authority for a published API.
+bytes and corrects MariaDB JSON collation diagnostics. Prepared stable 10.4.1
+preserves that public API, generated-operation contract, and report schemas
+while correcting ordered prerequisite and physical-identity projection. Strict
+scaffolding remains the default. A successful release run and exact-version
+public package readback remain the authority for a published API.
 
 ## Packages and registration
 

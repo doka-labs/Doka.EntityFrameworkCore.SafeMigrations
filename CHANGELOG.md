@@ -6,6 +6,23 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+## [10.4.1] - 2026-09-13
+
+Prepared a stable maintenance release that makes ordered prerequisite
+projection reflect the physical database state throughout one preflight.
+Brownfield convergence now preserves accepted column and candidate-key
+evidence, binds semantic aliases to resolved physical identities, overrides
+pre-batch matches after ordered drops, and rejects infeasible MySQL/MariaDB key
+replacements before destructive DDL. The public API, generated migration
+source, report schemas, dependency ranges, and migration history contract
+remain unchanged.
+
+These notes do not establish publication. Require the successful stable
+release run, the authorized signed `v10.4.1` tag, and verified public package,
+symbol, GitHub Release, provenance, SBOM, and attestation readback before
+selecting 10.4.1. All three package IDs must be published at the exact same
+version.
+
 ### Fixed
 
 - Preserve accepted ordered column and candidate-key prerequisites while a
@@ -904,7 +921,8 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.0...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.1...HEAD
+[10.4.1]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.0...v10.4.1
 [10.4.0]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.3.2...v10.4.0
 [10.3.2]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.3.1...v10.3.2
 [10.3.1]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.3.0...v10.3.1
