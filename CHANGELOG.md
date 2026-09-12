@@ -6,6 +6,57 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+## [10.4.1] - 2026-09-13
+
+Prepared a stable maintenance release that makes ordered prerequisite
+projection reflect the physical database state throughout one preflight.
+Brownfield convergence now preserves accepted column and candidate-key
+evidence, binds semantic aliases to resolved physical identities, overrides
+pre-batch matches after ordered drops, and rejects infeasible MySQL/MariaDB key
+replacements before destructive DDL. The public API, generated migration
+source, report schemas, dependency ranges, and migration history contract
+remain unchanged.
+
+These notes do not establish publication. Require the successful stable
+release run, the authorized signed `v10.4.1` tag, and verified public package,
+symbol, GitHub Release, provenance, SBOM, and attestation readback before
+selecting 10.4.1. All three package IDs must be published at the exact same
+version.
+
+### Fixed
+
+- Preserve accepted ordered column and candidate-key prerequisites while a
+  legacy convergence baseline processes existing tables. Primary keys, unique
+  constraints, checks, foreign keys, and indexes now observe earlier accepted
+  operations without depending on a complete projected table image. Data-
+  validating constraints remain fail-closed unless an empty-table proof or a
+  null-preserving added column proves existing rows safe.
+- Bind a semantic constraint or index `NoOp` to its uniquely resolved physical
+  catalog object. Dropping or renaming that object now invalidates every bound
+  alias, while genuinely distinct equivalent objects remain independent.
+  Ambiguous or unresolved catalog identity is never retained as prerequisite
+  evidence for a later operation.
+- Override immutable pre-batch catalog matches after an accepted ordered drop.
+  A following primary-key, unique, check, foreign-key, or index ensure now
+  reports `Missing` and `Apply` for both exact names and resolved semantic
+  aliases. Intervening data or unresolved structural mutations retain their
+  fail-closed boundary instead of converting stale evidence into a `NoOp`.
+- Invalidate accepted semantic index evidence after an ordered index drop or
+  column mutation, preventing a removed or rewritten index from being reported
+  as matching later in the same preflight.
+- Model MySQL and MariaDB unique constraints and ordinary unique indexes as one
+  physical identity. Cross-kind drops now invalidate every semantic alias,
+  while the reserved `PRIMARY` index remains exclusively owned by the primary-
+  key contract and exact-name collisions retain precedence over aliases.
+- Revalidate MySQL and MariaDB index, primary-key, and unique-constraint
+  feasibility against ordered target column definitions. Safe replacements
+  cannot drop a working physical key before rejecting an over-limit target;
+  composite widths, the 16-part limit, duplicate-row evidence, storage engines,
+  row formats, page sizes, and invalid target prefixes remain fail-closed.
+- Compare MySQL and MariaDB composite primary and unique-key columns by ordinal
+  catalog rows instead of `GROUP_CONCAT`. Maximum-width 16-column identifiers
+  no longer depend on the session's `group_concat_max_len` value.
+
 ## [10.4.0] - 2026-09-11
 
 Prepared a stable minor release for allocation-bounded, self-describing report
@@ -870,7 +921,8 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.0...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.1...HEAD
+[10.4.1]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.0...v10.4.1
 [10.4.0]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.3.2...v10.4.0
 [10.3.2]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.3.1...v10.3.2
 [10.3.1]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.3.0...v10.3.1

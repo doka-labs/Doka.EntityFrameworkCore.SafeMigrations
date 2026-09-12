@@ -33,7 +33,13 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             requireLocalIdentity: false),
         namespaceCollision: RelationNameExists(
             intent.Definition.Name,
-            intent.Definition.Schema));
+            intent.Definition.Schema),
+        semanticCandidates: ConstraintColumnsMatchQuery(
+            intent.Definition.Table,
+            intent.Definition.Schema,
+            'u',
+            intent.Definition.Columns,
+            $"co.conname <> {Literal(intent.Definition.Name)}"));
 
     private PostgreSqlSafeMigrationRuntimePlan BuildDropUnique(
         DropUniqueConstraintIntent intent

@@ -1,8 +1,9 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 
-internal sealed class MySqlSafeMigrationProviderAnalyzer :
+internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
     ISafeMigrationProviderAnalyzer,
-    ISafeMigrationProviderOperationProjection
+    ISafeMigrationProviderOperationProjection,
+    ISafeMigrationProjectedKeyAnalyzer
 {
     private readonly MySqlSafeMigrationPlanCapture _planCapture;
     private readonly IMigrationsSqlGenerator _sqlGenerator;
@@ -24,6 +25,8 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer :
     }
 
     public string ProviderId => "doka_mysql";
+
+    bool ISafeMigrationProjectedKeyAnalyzer.SharesUniqueConstraintAndIndexIdentity => true;
 
     bool ISafeMigrationProviderOperationProjection.PreservesExistingTableState(
         MigrationOperation operation
@@ -125,6 +128,11 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer :
 
             var commandTimeout = context.Database.GetCommandTimeout();
             var maximumPayloadBytes = await GetMaximumPayloadBytesAsync(connection, commandTimeout, cancellationToken);
+            var indexEnvironments = await ReadIndexPhysicalEnvironmentsAsync(
+                connection,
+                operations,
+                commandTimeout,
+                cancellationToken);
 
             var expectedUniqueIndexes = MySqlSafeMigrationPlanCapture.CreateExpectedUniqueIndexes(operations);
             var results = new List<SafeMigrationProviderAnalysis>(operations.Count);
@@ -136,6 +144,7 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer :
                          SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture))
             {
                 var plans = CapturePlans(operationWindow, context.Model, expectedUniqueIndexes);
+                AttachIndexPhysicalEnvironments(operationWindow, plans, indexEnvironments);
                 var shortCircuitStates = await FindShortCircuitStatesAsync(
                     connection,
                     plans,
@@ -165,7 +174,7 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer :
                     while (ordinal < operationWindow.Length
                            && shortCircuitStates[ordinal] is { } shortCircuitState)
                     {
-                        results.Add(ShortCircuitAnalysis(shortCircuitState));
+                        results.Add(ShortCircuitAnalysis(shortCircuitState, plans[ordinal]));
                         ordinal++;
                     }
 
@@ -241,6 +250,10 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer :
                                 ? "NULL"
                                 : plan.RenderDiagnosticEvidenceExpression(parameterizer.Add);
 
+                            var matchedObjectName = plan.MatchedObjectNameExpression is null
+                                ? "NULL"
+                                : plan.RenderMatchedObjectNameExpression(parameterizer.Add);
+
                             var resultOrdinal = operationOffset + ordinal;
                             var selection = $"SELECT {resultOrdinal.ToString(CultureInfo.InvariantCulture)}, "
                                 + $"({stateExpression}), "
@@ -249,7 +262,8 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer :
                                 + $"({classificationCode}), "
                                 + $"({rowEvidence}), "
                                 + $"({dependencyCounts}), "
-                                + $"({diagnosticEvidence})";
+                                + $"({diagnosticEvidence}), "
+                                + $"({matchedObjectName})";
 
                             var selectionBytes = Encoding.UTF8.GetByteCount(selection)
                                 + (selections.Count == 0 ? 0 : separatorBytes);
@@ -489,6 +503,8 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer :
             current.OperationalImpact,
             differences)
         {
+            IndexPhysicalEnvironment = current.IndexPhysicalEnvironment,
+            MatchedObjectName = current.MatchedObjectName,
             ModelManagedDataEvidence = current.ModelManagedDataEvidence,
             RequiresLiveDataProof = current.RequiresLiveDataProof
                 || (plan.MayRequireNullabilityDataProof
@@ -1027,8 +1043,12 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer :
     }
 
     private static SafeMigrationProviderAnalysis ShortCircuitAnalysis(
-        SafeMigrationObservedState state
-    ) => new(state, SafeMigrationRepairCapability.None, false, $"classified_{StateCode(state)}");
+        SafeMigrationObservedState state,
+        MySqlSafeMigrationRuntimePlan plan
+    ) => new(state, SafeMigrationRepairCapability.None, false, $"classified_{StateCode(state)}")
+    {
+        IndexPhysicalEnvironment = plan.IndexPhysicalEnvironment,
+    };
 
     private static async Task<int> GetMaximumPayloadBytesAsync(
         DbConnection connection,
@@ -1137,6 +1157,11 @@ internal sealed class MySqlSafeMigrationProviderAnalyzer :
                         operationalImpact,
                         differences)
                     {
+                        IndexPhysicalEnvironment = plan.IndexPhysicalEnvironment,
+                        MatchedObjectName = state == SafeMigrationObservedState.Matching
+                            && !reader.IsDBNull(8)
+                                ? reader.GetString(8)
+                                : null,
                         ModelManagedDataEvidence = evidence,
                         // WHY: Every VARCHAR transition carries a probe template,
                         // but widening is catalog-only. Only a catalog-confirmed

@@ -5,8 +5,13 @@ internal static partial class SafeMigrationDefinitionEquivalence
     public static bool Index(
         ExpectedIndexDefinition left,
         ExpectedIndexDefinition right
+    ) => StringComparer.Ordinal.Equals(left.Name, right.Name)
+        && IndexSemantics(left, right);
+
+    public static bool IndexSemantics(
+        ExpectedIndexDefinition left,
+        ExpectedIndexDefinition right
     ) => Identity(left.Table, left.Schema, right.Table, right.Schema)
-        && StringComparer.Ordinal.Equals(left.Name, right.Name)
         && left.Unique == right.Unique
         && StringComparer.Ordinal.Equals(left.Filter, right.Filter)
         && SafeMigrationSqlExpressionContract.Equivalent(left.StructuredFilter, right.StructuredFilter)

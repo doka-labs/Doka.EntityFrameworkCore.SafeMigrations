@@ -535,6 +535,31 @@ semantics. Unknown columns, non-null defaults, computed values, and
 `NULLS NOT DISTINCT` remain `prerequisite_missing`. Runtime guards and
 postflight remain authoritative for the actual database state.
 
+Legacy convergence applies the same ordered-proof boundary to table
+constraints. An accepted primary key, unique constraint, check, foreign key, or
+index remains visible to later operations even when the existing table has no
+complete projected definition. Primary keys and checks over newly added
+required columns require the provider's empty-table proof. Unique constraints
+and foreign keys may also use a newly added nullable, non-computed column whose
+default preserves `NULL` for every existing row. A foreign key additionally
+requires an accepted primary or unique key with the exact declared principal-
+column order and physically compatible dependent/principal column storage.
+Missing keys, reversed composite order, incompatible storage, non-null
+defaults, computed columns, and intervening provider data operations remain
+blocked. A semantic no-op is bound to the unique physical object that supplied
+the match. Dropping or renaming that object invalidates every bound alias;
+unrelated physical candidate keys and constraints remain available to following
+operations. Ambiguous physical identity is not projected as later prerequisite
+evidence.
+
+An ordered `Drop*IfExists` followed by the corresponding ensure is represented
+as a real replacement, not as a live-catalog no-op. This applies to primary
+keys, unique constraints, checks, foreign keys, and indexes with the same name
+or a uniquely resolved semantic alias. Keep any data transformation before a
+new data-validating constraint explicit: DML between the drop and ensure
+invalidates the pre-batch row proof and blocks the preflight. An unresolved
+physical alias or a changed column/key prerequisite likewise fails closed.
+
 The generated `Down` body applies to the entire migration. It throws before any
 destructive DDL because the migration cannot prove which table, column,
 constraint, or index existed before the baseline.
@@ -634,6 +659,31 @@ model, scaffold a new migration, and review the resulting explicit
 bounded proof in the adapter; author a reviewed provider-specific transition
 instead of relying on a later server error. SafeMigrations never invents a
 prefix because doing so can change uniqueness and query semantics.
+
+When an earlier accepted operation changes an indexed column, preflight
+recomputes the target key rather than reusing the live catalog width. Composite
+keys combine each projected part with bounded live evidence for unchanged
+parts. A valid widening such as `varchar(700)` to `varchar(800)` followed by an
+explicit 768-character `utf8mb4` prefix is therefore evaluated against the
+target definition. A prefix beyond the target column, an over-limit composite
+key, an unsupported engine, or an unverifiable shape remains blocked before
+the preceding mutation executes. Unique indexes additionally retain the live
+duplicate-row gate.
+
+These limits follow the official
+[MySQL InnoDB limits](https://dev.mysql.com/doc/refman/8.4/en/innodb-limits.html)
+and [column-prefix semantics](https://dev.mysql.com/doc/refman/8.4/en/column-indexes.html)
+(primary sources; retrieved 2026-09-12).
+
+MySQL and MariaDB implement a unique constraint through a unique index. An
+ordered drop of either representation therefore invalidates both views before
+a later ensure is classified. An ordinary index cannot use the reserved name
+`PRIMARY`, and exact-name conflicts are evaluated before semantic aliases.
+SafeMigrations validates missing and replacement indexes, primary keys, and
+unique constraints against the table's physical byte limit and maximum of 16
+key parts before any preceding DDL is executed. Composite primary and unique-
+key matching uses ordinal catalog rows rather than `GROUP_CONCAT`, so long
+identifier lists do not inherit the session aggregation limit.
 
 `ConvergeTable` and `ConvergeTableFromModel` reach the same object-granular
 convergence implementation. Their difference is how the immutable expected

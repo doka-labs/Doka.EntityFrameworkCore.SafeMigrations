@@ -27,6 +27,24 @@ internal static partial class SafeMigrationDefinitionEquivalence
         && left.IsStored == right.IsStored
         && ProviderAnnotations(left.ProviderAnnotations, right.ProviderAnnotations);
 
+    // WHY: Foreign-key columns may legitimately differ in nullability and value
+    // generation. Referential compatibility depends on their physical storage
+    // shape, while defaults and comments do not alter the referenced value.
+    public static bool ForeignKeyColumnStorage(
+        ExpectedColumnDefinition dependent,
+        ExpectedColumnDefinition principal
+    ) => StringComparer.Ordinal.Equals(dependent.StoreType, principal.StoreType)
+        && dependent.IsUnicode == principal.IsUnicode
+        && dependent.MaxLength == principal.MaxLength
+        && dependent.IsFixedLength == principal.IsFixedLength
+        && dependent.Precision == principal.Precision
+        && dependent.Scale == principal.Scale
+        && Equals(dependent.Collation, principal.Collation)
+        && dependent.ComputedColumnSql is null
+        && dependent.ComputedExpression is null
+        && principal.ComputedColumnSql is null
+        && principal.ComputedExpression is null;
+
     private static bool ProviderAnnotations(
         IReadOnlyList<SafeMigrationProviderAnnotation> left,
         IReadOnlyList<SafeMigrationProviderAnnotation> right

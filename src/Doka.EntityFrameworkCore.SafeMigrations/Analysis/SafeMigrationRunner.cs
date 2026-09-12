@@ -261,7 +261,8 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
         var hasProviderOperations = false;
         var preflightProjection = mode == SafeMigrationReportMode.Preflight
             ? new SafeMigrationPreflightProjection(
-                _providerAnalyzer as ISafeMigrationProviderOperationProjection)
+                _providerAnalyzer as ISafeMigrationProviderOperationProjection,
+                _providerAnalyzer as ISafeMigrationProjectedKeyAnalyzer)
             : null;
 
         var postflightProjection = mode == SafeMigrationReportMode.Postflight
@@ -327,7 +328,7 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
                 : !postconditionSatisfied;
 
             blocked |= operationBlocked;
-            preflightProjection?.Observe(safeOperation, analysis, decision);
+            preflightProjection?.Observe(safeOperation, liveAnalysis, analysis, decision);
             var assessmentCode = postconditionSuperseded
                 ? "postcondition_superseded"
                 : operationBlocked

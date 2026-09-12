@@ -77,7 +77,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             repair.Policy,
             repairAnalysis.RepairCapability);
 
-        projection.Observe(repair, repairAnalysis, repairDecision);
+        projection.Observe(repair, repairAnalysis, repairAnalysis, repairDecision);
 
         var analysis = projection.Project(
             new SafeMigrationOperation(
@@ -180,7 +180,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             ensure.Policy,
             ensureAnalysis.RepairCapability);
 
-        projection.Observe(ensure, ensureAnalysis, ensureDecision);
+        projection.Observe(ensure, ensureAnalysis, ensureAnalysis, ensureDecision);
 
         var index = new SafeMigrationOperation(
             new EnsureIndexIntent(
@@ -608,7 +608,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         AssertProjectedState(
             projection,
             new EnsureForeignKeyIntent(table.ForeignKeys[0]),
-            SafeMigrationObservedState.Missing);
+            SafeMigrationObservedState.PrerequisiteMissing);
 
         Apply(projection, new DropIndexIntent(index.Name, index.Table));
         Apply(projection, new DropPrimaryKeyIntent("pk_items", "items"));
@@ -635,7 +635,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         Assert.Equal(SafeMigrationAction.Repair, alterDecision.Action);
 
-        projection.Observe(alterOperation, alterAnalysis, alterDecision);
+        projection.Observe(alterOperation, alterAnalysis, alterAnalysis, alterDecision);
         AssertMatching(projection, new EnsureColumnIntent("items", targetParentColumn));
         Apply(projection, new DropColumnIntent(targetParentColumn.Name, "items"));
         Apply(projection, new DropTableIntent("items"));

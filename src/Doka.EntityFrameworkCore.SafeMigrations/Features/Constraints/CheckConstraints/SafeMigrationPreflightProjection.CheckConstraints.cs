@@ -14,10 +14,48 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         if (!TryGet(intent.Definition.Table, intent.Definition.Schema, out var table))
         {
+            if (_prerequisites.TryGetValue(
+                    new TableKey(intent.Definition.Table, intent.Definition.Schema),
+                    out var prerequisites))
+            {
+                var accepted = AnalyzeAcceptedDefinition(
+                    prerequisites.CheckConstraints,
+                    intent.Definition.Name,
+                    intent.Definition,
+                    liveAnalysis);
+
+                if (accepted is not null)
+                {
+                    if (accepted.ObservedState == SafeMigrationObservedState.Missing
+                        && !TryGetConstraintPrerequisites(
+                            intent.Definition.Table,
+                            intent.Definition.Schema,
+                            SafeMigrationPrerequisiteColumns.Local(intent),
+                            out _)
+                        && !CanReuseMatchingLiveColumnPrerequisites(
+                            intent.Definition.Table,
+                            intent.Definition.Schema,
+                            SafeMigrationPrerequisiteColumns.Local(intent),
+                            liveAnalysis))
+                    {
+                        return StructureStateUnknown();
+                    }
+
+                    return InvalidateDataDependentMissing(
+                        intent.Definition.Table,
+                        intent.Definition.Schema,
+                        accepted);
+                }
+            }
+
+            var projectedAnalysis = CanProjectMissingCheckConstraint(intent, liveAnalysis)
+                ? Analysis(SafeMigrationObservedState.Missing)
+                : liveAnalysis;
+
             return InvalidateDataDependentMissing(
                 intent.Definition.Table,
                 intent.Definition.Schema,
-                liveAnalysis);
+                projectedAnalysis);
         }
 
         var analysis = AnalyzeDefinition(
@@ -43,9 +81,23 @@ internal sealed partial class SafeMigrationPreflightProjection
 
     private void Observe(
         EnsureCheckConstraintIntent intent,
+        SafeMigrationProviderAnalysis liveAnalysis,
         SafeMigrationDecision decision
     )
     {
+        if (decision.Action is SafeMigrationAction.Apply or SafeMigrationAction.NoOp
+            && _prerequisites.TryGetValue(
+                new TableKey(intent.Definition.Table, intent.Definition.Schema),
+                out var prerequisites))
+        {
+            ObserveAcceptedDefinition(
+                prerequisites.CheckConstraints,
+                intent.Definition.Name,
+                intent.Definition,
+                liveAnalysis,
+                decision);
+        }
+
         if (decision.Action == SafeMigrationAction.Apply
             && TryGet(intent.Definition.Table, intent.Definition.Schema, out var table))
         {
@@ -58,6 +110,13 @@ internal sealed partial class SafeMigrationPreflightProjection
         SafeMigrationDecision decision
     )
     {
+        if (decision.Action == SafeMigrationAction.Apply)
+        {
+            var prerequisites = GetOrCreateProviderPrerequisites(intent.Table, intent.Schema);
+
+            prerequisites.CheckConstraints.MarkPhysicalMissing(intent.Name);
+        }
+
         if (decision.Action == SafeMigrationAction.Apply
             && TryGet(intent.Table, intent.Schema, out var table))
         {

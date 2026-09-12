@@ -13,6 +13,8 @@ internal static class LargeMigrationStressContract
     private const string ParentTable = "large_migration_parent";
     private const string SecondaryParentTable = "large_migration_secondary_parent";
     private const string TargetTable = "large_migration_target";
+    private const int MissingIndexColumnLag = 10;
+    private const int MissingUniqueConstraintColumnLag = 14;
 
     public static LargeMigrationStressExpectation Populate(
         MigrationBuilder builder,
@@ -23,9 +25,9 @@ internal static class LargeMigrationStressContract
 
         var scenarios = CreateScenarios(dialect);
 
-        // Missing resources use ordinal-specific names. Reusing one name would
-        // let preflight projection turn later operations into synthetic no-ops
-        // and would no longer exercise a large expected catalog.
+        // Missing resources use ordinal-specific definitions. A different name
+        // alone cannot make a semantically identical index or constraint a new
+        // object, so the stress catalog varies structural identity as well.
         for (var ordinal = 0; ordinal < OperationCount; ordinal++)
         {
             scenarios[ordinal % scenarios.Count].AddOperation(builder, ordinal);
@@ -346,7 +348,9 @@ internal static class LargeMigrationStressContract
                 postconditionSatisfied: true),
             Scenario(
                 (migrationBuilder, ordinal) => migrationBuilder.EnsureIndex(
-                    Index(MissingIndex(ordinal), ["indexed_value", "id"]),
+                    Index(
+                        MissingIndex(ordinal),
+                        [MissingColumn(ordinal - MissingIndexColumnLag), "id"]),
                     SafeMigrationPolicy.ThrowIfDifferent),
                 MissingIndex,
                 SafeMigrationOperationKind.EnsureIndex,
@@ -383,7 +387,7 @@ internal static class LargeMigrationStressContract
                     new ExpectedUniqueConstraintDefinition(
                         MissingUniqueConstraint(ordinal),
                         TargetTable,
-                        ["id", "matching_value"]),
+                        [MissingColumn(ordinal - MissingUniqueConstraintColumnLag), "id"]),
                     SafeMigrationPolicy.ThrowIfDifferent),
                 MissingUniqueConstraint,
                 SafeMigrationOperationKind.EnsureUniqueConstraint,
@@ -407,7 +411,7 @@ internal static class LargeMigrationStressContract
                         SafeMigrationSql.Binary(
                             SafeMigrationSql.Identifier("check_value"),
                             SafeMigrationSqlBinaryOperator.LessThanOrEqual,
-                            SafeMigrationSql.Literal(OperationCount))),
+                            SafeMigrationSql.Literal(checked(OperationCount + ordinal)))),
                     SafeMigrationPolicy.ThrowIfDifferent),
                 MissingCheckConstraint,
                 SafeMigrationOperationKind.EnsureCheckConstraint,
@@ -436,7 +440,8 @@ internal static class LargeMigrationStressContract
                 SafeMigrationOperationKind.EnsureForeignKey,
                 SafeMigrationObservedState.Missing,
                 SafeMigrationAction.Apply,
-                requiresLiveDataProof: true),
+                requiresLiveDataProof: true,
+                convergesOnFirstAcceptedMutation: true),
             Scenario(
                 (migrationBuilder, ordinal) => migrationBuilder.EnsureModelManagedDataFromModel(
                     TargetTable,

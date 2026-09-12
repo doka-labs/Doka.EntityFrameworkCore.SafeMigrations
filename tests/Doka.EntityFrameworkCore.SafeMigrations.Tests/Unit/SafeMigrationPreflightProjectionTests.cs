@@ -8,7 +8,8 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     )
     {
         var operation = new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent);
-        var analysis = projection.Project(operation, Live(SafeMigrationObservedState.Missing));
+        var liveAnalysis = Live(SafeMigrationObservedState.Missing);
+        var analysis = projection.Project(operation, liveAnalysis);
         var decision = SafeMigrationDecisionPlanner.Plan(
             intent.Kind,
             analysis.ObservedState,
@@ -24,7 +25,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 SafeMigrationAction.RejectDataBlocked,
                 SafeMigrationAction.RejectPrerequisiteMissing,
             });
-        projection.Observe(operation, analysis, decision);
+        projection.Observe(operation, liveAnalysis, analysis, decision);
     }
 
     private static void AssertMatching(
@@ -42,10 +43,24 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         SafeMigrationPreflightProjection projection,
         SafeMigrationIntent intent,
         SafeMigrationObservedState liveState
+    ) => ObserveAccepted(
+        projection,
+        intent,
+        liveState,
+        liveState == SafeMigrationObservedState.Matching
+            ? intent.ObjectName
+            : null);
+
+    private static void ObserveAccepted(
+        SafeMigrationPreflightProjection projection,
+        SafeMigrationIntent intent,
+        SafeMigrationObservedState liveState,
+        string? matchedObjectName
     )
     {
         var operation = new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent);
-        var analysis = projection.Project(operation, Live(liveState));
+        var liveAnalysis = Live(liveState, matchedObjectName);
+        var analysis = projection.Project(operation, liveAnalysis);
         var decision = SafeMigrationDecisionPlanner.Plan(
             intent.Kind,
             analysis.ObservedState,
@@ -53,12 +68,16 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             analysis.RepairCapability);
 
         Assert.Contains(decision.Action, new[] { SafeMigrationAction.Apply, SafeMigrationAction.NoOp, });
-        projection.Observe(operation, analysis, decision);
+        projection.Observe(operation, liveAnalysis, analysis, decision);
     }
 
     private static SafeMigrationProviderAnalysis Live(
-        SafeMigrationObservedState state
-    ) => new(state, SafeMigrationRepairCapability.None, postconditionSatisfied: false, "test_live");
+        SafeMigrationObservedState state,
+        string? matchedObjectName = null
+    ) => new(state, SafeMigrationRepairCapability.None, postconditionSatisfied: false, "test_live")
+    {
+        MatchedObjectName = matchedObjectName,
+    };
 
     private static ExpectedColumnDefinition Column(
         string name

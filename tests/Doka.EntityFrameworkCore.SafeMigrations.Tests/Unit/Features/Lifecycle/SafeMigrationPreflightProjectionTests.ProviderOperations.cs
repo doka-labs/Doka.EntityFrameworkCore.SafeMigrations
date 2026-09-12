@@ -563,7 +563,11 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             var analysis = projection.Project(operation, live);
 
             Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
-            Assert.Equal("projected_data_state_unknown", analysis.Code);
+            Assert.Equal(
+                intent is EnsureForeignKeyIntent
+                    ? "projected_structure_state_unknown"
+                    : "projected_data_state_unknown",
+                analysis.Code);
         }
     }
 
@@ -896,6 +900,71 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         Assert.Equal(SafeMigrationObservedState.Missing, analysis.ObservedState);
         Assert.Equal("projected_missing", analysis.Code);
+    }
+
+    [Fact]
+    public void ProviderDropIndexInvalidatesAnEarlierAcceptedIndex()
+    {
+        const string indexName = "ix_shipments_customer_id";
+        var projection = new SafeMigrationPreflightProjection();
+        projection.ObserveProviderPostcondition(
+            ProviderColumn("customer_id", "shipments", isNullable: false));
+        ObserveAccepted(
+            projection,
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    indexName,
+                    "shipments",
+                    [new ExpectedIndexKeyDefinition(column: "customer_id")])),
+            SafeMigrationObservedState.Matching);
+
+        projection.ObserveProviderPostcondition(
+            new DropIndexOperation
+            {
+                Name = indexName,
+                Table = "shipments",
+            });
+        var analysis = ProjectIndex(
+            projection,
+            "shipments",
+            "customer_id",
+            unique: false,
+            Live(SafeMigrationObservedState.Matching));
+
+        Assert.Equal(SafeMigrationObservedState.Missing, analysis.ObservedState);
+        Assert.Equal("projected_missing", analysis.Code);
+    }
+
+    [Fact]
+    public void ProviderColumnDropInvalidatesAnEarlierAcceptedIndex()
+    {
+        var projection = new SafeMigrationPreflightProjection();
+        projection.ObserveProviderPostcondition(
+            ProviderColumn("customer_id", "shipments", isNullable: false));
+        ObserveAccepted(
+            projection,
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "ix_shipments_customer_id",
+                    "shipments",
+                    [new ExpectedIndexKeyDefinition(column: "customer_id")])),
+            SafeMigrationObservedState.Matching);
+
+        projection.ObserveProviderPostcondition(
+            new DropColumnOperation
+            {
+                Name = "customer_id",
+                Table = "shipments",
+            });
+        var analysis = ProjectIndex(
+            projection,
+            "shipments",
+            "customer_id",
+            unique: false,
+            Live(SafeMigrationObservedState.Matching));
+
+        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
+        Assert.Equal("projected_structure_state_unknown", analysis.Code);
     }
 
     [Fact]

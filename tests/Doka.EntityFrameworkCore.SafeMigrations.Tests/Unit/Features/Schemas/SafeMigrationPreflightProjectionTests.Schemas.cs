@@ -25,7 +25,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 operation.Policy,
                 projected.RepairCapability);
 
-            projection.Observe(operation, projected, decision);
+            projection.Observe(operation, projected, projected, decision);
 
             Assert.Same(live, projected);
         }

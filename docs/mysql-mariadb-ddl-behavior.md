@@ -214,8 +214,8 @@ analysis proves its complete maximum key width. The proof reads the live
 InnoDB engine, row format, `@@innodb_page_size`, column store families,
 character widths, numeric precision/scale, temporal precision, and explicit
 prefixes. `COMPACT` and `REDUNDANT` use the 767-byte limit. A 4 KiB or 8 KiB
-page uses 768 or 1536 bytes respectively; the qualified default 16 KiB profile
-uses 3072 bytes.
+page uses 768 or 1536 bytes respectively; supported page profiles of 16 KiB or
+larger use 3072 bytes.
 
 An overlong ordinary key rejects as
 `index_prefix_required_for_key_limit`. An unknown-width, expression,
@@ -225,6 +225,31 @@ a scalar key also rejects. Existing indexes remain catalog-comparable, so an
 already materialized provider-supported index is not rejected merely because
 SafeMigrations does not own a creation proof for its access method. No path
 silently truncates or invents a prefix.
+
+If an earlier accepted column operation changes an indexed definition, the
+ordered preflight discards the live width conclusion. It evaluates projected
+key parts from their complete target store definitions and combines them with
+bounded catalog shapes for unchanged composite parts. The proof retains the
+actual table engine and row format, or the database defaults for a table being
+created, plus `@@innodb_page_size`. Unique-index duplicate evidence is evaluated
+before a stale physical-width rejection can be replaced with projected
+`Missing`. A drop or column invalidation also removes any earlier accepted
+semantic index alias, so historical evidence cannot produce a later `NoOp`.
+
+MySQL and MariaDB implement an ordinary unique constraint as a physical unique
+index. Ordered projection therefore mirrors compatible BTREE definitions across
+both operation families, and a drop through either family invalidates the same
+physical identity and all of its aliases. Prefix, expression, provider-option,
+and `PRIMARY` definitions are not cross-kind aliases; `PRIMARY` is reserved for
+the primary-key contract. Exact-name collisions are resolved before differently
+named semantic matches.
+
+The same physical feasibility gate applies to missing and replacement ordinary
+indexes, primary keys, and unique constraints. It checks the complete key width,
+the InnoDB row format and page size, the 16-part limit, and bounded knowledge of
+every key column before any earlier drop can execute. Constraint column order is
+matched by ordinal catalog rows, not `GROUP_CONCAT`, whose default session limit
+can truncate 16 maximum-length identifiers.
 
 ## Ordered index replacement
 
@@ -277,6 +302,20 @@ actions, ordering, prefixes, methods, uniqueness, visibility, or other modeled
 facets remain independent and do not suppress safe creation. Multiple semantic
 aliases remain a deterministic no-op and are reconciled from unexpected-object
 inventory through the same provider comparator.
+
+Ordered preflight resolves a semantic no-op to one physical catalog name before
+retaining it as prerequisite evidence. A later drop invalidates every semantic
+alias bound to that physical object. If multiple physical objects match, the
+current ensure remains a deterministic no-op, but its ambiguous identity is not
+used to authorize a later operation.
+
+An accepted drop creates an ordered tombstone for the physical object. A later
+ensure for the same definition, including a uniquely bound semantic alias,
+therefore reports `Missing` and `Apply` even though the immutable pre-batch
+catalog result was `Matching`. If data or a required key/column changes between
+those operations, preflight blocks before execution. This matters on both
+engines because their DDL can commit independently of surrounding application
+transactions.
 
 Physical constraint namespaces are checked only after local exact and semantic
 matching. MySQL CHECK and foreign-key symbols must be free across the current
@@ -425,7 +464,13 @@ unqualified future engine line is admitted implicitly.
 - [MariaDB JSON_EQUALS](https://mariadb.com/docs/server/reference/sql-functions/special-functions/json-functions/json_equals)
 - [MariaDB INSERT ON DUPLICATE KEY UPDATE](https://mariadb.com/docs/server/reference/sql-statements/data-manipulation/inserting-loading-data/insert-on-duplicate-key-update)
 - [MySQL InnoDB limits](https://dev.mysql.com/doc/refman/8.4/en/innodb-limits.html)
+  (retrieved 2026-09-12)
+- [MySQL CREATE TABLE](https://dev.mysql.com/doc/refman/8.4/en/create-table.html)
+  (retrieved 2026-09-12)
+- [MySQL `group_concat_max_len`](https://dev.mysql.com/doc/refman/8.4/en/server-system-variables.html#sysvar_group_concat_max_len)
+  (retrieved 2026-09-12)
 - [MySQL CREATE INDEX](https://dev.mysql.com/doc/refman/8.4/en/create-index.html)
+  (retrieved 2026-09-12)
 - [MySQL invisible indexes](https://dev.mysql.com/doc/refman/8.4/en/invisible-indexes.html)
 - [MySQL CHECK constraints](https://dev.mysql.com/doc/refman/8.4/en/create-table-check-constraints.html)
 - [MySQL foreign keys](https://dev.mysql.com/doc/refman/8.4/en/create-table-foreign-keys.html)

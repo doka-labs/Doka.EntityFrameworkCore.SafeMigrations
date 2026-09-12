@@ -98,5 +98,9 @@ public sealed class SafeMigrationProviderAnalysis
 
     internal bool RequiresLiveDataProof { get; init; }
 
+    internal SafeMigrationIndexPhysicalEnvironment? IndexPhysicalEnvironment { get; init; }
+
+    internal string? MatchedObjectName { get; init; }
+
     internal SafeMigrationModelManagedDataEvidence? ModelManagedDataEvidence { get; init; }
 }

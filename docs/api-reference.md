@@ -31,11 +31,13 @@ tables, provider-proven lossless column repair, report schema version 2, and
 typed diagnostic evidence. Published stable 10.3.1 preserves the complete
 public API and generated operation contract. Published stable 10.3.2 preserves
 them again while hardening design-time registration detection and consuming
-Doka 10.4.0's commandless operation result. Prepared stable 10.4.0 adds
+Doka 10.4.0's commandless operation result. Published stable 10.4.0 adds
 self-describing report-view serialization without changing canonical report-v2
-bytes and corrects MariaDB JSON collation diagnostics. Strict scaffolding
-remains the default. A successful release run and exact-version public package
-readback remain the authority for a published API.
+bytes and corrects MariaDB JSON collation diagnostics. Prepared stable 10.4.1
+preserves that public API, generated-operation contract, and report schemas
+while correcting ordered prerequisite and physical-identity projection. Strict
+scaffolding remains the default. A successful release run and exact-version
+public package readback remain the authority for a published API.
 
 ## Packages and registration
 
@@ -275,11 +277,22 @@ Named ensure operations use semantic identity with exact-name precedence. If
 the expected name exists, all modeled facets must match. If it is absent, a
 differently named equivalent primary key, unique constraint, check constraint,
 foreign key, or index satisfies the operation as `Matching`; multiple aliases
-remain a no-op. A differently named object with a different definition remains
-independent and does not suppress normal safe creation unless its singleton or
-physical provider namespace makes the requested object impossible to create.
-That conflict is `Different` and rejects before DDL. Drop and rename helpers
-always use the exact physical name and never select a semantic alias.
+remain a no-op. Ordered preflight binds such a no-op to the unique physical
+catalog object that supplied the match. Drop or rename operations invalidate
+every alias bound to that object. If physical identity is ambiguous or cannot
+be resolved, the no-op is not retained as prerequisite evidence. A differently
+named object with a different definition remains independent and does not
+suppress normal safe creation unless its singleton or physical provider
+namespace makes the requested object impossible to create. That conflict is
+`Different` and rejects before DDL. Drop and rename helpers always use the
+exact physical name and never select a semantic alias.
+
+Provider analysis observes the catalog before ordered projection begins. Once
+an accepted drop removes a physical primary key, unique constraint, check
+constraint, foreign key, or index, a later ensure cannot reuse that immutable
+live match. Exact-name and resolved-alias replacements project as `Missing`;
+ambiguous identity, altered prerequisites, or intervening data changes remain
+`PrerequisiteMissing`.
 
 `EnsureTable` additionally requires `SafeMigrationTableMode`: strict owned
 definition or convergence container. `ConvergeTable` always emits an
@@ -423,6 +436,26 @@ Recognized ordinary table/column operations may satisfy a later safe
 prerequisite in the ordered projection, but remain
 `provider_owned_not_analyzed`; this conditional projection is not an analysis
 or approval of their DDL.
+Accepted legacy-convergence columns and constraints also remain visible to
+following safe operations on an existing table. Constraint creation projects
+`Missing` only from provider `PrerequisiteMissing` evidence when all referenced
+columns are known and existing rows are proven safe. Foreign keys additionally
+require an accepted ordered candidate key and compatible physical column
+storage. Missing or reversed keys, non-null defaults, computed columns,
+incompatible storage, and stale row proofs remain blocked.
+Accepted index evidence is invalidated by later index drops and column
+mutations. When MySQL or MariaDB index feasibility depends on a column changed
+earlier in the ordered migration, the provider recomputes the complete target
+key width from projected definitions, unchanged live key parts, the InnoDB row
+format, and the server page size. The projection never reuses the pre-batch
+column width for that decision.
+MySQL and MariaDB unique constraints and ordinary unique indexes share this
+physical identity: dropping either representation invalidates the other. The
+reserved `PRIMARY` index is excluded from ordinary index aliases. Missing and
+replacement indexes, primary keys, and unique constraints are checked against
+the complete physical key width and 16-part limit before DDL. Composite primary
+and unique-key identity is compared from ordinal catalog rows and is therefore
+independent of `group_concat_max_len`.
 Source-frozen model-managed operations participate in ordered row projection:
 accepted ensures record target rows, accepted updates replace captured source
 state with target state, and accepted deletes record absence. The projection

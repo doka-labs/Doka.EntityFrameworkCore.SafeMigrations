@@ -119,9 +119,12 @@ internal sealed partial class SafeMigrationPreflightProjection
                 SetProjectedColumnDefinition(intent.Definition.Table, intent.Definition.Schema, column);
             }
 
-            _tables[key] = new ProjectedTable(
+            var table = new ProjectedTable(
                 intent.Definition,
                 dataMutationVersion: _providerDataMutationVersion);
+
+            CaptureSharedUniqueKeys(table, intent.Definition);
+            _tables[key] = table;
 
             var prerequisites = new ProjectedPrerequisites(
                 newlyCreated: true,
@@ -133,6 +136,8 @@ internal sealed partial class SafeMigrationPreflightProjection
                     column,
                     addedToExistingTable: false);
             }
+
+            CaptureConstraintPrerequisites(prerequisites, intent.Definition);
 
             _prerequisites[key] = prerequisites;
             return;
@@ -148,6 +153,20 @@ internal sealed partial class SafeMigrationPreflightProjection
             {
                 SetProjectedColumnDefinition(intent.Definition.Table, intent.Definition.Schema, column);
             }
+
+            var prerequisites = new ProjectedPrerequisites(
+                newlyCreated: false,
+                dataMutationVersion: 0);
+
+            foreach (var column in intent.Definition.Columns)
+            {
+                prerequisites.Columns[column.Name] = ProjectedColumn.From(
+                    column,
+                    addedToExistingTable: false);
+            }
+
+            CaptureConstraintPrerequisites(prerequisites, intent.Definition);
+            _prerequisites[key] = prerequisites;
         }
 
         if (intent.Mode == SafeMigrationTableMode.ConvergenceContainer

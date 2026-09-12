@@ -68,6 +68,40 @@ evidence. Provider-owned effects invalidate complete projected shapes that may
 have become stale; an unrecognized operation invalidates all accumulated
 projection facts rather than carrying an unknown effect forward.
 
+Existing legacy-convergence tables retain accepted column, candidate-key,
+constraint, and index prerequisites without claiming a complete table image.
+A constraint can replace live `PrerequisiteMissing` with projected `Missing`
+only when every referenced definition is accepted and existing-row safety is
+proven by an empty table or an eligible null-preserving added column. Foreign
+keys additionally require exact principal-key order and compatible physical
+column storage. Provider data operations invalidate earlier row proofs through
+a monotonic mutation version; unknown evidence remains fail-closed.
+
+Accepted semantic index evidence is removed when a later drop or column
+mutation can invalidate it. MySQL and MariaDB also re-evaluate physical key
+feasibility from ordered target columns and bounded live shapes for unchanged
+composite key parts. The target proof retains the live engine, row format, page
+size, and unique-row evidence; stale live column widths cannot decide it.
+Their unique constraints and ordinary unique indexes are one physical identity,
+so either drop invalidates both projected representations. `PRIMARY` remains a
+separate reserved identity. Index, primary-key, and unique-constraint creation
+also enforce the physical byte and 16-part limits before execution.
+
+An accepted semantic constraint or index alias is projection evidence only
+when it can be bound to one physical catalog object. Every alias bound to that
+identity is invalidated when the object is dropped or renamed. Multiple
+distinct physical objects with equal semantics remain independent. Ambiguous
+or unresolved physical identity is not carried into later prerequisite checks.
+
+Provider analysis is one bounded observation of the catalog before ordered
+projection. An accepted drop therefore records a tombstone for the removed
+physical identity. A later exact or uniquely resolved semantic ensure uses that
+newer projected absence instead of the immutable live match. Re-creation still
+requires current column, candidate-key, physical-storage, and row-safety proof.
+Unresolved identity or an intervening structural/data mutation remains
+fail-closed. This preflight accuracy is operationally required on MySQL and
+MariaDB because their DDL can commit independently.
+
 A provider adapter may retain existing table-scoped facts only through an
 internal proof for one versioned operation contract. Doka 10.3.x supplies that
 proof for its database-character-set `AlterDatabaseOperation`. Provider-neutral
@@ -208,6 +242,21 @@ installations.
 - 2026-09-05: Restricted database-operation projection to an explicit provider
   proof. Doka 10.3.x retains existing table-scoped facts across its character-
   set default; PostgreSQL and unknown providers remain fail-closed.
+- 2026-09-11: Retained accepted constraint prerequisites for existing legacy-
+  convergence tables while requiring explicit empty/null-preserving row proof,
+  ordered candidate keys, and compatible foreign-key storage.
+- 2026-09-11: Invalidated accepted indexes after ordered mutations and qualified
+  MySQL/MariaDB index feasibility against projected target column widths.
+- 2026-09-12: Bound semantic no-op aliases to uniquely resolved physical
+  identities and invalidated every bound alias on drop or rename.
+- 2026-09-12: Made accepted drop tombstones authoritative over immutable
+  pre-batch catalog matches. Exact and resolved semantic replacements project
+  as missing; unresolved identities and changed row or structure prerequisites
+  remain fail-closed.
+- 2026-09-12: Unified MySQL/MariaDB unique-constraint and unique-index physical
+  identity, excluded `PRIMARY` from ordinary aliases, and extended physical-key
+  qualification to primary and unique constraints. Composite constraint
+  matching now uses ordinal rows instead of session-bounded aggregation.
 
 ### Implementation References
 
@@ -223,10 +272,18 @@ installations.
 
 ### Sources
 
+- [EF Core 10.0.11 ordered migration SQL generation][ef-core-ordered-generation]
+  (primary source; retrieved 2026-09-12)
 - [EF Core migration execution and script-locking boundary](https://learn.microsoft.com/en-us/ef/core/managing-schemas/migrations/applying) (primary source; retrieved 2026-08-26)
 - [MySQL 8.4 implicit-commit statements](https://dev.mysql.com/doc/refman/8.4/en/implicit-commit.html) (primary source; retrieved 2026-08-26)
+- [MySQL 8.4 CREATE TABLE index and constraint semantics](https://dev.mysql.com/doc/refman/8.4/en/create-table.html) (primary source; retrieved 2026-09-12)
+- [MySQL 8.4 InnoDB limits](https://dev.mysql.com/doc/refman/8.4/en/innodb-limits.html) (primary source; retrieved 2026-09-12)
+- [MySQL 8.4 `group_concat_max_len`](https://dev.mysql.com/doc/refman/8.4/en/server-system-variables.html#sysvar_group_concat_max_len) (primary source; retrieved 2026-09-12)
 - [MariaDB implicit-commit statements](https://mariadb.com/docs/server/reference/sql-statements/transactions/sql-statements-that-cause-an-implicit-commit) (primary source; retrieved 2026-08-26)
 - [PostgreSQL 18 transaction isolation](https://www.postgresql.org/docs/18/transaction-iso.html) (primary source; retrieved 2026-08-26)
 - [Doka 10.2.0 scoped-command cleanup contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.2.0/docs/migration-operation-handlers.md) (primary source; retrieved 2026-08-31)
 - [Doka 10.3.0 AlterDatabase generator](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.3.0/src/Doka.EntityFrameworkCore.MySql/Internal/Migrations/MySqlMigrationsSqlGenerator.Tables.cs) (primary source; retrieved 2026-09-05)
 - [Npgsql 10.0.3 migrations generator](https://github.com/npgsql/efcore.pg/blob/v10.0.3/src/EFCore.PG/Migrations/NpgsqlMigrationsSqlGenerator.cs) (primary source; retrieved 2026-09-05)
+
+[ef-core-ordered-generation]:
+  https://github.com/dotnet/efcore/blob/v10.0.11/src/EFCore.Relational/Migrations/MigrationsSqlGenerator.cs

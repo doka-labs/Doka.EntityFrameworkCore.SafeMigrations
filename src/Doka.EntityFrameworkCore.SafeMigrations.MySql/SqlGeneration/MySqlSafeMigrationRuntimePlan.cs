@@ -54,8 +54,14 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     /// <summary>Gets optional bounded catalog-only facet-difference evidence.</summary>
     public string? DiagnosticEvidenceExpression { get; init; }
 
+    /// <summary>Gets the physical index environment captured for ordered projection.</summary>
+    public SafeMigrationIndexPhysicalEnvironment? IndexPhysicalEnvironment { get; init; }
+
     /// <summary>Gets optional constant evidence for a privacy-sensitive Different result.</summary>
     public SafeMigrationFacetDifference? DifferentDifference { get; init; }
+
+    /// <summary>Gets the uniquely resolved physical object name for a matching ensure operation.</summary>
+    public string? MatchedObjectNameExpression { get; init; }
 
     /// <summary>
     /// Gets whether the complete operation is unsupported independently of
@@ -153,6 +159,17 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     ) => MySqlCatalogSqlTemplate.Render(
         DiagnosticEvidenceExpression
             ?? throw new InvalidOperationException("The runtime plan has no diagnostic evidence expression."),
+        ParameterValues,
+        renderValue);
+
+    /// <summary>Renders the uniquely resolved physical object name.</summary>
+    /// <param name="renderValue">The provider literal renderer.</param>
+    /// <returns>The rendered expression.</returns>
+    public string RenderMatchedObjectNameExpression(
+        Func<MySqlCatalogParameterValue, string> renderValue
+    ) => MySqlCatalogSqlTemplate.Render(
+        MatchedObjectNameExpression
+            ?? throw new InvalidOperationException("The runtime plan has no matched-object expression."),
         ParameterValues,
         renderValue);
 
@@ -436,6 +453,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
 
                     var replaceData = dataIndex >= 0
                         && (transitionIndex < 0 || dataIndex < transitionIndex);
+
                     var nextIndex = replaceData ? dataIndex : transitionIndex;
                     if (nextIndex < 0)
                     {

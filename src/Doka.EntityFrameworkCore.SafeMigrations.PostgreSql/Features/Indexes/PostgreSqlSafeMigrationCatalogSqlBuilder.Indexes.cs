@@ -48,6 +48,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             : $"({string.Join(" OR ", unsupportedConditions)})";
 
         var satisfied = $"({matching}) OR (NOT ({exists}) AND ({semanticAlias}))";
+        var semanticCandidates = IndexMatchQuery(
+            definition,
+            requireExpectedName: false,
+            requireIndependentIdentity: true);
 
         return Plan(
             $"CASE WHEN {unsupported} THEN 'unsupported' "
@@ -61,6 +65,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             satisfied) with
         {
             DiagnosticEvidenceExpression = BuildIndexDiagnosticEvidence(definition),
+            MatchedObjectNameExpression = ResolveMatchingObjectName(
+                matching,
+                Literal(definition.Name),
+                semanticCandidates),
             // Ordered DropIndex -> EnsureIndex projection still needs the
             // duplicate-row proof hidden by an exact-name shape clash. The
             // code carries evidence into Core and never authorizes mutation.
@@ -157,6 +165,12 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         ExpectedIndexDefinition definition,
         bool requireExpectedName = true,
         bool requireIndependentIdentity = true
+    ) => $"EXISTS ({IndexMatchQuery(definition, requireExpectedName, requireIndependentIdentity)})";
+
+    private string IndexMatchQuery(
+        ExpectedIndexDefinition definition,
+        bool requireExpectedName,
+        bool requireIndependentIdentity
     )
     {
         var conditions = new List<string>
@@ -258,7 +272,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 + $"IN ({Literal(column)}, {Literal(_sqlGenerationHelper.DelimitIdentifier(column))})");
         }
 
-        return "EXISTS (SELECT 1 FROM pg_catalog.pg_index i "
+        return "SELECT idx.relname AS candidate_name FROM pg_catalog.pg_index i "
             + "JOIN pg_catalog.pg_class idx ON idx.oid = i.indexrelid "
             + "JOIN pg_catalog.pg_class tbl ON tbl.oid = i.indrelid "
             + "JOIN pg_catalog.pg_namespace n ON n.oid = idx.relnamespace "
@@ -266,7 +280,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             + $"WHERE n.nspname = {SchemaExpression(definition.Schema)} "
             + $"AND idx.relname {(requireExpectedName ? "=" : "<>")} {Literal(definition.Name)} "
             + $"AND tbl.relname = {Literal(definition.Table)} "
-            + $"AND {string.Join(" AND ", conditions)})";
+            + $"AND {string.Join(" AND ", conditions)}";
     }
 
     private static string IndexSortMatches(
