@@ -134,6 +134,84 @@ public sealed class MySqlSafeMigrationPlanCaptureTests
         Assert.Single(lease.Complete());
     }
 
+    [Fact]
+    public void GenerationScope_ExposesCompleteTransitionCatalogAndRejectsNestedOwnership()
+    {
+        var capture = new MySqlSafeMigrationPlanCapture();
+        var builder = new MigrationBuilder("Provider");
+        builder.EnsureTable(
+            new ExpectedTableDefinition(
+                "users",
+                [new ExpectedColumnDefinition("id", typeof(int), isNullable: false, storeType: "int")]),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
+        builder.AddForeignKeyIfNotExists(
+            "fk_users_parent",
+            "users",
+            ["id"],
+            "users",
+            ["id"]);
+        builder.CreateIndexIfNotExists("ux_users_id", "users", ["id"], unique: true);
+        var tableIntent = Assert.IsType<EnsureTableIntent>(
+            Assert.IsType<SafeMigrationOperation>(builder.Operations[0]).Intent);
+
+        using (capture.BeginGeneration(builder.Operations))
+        {
+            Assert.True(capture.HasGenerationContract);
+            Assert.Equal(
+                "fk_users_parent",
+                Assert.Single(capture.GetGenerationTableConstraints(tableIntent)!.AllowedForeignKeys).Name);
+            Assert.Equal(
+                "ux_users_id",
+                Assert.Single(capture.GetGenerationUniqueIndexes("users")).Name);
+            Assert.Throws<InvalidOperationException>(() => capture.BeginGeneration(builder.Operations));
+            Assert.Throws<InvalidOperationException>(() => capture.Begin(
+                builder.Operations.Cast<SafeMigrationOperation>().ToArray()));
+        }
+
+        Assert.False(capture.HasGenerationContract);
+        Assert.Throws<InvalidOperationException>(() => capture.GetGenerationTableConstraints(tableIntent));
+        Assert.Throws<InvalidOperationException>(() => capture.GetGenerationUniqueIndexes("users"));
+    }
+
+    [Fact]
+    public void GenerationScopeWithoutEnsureTableUsesAnEmptyUniqueIndexCatalog()
+    {
+        // Arrange
+        var capture = new MySqlSafeMigrationPlanCapture();
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "records",
+                new ExpectedColumnDefinition(
+                    "caption",
+                    typeof(string),
+                    isNullable: true,
+                    storeType: "longtext")),
+            SafeMigrationPolicy.RepairIfSafe);
+
+        // Act
+        using var lease = capture.BeginGeneration([operation]);
+        var indexes = capture.GetGenerationUniqueIndexes("records");
+
+        // Assert
+        Assert.True(capture.HasGenerationContract);
+        Assert.Empty(indexes);
+    }
+
+    [Fact]
+    public void GeneratorDecorator_ClearsGenerationScopeWhenTheProviderFails()
+    {
+        var capture = new MySqlSafeMigrationPlanCapture();
+        var generator = new MySqlSafeMigrationsSqlGenerator(new ThrowingSqlGenerator(), capture);
+
+        var exception = Record.Exception(() => generator.Generate(
+            [Operation("schema")],
+            model: null));
+
+        Assert.IsType<InvalidOperationException>(exception);
+        Assert.False(capture.HasGenerationContract);
+    }
+
     private static SafeMigrationOperation Operation(
         string name
     ) => new(new EnsureSchemaIntent(name), SafeMigrationPolicy.ThrowIfDifferent);
@@ -141,4 +219,13 @@ public sealed class MySqlSafeMigrationPlanCaptureTests
     private static MySqlSafeMigrationRuntimePlan Plan(
         string value
     ) => new(value, value, SafeMigrationRepairCapability.None, value);
+
+    private sealed class ThrowingSqlGenerator : IMigrationsSqlGenerator
+    {
+        public IReadOnlyList<MigrationCommand> Generate(
+            IReadOnlyList<MigrationOperation> operations,
+            IModel? model = null,
+            MigrationsSqlGenerationOptions options = MigrationsSqlGenerationOptions.Default
+        ) => throw new InvalidOperationException("Provider generation failed.");
+    }
 }

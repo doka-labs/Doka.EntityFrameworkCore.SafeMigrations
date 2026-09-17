@@ -23,6 +23,12 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     /// <summary>Gets the catalog-only prerequisite expression.</summary>
     public string PrerequisiteExpression { get; init; } = "TRUE";
 
+    /// <summary>
+    /// Gets the immediate postcondition for an applied operation when it
+    /// differs from the terminal migration contract.
+    /// </summary>
+    public string? ExecutionPostcondition { get; init; }
+
     /// <summary>Gets the catalog-only guard that must pass before state SQL can be evaluated.</summary>
     public string StateEvaluationGuardExpression { get; init; } = "TRUE";
 
@@ -272,6 +278,15 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     public string RenderPreparedPostcondition(
         IReadOnlyList<string> renderedValues
     ) => MySqlCatalogSqlTemplate.RenderPrepared(Postcondition, renderedValues);
+
+    /// <summary>Renders the immediate execution postcondition with prepared literal values.</summary>
+    /// <param name="renderedValues">The rendered literal values in placeholder order.</param>
+    /// <returns>The rendered expression.</returns>
+    public string RenderPreparedExecutionPostcondition(
+        IReadOnlyList<string> renderedValues
+    ) => MySqlCatalogSqlTemplate.RenderPrepared(
+        ExecutionPostcondition ?? Postcondition,
+        renderedValues);
 
     /// <summary>Renders the repair precondition with prepared literal values.</summary>
     /// <param name="renderedValues">The rendered literal values in placeholder order.</param>

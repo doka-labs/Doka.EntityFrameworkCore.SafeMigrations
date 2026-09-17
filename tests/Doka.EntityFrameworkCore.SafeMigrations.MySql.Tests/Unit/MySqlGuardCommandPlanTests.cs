@@ -3,6 +3,44 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 public sealed class MySqlGuardCommandPlanTests
 {
     [Fact]
+    public void RuntimeSqlGenerator_RejectsKnownIndexBeforeColumnDropWithoutEnsureTable()
+    {
+        // Arrange
+        using var context = CreateContext();
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.CreateIndexIfNotExists("ix_items_legacy", "items", ["legacy"]);
+        builder.DropColumnIfExists("legacy", "items");
+
+        // Act
+        var exception = Record.Exception(() => context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(builder.Operations, context.Model));
+
+        // Assert
+        var invalidOperation = Assert.IsType<InvalidOperationException>(exception);
+        Assert.Contains("Drop the index explicitly", invalidOperation.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RuntimeSqlGenerator_AcceptsExplicitIndexDropBeforeColumnDropWithoutEnsureTable()
+    {
+        // Arrange
+        using var context = CreateContext();
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.CreateIndexIfNotExists("ix_items_legacy", "items", ["legacy"]);
+        builder.DropIndexIfExists("ix_items_legacy", "items");
+        builder.DropColumnIfExists("legacy", "items");
+
+        // Act
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(builder.Operations, context.Model);
+
+        // Assert
+        Assert.Equal(3, commands.Count);
+    }
+
+    [Fact]
     public void DataReadingSingleBaselineOperation_HasExactBoundedScopedCommandShape()
     {
         var options = new DbContextOptionsBuilder<DbContext>();
@@ -288,6 +326,17 @@ public sealed class MySqlGuardCommandPlanTests
         }
 
         return count;
+    }
+
+    private static DbContext CreateContext()
+    {
+        var options = new DbContextOptionsBuilder<DbContext>();
+        options.UseMySql(
+            "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
+            MySqlServerVersion.MySql(new Version(8, 4, 11)));
+        ((DbContextOptionsBuilder)options).UseMySqlSafeMigrations();
+
+        return new DbContext(options.Options);
     }
 
     private static List<string> DecodeHexPayloads(

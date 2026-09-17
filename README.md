@@ -325,16 +325,16 @@ and a non-default legacy policy without `LegacyConvergence` fail during options
 configuration.
 
 Automatic rewriting covers scaffolded `CreateTable`, `CreateIndex`,
-`DropIndex`, and `DropTable` operations plus data changes derived from
-`HasData`. The structural calls become `CreateTableIfNotExists`, a safe
-index-create helper, `DropIndexIfExists`, and `DropTableIfExists`. Model-managed
-inserts, updates, and deletes become source-frozen SafeMigrations operations.
-Other EF operations remain ordinary EF migration operations. When a later
-migration needs catalog-aware idempotent handling for a column, constraint,
-rename, or schema operation, use the corresponding SafeMigrations builder API
-and review the resulting contract. This boundary prevents the design-time
-layer from silently assigning policies to operations whose repair or ownership
-semantics require an explicit choice.
+`DropIndex`, and `DropTable` operations, standalone primary-key, unique,
+check, and foreign-key adds and drops, plus data changes derived from
+`HasData`. Constraint adds freeze `ThrowIfDifferent`; constraint drops make
+only absence idempotent. Unsupported operation annotations, an implicit
+foreign-key principal-column list, or check SQL outside the structured grammar
+stops scaffolding rather than losing semantics. Model-managed inserts, updates,
+and deletes become source-frozen SafeMigrations operations. Other EF operations
+remain ordinary EF migration operations. When a later migration needs
+catalog-aware handling for a column, rename, or schema operation, use the
+corresponding SafeMigrations builder API and review the resulting contract.
 
 Provider identity annotations on scaffolded columns are captured immutably and
 participate in fingerprints, live-catalog comparison, and final DDL. This
@@ -450,8 +450,11 @@ operations for every owned column and constraint. Scaffolded indexes follow as
 their own safe operations. Those children use the policy written into the
 generated call; the default is `ThrowIfDifferent`. With explicit
 `RepairIfSafe`, an ordinary existing column may also use a provider-proven,
-lossless `VARCHAR` widening or data-verified narrowing. MySQL and MariaDB may
-additionally repair the exact Boolean transition `BIT(1) -> TINYINT(1)`.
+lossless `VARCHAR` widening or data-verified narrowing. MySQL and MariaDB also
+accept a declared-domain-safe transition from `VARCHAR` into the `TEXT` family,
+a widening within that family, or a live-data-verified transition from a text
+type to `VARCHAR(n)`. They may additionally repair the exact Boolean transition
+`BIT(1) -> TINYINT(1)`.
 PostgreSQL independently qualifies `character varying` widening and narrowing;
 the Boolean transition does not apply there. Narrowing performs a grouped live
 character-length scan and repeats its proof at execution. One overlength value,
@@ -462,8 +465,10 @@ data safety is not an online-DDL promise.
 All other pre-existing requirements remain: the resolved character family,
 collation, generated/identity state, row-version state, provider metadata, and
 dependent indexes or constraints must be fully understood and compatible. A
-MySQL/MariaDB `VARCHAR` column on either side of a foreign key remains blocked
-because the required coupled type transition is outside a single-column repair.
+normal MySQL/MariaDB index over a target text column must retain an explicit
+prefix; a full key blocks repair. A MySQL/MariaDB character column on either
+side of a foreign key remains blocked because the required coupled type
+transition is outside a single-column repair.
 PostgreSQL preserves compatible ordinary foreign keys across its independently
 qualified length change. Doka's exact Boolean conversion accepts only absent,
 null, false, or true literal defaults. An expression default or a foreign-key

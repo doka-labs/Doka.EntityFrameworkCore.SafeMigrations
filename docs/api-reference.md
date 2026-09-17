@@ -167,6 +167,8 @@ mapping is:
 | `CreateTable` | `CreateTableIfNotExists` | `ConvergeTableFromModel` |
 | Single-column `CreateIndex` | `CreateIndexIfNotExistsFromModel`, or the prefix-aware counterpart on MySQL/MariaDB | Same |
 | Multi-column `CreateIndex` | `CreateCompositeIndexIfNotExistsFromModel`, or the prefix-aware counterpart on MySQL/MariaDB | Same |
+| Standalone `AddPrimaryKey`, `AddUniqueConstraint`, `AddCheckConstraint`, `AddForeignKey` | Corresponding `*IfNotExists` method with `ThrowIfDifferent` | Same |
+| Standalone primary-key, unique, check, or foreign-key drop | Corresponding `*IfExists` method | Same |
 | Model-managed insert from `HasData` | `EnsureModelManagedDataFromModel` | Same |
 | Model-managed update from `HasData` | `UpdateModelManagedDataFromModel` with captured old and new values | Same |
 | Model-managed delete from `HasData` | `DeleteModelManagedDataFromModel` with complete captured old values and incoming source-model dependencies | Same; inverse data is analyzed before rollback is replaced |
@@ -176,7 +178,9 @@ Every generated `ConvergeTableFromModel` call contains an explicit `policy`
 argument. The compatibility default is `ThrowIfDifferent`. `RepairIfSafe`
 allows nullability, default, and comment changes plus provider-proven ordinary
 `VARCHAR` widening or live-data-verified narrowing. MySQL/MariaDB also permit
-the exact compatible Boolean transition `BIT(1) -> TINYINT(1)`. PostgreSQL
+declared-domain-safe `VARCHAR` to text-family transitions, text-family
+widening, live-data-verified text-to-`VARCHAR(n)`, and the exact compatible
+Boolean transition `BIT(1) -> TINYINT(1)`. PostgreSQL
 qualifies `character varying` independently and has no equivalent Boolean
 transition. Narrowing uses character length, groups and deduplicates table
 probes, repeats its proof during execution, and blocks on one overlength value

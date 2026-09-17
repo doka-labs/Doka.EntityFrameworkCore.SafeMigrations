@@ -456,6 +456,83 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     }
 
     [Fact]
+    public async Task StrictTableDefinition_AllowsPendingStandaloneForeignKeyAndRejectsUnexpectedTransitionShape()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `transition_parents` (`id` int NOT NULL, PRIMARY KEY (`id`)); "
+            + "CREATE TABLE `transition_children` ("
+            + "`id` int NOT NULL, `parent_id` int NULL, PRIMARY KEY (`id`));");
+        var options = new DbContextOptionsBuilder<StandaloneForeignKeyContext>()
+            .UseMySql(connectionString, Fixture.ServerVersion)
+            .UseMySqlSafeMigrations<StandaloneForeignKeyContext>()
+            .Options;
+        await using var context = new StandaloneForeignKeyContext(options);
+        var definition = new ExpectedTableDefinition(
+            "transition_children",
+            [
+                new ExpectedColumnDefinition("id", typeof(int), false, "int"),
+                new ExpectedColumnDefinition("parent_id", typeof(int), true, "int"),
+            ],
+            primaryKey: new ExpectedPrimaryKeyDefinition("PRIMARY", "transition_children", ["id"]));
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureTable(
+            definition,
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
+        builder.AddForeignKeyIfNotExists(
+            "fk_transition_children_parent",
+            "transition_children",
+            ["parent_id"],
+            "transition_parents",
+            ["id"],
+            onDelete: ReferentialAction.SetNull);
+        var runner = context.GetService<ISafeMigrationRunner>();
+
+        var pending = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("standalone-fk-pending"));
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, pending.Status);
+        Assert.Equal(SafeMigrationObservedState.Matching, pending.Assessments[0].ObservedState);
+        Assert.Equal(SafeMigrationObservedState.Missing, pending.Assessments[1].ObservedState);
+        Assert.Equal(SafeMigrationAction.NoOp, pending.Assessments[0].Action);
+        Assert.Equal(SafeMigrationAction.Apply, pending.Assessments[1].Action);
+
+        await ExecuteOperationsAsync(context, builder.Operations);
+
+        var replay = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("standalone-fk-replay"));
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, replay.Status);
+        Assert.All(replay.Assessments, static assessment =>
+        {
+            Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState);
+            Assert.Equal(SafeMigrationAction.NoOp, assessment.Action);
+        });
+
+        await ExecuteSqlAsync(
+            connectionString,
+            "ALTER TABLE `transition_children` DROP FOREIGN KEY `fk_transition_children_parent`; "
+            + "CREATE TABLE `transition_other_parents` (`id` int NOT NULL, PRIMARY KEY (`id`)); "
+            + "ALTER TABLE `transition_children` ADD CONSTRAINT `fk_transition_children_unexpected` "
+            + "FOREIGN KEY (`parent_id`) REFERENCES `transition_other_parents` (`id`);");
+
+        var drift = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("standalone-fk-drift"));
+
+        Assert.Equal(SafeMigrationReportStatus.Blocked, drift.Status);
+        Assert.Equal(SafeMigrationObservedState.Different, drift.Assessments[0].ObservedState);
+        Assert.Equal(SafeMigrationObservedState.Missing, drift.Assessments[1].ObservedState);
+    }
+
+    [Fact]
     public async Task UnexpectedObjectInventory_DoesNotAliasUniqueConstraintToExpectedNonUniqueIndex()
     {
         var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
@@ -535,5 +612,57 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         public int Id { get; init; }
 
         public string? Email { get; init; }
+    }
+
+    private sealed class StandaloneForeignKeyContext(
+        DbContextOptions<StandaloneForeignKeyContext> options
+    ) : DbContext(options)
+    {
+        protected override void OnModelCreating(
+            ModelBuilder modelBuilder
+        )
+        {
+            modelBuilder.Entity<TransitionParent>(entity =>
+            {
+                entity.ToTable("transition_parents");
+                entity.HasKey(value => value.Id)
+                    .HasName("PRIMARY");
+                entity.Property(value => value.Id)
+                    .HasColumnName("id")
+                    .HasColumnType("int")
+                    .ValueGeneratedNever();
+            });
+
+            modelBuilder.Entity<TransitionChild>(entity =>
+            {
+                entity.ToTable("transition_children");
+                entity.HasKey(value => value.Id)
+                    .HasName("PRIMARY");
+                entity.Property(value => value.Id)
+                    .HasColumnName("id")
+                    .HasColumnType("int")
+                    .ValueGeneratedNever();
+                entity.Property(value => value.ParentId)
+                    .HasColumnName("parent_id")
+                    .HasColumnType("int");
+                entity.HasOne<TransitionParent>()
+                    .WithMany()
+                    .HasForeignKey(value => value.ParentId)
+                    .OnDelete(DeleteBehavior.SetNull)
+                    .HasConstraintName("fk_transition_children_parent");
+            });
+        }
+    }
+
+    private sealed class TransitionParent
+    {
+        public int Id { get; init; }
+    }
+
+    private sealed class TransitionChild
+    {
+        public int Id { get; init; }
+
+        public int? ParentId { get; init; }
     }
 }

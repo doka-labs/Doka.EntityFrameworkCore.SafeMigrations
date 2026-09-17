@@ -154,6 +154,8 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
             return [];
         }
 
+        SafeMigrationExpectedIndexTransitions.Validate(operations);
+
         var connection = context.Database.GetDbConnection();
         var openedHere = connection.State != System.Data.ConnectionState.Open;
         if (openedHere)
@@ -164,6 +166,7 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
         try
         {
             var commandTimeout = context.Database.GetCommandTimeout();
+            var expectedTableConstraints = SafeMigrationExpectedTableConstraints.FromOperations(operations);
             var shortCircuitStates = await FindShortCircuitStatesAsync(
                 connection,
                 operations,
@@ -234,7 +237,9 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
                                 nameof(operations));
 
                         var checkpoint = parameters.Capture();
-                        var plan = builder.Build(operation);
+                        var plan = builder.Build(
+                            operation,
+                            GetExpectedTableConstraints(operation, expectedTableConstraints));
                         plans[ordinal] = plan;
                         PostgreSqlDataProbeResult? dataProbeResult = plan.DataProbe is null
                             ? null
@@ -346,6 +351,15 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
             }
         }
     }
+
+    private static SafeMigrationExpectedTableConstraints? GetExpectedTableConstraints(
+        SafeMigrationOperation operation,
+        IReadOnlyDictionary<
+            (string? Schema, string Table), SafeMigrationExpectedTableConstraints> expectedTableConstraints
+    ) => operation.Intent is EnsureTableIntent table
+        ? expectedTableConstraints.GetValueOrDefault(
+            (table.Definition.Schema, table.Definition.Table))
+        : null;
 
     private async Task<PostgreSqlDataProbeResult?[]> ResolveDataProbeResultsAsync(
         DbConnection connection,

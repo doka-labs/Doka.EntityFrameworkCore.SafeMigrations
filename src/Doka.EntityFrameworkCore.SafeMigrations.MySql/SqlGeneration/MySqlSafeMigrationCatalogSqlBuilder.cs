@@ -30,6 +30,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         SafeMigrationOperation operation,
         MySqlMigrationOperationContext context,
         IReadOnlyList<ExpectedIndexDefinition>? expectedUniqueIndexes = null,
+        SafeMigrationExpectedTableConstraints? expectedTableConstraints = null,
         bool includeAnalysisEvidence = true,
         bool includeTransitionEvidence = true,
         bool parameterizeValues = true
@@ -63,7 +64,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                     EnsureTableIntent value => BuildEnsureTable(
                         value,
                         context.ServerVersion.IsMariaDb,
-                        expectedUniqueIndexes),
+                        expectedUniqueIndexes,
+                        expectedTableConstraints),
                     DropTableIntent value => BuildDropTable(value),
                     RenameTableIntent value => BuildRenameTable(value),
                     EnsureColumnIntent value => BuildEnsureColumn(

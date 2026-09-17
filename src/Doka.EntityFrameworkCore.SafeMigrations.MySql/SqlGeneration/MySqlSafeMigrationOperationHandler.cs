@@ -58,10 +58,15 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             ? GetExpectedUniqueIndexes(table)
             : null;
 
+        var expectedTableConstraints = operation.Intent is EnsureTableIntent tableIntent
+            ? GetExpectedTableConstraints(tableIntent, context.Model)
+            : null;
+
         var runtimePlan = _catalogSqlBuilder.Build(
             operation,
             context,
             expectedUniqueIndexes,
+            expectedTableConstraints,
             includeAnalysisEvidence: _planCapture.IncludeAnalysisEvidence,
             includeTransitionEvidence: !_planCapture.IsActive || _planCapture.IncludeTransitionEvidence,
             parameterizeValues: _planCapture.IsActive);
@@ -158,7 +163,8 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         var bodyCommand = $"EXECUTE {PreparedStatementName};\n"
             + "SET @doka_sm_post_ok = CASE "
             + "WHEN @doka_sm_action IN ('apply', 'repair') "
-            + $"THEN COALESCE(({runtimePlan.RenderPreparedPostcondition(renderedParameterValues)}), FALSE) "
+            + "THEN COALESCE(("
+            + $"{runtimePlan.RenderPreparedExecutionPostcondition(renderedParameterValues)}), FALSE) "
             + "ELSE TRUE END;\n"
             + "INSERT INTO `__doka_sm_assert` "
             + "(`different_code`, `unsupported_code`, `data_blocked_code`, "
@@ -193,14 +199,18 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         EnsureTableIntent intent
     )
     {
-        // Analysis owns an exact operation-batch catalog. Runtime generation
-        // receives operations one at a time, so EF's target relational model is
-        // the authoritative fallback for indexes emitted beside the table.
         if (_planCapture.IsActive)
         {
             return _planCapture.GetExpectedUniqueIndexes(intent.Definition.Table);
         }
 
+        if (_planCapture.HasGenerationContract)
+        {
+            return _planCapture.GetGenerationUniqueIndexes(intent.Definition.Table);
+        }
+
+        // Direct handler use has no ordered provider-generation scope. EF's
+        // target relational model is the only authoritative fallback there.
         if (!ReferenceEquals(_designTimeModel, _modelUniqueIndexSource))
         {
             _modelUniqueIndexes = BuildModelUniqueIndexes(_designTimeModel);
@@ -210,6 +220,30 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         return _modelUniqueIndexes!.GetValueOrDefault(
                 new ModelTableKey(intent.Definition.Table, intent.Definition.Schema))
             ?? s_emptyUniqueIndexes;
+    }
+
+    private SafeMigrationExpectedTableConstraints? GetExpectedTableConstraints(
+        EnsureTableIntent intent,
+        IModel? operationModel
+    )
+    {
+        if (_planCapture.IsActive)
+        {
+            return _planCapture.GetExpectedTableConstraints(intent);
+        }
+
+        if (_planCapture.HasGenerationContract)
+        {
+            return _planCapture.GetGenerationTableConstraints(intent);
+        }
+
+        // Direct handler use has no ordered provider-generation scope. EF's
+        // target relational model is the only authoritative fallback there.
+        return SafeMigrationExpectedTableConstraints.FromModel(
+            operationModel ?? _designTimeModel,
+            intent.Definition.Table,
+            intent.Definition.Schema,
+            intent.Definition.CheckConstraints);
     }
 
     private static Dictionary<ModelTableKey, IReadOnlyList<ExpectedIndexDefinition>> BuildModelUniqueIndexes(

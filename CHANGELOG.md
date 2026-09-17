@@ -6,6 +6,34 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Pending hand-authored migrations that drop a column before explicitly
+  dropping every known dependent constraint and index now fail during
+  preflight and direct SQL generation. Reorder those operations so dependency
+  drops precede the column drop, then recreate terminal-model dependencies.
+
+### Fixed
+
+- Rewrite standalone EF primary-key, unique, check, and foreign-key adds and
+  drops into their SafeMigrations counterparts. Dependency-ordered initial
+  migrations no longer leave a raw `AddForeignKey` that collides with an
+  equivalent brownfield constraint. Unsupported annotations, implicit
+  principal columns, and opaque check SQL fail during scaffolding. Strict
+  batch analysis and replay use a fail-closed transition envelope: every
+  intermediate constraint shape is allowed, only continuously present
+  constraints are required, and unknown shapes remain drift. The immediate
+  create-table postcondition verifies only constraints present at that point
+  in the ordered migration. Column drops now require every known dependent
+  primary key, unique constraint, check, foreign key, and index to be dropped
+  explicitly first, preventing provider-specific implicit removal or index
+  narrowing from escaping the terminal and replay contract.
+- Repair lossless MySQL/MariaDB transitions from `VARCHAR` into the text
+  family, between wider text families, and from a text type to `VARCHAR(n)`
+  after a repeated live character-length proof. Declared byte capacity,
+  collation, dependencies, row size, and index-prefix feasibility remain
+  fail-closed, and accepted DDL reports `TableRewritePossible`.
+
 ## [10.4.1] - 2026-09-13
 
 Prepared a stable maintenance release that makes ordered prerequisite

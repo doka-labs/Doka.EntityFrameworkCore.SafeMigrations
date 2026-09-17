@@ -148,14 +148,18 @@ A generated legacy-convergence migration retains `ThrowIfDifferent` unless its
 source explicitly selects `RepairIfSafe`. That policy can repair nullability,
 default, and comment drift on an ordinary existing column. It can also accept a
 provider-proven ordinary `VARCHAR` widening, a live-data-verified `VARCHAR`
-narrowing, or the exact compatible Boolean transition from `BIT(1)` to
-`TINYINT(1)`.
+narrowing, a declared-domain-safe transition into the `TEXT` family, a
+text-family widening, a live-data-verified text-to-`VARCHAR(n)` transition, or
+the exact compatible Boolean transition from `BIT(1)` to `TINYINT(1)`.
 
 A `VARCHAR` length repair requires the same nonbinary character family,
 character set, effective collation, generated/identity/row-version state,
 provider metadata, and compatible dependent indexes. A column on either side
 of a foreign key remains blocked because MySQL/MariaDB require a coupled type
-transition and a single-column repair cannot own both sides. Widening needs no
+transition and a single-column repair cannot own both sides. A text target must
+contain the complete declared source byte domain. An ordinary dependent index
+must already use an explicit valid prefix; SafeMigrations never invents one.
+`FULLTEXT` retains its provider-supported full-column shape. Widening needs no
 row-value query. Narrowing groups and deduplicates candidates for the same table
 into one bounded character-length scan. It uses `CHAR_LENGTH`, not byte
 `LENGTH`, returns only whether a violating row exists, and never returns a value
@@ -193,10 +197,10 @@ prepared classifier reads column data only after a catalog-only guard has
 proved that the target exists. Missing safe additions remain `Missing`; an
 unsafe missing `NOT NULL` addition to a populated table remains `DataBlocked`.
 
-Every accepted length or Boolean repair reports
+Every accepted string-family or Boolean repair reports
 `SafeMigrationOperationalImpact.TableRewritePossible`. Lossless does not mean
 instant or online: a `VARCHAR` widening can cross the one-byte/two-byte encoded
-length boundary, and either widening or narrowing may copy or rebuild a table,
+length boundary, and a string-family transition may copy or rebuild a table,
 rebuild indexes, or wait for a metadata lock. Review table size, row format,
 page size, key limits, server profile, and maintenance window independently.
 

@@ -181,6 +181,44 @@ public sealed class PostgreSqlServiceCompositionTests
     }
 
     [Fact]
+    public void RuntimeSqlGenerator_RejectsKnownIndexBeforeColumnDropWithoutEnsureTable()
+    {
+        // Arrange
+        using var context = CreateRuntimeContext();
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.CreateIndexIfNotExists("ix_items_legacy", "items", ["legacy"]);
+        builder.DropColumnIfExists("legacy", "items");
+
+        // Act
+        var exception = Record.Exception(() => context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(builder.Operations, context.Model));
+
+        // Assert
+        var invalidOperation = Assert.IsType<InvalidOperationException>(exception);
+        Assert.Contains("Drop the index explicitly", invalidOperation.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RuntimeSqlGenerator_AcceptsExplicitIndexDropBeforeColumnDropWithoutEnsureTable()
+    {
+        // Arrange
+        using var context = CreateRuntimeContext();
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.CreateIndexIfNotExists("ix_items_legacy", "items", ["legacy"]);
+        builder.DropIndexIfExists("ix_items_legacy", "items");
+        builder.DropColumnIfExists("legacy", "items");
+
+        // Act
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(builder.Operations, context.Model);
+
+        // Assert
+        Assert.Equal(3, commands.Count);
+    }
+
+    [Fact]
     public void CustomBaselineGeneratorReceivesOrdinaryAndSafeMigrationBaselines()
     {
         var options = new DbContextOptionsBuilder<SafeMigrationDbContext>();
@@ -370,6 +408,15 @@ public sealed class PostgreSqlServiceCompositionTests
     private static IEnumerable<ServiceDescriptor> CanonicalConfigurations(
         IServiceCollection services
     ) => services.Where(static descriptor => descriptor.ServiceType.FullName == CanonicalConfigurationTypeName);
+
+    private static SafeMigrationDbContext CreateRuntimeContext()
+    {
+        var options = new DbContextOptionsBuilder<SafeMigrationDbContext>();
+        options.UseNpgsql("Host=localhost;Database=composition;Username=test;Password=test");
+        ((DbContextOptionsBuilder)options).UsePostgreSqlSafeMigrations();
+
+        return new SafeMigrationDbContext(options.Options);
+    }
 
     private static void ConfigureLegacy(
         SafeMigrationOptionsBuilder options

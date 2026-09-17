@@ -465,6 +465,16 @@ for migration in "${strict_migration}" "${legacy_migration}"; do
     exit 1
   fi
 
+  if ! grep -Fq 'migrationBuilder.AddForeignKeyIfNotExists(' "${migration}"; then
+    echo "Scaffolding output is missing its safe standalone foreign key." >&2
+    exit 1
+  fi
+
+  if grep -Fq 'migrationBuilder.AddForeignKey(' "${migration}"; then
+    echo "Scaffolding output contains an unsafe standalone foreign key." >&2
+    exit 1
+  fi
+
   for unsafe_data_call in \
     'migrationBuilder.InsertData(' \
     'migrationBuilder.UpdateData(' \

@@ -3,18 +3,28 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 {
     private PostgreSqlSafeMigrationRuntimePlan BuildEnsureTable(
-        EnsureTableIntent intent
+        EnsureTableIntent intent,
+        SafeMigrationExpectedTableConstraints? expectedTableConstraints
     )
     {
         var definition = intent.Definition;
         var exists = RelationExists(definition.Table, definition.Schema);
         var table = TableExists(definition.Table, definition.Schema);
-        var matching = intent.Mode == SafeMigrationTableMode.ConvergenceContainer ? table : TableMatches(definition);
+        var matching = intent.Mode == SafeMigrationTableMode.ConvergenceContainer
+            ? table
+            : TableMatches(definition, expectedTableConstraints);
+
+        var executionPostcondition = intent.Mode == SafeMigrationTableMode.ConvergenceContainer
+            ? table
+            : TableMatches(definition, expectedTableConstraints: null);
 
         return Plan(
             $"CASE WHEN NOT {exists} THEN 'missing' WHEN NOT {table} THEN 'unsupported' "
             + $"WHEN {matching} THEN 'matching' ELSE 'different' END",
-            matching);
+            matching) with
+        {
+            ExecutionPostcondition = executionPostcondition,
+        };
     }
 
     private PostgreSqlSafeMigrationRuntimePlan BuildDropTable(
@@ -47,9 +57,28 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     }
 
     private string TableMatches(
-        ExpectedTableDefinition definition
+        ExpectedTableDefinition definition,
+        SafeMigrationExpectedTableConstraints? expectedTableConstraints
     )
     {
+        var allowedUniqueConstraints = expectedTableConstraints?.AllowedUniqueConstraints
+            ?? definition.UniqueConstraints;
+
+        var requiredUniqueConstraints = expectedTableConstraints?.RequiredUniqueConstraints
+            ?? definition.UniqueConstraints;
+
+        var allowedCheckConstraints = expectedTableConstraints?.AllowedCheckConstraints
+            ?? definition.CheckConstraints;
+
+        var requiredCheckConstraints = expectedTableConstraints?.RequiredCheckConstraints
+            ?? definition.CheckConstraints;
+
+        var allowedForeignKeys = expectedTableConstraints?.AllowedForeignKeys
+            ?? definition.ForeignKeys;
+
+        var requiredForeignKeys = expectedTableConstraints?.RequiredForeignKeys
+            ?? definition.ForeignKeys;
+
         var schema = SchemaExpression(definition.Schema);
         var conditions = new List<string>
         {
@@ -60,9 +89,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             + $"WHERE n.nspname = {schema} AND c.relname = {Literal(definition.Table)} "
             + "AND a.attnum > 0 AND NOT a.attisdropped) "
             + $"= {definition.Columns.Count.ToString(CultureInfo.InvariantCulture)}",
-            AllUniqueConstraintsModeled(definition),
-            AllCheckConstraintsModeled(definition),
-            AllForeignKeysModeled(definition),
+            AllUniqueConstraintsModeled(definition.Table, definition.Schema, allowedUniqueConstraints),
+            AllCheckConstraintsModeled(definition.Table, definition.Schema, allowedCheckConstraints),
+            AllForeignKeysModeled(definition.Table, definition.Schema, allowedForeignKeys),
             TableCommentMatches(definition),
         };
 
@@ -72,37 +101,75 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 ColumnMatches(definition.Table, definition.Schema, definition.Columns[ordinal], ordinal + 1));
         }
 
-        conditions.Add(
-            definition.PrimaryKey is null
-                ? $"NOT {AnyConstraint(definition.Table, definition.Schema, 'p')}"
-                : ConstraintColumnsSatisfied(
-                    definition.Table,
-                    definition.Schema,
-                    definition.PrimaryKey.Name,
-                    'p',
-                    definition.PrimaryKey.Columns));
+        conditions.Add(BuildPrimaryKeyTransitionMatches(definition, expectedTableConstraints));
 
         conditions.AddRange(
-            definition.UniqueConstraints.Select(value => ConstraintColumnsSatisfied(
+            requiredUniqueConstraints.Select(value => ConstraintColumnsSatisfied(
                 value.Table,
                 value.Schema,
                 value.Name,
                 'u',
                 value.Columns)));
 
-        conditions.AddRange(definition.CheckConstraints.Select(CheckSatisfied));
-        conditions.AddRange(definition.ForeignKeys.Select(ForeignKeySatisfied));
+        conditions.AddRange(requiredCheckConstraints.Select(CheckSatisfied));
+        conditions.AddRange(requiredForeignKeys.Select(ForeignKeySatisfied));
 
         return $"({string.Join(" AND ", conditions)})";
     }
 
+    private string BuildPrimaryKeyTransitionMatches(
+        ExpectedTableDefinition definition,
+        SafeMigrationExpectedTableConstraints? expectedTableConstraints
+    )
+    {
+        if (expectedTableConstraints is null)
+        {
+            return definition.PrimaryKey is null
+                ? $"NOT {AnyConstraint(definition.Table, definition.Schema, 'p')}"
+                : ConstraintColumnsSatisfied(
+                    definition.Table,
+                    definition.Schema,
+                    definition.PrimaryKey.Name,
+                    'p',
+                    definition.PrimaryKey.Columns);
+        }
+
+        var allowed = expectedTableConstraints.AllowedPrimaryKeys
+            .Select(primaryKey => ConstraintColumnsMatch(
+                definition.Table,
+                definition.Schema,
+                'p',
+                primaryKey.Columns,
+                "TRUE"))
+            .ToArray();
+
+        if (!expectedTableConstraints.PrimaryKeyMayBeAbsent)
+        {
+            var primaryKey = expectedTableConstraints.AllowedPrimaryKeys.Single();
+
+            return ConstraintColumnsSatisfied(
+                definition.Table,
+                definition.Schema,
+                primaryKey.Name,
+                'p',
+                primaryKey.Columns);
+        }
+
+        return allowed.Length == 0
+            ? $"NOT {AnyConstraint(definition.Table, definition.Schema, 'p')}"
+            : $"(NOT {AnyConstraint(definition.Table, definition.Schema, 'p')} "
+                + $"OR {string.Join(" OR ", allowed)})";
+    }
+
     private string AllUniqueConstraintsModeled(
-        ExpectedTableDefinition definition
+        string table,
+        string? schema,
+        IReadOnlyList<ExpectedUniqueConstraintDefinition> uniqueConstraints
     ) => AllConstraintsModeled(
-        definition.Table,
-        definition.Schema,
+        table,
+        schema,
         'u',
-        definition.UniqueConstraints
+        uniqueConstraints
             .Select(uniqueConstraint => ConstraintColumnsMatch(
                 uniqueConstraint.Table,
                 uniqueConstraint.Schema,
@@ -112,24 +179,28 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             .ToArray());
 
     private string AllCheckConstraintsModeled(
-        ExpectedTableDefinition definition
+        string table,
+        string? schema,
+        IReadOnlyList<ExpectedCheckConstraintDefinition> checkConstraints
     ) => AllConstraintsModeled(
-        definition.Table,
-        definition.Schema,
+        table,
+        schema,
         'c',
-        definition.CheckConstraints
+        checkConstraints
             .Select(checkConstraint => CheckMatches(
                 checkConstraint,
                 "co.conname = candidate_co.conname"))
             .ToArray());
 
     private string AllForeignKeysModeled(
-        ExpectedTableDefinition definition
+        string table,
+        string? schema,
+        IReadOnlyList<ExpectedForeignKeyDefinition> foreignKeys
     ) => AllConstraintsModeled(
-        definition.Table,
-        definition.Schema,
+        table,
+        schema,
         'f',
-        definition.ForeignKeys
+        foreignKeys
             .Select(foreignKey => ForeignKeyMatches(
                 foreignKey,
                 "co.conname = candidate_co.conname"))

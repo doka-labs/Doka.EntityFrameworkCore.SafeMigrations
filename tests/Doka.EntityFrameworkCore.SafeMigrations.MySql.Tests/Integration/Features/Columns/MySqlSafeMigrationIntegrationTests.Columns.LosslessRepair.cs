@@ -90,6 +90,382 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     }
 
     [Theory]
+    [InlineData("varchar(10)", "tinytext", true, "utf8mb4_unicode_ci", true)]
+    [InlineData("varchar(10)", "tinytext", false, "utf8mb4_bin", false)]
+    [InlineData("varchar(255)", "text", false, "utf8mb4_bin", true)]
+    [InlineData("tinytext", "text", true, "utf8mb4_unicode_ci", false)]
+    [InlineData("varchar(255)", "mediumtext", true, "utf8mb4_unicode_ci", true)]
+    [InlineData("text", "mediumtext", false, "utf8mb4_bin", false)]
+    [InlineData("varchar(255)", "longtext", false, "utf8mb4_unicode_ci", false)]
+    [InlineData("mediumtext", "longtext", true, "utf8mb4_bin", true)]
+    public async Task TextFamilyWidening_RepairsWithoutDataLossAndReplaysAsNoOp(
+        string liveStoreType,
+        string targetStoreType,
+        bool isNullable,
+        string collation,
+        bool containsData
+    )
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var nullability = isNullable ? "NULL" : "NOT NULL";
+        var seedSql = containsData
+            ? "INSERT INTO `text_family_widening` (`id`, `value`) "
+                + "VALUES (1, CONCAT('ok-', CONVERT(0xF09F9880 USING utf8mb4)));"
+            : string.Empty;
+
+        await ExecuteSqlAsync(
+            connectionString,
+            $"CREATE TABLE `text_family_widening` ("
+            + $"`id` int NOT NULL, `value` {liveStoreType} {nullability}, PRIMARY KEY (`id`)) "
+            + $"ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE {collation}; "
+            + seedSql);
+
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureColumn(
+            "text_family_widening",
+            new ExpectedColumnDefinition(
+                "value",
+                typeof(string),
+                isNullable,
+                storeType: targetStoreType,
+                collation: new SafeMigrationCollationIdentifier(collation)),
+            SafeMigrationPolicy.RepairIfSafe);
+
+        var runner = context.GetService<ISafeMigrationRunner>();
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("text-family-widening"),
+            CancellationToken.None);
+
+        var assessment = Assert.Single(preflight.Assessments);
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
+        Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.Repair, assessment.Action);
+        Assert.Equal(SafeMigrationOperationalImpact.TableRewritePossible, assessment.OperationalImpact);
+
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+
+        var postflight = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("text-family-widening-postflight"),
+            CancellationToken.None);
+
+        var replay = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("text-family-widening-replay"),
+            CancellationToken.None);
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
+        Assert.True(Assert.Single(postflight.Assessments).PostconditionSatisfied);
+        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(replay.Assessments).Action);
+        Assert.Equal(
+            targetStoreType,
+            await ScalarStringAsync(
+                connectionString,
+                "SELECT LOWER(DATA_TYPE) FROM INFORMATION_SCHEMA.COLUMNS "
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'text_family_widening' "
+                + "AND COLUMN_NAME = 'value';"));
+        Assert.Equal(
+            containsData ? 1 : 0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM `text_family_widening`;"));
+
+        if (containsData)
+        {
+            Assert.Equal(
+                "6F6B2DF09F9880",
+                await ScalarStringAsync(
+                    connectionString,
+                    "SELECT HEX(`value`) FROM `text_family_widening` WHERE `id` = 1;"));
+        }
+    }
+
+    [Fact]
+    public async Task TextToVarchar_RepairsOnlyAfterTheLiveCharacterProof()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `text_to_varchar` ("
+            + "`id` int NOT NULL, `value` text NULL, PRIMARY KEY (`id`)) "
+            + "ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
+            + "INSERT INTO `text_to_varchar` (`id`, `value`) VALUES "
+            + "(1, REPEAT(CONVERT(0xF09F9880 USING utf8mb4), 5)), (2, CONCAT('a', REPEAT(' ', 3))); ");
+
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureColumn(
+            "text_to_varchar",
+            new ExpectedColumnDefinition(
+                "value",
+                typeof(string),
+                isNullable: true,
+                storeType: "varchar(5)",
+                maxLength: 5),
+            SafeMigrationPolicy.RepairIfSafe);
+
+        var providerAnalysis = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations.Cast<SafeMigrationOperation>().ToArray(),
+                CancellationToken.None);
+
+        var runner = context.GetService<ISafeMigrationRunner>();
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("text-to-varchar"),
+            CancellationToken.None);
+
+        Assert.True(Assert.Single(providerAnalysis).RequiresLiveDataProof);
+        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
+        Assert.Equal(SafeMigrationAction.Repair, Assert.Single(preflight.Assessments).Action);
+
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+
+        Assert.Equal(
+            5,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS "
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'text_to_varchar' "
+                + "AND COLUMN_NAME = 'value';"));
+        Assert.Equal(
+            4,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT CHAR_LENGTH(`value`) FROM `text_to_varchar` WHERE `id` = 2;"));
+    }
+
+    [Fact]
+    public async Task TextToVarchar_RejectsOverlengthLiveValues()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `text_to_varchar_blocked` ("
+            + "`id` int NOT NULL, `value` text NULL, PRIMARY KEY (`id`)) "
+            + "ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
+            + "INSERT INTO `text_to_varchar_blocked` (`id`, `value`) VALUES (1, 'too-long');");
+
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureColumn(
+            "text_to_varchar_blocked",
+            new ExpectedColumnDefinition(
+                "value",
+                typeof(string),
+                isNullable: true,
+                storeType: "varchar(5)",
+                maxLength: 5),
+            SafeMigrationPolicy.RepairIfSafe);
+
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("text-to-varchar-blocked"),
+                CancellationToken.None);
+
+        var assessment = Assert.Single(report.Assessments);
+
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(SafeMigrationObservedState.DataBlocked, assessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.RejectDataBlocked, assessment.Action);
+        Assert.Equal("varchar_narrowing_value_too_long", assessment.AnalysisCode);
+        Assert.Equal(
+            "text",
+            await ScalarStringAsync(
+                connectionString,
+                "SELECT LOWER(DATA_TYPE) FROM INFORMATION_SCHEMA.COLUMNS "
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'text_to_varchar_blocked' "
+                + "AND COLUMN_NAME = 'value';"));
+    }
+
+    [Fact]
+    public async Task TextToVarchar_RejectsOverlengthTrailingSpaces()
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `text_to_varchar_spaces` ("
+            + "`id` int NOT NULL, `value` text NULL, PRIMARY KEY (`id`)) "
+            + "ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
+            + "INSERT INTO `text_to_varchar_spaces` (`id`, `value`) "
+            + "VALUES (1, CONCAT('abc', REPEAT(' ', 3))); ");
+
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureColumn(
+            "text_to_varchar_spaces",
+            new ExpectedColumnDefinition(
+                "value",
+                typeof(string),
+                isNullable: true,
+                storeType: "varchar(4)",
+                maxLength: 4),
+            SafeMigrationPolicy.RepairIfSafe);
+
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("text-to-varchar-trailing-spaces"),
+                CancellationToken.None);
+
+        var assessment = Assert.Single(report.Assessments);
+
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(SafeMigrationObservedState.DataBlocked, assessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.RejectDataBlocked, assessment.Action);
+        Assert.Equal("varchar_narrowing_value_too_long", assessment.AnalysisCode);
+        Assert.Equal(
+            6,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT CHAR_LENGTH(`value`) FROM `text_to_varchar_spaces` WHERE `id` = 1;"));
+        Assert.Equal(
+            "text",
+            await ScalarStringAsync(
+                connectionString,
+                "SELECT LOWER(DATA_TYPE) FROM INFORMATION_SCHEMA.COLUMNS "
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'text_to_varchar_spaces' "
+                + "AND COLUMN_NAME = 'value';"));
+    }
+
+    [Theory]
+    [InlineData(10, SafeMigrationReportStatus.Ready, SafeMigrationAction.Repair)]
+    [InlineData(100, SafeMigrationReportStatus.Blocked, SafeMigrationAction.RejectDifferent)]
+    public async Task VarcharToTinyText_RequiresTheCompleteDeclaredDomainToFit(
+        int sourceLength,
+        SafeMigrationReportStatus expectedStatus,
+        SafeMigrationAction expectedAction
+    )
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `varchar_to_tinytext` ("
+            + $"`id` int NOT NULL, `value` varchar({sourceLength}) NULL, PRIMARY KEY (`id`)) "
+            + "ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
+            + "INSERT INTO `varchar_to_tinytext` (`id`, `value`) VALUES (1, 'fits');");
+
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureColumn(
+            "varchar_to_tinytext",
+            new ExpectedColumnDefinition(
+                "value",
+                typeof(string),
+                isNullable: true,
+                storeType: "tinytext"),
+            SafeMigrationPolicy.RepairIfSafe);
+
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("varchar-to-tinytext"),
+                CancellationToken.None);
+
+        var assessment = Assert.Single(report.Assessments);
+
+        Assert.Equal(expectedStatus, report.Status);
+        Assert.Equal(expectedAction, assessment.Action);
+
+        if (expectedStatus == SafeMigrationReportStatus.Ready)
+        {
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        }
+
+        Assert.Equal(
+            expectedStatus == SafeMigrationReportStatus.Ready ? "tinytext" : "varchar",
+            await ScalarStringAsync(
+                connectionString,
+                "SELECT LOWER(DATA_TYPE) FROM INFORMATION_SCHEMA.COLUMNS "
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'varchar_to_tinytext' "
+                + "AND COLUMN_NAME = 'value';"));
+    }
+
+    [Theory]
+    [InlineData("INDEX `ix_text_transition_value` (`value`)", false, 0)]
+    [InlineData("INDEX `ix_text_transition_value` (`value`(20))", true, 20)]
+    [InlineData("FULLTEXT INDEX `ix_text_transition_value` (`value`)", true, 0)]
+    public async Task VarcharToText_RequiresRepresentableDependentIndexes(
+        string indexDefinition,
+        bool repairExpected,
+        int expectedPrefixLength
+    )
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `text_transition_index` ("
+            + "`id` int NOT NULL, `value` varchar(100) NULL, PRIMARY KEY (`id`), "
+            + $"{indexDefinition}) ENGINE=InnoDB "
+            + "DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
+            + "INSERT INTO `text_transition_index` (`id`, `value`) VALUES (1, 'preserved');");
+
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureColumn(
+            "text_transition_index",
+            new ExpectedColumnDefinition(
+                "value",
+                typeof(string),
+                isNullable: true,
+                storeType: "text"),
+            SafeMigrationPolicy.RepairIfSafe);
+
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("varchar-to-text-index"),
+                CancellationToken.None);
+
+        var assessment = Assert.Single(report.Assessments);
+
+        Assert.Equal(
+            repairExpected ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked,
+            report.Status);
+        Assert.Equal(
+            repairExpected ? SafeMigrationAction.Repair : SafeMigrationAction.RejectDifferent,
+            assessment.Action);
+
+        if (repairExpected)
+        {
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        }
+
+        Assert.Equal(
+            repairExpected ? "text" : "varchar",
+            await ScalarStringAsync(
+                connectionString,
+                "SELECT LOWER(DATA_TYPE) FROM INFORMATION_SCHEMA.COLUMNS "
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'text_transition_index' "
+                + "AND COLUMN_NAME = 'value';"));
+        Assert.Equal(
+            expectedPrefixLength,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COALESCE(MAX(SUB_PART), 0) FROM INFORMATION_SCHEMA.STATISTICS "
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'text_transition_index' "
+                + "AND INDEX_NAME = 'ix_text_transition_value';"));
+    }
+
+    [Theory]
     [InlineData(5)]
     [InlineData(20)]
     public async Task VarcharRepair_RejectsForeignKeyDependentColumns(
@@ -770,11 +1146,16 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
     [Theory]
     [InlineData("char(10)", "varchar(20)")]
-    [InlineData("text", "varchar(20)")]
     [InlineData("varbinary(10)", "varchar(20)")]
     [InlineData("enum('a','b')", "varchar(20)")]
     [InlineData("set('a','b')", "varchar(20)")]
     [InlineData("varchar(10)", "char(20)")]
+    [InlineData("char(10)", "text")]
+    [InlineData("binary(10)", "text")]
+    [InlineData("varbinary(10)", "text")]
+    [InlineData("blob", "text")]
+    [InlineData("enum('a','b')", "text")]
+    [InlineData("set('a','b')", "text")]
     public async Task NeighboringStringFamilyTransitions_RemainBlocked(
         string liveStoreType,
         string targetStoreType
@@ -792,6 +1173,10 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             + "AND COLUMN_NAME = 'value';");
 
         await using var context = CreateContext(connectionString);
+        var targetLength = targetStoreType.Contains('(', StringComparison.Ordinal)
+            ? 20
+            : (int?)null;
+
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureColumn(
             "string_family_blocked",
@@ -800,7 +1185,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 typeof(string),
                 isNullable: true,
                 storeType: targetStoreType,
-                maxLength: 20,
+                maxLength: targetLength,
                 isFixedLength: targetStoreType.StartsWith("char", StringComparison.Ordinal)),
             SafeMigrationPolicy.RepairIfSafe);
 

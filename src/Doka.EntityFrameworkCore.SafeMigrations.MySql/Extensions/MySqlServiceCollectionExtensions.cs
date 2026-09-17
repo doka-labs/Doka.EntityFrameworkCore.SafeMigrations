@@ -46,6 +46,7 @@ public static class MySqlServiceCollectionExtensions
                 MySqlSafeMigrationDesignTimeServicesGuardHandler>());
 
         services.TryAddScoped<MySqlSafeMigrationPlanCapture>();
+        MySqlSafeMigrationServiceCollectionDecorator.DecorateMigrationsSqlGenerator(services);
         services.TryAddScoped<ISafeMigrationProviderAnalyzer, MySqlSafeMigrationProviderAnalyzer>();
         services.TryAddScoped<ISafeMigrationRunner, SafeMigrationRunner>();
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IInterceptor, MySqlSafeMigrationConnectionInterceptor>());

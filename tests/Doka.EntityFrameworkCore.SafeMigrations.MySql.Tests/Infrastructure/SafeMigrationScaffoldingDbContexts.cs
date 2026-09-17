@@ -134,6 +134,28 @@ public abstract class SafeMigrationScaffoldingDbContext : DbContext
             .Entity<SafeMigrationContractNamedWorkItem>()
             .Metadata
             .SetDiscriminatorValue(SafeMigrationAttributedWorkItemKind.ContractNamed);
+
+        modelBuilder.Entity<SafeMigrationScaffoldingCycleLeft>(entity =>
+        {
+            entity.ToTable("scaffolding_cycle_left");
+            entity.HasKey(value => value.Id);
+            entity
+                .HasOne<SafeMigrationScaffoldingCycleRight>()
+                .WithMany()
+                .HasForeignKey(value => value.RightId)
+                .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        modelBuilder.Entity<SafeMigrationScaffoldingCycleRight>(entity =>
+        {
+            entity.ToTable("scaffolding_cycle_right");
+            entity.HasKey(value => value.Id);
+            entity
+                .HasOne<SafeMigrationScaffoldingCycleLeft>()
+                .WithMany()
+                .HasForeignKey(value => value.LeftId)
+                .OnDelete(DeleteBehavior.NoAction);
+        });
     }
 }
 
@@ -202,6 +224,20 @@ public sealed class SafeMigrationJsonNamedWorkItem : SafeMigrationAttributedWork
 public sealed class SafeMigrationContractNamedWorkItem : SafeMigrationAttributedWorkItem;
 
 public sealed class SafeMigrationFallbackNamedWorkItem : SafeMigrationAttributedWorkItem;
+
+public sealed class SafeMigrationScaffoldingCycleLeft
+{
+    public int Id { get; set; }
+
+    public int? RightId { get; set; }
+}
+
+public sealed class SafeMigrationScaffoldingCycleRight
+{
+    public int Id { get; set; }
+
+    public int? LeftId { get; set; }
+}
 
 public enum SafeMigrationAttributedWorkItemKind
 {

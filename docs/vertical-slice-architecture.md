@@ -54,8 +54,9 @@ and do not own product behavior.
 
 Design-time scaffolding is a cross-slice composition concern under Core's
 `Scaffolding` folder. It delegates provider-specific model differ and C#
-rendering behavior to EF Core, then maps reviewed table/index boundaries and
-exactly paired model-managed data into existing slice entry points. Provider
+rendering behavior to EF Core, then maps reviewed table/index boundaries,
+complete standalone constraint operations, and exactly paired model-managed
+data into existing slice entry points. Provider
 `buildTransitive` assets own discovery. Provider column annotation comparison
 remains in each provider's `Columns` slice; scaffolding does not introduce a
 runtime feature registry or a fourth package.

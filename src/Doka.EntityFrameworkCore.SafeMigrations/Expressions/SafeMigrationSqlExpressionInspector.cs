@@ -76,6 +76,24 @@ internal static class SafeMigrationSqlExpressionInspector
         }
     }
 
+    /// <summary>Determines whether an expression references one exact identifier part.</summary>
+    /// <param name="expression">The expression tree to inspect.</param>
+    /// <param name="identifier">The exact terminal identifier part.</param>
+    /// <returns><see langword="true" /> when the identifier is referenced.</returns>
+    public static bool ReferencesIdentifier(
+        SafeMigrationSqlExpression expression,
+        string identifier
+    )
+    {
+        ArgumentNullException.ThrowIfNull(expression);
+        ArgumentException.ThrowIfNullOrWhiteSpace(identifier);
+
+        var identifiers = new HashSet<string>(StringComparer.Ordinal);
+        CollectIdentifiers(expression, identifiers);
+
+        return identifiers.Contains(identifier);
+    }
+
     /// <summary>Determines whether every node has provider-neutral structural semantics.</summary>
     /// <param name="expression">The expression tree to inspect.</param>
     /// <returns><see langword="true" /> when structural comparison is safe.</returns>

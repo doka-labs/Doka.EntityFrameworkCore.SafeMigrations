@@ -103,8 +103,12 @@ SafeMigrations composes EF Core's public design-time service contracts, but the
 exact C# text emitted by EF's migration generators is not a compatibility
 contract. SafeMigrations validates the leading operation call, controlled array
 literals, outer namespace block, and indentation before substituting safe calls
-or file-scoped source. A missing, duplicated, or newly formatted shape stops
-scaffolding instead of emitting ambiguous migration code.
+or file-scoped source. Standalone constraints are rendered from validated EF
+operation values because the safe APIs intentionally use plural ordered column
+contracts even when EF exposes a single-column overload. Unsupported operation
+annotations stop scaffolding rather than disappearing. A missing, duplicated,
+or newly formatted delegated shape stops scaffolding instead of emitting
+ambiguous migration code.
 
 The active provider `IMigrationsCodeGenerator` is selected and decorated, not
 replaced. EF Core loads referenced design-time services before provider and

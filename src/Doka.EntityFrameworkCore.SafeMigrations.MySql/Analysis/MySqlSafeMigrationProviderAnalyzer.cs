@@ -135,6 +135,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                 cancellationToken);
 
             var expectedUniqueIndexes = MySqlSafeMigrationPlanCapture.CreateExpectedUniqueIndexes(operations);
+            var expectedTableConstraints = SafeMigrationExpectedTableConstraints.FromOperations(operations);
             var results = new List<SafeMigrationProviderAnalysis>(operations.Count);
             var separatorBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Separator);
             var trailerBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Trailer);
@@ -143,7 +144,11 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
             foreach (var operationWindow in operations.Chunk(
                          SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture))
             {
-                var plans = CapturePlans(operationWindow, context.Model, expectedUniqueIndexes);
+                var plans = CapturePlans(
+                    operationWindow,
+                    context.Model,
+                    expectedUniqueIndexes,
+                    expectedTableConstraints);
                 AttachIndexPhysicalEnvironments(operationWindow, plans, indexEnvironments);
                 var shortCircuitStates = await FindShortCircuitStatesAsync(
                     connection,
@@ -161,6 +166,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                     dataProbeCache,
                     context.Model,
                     expectedUniqueIndexes,
+                    expectedTableConstraints,
                     maximumPayloadBytes,
                     commandTimeout,
                     operationOffset,
@@ -328,6 +334,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                     results,
                     context.Model,
                     expectedUniqueIndexes,
+                    expectedTableConstraints,
                     maximumPayloadBytes,
                     commandTimeout,
                     operationOffset,
@@ -357,6 +364,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         IReadOnlyList<SafeMigrationOperation> operations,
         IModel model,
         IReadOnlyDictionary<string, IReadOnlyList<ExpectedIndexDefinition>> expectedUniqueIndexes,
+        IReadOnlyDictionary<
+            (string? Schema, string Table), SafeMigrationExpectedTableConstraints> expectedTableConstraints,
         bool includeAnalysisEvidence = false,
         bool includeTransitionEvidence = false
     )
@@ -367,6 +376,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         using var capture = _planCapture.Begin(
             operations,
             expectedUniqueIndexes,
+            expectedTableConstraints,
             includeAnalysisEvidence,
             includeTransitionEvidence);
         _ = _sqlGenerator.Generate(operations, model);
@@ -380,6 +390,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         List<SafeMigrationProviderAnalysis> results,
         IModel model,
         IReadOnlyDictionary<string, IReadOnlyList<ExpectedIndexDefinition>> expectedUniqueIndexes,
+        IReadOnlyDictionary<
+            (string? Schema, string Table), SafeMigrationExpectedTableConstraints> expectedTableConstraints,
         int maximumPayloadBytes,
         int? commandTimeout,
         int operationOffset,
@@ -411,6 +423,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
             candidates.Select(static candidate => candidate.Operation).ToArray(),
             model,
             expectedUniqueIndexes,
+            expectedTableConstraints,
             includeAnalysisEvidence: true,
             includeTransitionEvidence: false);
 
@@ -521,6 +534,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         Dictionary<MySqlDataProbeIdentity, MySqlDataProbeResult> cache,
         IModel model,
         IReadOnlyDictionary<string, IReadOnlyList<ExpectedIndexDefinition>> expectedUniqueIndexes,
+        IReadOnlyDictionary<
+            (string? Schema, string Table), SafeMigrationExpectedTableConstraints> expectedTableConstraints,
         int maximumPayloadBytes,
         int? commandTimeout,
         int operationOffset,
@@ -555,6 +570,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                 candidateArray.Select(static candidate => candidate.Operation).ToArray(),
                 model,
                 expectedUniqueIndexes,
+                expectedTableConstraints,
                 includeTransitionEvidence: true);
 
             var resolved = await FindRequiredDataProbesAsync(

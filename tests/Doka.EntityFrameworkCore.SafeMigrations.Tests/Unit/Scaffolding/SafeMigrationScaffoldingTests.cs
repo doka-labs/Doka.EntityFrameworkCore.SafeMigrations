@@ -327,6 +327,241 @@ public sealed class SafeMigrationScaffoldingTests
         Assert.DoesNotContain("new[]", source, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void StandaloneConstraintGenerationUsesSafeCompleteContracts()
+    {
+        var generator = CreateOperationGenerator(SafeMigrationScaffoldingMode.Strict);
+        var builder = new IndentedStringBuilder();
+        MigrationOperation[] operations =
+        [
+            new AddPrimaryKeyOperation
+            {
+                Name = "pk_users",
+                Table = "users",
+                Columns = ["tenant_id", "id"],
+                Schema = "identity",
+            },
+            new AddUniqueConstraintOperation
+            {
+                Name = "uq_users_email",
+                Table = "users",
+                Columns = ["email"],
+            },
+            new AddCheckConstraintOperation
+            {
+                Name = "ck_users_id",
+                Table = "users",
+                Sql = "`id` >= 0",
+            },
+            new AddForeignKeyOperation
+            {
+                Name = "fk_users_roles",
+                Table = "users",
+                Columns = ["tenant_id", "role_id"],
+                PrincipalTable = "roles",
+                PrincipalColumns = ["tenant_id", "id"],
+                Schema = "identity",
+                PrincipalSchema = "authorization",
+                OnUpdate = ReferentialAction.Cascade,
+                OnDelete = ReferentialAction.SetNull,
+            },
+        ];
+
+        generator.Generate("migrationBuilder", operations, builder);
+        var source = builder.ToString();
+
+        Assert.Contains("migrationBuilder.AddPrimaryKeyIfNotExists(", source, StringComparison.Ordinal);
+        Assert.Contains("migrationBuilder.AddUniqueConstraintIfNotExists(", source, StringComparison.Ordinal);
+        Assert.Contains("migrationBuilder.AddCheckConstraintIfNotExists(", source, StringComparison.Ordinal);
+        Assert.Contains("migrationBuilder.AddForeignKeyIfNotExists(", source, StringComparison.Ordinal);
+        Assert.Contains("columns: [\"tenant_id\", \"role_id\"]", source, StringComparison.Ordinal);
+        Assert.Contains("principalColumns: [\"tenant_id\", \"id\"]", source, StringComparison.Ordinal);
+        Assert.Contains("schema: \"identity\"", source, StringComparison.Ordinal);
+        Assert.Contains("principalSchema: \"authorization\"", source, StringComparison.Ordinal);
+        Assert.Contains("ReferentialAction.Cascade", source, StringComparison.Ordinal);
+        Assert.Contains("ReferentialAction.SetNull", source, StringComparison.Ordinal);
+        Assert.Equal(4, CountOccurrences(source, "SafeMigrationPolicy.ThrowIfDifferent"));
+        Assert.DoesNotContain("migrationBuilder.AddPrimaryKey(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("migrationBuilder.AddUniqueConstraint(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("migrationBuilder.AddCheckConstraint(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("migrationBuilder.AddForeignKey(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("new[]", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void StandaloneConstraintDropGenerationUsesSafeEntryPoints()
+    {
+        var generator = CreateOperationGenerator(SafeMigrationScaffoldingMode.Strict);
+        var builder = new IndentedStringBuilder();
+        MigrationOperation[] operations =
+        [
+            new DropPrimaryKeyOperation { Name = "pk_users", Table = "users", Schema = "identity" },
+            new DropUniqueConstraintOperation { Name = "uq_users_email", Table = "users", Schema = "identity" },
+            new DropCheckConstraintOperation { Name = "ck_users_id", Table = "users", Schema = "identity" },
+            new DropForeignKeyOperation { Name = "fk_users_roles", Table = "users", Schema = "identity" },
+        ];
+
+        generator.Generate("migrationBuilder", operations, builder);
+        var source = builder.ToString();
+
+        Assert.Contains("migrationBuilder.DropPrimaryKeyIfExists(", source, StringComparison.Ordinal);
+        Assert.Contains("migrationBuilder.DropUniqueConstraintIfExists(", source, StringComparison.Ordinal);
+        Assert.Contains("migrationBuilder.DropCheckConstraintIfExists(", source, StringComparison.Ordinal);
+        Assert.Contains("migrationBuilder.DropForeignKeyIfExists(", source, StringComparison.Ordinal);
+        Assert.Equal(4, CountOccurrences(source, "schema: \"identity\""));
+        Assert.DoesNotContain("migrationBuilder.DropPrimaryKey(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("migrationBuilder.DropUniqueConstraint(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("migrationBuilder.DropCheckConstraint(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("migrationBuilder.DropForeignKey(", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DisabledScaffoldingPreservesStandaloneForeignKeyGeneration()
+    {
+        var generator = CreateOperationGenerator(SafeMigrationScaffoldingMode.Strict, isEnabled: false);
+        var builder = new IndentedStringBuilder();
+        var operation = new AddForeignKeyOperation
+        {
+            Name = "fk_users_roles",
+            Table = "users",
+            Columns = ["role_id"],
+            PrincipalTable = "roles",
+            PrincipalColumns = ["id"],
+        };
+
+        generator.Generate("migrationBuilder", [operation], builder);
+        var source = builder.ToString();
+
+        Assert.Contains("migrationBuilder.AddForeignKey(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("AddForeignKeyIfNotExists", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void StandaloneCheckConstraintRejectsOpaqueSqlBeforeEmittingSource()
+    {
+        var generator = CreateOperationGenerator(SafeMigrationScaffoldingMode.Strict);
+        var builder = new IndentedStringBuilder();
+        var operation = new AddCheckConstraintOperation
+        {
+            Name = "ck_users_reference",
+            Table = "users",
+            Sql = "reference LIKE 'USR-%'",
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            generator.Generate("migrationBuilder", [operation], builder));
+
+        Assert.Equal("migrationBuilder", builder.ToString());
+        Assert.Contains("ck_users_reference", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("trailing_token", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void StandaloneConstraintRejectsProviderAnnotationsBeforeEmittingSource()
+    {
+        var generator = CreateOperationGenerator(SafeMigrationScaffoldingMode.Strict);
+        var builder = new IndentedStringBuilder();
+        var operation = new AddForeignKeyOperation
+        {
+            Name = "fk_users_roles",
+            Table = "users",
+            Columns = ["role_id"],
+            PrincipalTable = "roles",
+            PrincipalColumns = ["id"],
+        };
+        operation["Provider:PhysicalOption"] = "value";
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            generator.Generate("migrationBuilder", [operation], builder));
+
+        Assert.Equal("migrationBuilder", builder.ToString());
+        Assert.Contains("Provider:PhysicalOption", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("lossy constraint contract", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void StandaloneForeignKeyRejectsImplicitPrincipalColumnsBeforeEmittingSource()
+    {
+        var generator = CreateOperationGenerator(SafeMigrationScaffoldingMode.Strict);
+        var builder = new IndentedStringBuilder();
+        var operation = new AddForeignKeyOperation
+        {
+            Name = "fk_users_roles",
+            Table = "users",
+            Columns = ["role_id"],
+            PrincipalTable = "roles",
+            PrincipalColumns = null,
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            generator.Generate("migrationBuilder", [operation], builder));
+
+        Assert.Equal("migrationBuilder", builder.ToString());
+        Assert.Contains("does not identify its principal columns", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void StandaloneConstraintRejectsAnEmptyColumnContractBeforeEmittingSource()
+    {
+        var generator = CreateOperationGenerator(SafeMigrationScaffoldingMode.Strict);
+        var builder = new IndentedStringBuilder();
+        var operation = new AddUniqueConstraintOperation
+        {
+            Name = "uq_users_email",
+            Table = "users",
+            Columns = [],
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            generator.Generate("migrationBuilder", [operation], builder));
+
+        Assert.Equal("migrationBuilder", builder.ToString());
+        Assert.Contains("incomplete key-column contract", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void StandaloneForeignKeyRejectsAnUndefinedReferentialActionBeforeEmittingSource()
+    {
+        var generator = CreateOperationGenerator(SafeMigrationScaffoldingMode.Strict);
+        var builder = new IndentedStringBuilder();
+        var operation = new AddForeignKeyOperation
+        {
+            Name = "fk_users_roles",
+            Table = "users",
+            Columns = ["role_id"],
+            PrincipalTable = "roles",
+            PrincipalColumns = ["id"],
+            OnDelete = (ReferentialAction)int.MaxValue,
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            generator.Generate("migrationBuilder", [operation], builder));
+
+        Assert.Equal("migrationBuilder", builder.ToString());
+        Assert.Contains("undefined delete referential action", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void StandaloneForeignKeyRejectsMismatchedColumnCountsBeforeEmittingSource()
+    {
+        var generator = CreateOperationGenerator(SafeMigrationScaffoldingMode.Strict);
+        var builder = new IndentedStringBuilder();
+        var operation = new AddForeignKeyOperation
+        {
+            Name = "fk_users_roles",
+            Table = "users",
+            Columns = ["tenant_id", "role_id"],
+            PrincipalTable = "roles",
+            PrincipalColumns = ["id"],
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            generator.Generate("migrationBuilder", [operation], builder));
+
+        Assert.Equal("migrationBuilder", builder.ToString());
+        Assert.Contains("different dependent and principal column counts", exception.Message, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("\n")]
     [InlineData("\r\n")]
@@ -1046,6 +1281,22 @@ public sealed class SafeMigrationScaffoldingTests
             });
 
         return operation;
+    }
+
+    private static int CountOccurrences(
+        string source,
+        string value
+    )
+    {
+        var count = 0;
+        var offset = 0;
+        while ((offset = source.IndexOf(value, offset, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            offset += value.Length;
+        }
+
+        return count;
     }
 
     private sealed class NullTypeMappingSource : ITypeMappingSource

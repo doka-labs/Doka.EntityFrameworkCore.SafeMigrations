@@ -58,6 +58,8 @@ internal static partial class SafeMigrationExpectedCatalog
     {
         ArgumentNullException.ThrowIfNull(operations);
 
+        SafeMigrationExpectedIndexTransitions.Validate(operations);
+
         var tables = new Dictionary<TableKey, MutableTable>();
         foreach (var envelope in operations.OfType<SafeMigrationOperation>())
         {

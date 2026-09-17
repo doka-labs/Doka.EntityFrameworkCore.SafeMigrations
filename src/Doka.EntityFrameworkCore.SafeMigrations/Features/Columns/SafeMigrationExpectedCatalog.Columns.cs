@@ -14,9 +14,26 @@ internal static partial class SafeMigrationExpectedCatalog
     private static void Apply(
         Dictionary<TableKey, MutableTable> tables,
         DropColumnIntent intent
-    ) => Find(tables, intent.Schema, intent.Table)
-        ?.Columns
-        .Remove(intent.Name);
+    )
+    {
+        var table = Find(tables, intent.Schema, intent.Table);
+        if (table is null)
+        {
+            return;
+        }
+
+        var dependentIndex = table.IndexDefinitions.Values.FirstOrDefault(
+            value => SafeMigrationExpectedIndexTransitions.MayDependOnColumn(value, intent.Name));
+        if (dependentIndex is not null)
+        {
+            throw new InvalidOperationException(
+                $"Cannot project column drop '{intent.Name}' on table '{intent.Table}' while index "
+                + $"'{dependentIndex.Name}' may depend on it. Drop the index explicitly before the column "
+                + "drop and recreate it afterward when required.");
+        }
+
+        table.Columns.Remove(intent.Name);
+    }
 
     private static void Apply(
         Dictionary<TableKey, MutableTable> tables,
@@ -48,7 +65,14 @@ internal static partial class SafeMigrationExpectedCatalog
                     : key)
                 .ToArray();
 
-            table.IndexDefinitions[pair.Key] = Copy(pair.Value, keys: keys);
+            table.IndexDefinitions[pair.Key] = Copy(
+                pair.Value,
+                keys: keys,
+                includedColumns: pair.Value.IncludedColumns
+                    .Select(column => StringComparer.Ordinal.Equals(column, intent.Name)
+                        ? intent.NewName
+                        : column)
+                    .ToArray());
         }
     }
 }
