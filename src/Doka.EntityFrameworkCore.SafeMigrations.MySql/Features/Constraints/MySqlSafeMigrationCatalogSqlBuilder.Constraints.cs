@@ -37,13 +37,14 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
     private string DuplicateDataExists(
         string table,
+        string? schema,
         IEnumerable<string> keys,
         string predicate
     )
     {
         var snapshot = keys.ToArray();
 
-        return $"EXISTS (SELECT 1 FROM {Delimited(table)} WHERE {predicate} "
+        return $"EXISTS (SELECT 1 FROM {Delimited(table, schema)} WHERE {predicate} "
             + $"GROUP BY {string.Join(", ", snapshot)} HAVING COUNT(*) > 1 LIMIT 1)";
     }
 

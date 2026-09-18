@@ -23,6 +23,18 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     /// <summary>Gets the catalog-only prerequisite expression.</summary>
     public string PrerequisiteExpression { get; init; } = "TRUE";
 
+    /// <summary>
+    /// Gets the immediate postcondition for an applied operation when it
+    /// differs from the terminal migration contract.
+    /// </summary>
+    public string? ExecutionPostcondition { get; init; }
+
+    /// <summary>Gets the exact selected-database identity guard for qualified operations.</summary>
+    public string? CurrentDatabaseQualificationExpression { get; init; }
+
+    /// <summary>Gets the stable code emitted when the selected-database identity guard fails.</summary>
+    public string? CurrentDatabaseQualificationFailureCode { get; init; }
+
     /// <summary>Gets the catalog-only guard that must pass before state SQL can be evaluated.</summary>
     public string StateEvaluationGuardExpression { get; init; } = "TRUE";
 
@@ -90,6 +102,17 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     public string RenderPrerequisiteExpression(
         Func<MySqlCatalogParameterValue, string> renderValue
     ) => MySqlCatalogSqlTemplate.Render(PrerequisiteExpression, ParameterValues, renderValue);
+
+    /// <summary>Renders the selected-database identity guard with provider literals.</summary>
+    /// <param name="renderValue">The provider literal renderer.</param>
+    /// <returns>The rendered expression.</returns>
+    public string RenderCurrentDatabaseQualificationExpression(
+        Func<MySqlCatalogParameterValue, string> renderValue
+    ) => MySqlCatalogSqlTemplate.Render(
+        CurrentDatabaseQualificationExpression
+            ?? throw new InvalidOperationException("The runtime plan has no database qualification expression."),
+        ParameterValues,
+        renderValue);
 
     /// <summary>Renders the state expression with provider literals.</summary>
     /// <param name="renderValue">The provider literal renderer.</param>
@@ -227,6 +250,16 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         IReadOnlyList<string> renderedValues
     ) => MySqlCatalogSqlTemplate.RenderPrepared(PrerequisiteExpression, renderedValues);
 
+    /// <summary>Renders the selected-database identity guard with prepared literal values.</summary>
+    /// <param name="renderedValues">The rendered literal values in placeholder order.</param>
+    /// <returns>The rendered expression.</returns>
+    public string RenderPreparedCurrentDatabaseQualificationExpression(
+        IReadOnlyList<string> renderedValues
+    ) => MySqlCatalogSqlTemplate.RenderPrepared(
+        CurrentDatabaseQualificationExpression
+            ?? throw new InvalidOperationException("The runtime plan has no database qualification expression."),
+        renderedValues);
+
     /// <summary>Renders the state expression with prepared literal values.</summary>
     /// <param name="renderedValues">The rendered literal values in placeholder order.</param>
     /// <returns>The rendered expression.</returns>
@@ -272,6 +305,15 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     public string RenderPreparedPostcondition(
         IReadOnlyList<string> renderedValues
     ) => MySqlCatalogSqlTemplate.RenderPrepared(Postcondition, renderedValues);
+
+    /// <summary>Renders the immediate execution postcondition with prepared literal values.</summary>
+    /// <param name="renderedValues">The rendered literal values in placeholder order.</param>
+    /// <returns>The rendered expression.</returns>
+    public string RenderPreparedExecutionPostcondition(
+        IReadOnlyList<string> renderedValues
+    ) => MySqlCatalogSqlTemplate.RenderPrepared(
+        ExecutionPostcondition ?? Postcondition,
+        renderedValues);
 
     /// <summary>Renders the repair precondition with prepared literal values.</summary>
     /// <param name="renderedValues">The rendered literal values in placeholder order.</param>

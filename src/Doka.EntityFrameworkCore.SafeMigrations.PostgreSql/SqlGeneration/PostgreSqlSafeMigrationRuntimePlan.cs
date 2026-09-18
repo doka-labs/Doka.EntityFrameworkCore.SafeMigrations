@@ -20,6 +20,12 @@ internal sealed record PostgreSqlSafeMigrationRuntimePlan(
     /// <summary>Gets the catalog-only prerequisite expression.</summary>
     public string PrerequisiteExpression { get; init; } = "TRUE";
 
+    /// <summary>
+    /// Gets the immediate postcondition for an applied operation when it
+    /// differs from the terminal migration contract.
+    /// </summary>
+    public string? ExecutionPostcondition { get; init; }
+
     /// <summary>Gets the catalog-only guard that must pass before state SQL can be evaluated.</summary>
     public string StateEvaluationGuardExpression { get; init; } = "TRUE";
 

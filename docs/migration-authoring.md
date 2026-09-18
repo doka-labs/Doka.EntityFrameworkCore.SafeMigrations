@@ -111,6 +111,40 @@ The generated index calls are evaluated independently under the same
 missing/matching/different contract. `DropTableIfExists` makes only absence
 idempotent; it is still destructive when the table exists.
 
+EF may emit a primary key, unique constraint, check constraint, or foreign key
+outside `CreateTable`, for example when dependency ordering breaks a table
+cycle. SafeMigrations rewrites those standalone adds to the corresponding
+`*IfNotExists` call with source-frozen `ThrowIfDifferent`, and rewrites their
+drops to `*IfExists`. A semantically matching object under another physical
+name is a no-op; same-name drift and namespace collisions remain blocked.
+Provider annotations that the immutable constraint definitions cannot carry,
+implicit foreign-key principal columns, and opaque check SQL stop scaffolding.
+Strict batch analysis and replay bind the table to the ordered constraint
+transition envelope. Initial, intermediate, and terminal definitions are
+allowed; only continuously present definitions are required; any unrelated
+physical shape remains drift. The immediate create-table postcondition remains
+limited to constraints emitted with `CreateTable`, so a dependency-ordered
+foreign key is not required before its own operation runs.
+MySQL/MariaDB and PostgreSQL runtime generation validate the same known index
+and constraint transitions as preflight. The MySQL/MariaDB adapter carries the
+complete ordered catalog even though Doka invokes extension handlers one
+operation at a time. Preflight, generated runtime SQL, replay, and postflight
+therefore enforce the same dependency order.
+
+For a hand-authored `DropColumnIfExists`, drop every known dependent primary
+key, unique constraint, check constraint, foreign key, and index explicitly
+before dropping the column. Recreate each dependency afterward when it belongs
+to the terminal model. SafeMigrations rejects an unresolved dependency before
+analysis or DDL because providers do not share one implicit outcome:
+[PostgreSQL drops local indexes and table constraints involving the column](https://www.postgresql.org/docs/current/sql-altertable.html),
+while [MySQL removes the column from every participating index and drops the
+index only when no key parts remain](https://dev.mysql.com/doc/refman/8.4/en/alter-table.html).
+Structured checks, expression keys, and filters are inspected by identifier;
+opaque expressions remain unknown and therefore require an explicit drop.
+This is an intentional upgrade-time behavior change for pending hand-authored
+migrations: operation streams that previously relied on provider-specific
+implicit dependency removal now stop before emitting DDL and must be reordered.
+
 When EF scaffolds an index replacement as `DropIndex` followed by
 `CreateIndex`, SafeMigrations writes `DropIndexIfExists` followed by the
 appropriate safe create helper. Preflight preserves this operation order: an
@@ -484,14 +518,19 @@ The policy is a literal part of the generated migration. Without
 `SafeMigrationPolicy.ThrowIfDifferent`. With the explicit `RepairIfSafe`
 configuration above, ordinary existing columns can converge nullability,
 default, and comment drift plus a provider-proven ordinary `VARCHAR` widening
-or live-data-verified narrowing. MySQL/MariaDB can also repair only the exact
-compatible Boolean transition `BIT(1) -> TINYINT(1)`. PostgreSQL independently
+or live-data-verified narrowing. MySQL/MariaDB can also repair a
+declared-domain-safe `VARCHAR` to text-family transition, text-family widening,
+a live-data-verified text-to-`VARCHAR(n)` transition, or the exact compatible
+Boolean transition `BIT(1) -> TINYINT(1)`. PostgreSQL independently
 qualifies `character varying` length transitions and has no equivalent Boolean
 conversion.
 
 A widening needs no row scan but must preserve the character family,
 collation, generated/identity/row-version state, provider metadata, and all
-dependent indexes or constraints. A narrowing groups and deduplicates
+dependent indexes or constraints. A text target must contain the complete
+declared source byte domain. Every ordinary dependent index over that target
+must retain an explicit prefix; SafeMigrations never invents one. A narrowing
+groups and deduplicates
 `CHAR_LENGTH`/`char_length` existence probes by table and repeats its proof
 immediately before DDL. One overlength value is
 `DataBlocked / varchar_narrowing_value_too_long`; the value itself is never

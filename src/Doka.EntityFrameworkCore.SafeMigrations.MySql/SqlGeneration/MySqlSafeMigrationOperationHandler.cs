@@ -58,13 +58,21 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             ? GetExpectedUniqueIndexes(table)
             : null;
 
+        var expectedTableConstraints = operation.Intent is EnsureTableIntent tableIntent
+            ? GetExpectedTableConstraints(tableIntent, context.Model)
+            : null;
+
         var runtimePlan = _catalogSqlBuilder.Build(
             operation,
             context,
             expectedUniqueIndexes,
+            expectedTableConstraints,
             includeAnalysisEvidence: _planCapture.IncludeAnalysisEvidence,
             includeTransitionEvidence: !_planCapture.IsActive || _planCapture.IncludeTransitionEvidence,
-            parameterizeValues: _planCapture.IsActive);
+            parameterizeValues: _planCapture.IsActive,
+            requiredDatabaseQualifiers: _planCapture.HasGenerationContract
+                ? _planCapture.GenerationDatabaseQualifiers
+                : null);
         if (_planCapture.IsActive)
         {
             _planCapture.Record(context.OperationOrdinal, operation, runtimePlan);
@@ -100,11 +108,31 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
 
         if (runtimePlan.RequiresLazyStateEvaluation)
         {
-            setupCommands.Add(
-                $"SET @doka_sm_prerequisite_ok = COALESCE(("
-                + $"{runtimePlan.RenderPreparedPrerequisiteExpression(renderedParameterValues)}), FALSE);");
+            if (runtimePlan.CurrentDatabaseQualificationExpression is not null)
+            {
+                setupCommands.Add(
+                    "SET @doka_sm_state = CASE WHEN COALESCE(("
+                    + runtimePlan.RenderPreparedCurrentDatabaseQualificationExpression(renderedParameterValues)
+                    + "), FALSE) THEN NULL ELSE 'unsupported' END;");
 
-            setupCommands.Add(BuildInitialLazyStateAssignment());
+                setupCommands.Add(
+                    "SET @doka_sm_prerequisite_ok = CASE WHEN @doka_sm_state IS NULL THEN COALESCE(("
+                    + runtimePlan.RenderPreparedPrerequisiteExpression(renderedParameterValues)
+                    + "), FALSE) ELSE FALSE END;");
+            }
+            else
+            {
+                // WHY: Keep the unqualified hot path byte-for-byte equivalent to
+                // its established allocation profile. Only qualified operations
+                // need an earlier state that the prerequisite phase preserves.
+                setupCommands.Add(
+                    "SET @doka_sm_prerequisite_ok = COALESCE(("
+                    + runtimePlan.RenderPreparedPrerequisiteExpression(renderedParameterValues)
+                    + "), FALSE);");
+            }
+
+            setupCommands.Add(BuildInitialLazyStateAssignment(
+                preserveExistingState: runtimePlan.CurrentDatabaseQualificationExpression is not null));
             if (runtimePlan.StateEvaluationGuardFailureExpression is not null)
             {
                 setupCommands.Add(BuildGuardEvaluationAssignment(runtimePlan, renderedParameterValues));
@@ -158,7 +186,8 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         var bodyCommand = $"EXECUTE {PreparedStatementName};\n"
             + "SET @doka_sm_post_ok = CASE "
             + "WHEN @doka_sm_action IN ('apply', 'repair') "
-            + $"THEN COALESCE(({runtimePlan.RenderPreparedPostcondition(renderedParameterValues)}), FALSE) "
+            + "THEN COALESCE(("
+            + $"{runtimePlan.RenderPreparedExecutionPostcondition(renderedParameterValues)}), FALSE) "
             + "ELSE TRUE END;\n"
             + "INSERT INTO `__doka_sm_assert` "
             + "(`different_code`, `unsupported_code`, `data_blocked_code`, "
@@ -193,14 +222,22 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         EnsureTableIntent intent
     )
     {
-        // Analysis owns an exact operation-batch catalog. Runtime generation
-        // receives operations one at a time, so EF's target relational model is
-        // the authoritative fallback for indexes emitted beside the table.
         if (_planCapture.IsActive)
         {
-            return _planCapture.GetExpectedUniqueIndexes(intent.Definition.Table);
+            return _planCapture.GetExpectedUniqueIndexes(
+                intent.Definition.Table,
+                intent.Definition.Schema);
         }
 
+        if (_planCapture.HasGenerationContract)
+        {
+            return _planCapture.GetGenerationUniqueIndexes(
+                intent.Definition.Table,
+                intent.Definition.Schema);
+        }
+
+        // Direct handler use has no ordered provider-generation scope. EF's
+        // target relational model is the only authoritative fallback there.
         if (!ReferenceEquals(_designTimeModel, _modelUniqueIndexSource))
         {
             _modelUniqueIndexes = BuildModelUniqueIndexes(_designTimeModel);
@@ -210,6 +247,30 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         return _modelUniqueIndexes!.GetValueOrDefault(
                 new ModelTableKey(intent.Definition.Table, intent.Definition.Schema))
             ?? s_emptyUniqueIndexes;
+    }
+
+    private SafeMigrationExpectedTableConstraints? GetExpectedTableConstraints(
+        EnsureTableIntent intent,
+        IModel? operationModel
+    )
+    {
+        if (_planCapture.IsActive)
+        {
+            return _planCapture.GetExpectedTableConstraints(intent);
+        }
+
+        if (_planCapture.HasGenerationContract)
+        {
+            return _planCapture.GetGenerationTableConstraints(intent);
+        }
+
+        // Direct handler use has no ordered provider-generation scope. EF's
+        // target relational model is the only authoritative fallback there.
+        return SafeMigrationExpectedTableConstraints.FromModel(
+            operationModel ?? _designTimeModel,
+            intent.Definition.Table,
+            intent.Definition.Schema,
+            intent.Definition.CheckConstraints);
     }
 
     private static Dictionary<ModelTableKey, IReadOnlyList<ExpectedIndexDefinition>> BuildModelUniqueIndexes(
@@ -395,9 +456,14 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             " USING utf8mb4) ELSE 'DO 0' END;");
     }
 
-    private static string BuildInitialLazyStateAssignment() => "SET @doka_sm_state = CASE "
-        + "WHEN NOT @doka_sm_prerequisite_ok THEN 'prerequisite_missing' "
-        + "ELSE NULL END, @doka_sm_repair_ok = FALSE;";
+    private static string BuildInitialLazyStateAssignment(
+        bool preserveExistingState
+    ) => preserveExistingState
+        ? "SET @doka_sm_state = CASE WHEN @doka_sm_state IS NOT NULL THEN @doka_sm_state "
+            + "WHEN NOT @doka_sm_prerequisite_ok THEN 'prerequisite_missing' "
+            + "ELSE NULL END, @doka_sm_repair_ok = FALSE;"
+        : "SET @doka_sm_state = CASE WHEN NOT @doka_sm_prerequisite_ok THEN 'prerequisite_missing' "
+            + "ELSE NULL END, @doka_sm_repair_ok = FALSE;";
 
     private static string BuildPreparedSqlAssignment(
         string applyDdl,

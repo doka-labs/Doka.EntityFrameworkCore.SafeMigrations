@@ -10,8 +10,12 @@ internal sealed class SafeMigrationPostflightProjection
 
     /// <summary>Creates the final-writer projection for one ordered migration operation stream.</summary>
     /// <param name="operations">The complete operation stream in execution order.</param>
+    /// <param name="objectIdentityNormalizer">
+    /// The optional provider identity normalizer established by live analysis.
+    /// </param>
     public SafeMigrationPostflightProjection(
-        IReadOnlyList<MigrationOperation> operations
+        IReadOnlyList<MigrationOperation> operations,
+        ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer = null
     )
     {
         var finalWriters = new HashSet<PostflightResource>();
@@ -24,7 +28,10 @@ internal sealed class SafeMigrationPostflightProjection
         for (var ordinal = operations.Count - 1; ordinal >= 0; ordinal--)
         {
             if (operations[ordinal] is not SafeMigrationOperation safeOperation
-                || !TryCreateResource(safeOperation.Intent, out var resource))
+                || !TryCreateResource(
+                    safeOperation.Intent,
+                    objectIdentityNormalizer,
+                    out var resource))
             {
                 continue;
             }
@@ -48,80 +55,121 @@ internal sealed class SafeMigrationPostflightProjection
 
     private static bool TryCreateResource(
         SafeMigrationIntent intent,
+        ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer,
         out PostflightResource resource
     )
     {
+        string? Normalize(
+            string? schema
+        ) => objectIdentityNormalizer is null
+            ? schema
+            : objectIdentityNormalizer.NormalizeSchema(schema);
+
         resource = intent switch
         {
-            EnsureSchemaIntent value => new PostflightResource(PostflightResourceKind.Schema, value.Name, null, null),
-            DropSchemaIntent value => new PostflightResource(PostflightResourceKind.Schema, value.Name, null, null),
+            EnsureSchemaIntent value =>
+                new PostflightResource(PostflightResourceKind.Schema, Normalize(value.Name), null, null),
+            DropSchemaIntent value =>
+                new PostflightResource(PostflightResourceKind.Schema, Normalize(value.Name), null, null),
             EnsureTableIntent value =>
                 new PostflightResource(
                     PostflightResourceKind.Table,
-                    value.Definition.Schema,
+                    Normalize(value.Definition.Schema),
                     value.Definition.Table,
                     null),
             DropTableIntent value =>
-                new PostflightResource(PostflightResourceKind.Table, value.Schema, value.Table, null),
+                new PostflightResource(PostflightResourceKind.Table, Normalize(value.Schema), value.Table, null),
             RenameTableIntent value =>
-                new PostflightResource(PostflightResourceKind.Table, value.Schema, value.Name, null),
+                new PostflightResource(PostflightResourceKind.Table, Normalize(value.Schema), value.Name, null),
             EnsureColumnIntent value =>
-                new PostflightResource(PostflightResourceKind.Column, value.Schema, value.Table, value.Definition.Name),
+                new PostflightResource(
+                    PostflightResourceKind.Column,
+                    Normalize(value.Schema),
+                    value.Table,
+                    value.Definition.Name),
             DropColumnIntent value =>
-                new PostflightResource(PostflightResourceKind.Column, value.Schema, value.Table, value.Name),
+                new PostflightResource(
+                    PostflightResourceKind.Column,
+                    Normalize(value.Schema),
+                    value.Table,
+                    value.Name),
             RenameColumnIntent value =>
-                new PostflightResource(PostflightResourceKind.Column, value.Schema, value.Table, value.Name),
+                new PostflightResource(
+                    PostflightResourceKind.Column,
+                    Normalize(value.Schema),
+                    value.Table,
+                    value.Name),
             AlterColumnIntent value =>
-                new PostflightResource(PostflightResourceKind.Column, value.Schema, value.Table, value.Definition.Name),
+                new PostflightResource(
+                    PostflightResourceKind.Column,
+                    Normalize(value.Schema),
+                    value.Table,
+                    value.Definition.Name),
             EnsureIndexIntent value =>
                 new PostflightResource(
                     PostflightResourceKind.Index,
-                    value.Definition.Schema,
+                    Normalize(value.Definition.Schema),
                     value.Definition.Table,
                     value.Definition.Name),
             DropIndexIntent value =>
-                new PostflightResource(PostflightResourceKind.Index, value.Schema, value.Table, value.Name),
+                new PostflightResource(
+                    PostflightResourceKind.Index,
+                    Normalize(value.Schema),
+                    value.Table,
+                    value.Name),
             RenameIndexIntent value =>
-                new PostflightResource(PostflightResourceKind.Index, value.Schema, value.Table, value.Name),
+                new PostflightResource(
+                    PostflightResourceKind.Index,
+                    Normalize(value.Schema),
+                    value.Table,
+                    value.Name),
             EnsurePrimaryKeyIntent value =>
                 new PostflightResource(
                     PostflightResourceKind.PrimaryKey,
-                    value.Definition.Schema,
+                    Normalize(value.Definition.Schema),
                     value.Definition.Table,
                     null),
             DropPrimaryKeyIntent value =>
-                new PostflightResource(PostflightResourceKind.PrimaryKey, value.Schema, value.Table, null),
+                new PostflightResource(
+                    PostflightResourceKind.PrimaryKey,
+                    Normalize(value.Schema),
+                    value.Table,
+                    null),
             EnsureUniqueConstraintIntent value =>
                 new PostflightResource(
                     PostflightResourceKind.UniqueConstraint,
-                    value.Definition.Schema,
+                    Normalize(value.Definition.Schema),
                     value.Definition.Table,
                     value.Definition.Name),
             DropUniqueConstraintIntent value =>
-                new PostflightResource(PostflightResourceKind.UniqueConstraint, value.Schema, value.Table, value.Name),
+                new PostflightResource(
+                    PostflightResourceKind.UniqueConstraint,
+                    Normalize(value.Schema),
+                    value.Table,
+                    value.Name),
             EnsureCheckConstraintIntent value => new PostflightResource(
                 PostflightResourceKind.CheckConstraint,
-                value.Definition.Schema,
+                Normalize(value.Definition.Schema),
                 value.Definition.Table,
                 value.Definition.Name),
             DropCheckConstraintIntent value => new PostflightResource(
                 PostflightResourceKind.CheckConstraint,
-                value.Schema,
+                Normalize(value.Schema),
                 value.Table,
                 value.Name),
             EnsureForeignKeyIntent value => new PostflightResource(
                 PostflightResourceKind.ForeignKey,
-                value.Definition.Schema,
+                Normalize(value.Definition.Schema),
                 value.Definition.Table,
                 value.Definition.Name),
             DropForeignKeyIntent value => new PostflightResource(
                 PostflightResourceKind.ForeignKey,
-                value.Schema,
+                Normalize(value.Schema),
                 value.Table,
                 value.Name),
             ModelManagedDataIntent value => new PostflightResource(
                 PostflightResourceKind.ModelManagedData,
-                value.Schema,
+                Normalize(value.Schema),
                 value.Table,
                 ModelManagedKeySet(value)),
             _ => default,

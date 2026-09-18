@@ -25,7 +25,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
 
         builder
             .Append(" ON ")
-            .Append(_sqlGenerationHelper.DelimitIdentifier(definition.Table))
+            .Append(_sqlGenerationHelper.DelimitIdentifier(definition.Table, definition.Schema))
             .Append(" (");
 
         for (var index = 0; index < definition.Keys.Count; index++)

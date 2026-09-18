@@ -58,7 +58,8 @@ internal static partial class SafeMigrationExpectedCatalog
         string? name = null,
         string? table = null,
         string? schema = null,
-        IReadOnlyList<ExpectedIndexKeyDefinition>? keys = null
+        IReadOnlyList<ExpectedIndexKeyDefinition>? keys = null,
+        IReadOnlyList<string>? includedColumns = null
     ) => new(
         name ?? definition.Name,
         table ?? definition.Table,
@@ -66,7 +67,7 @@ internal static partial class SafeMigrationExpectedCatalog
         schema ?? definition.Schema,
         definition.Unique,
         definition.Filter,
-        definition.IncludedColumns,
+        includedColumns ?? definition.IncludedColumns,
         definition.Method,
         definition.NullsDistinct,
         definition.StructuredFilter);

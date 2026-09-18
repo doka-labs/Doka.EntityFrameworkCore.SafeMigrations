@@ -8,7 +8,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     )
     {
         var relation = ExpectedRelation(intent, ("t", intent.Columns, intent.ColumnTypes, intent.Values));
-        var table = Delimited(intent.Table);
+        var table = Delimited(intent.Table, intent.Schema);
         var keyMatch = KeyMatch(intent, "doka_actual", "doka_expected");
         var targetMatch = ColumnMatch(
             intent.Columns,
@@ -62,7 +62,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             ("o", intent.Columns, intent.ColumnTypes, intent.OldValues),
             ("n", intent.Columns, intent.ColumnTypes, intent.NewValues));
 
-        var table = Delimited(intent.Table);
+        var table = Delimited(intent.Table, intent.Schema);
         var keyMatch = KeyMatch(intent, "doka_actual", "doka_expected");
         var sourceMatch = ColumnMatch(
             intent.Columns,
@@ -120,7 +120,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     )
     {
         var relation = ExpectedRelation(intent, ("o", intent.Columns, intent.ColumnTypes, intent.OldValues));
-        var table = Delimited(intent.Table);
+        var table = Delimited(intent.Table, intent.Schema);
         var keyMatch = KeyMatch(intent, "doka_actual", "doka_expected");
         var sourceMatch = ColumnMatch(
             intent.Columns,
@@ -321,7 +321,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
             var sameKey = KeyMatch(intent, "doka_conflict", "doka_expected");
 
-            return $"EXISTS (SELECT 1 FROM {relation} JOIN {Delimited(intent.Table)} AS doka_conflict "
+            return $"EXISTS (SELECT 1 FROM {relation} "
+                + $"JOIN {Delimited(intent.Table, intent.Schema)} AS doka_conflict "
                 + $"ON {uniqueMatch} WHERE ({nonNullTarget}) AND NOT ({sameKey}))";
         });
 
@@ -350,7 +351,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                         + $"doka_expected.{Delimited($"o{principalOrdinal}")}";
                 }));
 
-            return $"EXISTS (SELECT 1 FROM {relation} JOIN {Delimited(foreignKey.Table)} AS doka_dependent "
+            return $"EXISTS (SELECT 1 FROM {relation} "
+                + $"JOIN {Delimited(foreignKey.Table, foreignKey.Schema)} AS doka_dependent "
                 + $"ON {match})";
         });
 
@@ -380,7 +382,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 }));
 
             return $"CAST((SELECT COUNT(*) FROM {relation} "
-                + $"JOIN {Delimited(foreignKey.Table)} AS doka_dependent ON {match}) AS CHAR)";
+                + $"JOIN {Delimited(foreignKey.Table, foreignKey.Schema)} AS doka_dependent ON {match}) AS CHAR)";
         });
 
         return $"CONCAT_WS(',', {string.Join(", ", counts)})";

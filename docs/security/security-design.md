@@ -161,10 +161,11 @@ or successful publication.
 ### S7 - Scaffolding cannot silently widen migration policy
 
 The design-time extension delegates C# argument and annotation rendering to EF
-Core, then substitutes only the documented table/index operation calls after
-validating one exact generated shape. Strict mode is the default. Legacy mode
-is explicitly selected and frozen into the generated C# file; its rollback
-body rejects before DDL. Column, constraint, rename, and schema operations are
+Core, then substitutes only the documented table/index calls and complete
+standalone constraint contracts. Strict mode is the default. Legacy mode is
+explicitly selected and frozen into the generated C# file; its rollback body
+rejects before DDL. Standalone constraint adds freeze `ThrowIfDifferent`;
+drops make only absence idempotent. Column, rename, and schema operations are
 not reinterpreted automatically. Unknown output shapes and unmodeled provider
 annotations fail closed.
 

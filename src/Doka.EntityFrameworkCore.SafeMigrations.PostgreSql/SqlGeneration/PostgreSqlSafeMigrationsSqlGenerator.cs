@@ -43,6 +43,9 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         ArgumentNullException.ThrowIfNull(operations);
 
         var commands = new List<MigrationCommand>();
+        SafeMigrationExpectedIndexTransitions.Validate(operations);
+        var expectedTableConstraints = SafeMigrationExpectedTableConstraints.FromOperations(operations);
+
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             var operation = operations[ordinal];
@@ -66,8 +69,14 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
                 continue;
             }
 
+            var tableConstraints = safeOperation.Intent is EnsureTableIntent tableIntent
+                ? expectedTableConstraints.GetValueOrDefault(
+                    (tableIntent.Definition.Schema, tableIntent.Definition.Table))
+                : null;
+
             var runtimePlan = _catalogSqlBuilder.Build(
                 safeOperation,
+                tableConstraints,
                 includeAnalysisEvidence: false,
                 includeTransitionEvidence: true);
             var baseline = RenderBaseline(safeOperation, runtimePlan, model, options);
@@ -258,7 +267,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             runtimePlan.DataProbe?.NarrowingExpression ?? string.Empty,
             runtimePlan.DataProbe?.BuildBlockedExpression() ?? string.Empty,
             runtimePlan.DataProbe?.QualifiedTable ?? string.Empty,
-            runtimePlan.Postcondition);
+            runtimePlan.ExecutionPostcondition ?? runtimePlan.Postcondition);
 
         // The selected dollar tag cannot occur in embedded SQL, so provider
         // output cannot terminate the anonymous block accidentally.
@@ -363,7 +372,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             .Append("        END IF;\n")
             .Append("        IF NOT COALESCE((\n")
             .Append("            ")
-            .Append(runtimePlan.Postcondition)
+            .Append(runtimePlan.ExecutionPostcondition ?? runtimePlan.Postcondition)
             .Append('\n')
             .Append("        ), FALSE) THEN\n")
             .Append("            RAISE EXCEPTION USING ERRCODE = 'P1005', MESSAGE = 'doka_sm_postcondition';\n")

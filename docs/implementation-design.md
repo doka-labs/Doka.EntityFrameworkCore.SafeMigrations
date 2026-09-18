@@ -160,11 +160,30 @@ engine families retain negative value-, operator-, and identifier-drift tests.
 
 EF Core's design-time service pipeline supplies the provider model differ and
 C# migration generator. SafeMigrations decorates both public contracts. The C#
-generator delegates provider rendering to EF Core, validates the expected
-generated call shape, and substitutes reviewed safe calls. This preserves
-provider-rendered arguments and annotations without forking EF Core's generator
-implementation. An unexpected upstream output shape stops scaffolding instead
-of producing ambiguous source.
+generator delegates provider rendering for table and index operations,
+validates the expected generated call shape, and substitutes reviewed safe
+calls. Standalone constraints are rendered from their complete validated
+operation values; annotations without an immutable constraint contract reject.
+Batch analysis projects those operations into a transition envelope used by
+strict replay and postflight. The envelope allows initial, intermediate, and
+terminal constraint definitions, requires only definitions that remain present
+throughout the ordered stream, and still rejects every unknown shape. The
+execution postcondition attached to the initial table operation remains its
+baseline contract, because later ordered constraints do not exist when that
+assertion runs.
+Column drops form an explicit dependency boundary inside the same catalog.
+Known keys, checks, foreign keys, and indexes must be removed by preceding
+safe operations; structured expressions prove when checks, functional keys,
+and filters are unrelated, while opaque expressions reject. This prevents a
+provider's implicit constraint removal or composite-index narrowing from
+creating an unmodeled terminal state.
+The MySQL/MariaDB adapter decorates the provider SQL generator only to scope
+this immutable transition catalog across Doka's per-operation handler calls;
+the provider still renders every command. PostgreSQL receives the complete
+operation list directly in its composed generator.
+This preserves provider-owned rendering where it is representable without
+forking EF Core's generator. An unexpected upstream output shape stops
+scaffolding instead of producing ambiguous source.
 
 Provider package `buildTransitive` assets add EF's
 `DesignTimeServicesReferenceAttribute` to a consuming assembly that directly
@@ -214,8 +233,12 @@ prefix counts, or negative values stop scaffolding. PostgreSQL registers no
 projector and retains the ordinary generated index calls.
 
 `Strict` rewrites table creation, index creation, index removal, table removal,
-and model-managed data produced from `HasData`. `LegacyConvergence` rewrites the
-same forward operations but replaces `Down` with a deterministic exception:
+standalone primary-key, unique, check, and foreign-key adds and drops, and
+model-managed data produced from `HasData`. Constraint adds freeze the existing
+`ThrowIfDifferent` contract; drops make only absence idempotent. Operations with
+unrepresentable annotations, implicit foreign-key principal columns, or opaque
+check SQL stop scaffolding. `LegacyConvergence` rewrites the same forward
+operations but replaces `Down` with a deterministic exception:
 adopted legacy objects have no provable destructive inverse. The inverse model
 difference is still verified before that replacement because safe forward
 updates and deletes require captured source values. Other EF operations are
@@ -266,14 +289,18 @@ repair. MySQL/MariaDB can authorize repair only after Doka's typed metadata
 recognizes every annotation and proves the complete column shape.
 
 Both adapters independently recognize ordinary `VARCHAR` widening and
-data-verified narrowing. Widening needs catalog and dependency proof but no row
-scan. Narrowing candidates are deduplicated and grouped by table into bounded
-character-length probes. The result is one Boolean fact per candidate and no
-row value. The execution guard repeats that proof before DDL; provider strict
-conversion and the complete postcondition close the remaining race. One
-overlength value becomes `DataBlocked`. MySQL/MariaDB additionally recognize
-only the exact CLR-Boolean `BIT(1) -> TINYINT(1)` value-domain expansion.
-PostgreSQL does not reuse that provider-specific proof.
+data-verified narrowing. MySQL/MariaDB extends the same nonbinary string proof
+to `VARCHAR` into a text family, widening between text families, and a
+live-data-verified text-to-`VARCHAR(n)` transition. A target text type must
+contain the complete declared source byte domain; ordinary dependent indexes
+must already use a valid prefix. Widening needs catalog and dependency proof
+but no row scan. Narrowing candidates are deduplicated and grouped by table
+into bounded character-length probes. The result is one Boolean fact per
+candidate and no row value. The execution guard repeats that proof before DDL;
+provider strict conversion and the complete postcondition close the remaining
+race. One overlength value becomes `DataBlocked`. MySQL/MariaDB additionally
+recognize only the exact CLR-Boolean `BIT(1) -> TINYINT(1)` value-domain
+expansion. PostgreSQL does not reuse those provider-specific proofs.
 The Boolean proof accepts only the absent, null, false, and true literal
 default forms understood by the catalog contract. It rejects expression
 defaults and any foreign-key dependency because changing one side cannot prove
@@ -365,6 +392,8 @@ compatible while newer unmodeled semantics reject fail-closed.
 | Single-column `CreateIndex` | `CreateIndexIfNotExistsFromModel`, or prefix-aware MySQL/MariaDB counterpart | Same |
 | Multi-column `CreateIndex` | `CreateCompositeIndexIfNotExistsFromModel`, or prefix-aware MySQL/MariaDB counterpart | Same |
 | `DropIndex` | `DropIndexIfExists` | Same |
+| Standalone PK, unique, check, or FK add | Corresponding `*IfNotExists` method with `ThrowIfDifferent` | Same |
+| Standalone PK, unique, check, or FK drop | Corresponding `*IfExists` method | Same |
 | Generated rollback of `CreateTable` | `DropTableIfExists` | Entire `Down` body rejects before DDL |
 
 The `*FromModel` methods are stable public targets for generated migration
@@ -657,6 +686,11 @@ unchanged composite parts and re-evaluates the key against the target table's
 InnoDB row format and server page size. Prefix units retain character semantics
 for character keys and byte semantics for binary keys. Unknown store families,
 unsupported engines, overflow, and incomplete evidence remain unsupported.
+The provider analyzers and both runtime SQL generators independently validate
+the ordered index-transition stream. A known index must be dropped explicitly
+before one of its key, included, expression, or filter columns is dropped;
+opaque expressions keep the dependency unknown and fail closed. This rule also
+applies when the migration has no `EnsureTable` operation.
 
 MySQL and MariaDB expose a unique constraint through the same physical unique-
 index identity. The projection mirrors each representable BTREE unique key in

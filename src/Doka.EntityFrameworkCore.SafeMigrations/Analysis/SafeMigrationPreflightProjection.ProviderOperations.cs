@@ -17,7 +17,8 @@ internal sealed partial class SafeMigrationPreflightProjection
         var key = new TableKey(operation.Name, operation.Schema);
         var prerequisites = new ProjectedPrerequisites(
             newlyCreated: true,
-            dataMutationVersion: _providerDataMutationVersion);
+            dataMutationVersion: _providerDataMutationVersion,
+            objectIdentityNormalizer: _objectIdentityNormalizer);
 
         ExpectedTableDefinition? definition = null;
 
@@ -26,7 +27,8 @@ internal sealed partial class SafeMigrationPreflightProjection
             definition = SafeMigrationExpectedDefinitionFactory.From(operation);
             var table = new ProjectedTable(
                 definition,
-                dataMutationVersion: _providerDataMutationVersion);
+                dataMutationVersion: _providerDataMutationVersion,
+                objectIdentityNormalizer: _objectIdentityNormalizer);
 
             CaptureSharedUniqueKeys(table, definition);
             _tables[key] = table;
@@ -294,7 +296,8 @@ internal sealed partial class SafeMigrationPreflightProjection
             // WHY: The table already existed when this prerequisite was first
             // observed. A preceding data operation may therefore have changed
             // its rows, even when the structural provider operation is newer.
-            dataMutationVersion: 0);
+            dataMutationVersion: 0,
+            objectIdentityNormalizer: _objectIdentityNormalizer);
         _prerequisites.Add(key, prerequisites);
 
         return prerequisites;
@@ -304,7 +307,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         string table,
         string? schema
     ) => _droppedPhysicalKeys.RemoveWhere(key => StringComparer.Ordinal.Equals(key.Table, table)
-        && StringComparer.Ordinal.Equals(key.Schema, schema));
+        && SameSchema(key.Schema, schema));
 
     private void InvalidateAcceptedIndexesForColumn(
         string table,

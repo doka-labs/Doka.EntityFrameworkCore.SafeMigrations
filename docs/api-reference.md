@@ -72,6 +72,20 @@ use matched-row semantics (`UseAffectedRows=false`). SafeMigrations validates
 its command connection again before guarded execution. See
 [registration examples](../README.md#provider-registration).
 
+On MySQL/MariaDB, EF table `Schema` metadata is a database qualifier rather
+than a PostgreSQL-style namespace. An explicit qualifier is supported only
+when it exactly equals `DATABASE()` on the active connection; it then shares
+one physical identity with an omitted qualifier across analysis, generated
+transition catalogs, and postflight final-writer reduction. A different
+database fails closed with `database_qualifier_mismatch` before dependent
+catalog or data queries. Generated cross-operation catalogs merge a sole
+explicit qualifier with omitted qualifiers only while every SafeMigrations
+command in that stream carries the same runtime database guard. `EnsureSchema`
+for the selected database is a no-op, while database drops and cross-database
+operations remain unsupported. The comparison is exact and does not inherit
+environment-specific `lower_case_table_names` behavior. See
+[MySQL and MariaDB DDL behavior](mysql-mariadb-ddl-behavior.md#current-database-qualification).
+
 ## Scaffolding configuration
 
 Import the provider namespace for the registration extension and the Core
@@ -167,6 +181,8 @@ mapping is:
 | `CreateTable` | `CreateTableIfNotExists` | `ConvergeTableFromModel` |
 | Single-column `CreateIndex` | `CreateIndexIfNotExistsFromModel`, or the prefix-aware counterpart on MySQL/MariaDB | Same |
 | Multi-column `CreateIndex` | `CreateCompositeIndexIfNotExistsFromModel`, or the prefix-aware counterpart on MySQL/MariaDB | Same |
+| Standalone `AddPrimaryKey`, `AddUniqueConstraint`, `AddCheckConstraint`, `AddForeignKey` | Corresponding `*IfNotExists` method with `ThrowIfDifferent` | Same |
+| Standalone primary-key, unique, check, or foreign-key drop | Corresponding `*IfExists` method | Same |
 | Model-managed insert from `HasData` | `EnsureModelManagedDataFromModel` | Same |
 | Model-managed update from `HasData` | `UpdateModelManagedDataFromModel` with captured old and new values | Same |
 | Model-managed delete from `HasData` | `DeleteModelManagedDataFromModel` with complete captured old values and incoming source-model dependencies | Same; inverse data is analyzed before rollback is replaced |
@@ -176,7 +192,9 @@ Every generated `ConvergeTableFromModel` call contains an explicit `policy`
 argument. The compatibility default is `ThrowIfDifferent`. `RepairIfSafe`
 allows nullability, default, and comment changes plus provider-proven ordinary
 `VARCHAR` widening or live-data-verified narrowing. MySQL/MariaDB also permit
-the exact compatible Boolean transition `BIT(1) -> TINYINT(1)`. PostgreSQL
+declared-domain-safe `VARCHAR` to text-family transitions, text-family
+widening, live-data-verified text-to-`VARCHAR(n)`, and the exact compatible
+Boolean transition `BIT(1) -> TINYINT(1)`. PostgreSQL
 qualifies `character varying` independently and has no equivalent Boolean
 transition. Narrowing uses character length, groups and deduplicates table
 probes, repeats its proof during execution, and blocks on one overlength value

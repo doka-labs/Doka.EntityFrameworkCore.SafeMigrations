@@ -2,7 +2,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 internal sealed partial class SafeMigrationPreflightProjection
 {
-    private readonly Dictionary<ModelManagedRowKey, ProjectedModelManagedRow> _modelManagedRows = [];
+    private readonly Dictionary<ModelManagedRowKey, ProjectedModelManagedRow> _modelManagedRows;
     private readonly List<AcceptedModelManagedDeleteRow> _acceptedModelManagedDeletes = [];
 
     private SafeMigrationProviderAnalysis Project(
@@ -148,14 +148,14 @@ internal sealed partial class SafeMigrationPreflightProjection
         return true;
     }
 
-    private static bool MatchesDependency(
+    private bool MatchesDependency(
         AcceptedModelManagedDeleteRow deletedRow,
         ExpectedModelManagedDataForeignKeyDefinition foreignKey,
         DeleteModelManagedDataIntent principalDelete
     )
     {
         if (!StringComparer.Ordinal.Equals(deletedRow.Intent.Table, foreignKey.Table)
-            || !StringComparer.Ordinal.Equals(deletedRow.Intent.Schema, foreignKey.Schema))
+            || !SameSchema(deletedRow.Intent.Schema, foreignKey.Schema))
         {
             return false;
         }
@@ -245,7 +245,7 @@ internal sealed partial class SafeMigrationPreflightProjection
                     if (!candidate.Exists
                         || candidateKey.Equals(currentKey)
                         || !StringComparer.Ordinal.Equals(candidateKey.Table, intent.Table)
-                        || !StringComparer.Ordinal.Equals(candidateKey.Schema, intent.Schema))
+                        || !SameSchema(candidateKey.Schema, intent.Schema))
                     {
                         continue;
                     }
@@ -522,6 +522,27 @@ internal sealed partial class SafeMigrationPreflightProjection
 
             return new ModelManagedRowKey(intent.Table, intent.Schema, writer.GetHash());
         }
+    }
+
+    private sealed class ModelManagedRowKeyComparer(
+        ISafeMigrationProviderObjectIdentityNormalizer? normalizer
+    ) : IEqualityComparer<ModelManagedRowKey>
+    {
+        private readonly TableKeyComparer _tableComparer = new(normalizer);
+
+        public bool Equals(
+            ModelManagedRowKey left,
+            ModelManagedRowKey right
+        ) => _tableComparer.Equals(
+                new TableKey(left.Table, left.Schema),
+                new TableKey(right.Table, right.Schema))
+            && StringComparer.Ordinal.Equals(left.KeyFingerprint, right.KeyFingerprint);
+
+        public int GetHashCode(
+            ModelManagedRowKey value
+        ) => HashCode.Combine(
+            _tableComparer.GetHashCode(new TableKey(value.Table, value.Schema)),
+            StringComparer.Ordinal.GetHashCode(value.KeyFingerprint));
     }
 
     private static int ColumnOrdinal(

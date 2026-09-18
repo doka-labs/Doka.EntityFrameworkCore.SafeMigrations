@@ -43,6 +43,29 @@ public sealed class GeneratedInitialMigrationPreflightTests
         Assert.Equal("projected_missing", dataAssessment.Code);
 
         await ExecuteOperationsAsync(context, operations);
+
+        var replayPreflight = await runner.AnalyzeAsync(
+            context,
+            operations,
+            new SafeMigrationRunOptions($"generated-initial-{migrationName}-replay"),
+            CancellationToken.None);
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, replayPreflight.Status);
+        Assert.All(
+            replayPreflight.Assessments,
+            static assessment =>
+            {
+                Assert.True(
+                    assessment is
+                    {
+                        ObservedState: SafeMigrationObservedState.Matching,
+                        Action: SafeMigrationAction.NoOp,
+                    },
+                    $"Replay operation {assessment.Ordinal} ({assessment.OperationKind} "
+                    + $"{assessment.ObjectName}) was {assessment.ObservedState}/{assessment.Action}; "
+                    + $"analysis={assessment.AnalysisCode}; decision={assessment.DecisionCode}.");
+            });
+
         await ExecuteOperationsAsync(context, operations);
 
         var postflight = await runner.VerifyAsync(

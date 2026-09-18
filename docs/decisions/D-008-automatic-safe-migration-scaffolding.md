@@ -98,12 +98,14 @@ selection time it preserves EF Core's legacy precedence and case-insensitive
 last-language match, then decorates the selected provider
 `IMigrationsCodeGenerator`. Migration metadata and snapshots pass through
 unchanged, preserving provider-owned model namespace discovery and rendering.
-SafeMigrations asks EF Core to render each supported migration operation and
-replaces only one validated leading method token. Any missing, repeated, or
-non-leading token stops scaffolding. Disabled SafeMigrations scaffolding
-delegates provider languages unchanged. Enabled scaffolding accepts C# only and
-rejects an unsupported language before applying the C# decorator. A genuinely
-missing generator always fails at selection.
+SafeMigrations asks EF Core to render table and index operations and replaces
+only one validated leading method token. Standalone constraints are rendered
+from their complete validated EF operation values because the safe APIs use
+ordered plural-column contracts for both single and composite definitions. Any
+missing, repeated, or non-leading delegated token stops scaffolding. Disabled
+SafeMigrations scaffolding delegates provider languages unchanged. Enabled
+scaffolding accepts C# only and rejects an unsupported language before applying
+the C# decorator. A genuinely missing generator always fails at selection.
 
 The runtime-registered model-differ decorator also prepends one internal
 design-time-services guard to every non-empty model difference. The
@@ -124,11 +126,15 @@ in provider-generated source; mixed line endings and standalone carriage
 returns fail closed.
 
 Automatic rewriting covers `CreateTable`, `CreateIndex`, `DropIndex`, and
-`DropTable`.
-Add/alter/drop column, constraint, rename, and schema operations remain ordinary
-EF operations unless the author chooses the corresponding explicit
-SafeMigrations API. This keeps policy selection explicit where ownership,
-repair, or destructive semantics cannot be inferred from the current model.
+`DropTable`, plus standalone primary-key, unique, check, and foreign-key adds
+and drops. Constraint adds freeze `ThrowIfDifferent`; drops make only absence
+idempotent. Their EF operations contain the complete semantic identity required
+by the existing SafeMigrations contracts. Unrepresentable operation annotations,
+implicit foreign-key principal columns, and opaque check SQL stop scaffolding.
+Add/alter/drop column, rename, and schema operations remain ordinary EF
+operations unless the author chooses the corresponding explicit SafeMigrations
+API. This keeps repair and ownership policy explicit where it cannot be inferred
+from the current model.
 
 The typed table callback captures EF's column and constraint operations into
 immutable definitions. Provider column annotations use a closed snapshot value
@@ -165,7 +171,7 @@ freezes both values into source.
 - Good, because a reviewed legacy baseline can repair common mutable column
   drift without giving type or generated-value drift implicit authority.
 - Bad, because migration authors must still select explicit safe APIs for later
-  non-table operations that require catalog-aware behavior.
+  column, rename, and schema operations that require catalog-aware behavior.
 - Bad, because a newly emitted provider operation annotation remains blocked
   until its catalog equivalence has an explicit adapter implementation.
 
@@ -271,6 +277,14 @@ snapshots already required for catalog comparison and hashing.
 - 2026-09-09: Added an operation-stream guard that prevents EF Core from
   emitting ordinary migration source when SafeMigrations runtime services are
   active but its design-time build assets are absent.
+- 2026-09-16: Added complete standalone constraint rewriting. Dependency-
+  ordered primary-key, unique, check, and foreign-key operations now retain the
+  same safe missing/matching/different behavior as embedded table constraints.
+- 2026-09-17: Required hand-authored column drops to remove known dependent
+  constraints and indexes explicitly before the drop. This keeps transition
+  and replay contracts independent of provider-specific implicit DDL effects.
+  Provider analysis and direct runtime SQL generation enforce the same order,
+  including migrations without an `EnsureTable` operation.
 
 ### Implementation References
 

@@ -31,6 +31,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
     public PostgreSqlSafeMigrationRuntimePlan Build(
         SafeMigrationOperation operation,
+        SafeMigrationExpectedTableConstraints? expectedTableConstraints = null,
         bool includeAnalysisEvidence = false,
         bool includeTransitionEvidence = false
     )
@@ -50,7 +51,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         {
             EnsureSchemaIntent value => BuildEnsureSchema(value),
             DropSchemaIntent value => BuildDropSchema(value),
-            EnsureTableIntent value => BuildEnsureTable(value),
+            EnsureTableIntent value => BuildEnsureTable(value, expectedTableConstraints),
             DropTableIntent value => BuildDropTable(value),
             RenameTableIntent value => BuildRenameTable(value),
             EnsureColumnIntent value => BuildEnsureColumn(

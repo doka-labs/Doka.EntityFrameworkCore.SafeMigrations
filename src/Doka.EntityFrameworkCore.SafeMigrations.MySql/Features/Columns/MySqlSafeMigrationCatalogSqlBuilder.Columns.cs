@@ -95,6 +95,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var transition = repairCapability == SafeMigrationRepairCapability.Safe
             ? BuildColumnRepairTransition(
                 intent.Table,
+                intent.Schema,
                 intent.Definition,
                 isMariaDb,
                 includeTransitionEvidence)
@@ -105,10 +106,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 + $"OR ({transition.InvariantExpression})"
             : "FALSE";
 
-        var dataBlocked = unsafeAdd ? $"EXISTS (SELECT 1 FROM {Delimited(intent.Table)} LIMIT 1)" : "FALSE";
+        var dataBlocked = unsafeAdd
+            ? $"EXISTS (SELECT 1 FROM {Delimited(intent.Table, intent.Schema)} LIMIT 1)"
+            : "FALSE";
         var hasNull = repairCapability == SafeMigrationRepairCapability.Safe
             && !intent.Definition.IsNullable
-                ? $"EXISTS (SELECT 1 FROM {Delimited(intent.Table)} WHERE "
+                ? $"EXISTS (SELECT 1 FROM {Delimited(intent.Table, intent.Schema)} WHERE "
                 + $"{Delimited(intent.Definition.Name)} IS NULL LIMIT 1)"
                 : "FALSE";
 
@@ -210,7 +213,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             repairCapability == SafeMigrationRepairCapability.Safe
             && intent.OldDefinition!.IsNullable
             && !intent.Definition.IsNullable
-                ? $"({repairPrecondition}) AND EXISTS (SELECT 1 FROM {Delimited(intent.Table)} WHERE "
+                ? $"({repairPrecondition}) AND EXISTS (SELECT 1 FROM {Delimited(intent.Table, intent.Schema)} WHERE "
                 + $"{Delimited(intent.Definition.Name)} IS NULL LIMIT 1)"
                 : "FALSE";
 
@@ -485,6 +488,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
     private MySqlColumnRepairTransition BuildColumnRepairTransition(
         string table,
+        string? schema,
         ExpectedColumnDefinition definition,
         bool isMariaDb,
         bool includeTransitionEvidence
@@ -498,7 +502,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 + "WHERE narrowing_column.TABLE_SCHEMA = DATABASE() "
                 + $"AND narrowing_column.TABLE_NAME = {Literal(table)} "
                 + $"AND narrowing_column.COLUMN_NAME = {Literal(definition.Name)} "
-                + $"AND narrowing_column.CHARACTER_MAXIMUM_LENGTH > {targetLength})";
+                + "AND (LOWER(narrowing_column.DATA_TYPE) <> 'varchar' "
+                + $"OR narrowing_column.CHARACTER_MAXIMUM_LENGTH > {targetLength}))";
 
             var strictMode = $"NOT ({narrowing}) "
                 + "OR FIND_IN_SET('STRICT_TRANS_TABLES', @@SESSION.sql_mode) > 0 "
@@ -512,7 +517,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                     table,
                     definition.Name,
                     targetLength,
-                    Delimited(table),
+                    Delimited(table, schema),
                     Delimited(definition.Name),
                     includeTransitionEvidence
                         ? BuildVarcharTransitionColumnExists(
@@ -522,6 +527,21 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                             isMariaDb)
                         : null,
                     narrowing),
+                SafeMigrationOperationalImpact.TableRewritePossible);
+        }
+
+        if (TryGetTextCapacity(storeType, out var targetCapacity)
+            && definition.ClrType == typeof(string))
+        {
+            return new MySqlColumnRepairTransition(
+                BuildTextTransitionColumnExists(
+                    table,
+                    definition,
+                    targetCapacity,
+                    isMariaDb),
+                "FALSE",
+                "TRUE",
+                DataProbe: null,
                 SafeMigrationOperationalImpact.TableRewritePossible);
         }
 
@@ -635,12 +655,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         bool isMariaDb
     )
     {
-        // WHY: The fixed predicate body is approximately 5.3K characters and
-        // references seven table plus six column literals. Deriving the initial
-        // capacity avoids retaining a mostly empty 6K buffer per operation;
-        // StringBuilder can still grow for escaped or unusually long names.
+        // WHY: The fixed predicate body is approximately 4.9K characters and
+        // references seven table plus six column literals. The bounded
+        // headroom keeps ordinary identifiers on one backing buffer;
+        // StringBuilder can still grow for heavily escaped or long names.
         var initialCapacity = checked(
-            5400
+            5800
             + (Literal(table).Length * 7)
             + (Literal(definition.Name).Length * 6));
         var builder = new StringBuilder(initialCapacity);
@@ -651,12 +671,13 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             .Append(Literal(table))
             .Append(" AND c.COLUMN_NAME = ")
             .Append(Literal(definition.Name))
-            .Append(" AND (LOWER(c.DATA_TYPE) = 'varchar' ")
-            .Append("AND c.CHARACTER_MAXIMUM_LENGTH <> ")
+            .Append(" AND (LOWER(c.DATA_TYPE) IN ")
+            .Append("('varchar', 'tinytext', 'text', 'mediumtext', 'longtext') ")
+            .Append("AND NOT (LOWER(c.DATA_TYPE) = 'varchar' AND c.CHARACTER_MAXIMUM_LENGTH = ")
             .Append(targetLength.ToString(CultureInfo.InvariantCulture))
-            .Append(" AND ");
+            .Append(") AND ");
 
-        AppendSupportedVarcharRepairTable(builder, table);
+        AppendSupportedStringRepairTable(builder, table);
         builder
             .Append(" AND ")
             .Append(BuildCollationContract(table, definition.Collation, mariaDbJsonAlias: false).MatchExpression)
@@ -678,7 +699,56 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         return builder.ToString();
     }
 
-    private void AppendSupportedVarcharRepairTable(
+    private string BuildTextTransitionColumnExists(
+        string table,
+        ExpectedColumnDefinition definition,
+        ulong targetCapacity,
+        bool isMariaDb
+    )
+    {
+        var initialCapacity = checked(
+            3900
+            + (Literal(table).Length * 6)
+            + (Literal(definition.Name).Length * 5));
+        var builder = new StringBuilder(initialCapacity);
+
+        builder
+            .Append("EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS c ")
+            .Append("WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = ")
+            .Append(Literal(table))
+            .Append(" AND c.COLUMN_NAME = ")
+            .Append(Literal(definition.Name))
+            .Append(" AND (LOWER(c.DATA_TYPE) IN ")
+            .Append("('varchar', 'tinytext', 'text', 'mediumtext', 'longtext') ")
+            .Append("AND LOWER(c.DATA_TYPE) <> ")
+            .Append(Literal(ResolveStoreType(definition).Trim().ToLowerInvariant()))
+            .Append(" AND COALESCE(c.CHARACTER_OCTET_LENGTH, 4294967296) <= ")
+            .Append(targetCapacity.ToString(CultureInfo.InvariantCulture))
+            .Append(" AND ");
+
+        AppendSupportedStringRepairTable(builder, table);
+        builder
+            .Append(" AND ")
+            .Append(BuildCollationContract(table, definition.Collation, mariaDbJsonAlias: false).MatchExpression)
+            .Append(" AND ")
+            .Append(BuildComputedMatches(definition, isMariaDb))
+            .Append(" AND ")
+            .Append(BuildValueGenerationMatches(definition, temporalRowVersion: false))
+            .Append(" AND ")
+            .Append(OrdinaryColumnExtraMatches())
+            .Append(" AND ");
+
+        AppendTargetDeclaredRowSizeFits(builder, table, definition.Name, targetLength: null);
+        builder.Append(" AND ");
+        AppendDependentIndexesRemainRepresentable(builder, table, definition.Name, targetLength: null);
+        builder.Append(" AND ");
+        AppendNoForeignKeyDependency(builder, table, definition.Name);
+        builder.Append("))");
+
+        return builder.ToString();
+    }
+
+    private void AppendSupportedStringRepairTable(
         StringBuilder builder,
         string table
     ) => builder
@@ -692,22 +762,34 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         StringBuilder builder,
         string table,
         string column,
-        int targetLength
+        int? targetLength
     )
     {
         // WHY: MySQL rejects a declared row above 65,535 bytes before
         // InnoDB can move long values off-page. Unknown families consume the
         // complete budget so incomplete catalog knowledge fails closed.
-        var targetLengthSql = targetLength.ToString(CultureInfo.InvariantCulture);
-
         builder
             .Append("COALESCE((SELECT SUM(CASE WHEN row_column.COLUMN_NAME = ")
             .Append(Literal(column))
-            .Append(" THEN (")
-            .Append(targetLengthSql)
-            .Append(" * COALESCE(character_set.MAXLEN, 1)) + CASE WHEN ")
-            .Append(targetLengthSql)
-            .Append(" * COALESCE(character_set.MAXLEN, 1) <= 255 THEN 1 ELSE 2 END ")
+            .Append(" THEN ");
+
+        if (targetLength is int varcharLength)
+        {
+            var targetLengthSql = varcharLength.ToString(CultureInfo.InvariantCulture);
+
+            builder
+                .Append('(')
+                .Append(targetLengthSql)
+                .Append(" * COALESCE(character_set.MAXLEN, 1)) + CASE WHEN ")
+                .Append(targetLengthSql)
+                .Append(" * COALESCE(character_set.MAXLEN, 1) <= 255 THEN 1 ELSE 2 END ");
+        }
+        else
+        {
+            builder.Append("12 ");
+        }
+
+        builder
             .Append("WHEN LOWER(row_column.DATA_TYPE) IN ('varchar', 'varbinary') ")
             .Append("THEN row_column.CHARACTER_OCTET_LENGTH ")
             .Append("+ CASE WHEN row_column.CHARACTER_OCTET_LENGTH <= 255 THEN 1 ELSE 2 END ")
@@ -743,55 +825,71 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         StringBuilder builder,
         string table,
         string column,
-        int targetLength
+        int? targetLength
     )
     {
         builder
-            .Append("NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS target_index ")
-            .Append("WHERE target_index.TABLE_SCHEMA = DATABASE() AND target_index.TABLE_NAME = ")
+            .Append("NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS ti ")
+            .Append("WHERE ti.TABLE_SCHEMA = DATABASE() AND ti.TABLE_NAME = ")
             .Append(Literal(table))
-            .Append(" AND target_index.COLUMN_NAME = ")
+            .Append(" AND ti.COLUMN_NAME = ")
+            .Append(Literal(column));
+
+        if (targetLength is null)
+        {
+            // MySQL and MariaDB require a prefix for non-FULLTEXT indexes over
+            // a TEXT column. Existing prefix and FULLTEXT indexes retain their
+            // physical key shape across this transition.
+            builder
+                .Append(" AND ti.SUB_PART IS NULL ")
+                .Append("AND UPPER(COALESCE(ti.INDEX_TYPE, '')) <> 'FULLTEXT')");
+
+            return;
+        }
+
+        builder
+            .Append(" AND ti.SUB_PART IS NULL ")
+            .Append("AND UPPER(COALESCE(ti.INDEX_TYPE, '')) <> 'FULLTEXT' ")
+            .Append("AND (SELECT COALESCE(SUM(CASE ")
+            .Append("WHEN ip.COLUMN_NAME IS NULL THEN 3073 ")
+            .Append("WHEN ip.COLUMN_NAME = ")
             .Append(Literal(column))
-            .Append(" AND target_index.SUB_PART IS NULL AND (SELECT COALESCE(SUM(CASE ")
-            .Append("WHEN index_part.COLUMN_NAME IS NULL THEN 3073 ")
-            .Append("WHEN index_part.COLUMN_NAME = ")
-            .Append(Literal(column))
-            .Append(" AND index_part.SUB_PART IS NULL THEN ")
-            .Append(targetLength.ToString(CultureInfo.InvariantCulture))
-            .Append(" * COALESCE(character_set.MAXLEN, 1) ")
-            .Append("WHEN index_part.SUB_PART IS NOT NULL ")
-            .Append("THEN index_part.SUB_PART * CASE WHEN indexed_column.COLLATION_NAME IS NULL ")
-            .Append("THEN 1 ELSE COALESCE(character_set.MAXLEN, 1) END ")
-            .Append("WHEN indexed_column.CHARACTER_OCTET_LENGTH IS NOT NULL ")
-            .Append("THEN indexed_column.CHARACTER_OCTET_LENGTH ")
-            .Append("WHEN LOWER(indexed_column.DATA_TYPE) = 'tinyint' THEN 1 ")
-            .Append("WHEN LOWER(indexed_column.DATA_TYPE) = 'smallint' THEN 2 ")
-            .Append("WHEN LOWER(indexed_column.DATA_TYPE) = 'mediumint' THEN 3 ")
-            .Append("WHEN LOWER(indexed_column.DATA_TYPE) IN ('int', 'integer', 'float') THEN 4 ")
-            .Append("WHEN LOWER(indexed_column.DATA_TYPE) ")
+            .Append(" AND ip.SUB_PART IS NULL THEN ")
+            .Append(targetLength.Value.ToString(CultureInfo.InvariantCulture))
+            .Append(" * COALESCE(cs.MAXLEN, 1) ")
+            .Append("WHEN ip.SUB_PART IS NOT NULL ")
+            .Append("THEN ip.SUB_PART * CASE WHEN ic.COLLATION_NAME IS NULL ")
+            .Append("THEN 1 ELSE COALESCE(cs.MAXLEN, 1) END ")
+            .Append("WHEN ic.CHARACTER_OCTET_LENGTH IS NOT NULL ")
+            .Append("THEN ic.CHARACTER_OCTET_LENGTH ")
+            .Append("WHEN LOWER(ic.DATA_TYPE) = 'tinyint' THEN 1 ")
+            .Append("WHEN LOWER(ic.DATA_TYPE) = 'smallint' THEN 2 ")
+            .Append("WHEN LOWER(ic.DATA_TYPE) = 'mediumint' THEN 3 ")
+            .Append("WHEN LOWER(ic.DATA_TYPE) IN ('int', 'integer', 'float') THEN 4 ")
+            .Append("WHEN LOWER(ic.DATA_TYPE) ")
             .Append("IN ('bigint', 'double', 'datetime', 'timestamp') THEN 8 ")
-            .Append("WHEN LOWER(indexed_column.DATA_TYPE) = 'date' THEN 3 ")
-            .Append("WHEN LOWER(indexed_column.DATA_TYPE) = 'time' THEN 6 ")
-            .Append("WHEN LOWER(indexed_column.DATA_TYPE) = 'year' THEN 1 ")
-            .Append("WHEN LOWER(indexed_column.DATA_TYPE) = 'decimal' ")
-            .Append("THEN CEIL(COALESCE(indexed_column.NUMERIC_PRECISION, 65) / 2) ")
-            .Append("ELSE 3073 END), 0) FROM INFORMATION_SCHEMA.STATISTICS index_part ")
-            .Append("LEFT JOIN INFORMATION_SCHEMA.COLUMNS indexed_column ")
-            .Append("ON indexed_column.TABLE_SCHEMA = index_part.TABLE_SCHEMA ")
-            .Append("AND indexed_column.TABLE_NAME = index_part.TABLE_NAME ")
-            .Append("AND indexed_column.COLUMN_NAME = index_part.COLUMN_NAME ")
-            .Append("LEFT JOIN INFORMATION_SCHEMA.COLLATIONS collation ")
-            .Append("ON collation.COLLATION_NAME = indexed_column.COLLATION_NAME ")
-            .Append("LEFT JOIN INFORMATION_SCHEMA.CHARACTER_SETS character_set ")
-            .Append("ON character_set.CHARACTER_SET_NAME = collation.CHARACTER_SET_NAME ")
-            .Append("WHERE index_part.TABLE_SCHEMA = target_index.TABLE_SCHEMA ")
-            .Append("AND index_part.TABLE_NAME = target_index.TABLE_NAME ")
-            .Append("AND index_part.INDEX_NAME = target_index.INDEX_NAME) > ")
-            .Append("COALESCE((SELECT CASE WHEN UPPER(dependent_table.ENGINE) = 'INNODB' THEN ")
-            .Append(BuildMaximumIndexKeyWidth("dependent_table"))
-            .Append(" ELSE 0 END FROM INFORMATION_SCHEMA.TABLES dependent_table ")
-            .Append("WHERE dependent_table.TABLE_SCHEMA = target_index.TABLE_SCHEMA ")
-            .Append("AND dependent_table.TABLE_NAME = target_index.TABLE_NAME LIMIT 1), 0))");
+            .Append("WHEN LOWER(ic.DATA_TYPE) = 'date' THEN 3 ")
+            .Append("WHEN LOWER(ic.DATA_TYPE) = 'time' THEN 6 ")
+            .Append("WHEN LOWER(ic.DATA_TYPE) = 'year' THEN 1 ")
+            .Append("WHEN LOWER(ic.DATA_TYPE) = 'decimal' ")
+            .Append("THEN CEIL(COALESCE(ic.NUMERIC_PRECISION, 65) / 2) ")
+            .Append("ELSE 3073 END), 0) FROM INFORMATION_SCHEMA.STATISTICS ip ")
+            .Append("LEFT JOIN INFORMATION_SCHEMA.COLUMNS ic ")
+            .Append("ON ic.TABLE_SCHEMA = ip.TABLE_SCHEMA ")
+            .Append("AND ic.TABLE_NAME = ip.TABLE_NAME ")
+            .Append("AND ic.COLUMN_NAME = ip.COLUMN_NAME ")
+            .Append("LEFT JOIN INFORMATION_SCHEMA.COLLATIONS co ")
+            .Append("ON co.COLLATION_NAME = ic.COLLATION_NAME ")
+            .Append("LEFT JOIN INFORMATION_SCHEMA.CHARACTER_SETS cs ")
+            .Append("ON cs.CHARACTER_SET_NAME = co.CHARACTER_SET_NAME ")
+            .Append("WHERE ip.TABLE_SCHEMA = ti.TABLE_SCHEMA ")
+            .Append("AND ip.TABLE_NAME = ti.TABLE_NAME ")
+            .Append("AND ip.INDEX_NAME = ti.INDEX_NAME) > ")
+            .Append("COALESCE((SELECT CASE WHEN UPPER(dt.ENGINE) = 'INNODB' THEN ")
+            .Append(BuildMaximumIndexKeyWidth("dt"))
+            .Append(" ELSE 0 END FROM INFORMATION_SCHEMA.TABLES dt ")
+            .Append("WHERE dt.TABLE_SCHEMA = ti.TABLE_SCHEMA ")
+            .Append("AND dt.TABLE_NAME = ti.TABLE_NAME LIMIT 1), 0))");
     }
 
     private string ResolveStoreType(
@@ -828,6 +926,23 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         }
 
         return length > 0;
+    }
+
+    private static bool TryGetTextCapacity(
+        string storeType,
+        out ulong capacity
+    )
+    {
+        capacity = storeType.Trim().ToLowerInvariant() switch
+        {
+            "tinytext" => byte.MaxValue,
+            "text" => ushort.MaxValue,
+            "mediumtext" => 16777215UL,
+            "longtext" => uint.MaxValue,
+            _ => 0,
+        };
+
+        return capacity > 0;
     }
 
     private static bool IsBooleanTinyInt(

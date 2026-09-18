@@ -233,8 +233,8 @@ code, not a claim that the feature is absent from every version of that engine.
 | `unique_constraint_storage_engine_unsupported` | MySQL/MariaDB | The target table does not use InnoDB, so the unique-key feasibility contract cannot be applied. |
 | `unique_constraint_length_unverifiable` | MySQL/MariaDB | The projected full unique-key width cannot be proved from the available table and column shape. |
 | `unique_constraint_replacement_data_blocked` | MySQL/MariaDB | A same-name index or constraint replacement would encounter duplicate target keys after its accepted drop. |
-| `schema_operations` | MySQL/MariaDB | PostgreSQL-style schema ensure/drop is not a supported namespace operation. |
-| `schema_qualified_object` | MySQL/MariaDB | An object expectation supplies a PostgreSQL-style schema namespace. |
+| `schema_operations` | MySQL/MariaDB | A selected-database drop or PostgreSQL-style independent schema operation is not supported. |
+| `database_qualifier_mismatch` | MySQL/MariaDB | An explicit object/database qualifier, including a foreign database drop, does not exactly equal the database selected by the active connection. |
 | `schema_qualified_collation` | MySQL/MariaDB | A column collation supplies a schema-qualified identity. |
 | `literal_default_catalog_representation` | MySQL/MariaDB | The literal default cannot be represented and compared reliably through that catalog/profile. |
 | `generated_column` | MySQL/MariaDB | The active profile lacks the requested stored/virtual generated-column capability. |

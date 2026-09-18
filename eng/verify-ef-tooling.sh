@@ -157,8 +157,6 @@ dotnet build "${project}" \
   --configuration Release --no-restore --disable-build-servers -m:1 /nodeReuse:false
 dotnet tool restore --tool-manifest "${repository_root}/.config/dotnet-tools.json" \
   --disable-parallel
-export SAFE_MIGRATIONS_CONNECTION_STRING="${cli_connection}"
-
 project_directory="$(dirname "${project}")"
 ownership_core_project="eng/ef-ownership/Core/Doka.EntityFrameworkCore.SafeMigrations.EfOwnership.Core.csproj"
 ownership_custom_project="eng/ef-ownership/Custom/Doka.EntityFrameworkCore.SafeMigrations.EfOwnership.Custom.csproj"
@@ -170,12 +168,15 @@ legacy_output="ScaffoldingProbes/${engine}/Legacy"
 strict_transition_output="ScaffoldingProbes/${engine}/StrictDataTransition"
 legacy_transition_output="ScaffoldingProbes/${engine}/LegacyDataTransition"
 
+export SAFE_MIGRATIONS_CONNECTION_STRING="${generated_strict_connection}"
 dotnet ef migrations add StrictScaffoldingProbe \
   --project "${project}" \
   --context StrictSafeMigrationScaffoldingDbContext \
   --output-dir "${strict_output}" \
   --configuration Release \
   --no-build
+
+export SAFE_MIGRATIONS_CONNECTION_STRING="${generated_legacy_connection}"
 dotnet ef migrations add LegacyScaffoldingProbe \
   --project "${project}" \
   --context LegacySafeMigrationScaffoldingDbContext \
@@ -183,6 +184,7 @@ dotnet ef migrations add LegacyScaffoldingProbe \
   --configuration Release \
   --no-build
 
+export SAFE_MIGRATIONS_CONNECTION_STRING="${cli_connection}"
 export SAFE_MIGRATIONS_MODEL_MANAGED_DATA_STATE="source"
 dotnet ef migrations add StrictDataTransitionBaseline \
   --project "${project}" \
@@ -465,6 +467,16 @@ for migration in "${strict_migration}" "${legacy_migration}"; do
     exit 1
   fi
 
+  if ! grep -Fq 'migrationBuilder.AddForeignKeyIfNotExists(' "${migration}"; then
+    echo "Scaffolding output is missing its safe standalone foreign key." >&2
+    exit 1
+  fi
+
+  if grep -Fq 'migrationBuilder.AddForeignKey(' "${migration}"; then
+    echo "Scaffolding output contains an unsafe standalone foreign key." >&2
+    exit 1
+  fi
+
   for unsafe_data_call in \
     'migrationBuilder.InsertData(' \
     'migrationBuilder.UpdateData(' \
@@ -526,6 +538,16 @@ for migration in "${strict_migration}" "${legacy_migration}"; do
   fi
 
   if [[ "${engine}" != "postgres" ]]; then
+    if ! grep -Fq 'migrationBuilder.EnsureSchemaExists(' "${migration}"; then
+      echo "MySQL scaffolding output is missing safe current-database qualification." >&2
+      exit 1
+    fi
+
+    if grep -Fq 'migrationBuilder.EnsureSchema(' "${migration}"; then
+      echo "MySQL scaffolding output contains an unsafe provider schema operation." >&2
+      exit 1
+    fi
+
     if ! grep -Fq 'prefixLengths: [0, 64]' "${migration}"; then
       echo "MySQL scaffolding output is missing the projected index prefix lengths." >&2
       exit 1

@@ -13,7 +13,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     private MySqlSafeMigrationRuntimePlan BuildEnsureTable(
         EnsureTableIntent intent,
         bool isMariaDb,
-        IReadOnlyList<ExpectedIndexDefinition>? expectedUniqueIndexes
+        IReadOnlyList<ExpectedIndexDefinition>? expectedUniqueIndexes,
+        SafeMigrationExpectedTableConstraints? expectedTableConstraints
     )
     {
         var definition = intent.Definition;
@@ -21,13 +22,28 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var baseTable = BaseTableExists(definition.Table);
         var matching = intent.Mode == SafeMigrationTableMode.ConvergenceContainer
             ? baseTable
-            : BuildTableMatches(definition, isMariaDb, expectedUniqueIndexes);
+            : BuildTableMatches(
+                definition,
+                isMariaDb,
+                expectedUniqueIndexes,
+                expectedTableConstraints);
+
+        var executionPostcondition = intent.Mode == SafeMigrationTableMode.ConvergenceContainer
+            ? baseTable
+            : BuildTableMatches(
+                definition,
+                isMariaDb,
+                expectedUniqueIndexes,
+                expectedTableConstraints: null);
 
         return Plan(
             $"CASE WHEN NOT {exists} THEN 'missing' "
             + $"WHEN NOT {baseTable} THEN 'unsupported' "
             + $"WHEN {matching} THEN 'matching' ELSE 'different' END",
-            matching);
+            matching) with
+        {
+            ExecutionPostcondition = executionPostcondition,
+        };
     }
 
     private MySqlSafeMigrationRuntimePlan BuildDropTable(
@@ -56,18 +72,45 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     private string BuildTableMatches(
         ExpectedTableDefinition definition,
         bool isMariaDb,
-        IReadOnlyList<ExpectedIndexDefinition>? expectedUniqueIndexes
+        IReadOnlyList<ExpectedIndexDefinition>? expectedUniqueIndexes,
+        SafeMigrationExpectedTableConstraints? expectedTableConstraints
     )
     {
+        var allowedUniqueConstraints = expectedTableConstraints?.AllowedUniqueConstraints
+            ?? definition.UniqueConstraints;
+
+        var requiredUniqueConstraints = expectedTableConstraints?.RequiredUniqueConstraints
+            ?? definition.UniqueConstraints;
+
+        var allowedCheckConstraints = expectedTableConstraints?.AllowedCheckConstraints
+            ?? definition.CheckConstraints;
+
+        var requiredCheckConstraints = expectedTableConstraints?.RequiredCheckConstraints
+            ?? definition.CheckConstraints;
+
+        var allowedForeignKeys = expectedTableConstraints?.AllowedForeignKeys
+            ?? definition.ForeignKeys;
+
+        var requiredForeignKeys = expectedTableConstraints?.RequiredForeignKeys
+            ?? definition.ForeignKeys;
+
         var conditions = new List<string>
         {
             BaseTableExists(definition.Table),
             $"(SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS c "
             + $"WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = {Literal(definition.Table)}) "
             + $"= {definition.Columns.Count.ToString(CultureInfo.InvariantCulture)}",
-            BuildAllUniqueKeysModeled(definition, isMariaDb, expectedUniqueIndexes),
-            BuildAllCheckConstraintsModeled(definition, isMariaDb),
-            BuildAllForeignKeysModeled(definition),
+            BuildAllUniqueKeysModeled(
+                definition.Table,
+                allowedUniqueConstraints,
+                isMariaDb,
+                expectedUniqueIndexes),
+            BuildAllCheckConstraintsModeled(
+                definition.Table,
+                definition.Columns,
+                allowedCheckConstraints,
+                isMariaDb),
+            BuildAllForeignKeysModeled(definition.Table, allowedForeignKeys),
             $"COALESCE((SELECT t.TABLE_COMMENT FROM INFORMATION_SCHEMA.TABLES t "
             + $"WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_NAME = {Literal(definition.Table)}), '') "
             + $"= {Literal(definition.Comment ?? string.Empty)}",
@@ -78,27 +121,59 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             conditions.Add(BuildColumnMatches(definition.Table, definition.Columns[ordinal], isMariaDb, ordinal + 1));
         }
 
-        conditions.Add(
-            definition.PrimaryKey is null
-                ? $"NOT {PrimaryKeyExists(definition.Table)}"
-                : ConstraintColumnsMatch(definition.Table, "PRIMARY", definition.PrimaryKey.Columns, "PRIMARY KEY"));
+        conditions.Add(BuildPrimaryKeyTransitionMatches(definition, expectedTableConstraints));
 
-        conditions.AddRange(definition.UniqueConstraints.Select(UniqueConstraintSatisfied));
+        conditions.AddRange(requiredUniqueConstraints.Select(UniqueConstraintSatisfied));
         conditions.AddRange(
-            definition.CheckConstraints.Select(checkConstraint =>
+            requiredCheckConstraints.Select(checkConstraint =>
                 CheckConstraintSatisfied(checkConstraint, isMariaDb)));
-        conditions.AddRange(definition.ForeignKeys.Select(ForeignKeySatisfied));
+        conditions.AddRange(requiredForeignKeys.Select(ForeignKeySatisfied));
 
         return $"({string.Join(" AND ", conditions)})";
     }
 
-    private string BuildAllUniqueKeysModeled(
+    private string BuildPrimaryKeyTransitionMatches(
         ExpectedTableDefinition definition,
+        SafeMigrationExpectedTableConstraints? expectedTableConstraints
+    )
+    {
+        if (expectedTableConstraints is null)
+        {
+            return definition.PrimaryKey is null
+                ? $"NOT {PrimaryKeyExists(definition.Table)}"
+                : ConstraintColumnsMatch(
+                    definition.Table,
+                    "PRIMARY",
+                    definition.PrimaryKey.Columns,
+                    "PRIMARY KEY");
+        }
+
+        var allowed = expectedTableConstraints.AllowedPrimaryKeys
+            .Select(primaryKey => ConstraintColumnsMatch(
+                definition.Table,
+                "PRIMARY",
+                primaryKey.Columns,
+                "PRIMARY KEY"))
+            .ToArray();
+
+        if (!expectedTableConstraints.PrimaryKeyMayBeAbsent)
+        {
+            return allowed.Single();
+        }
+
+        return allowed.Length == 0
+            ? $"NOT {PrimaryKeyExists(definition.Table)}"
+            : $"(NOT {PrimaryKeyExists(definition.Table)} OR {string.Join(" OR ", allowed)})";
+    }
+
+    private string BuildAllUniqueKeysModeled(
+        string table,
+        IReadOnlyList<ExpectedUniqueConstraintDefinition> uniqueConstraints,
         bool isMariaDb,
         IReadOnlyList<ExpectedIndexDefinition>? expectedUniqueIndexes
     )
     {
-        var expectedConstraintShapes = definition.UniqueConstraints.Select(constraint =>
+        var expectedConstraintShapes = uniqueConstraints.Select(constraint =>
             BuildUniqueConstraintIndexCandidateMatches(constraint, "candidate_unique"));
 
         var expectedIndexShapes =
@@ -119,7 +194,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         // while any number of semantically equivalent aliases is legitimate.
         return "NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS candidate_unique "
             + $"WHERE candidate_unique.TABLE_SCHEMA = DATABASE() "
-            + $"AND candidate_unique.TABLE_NAME = {Literal(definition.Table)} "
+            + $"AND candidate_unique.TABLE_NAME = {Literal(table)} "
             + "AND candidate_unique.NON_UNIQUE = 0 "
             + "AND candidate_unique.INDEX_NAME <> 'PRIMARY' "
             + "AND candidate_unique.SEQ_IN_INDEX = 1 "
@@ -156,18 +231,20 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     }
 
     private string BuildAllCheckConstraintsModeled(
-        ExpectedTableDefinition definition,
+        string table,
+        IReadOnlyList<ExpectedColumnDefinition> columns,
+        IReadOnlyList<ExpectedCheckConstraintDefinition> checkConstraints,
         bool isMariaDb
     )
     {
         var implicitJsonChecks = isMariaDb
-            ? definition.Columns
+            ? columns
                 .Where(static column => StringComparer.OrdinalIgnoreCase.Equals(column.StoreType?.Trim(), "json"))
                 .Select(MariaDbImplicitJsonCheckMatches)
                 .ToArray()
             : [];
 
-        var expectedMatches = definition.CheckConstraints
+        var expectedMatches = checkConstraints
             .Select(checkConstraint => CheckConstraintMatches(
                 checkConstraint,
                 isMariaDb,
@@ -190,17 +267,18 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                     + "AND cc.TABLE_NAME = candidate_tc.TABLE_NAME "
                     + "AND cc.CONSTRAINT_NAME = candidate_tc.CONSTRAINT_NAME ")
             + $"WHERE candidate_tc.CONSTRAINT_SCHEMA = DATABASE() "
-            + $"AND candidate_tc.TABLE_NAME = {Literal(definition.Table)} "
+            + $"AND candidate_tc.TABLE_NAME = {Literal(table)} "
             + "AND candidate_tc.CONSTRAINT_TYPE = 'CHECK' "
             + providerGeneratedFilter
             + $"AND NOT ({modeled}))";
     }
 
     private string BuildAllForeignKeysModeled(
-        ExpectedTableDefinition definition
+        string table,
+        IReadOnlyList<ExpectedForeignKeyDefinition> foreignKeys
     )
     {
-        var expectedMatches = definition.ForeignKeys
+        var expectedMatches = foreignKeys
             .Select(foreignKey => ForeignKeyMatches(
                 foreignKey,
                 "rc.CONSTRAINT_NAME = candidate_rc.CONSTRAINT_NAME"))
@@ -212,7 +290,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
         return "NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS candidate_rc "
             + $"WHERE candidate_rc.CONSTRAINT_SCHEMA = DATABASE() "
-            + $"AND candidate_rc.TABLE_NAME = {Literal(definition.Table)} "
+            + $"AND candidate_rc.TABLE_NAME = {Literal(table)} "
             + $"AND NOT ({modeled}))";
     }
 
