@@ -212,6 +212,158 @@ public sealed class MySqlSafeMigrationPlanCaptureTests
         Assert.False(capture.HasGenerationContract);
     }
 
+    [Fact]
+    public void CurrentDatabaseQualificationSharesOneExpectedIndexIdentity()
+    {
+        var capture = new MySqlSafeMigrationPlanCapture();
+        var table = new SafeMigrationOperation(
+            new EnsureTableIntent(
+                new ExpectedTableDefinition(
+                    "users",
+                    [new ExpectedColumnDefinition("email", typeof(string), isNullable: true)],
+                    schema: "application"),
+                SafeMigrationTableMode.StrictDefinition),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var unique = new SafeMigrationOperation(
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "ux_users_email",
+                    "users",
+                    [new ExpectedIndexKeyDefinition(column: "email")],
+                    unique: true)),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var catalog = MySqlSafeMigrationPlanCapture.CreateExpectedUniqueIndexes(
+            [table, unique],
+            currentDatabase: "application");
+
+        using var lease = capture.Begin([table], catalog);
+
+        Assert.Equal(
+            ["ux_users_email"],
+            capture
+                .GetExpectedUniqueIndexes("users")
+                .Select(static index => index.Name));
+        Assert.Equal(
+            ["ux_users_email"],
+            capture
+                .GetExpectedUniqueIndexes("users", "application")
+                .Select(static index => index.Name));
+        Assert.Empty(capture.GetExpectedUniqueIndexes("users", "foreign"));
+
+        capture.Record(0, table, Plan("table"));
+        Assert.Single(lease.Complete());
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void GenerationScope_NormalizesQualifiedAndUnqualifiedTransitionCatalogs(
+        bool tableIsQualified
+    )
+    {
+        // Arrange
+        const string database = "application";
+        var capture = new MySqlSafeMigrationPlanCapture();
+        var builder = new MigrationBuilder("Provider");
+        builder.EnsureTable(
+            new ExpectedTableDefinition(
+                "users",
+                [new ExpectedColumnDefinition("id", typeof(int), isNullable: false, storeType: "int")],
+                schema: tableIsQualified ? database : null),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
+        builder.AddForeignKeyIfNotExists(
+            "fk_users_parent",
+            "users",
+            ["id"],
+            "users",
+            ["id"],
+            schema: tableIsQualified ? null : database);
+        builder.CreateIndexIfNotExists(
+            "ux_users_id",
+            "users",
+            ["id"],
+            schema: tableIsQualified ? null : database,
+            unique: true);
+        var tableIntent = Assert.IsType<EnsureTableIntent>(
+            Assert.IsType<SafeMigrationOperation>(builder.Operations[0]).Intent);
+
+        // Act
+        using var generation = capture.BeginGeneration(builder.Operations);
+
+        // Assert
+        Assert.Equal([database], capture.GenerationDatabaseQualifiers);
+        Assert.Equal(
+            "fk_users_parent",
+            Assert.Single(capture.GetGenerationTableConstraints(tableIntent)!.AllowedForeignKeys).Name);
+        Assert.Equal(
+            "ux_users_id",
+            Assert.Single(capture.GetGenerationUniqueIndexes("users", tableIntent.Definition.Schema)).Name);
+    }
+
+    [Fact]
+    public void GenerationScope_DoesNotMergeDistinctExplicitDatabaseQualifiers()
+    {
+        // Arrange
+        var capture = new MySqlSafeMigrationPlanCapture();
+        var builder = new MigrationBuilder("Provider");
+        builder.EnsureTable(
+            new ExpectedTableDefinition(
+                "users",
+                [new ExpectedColumnDefinition("id", typeof(int), isNullable: false, storeType: "int")],
+                schema: "application"),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
+        builder.CreateIndexIfNotExists(
+            "ux_users_id",
+            "users",
+            ["id"],
+            schema: "foreign",
+            unique: true);
+
+        // Act
+        using var generation = capture.BeginGeneration(builder.Operations);
+
+        // Assert
+        Assert.Equal(
+            ["application", "foreign"],
+            capture.GenerationDatabaseQualifiers);
+        Assert.Empty(capture.GetGenerationUniqueIndexes("users", "application"));
+        Assert.Empty(capture.GetGenerationUniqueIndexes("users", "foreign"));
+    }
+
+    [Fact]
+    public void DirectCaptureDoesNotInferCurrentDatabaseFromAnExplicitQualifier()
+    {
+        // Arrange
+        var capture = new MySqlSafeMigrationPlanCapture();
+        var table = new SafeMigrationOperation(
+            new EnsureTableIntent(
+                new ExpectedTableDefinition(
+                    "users",
+                    [new ExpectedColumnDefinition("email", typeof(string), isNullable: true)],
+                    schema: "foreign"),
+                SafeMigrationTableMode.StrictDefinition),
+            SafeMigrationPolicy.ThrowIfDifferent);
+        var unique = new SafeMigrationOperation(
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "ux_users_email",
+                    "users",
+                    [new ExpectedIndexKeyDefinition(column: "email")],
+                    unique: true)),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        // Act
+        using var captureLease = capture.Begin([table, unique]);
+
+        // Assert
+        Assert.Empty(capture.GetExpectedUniqueIndexes("users", "foreign"));
+        Assert.Empty(capture.GetExpectedUniqueIndexes("users"));
+    }
+
     private static SafeMigrationOperation Operation(
         string name
     ) => new(new EnsureSchemaIntent(name), SafeMigrationPolicy.ThrowIfDifferent);

@@ -658,13 +658,29 @@ is classified with `opaque_expression_rename_projection`. This is deliberate:
 neither provider guesses semantic equivalence from SQL text.
 
 MySQL and MariaDB do not provide PostgreSQL-style schema namespaces, so schema
-operations are classified as unsupported there. Provider-specific features
-such as PostgreSQL filtered, included, operator-class, collation, descending,
-and null-distinctness index facets are explicit rather than silently degraded.
-An omitted column collation means the exact provider-inferred effective
-default, never an ignored comparison facet. Index key direction and null order
-distinguish provider default from explicit `ASC`, `DESC`, `NULLS FIRST`, and
-`NULLS LAST`.
+metadata on a MySQL/MariaDB table is a database qualifier. SafeMigrations
+accepts an explicit qualifier only when it exactly equals `DATABASE()` for the
+active connection. That qualifier and an omitted qualifier share one physical
+identity during catalog analysis, ordered projection, DDL, and model-managed
+data, including postflight final-writer reduction and generated transition
+catalogs. Because SQL generation has no connection, a generated stream merges
+a sole explicit qualifier with omitted qualifiers only while applying that
+qualifier as a runtime guard to every SafeMigrations command in the stream. A
+foreign or ambiguous stream therefore fails before its first SafeMigrations
+mutation.
+`EnsureSchema` for the selected database is an idempotent no-op. A different
+qualifier fails with `database_qualifier_mismatch` before prerequisite or data
+queries, and database drops remain unsupported. Database identity uses exact
+casing rather than the environment-specific `lower_case_table_names`
+behavior. No qualifier is silently removed or redirected to the current
+database.
+
+Provider-specific features such as PostgreSQL filtered, included,
+operator-class, collation, descending, and null-distinctness index facets are
+explicit rather than silently degraded. An omitted column collation means the
+exact provider-inferred effective default, never an ignored comparison facet.
+Index key direction and null order distinguish provider default from explicit
+`ASC`, `DESC`, `NULLS FIRST`, and `NULLS LAST`.
 
 Collation identity is structured rather than dot-split text:
 

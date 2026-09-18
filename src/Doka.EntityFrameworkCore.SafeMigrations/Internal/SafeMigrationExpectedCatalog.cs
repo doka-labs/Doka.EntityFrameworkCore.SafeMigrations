@@ -54,13 +54,19 @@ internal static partial class SafeMigrationExpectedCatalog
 {
     public static IReadOnlyList<SafeMigrationExpectedTableInventory> Create(
         IReadOnlyList<MigrationOperation> operations
+    ) => Create(operations, static schema => schema);
+
+    public static IReadOnlyList<SafeMigrationExpectedTableInventory> Create(
+        IReadOnlyList<MigrationOperation> operations,
+        Func<string?, string?> normalizeSchema
     )
     {
         ArgumentNullException.ThrowIfNull(operations);
+        ArgumentNullException.ThrowIfNull(normalizeSchema);
 
-        SafeMigrationExpectedIndexTransitions.Validate(operations);
+        SafeMigrationExpectedIndexTransitions.Validate(operations, normalizeSchema);
 
-        var tables = new Dictionary<TableKey, MutableTable>();
+        var tables = new Dictionary<TableKey, MutableTable>(new TableKeyComparer(normalizeSchema));
         foreach (var envelope in operations.OfType<SafeMigrationOperation>())
         {
             Apply(tables, envelope.Intent);
@@ -166,6 +172,27 @@ internal static partial class SafeMigrationExpectedCatalog
         string? Schema,
         string Table
     );
+
+    private sealed class TableKeyComparer(
+        Func<string?, string?> normalizeSchema
+    ) : IEqualityComparer<TableKey>
+    {
+        public bool Equals(
+            TableKey left,
+            TableKey right
+        ) => StringComparer.Ordinal.Equals(left.Table, right.Table)
+            && StringComparer.Ordinal.Equals(
+                normalizeSchema(left.Schema),
+                normalizeSchema(right.Schema));
+
+        public int GetHashCode(
+            TableKey value
+        ) => HashCode.Combine(
+            StringComparer.Ordinal.GetHashCode(value.Table),
+            normalizeSchema(value.Schema) is { } schema
+                ? StringComparer.Ordinal.GetHashCode(schema)
+                : 0);
+    }
 
     private sealed class MutableTable
     {

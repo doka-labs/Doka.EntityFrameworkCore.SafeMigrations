@@ -121,14 +121,16 @@ internal sealed partial class SafeMigrationPreflightProjection
 
             var table = new ProjectedTable(
                 intent.Definition,
-                dataMutationVersion: _providerDataMutationVersion);
+                dataMutationVersion: _providerDataMutationVersion,
+                objectIdentityNormalizer: _objectIdentityNormalizer);
 
             CaptureSharedUniqueKeys(table, intent.Definition);
             _tables[key] = table;
 
             var prerequisites = new ProjectedPrerequisites(
                 newlyCreated: true,
-                dataMutationVersion: _providerDataMutationVersion);
+                dataMutationVersion: _providerDataMutationVersion,
+                objectIdentityNormalizer: _objectIdentityNormalizer);
 
             foreach (var column in intent.Definition.Columns)
             {
@@ -156,7 +158,8 @@ internal sealed partial class SafeMigrationPreflightProjection
 
             var prerequisites = new ProjectedPrerequisites(
                 newlyCreated: false,
-                dataMutationVersion: 0);
+                dataMutationVersion: 0,
+                objectIdentityNormalizer: _objectIdentityNormalizer);
 
             foreach (var column in intent.Definition.Columns)
             {
@@ -179,7 +182,8 @@ internal sealed partial class SafeMigrationPreflightProjection
                     newlyCreated: false,
                     // WHY: Matching proves that the table exists; it does not
                     // re-establish row-level safety after provider data DML.
-                    dataMutationVersion: 0));
+                    dataMutationVersion: 0,
+                    objectIdentityNormalizer: _objectIdentityNormalizer));
         }
     }
 

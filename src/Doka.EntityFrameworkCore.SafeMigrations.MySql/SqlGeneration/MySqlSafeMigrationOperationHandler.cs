@@ -69,7 +69,10 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             expectedTableConstraints,
             includeAnalysisEvidence: _planCapture.IncludeAnalysisEvidence,
             includeTransitionEvidence: !_planCapture.IsActive || _planCapture.IncludeTransitionEvidence,
-            parameterizeValues: _planCapture.IsActive);
+            parameterizeValues: _planCapture.IsActive,
+            requiredDatabaseQualifiers: _planCapture.HasGenerationContract
+                ? _planCapture.GenerationDatabaseQualifiers
+                : null);
         if (_planCapture.IsActive)
         {
             _planCapture.Record(context.OperationOrdinal, operation, runtimePlan);
@@ -105,11 +108,31 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
 
         if (runtimePlan.RequiresLazyStateEvaluation)
         {
-            setupCommands.Add(
-                $"SET @doka_sm_prerequisite_ok = COALESCE(("
-                + $"{runtimePlan.RenderPreparedPrerequisiteExpression(renderedParameterValues)}), FALSE);");
+            if (runtimePlan.CurrentDatabaseQualificationExpression is not null)
+            {
+                setupCommands.Add(
+                    "SET @doka_sm_state = CASE WHEN COALESCE(("
+                    + runtimePlan.RenderPreparedCurrentDatabaseQualificationExpression(renderedParameterValues)
+                    + "), FALSE) THEN NULL ELSE 'unsupported' END;");
 
-            setupCommands.Add(BuildInitialLazyStateAssignment());
+                setupCommands.Add(
+                    "SET @doka_sm_prerequisite_ok = CASE WHEN @doka_sm_state IS NULL THEN COALESCE(("
+                    + runtimePlan.RenderPreparedPrerequisiteExpression(renderedParameterValues)
+                    + "), FALSE) ELSE FALSE END;");
+            }
+            else
+            {
+                // WHY: Keep the unqualified hot path byte-for-byte equivalent to
+                // its established allocation profile. Only qualified operations
+                // need an earlier state that the prerequisite phase preserves.
+                setupCommands.Add(
+                    "SET @doka_sm_prerequisite_ok = COALESCE(("
+                    + runtimePlan.RenderPreparedPrerequisiteExpression(renderedParameterValues)
+                    + "), FALSE);");
+            }
+
+            setupCommands.Add(BuildInitialLazyStateAssignment(
+                preserveExistingState: runtimePlan.CurrentDatabaseQualificationExpression is not null));
             if (runtimePlan.StateEvaluationGuardFailureExpression is not null)
             {
                 setupCommands.Add(BuildGuardEvaluationAssignment(runtimePlan, renderedParameterValues));
@@ -201,12 +224,16 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
     {
         if (_planCapture.IsActive)
         {
-            return _planCapture.GetExpectedUniqueIndexes(intent.Definition.Table);
+            return _planCapture.GetExpectedUniqueIndexes(
+                intent.Definition.Table,
+                intent.Definition.Schema);
         }
 
         if (_planCapture.HasGenerationContract)
         {
-            return _planCapture.GetGenerationUniqueIndexes(intent.Definition.Table);
+            return _planCapture.GetGenerationUniqueIndexes(
+                intent.Definition.Table,
+                intent.Definition.Schema);
         }
 
         // Direct handler use has no ordered provider-generation scope. EF's
@@ -429,9 +456,14 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             " USING utf8mb4) ELSE 'DO 0' END;");
     }
 
-    private static string BuildInitialLazyStateAssignment() => "SET @doka_sm_state = CASE "
-        + "WHEN NOT @doka_sm_prerequisite_ok THEN 'prerequisite_missing' "
-        + "ELSE NULL END, @doka_sm_repair_ok = FALSE;";
+    private static string BuildInitialLazyStateAssignment(
+        bool preserveExistingState
+    ) => preserveExistingState
+        ? "SET @doka_sm_state = CASE WHEN @doka_sm_state IS NOT NULL THEN @doka_sm_state "
+            + "WHEN NOT @doka_sm_prerequisite_ok THEN 'prerequisite_missing' "
+            + "ELSE NULL END, @doka_sm_repair_ok = FALSE;"
+        : "SET @doka_sm_state = CASE WHEN NOT @doka_sm_prerequisite_ok THEN 'prerequisite_missing' "
+            + "ELSE NULL END, @doka_sm_repair_ok = FALSE;";
 
     private static string BuildPreparedSqlAssignment(
         string applyDdl,

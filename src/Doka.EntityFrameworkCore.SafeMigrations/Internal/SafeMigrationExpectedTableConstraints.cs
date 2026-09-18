@@ -67,23 +67,43 @@ internal sealed class SafeMigrationExpectedTableConstraints
     public static IReadOnlyDictionary<(string? Schema, string Table), SafeMigrationExpectedTableConstraints>
         FromOperations(
             IReadOnlyList<MigrationOperation> operations
+        ) => FromOperations(operations, static schema => schema);
+
+    /// <summary>
+    /// Projects the table-constraint transition contract with provider-normalized table identity.
+    /// </summary>
+    /// <param name="operations">The operations generated for one migration direction.</param>
+    /// <param name="normalizeSchema">The provider qualifier normalizer.</param>
+    /// <returns>Constraint contracts keyed by normalized physical table identity.</returns>
+    public static IReadOnlyDictionary<(string? Schema, string Table), SafeMigrationExpectedTableConstraints>
+        FromOperations(
+            IReadOnlyList<MigrationOperation> operations,
+            Func<string?, string?> normalizeSchema
         )
     {
         ArgumentNullException.ThrowIfNull(operations);
+        ArgumentNullException.ThrowIfNull(normalizeSchema);
 
-        var tables = new Dictionary<(string? Schema, string Table), MutableConstraints>();
+        var comparer = new TableIdentityComparer(normalizeSchema);
+        var tables = new Dictionary<(string? Schema, string Table), MutableConstraints>(comparer);
 
         // WHY: EF splits cyclic and provider-ordered constraints out of
         // CreateTable. Strict analysis must accept recoverable intermediate
         // states without treating future constraints as already mandatory.
         foreach (var operation in operations.OfType<SafeMigrationOperation>())
         {
-            Apply(tables, operation.Intent);
+            Apply(tables, operation.Intent, normalizeSchema);
         }
 
-        return tables.ToDictionary(
-            static pair => pair.Key,
-            static pair => pair.Value.Snapshot());
+        var result = new Dictionary<
+            (string? Schema, string Table),
+            SafeMigrationExpectedTableConstraints>(tables.Count, comparer);
+        foreach (var pair in tables)
+        {
+            result.Add(pair.Key, pair.Value.Snapshot());
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -201,26 +221,27 @@ internal sealed class SafeMigrationExpectedTableConstraints
 
     private static void Apply(
         Dictionary<(string? Schema, string Table), MutableConstraints> tables,
-        SafeMigrationIntent intent
+        SafeMigrationIntent intent,
+        Func<string?, string?> normalizeSchema
     )
     {
         switch (intent)
         {
             case EnsureTableIntent value:
                 tables[(value.Definition.Schema, value.Definition.Table)] =
-                    MutableConstraints.From(value.Definition);
+                    MutableConstraints.From(value.Definition, normalizeSchema);
                 break;
             case DropTableIntent value:
                 tables.Remove((value.Schema, value.Table));
                 break;
             case RenameTableIntent value:
-                RenameTable(tables, value);
+                RenameTable(tables, value, normalizeSchema);
                 break;
             case DropColumnIntent value:
-                DropColumn(tables, value);
+                DropColumn(tables, value, normalizeSchema);
                 break;
             case RenameColumnIntent value:
-                RenameColumn(tables, value);
+                RenameColumn(tables, value, normalizeSchema);
                 break;
             case EnsurePrimaryKeyIntent value when
                 Find(tables, value.Definition.Schema, value.Definition.Table) is { } table:
@@ -263,7 +284,8 @@ internal sealed class SafeMigrationExpectedTableConstraints
 
     private static void RenameTable(
         Dictionary<(string? Schema, string Table), MutableConstraints> tables,
-        RenameTableIntent intent
+        RenameTableIntent intent,
+        Func<string?, string?> normalizeSchema
     )
     {
         if (!tables.Remove((intent.Schema, intent.Name), out var table))
@@ -272,7 +294,7 @@ internal sealed class SafeMigrationExpectedTableConstraints
         }
 
         var newTable = intent.NewName ?? intent.Name;
-        var newSchema = intent.NewSchema ?? intent.Schema;
+        var newSchema = normalizeSchema(intent.NewSchema ?? intent.Schema);
         table.RenameOwner(newTable, newSchema);
         tables[(newSchema, newTable)] = table;
 
@@ -280,7 +302,7 @@ internal sealed class SafeMigrationExpectedTableConstraints
         {
             candidate.RenamePrincipal(
                 intent.Name,
-                intent.Schema,
+                normalizeSchema(intent.Schema),
                 newTable,
                 newSchema);
         }
@@ -288,7 +310,8 @@ internal sealed class SafeMigrationExpectedTableConstraints
 
     private static void RenameColumn(
         Dictionary<(string? Schema, string Table), MutableConstraints> tables,
-        RenameColumnIntent intent
+        RenameColumnIntent intent,
+        Func<string?, string?> normalizeSchema
     )
     {
         Find(tables, intent.Schema, intent.Table)?.RenameLocalColumn(intent.Name, intent.NewName);
@@ -297,7 +320,7 @@ internal sealed class SafeMigrationExpectedTableConstraints
         {
             candidate.RenamePrincipalColumn(
                 intent.Table,
-                intent.Schema,
+                normalizeSchema(intent.Schema),
                 intent.Name,
                 intent.NewName);
         }
@@ -305,7 +328,8 @@ internal sealed class SafeMigrationExpectedTableConstraints
 
     private static void DropColumn(
         Dictionary<(string? Schema, string Table), MutableConstraints> tables,
-        DropColumnIntent intent
+        DropColumnIntent intent,
+        Func<string?, string?> normalizeSchema
     )
     {
         Find(tables, intent.Schema, intent.Table)?.ValidateLocalColumnDrop(intent.Name);
@@ -314,13 +338,14 @@ internal sealed class SafeMigrationExpectedTableConstraints
         {
             candidate.ValidatePrincipalColumnDrop(
                 intent.Table,
-                intent.Schema,
+                normalizeSchema(intent.Schema),
                 intent.Name);
         }
     }
 
     private sealed class MutableConstraints
     {
+        private readonly Func<string?, string?> _normalizeSchema;
         private readonly List<ExpectedPrimaryKeyDefinition> _allowedPrimaryKeys = [];
         private readonly List<ExpectedUniqueConstraintDefinition> _allowedUniqueConstraints = [];
         private readonly List<ExpectedCheckConstraintDefinition> _allowedCheckConstraints = [];
@@ -334,18 +359,27 @@ internal sealed class SafeMigrationExpectedTableConstraints
             ExpectedPrimaryKeyDefinition? primaryKey,
             IEnumerable<ExpectedUniqueConstraintDefinition> uniqueConstraints,
             IEnumerable<ExpectedCheckConstraintDefinition> checkConstraints,
-            IEnumerable<ExpectedForeignKeyDefinition> foreignKeys
+            IEnumerable<ExpectedForeignKeyDefinition> foreignKeys,
+            Func<string?, string?> normalizeSchema
         )
         {
-            var uniqueConstraintSnapshot = uniqueConstraints.ToArray();
-            var checkConstraintSnapshot = checkConstraints.ToArray();
-            var foreignKeySnapshot = foreignKeys.ToArray();
+            _normalizeSchema = normalizeSchema;
 
-            PrimaryKey = primaryKey;
+            var uniqueConstraintSnapshot = uniqueConstraints
+                .Select(Normalize)
+                .ToArray();
+            var checkConstraintSnapshot = checkConstraints
+                .Select(Normalize)
+                .ToArray();
+            var foreignKeySnapshot = foreignKeys
+                .Select(Normalize)
+                .ToArray();
+
+            PrimaryKey = primaryKey is null ? null : Normalize(primaryKey);
             _primaryKeyMayBeAbsent = primaryKey is null;
-            if (primaryKey is not null)
+            if (PrimaryKey is not null)
             {
-                _allowedPrimaryKeys.Add(primaryKey);
+                _allowedPrimaryKeys.Add(PrimaryKey);
             }
 
             UniqueConstraints = uniqueConstraintSnapshot.ToDictionary(
@@ -381,12 +415,14 @@ internal sealed class SafeMigrationExpectedTableConstraints
         public Dictionary<string, ExpectedForeignKeyDefinition> ForeignKeys { get; }
 
         public static MutableConstraints From(
-            ExpectedTableDefinition definition
+            ExpectedTableDefinition definition,
+            Func<string?, string?> normalizeSchema
         ) => new(
             definition.PrimaryKey,
             definition.UniqueConstraints,
             definition.CheckConstraints,
-            definition.ForeignKeys);
+            definition.ForeignKeys,
+            normalizeSchema);
 
         public SafeMigrationExpectedTableConstraints Snapshot() => new(
             PrimaryKey,
@@ -406,6 +442,8 @@ internal sealed class SafeMigrationExpectedTableConstraints
             ExpectedPrimaryKeyDefinition definition
         )
         {
+            definition = Normalize(definition);
+
             if (PrimaryKey is null
                 || !SafeMigrationDefinitionEquivalence.PrimaryKey(PrimaryKey, definition))
             {
@@ -427,12 +465,17 @@ internal sealed class SafeMigrationExpectedTableConstraints
 
         public void EnsureUniqueConstraint(
             ExpectedUniqueConstraintDefinition definition
-        ) => Ensure(
-            UniqueConstraints,
-            _allowedUniqueConstraints,
-            _requiredUniqueConstraints,
-            definition,
-            SafeMigrationDefinitionEquivalence.UniqueConstraint);
+        )
+        {
+            definition = Normalize(definition);
+
+            Ensure(
+                UniqueConstraints,
+                _allowedUniqueConstraints,
+                _requiredUniqueConstraints,
+                definition,
+                SafeMigrationDefinitionEquivalence.UniqueConstraint);
+        }
 
         public void DropUniqueConstraint(
             string name
@@ -440,12 +483,17 @@ internal sealed class SafeMigrationExpectedTableConstraints
 
         public void EnsureCheckConstraint(
             ExpectedCheckConstraintDefinition definition
-        ) => Ensure(
-            CheckConstraints,
-            _allowedCheckConstraints,
-            _requiredCheckConstraints,
-            definition,
-            SafeMigrationDefinitionEquivalence.CheckConstraint);
+        )
+        {
+            definition = Normalize(definition);
+
+            Ensure(
+                CheckConstraints,
+                _allowedCheckConstraints,
+                _requiredCheckConstraints,
+                definition,
+                SafeMigrationDefinitionEquivalence.CheckConstraint);
+        }
 
         public void DropCheckConstraint(
             string name
@@ -453,12 +501,17 @@ internal sealed class SafeMigrationExpectedTableConstraints
 
         public void EnsureForeignKey(
             ExpectedForeignKeyDefinition definition
-        ) => Ensure(
-            ForeignKeys,
-            _allowedForeignKeys,
-            _requiredForeignKeys,
-            definition,
-            SafeMigrationDefinitionEquivalence.ForeignKey);
+        )
+        {
+            definition = Normalize(definition);
+
+            Ensure(
+                ForeignKeys,
+                _allowedForeignKeys,
+                _requiredForeignKeys,
+                definition,
+                SafeMigrationDefinitionEquivalence.ForeignKey);
+        }
 
         public void DropForeignKey(
             string name
@@ -469,6 +522,8 @@ internal sealed class SafeMigrationExpectedTableConstraints
             string? schema
         )
         {
+            schema = _normalizeSchema(schema);
+
             if (PrimaryKey is not null)
             {
                 var renamed = new ExpectedPrimaryKeyDefinition(
@@ -511,15 +566,21 @@ internal sealed class SafeMigrationExpectedTableConstraints
             string? schema,
             string newTable,
             string? newSchema
-        ) => ReplaceValues(
-            ForeignKeys,
-            _allowedForeignKeys,
-            _requiredForeignKeys,
-            SafeMigrationDefinitionEquivalence.ForeignKey,
-            value => StringComparer.Ordinal.Equals(value.PrincipalTable, table)
-                && StringComparer.Ordinal.Equals(value.PrincipalSchema, schema)
-                    ? CopyForeignKey(value, principalTable: newTable, principalSchema: newSchema)
-                    : value);
+        )
+        {
+            schema = _normalizeSchema(schema);
+            newSchema = _normalizeSchema(newSchema);
+
+            ReplaceValues(
+                ForeignKeys,
+                _allowedForeignKeys,
+                _requiredForeignKeys,
+                SafeMigrationDefinitionEquivalence.ForeignKey,
+                value => StringComparer.Ordinal.Equals(value.PrincipalTable, table)
+                    && StringComparer.Ordinal.Equals(value.PrincipalSchema, schema)
+                        ? CopyForeignKey(value, principalTable: newTable, principalSchema: newSchema)
+                        : value);
+        }
 
         public void RenameLocalColumn(
             string column,
@@ -573,17 +634,22 @@ internal sealed class SafeMigrationExpectedTableConstraints
             string? schema,
             string column,
             string newColumn
-        ) => ReplaceValues(
-            ForeignKeys,
-            _allowedForeignKeys,
-            _requiredForeignKeys,
-            SafeMigrationDefinitionEquivalence.ForeignKey,
-            value => StringComparer.Ordinal.Equals(value.PrincipalTable, table)
-                && StringComparer.Ordinal.Equals(value.PrincipalSchema, schema)
-                    ? CopyForeignKey(
-                        value,
-                        principalColumns: RenameColumns(value.PrincipalColumns, column, newColumn))
-                    : value);
+        )
+        {
+            schema = _normalizeSchema(schema);
+
+            ReplaceValues(
+                ForeignKeys,
+                _allowedForeignKeys,
+                _requiredForeignKeys,
+                SafeMigrationDefinitionEquivalence.ForeignKey,
+                value => StringComparer.Ordinal.Equals(value.PrincipalTable, table)
+                    && StringComparer.Ordinal.Equals(value.PrincipalSchema, schema)
+                        ? CopyForeignKey(
+                            value,
+                            principalColumns: RenameColumns(value.PrincipalColumns, column, newColumn))
+                        : value);
+        }
 
         public void ValidateLocalColumnDrop(
             string column
@@ -639,6 +705,8 @@ internal sealed class SafeMigrationExpectedTableConstraints
             string column
         )
         {
+            schema = _normalizeSchema(schema);
+
             var foreignKey = ForeignKeys.Values.FirstOrDefault(value =>
                 StringComparer.Ordinal.Equals(value.PrincipalTable, table)
                 && StringComparer.Ordinal.Equals(value.PrincipalSchema, schema)
@@ -655,6 +723,49 @@ internal sealed class SafeMigrationExpectedTableConstraints
                 foreignKey.Name,
                 foreignKey.Table);
         }
+
+        private ExpectedPrimaryKeyDefinition Normalize(
+            ExpectedPrimaryKeyDefinition definition
+        ) => new(
+            definition.Name,
+            definition.Table,
+            definition.Columns,
+            _normalizeSchema(definition.Schema));
+
+        private ExpectedUniqueConstraintDefinition Normalize(
+            ExpectedUniqueConstraintDefinition definition
+        ) => new(
+            definition.Name,
+            definition.Table,
+            definition.Columns,
+            _normalizeSchema(definition.Schema));
+
+        private ExpectedCheckConstraintDefinition Normalize(
+            ExpectedCheckConstraintDefinition definition
+        ) => definition.Expression is not null
+            ? ExpectedCheckConstraintDefinition.FromExpression(
+                definition.Name,
+                definition.Table,
+                definition.Expression,
+                _normalizeSchema(definition.Schema))
+            : new ExpectedCheckConstraintDefinition(
+                definition.Name,
+                definition.Table,
+                definition.Sql!,
+                _normalizeSchema(definition.Schema));
+
+        private ExpectedForeignKeyDefinition Normalize(
+            ExpectedForeignKeyDefinition definition
+        ) => new(
+            definition.Name,
+            definition.Table,
+            definition.Columns,
+            definition.PrincipalTable,
+            definition.PrincipalColumns,
+            _normalizeSchema(definition.Schema),
+            _normalizeSchema(definition.PrincipalSchema),
+            definition.OnUpdate,
+            definition.OnDelete);
 
         private static void ReplaceValues<T>(
             Dictionary<string, T> values,
@@ -811,5 +922,26 @@ internal sealed class SafeMigrationExpectedTableConstraints
             principalSchema ?? definition.PrincipalSchema,
             definition.OnUpdate,
             definition.OnDelete);
+    }
+
+    private sealed class TableIdentityComparer(
+        Func<string?, string?> normalizeSchema
+    ) : IEqualityComparer<(string? Schema, string Table)>
+    {
+        public bool Equals(
+            (string? Schema, string Table) left,
+            (string? Schema, string Table) right
+        ) => StringComparer.Ordinal.Equals(left.Table, right.Table)
+            && StringComparer.Ordinal.Equals(
+                normalizeSchema(left.Schema),
+                normalizeSchema(right.Schema));
+
+        public int GetHashCode(
+            (string? Schema, string Table) value
+        ) => HashCode.Combine(
+            StringComparer.Ordinal.GetHashCode(value.Table),
+            normalizeSchema(value.Schema) is { } schema
+                ? StringComparer.Ordinal.GetHashCode(schema)
+                : 0);
     }
 }

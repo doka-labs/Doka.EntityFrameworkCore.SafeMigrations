@@ -38,6 +38,11 @@ public abstract class SafeMigrationScaffoldingDbContext : DbContext
         ModelBuilder modelBuilder
     )
     {
+        // WHY: MySQL treats EF's schema metadata as a database qualifier. The
+        // generated-tooling gate must therefore exercise the common
+        // HasDefaultSchema(current database) migration shape end to end.
+        modelBuilder.HasDefaultSchema(new MySqlConnectionStringBuilder(_connectionString).Database);
+
         modelBuilder.Entity<SafeMigrationScaffoldingUser>(entity =>
         {
             entity.ToTable("scaffolding_users");

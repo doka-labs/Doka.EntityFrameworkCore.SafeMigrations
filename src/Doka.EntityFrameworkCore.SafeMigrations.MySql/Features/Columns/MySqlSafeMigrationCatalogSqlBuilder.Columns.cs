@@ -95,6 +95,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var transition = repairCapability == SafeMigrationRepairCapability.Safe
             ? BuildColumnRepairTransition(
                 intent.Table,
+                intent.Schema,
                 intent.Definition,
                 isMariaDb,
                 includeTransitionEvidence)
@@ -105,10 +106,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 + $"OR ({transition.InvariantExpression})"
             : "FALSE";
 
-        var dataBlocked = unsafeAdd ? $"EXISTS (SELECT 1 FROM {Delimited(intent.Table)} LIMIT 1)" : "FALSE";
+        var dataBlocked = unsafeAdd
+            ? $"EXISTS (SELECT 1 FROM {Delimited(intent.Table, intent.Schema)} LIMIT 1)"
+            : "FALSE";
         var hasNull = repairCapability == SafeMigrationRepairCapability.Safe
             && !intent.Definition.IsNullable
-                ? $"EXISTS (SELECT 1 FROM {Delimited(intent.Table)} WHERE "
+                ? $"EXISTS (SELECT 1 FROM {Delimited(intent.Table, intent.Schema)} WHERE "
                 + $"{Delimited(intent.Definition.Name)} IS NULL LIMIT 1)"
                 : "FALSE";
 
@@ -210,7 +213,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             repairCapability == SafeMigrationRepairCapability.Safe
             && intent.OldDefinition!.IsNullable
             && !intent.Definition.IsNullable
-                ? $"({repairPrecondition}) AND EXISTS (SELECT 1 FROM {Delimited(intent.Table)} WHERE "
+                ? $"({repairPrecondition}) AND EXISTS (SELECT 1 FROM {Delimited(intent.Table, intent.Schema)} WHERE "
                 + $"{Delimited(intent.Definition.Name)} IS NULL LIMIT 1)"
                 : "FALSE";
 
@@ -485,6 +488,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
     private MySqlColumnRepairTransition BuildColumnRepairTransition(
         string table,
+        string? schema,
         ExpectedColumnDefinition definition,
         bool isMariaDb,
         bool includeTransitionEvidence
@@ -513,7 +517,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                     table,
                     definition.Name,
                     targetLength,
-                    Delimited(table),
+                    Delimited(table, schema),
                     Delimited(definition.Name),
                     includeTransitionEvidence
                         ? BuildVarcharTransitionColumnExists(

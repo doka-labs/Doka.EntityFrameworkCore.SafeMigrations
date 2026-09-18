@@ -117,7 +117,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     {
         var expression = definition.Sql ?? _expressionRenderer.Render(definition.Expression!);
 
-        return $"EXISTS (SELECT 1 FROM {Delimited(definition.Table)} "
+        return $"EXISTS (SELECT 1 FROM {Delimited(definition.Table, definition.Schema)} "
             + $"WHERE NOT COALESCE(({expression}), TRUE) LIMIT 1)";
     }
 }

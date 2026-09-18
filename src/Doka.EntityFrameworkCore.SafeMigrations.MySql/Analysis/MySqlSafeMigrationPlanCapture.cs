@@ -10,17 +10,17 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 internal sealed class MySqlSafeMigrationPlanCapture
 {
     private static readonly IReadOnlyList<ExpectedIndexDefinition> s_emptyUniqueIndexes = [];
-    private static readonly IReadOnlyDictionary<string, IReadOnlyList<ExpectedIndexDefinition>>
-        s_emptyUniqueIndexCatalog = new Dictionary<string, IReadOnlyList<ExpectedIndexDefinition>>(
-            StringComparer.Ordinal);
+    private static readonly IReadOnlyDictionary<MySqlTableIdentity, IReadOnlyList<ExpectedIndexDefinition>>
+        s_emptyUniqueIndexCatalog = new Dictionary<MySqlTableIdentity, IReadOnlyList<ExpectedIndexDefinition>>();
 
     private SafeMigrationOperation[]? _expected;
     private IReadOnlyDictionary<
         (string? Schema, string Table), SafeMigrationExpectedTableConstraints>? _expectedTableConstraints;
     private IReadOnlyDictionary<
         (string? Schema, string Table), SafeMigrationExpectedTableConstraints>? _generationTableConstraints;
-    private IReadOnlyDictionary<string, IReadOnlyList<ExpectedIndexDefinition>>? _generationUniqueIndexes;
-    private IReadOnlyDictionary<string, IReadOnlyList<ExpectedIndexDefinition>>? _expectedUniqueIndexes;
+    private IReadOnlyList<string>? _generationDatabaseQualifiers;
+    private MySqlExpectedUniqueIndexCatalog? _generationUniqueIndexes;
+    private MySqlExpectedUniqueIndexCatalog? _expectedUniqueIndexes;
     private MySqlSafeMigrationRuntimePlan?[]? _plans;
     private bool _includeAnalysisEvidence;
     private bool _includeTransitionEvidence;
@@ -31,7 +31,13 @@ internal sealed class MySqlSafeMigrationPlanCapture
 
     /// <summary>Gets whether runtime SQL generation owns an ordered transition catalog.</summary>
     public bool HasGenerationContract => _generationTableConstraints is not null
-        && _generationUniqueIndexes is not null;
+        && _generationUniqueIndexes is not null
+        && _generationDatabaseQualifiers is not null;
+
+    /// <summary>Gets every explicit database identity required by runtime generation.</summary>
+    public IReadOnlyList<string> GenerationDatabaseQualifiers => _generationDatabaseQualifiers
+        ?? throw new InvalidOperationException(
+            "No MySQL SafeMigrations runtime generation scope is active.");
 
     /// <summary>Gets whether the active capture requests detailed diagnostic SQL.</summary>
     public bool IncludeAnalysisEvidence => IsActive && _includeAnalysisEvidence;
@@ -44,12 +50,17 @@ internal sealed class MySqlSafeMigrationPlanCapture
     /// <returns>A lease that owns capture completion and cleanup.</returns>
     public Lease Begin(
         IReadOnlyList<SafeMigrationOperation> operations
-    ) => Begin(
-        operations,
-        CreateExpectedUniqueIndexes(operations),
-        SafeMigrationExpectedTableConstraints.FromOperations(operations),
-        includeAnalysisEvidence: false,
-        includeTransitionEvidence: false);
+    )
+    {
+        ArgumentNullException.ThrowIfNull(operations);
+
+        return Begin(
+            operations,
+            CreateExpectedUniqueIndexes(operations),
+            SafeMigrationExpectedTableConstraints.FromOperations(operations),
+            includeAnalysisEvidence: false,
+            includeTransitionEvidence: false);
+    }
 
     /// <summary>Begins one bounded capture against a complete expected-index catalog.</summary>
     /// <param name="operations">The bounded operation window captured in order.</param>
@@ -59,7 +70,7 @@ internal sealed class MySqlSafeMigrationPlanCapture
     /// <returns>A lease that owns capture completion and cleanup.</returns>
     public Lease Begin(
         IReadOnlyList<SafeMigrationOperation> operations,
-        IReadOnlyDictionary<string, IReadOnlyList<ExpectedIndexDefinition>> expectedUniqueIndexes,
+        MySqlExpectedUniqueIndexCatalog expectedUniqueIndexes,
         bool includeAnalysisEvidence = false,
         bool includeTransitionEvidence = false
     ) => Begin(
@@ -78,7 +89,7 @@ internal sealed class MySqlSafeMigrationPlanCapture
     /// <returns>A lease that owns capture completion and cleanup.</returns>
     public Lease Begin(
         IReadOnlyList<SafeMigrationOperation> operations,
-        IReadOnlyDictionary<string, IReadOnlyList<ExpectedIndexDefinition>> expectedUniqueIndexes,
+        MySqlExpectedUniqueIndexCatalog expectedUniqueIndexes,
         IReadOnlyDictionary<
             (string? Schema, string Table), SafeMigrationExpectedTableConstraints> expectedTableConstraints,
         bool includeAnalysisEvidence = false,
@@ -130,18 +141,37 @@ internal sealed class MySqlSafeMigrationPlanCapture
         }
 
         var safeOperations = operations.OfType<SafeMigrationOperation>().ToArray();
+        var databaseQualifiers = MySqlSafeMigrationCatalogSqlBuilder.GetDatabaseQualifiers(operations);
+        var guardedDatabase = databaseQualifiers.Length == 1
+            ? databaseQualifiers[0]
+            : null;
+        var tableConstraints = SafeMigrationExpectedTableConstraints.FromOperations(
+            operations,
+            schema => MySqlTableIdentity.NormalizeDatabase(schema, guardedDatabase));
+        var uniqueIndexes = CreateExpectedUniqueIndexes(safeOperations, guardedDatabase);
 
-        _generationTableConstraints = SafeMigrationExpectedTableConstraints.FromOperations(operations);
-        _generationUniqueIndexes = CreateExpectedUniqueIndexes(safeOperations);
+        // WHY: Generation has no connection from which to prove DATABASE().
+        // A single candidate may merge with unqualified identities only
+        // because every generated SafeMigrations command receives the same
+        // runtime guard. Multiple candidates remain distinct and make that
+        // shared guard fail before any command mutates either database.
+        _generationDatabaseQualifiers = databaseQualifiers;
+        _generationTableConstraints = tableConstraints;
+        _generationUniqueIndexes = uniqueIndexes;
 
         return new GenerationLease(this);
     }
 
     /// <summary>Builds the unique-index catalog shared by every bounded capture window.</summary>
     /// <param name="operations">The complete ordered SafeMigrations operation set.</param>
-    /// <returns>The expected unique-index definitions keyed by unqualified table name.</returns>
-    public static IReadOnlyDictionary<string, IReadOnlyList<ExpectedIndexDefinition>> CreateExpectedUniqueIndexes(
-        IReadOnlyList<SafeMigrationOperation> operations
+    /// <param name="currentDatabase">
+    /// The selected database whose explicit qualifier is equivalent to an unqualified table,
+    /// or null when runtime identity normalization is unavailable.
+    /// </param>
+    /// <returns>The expected unique-index definitions keyed by physical table identity.</returns>
+    public static MySqlExpectedUniqueIndexCatalog CreateExpectedUniqueIndexes(
+        IReadOnlyList<SafeMigrationOperation> operations,
+        string? currentDatabase = null
     )
     {
         ArgumentNullException.ThrowIfNull(operations);
@@ -150,30 +180,48 @@ internal sealed class MySqlSafeMigrationPlanCapture
         // materializing the complete expected schema for unrelated batches.
         if (!operations.Any(static operation => operation.Intent is EnsureTableIntent))
         {
-            SafeMigrationExpectedIndexTransitions.Validate(operations);
+            SafeMigrationExpectedIndexTransitions.Validate(
+                operations,
+                schema => MySqlTableIdentity.NormalizeDatabase(schema, currentDatabase));
 
-            return s_emptyUniqueIndexCatalog;
+            return new MySqlExpectedUniqueIndexCatalog(s_emptyUniqueIndexCatalog, currentDatabase);
         }
 
-        return SafeMigrationExpectedCatalog
-            .Create(operations)
-            .Where(static table => table.Schema is null && table.UniqueIndexes.Count > 0)
-            .ToDictionary(
-                static table => table.Table,
-                static table => (IReadOnlyList<ExpectedIndexDefinition>)table
-                    .IndexDefinitions
-                    .Values
-                    .Where(static index => index.Unique)
-                    .OrderBy(static index => index.Name, StringComparer.Ordinal)
-                    .ToArray(),
-                StringComparer.Ordinal);
+        var definitions = new Dictionary<MySqlTableIdentity, IReadOnlyList<ExpectedIndexDefinition>>();
+        foreach (var table in SafeMigrationExpectedCatalog.Create(
+                     operations,
+                     schema => MySqlTableIdentity.NormalizeDatabase(schema, currentDatabase)))
+        {
+            if (table.UniqueIndexes.Count == 0)
+            {
+                continue;
+            }
+
+            var key = MySqlTableIdentity.Create(table.Table, table.Schema, currentDatabase);
+            var indexes = table
+                .IndexDefinitions
+                .Values
+                .Where(static index => index.Unique)
+                .OrderBy(static index => index.Name, StringComparer.Ordinal)
+                .ToArray();
+
+            if (!definitions.TryAdd(key, indexes))
+            {
+                throw new InvalidOperationException(
+                    "The migration contains multiple expected table definitions for one MySQL database object.");
+            }
+        }
+
+        return new MySqlExpectedUniqueIndexCatalog(definitions, currentDatabase);
     }
 
     /// <summary>Gets expected unique-index definitions for a table in the active batch.</summary>
     /// <param name="table">The unqualified MySQL or MariaDB table name.</param>
+    /// <param name="schema">The optional database qualifier.</param>
     /// <returns>The expected unique-index definitions, or an empty list.</returns>
     public IReadOnlyList<ExpectedIndexDefinition> GetExpectedUniqueIndexes(
-        string table
+        string table,
+        string? schema = null
     )
     {
         if (!IsActive
@@ -182,7 +230,7 @@ internal sealed class MySqlSafeMigrationPlanCapture
             throw new InvalidOperationException("No MySQL SafeMigrations plan capture is active.");
         }
 
-        return _expectedUniqueIndexes.GetValueOrDefault(table) ?? s_emptyUniqueIndexes;
+        return _expectedUniqueIndexes.Get(table, schema) ?? s_emptyUniqueIndexes;
     }
 
     /// <summary>Gets the table-constraint transition contract for the active batch.</summary>
@@ -224,10 +272,12 @@ internal sealed class MySqlSafeMigrationPlanCapture
     }
 
     /// <summary>Gets expected unique indexes for runtime SQL generation.</summary>
-    /// <param name="table">The unqualified MySQL or MariaDB table name.</param>
+    /// <param name="table">The MySQL or MariaDB table name.</param>
+    /// <param name="schema">The optional database qualifier.</param>
     /// <returns>The expected unique indexes, or an empty list.</returns>
     public IReadOnlyList<ExpectedIndexDefinition> GetGenerationUniqueIndexes(
-        string table
+        string table,
+        string? schema = null
     )
     {
         if (_generationUniqueIndexes is null)
@@ -236,7 +286,7 @@ internal sealed class MySqlSafeMigrationPlanCapture
                 "No MySQL SafeMigrations runtime generation scope is active.");
         }
 
-        return _generationUniqueIndexes.GetValueOrDefault(table) ?? s_emptyUniqueIndexes;
+        return _generationUniqueIndexes.Get(table, schema) ?? s_emptyUniqueIndexes;
     }
 
     /// <summary>Records the provider plan emitted for one expected operation ordinal.</summary>
@@ -325,6 +375,7 @@ internal sealed class MySqlSafeMigrationPlanCapture
 
     private void ClearGeneration()
     {
+        _generationDatabaseQualifiers = null;
         _generationTableConstraints = null;
         _generationUniqueIndexes = null;
     }
@@ -381,4 +432,34 @@ internal sealed class MySqlSafeMigrationPlanCapture
             _owner = null;
         }
     }
+}
+
+internal sealed class MySqlExpectedUniqueIndexCatalog(
+    IReadOnlyDictionary<MySqlTableIdentity, IReadOnlyList<ExpectedIndexDefinition>> definitions,
+    string? currentDatabase
+)
+{
+    public IReadOnlyList<ExpectedIndexDefinition>? Get(
+        string table,
+        string? schema
+    ) => definitions.GetValueOrDefault(MySqlTableIdentity.Create(table, schema, currentDatabase));
+}
+
+internal readonly record struct MySqlTableIdentity(
+    string Table,
+    string? Database
+)
+{
+    public static MySqlTableIdentity Create(
+        string table,
+        string? database,
+        string? currentDatabase
+    ) => new(table, NormalizeDatabase(database, currentDatabase));
+
+    public static string? NormalizeDatabase(
+        string? database,
+        string? currentDatabase
+    ) => database is not null && StringComparer.Ordinal.Equals(database, currentDatabase)
+        ? null
+        : database;
 }

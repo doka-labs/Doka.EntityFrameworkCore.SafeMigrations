@@ -72,6 +72,20 @@ use matched-row semantics (`UseAffectedRows=false`). SafeMigrations validates
 its command connection again before guarded execution. See
 [registration examples](../README.md#provider-registration).
 
+On MySQL/MariaDB, EF table `Schema` metadata is a database qualifier rather
+than a PostgreSQL-style namespace. An explicit qualifier is supported only
+when it exactly equals `DATABASE()` on the active connection; it then shares
+one physical identity with an omitted qualifier across analysis, generated
+transition catalogs, and postflight final-writer reduction. A different
+database fails closed with `database_qualifier_mismatch` before dependent
+catalog or data queries. Generated cross-operation catalogs merge a sole
+explicit qualifier with omitted qualifiers only while every SafeMigrations
+command in that stream carries the same runtime database guard. `EnsureSchema`
+for the selected database is a no-op, while database drops and cross-database
+operations remain unsupported. The comparison is exact and does not inherit
+environment-specific `lower_case_table_names` behavior. See
+[MySQL and MariaDB DDL behavior](mysql-mariadb-ddl-behavior.md#current-database-qualification).
+
 ## Scaffolding configuration
 
 Import the provider namespace for the registration extension and the Core

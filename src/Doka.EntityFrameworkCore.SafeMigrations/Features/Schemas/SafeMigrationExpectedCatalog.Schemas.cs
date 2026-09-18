@@ -9,7 +9,7 @@ internal static partial class SafeMigrationExpectedCatalog
     {
         var keys = tables
             .Keys
-            .Where(key => StringComparer.Ordinal.Equals(key.Schema, intent.Name))
+            .Where(key => tables.Comparer.Equals(key, new TableKey(intent.Name, key.Table)))
             .ToArray();
 
         foreach (var key in keys)

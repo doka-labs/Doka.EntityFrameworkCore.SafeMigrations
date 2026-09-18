@@ -33,7 +33,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         SafeMigrationExpectedTableConstraints? expectedTableConstraints = null,
         bool includeAnalysisEvidence = true,
         bool includeTransitionEvidence = true,
-        bool parameterizeValues = true
+        bool parameterizeValues = true,
+        IReadOnlyList<string>? requiredDatabaseQualifiers = null
     )
     {
         ArgumentNullException.ThrowIfNull(operation);
@@ -117,6 +118,14 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                         || plan.RequiresDataProbe,
                 };
             }
+
+            // Identity qualification has precedence over feature and catalog
+            // classification. A foreign database may never reach prerequisite,
+            // data, or target SQL merely because another reason also rejects it.
+            plan = ApplyCurrentDatabaseQualification(
+                operation.Intent,
+                plan,
+                requiredDatabaseQualifiers);
 
             return plan with { ParameterValues = _parameterValues.ToArray() };
         }
@@ -204,7 +213,6 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     ) => GetUnsupportedSqlExpressionFeature(intent)
         ?? GetUnsupportedColumnFeature(intent, features, serverVersion)
         ?? GetUnsupportedTableFeature(intent, features)
-        ?? GetUnsupportedSchemaFeature(intent)
         ?? GetUnsupportedIndexFeature(intent, features) ?? GetUnsupportedCheckConstraintFeature(intent, features);
 
     public string RenderExpression(
@@ -414,4 +422,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     private string Delimited(
         string identifier
     ) => _sqlGenerationHelper.DelimitIdentifier(identifier);
+
+    private string Delimited(
+        string identifier,
+        string? schema
+    ) => _sqlGenerationHelper.DelimitIdentifier(identifier, schema);
 }

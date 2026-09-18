@@ -97,6 +97,36 @@ internal sealed class SafeMigrationCSharpMigrationOperationGenerator : CSharpMig
 
     /// <inheritdoc />
     protected override void Generate(
+        EnsureSchemaOperation operation,
+        IndentedStringBuilder builder
+    )
+    {
+        if (!_configuration.IsEnabled)
+        {
+            base.Generate(operation, builder);
+            return;
+        }
+
+        GenerateWithReplacement(operation, builder, ".EnsureSchema(", ".EnsureSchemaExists(");
+    }
+
+    /// <inheritdoc />
+    protected override void Generate(
+        DropSchemaOperation operation,
+        IndentedStringBuilder builder
+    )
+    {
+        if (!_configuration.IsEnabled)
+        {
+            base.Generate(operation, builder);
+            return;
+        }
+
+        GenerateWithReplacement(operation, builder, ".DropSchema(", ".DropSchemaIfExists(");
+    }
+
+    /// <inheritdoc />
+    protected override void Generate(
         AddPrimaryKeyOperation operation,
         IndentedStringBuilder builder
     )
@@ -1030,6 +1060,30 @@ internal sealed class SafeMigrationCSharpMigrationOperationGenerator : CSharpMig
         return source.Insert(
             closeParenthesis,
             string.Concat(",", newline, argumentIndent, "prefixLengths: [", prefixValues, "]"));
+    }
+
+    private void GenerateWithReplacement(
+        EnsureSchemaOperation operation,
+        IndentedStringBuilder builder,
+        string expected,
+        string replacement
+    )
+    {
+        var baseline = CreateScratchBuilder(builder);
+        base.Generate(operation, baseline);
+        AppendReplaced(builder, baseline.ToString(), expected, replacement);
+    }
+
+    private void GenerateWithReplacement(
+        DropSchemaOperation operation,
+        IndentedStringBuilder builder,
+        string expected,
+        string replacement
+    )
+    {
+        var baseline = CreateScratchBuilder(builder);
+        base.Generate(operation, baseline);
+        AppendReplaced(builder, baseline.ToString(), expected, replacement);
     }
 
     private void GenerateWithReplacement(

@@ -33,6 +33,21 @@ All notable changes are documented here. The format follows
   after a repeated live character-length proof. Declared byte capacity,
   collation, dependencies, row size, and index-prefix feasibility remain
   fail-closed, and accepted DDL reports `TableRewritePossible`.
+- Accept MySQL and MariaDB object qualifiers only when they exactly identify
+  the database selected by the active connection. Current-database-qualified
+  and unqualified operations now share one projected physical identity across
+  catalog analysis, ordered preflight, generated transition catalogs,
+  postflight final-writer reduction, DDL, model-managed data, and unexpected-
+  object inventory. A different database remains fail-closed with
+  `database_qualifier_mismatch` before prerequisite, data, or target SQL can
+  address the wrong database. Generated cross-operation catalogs merge a sole
+  explicit qualifier with omitted qualifiers only under one stream-wide
+  runtime identity guard; a foreign or ambiguous stream is rejected before
+  its first SafeMigrations mutation. Exact identity deliberately remains
+  independent of server-specific `lower_case_table_names` behavior.
+- Treat an EF `EnsureSchema` for the selected MySQL or MariaDB database as an
+  idempotent no-op while retaining the unsupported boundary for database drops
+  and PostgreSQL-style independent schema namespaces.
 
 ## [10.4.1] - 2026-09-13
 

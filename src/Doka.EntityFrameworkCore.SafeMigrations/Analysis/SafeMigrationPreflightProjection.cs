@@ -4,33 +4,56 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
 {
     private readonly ISafeMigrationProviderOperationProjection? _providerOperationProjection;
     private readonly ISafeMigrationProjectedKeyAnalyzer? _projectedKeyAnalyzer;
-    private readonly Dictionary<TableKey, ProjectedTable> _tables = [];
+    private readonly ISafeMigrationProviderObjectIdentityNormalizer? _objectIdentityNormalizer;
+    private readonly Dictionary<TableKey, ProjectedTable> _tables;
 
     // WHY: Strict table projections retain complete definitions. This second view
     // records only prerequisites proven by earlier convergence operations, so
     // a later operation cannot infer safety from an object that was rejected.
-    private readonly Dictionary<TableKey, ProjectedPrerequisites> _prerequisites = [];
-    private readonly HashSet<IndexKey> _droppedPhysicalKeys = [];
-    private readonly HashSet<TableKey> _projectedDataMutationTables = [];
-    private readonly Dictionary<TableKey, HashSet<string>> _projectedModelManagedUniqueKeys = [];
-    private readonly Dictionary<ColumnKey, ExpectedColumnDefinition> _projectedColumnDefinitions = [];
-    private readonly HashSet<TableKey> _projectedCandidateKeyMutationTables = [];
-    private readonly HashSet<ColumnKey> _projectedMissingColumns = [];
-    private readonly HashSet<ColumnKey> _projectedUnknownColumns = [];
-    private readonly HashSet<TableKey> _projectedMissingTables = [];
-    private readonly HashSet<TableKey> _projectedUnknownTableStructures = [];
-    private readonly HashSet<TableKey> _projectedStructurallyModifiedTables = [];
-    private readonly Dictionary<TableKey, HashSet<string>> _projectedChangedColumns = [];
+    private readonly Dictionary<TableKey, ProjectedPrerequisites> _prerequisites;
+    private readonly HashSet<IndexKey> _droppedPhysicalKeys;
+    private readonly HashSet<TableKey> _projectedDataMutationTables;
+    private readonly Dictionary<TableKey, HashSet<string>> _projectedModelManagedUniqueKeys;
+    private readonly Dictionary<ColumnKey, ExpectedColumnDefinition> _projectedColumnDefinitions;
+    private readonly HashSet<TableKey> _projectedCandidateKeyMutationTables;
+    private readonly HashSet<ColumnKey> _projectedMissingColumns;
+    private readonly HashSet<ColumnKey> _projectedUnknownColumns;
+    private readonly HashSet<TableKey> _projectedMissingTables;
+    private readonly HashSet<TableKey> _projectedUnknownTableStructures;
+    private readonly HashSet<TableKey> _projectedStructurallyModifiedTables;
+    private readonly Dictionary<TableKey, HashSet<string>> _projectedChangedColumns;
     private bool _hasOpaqueProviderPostcondition;
     private long _providerDataMutationVersion;
 
     public SafeMigrationPreflightProjection(
         ISafeMigrationProviderOperationProjection? providerOperationProjection = null,
-        ISafeMigrationProjectedKeyAnalyzer? projectedKeyAnalyzer = null
+        ISafeMigrationProjectedKeyAnalyzer? projectedKeyAnalyzer = null,
+        ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer = null
     )
     {
         _providerOperationProjection = providerOperationProjection;
         _projectedKeyAnalyzer = projectedKeyAnalyzer;
+        _objectIdentityNormalizer = objectIdentityNormalizer;
+
+        var tableComparer = new TableKeyComparer(objectIdentityNormalizer);
+        var indexComparer = new IndexKeyComparer(objectIdentityNormalizer);
+        var columnComparer = new ColumnKeyComparer(objectIdentityNormalizer);
+
+        _tables = new Dictionary<TableKey, ProjectedTable>(tableComparer);
+        _prerequisites = new Dictionary<TableKey, ProjectedPrerequisites>(tableComparer);
+        _droppedPhysicalKeys = new HashSet<IndexKey>(indexComparer);
+        _projectedDataMutationTables = new HashSet<TableKey>(tableComparer);
+        _projectedModelManagedUniqueKeys = new Dictionary<TableKey, HashSet<string>>(tableComparer);
+        _projectedColumnDefinitions = new Dictionary<ColumnKey, ExpectedColumnDefinition>(columnComparer);
+        _projectedCandidateKeyMutationTables = new HashSet<TableKey>(tableComparer);
+        _projectedMissingColumns = new HashSet<ColumnKey>(columnComparer);
+        _projectedUnknownColumns = new HashSet<ColumnKey>(columnComparer);
+        _projectedMissingTables = new HashSet<TableKey>(tableComparer);
+        _projectedUnknownTableStructures = new HashSet<TableKey>(tableComparer);
+        _projectedStructurallyModifiedTables = new HashSet<TableKey>(tableComparer);
+        _projectedChangedColumns = new Dictionary<TableKey, HashSet<string>>(tableComparer);
+        _modelManagedRows = new Dictionary<ModelManagedRowKey, ProjectedModelManagedRow>(
+            new ModelManagedRowKeyComparer(objectIdentityNormalizer));
     }
 
     public SafeMigrationProviderAnalysis Project(
@@ -40,6 +63,13 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
     {
         ArgumentNullException.ThrowIfNull(operation);
         ArgumentNullException.ThrowIfNull(liveAnalysis);
+
+        if (_objectIdentityNormalizer?.IsObjectIdentityMismatch(liveAnalysis) == true)
+        {
+            // WHY: Earlier operations may repair an unsupported physical shape,
+            // but they can never change which database object this operation names.
+            return liveAnalysis;
+        }
 
         if (_hasOpaqueProviderPostcondition)
         {
@@ -581,12 +611,26 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
         }
     }
 
-    private static bool SameTable(
+    private bool SameTable(
         ColumnKey key,
         string table,
         string? schema
     ) => StringComparer.Ordinal.Equals(key.Table, table)
-        && StringComparer.Ordinal.Equals(key.Schema, schema);
+        && SameSchema(key.Schema, schema);
+
+    private bool SameSchema(
+        string? left,
+        string? right
+    ) => StringComparer.Ordinal.Equals(
+        NormalizeSchema(_objectIdentityNormalizer, left),
+        NormalizeSchema(_objectIdentityNormalizer, right));
+
+    private static string? NormalizeSchema(
+        ISafeMigrationProviderObjectIdentityNormalizer? normalizer,
+        string? schema
+    ) => normalizer is null
+        ? schema
+        : normalizer.NormalizeSchema(schema);
 
     private static ExpectedColumnDefinition CopyProjectedColumn(
         ExpectedColumnDefinition value,
@@ -764,6 +808,69 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
         string Name
     );
 
+    private sealed class TableKeyComparer(
+        ISafeMigrationProviderObjectIdentityNormalizer? normalizer
+    ) : IEqualityComparer<TableKey>
+    {
+        public bool Equals(
+            TableKey left,
+            TableKey right
+        ) => StringComparer.Ordinal.Equals(left.Table, right.Table)
+            && StringComparer.Ordinal.Equals(Normalize(left.Schema), Normalize(right.Schema));
+
+        public int GetHashCode(
+            TableKey value
+        ) => HashCode.Combine(
+            StringComparer.Ordinal.GetHashCode(value.Table),
+            Normalize(value.Schema) is { } schema ? StringComparer.Ordinal.GetHashCode(schema) : 0);
+
+        private string? Normalize(
+            string? schema
+        ) => NormalizeSchema(normalizer, schema);
+    }
+
+    private sealed class IndexKeyComparer(
+        ISafeMigrationProviderObjectIdentityNormalizer? normalizer
+    ) : IEqualityComparer<IndexKey>
+    {
+        private readonly TableKeyComparer _tableComparer = new(normalizer);
+
+        public bool Equals(
+            IndexKey left,
+            IndexKey right
+        ) => _tableComparer.Equals(
+                new TableKey(left.Table, left.Schema),
+                new TableKey(right.Table, right.Schema))
+            && StringComparer.Ordinal.Equals(left.Name, right.Name);
+
+        public int GetHashCode(
+            IndexKey value
+        ) => HashCode.Combine(
+            _tableComparer.GetHashCode(new TableKey(value.Table, value.Schema)),
+            StringComparer.Ordinal.GetHashCode(value.Name));
+    }
+
+    private sealed class ColumnKeyComparer(
+        ISafeMigrationProviderObjectIdentityNormalizer? normalizer
+    ) : IEqualityComparer<ColumnKey>
+    {
+        private readonly TableKeyComparer _tableComparer = new(normalizer);
+
+        public bool Equals(
+            ColumnKey left,
+            ColumnKey right
+        ) => _tableComparer.Equals(
+                new TableKey(left.Table, left.Schema),
+                new TableKey(right.Table, right.Schema))
+            && StringComparer.Ordinal.Equals(left.Name, right.Name);
+
+        public int GetHashCode(
+            ColumnKey value
+        ) => HashCode.Combine(
+            _tableComparer.GetHashCode(new TableKey(value.Table, value.Schema)),
+            StringComparer.Ordinal.GetHashCode(value.Name));
+    }
+
     private sealed record ProjectedColumnState(
         string Name,
         ExpectedColumnDefinition? Definition,
@@ -773,9 +880,13 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
 
     private sealed class ProjectedPrerequisites(
         bool newlyCreated,
-        long dataMutationVersion
+        long dataMutationVersion,
+        ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer
     )
     {
+        private readonly ISafeMigrationProviderObjectIdentityNormalizer? _objectIdentityNormalizer
+            = objectIdentityNormalizer;
+
         public ProjectedDefinitionSet<ExpectedCheckConstraintDefinition> CheckConstraints { get; } =
             new(SafeMigrationSemanticDefinitionComparers.CheckConstraint);
 
@@ -834,7 +945,9 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
         {
             if (PrimaryKey is not null
                 && StringComparer.Ordinal.Equals(PrimaryKey.Table, table)
-                && StringComparer.Ordinal.Equals(PrimaryKey.Schema, schema)
+                && StringComparer.Ordinal.Equals(
+                    NormalizeSchema(_objectIdentityNormalizer, PrimaryKey.Schema),
+                    NormalizeSchema(_objectIdentityNormalizer, schema))
                 && SameColumns(PrimaryKey.Columns, columns))
             {
                 return true;
@@ -1162,15 +1275,18 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
     private sealed partial class ProjectedTable
     {
         private readonly List<string> _columnOrder;
+        private readonly ISafeMigrationProviderObjectIdentityNormalizer? _objectIdentityNormalizer;
         private string _table;
         private string? _schema;
         private readonly string? _comment;
 
         public ProjectedTable(
             ExpectedTableDefinition definition,
-            long dataMutationVersion
+            long dataMutationVersion,
+            ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer
         )
         {
+            _objectIdentityNormalizer = objectIdentityNormalizer;
             _table = definition.Table;
             _schema = definition.Schema;
             _comment = definition.Comment;
@@ -1242,13 +1358,15 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
             .Select(value => StringComparer.Ordinal.Equals(value, source) ? target : value)
             .ToArray();
 
-        private static bool SameIdentity(
+        private bool SameIdentity(
             string leftTable,
             string? leftSchema,
             string rightTable,
             string? rightSchema
         ) => StringComparer.Ordinal.Equals(leftTable, rightTable)
-            && StringComparer.Ordinal.Equals(leftSchema, rightSchema);
+            && StringComparer.Ordinal.Equals(
+                NormalizeSchema(_objectIdentityNormalizer, leftSchema),
+                NormalizeSchema(_objectIdentityNormalizer, rightSchema));
 
         private static ExpectedColumnDefinition Copy(
             ExpectedColumnDefinition value,

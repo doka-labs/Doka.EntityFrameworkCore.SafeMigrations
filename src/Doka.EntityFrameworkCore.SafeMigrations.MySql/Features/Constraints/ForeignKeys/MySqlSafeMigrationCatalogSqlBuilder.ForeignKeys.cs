@@ -133,8 +133,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                         principal
                     ) => $"d.{Delimited(local)} = p.{Delimited(principal)}"));
 
-        return $"EXISTS (SELECT 1 FROM {Delimited(definition.Table)} d "
-            + $"LEFT JOIN {Delimited(definition.PrincipalTable)} p ON {join} "
+        return $"EXISTS (SELECT 1 FROM {Delimited(definition.Table, definition.Schema)} d "
+            + $"LEFT JOIN {Delimited(definition.PrincipalTable, definition.PrincipalSchema)} p ON {join} "
             + $"WHERE {localNotNull} AND p.{Delimited(definition.PrincipalColumns[0])} IS NULL LIMIT 1)";
     }
 

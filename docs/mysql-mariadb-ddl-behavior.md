@@ -23,8 +23,64 @@ session-local, but MySQL-family DDL is not an atomic migration transaction.
   history, model, environment, lock, catalog access, or connection opening.
   Replacing a connection cannot inherit validation from an EF-cached service
   provider.
+- An explicit EF table schema is treated as a MySQL/MariaDB database
+  qualifier. It must exactly equal the active connection's `DATABASE()` value.
 - A failure can occur after earlier DDL committed; retry must converge from the
   observed partial state.
+
+## Current-database qualification
+
+Doka preserves EF table and view `Schema` metadata as MySQL/MariaDB database
+qualification. SafeMigrations accepts the explicit qualifier only when it
+exactly equals the database selected by the active connection. The verified
+qualifier and an omitted qualifier then share one physical identity in the
+expected catalog, unexpected-object inventory, ordered projection, generated
+transition catalogs, postflight final-writer projection, DDL, constraints,
+indexes, and model-managed data.
+
+SQL generation cannot inspect the active connection. When an ordered
+SafeMigrations stream contains exactly one explicit database qualifier,
+generated cross-operation catalogs may merge that qualifier with omitted
+qualifiers only because every SafeMigrations command in the stream receives
+the same runtime `DATABASE()` guard. A foreign qualifier therefore rejects the
+first otherwise unqualified command before DDL or DML. Multiple distinct
+qualifiers remain separate and their shared guard cannot succeed, so an
+ambiguous stream also fails before its first SafeMigrations mutation.
+
+The identity check runs before catalog prerequisites, row probes, or target
+SQL. A different qualifier, or an explicit qualifier on a connection without a
+selected database, is `Unsupported` with `database_qualifier_mismatch`. The
+adapter does not remove the qualifier, inspect a same-named current-database
+object as a substitute, or perform cross-database DDL/DML. This preserves the
+isolation boundary even when both databases contain the same table name.
+
+EF may scaffold `EnsureSchema` when a MySQL/MariaDB model uses
+`HasDefaultSchema(currentDatabase)`. For the selected database this operation
+is an idempotent no-op because the connection already proves its existence.
+Dropping the selected database remains outside SafeMigrations and is rejected
+with `schema_operations`. A drop naming another database is rejected first
+with `database_qualifier_mismatch`; PostgreSQL-style independent schema
+namespaces remain a provider mismatch.
+
+The identity guard deliberately compares the configured qualifier and
+`DATABASE()` byte-for-byte. MySQL and MariaDB can change database and table
+name comparison with `lower_case_table_names`, and that setting also depends
+on server initialization and platform. SafeMigrations does not broaden a
+reviewed database identity according to that environment-specific setting.
+Use the exact `DATABASE()` spelling consistently in model metadata and across
+environments:
+
+- [MySQL identifier case sensitivity](https://dev.mysql.com/doc/refman/8.4/en/identifier-case-sensitivity.html)
+- [MariaDB identifier case sensitivity](https://mariadb.com/docs/server/reference/sql-structure/sql-language-structure/identifier-case-sensitivity)
+
+MySQL documents `db_name.tbl_name` as database-qualified table identity, and
+MariaDB documents that an omitted database qualifier resolves to the current
+database. Both engines expose that selected identity through `DATABASE()`:
+
+- [MySQL CREATE TABLE](https://dev.mysql.com/doc/refman/8.4/en/create-table.html)
+- [MySQL current database](https://dev.mysql.com/doc/refman/8.4/en/getting-information.html)
+- [MariaDB identifier qualifiers](https://mariadb.com/docs/server/reference/sql-structure/sql-language-structure/identifier-qualifiers)
+- [MariaDB DATABASE](https://mariadb.com/docs/server/reference/sql-functions/secondary-functions/information-functions/database)
 
 ## Why multiple commands are required
 
@@ -48,14 +104,16 @@ cleanup inside one provider-executed command scope.
 The provider handler emits a plan equivalent to:
 
 1. create the session-local assertion table;
-2. evaluate catalog-only table and referenced-column prerequisites;
-3. prepare and execute the data-reading state query only when prerequisites
+2. verify an explicit database qualifier against the active connection;
+3. evaluate catalog-only table and referenced-column prerequisites only after
+   the identity check succeeds;
+4. prepare and execute the data-reading state query only when prerequisites
    exist;
-4. run a non-DDL assertion that fails for a rejected state;
-5. select provider-rendered DDL or an inert statement;
-6. `PREPARE` and `EXECUTE` the selected statement;
-7. evaluate and assert the target postcondition;
-8. always deallocate the prepared statement, restore provider session state,
+5. run a non-DDL assertion that fails for a rejected state;
+6. select provider-rendered DDL or an inert statement;
+7. `PREPARE` and `EXECUTE` the selected statement;
+8. evaluate and assert the target postcondition;
+9. always deallocate the prepared statement, restore provider session state,
    clear SafeMigrations variables, and drop the temporary assertion table.
 
 Names and catalog literals are generated by EF/Doka SQL helpers. During
@@ -449,11 +507,12 @@ Guid property is stored as `binary(16)` or `char(36)`. This separation prevents
 connection ownership from changing the model's storage contract.
 
 Unsupported features are rejected from Doka's canonical server feature
-profile. Examples include relational schema namespaces and filtered indexes on
-MySQL/MariaDB. The separately qualified Binary16-default catalog boundary is
-version-specific: MySQL, MariaDB 10.11, and MariaDB 11.4 fail closed, while
-MariaDB 11.8 and 12.3 are enabled by the complete live evidence matrix. No
-unqualified future engine line is admitted implicitly.
+profile. Examples include independent relational schema namespaces,
+cross-database operations, and filtered indexes on MySQL/MariaDB. The
+separately qualified Binary16-default catalog boundary is version-specific:
+MySQL, MariaDB 10.11, and MariaDB 11.4 fail closed, while MariaDB 11.8 and 12.3
+are enabled by the complete live evidence matrix. No unqualified future engine
+line is admitted implicitly.
 
 ## Primary documentation
 

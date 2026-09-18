@@ -357,7 +357,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
         var nonNull = string.Join(" AND ", keys.Select(static key => $"({key}) IS NOT NULL"));
 
-        return DuplicateDataExists(definition.Table, keys, nonNull);
+        return DuplicateDataExists(definition.Table, definition.Schema, keys, nonNull);
     }
 
     private string IndexDataExpression(

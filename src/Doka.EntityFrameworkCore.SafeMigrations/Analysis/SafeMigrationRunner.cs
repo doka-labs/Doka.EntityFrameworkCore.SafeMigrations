@@ -259,15 +259,6 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
         var assessments = new List<SafeMigrationAssessment>(operations.Count);
         var blocked = false;
         var hasProviderOperations = false;
-        var preflightProjection = mode == SafeMigrationReportMode.Preflight
-            ? new SafeMigrationPreflightProjection(
-                _providerAnalyzer as ISafeMigrationProviderOperationProjection,
-                _providerAnalyzer as ISafeMigrationProjectedKeyAnalyzer)
-            : null;
-
-        var postflightProjection = mode == SafeMigrationReportMode.Postflight
-            ? new SafeMigrationPostflightProjection(operations)
-            : null;
 
         var safeOperations = operations
             .OfType<SafeMigrationOperation>()
@@ -280,6 +271,19 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
         {
             throw new InvalidOperationException("The SafeMigrations analyzer returned an inconsistent result count.");
         }
+
+        var objectIdentityNormalizer =
+            _providerAnalyzer as ISafeMigrationProviderObjectIdentityNormalizer;
+        var postflightProjection = mode == SafeMigrationReportMode.Postflight
+            ? new SafeMigrationPostflightProjection(operations, objectIdentityNormalizer)
+            : null;
+
+        var preflightProjection = mode == SafeMigrationReportMode.Preflight
+            ? new SafeMigrationPreflightProjection(
+                _providerAnalyzer as ISafeMigrationProviderOperationProjection,
+                _providerAnalyzer as ISafeMigrationProjectedKeyAnalyzer,
+                objectIdentityNormalizer)
+            : null;
 
         var safeOperationOrdinal = 0;
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)

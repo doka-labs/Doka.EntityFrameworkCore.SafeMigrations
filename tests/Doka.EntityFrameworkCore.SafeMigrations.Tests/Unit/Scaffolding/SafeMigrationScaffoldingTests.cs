@@ -105,6 +105,54 @@ public sealed class SafeMigrationScaffoldingTests
     }
 
     [Theory]
+    [InlineData(SafeMigrationScaffoldingMode.Strict)]
+    [InlineData(SafeMigrationScaffoldingMode.LegacyConvergence)]
+    public void SchemaGenerationUsesSafeOperationsForBothScaffoldingModes(
+        SafeMigrationScaffoldingMode mode
+    )
+    {
+        var generator = CreateOperationGenerator(mode);
+        var builder = new IndentedStringBuilder();
+        MigrationOperation[] operations =
+        [
+            new EnsureSchemaOperation { Name = "application" },
+            new DropSchemaOperation { Name = "archive" },
+        ];
+
+        generator.Generate("migrationBuilder", operations, builder);
+        var source = builder.ToString();
+
+        Assert.Contains(".EnsureSchemaExists(", source, StringComparison.Ordinal);
+        Assert.Contains("name: \"application\"", source, StringComparison.Ordinal);
+        Assert.Contains(".DropSchemaIfExists(", source, StringComparison.Ordinal);
+        Assert.Contains("name: \"archive\"", source, StringComparison.Ordinal);
+        Assert.DoesNotContain(".EnsureSchema(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain(".DropSchema(", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DisabledScaffoldingPreservesProviderSchemaOperations()
+    {
+        var generator = CreateOperationGenerator(SafeMigrationScaffoldingMode.Strict, isEnabled: false);
+        var builder = new IndentedStringBuilder();
+        MigrationOperation[] operations =
+        [
+            new EnsureSchemaOperation { Name = "application" },
+            new DropSchemaOperation { Name = "archive" },
+        ];
+
+        generator.Generate("migrationBuilder", operations, builder);
+        var source = builder.ToString();
+
+        Assert.Contains(".EnsureSchema(", source, StringComparison.Ordinal);
+        Assert.Contains("name: \"application\"", source, StringComparison.Ordinal);
+        Assert.Contains(".DropSchema(", source, StringComparison.Ordinal);
+        Assert.Contains("name: \"archive\"", source, StringComparison.Ordinal);
+        Assert.DoesNotContain(".EnsureSchemaExists(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain(".DropSchemaIfExists(", source, StringComparison.Ordinal);
+    }
+
+    [Theory]
     [InlineData(true, ".DropIndexIfExists(")]
     [InlineData(false, ".DropIndex(")]
     public void DropIndexGenerationFollowsTheSelectedScaffoldingContract(

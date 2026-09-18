@@ -7,14 +7,21 @@ internal static class SafeMigrationExpectedIndexTransitions
 {
     public static void Validate(
         IReadOnlyList<MigrationOperation> operations
+    ) => Validate(operations, static schema => schema);
+
+    public static void Validate(
+        IReadOnlyList<MigrationOperation> operations,
+        Func<string?, string?> normalizeSchema
     )
     {
         ArgumentNullException.ThrowIfNull(operations);
+        ArgumentNullException.ThrowIfNull(normalizeSchema);
 
-        var tables = new Dictionary<TableKey, Dictionary<string, ExpectedIndexDefinition>>();
+        var tables = new Dictionary<TableKey, Dictionary<string, ExpectedIndexDefinition>>(
+            new TableKeyComparer(normalizeSchema));
         foreach (var operation in operations.OfType<SafeMigrationOperation>())
         {
-            Apply(tables, operation.Intent);
+            Apply(tables, operation.Intent, normalizeSchema);
         }
     }
 
@@ -44,7 +51,8 @@ internal static class SafeMigrationExpectedIndexTransitions
 
     private static void Apply(
         Dictionary<TableKey, Dictionary<string, ExpectedIndexDefinition>> tables,
-        SafeMigrationIntent intent
+        SafeMigrationIntent intent,
+        Func<string?, string?> normalizeSchema
     )
     {
         switch (intent)
@@ -59,7 +67,7 @@ internal static class SafeMigrationExpectedIndexTransitions
                 RenameTable(tables, value);
                 break;
             case DropSchemaIntent value:
-                DropSchema(tables, value.Name);
+                DropSchema(tables, value.Name, normalizeSchema);
                 break;
             case EnsureIndexIntent value:
                 GetOrAdd(tables, value.Definition.Schema, value.Definition.Table)[value.Definition.Name] =
@@ -108,10 +116,14 @@ internal static class SafeMigrationExpectedIndexTransitions
 
     private static void DropSchema(
         Dictionary<TableKey, Dictionary<string, ExpectedIndexDefinition>> tables,
-        string schema
+        string schema,
+        Func<string?, string?> normalizeSchema
     )
     {
-        foreach (var key in tables.Keys.Where(key => StringComparer.Ordinal.Equals(key.Schema, schema)).ToArray())
+        var normalizedSchema = normalizeSchema(schema);
+        foreach (var key in tables.Keys
+                     .Where(key => StringComparer.Ordinal.Equals(normalizeSchema(key.Schema), normalizedSchema))
+                     .ToArray())
         {
             tables.Remove(key);
         }
@@ -255,4 +267,25 @@ internal static class SafeMigrationExpectedIndexTransitions
         string? Schema,
         string Table
     );
+
+    private sealed class TableKeyComparer(
+        Func<string?, string?> normalizeSchema
+    ) : IEqualityComparer<TableKey>
+    {
+        public bool Equals(
+            TableKey left,
+            TableKey right
+        ) => StringComparer.Ordinal.Equals(left.Table, right.Table)
+            && StringComparer.Ordinal.Equals(
+                normalizeSchema(left.Schema),
+                normalizeSchema(right.Schema));
+
+        public int GetHashCode(
+            TableKey value
+        ) => HashCode.Combine(
+            StringComparer.Ordinal.GetHashCode(value.Table),
+            normalizeSchema(value.Schema) is { } schema
+                ? StringComparer.Ordinal.GetHashCode(schema)
+                : 0);
+    }
 }
