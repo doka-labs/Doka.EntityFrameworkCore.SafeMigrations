@@ -77,6 +77,87 @@ cleanup() {
 }
 trap cleanup EXIT
 
+package_consumer_project_name() {
+    local consumer_name="$1"
+
+    case "$consumer_name" in
+        MySql)
+            printf '%s\n' "Doka.EntityFrameworkCore.SafeMigrations.MySql.PackageConsumer.csproj"
+            ;;
+        PostgreSql)
+            printf '%s\n' "Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.PackageConsumer.csproj"
+            ;;
+        Sqlite)
+            printf '%s\n' "Doka.EntityFrameworkCore.SafeMigrations.Sqlite.PackageConsumer.csproj"
+            ;;
+        *)
+            echo "Unknown package consumer: $consumer_name" >&2
+            exit 1
+            ;;
+    esac
+}
+
+assert_design_reference_count() {
+    local assembly_info_file="$1"
+    local expected_count="$2"
+    local actual_count
+
+    if [[ ! -f "$assembly_info_file" ]]; then
+        echo "Generated assembly info is missing: $assembly_info_file" >&2
+        exit 1
+    fi
+
+    actual_count="$(
+        grep -Fc \
+            'Microsoft.EntityFrameworkCore.Design.DesignTimeServicesReferenceAttribute' \
+            "$assembly_info_file" \
+            || true
+    )"
+
+    if [[ "$actual_count" -ne "$expected_count" ]]; then
+        echo \
+            "Expected $expected_count SafeMigrations design reference(s) in $assembly_info_file, found $actual_count." \
+            >&2
+        exit 1
+    fi
+}
+
+assert_safe_scaffolding_source() {
+    local consumer_name="$1"
+    local migration_file="$2"
+
+    case "$consumer_name" in
+        MySql)
+            if ! grep -Fq 'migrationBuilder.ConvergeTableFromModel(' "$migration_file"; then
+                echo "$consumer_name incremental migration did not use ConvergeTableFromModel." >&2
+                sed -n '1,220p' "$migration_file" >&2
+                exit 1
+            fi
+            ;;
+        PostgreSql | Sqlite)
+            if ! grep -Fq 'migrationBuilder.CreateTableIfNotExists(' "$migration_file"; then
+                echo "$consumer_name incremental migration did not use CreateTableIfNotExists." >&2
+                sed -n '1,220p' "$migration_file" >&2
+                exit 1
+            fi
+            ;;
+        *)
+            echo "Unknown package consumer: $consumer_name" >&2
+            exit 1
+            ;;
+    esac
+
+    if ! grep -Fq 'using Doka.EntityFrameworkCore.SafeMigrations;' "$migration_file"; then
+        echo "$consumer_name incremental migration is missing the SafeMigrations namespace." >&2
+        exit 1
+    fi
+
+    if grep -Fq 'migrationBuilder.CreateTable(' "$migration_file"; then
+        echo "$consumer_name incremental consumer bypassed SafeMigrations scaffolding." >&2
+        exit 1
+    fi
+}
+
 mkdir -p "$work_dir/.config" "$work_dir/eng/package-consumer"
 cp "$script_dir/../.config/dotnet-tools.json" "$work_dir/.config/dotnet-tools.json"
 cp "$script_dir/../.editorconfig" "$work_dir/.editorconfig"
@@ -118,21 +199,7 @@ verify_consumer() {
             ;;
     esac
 
-    case "$consumer_name" in
-        MySql)
-            source_project="Doka.EntityFrameworkCore.SafeMigrations.MySql.PackageConsumer.csproj"
-            ;;
-        PostgreSql)
-            source_project="Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.PackageConsumer.csproj"
-            ;;
-        Sqlite)
-            source_project="Doka.EntityFrameworkCore.SafeMigrations.Sqlite.PackageConsumer.csproj"
-            ;;
-        *)
-            echo "Unknown package consumer: $consumer_name" >&2
-            exit 1
-            ;;
-    esac
+    source_project="$(package_consumer_project_name "$consumer_name")"
 
     mkdir -p "$consumer_dir"
     cp "$script_dir/package-consumer/$consumer_name/$source_project" \
@@ -446,6 +513,112 @@ verify_consumer() {
         "${msbuild_properties[@]}"
 }
 
+verify_incremental_design_registration() {
+    local consumer_name="$1"
+    local tooling_reference="$2"
+    local consumer_dir="$work_dir/eng/package-consumer/$consumer_name-Incremental-$tooling_reference"
+    local source_project
+    source_project="$(package_consumer_project_name "$consumer_name")"
+    local consumer_project="$consumer_dir/$source_project"
+    local artifacts_project_name="$consumer_name.Incremental.$tooling_reference"
+    local scaffolding_dir="$consumer_dir/IncrementalScaffoldingProbe"
+    local migration_name="Incremental${tooling_reference}ScaffoldingProbe"
+    local -a transition_references=(None "$tooling_reference" None)
+    local -a expected_reference_counts=(0 1 0)
+
+    mkdir -p "$consumer_dir"
+    cp "$script_dir/package-consumer/$consumer_name/$source_project" "$consumer_project"
+    cp "$script_dir/package-consumer/$consumer_name/Imports.cs" "$consumer_dir/"
+    cp "$script_dir/package-consumer/$consumer_name/Program.cs" "$consumer_dir/"
+
+    local transition_index
+    for transition_index in "${!transition_references[@]}"; do
+        local current_reference="${transition_references[$transition_index]}"
+        local expected_count="${expected_reference_counts[$transition_index]}"
+        local generated_assembly_info
+        local -a msbuild_properties=(
+            -p:SafeMigrationsPackageVersion="$package_version"
+            -p:EfCorePackageVersion="$ef_core_version"
+            -p:SafeMigrationsPackageConsumerMode=Package
+            -p:SafeMigrationsEfToolingReference="$current_reference"
+            -p:ArtifactsProjectName="$artifacts_project_name"
+        )
+        local -a restore_args=(
+            "$consumer_project"
+            --packages "$work_dir/packages"
+            --source "$package_dir"
+            --source "$doka_source"
+            --source "https://api.nuget.org/v3/index.json"
+            --use-lock-file
+            --force-evaluate
+            --disable-parallel
+            "${msbuild_properties[@]}"
+        )
+
+        dotnet restore "${restore_args[@]}"
+        dotnet build "$consumer_project" \
+            --configuration Release \
+            --no-restore \
+            --disable-build-servers \
+            "${msbuild_properties[@]}"
+
+        generated_assembly_info="$(
+            dotnet msbuild "$consumer_project" \
+                -p:Configuration=Release \
+                -getProperty:GeneratedAssemblyInfoFile \
+                "${msbuild_properties[@]}"
+        )"
+
+        assert_design_reference_count "$generated_assembly_info" "$expected_count"
+
+        if [[ "$expected_count" -eq 1 ]]; then
+            dotnet run \
+                --project "$consumer_project" \
+                --configuration Release \
+                --no-build \
+                --no-restore \
+                "${msbuild_properties[@]}" \
+                -- \
+                --expect-design-reference
+        else
+            dotnet run \
+                --project "$consumer_project" \
+                --configuration Release \
+                --no-build \
+                --no-restore \
+                "${msbuild_properties[@]}"
+        fi
+
+        if [[ "$transition_index" -eq 1 ]]; then
+            # WHY: The same output and intermediate paths reproduce the consumer transition that clean builds miss.
+            (
+                cd "$work_dir"
+                ArtifactsProjectName="$artifacts_project_name" \
+                SafeMigrationsPackageConsumerMode=Package \
+                SafeMigrationsEfToolingReference="$current_reference" \
+                SafeMigrationsPackageVersion="$package_version" \
+                EfCorePackageVersion="$ef_core_version" \
+                dotnet tool run dotnet-ef -- \
+                    migrations add "$migration_name" \
+                    --project "$consumer_project" \
+                    --context PackageScaffoldingDbContext \
+                    --output-dir IncrementalScaffoldingProbe \
+                    --configuration Release \
+                    --no-build
+            )
+
+            local migration_file
+            migration_file="$(find "$scaffolding_dir" -type f -name "*_${migration_name}.cs" -print -quit)"
+            if [[ -z "$migration_file" ]]; then
+                echo "$consumer_name $tooling_reference transition did not scaffold a migration." >&2
+                exit 1
+            fi
+
+            assert_safe_scaffolding_source "$consumer_name" "$migration_file"
+        fi
+    done
+}
+
 verify_split_mysql_consumer() {
     local split_root="$work_dir/eng/package-consumer/MySqlSplit"
     local target_project="$split_root/MigrationsTarget/Doka.EntityFrameworkCore.SafeMigrations.MySql.SplitTarget.csproj"
@@ -527,6 +700,9 @@ for consumer_name in MySql PostgreSql Sqlite; do
     verify_consumer "$consumer_name" Tools
     verify_consumer "$consumer_name" DesignWithoutSafeBuildAssets
     verify_consumer "$consumer_name" None
+
+    verify_incremental_design_registration "$consumer_name" Design
+    verify_incremental_design_registration "$consumer_name" Tools
 done
 
 verify_split_mysql_consumer

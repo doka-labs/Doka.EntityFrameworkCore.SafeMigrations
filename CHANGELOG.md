@@ -74,6 +74,11 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- Register MySQL/MariaDB, PostgreSQL, and SQLite design-time services before
+  the .NET SDK hashes generated assembly attributes. Adding or removing a
+  direct EF Design or EF Tools reference after an earlier runtime-only build
+  now updates the compiled registration through an ordinary incremental build
+  without requiring a clean or rebuild.
 - Rewrite standalone EF primary-key, unique, check, and foreign-key adds and
   drops into their SafeMigrations counterparts. Dependency-ordered initial
   migrations no longer leave a raw `AddForeignKey` that collides with an

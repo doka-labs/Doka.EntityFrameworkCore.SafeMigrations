@@ -1,8 +1,9 @@
 <Project>
   <Target Name="AddDokaSqliteSafeMigrationsDesignTimeServicesReference"
-          BeforeTargets="CoreGenerateAssemblyInfo"
+          BeforeTargets="GetAssemblyAttributes"
           Condition="'@(PackageReference->WithMetadataValue('Identity', 'Microsoft.EntityFrameworkCore.Design'))' != ''
                      Or '@(PackageReference->WithMetadataValue('Identity', 'Microsoft.EntityFrameworkCore.Tools'))' != ''">
+    <!-- Add the registration before the SDK hashes assembly attributes for incremental generation. -->
     <ItemGroup>
       <AssemblyAttribute Include="Microsoft.EntityFrameworkCore.Design.DesignTimeServicesReferenceAttribute">
         <_Parameter1>Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDesignTimeServices, Doka.EntityFrameworkCore.SafeMigrations</_Parameter1>
