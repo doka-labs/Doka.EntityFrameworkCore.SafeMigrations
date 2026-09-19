@@ -86,6 +86,14 @@ paginated Release inventory because GitHub's tag endpoint returns published
 Releases only. The complete eleven-asset draft is read back before the first
 NuGet push.
 
+Immediately before requesting the NuGet credential, the workflow checks the
+public state of every primary package with bounded retries. Missing primary
+packages are published in dependency order: Core first, followed by MySQL,
+PostgreSQL, and SQLite. A same-run retry skips primary packages that NuGet.org
+already exposes through the Flat Container and retries every primary or symbol
+package with duplicate tolerance when visibility still lags. The final
+signed-content readback remains the acceptance gate.
+
 After signed NuGet content has been read back, the workflow publishes the
 verified draft. It then waits for the published immutable state and GitHub's
 automatically generated Release and asset attestations with a bounded retry
@@ -97,8 +105,11 @@ already exists.
 
 NuGet cannot publish four package IDs atomically. A network failure can occur
 after one or more uploads are accepted. The supported recovery is rerunning the
-failed `publish` job in the original run. Duplicate pushes are tolerated, but
-signed public content and the staged or immutable GitHub Release must still
+failed `publish` job in the original run. Its publication preflight skips
+primary packages already visible through the Flat Container, and
+duplicate-tolerant primary and symbol pushes are safe to repeat. A new workflow
+dispatch is intentionally rejected because the version is no longer unused.
+Signed public content and the staged or immutable GitHub Release must still
 match exactly. Missing draft assets can be uploaded; conflicting assets are
 never overwritten. The successful attestation job supplies the same immutable
 attempt-qualified provenance artifact to a publish-only retry; rerunning the
