@@ -28,9 +28,11 @@ rechecked on 2026-08-27. Bounded package ranges describe compatibility; the
 committed lockfiles identify the exact graph selected by a particular
 revision.
 
-Published stable 10.4.1 is the latest verified public release. This source adds
-the SQLite package for the next stable release. Only the blocking release
-workflow and exact public package readback establish its qualification.
+Published stable 10.4.1 is the latest verified public release. This source is
+prepared for stable 10.4.2 with the first SQLite package and the verified
+convergence and incremental design-time registration fixes described in the
+changelog. Only the blocking release workflow and exact public package
+readback establish its qualification.
 
 ## Engine matrix
 

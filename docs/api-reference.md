@@ -8,7 +8,7 @@ completion/Quick Documentation for the selected package version. The
 [Core](../src/Doka.EntityFrameworkCore.SafeMigrations/PublicAPI.Shipped.txt),
 [MySQL/MariaDB](../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/PublicAPI.Shipped.txt),
 [PostgreSQL](../src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/PublicAPI.Shipped.txt),
-and [SQLite](../src/Doka.EntityFrameworkCore.SafeMigrations.Sqlite/PublicAPI.Unshipped.txt)
+and [SQLite](../src/Doka.EntityFrameworkCore.SafeMigrations.Sqlite/PublicAPI.Shipped.txt)
 API baselines are review inventories, not substitutes for this guide or XML.
 The initial public surface shipped with `10.0.0-rc.1`; `10.0.0-rc.2` added
 source-frozen legacy-convergence policy selection and provider-context
@@ -36,11 +36,12 @@ Doka 10.4.0's commandless operation result. Published stable 10.4.0 adds
 self-describing report-view serialization without changing canonical report-v2
 bytes and corrects MariaDB JSON collation diagnostics. Published stable 10.4.1
 preserves that public API, generated-operation contract, and report schemas
-while correcting ordered prerequisite and physical-identity projection. The
-next stable source adds the SQLite package and its provider-specific public
-registration and generator surface. Strict
-scaffolding remains the default. A successful release run and exact-version
-public package readback remain the authority for a published API.
+while correcting ordered prerequisite and physical-identity projection.
+Prepared stable 10.4.2 adds the SQLite package and its provider-specific public
+registration and generator surface. Existing Core, MySQL/MariaDB, and
+PostgreSQL public APIs remain compatible. Strict scaffolding remains the
+default. A successful release run and exact-version public package readback
+remain the authority for a published API.
 
 ## Packages and registration
 

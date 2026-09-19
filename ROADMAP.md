@@ -57,10 +57,11 @@ adopts Doka 10.4.0's commandless handler result for the internal runtime guard.
 Published stable 10.4.0 adds allocation-bounded, self-describing report views
 and corrects MariaDB JSON collation diagnostics. Published stable 10.4.1 closes
 ordered prerequisite-state, semantic-alias, physical-key feasibility, and
-composite-key catalog-matching defects. The next stable source adds a separately
-packaged SQLite adapter with transactional, model-owned rebuilds. These releases follow changed
-dependency conditions and confirmed correctness requirements; they are not
-deferred initial scope.
+composite-key catalog-matching defects. Prepared stable 10.4.2 adds a
+separately packaged SQLite adapter with transactional, model-owned rebuilds
+and closes verified convergence and incremental design-time registration
+defects. These releases follow changed dependency conditions and confirmed
+correctness requirements; they are not deferred initial scope.
 
 Requalify affected behavior before adopting a provider, EF Core, database,
 SDK, action, or tooling update. Preserve public API, report, migration, data

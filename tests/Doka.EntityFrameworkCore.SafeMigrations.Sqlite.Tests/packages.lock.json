@@ -406,7 +406,7 @@
       "doka.entityframeworkcore.safemigrations.sqlite": {
         "type": "Project",
         "dependencies": {
-          "Doka.EntityFrameworkCore.SafeMigrations": "[10.4.1-dev, )",
+          "Doka.EntityFrameworkCore.SafeMigrations": "[10.4.2-dev, )",
           "Microsoft.EntityFrameworkCore.Sqlite.Core": "[10.0.11, 10.1.0)",
           "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.0.11, 10.1.0)"
         }

@@ -47,9 +47,11 @@ when that matrix executes. The exact successful run, not this table, is release
 evidence. See [Support and qualification](docs/support-and-qualification.md).
 
 The initial complete stable delivery is 10.0.0. The latest confirmed published
-release is 10.4.1. This source adds the SQLite provider for the next stable
-release. Only a successful release run and verified public packages establish
-its availability or qualification. See the [changelog](CHANGELOG.md).
+release is 10.4.1. This source is prepared for stable 10.4.2, which adds the
+SQLite provider and includes the verified convergence and incremental
+design-time registration fixes described in the changelog. Only a successful
+release run and verified public packages establish 10.4.2 availability or
+qualification. See the [changelog](CHANGELOG.md).
 
 ## Installation
 
@@ -60,21 +62,21 @@ published release and all four NuGet package pages before installation; source
 or changelog entries alone do not establish package availability.
 
 ```bash
-package_version='10.4.1'
+package_version='10.4.2'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.MySql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.4.1'
+package_version='10.4.2'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version "$package_version"
 ```
 
-or, after the first release containing the SQLite provider:
+or:
 
 ```bash
-package_version='10.5.0'
+package_version='10.4.2'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.Sqlite --version "$package_version"
 ```
 

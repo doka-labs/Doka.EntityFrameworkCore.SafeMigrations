@@ -6,6 +6,22 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+## [10.4.2] - 2026-09-19
+
+Prepared a stable release that adds the separately packaged SQLite provider
+while preserving the existing Core, MySQL/MariaDB, and PostgreSQL contracts.
+The release also closes verified brownfield text and standalone-constraint
+gaps, normalizes selected-database identity throughout MySQL/MariaDB operation
+streams, and makes design-time registration responsive to ordinary incremental
+builds. Existing Core, MySQL/MariaDB, and PostgreSQL public APIs and report
+schemas remain compatible; SQLite establishes its initial public API.
+
+These notes do not establish publication. Require the successful stable
+release run, the authorized signed `v10.4.2` tag, and verified public package,
+symbol, GitHub Release, provenance, SBOM, and attestation readback before
+selecting 10.4.2. All four package IDs must be published at the exact same
+version.
+
 ### Added
 
 - Add `Doka.EntityFrameworkCore.SafeMigrations.Sqlite` as the third provider
@@ -1028,7 +1044,8 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.1...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.2...HEAD
+[10.4.2]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.1...v10.4.2
 [10.4.1]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.0...v10.4.1
 [10.4.0]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.3.2...v10.4.0
 [10.3.2]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.3.1...v10.3.2

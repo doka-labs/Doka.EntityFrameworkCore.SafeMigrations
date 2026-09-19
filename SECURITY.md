@@ -95,12 +95,13 @@ changes.
 This policy covers all four SafeMigrations packages. Stable 10.4.x is the
 currently supported line; a dated changelog entry is not proof that a
 particular version has been published. Version 10.4.1 is the latest confirmed
-published release. This source adds the SQLite package for the next stable
-release; support begins only after verified publication and package readback.
+published release. This source is prepared for stable 10.4.2, including the
+first SQLite package; its support begins only after verified publication and
+package readback.
 
 | Release state | Security support |
 | --- | --- |
-| Unreleased SQLite source | Not a published support claim until release and package readback succeed |
+| Prepared 10.4.2 source | Not a published support claim until release and package readback succeed |
 | Stable 10.4.x | Supported release line; fixes may require updating to its latest published patch |
 | Stable 10.3.x | Superseded by the stable 10.4.x line |
 | Stable 10.2.x | Superseded by the stable 10.3.x line |
