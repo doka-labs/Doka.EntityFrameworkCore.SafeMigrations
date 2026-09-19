@@ -15,7 +15,9 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         for (var row = 0; row < intent.RowCount; row++)
         {
-            if (_modelManagedRows.TryGetValue(ModelManagedRowKey.Create(intent, row), out var projected))
+            if (_modelManagedRows.TryGetValue(
+                    ModelManagedRowKey.Create(intent, row, _objectIdentityNormalizer),
+                    out var projected))
             {
                 if (TryClassify(intent, row, projected, out states[row]))
                 {
@@ -76,10 +78,11 @@ internal sealed partial class SafeMigrationPreflightProjection
             return false;
         }
 
-        // A preceding accepted table creation proves an empty relation. This
+        // WHY: A preceding accepted table creation proves an empty relation. This
         // proof remains authoritative only while every referenced column is
         // projected and no opaque provider data operation could have populated
         // the table through direct writes or triggers.
+
         return ContainsAllColumns(prerequisites, intent.KeyColumns)
             && ContainsAllColumns(prerequisites, intent.Columns);
     }
@@ -154,7 +157,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         DeleteModelManagedDataIntent principalDelete
     )
     {
-        if (!StringComparer.Ordinal.Equals(deletedRow.Intent.Table, foreignKey.Table)
+        if (!IdentifierEquals(_objectIdentityNormalizer, deletedRow.Intent.Table, foreignKey.Table)
             || !SameSchema(deletedRow.Intent.Schema, foreignKey.Schema))
         {
             return false;
@@ -229,7 +232,7 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         for (var row = 0; row < intent.RowCount; row++)
         {
-            var currentKey = ModelManagedRowKey.Create(intent, row);
+            var currentKey = ModelManagedRowKey.Create(intent, row, _objectIdentityNormalizer);
 
             foreach (var uniqueKey in uniqueKeys)
             {
@@ -244,7 +247,7 @@ internal sealed partial class SafeMigrationPreflightProjection
                 {
                     if (!candidate.Exists
                         || candidateKey.Equals(currentKey)
-                        || !StringComparer.Ordinal.Equals(candidateKey.Table, intent.Table)
+                        || !IdentifierEquals(_objectIdentityNormalizer, candidateKey.Table, intent.Table)
                         || !SameSchema(candidateKey.Schema, intent.Schema))
                     {
                         continue;
@@ -274,7 +277,7 @@ internal sealed partial class SafeMigrationPreflightProjection
     {
         for (var row = 0; row < intent.RowCount; row++)
         {
-            var key = ModelManagedRowKey.Create(intent, row);
+            var key = ModelManagedRowKey.Create(intent, row, _objectIdentityNormalizer);
 
             if (intent is DeleteModelManagedDataIntent deletion)
             {
@@ -283,13 +286,13 @@ internal sealed partial class SafeMigrationPreflightProjection
                     _acceptedModelManagedDeletes.Add(new AcceptedModelManagedDeleteRow(deletion, row));
                 }
 
-                _modelManagedRows[key] = ProjectedModelManagedRow.Absent;
+                _modelManagedRows[key] = ProjectedModelManagedRow.Absent(_objectIdentityNormalizer);
                 continue;
             }
 
             var projected = _modelManagedRows.TryGetValue(key, out var existing) && existing.Exists
                 ? existing.Copy()
-                : new ProjectedModelManagedRow(exists: true);
+                : new ProjectedModelManagedRow(exists: true, _objectIdentityNormalizer);
 
             var values = intent switch
             {
@@ -336,7 +339,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         };
 
         var fingerprints = intentUniqueKeys
-            .Select(static uniqueKey => ModelManagedUniqueKeyFingerprint(uniqueKey.Columns))
+            .Select(uniqueKey => ModelManagedUniqueKeyFingerprint(uniqueKey.Columns))
             .ToHashSet(StringComparer.Ordinal);
 
         if (_projectedModelManagedUniqueKeys.TryGetValue(table, out var provenUniqueKeys))
@@ -367,7 +370,9 @@ internal sealed partial class SafeMigrationPreflightProjection
         SafeMigrationModelManagedDataEvidence? evidence
     )
     {
-        if (_modelManagedRows.TryGetValue(ModelManagedRowKey.Create(intent, row), out var projected)
+        if (_modelManagedRows.TryGetValue(
+                ModelManagedRowKey.Create(intent, row, _objectIdentityNormalizer),
+                out var projected)
             && projected.Exists
             && Matches(projected, intent.Columns, intent.OldValues, row, out var allKnown)
             && allKnown)
@@ -507,7 +512,8 @@ internal sealed partial class SafeMigrationPreflightProjection
     {
         public static ModelManagedRowKey Create(
             ModelManagedDataIntent intent,
-            int row
+            int row,
+            ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer
         )
         {
             using var writer = new CanonicalHashWriter();
@@ -516,7 +522,7 @@ internal sealed partial class SafeMigrationPreflightProjection
 
             for (var column = 0; column < intent.KeyColumns.Count; column++)
             {
-                writer.Add(intent.KeyColumns[column]);
+                writer.Add(NormalizeIdentifier(objectIdentityNormalizer, intent.KeyColumns[column]));
                 SafeMigrationModelManagedValue.Write(writer, intent.KeyValues.GetUnsafeValue(row, column));
             }
 
@@ -545,14 +551,14 @@ internal sealed partial class SafeMigrationPreflightProjection
             StringComparer.Ordinal.GetHashCode(value.KeyFingerprint));
     }
 
-    private static int ColumnOrdinal(
+    private int ColumnOrdinal(
         IReadOnlyList<string> columns,
         string column
     )
     {
         for (var ordinal = 0; ordinal < columns.Count; ordinal++)
         {
-            if (StringComparer.Ordinal.Equals(columns[ordinal], column))
+            if (IdentifierEquals(_objectIdentityNormalizer, columns[ordinal], column))
             {
                 return ordinal;
             }
@@ -561,14 +567,14 @@ internal sealed partial class SafeMigrationPreflightProjection
         throw new UnreachableException();
     }
 
-    private static int IndexOf(
+    private int IndexOf(
         IReadOnlyList<string> values,
         string expected
     )
     {
         for (var index = 0; index < values.Count; index++)
         {
-            if (StringComparer.Ordinal.Equals(values[index], expected))
+            if (IdentifierEquals(_objectIdentityNormalizer, values[index], expected))
             {
                 return index;
             }
@@ -583,18 +589,22 @@ internal sealed partial class SafeMigrationPreflightProjection
     );
 
     private sealed class ProjectedModelManagedRow(
-        bool exists
+        bool exists,
+        ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer
     )
     {
-        public static ProjectedModelManagedRow Absent { get; } = new(exists: false);
+        public static ProjectedModelManagedRow Absent(
+            ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer
+        ) => new(exists: false, objectIdentityNormalizer);
 
         public bool Exists { get; } = exists;
 
-        public Dictionary<string, object?> Values { get; } = new(StringComparer.Ordinal);
+        public Dictionary<string, object?> Values { get; } =
+            new(new IdentifierComparer(objectIdentityNormalizer));
 
         public ProjectedModelManagedRow Copy()
         {
-            var result = new ProjectedModelManagedRow(Exists);
+            var result = new ProjectedModelManagedRow(Exists, objectIdentityNormalizer);
 
             foreach (var (column, value) in Values)
             {

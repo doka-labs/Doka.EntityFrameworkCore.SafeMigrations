@@ -66,14 +66,14 @@ entry except NuGet's added `.signature.p7s`.
 
 Before requesting the NuGet credential, the protected job downloads the exact
 same-run provenance artifact, validates its SLSA v1 envelope and complete
-eight-subject name/digest inventory, and verifies every subject with
+ten-subject name/digest inventory, and verifies every subject with
 `gh attestation verify --bundle` pinned to the repository, release workflow,
 workflow commit, source ref, source commit, and hosted-runner boundary. It then
 creates a GitHub Release draft with the expected title, Changelog-derived
-notes, classification, exact six package files, `SHA256SUMS`, the SPDX
+notes, classification, exact eight package files, `SHA256SUMS`, the SPDX
 manifest, and `release-provenance.intoto.jsonl`. A retry retains digest-matching
 assets, uploads missing assets, and rejects every mismatch. Only a completely
-read-back nine-asset draft permits the first NuGet push.
+read-back eleven-asset draft permits the first NuGet push.
 
 After signed public NuGet content matches the qualified packages, the job
 publishes the draft. GitHub's immutable-release and release-asset verification
@@ -96,7 +96,7 @@ parallel release state and does not parse the symbol server.
   inside the immutable Release instead of depending only on GitHub API state.
 - Good, because the engineering surface is smaller and has fewer contracts
   that can disagree with GitHub or NuGet.
-- Bad, because three NuGet package IDs cannot be published atomically.
+- Bad, because four NuGet package IDs cannot be published atomically.
 - Bad, because symbol indexing is asynchronous and remains a NuGet-hosted
   validation state after upload.
 - Bad, because GitHub and NuGet still cannot commit atomically; recovery after
@@ -141,7 +141,7 @@ for that hosted evidence.
 
 - Good, because it can model every observed partial state explicitly.
 - Bad, because it duplicates platform contracts, requires extensive fixture
-  maintenance, and adds more failure modes than the three-package release needs.
+  maintenance, and adds more failure modes than the four-package release needs.
 
 ## More Information
 
@@ -171,6 +171,9 @@ owns independent consumer readback.
   attestations were not retained as a portable Release asset. Future releases
   now publish and independently verify the exact `actions/attest` Sigstore
   bundle as `release-provenance.intoto.jsonl` before requesting NuGet OIDC.
+- 2026-09-18: D-013 expanded qualification, exact-byte publication,
+  reconciliation, SBOM, and readback from three to four version-aligned NuGet
+  package IDs for the SQLite provider release.
 
 ### Implementation References
 

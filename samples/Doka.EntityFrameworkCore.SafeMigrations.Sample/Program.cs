@@ -8,6 +8,8 @@ internal static class Program
             options.UseScaffoldingMode(SafeMigrationScaffoldingMode.LegacyConvergence));
         _ = new DbContextOptionsBuilder().UsePostgreSqlSafeMigrations(options =>
             options.UseScaffoldingMode(SafeMigrationScaffoldingMode.LegacyConvergence));
+        _ = new DbContextOptionsBuilder().UseSqliteSafeMigrations(options =>
+            options.UseScaffoldingMode(SafeMigrationScaffoldingMode.LegacyConvergence));
 
         var initialMigrationBuilder = new MigrationBuilder("Doka.Sample.Provider");
         SampleMigrationUsage.BuildUpOperations(initialMigrationBuilder);

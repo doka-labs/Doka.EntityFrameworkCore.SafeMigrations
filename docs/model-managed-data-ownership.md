@@ -152,9 +152,12 @@ Before accepting an extended migration, verify all of the following:
 8. Pending-model detection uses the same ownership configuration as
    scaffolding.
 
-The repository's real EF tooling qualification implements these checks for
-MySQL, MariaDB, and PostgreSQL. Provider qualification still has to pass on the
-supported server matrix before release.
+The repository's full shared/extended ownership tooling implements these checks
+for MySQL, MariaDB, and PostgreSQL. SQLite qualification independently verifies
+strict and legacy source generation, history, schema, model-managed data,
+integrity, replay, and Migration Bundle application on file databases. Core unit
+tests retain provider-neutral coverage of the eight ownership rules. Provider
+qualification still has to pass on the supported engine matrix before release.
 
 ## Primary sources
 

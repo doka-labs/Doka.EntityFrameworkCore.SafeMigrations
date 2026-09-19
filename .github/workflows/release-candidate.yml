@@ -65,7 +65,8 @@ jobs:
           for package_id in \
             doka.entityframeworkcore.safemigrations \
             doka.entityframeworkcore.safemigrations.mysql \
-            doka.entityframeworkcore.safemigrations.postgresql; do
+            doka.entityframeworkcore.safemigrations.postgresql \
+            doka.entityframeworkcore.safemigrations.sqlite; do
             package_url="https://api.nuget.org/v3-flatcontainer/$package_id/$PACKAGE_VERSION/$package_id.$PACKAGE_VERSION.nupkg"
             http_code="$(curl --silent --show-error --location \
               --connect-timeout 10 --max-time 60 --output /dev/null \

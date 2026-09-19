@@ -1,8 +1,8 @@
 # Documentation
 
 This is the task-oriented entry point for SafeMigrations documentation. The
-latest confirmed published release is 10.4.0. This source is prepared for the
-stable 10.4.1 maintenance release described in the changelog; package
+latest confirmed published release is 10.4.1. This source adds the SQLite
+provider for the next stable release described in the changelog; package
 availability and OpenSSF status are established by their linked external
 registries, not by source documentation alone.
 
@@ -17,6 +17,7 @@ registries, not by source documentation alone.
 | Check engines, dependency ranges, qualified boundaries, and evidence | [Support and qualification](support-and-qualification.md) |
 | Understand MySQL/MariaDB session guards and implicit commits | [MySQL and MariaDB DDL](mysql-mariadb-ddl-behavior.md) |
 | Understand PostgreSQL analysis, model-managed data, and transaction behavior | [PostgreSQL behavior](postgresql-behavior.md) |
+| Understand SQLite rebuilds, tooling, and script boundaries | [SQLite behavior](sqlite-behavior.md) |
 | Deploy independently to heterogeneous instances and recover safely | [Deployment and recovery](runbooks/deployment-and-recovery.md) |
 | Interpret a blocked report or stable error | [Failure codes](runbooks/failure-codes.md) |
 | Collect metrics without exposing protected reports | [Observability](runbooks/observability.md) |

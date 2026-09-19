@@ -1,0 +1,78 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup Label="Engineering">
+    <AssemblyName>Doka.EntityFrameworkCore.SafeMigrations.Sqlite.PackageConsumer</AssemblyName>
+    <RootNamespace>Doka.EntityFrameworkCore.SafeMigrations.Sqlite.PackageConsumer</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup Label="Source"
+             Condition="'$(SafeMigrationsPackageConsumerMode)' == 'Source'">
+    <ProjectReference
+      Include="../../../src/Doka.EntityFrameworkCore.SafeMigrations.Sqlite/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.csproj"
+    />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+  </ItemGroup>
+
+  <ItemGroup Label="Package qualification"
+             Condition="'$(SafeMigrationsPackageConsumerMode)' == 'Package'">
+    <PackageReference Include="Doka.EntityFrameworkCore.SafeMigrations.Sqlite"
+                      Version="$(SafeMigrationsPackageVersion)">
+      <ExcludeAssets
+        Condition="'$(SafeMigrationsEfToolingReference)' == 'DesignWithoutSafeBuildAssets'">
+        build;buildTransitive
+      </ExcludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite"
+                      Version="$(EfCorePackageVersion)" />
+  </ItemGroup>
+
+  <ItemGroup Label="Source - EF Design"
+             Condition="'$(SafeMigrationsPackageConsumerMode)' == 'Source'
+                        And '$(SafeMigrationsEfToolingReference)' == 'Design'">
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design"
+                      PrivateAssets="all"
+                      IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive; compile" />
+  </ItemGroup>
+
+  <ItemGroup Label="Source - EF Tools"
+             Condition="'$(SafeMigrationsPackageConsumerMode)' == 'Source'
+                        And '$(SafeMigrationsEfToolingReference)' == 'Tools'">
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools"
+                      PrivateAssets="all"
+                      IncludeAssets="runtime; build; native; contentfiles; analyzers" />
+  </ItemGroup>
+
+  <ItemGroup Label="Package qualification - EF Design"
+             Condition="'$(SafeMigrationsPackageConsumerMode)' == 'Package'
+                        And ('$(SafeMigrationsEfToolingReference)' == 'Design'
+                             Or '$(SafeMigrationsEfToolingReference)' == 'DesignWithoutSafeBuildAssets')">
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design"
+                      Version="$(EfCorePackageVersion)"
+                      PrivateAssets="all"
+                      IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive; compile" />
+  </ItemGroup>
+
+  <ItemGroup Label="Package qualification - EF Tools"
+             Condition="'$(SafeMigrationsPackageConsumerMode)' == 'Package'
+                        And '$(SafeMigrationsEfToolingReference)' == 'Tools'">
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools"
+                      Version="$(EfCorePackageVersion)"
+                      PrivateAssets="all"
+                      IncludeAssets="runtime; build; native; contentfiles; analyzers" />
+  </ItemGroup>
+
+  <Target Name="ValidateSafeMigrationsPackageConsumerMode"
+          BeforeTargets="PrepareForBuild"
+          Condition="'$(SafeMigrationsPackageConsumerMode)' != 'Source'
+                     And '$(SafeMigrationsPackageConsumerMode)' != 'Package'">
+    <Error Text="SafeMigrationsPackageConsumerMode must be Source or Package." />
+  </Target>
+
+  <Target Name="ValidateSafeMigrationsEfToolingReference"
+          BeforeTargets="PrepareForBuild"
+          Condition="'$(SafeMigrationsEfToolingReference)' != 'Design'
+                     And '$(SafeMigrationsEfToolingReference)' != 'DesignWithoutSafeBuildAssets'
+                     And '$(SafeMigrationsEfToolingReference)' != 'Tools'
+                     And '$(SafeMigrationsEfToolingReference)' != 'None'">
+    <Error Text="SafeMigrationsEfToolingReference must be Design, DesignWithoutSafeBuildAssets, Tools, or None." />
+  </Target>
+</Project>

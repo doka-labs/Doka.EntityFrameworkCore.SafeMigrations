@@ -10,7 +10,7 @@ This compilable sample demonstrates the current .NET 10 API:
 - PostgreSQL schema and rename operations;
 - an allowlisted `RepairIfSafe` column metadata transition whose structural
   type facets exactly match the declared old definition;
-- MySQL/MariaDB and PostgreSQL adapter registration touchpoints.
+- MySQL/MariaDB, PostgreSQL, and SQLite adapter registration touchpoints.
 
 The normal authoring path is `dotnet ef migrations add` with
 `LegacyConvergence` selected in provider registration; the design-time
@@ -23,12 +23,13 @@ convergence only while generating a migration that intentionally adopts
 heterogeneous existing tables, then review the source and return registration
 to the strict default for subsequent scaffolding.
 
-The explicit design-time configuration is identical for both providers:
+The explicit design-time configuration is identical for all providers:
 
 ```csharp
 using Doka.EntityFrameworkCore.SafeMigrations;
 using Doka.EntityFrameworkCore.SafeMigrations.MySql;
 using Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
+using Doka.EntityFrameworkCore.SafeMigrations.Sqlite;
 
 options.UseMySqlSafeMigrations(configuration =>
 {
@@ -37,6 +38,12 @@ options.UseMySqlSafeMigrations(configuration =>
 });
 
 options.UsePostgreSqlSafeMigrations(configuration =>
+{
+    configuration.UseScaffoldingMode(
+        SafeMigrationScaffoldingMode.LegacyConvergence);
+});
+
+options.UseSqliteSafeMigrations(configuration =>
 {
     configuration.UseScaffoldingMode(
         SafeMigrationScaffoldingMode.LegacyConvergence);
@@ -57,12 +64,12 @@ Key files:
   migration.
 - `Migrations/MaintenanceSafeMigrationExample.cs` shows an explicit later
   forward fix.
-- `Program.cs` proves both provider registration extensions and constructs the
+- `Program.cs` proves all provider registration extensions and constructs the
   operation sequences without connecting to a database.
 
-The consuming application configures either Doka `UseMySql(...)` plus
-`UseMySqlSafeMigrations()`, or Npgsql `UseNpgsql(...)` plus
-`UsePostgreSqlSafeMigrations()`. `SampleDbContext` intentionally contains no
+The consuming application configures Doka `UseMySql(...)`, Npgsql
+`UseNpgsql(...)`, or Microsoft `UseSqlite(...)` plus the matching
+SafeMigrations registration. `SampleDbContext` intentionally contains no
 connection string or implicit provider choice.
 
 The sample slices are not intended to run as one combined migration history.

@@ -188,15 +188,15 @@ PostgreSQL cell. It must scaffold strict and legacy migrations with real
 identity annotations, and compile the generated migrations before continuing
 through update, script, idempotent script, and bundle gates.
 
-Run both provider integration suites. Missing identity tables must be created,
+Run every provider integration suite. Missing identity tables must be created,
 accept generated values, and remain matching on a second execution. Existing
 non-identity columns must classify `Different`; unknown operation annotations
 must classify `Unsupported`; neither negative case may execute target DDL.
 Repair qualification must additionally prove mutable drift, matching rerun,
 null-data blocking, and invariant type-drift rejection on every supported
-MySQL, MariaDB, and PostgreSQL server cell.
+MySQL, MariaDB, and PostgreSQL server cell plus SQLite.
 
-Pack all three packages and run package-only consumers. Each provider package
+Pack all four packages and run package-only consumers. Each provider package
 must contain its `buildTransitive` asset, inject the correct EF design-service
 attribute for direct-Design and Tools-only consumers, and restore without a
 project reference or cross-provider package. A runtime-only consumer must build
@@ -285,6 +285,8 @@ snapshots already required for catalog comparison and hashing.
   and replay contracts independent of provider-specific implicit DDL effects.
   Provider analysis and direct runtime SQL generation enforce the same order,
   including migrations without an `EnsureTable` operation.
+- 2026-09-18: D-013 extended automatic strict and legacy-convergence
+  scaffolding to the SQLite provider package and EF tooling gate.
 
 ### Implementation References
 
@@ -301,6 +303,8 @@ snapshots already required for catalog comparison and hashing.
 - [PostgreSQL identity integration](../../tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Integration/Features/Columns/PostgreSqlSafeMigrationIntegrationTests.Columns.Scaffolding.cs)
 - [Real EF tooling qualification](../../eng/verify-ef-tooling.sh)
 - [Package-only consumer qualification](../../eng/verify-package-consumer.sh)
+- [SQLite design-time package asset](../../src/Doka.EntityFrameworkCore.SafeMigrations.Sqlite/buildTransitive/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.props)
+- [SQLite EF tooling gate](../../eng/verify-sqlite-ef-tooling.sh)
 
 ### Sources
 

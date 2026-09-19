@@ -10,12 +10,13 @@ operator commands and order live only in
 SafeMigrations publishes these package IDs at one version:
 
 - `Doka.EntityFrameworkCore.SafeMigrations`;
-- `Doka.EntityFrameworkCore.SafeMigrations.MySql`; and
-- `Doka.EntityFrameworkCore.SafeMigrations.PostgreSql`.
+- `Doka.EntityFrameworkCore.SafeMigrations.MySql`;
+- `Doka.EntityFrameworkCore.SafeMigrations.PostgreSql`; and
+- `Doka.EntityFrameworkCore.SafeMigrations.Sqlite`.
 
 The workflow accepts a canonical lowercase NuGet version without a leading
 `v`. The version must belong to the source `VersionPrefix`, have exactly one
-dated changelog entry, be absent from all three NuGet package IDs, and be
+dated changelog entry, be absent from all four NuGet package IDs, and be
 dispatched from the exact current `main` SHA before any release tag exists.
 
 ## Reversible qualification
@@ -25,10 +26,11 @@ CI and release call the same reusable quality workflow. It enforces:
 - locked restore, formatting, warning-free Release build, Core tests, and
   Public API analyzers;
 - merged line and branch coverage thresholds;
-- Core, MySQL/MariaDB, and PostgreSQL performance/allocation budgets;
-- all supported MySQL, MariaDB, and PostgreSQL integration cells;
-- EF CLI migrations, idempotent and no-transaction scripts, and Migration
-  Bundles in every engine cell;
+- Core, MySQL/MariaDB, PostgreSQL, and SQLite performance/allocation budgets;
+- all supported MySQL, MariaDB, and PostgreSQL integration cells plus the
+  locked in-process SQLite runtime;
+- EF CLI migrations, supported scripts, and Migration Bundles in every engine
+  cell, including explicit rejection of SQLite safe-operation scripts;
 - deterministic double-pack, exact package contents, provider separation, and
   isolated package-only consumers; and
 - SPDX 2.2 SBOM generation and validation.
@@ -38,10 +40,10 @@ image's temporary socket-only initialization server. Large live performance
 fixtures receive a fixture-only command timeout; production SafeMigrations
 continues to use its normal configured timeout.
 
-The qualified workflow artifact contains the six package archives,
+The qualified workflow artifact contains the eight package archives,
 `SHA256SUMS`, performance evidence, and the SPDX manifest. GitHub creates build
 provenance and SBOM attestations for those exact bytes. The attestation job
-validates the build-provenance Sigstore bundle against all six packages,
+validates the build-provenance Sigstore bundle against all eight packages,
 `SHA256SUMS`, and `manifest.spdx.json`, materializes exactly one canonical
 `release-provenance.intoto.jsonl` record, and uploads it under a run- and
 attempt-qualified artifact name before publication can reach the protected
@@ -75,13 +77,13 @@ boundary. An API-hosted attestation without the downloaded bundle cannot satisfy
 this gate.
 
 Before the NuGet credential is requested, the GitHub Release starts as a draft
-with the expected title, Changelog-derived notes, classification, exact six
+with the expected title, Changelog-derived notes, classification, exact eight
 qualified package files, `SHA256SUMS`, `manifest.spdx.json`, and
 `release-provenance.intoto.jsonl`. On a same-run retry, matching uploaded assets
 are retained and missing assets are added; any metadata, unexpected name, or
 SHA-256 digest conflict fails closed. Draft discovery uses the authenticated,
 paginated Release inventory because GitHub's tag endpoint returns published
-Releases only. The complete nine-asset draft is read back before the first
+Releases only. The complete eleven-asset draft is read back before the first
 NuGet push.
 
 After signed NuGet content has been read back, the workflow publishes the
@@ -93,7 +95,7 @@ already exists.
 
 ## Recovery semantics
 
-NuGet cannot publish three package IDs atomically. A network failure can occur
+NuGet cannot publish four package IDs atomically. A network failure can occur
 after one or more uploads are accepted. The supported recovery is rerunning the
 failed `publish` job in the original run. Duplicate pushes are tolerated, but
 signed public content and the staged or immutable GitHub Release must still

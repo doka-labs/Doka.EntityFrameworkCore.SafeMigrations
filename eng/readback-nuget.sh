@@ -50,6 +50,7 @@ package_ids=(
     Doka.EntityFrameworkCore.SafeMigrations
     Doka.EntityFrameworkCore.SafeMigrations.MySql
     Doka.EntityFrameworkCore.SafeMigrations.PostgreSql
+    Doka.EntityFrameworkCore.SafeMigrations.Sqlite
 )
 
 compare_package_content() {

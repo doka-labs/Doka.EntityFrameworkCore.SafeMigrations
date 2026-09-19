@@ -4,13 +4,14 @@
 [![NuGet Core](https://img.shields.io/nuget/v/Doka.EntityFrameworkCore.SafeMigrations.svg?label=NuGet%20Core)](https://www.nuget.org/packages/Doka.EntityFrameworkCore.SafeMigrations)
 [![NuGet MySQL / MariaDB](https://img.shields.io/nuget/v/Doka.EntityFrameworkCore.SafeMigrations.MySql.svg?label=NuGet%20MySQL%20%2F%20MariaDB)](https://www.nuget.org/packages/Doka.EntityFrameworkCore.SafeMigrations.MySql)
 [![NuGet PostgreSQL](https://img.shields.io/nuget/v/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.svg?label=NuGet%20PostgreSQL)](https://www.nuget.org/packages/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql)
+[![NuGet SQLite](https://img.shields.io/nuget/v/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.svg?label=NuGet%20SQLite)](https://www.nuget.org/packages/Doka.EntityFrameworkCore.SafeMigrations.Sqlite)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/badge)](https://scorecard.dev/viewer/?uri=github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/14265/badge)](https://www.bestpractices.dev/projects/14265)
 
 SafeMigrations is a fail-closed EF Core 10 migration library for databases whose
 starting schema may differ between application instances. It supports one
-canonical migration sequence across MySQL, MariaDB, and PostgreSQL without
+canonical migration sequence across MySQL, MariaDB, PostgreSQL, and SQLite without
 assuming a common legacy migration history or deleting unknown objects.
 
 The library classifies each operation against the live catalog as `missing`,
@@ -30,6 +31,8 @@ equivalent.
   typed migration-metadata SPI
 - `Doka.EntityFrameworkCore.SafeMigrations.PostgreSql`: PostgreSQL adapter on
   Npgsql 10
+- `Doka.EntityFrameworkCore.SafeMigrations.Sqlite`: SQLite adapter on the
+  bundle-neutral official EF Core SQLite 10 provider core
 
 The declared release-qualification matrix is:
 
@@ -37,25 +40,23 @@ The declared release-qualification matrix is:
 | --- | --- |
 | `.MySql` | MySQL 8.4 and 9.7; MariaDB 10.11, 11.4, 11.8, and 12.3 |
 | `.PostgreSql` | PostgreSQL 14 through 18, with one release-gate cell per supported major |
+| `.Sqlite` | SQLite 3.46.1 or later through locked `Microsoft.EntityFrameworkCore.Sqlite.Core`; applications select and reference their native SQLite bundle, while qualification covers the default bundle in-memory and against asserted file databases |
 
 The CI and release workflows pin the exact patch tags and image digests used
 when that matrix executes. The exact successful run, not this table, is release
 evidence. See [Support and qualification](docs/support-and-qualification.md).
 
 The initial complete stable delivery is 10.0.0. The latest confirmed published
-release is 10.4.0. This source is prepared for stable 10.4.1, which preserves
-accepted prerequisites across ordered brownfield convergence, binds semantic
-aliases to physical catalog identities, invalidates stale projected evidence,
-and revalidates MySQL/MariaDB physical keys before replacement. Only a
-successful release run and verified public packages establish 10.4.1
-availability or qualification. See the [changelog](CHANGELOG.md).
+release is 10.4.1. This source adds the SQLite provider for the next stable
+release. Only a successful release run and verified public packages establish
+its availability or qualification. See the [changelog](CHANGELOG.md).
 
 ## Installation
 
 Install one provider package. The core package is included transitively. The
 commands select the prepared stable release exactly so restore does
 not move to a different package version implicitly. Confirm the matching
-published release and all three NuGet package pages before installation; source
+published release and all four NuGet package pages before installation; source
 or changelog entries alone do not establish package availability.
 
 ```bash
@@ -69,6 +70,20 @@ or:
 package_version='10.4.1'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version "$package_version"
 ```
+
+or, after the first release containing the SQLite provider:
+
+```bash
+package_version='10.5.0'
+dotnet package add Doka.EntityFrameworkCore.SafeMigrations.Sqlite --version "$package_version"
+```
+
+The SQLite adapter deliberately does not choose a native SQLite bundle. Add
+`Microsoft.EntityFrameworkCore.Sqlite` for the default `bundle_e_sqlite3`
+deployment, or combine `Microsoft.EntityFrameworkCore.Sqlite.Core` with the
+application's selected SQLitePCLRaw provider and bundle for a custom native
+SQLite or SQLCipher deployment. The connected engine must report SQLite
+3.46.1 or later.
 
 The [.NET package command](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-package-add)
 documents exact-version selection. Verify release identity and content using
@@ -88,6 +103,19 @@ services.AddDbContext<AppDbContext>(options =>
 {
     options.UseMySql(connectionString, serverVersion);
     options.UseMySqlSafeMigrations();
+});
+```
+
+SQLite registration is additive to `UseSqlite`:
+
+```csharp
+using Doka.EntityFrameworkCore.SafeMigrations;
+using Doka.EntityFrameworkCore.SafeMigrations.Sqlite;
+
+services.AddDbContext<AppDbContext>(options =>
+{
+    options.UseSqlite(connectionString);
+    options.UseSqliteSafeMigrations();
 });
 ```
 
@@ -129,6 +157,13 @@ services.AddEntityFrameworkNpgsql();
 services.AddPostgreSqlSafeMigrations();
 ```
 
+or:
+
+```csharp
+services.AddEntityFrameworkSqlite();
+services.AddSqliteSafeMigrations();
+```
+
 Missing or conflicting SafeMigrations integration fails before target DDL and
 before the migration history row is written.
 
@@ -140,6 +175,7 @@ behavior. A derived instance context must name its canonical base explicitly:
 ```csharp
 options.UseMySqlSafeMigrations<ApplicationDbContext>();
 options.UsePostgreSqlSafeMigrations<ApplicationDbContext>();
+options.UseSqliteSafeMigrations<ApplicationDbContext>();
 ```
 
 The canonical type must be assignable from the runtime context. PostgreSQL
@@ -197,7 +233,7 @@ for migration-history DDL.
 
 ### Configure the scaffolding mode
 
-`SafeMigrationScaffoldingMode` is the design-time switch used by both provider
+`SafeMigrationScaffoldingMode` is the design-time switch used by every provider
 registrations:
 
 | Value | Selection | Generated table behavior | Generated rollback |
@@ -210,6 +246,7 @@ The no-argument registration selects `Strict`:
 ```csharp
 options.UseMySqlSafeMigrations();
 // or: options.UsePostgreSqlSafeMigrations();
+// or: options.UseSqliteSafeMigrations();
 ```
 
 This is equivalent to the explicit MySQL/MariaDB configuration:
@@ -229,6 +266,17 @@ PostgreSQL uses the same options contract:
 using Doka.EntityFrameworkCore.SafeMigrations;
 
 options.UsePostgreSqlSafeMigrations(safeMigrations =>
+{
+    safeMigrations.UseScaffoldingMode(SafeMigrationScaffoldingMode.Strict);
+});
+```
+
+SQLite uses the same options contract:
+
+```csharp
+using Doka.EntityFrameworkCore.SafeMigrations;
+
+options.UseSqliteSafeMigrations(safeMigrations =>
 {
     safeMigrations.UseScaffoldingMode(SafeMigrationScaffoldingMode.Strict);
 });
@@ -480,6 +528,21 @@ Unknown, malformed, contradictory, or unsupported metadata rejects. Existing
 collation, computed/generated, identity, row-version, and unsupported
 provider-metadata drift rejects without mutation. The table container alone
 never hides missing children.
+
+SQLite uses the official provider's model-owned rebuild path for changes that
+the engine cannot alter directly. A rebuild is accepted only when the terminal
+model owns every live and target column, index, primary key, unique constraint,
+check, and foreign key. Unknown triggers, referencing views, virtual tables,
+expression or partial indexes, `STRICT`, and `WITHOUT ROWID` reject before DDL.
+Table drops project external incoming foreign keys across ordered creates,
+renames, replacements, and drops; self-references disappear with their table.
+For a rebuild, foreign-key enforcement is disabled before the local transaction
+starts, the official provider rebuild runs inside that transaction, and final
+postconditions must pass before commit. When enforcement was enabled before the
+rebuild, the affected relationship closure must also pass `foreign_key_check`.
+The original mode is restored afterwards. The rebuild unit is atomic; EF's
+separate migration-history write is not part of that local transaction. See
+[SQLite behavior](docs/sqlite-behavior.md).
 
 `ExpectedTableDefinition` and `ConvergeTable` remain available for advanced
 hand-authored contracts, for example when a reviewed migration needs a policy
@@ -746,6 +809,12 @@ rejects before the server can raise a raw duplicate-object error.
   it must be read-only and use `RepeatableRead` or `Serializable`; otherwise
   analysis fails before reading the catalog and leaves that transaction owned
   by the caller.
+- SQLite safe structural segments that do not rebuild a table use the caller
+  transaction or one local transaction. Rebuild segments reject an existing
+  caller transaction and own a transaction-suppressed foreign-key boundary
+  plus one local transaction. Runtime migration and Migration Bundles are
+  supported. SQL scripts containing safe operations reject before partial
+  output because SQLite cannot encode the required catalog-dependent guards.
 - Always run postflight and retain its report with deployment evidence.
 
 Analyzer work is deterministically bounded at 32 operations per statement that
@@ -756,14 +825,18 @@ by 16,000 parameters and 4 MiB of UTF-8 payload; MySQL/MariaDB additionally cap
 a batch at half the live `max_allowed_packet`.
 Configured EF command timeouts apply to catalog commands and batches. A single
 operation that exceeds a bound is rejected before query execution; a failed
-later batch never publishes a partial report. The live provider suites qualify
-100,000 deterministically ordered mixed operations on every supported server
-profile. The workload covers every observed state and planned action across
+later batch never publishes a partial report. The live server-provider suites
+qualify 100,000 deterministically ordered mixed operations on every supported
+server profile. The workload covers every observed state and planned action across
 tables, columns, indexes, and primary-key, unique, check, and foreign-key
 constraints. Native ADO.NET batching is used only when
 `DbConnection.CanCreateBatch` is true. Compatible connection wrappers without
 batch support execute the same bounded statements sequentially and retain
 timeout, cancellation, ordinal, and report-atomicity guarantees.
+SQLite separately qualifies 50,000 mixed model-managed row transitions and
+budgets live analysis on 1,000 tables carrying indexes and foreign keys. These
+workloads reflect SQLite's in-process catalog and rebuild execution model
+rather than claiming equivalence with the server-provider transport matrix.
 
 See [Deployment and recovery](docs/runbooks/deployment-and-recovery.md) and
 [Failure codes](docs/runbooks/failure-codes.md).
@@ -778,6 +851,7 @@ dotnet build Doka.EntityFrameworkCore.SafeMigrations.slnx --configuration Releas
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Doka.EntityFrameworkCore.SafeMigrations.Tests.csproj --configuration Release
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests.csproj --configuration Release
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.csproj --configuration Release
+dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests.csproj --configuration Release
 ```
 
 Docker is required for provider tests. CI additionally executes every supported
@@ -802,7 +876,7 @@ signed annotated tag on that qualified commit and approve publication. The
 write-capable job validates and cryptographically verifies the portable SLSA
 bundle before using NuGet Trusted Publishing, verifies public repository
 signatures and package content, and creates or verifies an immutable GitHub
-Release with the exact six package files, checksums, SPDX manifest, and
+Release with the exact eight package files, checksums, SPDX manifest, and
 `release-provenance.intoto.jsonl`. Candidates are marked prerelease and never
 replace the latest stable release.
 See [Publication operations](docs/operations/release-publication.md) for the
@@ -824,6 +898,7 @@ Further documentation:
 - [Vertical-slice architecture](docs/vertical-slice-architecture.md)
 - [Support and qualification](docs/support-and-qualification.md)
 - [MySQL and MariaDB DDL behavior](docs/mysql-mariadb-ddl-behavior.md)
+- [SQLite behavior](docs/sqlite-behavior.md)
 - [EF Core and provider upgrade boundary](docs/efcore-provider-upgrade-risk.md)
 - [Sample project](samples/Doka.EntityFrameworkCore.SafeMigrations.Sample/README.md)
 

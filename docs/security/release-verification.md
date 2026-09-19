@@ -44,7 +44,7 @@ publication workflow uses a bounded retry. An independent verifier may repeat
 the same command for the same immutable tag; never treat a missing attestation
 as success or disable verification.
 
-Require exactly three `.nupkg`, three `.snupkg`, `SHA256SUMS`,
+Require exactly four `.nupkg`, four `.snupkg`, `SHA256SUMS`,
 `manifest.spdx.json`, and `release-provenance.intoto.jsonl`. Then verify each
 downloaded asset against the immutable Release:
 
@@ -65,7 +65,7 @@ On macOS, use `shasum -a 256 --check SHA256SUMS` instead.
 
 ## Verify portable build provenance
 
-The portable bundle must bind the six packages, `SHA256SUMS`, and the SPDX
+The portable bundle must bind the eight packages, `SHA256SUMS`, and the SPDX
 manifest. Verify each subject while pinning the repository, signer workflow,
 workflow commit, source ref, source commit, and hosted-runner requirement:
 
@@ -142,7 +142,7 @@ bash eng/readback-nuget.sh \
 It requires valid NuGet repository signatures and compares every public
 package entry with the qualified Release asset after excluding only
 `.signature.p7s`. NuGet.org separately validates and indexes the submitted
-`.snupkg` files; confirm the public symbol status for all three package IDs.
+`.snupkg` files; confirm the public symbol status for all four package IDs.
 
 Stop on an unknown signer, source mismatch, missing or unexpected asset,
 invalid attestation, invalid NuGet signature, content difference, or failed

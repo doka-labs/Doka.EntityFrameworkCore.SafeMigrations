@@ -259,11 +259,13 @@ internal sealed partial class SafeMigrationPreflightProjection
         if (_tables.TryGetValue(new TableKey(table, schema), out var projectedTable))
         {
             var hasPrimaryKey = projectedTable.PrimaryKey is not null
-                && SameColumns(projectedTable.PrimaryKey.Columns, columns);
+                && SameColumns(projectedTable.PrimaryKey.Columns, columns, _objectIdentityNormalizer);
 
             if (hasPrimaryKey
-                || projectedTable.UniqueConstraints.Values.Any(
-                    constraint => SameColumns(constraint.Columns, columns)))
+                || projectedTable.UniqueConstraints.Values.Any(constraint => SameColumns(
+                    constraint.Columns,
+                    columns,
+                    _objectIdentityNormalizer)))
             {
                 return true;
             }
@@ -304,7 +306,8 @@ internal sealed partial class SafeMigrationPreflightProjection
 
     private static bool SameColumns(
         IReadOnlyList<string> left,
-        IReadOnlyList<string> right
+        IReadOnlyList<string> right,
+        ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer
     )
     {
         if (left.Count != right.Count)
@@ -314,7 +317,7 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         for (var index = 0; index < left.Count; index++)
         {
-            if (!StringComparer.Ordinal.Equals(left[index], right[index]))
+            if (!IdentifierEquals(objectIdentityNormalizer, left[index], right[index]))
             {
                 return false;
             }

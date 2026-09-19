@@ -43,6 +43,16 @@
       "postgresql_model_data_generation_384",
       "postgresql_model_data_analyzer_build_384",
       "postgresql_canonical_model_validation"
+    ],
+    "sqlite": [
+      "sqlite_generation_1",
+      "sqlite_generation_100",
+      "sqlite_generation_1000",
+      "sqlite_repair_generation_1000",
+      "sqlite_model_data_generation_384",
+      "sqlite_model_data_analysis_384_tables_200",
+      "sqlite_model_data_analysis_384_tables_1000_relational",
+      "sqlite_canonical_model_validation"
     ]
   },
   "budgets": {
@@ -95,6 +105,18 @@
     "postgresql_model_data_generation_384": { "baselineDurationMilliseconds": 8, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 8000000 },
     "postgresql_model_data_analyzer_build_384": { "baselineDurationMilliseconds": 2, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 2000000 },
     "postgresql_canonical_model_validation": { "baselineDurationMilliseconds": 2, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 200000 },
+    "sqlite_generation_1": { "baselineDurationMilliseconds": 0.5, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 65536 },
+    "sqlite_generation_100": { "baselineDurationMilliseconds": 5, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 5000000 },
+    "sqlite_generation_1000": { "baselineDurationMilliseconds": 50, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 50000000 },
+    "sqlite_repair_generation_1000": {
+      "baselineDurationMilliseconds": 50,
+      "regressionTolerancePercent": 200,
+      "maximumAllocatedBytes": 100000000
+    },
+    "sqlite_model_data_generation_384": { "baselineDurationMilliseconds": 8, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 8000000 },
+    "sqlite_model_data_analysis_384_tables_200": { "baselineDurationMilliseconds": 30, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 12000000 },
+    "sqlite_model_data_analysis_384_tables_1000_relational": { "baselineDurationMilliseconds": 160, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 52000000 },
+    "sqlite_canonical_model_validation": { "baselineDurationMilliseconds": 2, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 200000 },
     "report_json_1": { "baselineDurationMilliseconds": 0.2, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 16384 },
     "report_json_100": { "baselineDurationMilliseconds": 1, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 160000 },
     "report_json_1000": {

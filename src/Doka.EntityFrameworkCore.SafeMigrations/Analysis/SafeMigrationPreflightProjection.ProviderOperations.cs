@@ -306,7 +306,7 @@ internal sealed partial class SafeMigrationPreflightProjection
     private void RemoveDroppedPhysicalKeys(
         string table,
         string? schema
-    ) => _droppedPhysicalKeys.RemoveWhere(key => StringComparer.Ordinal.Equals(key.Table, table)
+    ) => _droppedPhysicalKeys.RemoveWhere(key => IdentifierEquals(_objectIdentityNormalizer, key.Table, table)
         && SameSchema(key.Schema, schema));
 
     private void InvalidateAcceptedIndexesForColumn(
@@ -319,13 +319,16 @@ internal sealed partial class SafeMigrationPreflightProjection
         var candidateKeyInvalidated = false;
         if (_prerequisites.TryGetValue(key, out var prerequisites))
         {
-            prerequisites.Indexes.RemoveWhere(
-                index => index.Keys.Any(indexKey => StringComparer.Ordinal.Equals(indexKey.Column, column)));
+            prerequisites.Indexes.RemoveWhere(index => index.Keys.Any(indexKey =>
+                indexKey.Column is not null && IdentifierEquals(_objectIdentityNormalizer, indexKey.Column, column)));
 
             if (SharesUniqueConstraintAndIndexIdentity)
             {
-                candidateKeyInvalidated = prerequisites.UniqueConstraints.RemoveWhere(
-                    constraint => constraint.Columns.Contains(column, StringComparer.Ordinal));
+                candidateKeyInvalidated = prerequisites.UniqueConstraints.RemoveWhere(constraint =>
+                    constraint.Columns.Any(candidate => IdentifierEquals(
+                        _objectIdentityNormalizer,
+                        candidate,
+                        column)));
             }
         }
 
@@ -341,8 +344,8 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         var names = projectedTable
             .Indexes
-            .Where(pair => pair.Value.Keys.Any(
-                indexKey => StringComparer.Ordinal.Equals(indexKey.Column, column)))
+            .Where(pair => pair.Value.Keys.Any(indexKey =>
+                indexKey.Column is not null && IdentifierEquals(_objectIdentityNormalizer, indexKey.Column, column)))
             .Select(static pair => pair.Key)
             .ToArray();
 

@@ -14,7 +14,8 @@ internal sealed class SampleDbContext : DbContext
         {
             throw new InvalidOperationException(
                 "SampleDbContext requires provider configuration from the consuming application. "
-                + "Configure UseMySql(...) or UseNpgsql(...) together with UseMySqlSafeMigrations() or UsePostgreSqlSafeMigrations().");
+                + "Configure UseMySql(...), UseNpgsql(...), or UseSqlite(...) together with the matching "
+                + "SafeMigrations provider registration.");
         }
     }
 

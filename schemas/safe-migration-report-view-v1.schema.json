@@ -72,7 +72,7 @@
       "required": ["providerId", "engineFamily", "serverVersion"],
       "properties": {
         "providerId": { "type": "string", "minLength": 1 },
-        "engineFamily": { "enum": ["mysql", "mariadb", "postgresql"] },
+        "engineFamily": { "enum": ["mysql", "mariadb", "postgresql", "sqlite"] },
         "serverVersion": { "type": "string", "minLength": 1 }
       }
     },

@@ -155,6 +155,28 @@ public sealed class SafeMigrationPostflightProjectionTests
         Assert.False(projection.IsSuperseded(1));
     }
 
+    [Fact]
+    public void ProviderIdentifierNormalizationSupersedesCaseVariantPhysicalResource()
+    {
+        var operations = new MigrationOperation[]
+        {
+            Safe(new DropIndexIntent("IX_RECORDS_CODE", "RECORDS")),
+            Safe(
+                new EnsureIndexIntent(
+                    new ExpectedIndexDefinition(
+                        "ix_records_code",
+                        "records",
+                        [new ExpectedIndexKeyDefinition(column: "code")]))),
+        };
+
+        var projection = new SafeMigrationPostflightProjection(
+            operations,
+            new CaseInsensitiveIdentityNormalizer());
+
+        Assert.True(projection.IsSuperseded(0));
+        Assert.False(projection.IsSuperseded(1));
+    }
+
     private static SafeMigrationOperation Safe(
         SafeMigrationIntent intent
     ) => new(intent, SafeMigrationPolicy.ThrowIfDifferent);
@@ -226,9 +248,32 @@ public sealed class SafeMigrationPostflightProjectionTests
         string currentDatabase
     ) : ISafeMigrationProviderObjectIdentityNormalizer
     {
+        public StringComparer IdentifierComparer => StringComparer.Ordinal;
+
+        public string NormalizeIdentifier(
+            string identifier
+        ) => identifier;
+
         public string? NormalizeSchema(
             string? schema
         ) => StringComparer.Ordinal.Equals(schema, currentDatabase) ? null : schema;
+
+        public bool IsObjectIdentityMismatch(
+            SafeMigrationProviderAnalysis analysis
+        ) => false;
+    }
+
+    private sealed class CaseInsensitiveIdentityNormalizer : ISafeMigrationProviderObjectIdentityNormalizer
+    {
+        public StringComparer IdentifierComparer => StringComparer.OrdinalIgnoreCase;
+
+        public string NormalizeIdentifier(
+            string identifier
+        ) => identifier.ToUpperInvariant();
+
+        public string? NormalizeSchema(
+            string? schema
+        ) => schema;
 
         public bool IsObjectIdentityMismatch(
             SafeMigrationProviderAnalysis analysis

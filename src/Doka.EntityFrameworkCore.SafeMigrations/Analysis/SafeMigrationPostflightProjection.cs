@@ -18,7 +18,8 @@ internal sealed class SafeMigrationPostflightProjection
         ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer = null
     )
     {
-        var finalWriters = new HashSet<PostflightResource>();
+        var finalWriters = new HashSet<PostflightResource>(
+            new PostflightResourceComparer(objectIdentityNormalizer));
 
         // Postflight observes only the final catalog. Walk backwards so the
         // final safe writer for one exact resource remains authoritative while
@@ -78,9 +79,17 @@ internal sealed class SafeMigrationPostflightProjection
                     value.Definition.Table,
                     null),
             DropTableIntent value =>
-                new PostflightResource(PostflightResourceKind.Table, Normalize(value.Schema), value.Table, null),
+                new PostflightResource(
+                    PostflightResourceKind.Table,
+                    Normalize(value.Schema),
+                    value.Table,
+                    null),
             RenameTableIntent value =>
-                new PostflightResource(PostflightResourceKind.Table, Normalize(value.Schema), value.Name, null),
+                new PostflightResource(
+                    PostflightResourceKind.Table,
+                    Normalize(value.Schema),
+                    value.Name,
+                    null),
             EnsureColumnIntent value =>
                 new PostflightResource(
                     PostflightResourceKind.Column,
@@ -171,7 +180,7 @@ internal sealed class SafeMigrationPostflightProjection
                 PostflightResourceKind.ModelManagedData,
                 Normalize(value.Schema),
                 value.Table,
-                ModelManagedKeySet(value)),
+                ModelManagedKeySet(value, objectIdentityNormalizer)),
             _ => default,
         };
 
@@ -199,8 +208,32 @@ internal sealed class SafeMigrationPostflightProjection
         string? Name
     );
 
+    private sealed class PostflightResourceComparer(
+        ISafeMigrationProviderObjectIdentityNormalizer? normalizer
+    ) : IEqualityComparer<PostflightResource>
+    {
+        private readonly StringComparer _identifierComparer = normalizer?.IdentifierComparer ?? StringComparer.Ordinal;
+
+        public bool Equals(
+            PostflightResource left,
+            PostflightResource right
+        ) => left.Kind == right.Kind
+            && StringComparer.Ordinal.Equals(left.Schema, right.Schema)
+            && _identifierComparer.Equals(left.Table, right.Table)
+            && _identifierComparer.Equals(left.Name, right.Name);
+
+        public int GetHashCode(
+            PostflightResource value
+        ) => HashCode.Combine(
+            value.Kind,
+            value.Schema is null ? 0 : StringComparer.Ordinal.GetHashCode(value.Schema),
+            value.Table is null ? 0 : _identifierComparer.GetHashCode(value.Table),
+            value.Name is null ? 0 : _identifierComparer.GetHashCode(value.Name));
+    }
+
     private static string ModelManagedKeySet(
-        ModelManagedDataIntent intent
+        ModelManagedDataIntent intent,
+        ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer
     )
     {
         var rowFingerprints = new string[intent.RowCount];
@@ -209,7 +242,9 @@ internal sealed class SafeMigrationPostflightProjection
             using var rowWriter = new CanonicalHashWriter();
             for (var column = 0; column < intent.KeyColumns.Count; column++)
             {
-                rowWriter.Add(intent.KeyColumns[column]);
+                rowWriter.Add(
+                    objectIdentityNormalizer?.NormalizeIdentifier(intent.KeyColumns[column])
+                    ?? intent.KeyColumns[column]);
                 SafeMigrationModelManagedValue.Write(rowWriter, intent.KeyValues.GetUnsafeValue(row, column));
             }
 

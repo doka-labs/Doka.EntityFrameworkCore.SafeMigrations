@@ -18,10 +18,10 @@ does not add a third mode; it uses the public builder API directly inside a
 migration.
 
 The generated examples below show the representative MySQL/MariaDB shape for
-one model. PostgreSQL generates the same SafeMigrations method calls with its
-own store types and Npgsql provider annotations. Names, store types, defaults,
-constraints, and annotations always come from the consuming application's EF
-model.
+one model. PostgreSQL and SQLite generate the same SafeMigrations method calls
+with their own store types and provider annotations. Names, store types,
+defaults, constraints, and annotations always come from the consuming
+application's EF model.
 
 Every generated migration explicitly imports
 `Doka.EntityFrameworkCore.SafeMigrations`. The source therefore resolves its
@@ -36,6 +36,7 @@ Strict scaffolding is the default:
 ```csharp
 options.UseMySqlSafeMigrations();
 // or: options.UsePostgreSqlSafeMigrations();
+// or: options.UseSqliteSafeMigrations();
 ```
 
 Create the migration normally:
@@ -125,7 +126,7 @@ allowed; only continuously present definitions are required; any unrelated
 physical shape remains drift. The immediate create-table postcondition remains
 limited to constraints emitted with `CreateTable`, so a dependency-ordered
 foreign key is not required before its own operation runs.
-MySQL/MariaDB and PostgreSQL runtime generation validate the same known index
+MySQL/MariaDB, PostgreSQL, and SQLite runtime generation validate the same known index
 and constraint transitions as preflight. The MySQL/MariaDB adapter carries the
 complete ordered catalog even though Doka invokes extension handlers one
 operation at a time. Preflight, generated runtime SQL, replay, and postflight
@@ -425,6 +426,19 @@ PostgreSQL uses the same option:
 
 ```csharp
 options.UsePostgreSqlSafeMigrations(safeMigrations =>
+{
+    safeMigrations
+        .UseScaffoldingMode(
+            SafeMigrationScaffoldingMode.LegacyConvergence)
+        .UseLegacyConvergencePolicy(
+            SafeMigrationPolicy.RepairIfSafe);
+});
+```
+
+SQLite uses the same option:
+
+```csharp
+options.UseSqliteSafeMigrations(safeMigrations =>
 {
     safeMigrations
         .UseScaffoldingMode(

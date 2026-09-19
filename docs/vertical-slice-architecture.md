@@ -6,7 +6,7 @@ SafeMigrations uses a hybrid vertical-slice architecture. Public API and
 provider package boundaries remain stable, while implementation ownership is
 organized by migration capability instead of by technical layer alone.
 
-The architecture has three package-level boundaries:
+The architecture has four package-level boundaries:
 
 - `Doka.EntityFrameworkCore.SafeMigrations` owns provider-neutral contracts,
   policy, lifecycle, reports, fingerprints, and feature definitions.
@@ -14,9 +14,12 @@ The architecture has three package-level boundaries:
   classification and guarded command generation through the Doka handler SPI.
 - `Doka.EntityFrameworkCore.SafeMigrations.PostgreSql` owns PostgreSQL
   classification and guarded command generation through Npgsql composition.
+- `Doka.EntityFrameworkCore.SafeMigrations.Sqlite` owns SQLite classification,
+  guarded runtime commands, and atomic model-owned rebuild composition through
+  the official EF Core provider.
 
 These boundaries also apply to tests, benchmarks, and package consumers. Core,
-MySQL/MariaDB, and PostgreSQL have independent projects and restore graphs.
+MySQL/MariaDB, PostgreSQL, and SQLite have independent projects and restore graphs.
 Provider packages may depend on Core, but never on each other. The package-only
 qualification restores one consumer per provider package so a combined test
 application cannot conceal an accidental cross-provider dependency.
@@ -39,12 +42,16 @@ The implemented source layout is:
 src/Doka.EntityFrameworkCore.SafeMigrations/Features/<slice>/
 src/Doka.EntityFrameworkCore.SafeMigrations.MySql/Features/<slice>/
 src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/Features/<slice>/
+src/Doka.EntityFrameworkCore.SafeMigrations.Sqlite/Analysis/
+src/Doka.EntityFrameworkCore.SafeMigrations.Sqlite/SqlGeneration/
 tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Unit/Features/<slice>/
 tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Integration/Features/<slice>/
 tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Integration/Features/<slice>/
+tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests/Integration/
 benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks/
 benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks/
 benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks/
+benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks/
 ```
 
 The provider test trees additionally contain `Lifecycle` and `Identifiers`;
@@ -59,7 +66,7 @@ complete standalone constraint operations, and exactly paired model-managed
 data into existing slice entry points. Provider
 `buildTransitive` assets own discovery. Provider column annotation comparison
 remains in each provider's `Columns` slice; scaffolding does not introduce a
-runtime feature registry or a fourth package.
+runtime feature registry.
 
 Excluded-table model-managed-data ownership remains in `Scaffolding` because
 it filters provider model differences before any feature slice owns or enriches
@@ -148,10 +155,11 @@ windows. Connections without advertised `DbBatch` support retain the same
 bounds through sequential commands. Whole-run allocations also depend on
 input/model size, assessments,
 and returned catalog inventory; bounded requests do not imply constant memory
-or an operation-count-only bound. Provider matrix tests retain same-runner live
-p95 evidence for clean and 1,000-table noisy catalogs, plus qualification with
-100,000 ordered mixed operations spanning every observed state and planned
-action on every supported engine profile. Model-managed-data benchmarks measure
+or an operation-count-only bound. Server-provider matrix tests retain
+same-runner live p95 evidence for clean and 1,000-table noisy catalogs, plus
+qualification with 100,000 ordered mixed operations spanning every observed
+state and planned action. SQLite separately budgets whole-catalog analysis at
+200 tables and at 1,000 indexed, foreign-key-bearing tables. Model-managed-data benchmarks measure
 intent/fingerprint and provider generation/analyzer allocations at 384 row
 transitions. Live gates execute and replay 50,000 mixed row transitions using
 the production row/cell batching limits and persist command/allocation evidence.
@@ -161,7 +169,8 @@ the production row/cell batching limits and persist command/allocation evidence.
 The vertical-slice architecture remains conformant only while:
 
 1. every operation kind is owned by exactly one core feature slice;
-2. both provider packages mirror all feature slices;
+2. all three provider packages mirror all feature slices or document their
+   provider-specific composition boundary;
 3. central dispatchers contain routing but no feature-specific rules;
 4. public API baselines match the reviewed contract, with shipped/unshipped
    status maintained according to the release process;

@@ -57,10 +57,12 @@ provider-fragment SQL does not authorize structural equality.
 
 Controls: [MySQL parameterizer](../../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/Analysis/MySqlCatalogQueryParameterizer.cs),
 [PostgreSQL parameters](../../src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/Analysis/PostgreSqlCatalogQueryParameters.cs),
+[SQLite catalog](../../src/Doka.EntityFrameworkCore.SafeMigrations.Sqlite/Analysis/SqliteSafeMigrationCatalog.cs),
 and the [closed expression contract](../../src/Doka.EntityFrameworkCore.SafeMigrations/Expressions/SafeMigrationSqlExpressionInspector.cs).
 Evidence: [MySQL parameter tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Unit/MySqlCatalogQueryParameterizerTests.cs),
 [PostgreSQL parameter tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Infrastructure/PostgreSqlCatalogQueryParametersTests.cs),
-and both provider [identifier suites](../../tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Integration/Features/Identifiers).
+[SQLite operation tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests/Integration/SqliteSafeMigrationIntegrationTests.OperationMatrix.cs),
+and the provider identifier and catalog-normalization suites.
 The [PostgreSQL identifier suite](../../tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Integration/Features/Identifiers)
 additionally checks server-deparsed typed expressions. These counter SQL
 injection and second-order catalog interpretation errors.
@@ -94,11 +96,12 @@ Missing/conflicting registration must not produce safe target DDL or a success
 history row. Model fingerprints detect drift; they are not signatures or a
 tenant-isolation mechanism.
 
-Evidence: both providers' lifecycle tests for model mismatch, derived contexts,
+Evidence: all providers' lifecycle tests for model mismatch, derived contexts,
 missing/conflicting adapters, preflight/postflight, history, and mixed ordinary
 operations. [MySQL/MariaDB lifecycle](../../tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Integration/Features/Lifecycle)
 and [PostgreSQL lifecycle](../../tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Integration/Features/Lifecycle)
-must both pass; success on one engine is not evidence for the other.
+plus [SQLite execution](../../tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests/Integration/SqliteSafeMigrationIntegrationTests.Execution.cs)
+must pass; success on one engine is not evidence for another.
 
 ### S4 - Resource and failure bounds remain explicit
 

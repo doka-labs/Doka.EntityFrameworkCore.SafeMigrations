@@ -43,8 +43,8 @@ primary_packages=(artifacts/packages/*.nupkg)
 symbol_packages=(artifacts/packages/*.snupkg)
 shopt -u nullglob
 
-if ((${#primary_packages[@]} != 3 || ${#symbol_packages[@]} != 3)); then
-    echo "Expected exactly three primary packages and three symbol packages." >&2
+if ((${#primary_packages[@]} != 4 || ${#symbol_packages[@]} != 4)); then
+    echo "Expected exactly four primary packages and four symbol packages." >&2
     exit 1
 fi
 

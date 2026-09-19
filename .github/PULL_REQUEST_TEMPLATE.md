@@ -14,7 +14,7 @@ vulnerabilities here: follow SECURITY.md and use private coordination. -->
 
 ## Scope and compatibility
 
-<!-- Identify Core, MySQL/MariaDB, PostgreSQL, tooling, or documentation impact.
+<!-- Identify Core, MySQL/MariaDB, PostgreSQL, SQLite, tooling, or documentation impact.
 Explain API/SQL/history/report compatibility, data integrity, recovery, provider
 capability differences, and performance/allocation effects. State not applicable
 with a reason for unaffected areas. Link primary sources for external contracts. -->
@@ -48,7 +48,7 @@ For operation, policy, catalog, or execution changes, verify and record:
 
 - definition validation, planner decisions, SQL shape, and live provider behavior;
 - missing, matching, different, unsupported, data-blocked, and prerequisite states;
-- MySQL and MariaDB independently, plus PostgreSQL parity or explicit fail-closed rejection;
+- MySQL and MariaDB independently, plus PostgreSQL and SQLite parity or explicit fail-closed rejection;
 - initial application, idempotent rerun, partial-failure recovery, cancellation, and relevant concurrency cases;
 - preflight/postflight, normal EF operations, migration history, and derived-context boundaries;
 - affected EF CLI/script/bundle, package-consumer, locked-dependency, coverage, and performance/allocation gates.

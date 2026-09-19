@@ -112,7 +112,7 @@ the builder, expected-definition, state-space, and preflight-projection tests
 must cover granular expansion, immutable input, every defined state/policy
 combination, and rejection of invalid enum values.
 
-Run both provider integration suites on every supported engine cell. Confirm:
+Run every provider integration suite on its supported engine cells. Confirm:
 
 - a missing convergence table reaches its complete target;
 - an existing partial table receives missing children;
@@ -191,6 +191,8 @@ destructive migrations are silently turned into no-ops.
 - 2026-08-26: Status changed from proposed to accepted. Dominic Kalkbrenner confirmed the recorded decision and its existing implementation.
 - 2026-08-26: Status changed from accepted to implemented. Explicit convergence, canonical-context ownership, and model guards are implemented and covered by the referenced Core and provider lifecycle tests.
 - 2026-08-27: D-008 amended authoring ergonomics with source-frozen automatic scaffolding while retaining this record's explicit generated contract.
+- 2026-09-18: D-013 extended explicit convergence to SQLite with model-owned
+  rebuild authorization and per-pending-migration target-model analysis.
 
 ### Implementation References
 

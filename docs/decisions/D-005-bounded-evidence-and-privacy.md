@@ -126,16 +126,19 @@ single enumeration, immutable snapshots, stable ordering, and invalid
 annotation rejection. Provider tests must exercise `DbBatchCommand`
 parameterization, multiple result sets, cancellation, configured command
 timeouts, and 100,000 deterministically ordered mixed live operations on every
-qualified engine profile. The large-scale workload must exercise every
+qualified server-provider engine profile. The large-scale workload must exercise every
 observed state and planned action rather than repeating one matching object.
+SQLite must retain its 50,000-row live apply/replay gate and allocation budgets
+for both a 200-table catalog and a 1,000-table catalog with indexes and foreign
+keys.
 Serialization and telemetry tests must prove that changes to protected report
 detail do not add it to telemetry tags.
 
-Run both provider fingerprint suites and PostgreSQL facet-isolation cases
+Run every provider fingerprint suite and PostgreSQL facet-isolation cases
 under the qualified dependency profiles. A stable digest in one provider or
 runtime process does not prove all relational facets are represented.
 
-Run all three benchmark projects using the commands in CONTRIBUTING and
+Run all four benchmark projects using the commands in CONTRIBUTING and
 the versioned performance budgets. Require complete, non-duplicate, known
 measurements for construction, planning, SQL generation, model comparison,
 fingerprinting, and serialization as applicable.
@@ -207,6 +210,9 @@ window. Neither a hash nor a report proves the database server is honest.
 - 2026-09-02: D-009 added 128-row/4,096-cell model-managed operation bounds,
   compact row evidence, canonical value hashing, and explicit non-disclosure of
   keys and managed values in reports, telemetry, and exceptions.
+- 2026-09-18: D-013 extended the bounded evidence contract to the independent
+  SQLite runtime-catalog benchmark, coverage, large-operation, and package
+  qualification gates.
 
 ### Implementation References
 
@@ -222,6 +228,8 @@ window. Neither a hash nor a report proves the database server is honest.
 - [MySQL/MariaDB model-fingerprint tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Infrastructure/MySqlModelFingerprintTests.cs)
 - [PostgreSQL model-fingerprint tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Infrastructure/PostgreSqlModelFingerprintTests.cs)
 - [PostgreSQL model-facet tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Infrastructure/PostgreSqlModelFingerprintFacetTests.cs)
+- [SQLite benchmark](../../benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks)
+- [SQLite large-operation test](../../tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests/Integration/SqliteSafeMigrationIntegrationTests.Performance.cs)
 - [Report contract](../../src/Doka.EntityFrameworkCore.SafeMigrations/Analysis/SafeMigrationRunReport.cs)
 - [JSON writer](../../src/Doka.EntityFrameworkCore.SafeMigrations/Analysis/SafeMigrationReportJson.cs)
 - [Run-contract tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Unit/Features/Lifecycle/SafeMigrationRunContractTests.cs)

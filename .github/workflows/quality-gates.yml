@@ -113,6 +113,13 @@ jobs:
           --configuration Release --no-build --no-restore --
           --output artifacts/performance/postgresql-results.json
 
+      - name: SQLite performance and allocation budgets
+        run: >-
+          dotnet run
+          --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks.csproj
+          --configuration Release --no-build --no-restore --
+          --output artifacts/performance/sqlite-results.json
+
       - name: Qualify reproducible packages
         env:
           PACKAGE_VERSION: ${{ inputs.package-version }}
@@ -220,6 +227,15 @@ jobs:
           --collect "Code Coverage;Format=cobertura"
           --filter "Category!=LargeScale"
           --results-directory artifacts/coverage/postgresql -m:1 /nodeReuse:false
+
+      - name: Collect SQLite adapter coverage
+        run: >-
+          dotnet test
+          tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests.csproj
+          --configuration Release --no-build --no-restore --disable-build-servers
+          --collect "Code Coverage;Format=cobertura"
+          --filter "Category!=LargeScale"
+          --results-directory artifacts/coverage/sqlite -m:1 /nodeReuse:false
 
       - name: Enforce merged product coverage
         run: >-
@@ -394,6 +410,58 @@ jobs:
           compression-level: 0
           retention-days: ${{ inputs.artifact-retention-days }}
 
+  sqlite-engine:
+    name: SQLite
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.400
+
+      - name: Locked restore
+        run: >-
+          dotnet restore
+          tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests.csproj
+          --locked-mode --disable-parallel --disable-build-servers -m:1
+          /nodeReuse:false
+
+      - name: Release build
+        run: >-
+          dotnet build
+          tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests.csproj
+          --configuration Release --no-restore --disable-build-servers -m:1
+          /nodeReuse:false -p:ContinuousIntegrationBuild=true
+
+      - name: Integration tests
+        run: >-
+          dotnet test
+          tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests.csproj
+          --configuration Release --no-build --no-restore --disable-build-servers
+          --logger "trx;LogFileName=sqlite.trx" -m:1 /nodeReuse:false
+
+      - name: EF CLI and bundle
+        run: eng/verify-sqlite-ef-tooling.sh
+
+      - name: Upload test and tooling evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sqlite-evidence-${{ github.run_attempt }}
+          path: |
+            **/TestResults/*.trx
+            artifacts/ef-tooling/sqlite
+            artifacts/performance/live
+          if-no-files-found: warn
+          compression-level: 0
+          retention-days: ${{ inputs.artifact-retention-days }}
+
   # A failed dependency would skip this job without always(), leaving branch
   # protection without the single fail-closed result it is intended to trust.
   required:
@@ -404,6 +472,7 @@ jobs:
       - coverage
       - mysql-engine
       - postgresql-engine
+      - sqlite-engine
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions: {}
@@ -414,16 +483,19 @@ jobs:
           COVERAGE_RESULT: ${{ needs.coverage.result }}
           MYSQL_ENGINE_RESULT: ${{ needs.mysql-engine.result }}
           POSTGRESQL_ENGINE_RESULT: ${{ needs.postgresql-engine.result }}
+          SQLITE_ENGINE_RESULT: ${{ needs.sqlite-engine.result }}
         run: |
           printf 'package-and-core=%s\n' "$PACKAGE_AND_CORE_RESULT"
           printf 'coverage=%s\n' "$COVERAGE_RESULT"
           printf 'mysql-engine=%s\n' "$MYSQL_ENGINE_RESULT"
           printf 'postgresql-engine=%s\n' "$POSTGRESQL_ENGINE_RESULT"
+          printf 'sqlite-engine=%s\n' "$SQLITE_ENGINE_RESULT"
 
           if [[ "$PACKAGE_AND_CORE_RESULT" != 'success' ||
                 "$COVERAGE_RESULT" != 'success' ||
                 "$MYSQL_ENGINE_RESULT" != 'success' ||
-                "$POSTGRESQL_ENGINE_RESULT" != 'success' ]]; then
+                "$POSTGRESQL_ENGINE_RESULT" != 'success' ||
+                "$SQLITE_ENGINE_RESULT" != 'success' ]]; then
             printf 'One or more required qualification jobs did not succeed.\n' >&2
             exit 1
           fi

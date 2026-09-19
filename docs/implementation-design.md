@@ -21,8 +21,8 @@ MigrationBuilder extension
   -> read-only postcondition verification
 ```
 
-Core has no compile-time dependency on MySQL, MariaDB, PostgreSQL, Doka's
-provider, or Npgsql.
+Core has no compile-time dependency on MySQL, MariaDB, PostgreSQL, SQLite,
+Doka's provider, Npgsql, or Microsoft.Data.Sqlite.
 
 Source ownership follows the hybrid vertical-slice contract in
 [Vertical-slice architecture](vertical-slice-architecture.md). Public
@@ -97,6 +97,31 @@ The read-only PostgreSQL analyzer builds parameterized `pg_catalog` queries
 directly. Guarded runtime execution uses PostgreSQL anonymous blocks and normal
 EF transaction semantics.
 
+### SQLite
+
+`Doka.EntityFrameworkCore.SafeMigrations.Sqlite` composes the official EF Core
+SQLite migrations generator. It delegates every ordinary operation unchanged
+and wraps only `SafeMigrationOperation`. Runtime catalog classification reads
+`sqlite_schema` and provider PRAGMAs from the active connection; `main` and an
+omitted qualifier share one identity while attached databases reject.
+
+SQLite structural operations that the engine cannot alter directly are
+analyzed as one contiguous batch. Once every operation is accepted, the
+official provider generates the corresponding rebuild sequence. SafeMigrations
+disables foreign-key enforcement outside one local transaction, executes the
+rebuild in that transaction, and verifies effective final postconditions before
+commit. When enforcement was originally enabled, the affected relationship
+closure must also pass `foreign_key_check`; a disabled original mode is
+preserved without adding that validation contract. The original enforcement
+mode is restored afterwards. A rebuild requires complete
+model ownership and rejects unknown triggers, views, virtual tables, expression
+or partial indexes, constraints, `STRICT`, and `WITHOUT ROWID`.
+
+Safe operations cannot be rendered into a standalone SQLite script because the
+engine has no procedural branch that can evaluate their catalog-dependent
+decision. Script generation therefore rejects before returning partial output.
+Runtime migration and Migration Bundles execute the guarded command objects.
+
 ## Fail-closed ownership
 
 A safe operation is never encoded as an annotation on an ordinary EF
@@ -106,6 +131,8 @@ the operation as normal DDL:
 - Doka rejects an unowned `SafeMigrationOperation`;
 - Npgsql rejects the unknown safe envelope when its adapter is absent;
   incompatible SafeMigrations generator registration also fails closed;
+- SQLite rejects the unknown safe envelope when its adapter is absent;
+  incompatible generator registration also fails closed;
 - multiple owners for the same exact operation type are rejected;
 - provider-owned ordinary operations continue through the base provider.
 
@@ -775,7 +802,7 @@ The runtime path has:
 - allocation-bounded report-view selection without filtered collections;
 - bounded telemetry tags without object names or connection data.
 
-The repository gates construction, planning, both provider generators, and
+The repository gates construction, planning, all provider generators, and
 report serialization at 1, 100, and 1000 operations, plus blocker-view
 selection across 50,000 assessments, against strict allocation ceilings and
 coarse wall-clock ceilings in schema-versioned Core,

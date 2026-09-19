@@ -1,6 +1,6 @@
 # EF Core and provider upgrade boundary
 
-SafeMigrations integrates with two different public provider boundaries. An
+SafeMigrations integrates with three different public provider boundaries. An
 upgrade is accepted only after the full locked restore, package, engine, and
 tooling gates pass; compilation alone is insufficient.
 
@@ -97,6 +97,26 @@ ordinary operations, standard baselines inside safe operations, custom index
 SQL, scripts, and transaction-suppression boundaries continue through that
 selected generator.
 
+## SQLite boundary
+
+The `.Sqlite` package composes the official EF Core SQLite migrations SQL
+generator and reads live state through Microsoft.Data.Sqlite. Ordinary EF
+operations remain provider-owned. Safe operations use SQLite catalog metadata,
+normalized provider SQL, and transactional rebuild batches when SQLite cannot
+alter the modeled facet directly.
+
+SQLite cannot encode SafeMigrations' catalog-dependent runtime decisions in a
+portable generated SQL script. Script generation containing safe operations
+therefore fails before returning partial output. Runtime migrations, EF CLI
+database updates, and Migration Bundles remain supported because they execute
+the analyzer and guarded command path against the live database.
+
+Only model-owned tables and artifacts can enter an automatic rebuild. Unknown
+triggers, views, virtual tables, expression or partial indexes, attached
+databases, and other unproven dependencies reject before mutation. The rebuild
+and its data copy run in one transaction, require a single writer, and must be
+qualified with realistic file-system capacity and lock behavior.
+
 ## Design-time C# generation boundary
 
 SafeMigrations composes EF Core's public design-time service contracts, but the
@@ -140,7 +160,7 @@ layouts: a direct `Microsoft.EntityFrameworkCore.Design` reference and a direct
 Design transitively. A runtime-only project with neither package remains free
 of design-time attributes and warnings. A fourth negative layout retains EF
 Design while excluding the provider package's `buildTransitive` assets. Package
-qualification must prove all four layouts for both providers: the first two
+qualification must prove all four layouts for every provider: the first two
 scaffold safe source, the runtime-only layout is rejected by EF tooling, and the
 excluded-build-assets layout is rejected by the SafeMigrations operation guard.
 Neither negative path may leave migration source behind.
@@ -195,7 +215,7 @@ Every EF, Doka, Npgsql, or supported database update requires:
 1. locked restore and warning-free Release build;
 2. review of the proposed declarations and exact lockfile resolutions;
 3. core planner, fingerprint, definition, report, and model-guard tests;
-4. all supported MySQL/MariaDB and PostgreSQL engine endpoints;
+4. all supported MySQL/MariaDB and PostgreSQL engine endpoints plus SQLite;
 5. missing, matching, different, unsupported, and data-blocked states;
 6. `Database.MigrateAsync`, `IMigrator`, history, missing/conflicting adapter,
    parallel migrator, least-privilege, and recovery tests;

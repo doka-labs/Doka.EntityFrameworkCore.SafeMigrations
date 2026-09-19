@@ -15,7 +15,8 @@ source-frozen model-managed-data contract selected on 2026-09-02. The dated
 transitions are retained in each record's Decision History. D-010 and D-011
 record the implemented ownership and lossless-repair contracts selected on
 2026-09-05. D-012 records the implemented report-view contract selected on
-2026-09-10.
+2026-09-10. D-013 records the implemented SQLite provider contract selected on
+2026-09-18.
 
 | Record | Bounded decision |
 | --- | --- |
@@ -31,6 +32,7 @@ record the implemented ownership and lossless-repair contracts selected on
 | [D-010](D-010-excluded-table-model-managed-data-ownership.md) | Explicit model-managed-data ownership for excluded tables in independent lineages |
 | [D-011](D-011-lossless-column-repair-and-actionable-diagnostics.md) | Provider-proven lossless column repair and bounded actionable preflight evidence |
 | [D-012](D-012-self-describing-report-views.md) | Bounded report views for operator triage |
+| [D-013](D-013-sqlite-provider-and-atomic-rebuilds.md) | SQLite provider composition and atomic model-owned rebuilds |
 
 ## Authoring and review
 

@@ -56,7 +56,8 @@ ef_core_version="${BASH_REMATCH[1]}"
 for package_id in \
     Doka.EntityFrameworkCore.SafeMigrations \
     Doka.EntityFrameworkCore.SafeMigrations.MySql \
-    Doka.EntityFrameworkCore.SafeMigrations.PostgreSql; do
+    Doka.EntityFrameworkCore.SafeMigrations.PostgreSql \
+    Doka.EntityFrameworkCore.SafeMigrations.Sqlite; do
     test -f "$package_dir/$package_id.$package_version.nupkg"
     test -f "$package_dir/$package_id.$package_version.snupkg"
 done
@@ -80,6 +81,7 @@ mkdir -p "$work_dir/.config" "$work_dir/eng/package-consumer"
 cp "$script_dir/../.config/dotnet-tools.json" "$work_dir/.config/dotnet-tools.json"
 cp "$script_dir/../.editorconfig" "$work_dir/.editorconfig"
 cp "$script_dir/../Directory.Build.props" "$work_dir/Directory.Build.props"
+cp "$script_dir/../global.json" "$work_dir/global.json"
 cp "$script_dir/Directory.Build.props" "$work_dir/eng/Directory.Build.props"
 cp "$script_dir/package-consumer/Directory.Build.props" \
     "$work_dir/eng/package-consumer/Directory.Build.props"
@@ -122,6 +124,9 @@ verify_consumer() {
             ;;
         PostgreSql)
             source_project="Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.PackageConsumer.csproj"
+            ;;
+        Sqlite)
+            source_project="Doka.EntityFrameworkCore.SafeMigrations.Sqlite.PackageConsumer.csproj"
             ;;
         *)
             echo "Unknown package consumer: $consumer_name" >&2
@@ -202,8 +207,11 @@ verify_consumer() {
             grep -Fq 'Doka.EntityFrameworkCore.MySql/' "$assets_file"
 
             if grep -Fq 'Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/' "$assets_file" \
-                || grep -Fq 'Npgsql.EntityFrameworkCore.PostgreSQL/' "$assets_file"; then
-                echo "MySQL/MariaDB consumer resolved PostgreSQL assets." >&2
+                || grep -Fq 'Npgsql.EntityFrameworkCore.PostgreSQL/' "$assets_file" \
+                || grep -Fq 'Doka.EntityFrameworkCore.SafeMigrations.Sqlite/' "$assets_file" \
+                || grep -Fq 'Microsoft.EntityFrameworkCore.Sqlite/' "$assets_file" \
+                || grep -Fq 'Microsoft.EntityFrameworkCore.Sqlite.Core/' "$assets_file"; then
+                echo "MySQL/MariaDB consumer resolved PostgreSQL or SQLite assets." >&2
                 exit 1
             fi
             ;;
@@ -212,8 +220,24 @@ verify_consumer() {
             grep -Fq 'Npgsql.EntityFrameworkCore.PostgreSQL/' "$assets_file"
 
             if grep -Fq 'Doka.EntityFrameworkCore.SafeMigrations.MySql/' "$assets_file" \
-                || grep -Fq 'Doka.EntityFrameworkCore.MySql/' "$assets_file"; then
-                echo "PostgreSQL consumer resolved MySQL/MariaDB assets." >&2
+                || grep -Fq 'Doka.EntityFrameworkCore.MySql/' "$assets_file" \
+                || grep -Fq 'Doka.EntityFrameworkCore.SafeMigrations.Sqlite/' "$assets_file" \
+                || grep -Fq 'Microsoft.EntityFrameworkCore.Sqlite/' "$assets_file" \
+                || grep -Fq 'Microsoft.EntityFrameworkCore.Sqlite.Core/' "$assets_file"; then
+                echo "PostgreSQL consumer resolved MySQL/MariaDB or SQLite assets." >&2
+                exit 1
+            fi
+            ;;
+        Sqlite)
+            grep -Fq 'Doka.EntityFrameworkCore.SafeMigrations.Sqlite/' "$assets_file"
+            grep -Fq 'Microsoft.EntityFrameworkCore.Sqlite/' "$assets_file"
+            grep -Fq 'Microsoft.EntityFrameworkCore.Sqlite.Core/' "$assets_file"
+
+            if grep -Fq 'Doka.EntityFrameworkCore.SafeMigrations.MySql/' "$assets_file" \
+                || grep -Fq 'Doka.EntityFrameworkCore.MySql/' "$assets_file" \
+                || grep -Fq 'Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/' "$assets_file" \
+                || grep -Fq 'Npgsql.EntityFrameworkCore.PostgreSQL/' "$assets_file"; then
+                echo "SQLite consumer resolved MySQL/MariaDB or PostgreSQL assets." >&2
                 exit 1
             fi
             ;;
@@ -392,6 +416,10 @@ verify_consumer() {
             grep -Fq 'migrationBuilder.CreateTableIfNotExists(' "$migration_file"
             grep -Fq 'migrationBuilder.DropTableIfExists(' "$migration_file"
             ;;
+        Sqlite)
+            grep -Fq 'migrationBuilder.CreateTableIfNotExists(' "$migration_file"
+            grep -Fq 'migrationBuilder.DropTableIfExists(' "$migration_file"
+            ;;
         *)
             echo "Unknown package consumer: $consumer_name" >&2
             exit 1
@@ -494,7 +522,7 @@ verify_split_mysql_consumer() {
         "${msbuild_properties[@]}"
 }
 
-for consumer_name in MySql PostgreSql; do
+for consumer_name in MySql PostgreSql Sqlite; do
     verify_consumer "$consumer_name" Design
     verify_consumer "$consumer_name" Tools
     verify_consumer "$consumer_name" DesignWithoutSafeBuildAssets

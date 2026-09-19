@@ -66,7 +66,9 @@ The package dependency direction is explicit:
   provider and owns both MySQL and MariaDB behavior.
 - `Doka.EntityFrameworkCore.SafeMigrations.PostgreSql` depends on Core and
   Npgsql and owns PostgreSQL behavior.
-- Neither adapter references the other. Core does not reference either one.
+- `Doka.EntityFrameworkCore.SafeMigrations.Sqlite` depends on Core and the
+  official EF Core SQLite provider and owns SQLite behavior.
+- No adapter references another adapter. Core does not reference an adapter.
 
 Inside each package, source ownership mirrors Schemas, Tables, Columns,
 Indexes, and the four constraint families. A slice owns its immutable
@@ -97,7 +99,7 @@ files. Package-only consumers verify the actual published package graph.
 
 ### Confirmation
 
-Build the complete solution and run all three test projects. Inspect changed
+Build the complete solution and run all four test projects. Inspect changed
 project references and package graphs when adding a slice or project:
 provider-crossing dependencies, missing mirrored ownership, feature behavior
 in central dispatchers, and aggregate test ownership remain rejected in
@@ -171,6 +173,10 @@ the folder layout itself is not performance evidence.
 - 2026-08-26: Maintainer designated @doka-labs/core-maintainers as the informed audience.
 - 2026-08-26: Status changed from proposed to accepted. Dominic Kalkbrenner confirmed the recorded decision and its existing implementation.
 - 2026-08-26: Status changed from accepted to implemented. Package boundaries and vertical slices are present and verified by project references, package consumers, and provider tests.
+- 2026-09-18: D-013 added the SQLite provider and documented a bounded
+  provider-wide composition exception for catalog capture, rebuild
+  authorization, and command execution that jointly materialize multiple Core
+  feature intents.
 
 ### Implementation References
 
@@ -182,6 +188,7 @@ the folder layout itself is not performance evidence.
 - [Core features](../../src/Doka.EntityFrameworkCore.SafeMigrations/Features)
 - [MySQL/MariaDB features](../../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/Features)
 - [PostgreSQL features](../../src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/Features)
+- [SQLite provider](../../src/Doka.EntityFrameworkCore.SafeMigrations.Sqlite)
 - [Package qualification](../../eng/qualify-packages.sh)
 - [Performance budgets](../../eng/performance-budgets.json)
 

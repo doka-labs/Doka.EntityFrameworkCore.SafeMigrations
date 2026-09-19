@@ -39,7 +39,7 @@ safe, idempotent migration operations without requiring authors to duplicate
 - Updates and deletes need captured source values that are absent from the
   forward EF operation alone.
 - The contract must support composite keys, value converters, nulls, candidate
-  keys, and incoming dependencies on MySQL, MariaDB, and PostgreSQL.
+  keys, and incoming dependencies on MySQL, MariaDB, PostgreSQL, and SQLite.
 - Runtime races and trigger effects must fail their target postcondition.
 - Reports and diagnostics must not expose keys or managed values.
 - Large model-managed sets need deterministic request, allocation, and command
@@ -143,8 +143,10 @@ mutable, secret, environment-specific, or large data belongs in `UseSeeding`,
   HasData-derived calls, ready initial-deployment preflight, identical generated
   operation replay, successful scripts/bundles, and exact history.
 - Run package-only consumers and public API/package-content qualification.
-- Run the 100,000 mixed-operation analysis and 50,000 mixed-row execution gates
-  plus model-managed allocation benchmarks.
+- Run the server-provider 100,000 mixed-operation analysis, every provider's
+  50,000 mixed-row execution gate, and model-managed allocation benchmarks.
+  SQLite additionally budgets analysis against 200-table and 1,000-table
+  relational catalogs.
 - Keep release acceptance separate from implementation status. Hosted matrix,
   package publication, and public readback remain mandatory release gates, but
   they do not change whether this architectural decision is implemented in the
@@ -223,6 +225,8 @@ adds row/cell limits and value non-disclosure.
   engine-specific document equality without reclassifying JSON-like text.
 - 2026-09-05: Applied the same document contract to PostgreSQL `json` and
   `jsonb`, including the missing equality boundary of the textual `json` type.
+- 2026-09-18: D-013 extended model-managed convergence to SQLite with bounded
+  parameterized batches and transactional source/target revalidation.
 
 ### Implementation References
 
@@ -231,6 +235,8 @@ adds row/cell limits and value non-disclosure.
 - [Forward/inverse pairing](../../src/Doka.EntityFrameworkCore.SafeMigrations/Scaffolding/SafeMigrationModelManagedDataPairer.cs)
 - [MySQL/MariaDB slice](../../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/Features/ModelManagedData)
 - [PostgreSQL slice](../../src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/Features/ModelManagedData)
+- [SQLite analyzer](../../src/Doka.EntityFrameworkCore.SafeMigrations.Sqlite/Analysis/SqliteSafeMigrationProviderAnalyzer.cs)
+- [SQLite runtime command](../../src/Doka.EntityFrameworkCore.SafeMigrations.Sqlite/SqlGeneration/SqliteSafeMigrationCommand.cs)
 - [Real EF tooling qualification](../../eng/verify-ef-tooling.sh)
 - [Deployment and recovery](../runbooks/deployment-and-recovery.md)
 

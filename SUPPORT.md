@@ -29,8 +29,9 @@ For deployment failures, also consult the
 An actionable report normally includes:
 
 - exact SafeMigrations package or commit, EF Core, provider, driver, and .NET versions;
-- MySQL, MariaDB, or PostgreSQL family, exact server version, OS/architecture,
-  and relevant proxy, pooler, cluster, or managed-service topology;
+- MySQL, MariaDB, PostgreSQL, or SQLite family, exact engine and provider
+  version, OS/architecture, and relevant proxy, pooler, cluster, managed-service,
+  or SQLite file-system topology;
 - the runtime, EF CLI, script, bundle, preflight, or postflight path;
 - a minimal migration, expected definition, selected policy, and registration;
 - a synthetic starting schema, relevant data, and migration-history state;
@@ -74,7 +75,8 @@ SafeMigrations owns its intent model, policies, expected definitions, planning,
 provider adapters, convergence behavior, preflight/postflight, reports, and
 documented EF migration integration. MySQL and MariaDB share the `.MySql`
 adapter but are independently qualified engine families. PostgreSQL uses the
-separate `.PostgreSql` adapter. Core remains provider neutral.
+separate `.PostgreSql` adapter. SQLite uses the separate `.Sqlite` adapter on
+the official EF Core SQLite provider. Core remains provider neutral.
 
 Reports are assessed at that boundary before being redirected. If evidence
 locates a defect in EF Core, Doka, Npgsql, a driver, or an engine, maintainers
