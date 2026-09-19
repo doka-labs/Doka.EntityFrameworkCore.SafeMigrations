@@ -281,8 +281,25 @@ assert_command_order() {
     local first_line
     local second_line
 
-    first_line="$(grep -nF -- "$first_pattern" "$file" | head -n 1 | cut -d : -f 1)"
-    second_line="$(grep -nF -- "$second_pattern" "$file" | head -n 1 | cut -d : -f 1)"
+    first_line="$(
+        grep -nF -- "$first_pattern" "$file" \
+            | head -n 1 \
+            | cut -d : -f 1 \
+            || true
+    )"
+    second_line="$(
+        grep -nF -- "$second_pattern" "$file" \
+            | head -n 1 \
+            | cut -d : -f 1 \
+            || true
+    )"
+
+    if [[ -z "$first_line" || -z "$second_line" ]]; then
+        echo \
+            "Expected both '$first_pattern' and '$second_pattern' in $file." \
+            >&2
+        exit 1
+    fi
 
     if ((first_line >= second_line)); then
         echo "Expected '$first_pattern' before '$second_pattern' in $file." >&2
@@ -612,11 +629,73 @@ assert_command_order \
 assert_command_order \
     "$workflow" \
     "- name: Prepare verified GitHub Release draft" \
+    "- name: Check NuGet.org immediately before publication"
+assert_command_order \
+    "$workflow" \
+    "- name: Check NuGet.org immediately before publication" \
     "- name: Request short-lived NuGet.org key"
+assert_command_order \
+    "$workflow" \
+    "- name: Publish Core package" \
+    "- name: Publish MySQL package"
+assert_command_order \
+    "$workflow" \
+    "- name: Publish MySQL package" \
+    "- name: Publish PostgreSQL package"
+assert_command_order \
+    "$workflow" \
+    "- name: Publish PostgreSQL package" \
+    "- name: Publish SQLite package"
+assert_command_order \
+    "$workflow" \
+    "- name: Publish SQLite package" \
+    "- name: Publish Core symbols"
+assert_command_order \
+    "$workflow" \
+    "- name: Publish Core symbols" \
+    "- name: Publish MySQL symbols"
+assert_command_order \
+    "$workflow" \
+    "- name: Publish MySQL symbols" \
+    "- name: Publish PostgreSQL symbols"
+assert_command_order \
+    "$workflow" \
+    "- name: Publish PostgreSQL symbols" \
+    "- name: Publish SQLite symbols"
+assert_command_order \
+    "$workflow" \
+    "- name: Publish SQLite symbols" \
+    "- name: Verify public NuGet packages"
 assert_command_order \
     "$workflow" \
     "- name: Verify public NuGet packages" \
     "- name: Publish or verify immutable GitHub Release"
+grep -Fq "if: steps.nuget-preflight.outputs.sqlite_published != 'true'" \
+    "$workflow"
+grep -Fq "if: steps.nuget-preflight.outputs.core_published != 'true'" \
+    "$workflow"
+grep -Fq "if: steps.nuget-preflight.outputs.mysql_published != 'true'" \
+    "$workflow"
+grep -Fq "if: steps.nuget-preflight.outputs.postgresql_published != 'true'" \
+    "$workflow"
+grep -Fq -- '--head --location' "$workflow"
+grep -Fq '408 | 429 | 5??' "$workflow"
+grep -Fq 'transport-error (curl exit $curl_exit_code)' "$workflow"
+if [[ "$(grep -Fc -- '--no-symbols --skip-duplicate --timeout 300' \
+    "$workflow")" -ne 4 ]]; then
+    echo "Every primary package must use the explicit primary push contract." >&2
+    exit 1
+fi
+if [[ "$(grep -Ec \
+    '^[[:space:]]+- name: Publish (Core|MySQL|PostgreSQL|SQLite) symbols$' \
+    "$workflow")" -ne 4 ]]; then
+    echo "Every symbol package must have an explicit publication step." >&2
+    exit 1
+fi
+if grep -Fq 'for package in artifacts/packages/*.nupkg' "$workflow"; then
+    echo "Primary packages must be published and resumed independently." >&2
+    exit 1
+fi
 grep -Fq "stage \"\$PACKAGE_VERSION\" \"\$RELEASE_TAG\"" "$workflow"
 grep -Fq "publish \"\$PACKAGE_VERSION\" \"\$RELEASE_TAG\"" "$workflow"
 if grep -Fq "gh release" "$workflow"; then

@@ -6,6 +6,13 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Make NuGet publication explicitly dependency-ordered and same-run resumable.
+  A bounded status preflight skips visible primary packages, while symbol
+  pushes remain duplicate-tolerant and final signed-content readback remains
+  mandatory.
+
 ## [10.4.2] - 2026-09-19
 
 Prepared a stable release that adds the separately packaged SQLite provider

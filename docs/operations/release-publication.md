@@ -116,17 +116,22 @@ environment `nuget`. The job then:
 4. creates or resumes a metadata-matching GitHub Release draft, uploads the
    exact eleven release assets, and verifies every asset name and SHA-256
    digest;
-5. obtains a short-lived NuGet key through Trusted Publishing only after the
-   complete draft has been read back;
-6. publishes the four primary and four symbol packages;
+5. checks the public state of all four primary packages with bounded retries,
+   then obtains a short-lived NuGet key through Trusted Publishing only after
+   the complete draft has been read back;
+6. publishes missing primary packages in dependency order (Core, MySQL,
+   PostgreSQL, SQLite), then publishes all four symbol packages with duplicate
+   tolerance;
 7. reads all primary packages back from NuGet.org, verifies their repository
    signatures, and compares their content with the qualified packages; and
 8. publishes the prepared draft and waits for the immutable Release plus every
    Release-asset attestation through a bounded five-minute readback window.
 
-No package is rebuilt after qualification. Duplicate-tolerant pushes support a
-same-run retry after a lost response; the subsequent signed-content readback is
-the acceptance gate, not the push response alone.
+No package is rebuilt after qualification. A same-run retry skips primary
+packages already visible on NuGet.org and safely repeats duplicate-tolerant
+symbol pushes. The subsequent signed-content readback is the acceptance gate,
+not the status check or push response alone. A new workflow dispatch is not a
+recovery path because the candidate preflight requires an unused version.
 
 ### 6. Confirm completion
 
@@ -168,9 +173,10 @@ but the workflow's bounded signed-package readback must already have passed.
   provenance fails before draft creation and NuGet credential exchange. Rerun
   the failed job only after the reviewed workflow or source correction; never
   fabricate or manually attach a replacement bundle.
-- The publish job accepts matching already-published packages through
-  `--skip-duplicate`, then verifies their signed content. A conflicting public
-  package or immutable Release asset fails closed.
+- The publish job skips primary packages already visible on NuGet.org and
+  repeats symbol pushes with `--skip-duplicate`, then verifies signed primary
+  content. A conflicting public package or immutable Release asset fails
+  closed.
 - A failed GitHub asset upload may leave a draft. The same job resumes only a
   draft with the expected tag, prerelease state, asset names, and SHA-256
   digests. It uploads missing assets and never overwrites a mismatch. The

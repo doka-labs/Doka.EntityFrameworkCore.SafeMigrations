@@ -67,7 +67,8 @@ jobs:
             doka.entityframeworkcore.safemigrations.mysql \
             doka.entityframeworkcore.safemigrations.postgresql \
             doka.entityframeworkcore.safemigrations.sqlite; do
-            package_url="https://api.nuget.org/v3-flatcontainer/$package_id/$PACKAGE_VERSION/$package_id.$PACKAGE_VERSION.nupkg"
+            package_url="https://api.nuget.org/v3-flatcontainer/$package_id"
+            package_url+="/$PACKAGE_VERSION/$package_id.$PACKAGE_VERSION.nupkg"
             http_code="$(curl --silent --show-error --location \
               --connect-timeout 10 --max-time 60 --output /dev/null \
               --write-out '%{http_code}' "$package_url")"
@@ -288,31 +289,145 @@ jobs:
           bash eng/reconcile-github-release.sh
           stage "$PACKAGE_VERSION" "$RELEASE_TAG"
 
+      - name: Check NuGet.org immediately before publication
+        id: nuget-preflight
+        run: |
+          packages=(
+            "core|doka.entityframeworkcore.safemigrations"
+            "mysql|doka.entityframeworkcore.safemigrations.mysql"
+            "postgresql|doka.entityframeworkcore.safemigrations.postgresql"
+            "sqlite|doka.entityframeworkcore.safemigrations.sqlite"
+          )
+
+          for descriptor in "${packages[@]}"; do
+            IFS='|' read -r output_name package_id <<<"$descriptor"
+            package_url="https://api.nuget.org/v3-flatcontainer/$package_id"
+            package_url+="/$PACKAGE_VERSION/$package_id.$PACKAGE_VERSION.nupkg"
+            published=""
+            http_code=""
+
+            for attempt in {1..4}; do
+              if http_code="$(curl --silent --show-error --head --location \
+                --connect-timeout 10 --max-time 60 --output /dev/null \
+                --write-out '%{http_code}' "$package_url")"; then
+                case "$http_code" in
+                  200)
+                    published=true
+                    break
+                    ;;
+                  404)
+                    published=false
+                    break
+                    ;;
+                  408 | 429 | 5??) ;;
+                  *)
+                    echo "NuGet publication preflight failed for $package_id with HTTP $http_code." >&2
+                    exit 1
+                    ;;
+                esac
+              else
+                curl_exit_code=$?
+                http_code="transport-error (curl exit $curl_exit_code)"
+              fi
+
+              if ((attempt < 4)); then
+                sleep $((attempt * 5))
+              fi
+            done
+
+            if [[ -z "$published" ]]; then
+              echo \
+                "NuGet publication preflight remained unavailable for $package_id" \
+                "after 4 attempts; last result: $http_code." >&2
+              exit 1
+            fi
+
+            echo "${output_name}_published=$published" >>"$GITHUB_OUTPUT"
+          done
+
       - name: Request short-lived NuGet.org key
         id: nuget-login
         uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
         with:
           user: ${{ secrets.NUGET_USER }}
 
-      - name: Publish primary packages
+      - name: Publish Core package
+        if: steps.nuget-preflight.outputs.core_published != 'true'
         env:
           NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
-        run: |
-          for package in artifacts/packages/*.nupkg; do
-            dotnet nuget push "$package" \
-              --source https://api.nuget.org/v3/index.json \
-              --no-symbols --skip-duplicate --timeout 300
-          done
+          PACKAGE: artifacts/packages/Doka.EntityFrameworkCore.SafeMigrations.${{ env.PACKAGE_VERSION }}.nupkg
+        run: >-
+          dotnet nuget push "$PACKAGE"
+          --source https://api.nuget.org/v3/index.json
+          --no-symbols --skip-duplicate --timeout 300
 
-      - name: Publish symbol packages
+      - name: Publish MySQL package
+        if: steps.nuget-preflight.outputs.mysql_published != 'true'
         env:
           NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
-        run: |
-          for package in artifacts/packages/*.snupkg; do
-            dotnet nuget push "$package" \
-              --source https://api.nuget.org/v3/index.json \
-              --skip-duplicate --timeout 300
-          done
+          PACKAGE: artifacts/packages/Doka.EntityFrameworkCore.SafeMigrations.MySql.${{ env.PACKAGE_VERSION }}.nupkg
+        run: >-
+          dotnet nuget push "$PACKAGE"
+          --source https://api.nuget.org/v3/index.json
+          --no-symbols --skip-duplicate --timeout 300
+
+      - name: Publish PostgreSQL package
+        if: steps.nuget-preflight.outputs.postgresql_published != 'true'
+        env:
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+          PACKAGE: >-
+            artifacts/packages/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.${{ env.PACKAGE_VERSION }}.nupkg
+        run: >-
+          dotnet nuget push "$PACKAGE"
+          --source https://api.nuget.org/v3/index.json
+          --no-symbols --skip-duplicate --timeout 300
+
+      - name: Publish SQLite package
+        if: steps.nuget-preflight.outputs.sqlite_published != 'true'
+        env:
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+          PACKAGE: artifacts/packages/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.${{ env.PACKAGE_VERSION }}.nupkg
+        run: >-
+          dotnet nuget push "$PACKAGE"
+          --source https://api.nuget.org/v3/index.json
+          --no-symbols --skip-duplicate --timeout 300
+
+      - name: Publish Core symbols
+        env:
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+          PACKAGE: artifacts/packages/Doka.EntityFrameworkCore.SafeMigrations.${{ env.PACKAGE_VERSION }}.snupkg
+        run: >-
+          dotnet nuget push "$PACKAGE"
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate --timeout 300
+
+      - name: Publish MySQL symbols
+        env:
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+          PACKAGE: artifacts/packages/Doka.EntityFrameworkCore.SafeMigrations.MySql.${{ env.PACKAGE_VERSION }}.snupkg
+        run: >-
+          dotnet nuget push "$PACKAGE"
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate --timeout 300
+
+      - name: Publish PostgreSQL symbols
+        env:
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+          PACKAGE: >-
+            artifacts/packages/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.${{ env.PACKAGE_VERSION }}.snupkg
+        run: >-
+          dotnet nuget push "$PACKAGE"
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate --timeout 300
+
+      - name: Publish SQLite symbols
+        env:
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+          PACKAGE: artifacts/packages/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.${{ env.PACKAGE_VERSION }}.snupkg
+        run: >-
+          dotnet nuget push "$PACKAGE"
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate --timeout 300
 
       - name: Verify public NuGet packages
         run: >-
