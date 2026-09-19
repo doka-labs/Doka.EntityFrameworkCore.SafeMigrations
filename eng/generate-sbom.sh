@@ -140,10 +140,12 @@ jq -e \
     --arg expected_name "Doka.EntityFrameworkCore.SafeMigrations $package_version" \
     '.spdxVersion == "SPDX-2.2"
         and .name == $expected_name
-        and (.files | length) == 7
+        and (.files | length) == 9
         and (.packages | length) > 0
         and any(.packages[]; .name == "Doka.EntityFrameworkCore.MySql")
         and any(.packages[]; .name == "Npgsql.EntityFrameworkCore.PostgreSQL")
+        and any(.packages[]; .name == "Microsoft.EntityFrameworkCore.Sqlite")
+        and any(.packages[]; .name == "Microsoft.EntityFrameworkCore.Sqlite.Core")
         and any(.packages[]; .name == "Microsoft.EntityFrameworkCore.Relational")' \
     "$manifest_path" >/dev/null
 

@@ -111,14 +111,14 @@ environment `nuget`. The job then:
    authorized SSH signature;
 2. verifies the downloaded package checksums and package contract again;
 3. validates the portable Sigstore envelope, SLSA v1 predicate, and exact
-   eight-subject inventory, then cryptographically verifies every subject
+   ten-subject inventory, then cryptographically verifies every subject
    against the release workflow and qualified commit;
 4. creates or resumes a metadata-matching GitHub Release draft, uploads the
-   exact nine release assets, and verifies every asset name and SHA-256
+   exact eleven release assets, and verifies every asset name and SHA-256
    digest;
 5. obtains a short-lived NuGet key through Trusted Publishing only after the
    complete draft has been read back;
-6. publishes the three primary and three symbol packages;
+6. publishes the four primary and four symbol packages;
 7. reads all primary packages back from NuGet.org, verifies their repository
    signatures, and compares their content with the qualified packages; and
 8. publishes the prepared draft and waits for the immutable Release plus every
@@ -140,8 +140,8 @@ gh release view "${release_tag}" \
 The release must be published and immutable, target the exact tag, have the
 correct prerelease state, and contain exactly:
 
-- three `.nupkg` files;
-- three `.snupkg` files;
+- four `.nupkg` files;
+- four `.snupkg` files;
 - `SHA256SUMS`; and
 - `manifest.spdx.json`; and
 - `release-provenance.intoto.jsonl`.
@@ -152,7 +152,7 @@ signer-digest, source-ref, source-digest, and hosted-runner restrictions in
 [Release verification](../security/release-verification.md). A matching
 filename without successful cryptographic verification is not evidence.
 
-Confirm all three package pages and symbol validation status on NuGet.org.
+Confirm all four package pages and symbol validation status on NuGet.org.
 Indexing can lag after the upload; a pending package is not a failed upload,
 but the workflow's bounded signed-package readback must already have passed.
 

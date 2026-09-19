@@ -86,6 +86,13 @@ adapter's guarded DO block and is rejected. Ordinary delegated commands retain
 their provider semantics; composition does not make every provider command
 safe to embed.
 
+For SQLite, the adapter also composes `IMigrationsSqlGenerator`, intercepts
+only safe envelopes, and delegates ordinary operations to the official
+provider generator. Safe structural segments that need a table rebuild are
+analyzed completely and then handed to that generator as one atomic batch.
+Runtime migration and Migration Bundles are supported. SQL scripts containing
+safe operations reject because SQLite cannot encode their live catalog branch.
+
 The current MySQL/MariaDB adapter consumes Doka through the bounded
 `[10.4.0,10.5.0)` NuGet dependency range. Doka 10.3.0 introduced typed
 read-only migration metadata for Guid storage, value generation, and index
@@ -175,7 +182,7 @@ only the source branch of an upstream provider.
 ## More Information
 
 D-001 defines package boundaries and D-004 defines runtime ownership. This
-decision does not promise identical SQL or transactions on both providers.
+decision does not promise identical SQL or transactions on the server providers.
 Equivalent product intent may legitimately yield different command plans or
 a stable Unsupported result.
 
@@ -212,6 +219,8 @@ being accepted through broad string normalization.
   its signed `v10.4.0` tag identifies commit
   `dffabcafc74934f2645c9bc4cde43fda37051e28`. Complete SafeMigrations
   qualification remains the release acceptance gate.
+- 2026-09-18: D-013 amended this decision with official-provider SQLite
+  composition, atomic rebuild batches, and a fail-closed script boundary.
 
 ### Implementation References
 
@@ -227,7 +236,11 @@ being accepted through broad string normalization.
 - [Doka package-contract tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Unit/DokaPackageContractTests.cs)
 - [MySQL/MariaDB composition tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Infrastructure/MySqlServiceCompositionTests.cs)
 - [PostgreSQL composition tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Infrastructure/PostgreSqlServiceCompositionTests.cs)
+- [SQLite composed generator](../../src/Doka.EntityFrameworkCore.SafeMigrations.Sqlite/SqlGeneration/SqliteSafeMigrationsSqlGenerator.cs)
+- [SQLite registration](../../src/Doka.EntityFrameworkCore.SafeMigrations.Sqlite/Extensions/SqliteServiceCollectionExtensions.cs)
+- [SQLite composition tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests/Infrastructure/SqliteServiceCompositionTests.cs)
 - [EF tooling gate](../../eng/verify-ef-tooling.sh)
+- [SQLite EF tooling gate](../../eng/verify-sqlite-ef-tooling.sh)
 - [Dependency upgrade contract](../efcore-provider-upgrade-risk.md)
 - [Support and qualification](../support-and-qualification.md)
 

@@ -61,6 +61,7 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
         }
 
         var operations = new List<MigrationOperation>();
+        var targetModels = new List<IModel?>();
 
         // Reconstruct the pending Up-operation stream in the migration-ID order
         // used for target selection throughout this method.
@@ -82,12 +83,15 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
                 context.Database.ProviderName ?? string.Empty);
 
             operations.AddRange(migration.UpOperations);
+            targetModels.AddRange(Enumerable.Repeat(migration.TargetModel, migration.UpOperations.Count));
         }
 
-        return await AnalyzeAsync(
+        return await RunAsync(
             context,
             operations,
+            SafeMigrationReportMode.Preflight,
             new SafeMigrationRunOptions(options.InstanceId, targetMigrationId, options.ExpectedModelFingerprint),
+            targetModels,
             cancellationToken);
     }
 
@@ -97,7 +101,7 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
         IReadOnlyList<MigrationOperation> operations,
         SafeMigrationRunOptions options,
         CancellationToken cancellationToken = default
-    ) => RunAsync(context, operations, SafeMigrationReportMode.Preflight, options, cancellationToken);
+    ) => RunAsync(context, operations, SafeMigrationReportMode.Preflight, options, null, cancellationToken);
 
     /// <inheritdoc />
     public Task<SafeMigrationRunReport> VerifyAsync(
@@ -105,19 +109,28 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
         IReadOnlyList<MigrationOperation> operations,
         SafeMigrationRunOptions options,
         CancellationToken cancellationToken = default
-    ) => RunAsync(context, operations, SafeMigrationReportMode.Postflight, options, cancellationToken);
+    ) => RunAsync(context, operations, SafeMigrationReportMode.Postflight, options, null, cancellationToken);
 
     private async Task<SafeMigrationRunReport> RunAsync(
         DbContext context,
         IReadOnlyList<MigrationOperation> operations,
         SafeMigrationReportMode mode,
         SafeMigrationRunOptions options,
+        List<IModel?>? targetModels,
         CancellationToken cancellationToken
     )
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(operations);
         ArgumentNullException.ThrowIfNull(options);
+
+        if (targetModels is not null
+            && targetModels.Count != operations.Count)
+        {
+            throw new ArgumentException(
+                "The target-model sequence must align with the migration-operation sequence.",
+                nameof(targetModels));
+        }
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -177,6 +190,7 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
                 contractFingerprint,
                 generatedAtUtc,
                 environment,
+                targetModels,
                 cancellationToken);
 
             activity?.SetStatus(ActivityStatusCode.Ok);
@@ -253,6 +267,7 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
         string contractFingerprint,
         DateTimeOffset generatedAtUtc,
         SafeMigrationProviderEnvironment environment,
+        List<IModel?>? targetModels,
         CancellationToken cancellationToken
     )
     {
@@ -266,7 +281,20 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
 
         // Providers classify the safe subset in one batch. The projection then
         // advances sequentially without rereading the database, which preflight cannot mutate.
-        var liveAnalyses = await _providerAnalyzer.AnalyzeAsync(context, safeOperations, cancellationToken);
+        IReadOnlyList<SafeMigrationProviderAnalysis> liveAnalyses;
+        if (_providerAnalyzer is ISafeMigrationProviderTargetModelAnalyzer targetModelAnalyzer)
+        {
+            liveAnalyses = await targetModelAnalyzer.AnalyzeAsync(
+                context,
+                operations,
+                targetModels,
+                cancellationToken);
+        }
+        else
+        {
+            liveAnalyses = await _providerAnalyzer.AnalyzeAsync(context, safeOperations, cancellationToken);
+        }
+
         if (liveAnalyses.Count != safeOperations.Length)
         {
             throw new InvalidOperationException("The SafeMigrations analyzer returned an inconsistent result count.");
@@ -274,6 +302,7 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
 
         var objectIdentityNormalizer =
             _providerAnalyzer as ISafeMigrationProviderObjectIdentityNormalizer;
+
         var postflightProjection = mode == SafeMigrationReportMode.Postflight
             ? new SafeMigrationPostflightProjection(operations, objectIdentityNormalizer)
             : null;

@@ -92,6 +92,7 @@ package_ids=(
     Doka.EntityFrameworkCore.SafeMigrations
     Doka.EntityFrameworkCore.SafeMigrations.MySql
     Doka.EntityFrameworkCore.SafeMigrations.PostgreSql
+    Doka.EntityFrameworkCore.SafeMigrations.Sqlite
 )
 
 for package_id in "${package_ids[@]}"; do

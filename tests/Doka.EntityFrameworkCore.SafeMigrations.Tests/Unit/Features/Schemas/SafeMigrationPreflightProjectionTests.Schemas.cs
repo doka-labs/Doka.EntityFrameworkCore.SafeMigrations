@@ -91,6 +91,12 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         string database
     ) : ISafeMigrationProviderObjectIdentityNormalizer
     {
+        public StringComparer IdentifierComparer => StringComparer.Ordinal;
+
+        public string NormalizeIdentifier(
+            string identifier
+        ) => identifier;
+
         public string? NormalizeSchema(
             string? schema
         ) => StringComparer.Ordinal.Equals(schema, database)

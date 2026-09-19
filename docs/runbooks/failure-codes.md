@@ -84,6 +84,11 @@ SafeMigrations rejection. Match the invariant `doka_sm_*` constraint token for
 the guarded command, not localized sentence fragments. Do not export the full
 provider error message into public telemetry.
 
+SQLite guarded commands raise an `InvalidOperationException` containing the
+bounded analysis and decision codes before target DDL. A structural batch runs
+inside one transaction, so the exception category is evidence for rollback,
+not permission to skip postflight or backup verification.
+
 <a id="non-blocking-assessment-codes"></a>
 
 ## Analyzer and projection codes
@@ -203,6 +208,31 @@ alongside the analyzer/projection code.
 | `source_missing_noop` | Rename source is absent; no rename is performed. Independently check the destination; rename postflight proves source absence only. |
 | `source_exists_rename` | Rename source exists and target is free. |
 
+## SQLite data-analysis reason codes
+
+SQLite reports bounded, provider-specific evidence for data-blocked states.
+The public planner still emits `data_blocked`; the protected assessment retains
+one of these `AnalysisCode` values so remediation can target the failed proof
+without exposing row values.
+
+| Code | Meaning |
+| --- | --- |
+| `required_column_has_rows` | A required added column has no safe value for existing rows. |
+| `column_contains_nulls` | Existing rows contain `NULL` while the target column is required. |
+| `primary_key_invalid_values` | A proposed primary key contains `NULL` or duplicate tuples. |
+| `unique_constraint_duplicate_values` | Existing rows violate the requested unique constraint. |
+| `unique_index_duplicate_values` | Existing rows violate the requested unique index, including its key collations. |
+| `check_constraint_violated` | Existing rows violate the requested check expression. |
+| `foreign_key_orphans` | Existing dependent rows have no matching principal key. |
+| `table_rebuild_foreign_key_violation` | A retained foreign key already has an orphan in the relationship closure affected by a table rebuild. Repair the data before rebuilding. |
+| `model_managed_unique_collision` | A model-managed target row would violate a live unique key. |
+| `model_managed_dependency` | A model-managed delete would leave a dependent row. |
+
+A check that references a column added earlier in the same SQLite structural
+segment reports the ordinary `classified_prerequisite_missing` analysis on a
+populated table. Materialize the column in an earlier migration so preflight
+can evaluate the check against the resulting live rows.
+
 ## Stable unsupported reason codes
 
 An unsupported preflight assessment retains the provider's bounded reason
@@ -212,17 +242,17 @@ code, not a claim that the feature is absent from every version of that engine.
 
 | Code | Provider | Meaning |
 | --- | --- | --- |
-| `opaque_sql_expression` | Both | Raw/provider-fragment SQL has no provable typed catalog equivalence. |
-| `opaque_expression_rename_projection` | Both | An earlier rename affected an opaque facet that cannot be safely rewritten. |
-| `column_type_mapping` | Both | The expected column has no supported relational type mapping. |
-| `index_prefix_length` | Both | Prefix-length keys are not supported by the selected provider/capability. |
+| `opaque_sql_expression` | All | Raw/provider-fragment SQL has no provable typed catalog equivalence. |
+| `opaque_expression_rename_projection` | All | An earlier rename affected an opaque facet that cannot be safely rewritten. |
+| `column_type_mapping` | All | The expected column has no supported relational type mapping. |
+| `index_prefix_length` | All | Prefix-length keys are not supported by the selected provider/capability. |
 | `index_prefix_required_for_key_limit` | MySQL/MariaDB | An unprefixed variable-width key exceeds the InnoDB limit. |
 | `index_prefix_exceeds_target_column` | MySQL/MariaDB | A projected prefix exceeds the target column width. |
 | `index_key_exceeds_physical_limit` | MySQL/MariaDB | The projected key exceeds the InnoDB physical limit. |
 | `index_too_many_key_parts` | MySQL/MariaDB | The index exceeds the InnoDB limit of 16 key parts. |
 | `index_storage_engine_unsupported` | MySQL/MariaDB | The target table does not use InnoDB. |
 | `index_key_length_unverifiable` | MySQL/MariaDB | A missing expression, non-BTREE, text/blob, unknown-type, or otherwise unbounded index shape has no provable physical key width. |
-| `index_replacement_data_blocked` | Both | An accepted exact-name index drop is followed by a unique replacement whose live key values contain duplicates. Preflight preserves this evidence and blocks before executing the drop. |
+| `index_replacement_data_blocked` | All | An accepted exact-name index drop is followed by a unique replacement whose live key values contain duplicates. Preflight preserves this evidence and blocks before executing the drop. |
 | `index_name_reserved_primary` | MySQL/MariaDB | An ordinary index uses the provider-reserved primary-key name `PRIMARY`. |
 | `primary_key_exceeds_physical_limit` | MySQL/MariaDB | The full primary key exceeds the target InnoDB byte limit. |
 | `primary_key_too_many_columns` | MySQL/MariaDB | The primary key exceeds the InnoDB limit of 16 columns. |
@@ -235,7 +265,7 @@ code, not a claim that the feature is absent from every version of that engine.
 | `unique_constraint_replacement_data_blocked` | MySQL/MariaDB | A same-name index or constraint replacement would encounter duplicate target keys after its accepted drop. |
 | `schema_operations` | MySQL/MariaDB | A selected-database drop or PostgreSQL-style independent schema operation is not supported. |
 | `database_qualifier_mismatch` | MySQL/MariaDB | An explicit object/database qualifier, including a foreign database drop, does not exactly equal the database selected by the active connection. |
-| `schema_qualified_collation` | MySQL/MariaDB | A column collation supplies a schema-qualified identity. |
+| `schema_qualified_collation` | MySQL/MariaDB, SQLite | A column collation supplies a schema-qualified identity. |
 | `literal_default_catalog_representation` | MySQL/MariaDB | The literal default cannot be represented and compared reliably through that catalog/profile. |
 | `generated_column` | MySQL/MariaDB | The active profile lacks the requested stored/virtual generated-column capability. |
 | `expression_default` | MySQL/MariaDB | The active profile lacks expression-default capability. |
@@ -250,6 +280,46 @@ code, not a claim that the feature is absent from every version of that engine.
 | `index_key_collation` | MySQL/MariaDB | An explicit per-key index collation is not supported by the adapter. |
 | `operator_class` | MySQL/MariaDB | PostgreSQL-style index operator classes are not supported. |
 | `virtual_generated_column` | PostgreSQL | The adapter rejects an explicitly virtual computed column. |
+| `stored_generated_column_add` | SQLite | SQLite cannot add a STORED generated column through `ALTER TABLE ADD COLUMN`. |
+| `sqlite_version` | SQLite | The connected engine is older than the EF Core SQLite provider support floor. |
+| `operation_kind` | SQLite | The adapter has no qualified contract for the requested operation kind. |
+| `check_expression` | SQLite | A check expression cannot be parsed into the bounded SQLite expression contract. |
+| `virtual_table` | SQLite | The target is a virtual table outside the ordinary table convergence contract. |
+| `database_qualifier_mismatch` | SQLite | A qualifier identifies an attached database instead of `main`. |
+| `schema_operations` | SQLite | Dropping a schema/database is outside the adapter contract. |
+| `legacy_alter_table` | SQLite | `PRAGMA legacy_alter_table` is enabled, so a rename cannot prove that dependent SQL is rewritten. |
+| `table_drop_foreign_key_dependency` | SQLite | An external incoming foreign key remains in the projected ordered state when the table drop is reached; its referential actions could mutate another table. |
+| `table_comments` | SQLite | SQLite cannot preserve the requested table comment facet. |
+| `column_comments` | SQLite | SQLite cannot preserve the requested column comment facet. |
+| `row_version` | SQLite | SQLite has no database-generated row-version facet matching the definition. |
+| `column_provider_annotation` | SQLite | The column carries an unmodeled provider annotation. |
+| `index_provider_option` | SQLite | The index carries an unmodeled provider option. |
+| `index_key_provider_option` | SQLite | An index key carries an unmodeled provider option. |
+| `model_managed_unmodeled_dependency` | SQLite | A model-managed delete has a live dependency outside the target model contract. |
+| `table_rebuild_model_missing` | SQLite | No terminal EF model table proves rebuild ownership. |
+| `table_rebuild_unmanaged_column` | SQLite | The live table has a column outside the owned model. |
+| `table_rebuild_unmanaged_index` | SQLite | The live table has an unmodeled, expression, or partial index. |
+| `table_rebuild_unmanaged_primary_key` | SQLite | The live primary key is not represented by the model contract. |
+| `table_rebuild_unmanaged_unique_constraint` | SQLite | A live unique constraint is not represented by the model contract. |
+| `table_rebuild_unmanaged_check_constraint` | SQLite | A live check is not represented by the model contract. |
+| `table_rebuild_unmanaged_foreign_key` | SQLite | A live foreign key is not represented by the model contract. |
+| `table_rebuild_unmodeled_target_column` | SQLite | A target-model column is absent without an ordered add proof. |
+| `table_rebuild_unmodeled_target_index` | SQLite | A target-model index is absent without an ordered add proof. |
+| `table_rebuild_unmodeled_target_primary_key` | SQLite | The target primary key is absent without an ordered add proof. |
+| `table_rebuild_unmodeled_target_unique_constraint` | SQLite | A target unique constraint is absent without an ordered add proof. |
+| `table_rebuild_unmodeled_target_check_constraint` | SQLite | A target check is absent without an ordered add proof. |
+| `table_rebuild_unmodeled_target_foreign_key` | SQLite | A target foreign key is absent without an ordered add proof. |
+| `table_rebuild_column_drift` | SQLite | A live column has unowned physical-facet drift that a rebuild would normalize. |
+| `table_rebuild_index_drift` | SQLite | A live index has unowned key, uniqueness, filter, or collation drift. |
+| `table_rebuild_primary_key_drift` | SQLite | A live primary key has unowned name, order, direction, or collation drift. |
+| `table_rebuild_unique_constraint_drift` | SQLite | A live unique constraint has unowned name or key-facet drift. |
+| `table_rebuild_check_constraint_drift` | SQLite | A semantically matching live check has unowned physical-name drift. |
+| `table_rebuild_foreign_key_drift` | SQLite | A semantically matching live foreign key has unowned physical-name drift. |
+| `table_rebuild_provider_constraint_option` | SQLite | Live constraint SQL uses an option that the EF target model cannot prove and preserve. |
+| `table_rebuild_trigger` | SQLite | A trigger owned outside the EF model would be lost by rebuild. |
+| `table_rebuild_view` | SQLite | A view references the rebuilt table and has no safe recreation contract. |
+| `strict_table_rebuild` | SQLite | Rebuilding a `STRICT` table is not qualified. |
+| `without_rowid_table_rebuild` | SQLite | Rebuilding a `WITHOUT ROWID` table is not qualified. |
 
 PostgreSQL also evaluates capabilities dynamically. A nulls-not-distinct index
 before PostgreSQL 15, or ordering on an access method without `can_order`,
@@ -257,7 +327,8 @@ produces `classified_unsupported` rather than a new static reason above.
 
 The provider catalog builders and their feature slices own the reasons:
 [MySQL/MariaDB](../../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/SqlGeneration/MySqlSafeMigrationCatalogSqlBuilder.cs)
-and [PostgreSQL](../../src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/SqlGeneration/PostgreSqlSafeMigrationCatalogSqlBuilder.cs).
+[PostgreSQL](../../src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/SqlGeneration/PostgreSqlSafeMigrationCatalogSqlBuilder.cs),
+and [SQLite](../../src/Doka.EntityFrameworkCore.SafeMigrations.Sqlite/Analysis/SqliteSafeMigrationProviderAnalyzer.cs).
 For an unknown reason, stop automated rollout, record the actual package/engine
 versions, and investigate a documentation gap, version mismatch, or defect.
 Do not assume that an undocumented string alone proves a new runtime contract.

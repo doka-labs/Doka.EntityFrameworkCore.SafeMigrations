@@ -120,6 +120,20 @@ lock. An existing transaction is accepted only if read-only and RepeatableRead
 or Serializable. An unsuitable caller transaction is rejected, not silently
 changed or committed.
 
+SQLite analysis uses a deferred serializable transaction when it owns the
+scope. Deferral avoids reserving the writer slot at `BEGIN`, but a long read can
+still delay writer commits in rollback-journal mode. Runtime non-rebuild
+structural batches execute in the caller transaction or one local transaction.
+Rebuild batches suppress EF's outer transaction, disable foreign-key
+enforcement before their own transaction, require final postconditions before
+commit, and restore the original enforcement mode. When enforcement was
+originally enabled, retained violations fail preflight and the affected
+relationship closure must also pass `foreign_key_check` before commit.
+EF writes migration history separately after operation commands complete. EF's
+migration lock coordinates competing migrators; SQLite still permits only one
+writer. Microsoft.Data.Sqlite cannot interrupt native work after synchronous
+execution begins.
+
 MySQL/MariaDB analysis uses the provider's migration lock. That lock is not a
 general application-write fence. Neither provider's analysis lock is a promise
 that all future data and DDL remain unchanged. Deployment orchestration must
@@ -155,7 +169,7 @@ disposal; they do not inherit EF's runtime lock or finally-style cleanup.
 
 ### Confirmation
 
-Run both provider lifecycle and lifecycle-edge-case suites through the full
+Run every provider lifecycle and lifecycle-edge-case suite through the full
 engine matrix defined by support qualification. Require independent evidence
 for these boundaries:
 
@@ -257,6 +271,8 @@ installations.
   identity, excluded `PRIMARY` from ordinary aliases, and extended physical-key
   qualification to primary and unique constraints. Composite constraint
   matching now uses ordinal rows instead of session-bounded aggregation.
+- 2026-09-18: D-013 added SQLite analysis, atomic runtime batches, postflight,
+  and migration-lock recovery boundaries.
 
 ### Implementation References
 
@@ -267,6 +283,9 @@ installations.
 - [MySQL/MariaDB edge cases](../../tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Integration/Features/Lifecycle/MySqlSafeMigrationIntegrationTests.Lifecycle.EdgeCases.cs)
 - [PostgreSQL lifecycle tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Integration/Features/Lifecycle/PostgreSqlSafeMigrationIntegrationTests.Lifecycle.cs)
 - [PostgreSQL edge cases](../../tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Integration/Features/Lifecycle/PostgreSqlSafeMigrationIntegrationTests.Lifecycle.EdgeCases.cs)
+- [SQLite analyzer](../../src/Doka.EntityFrameworkCore.SafeMigrations.Sqlite/Analysis/SqliteSafeMigrationProviderAnalyzer.cs)
+- [SQLite execution tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests/Integration/SqliteSafeMigrationIntegrationTests.Execution.cs)
+- [SQLite behavior](../sqlite-behavior.md)
 - [MySQL/MariaDB DDL behavior](../mysql-mariadb-ddl-behavior.md)
 - [Deployment and recovery](../runbooks/deployment-and-recovery.md)
 

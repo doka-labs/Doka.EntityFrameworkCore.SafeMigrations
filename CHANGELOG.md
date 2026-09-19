@@ -6,15 +6,95 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+## [10.4.2] - 2026-09-19
+
+Prepared a stable release that adds the separately packaged SQLite provider
+while preserving the existing Core, MySQL/MariaDB, and PostgreSQL contracts.
+The release also closes verified brownfield text and standalone-constraint
+gaps, normalizes selected-database identity throughout MySQL/MariaDB operation
+streams, and makes design-time registration responsive to ordinary incremental
+builds. Existing Core, MySQL/MariaDB, and PostgreSQL public APIs and report
+schemas remain compatible; SQLite establishes its initial public API.
+
+These notes do not establish publication. Require the successful stable
+release run, the authorized signed `v10.4.2` tag, and verified public package,
+symbol, GitHub Release, provenance, SBOM, and attestation readback before
+selecting 10.4.2. All four package IDs must be published at the exact same
+version.
+
+### Added
+
+- Add `Doka.EntityFrameworkCore.SafeMigrations.Sqlite` as the third provider
+  package and fourth package overall on the bundle-neutral official EF Core
+  SQLite provider core. It supplies automatic safe
+  scaffolding, live catalog analysis, ordered preflight and postflight,
+  idempotent guarded execution, model-managed data convergence, unexpected-
+  object inventory, canonical model validation, package-only consumption, and
+  EF CLI and Migration Bundle qualification.
+- Implement transactional SQLite table rebuilds for model-owned column,
+  primary-key, unique, check, and foreign-key changes that SQLite cannot alter
+  directly. The complete batch is analyzed before its first mutation, rebuilds
+  preserve modeled data and indexes, and unmanaged triggers, views, virtual
+  tables, expression or partial indexes, or other unproven artifacts reject
+  before DDL.
+- Add SQLite-specific operation, constraint, index, generated-column,
+  model-managed-data, cancellation, concurrency, large-operation,
+  scaffolding, replay, package, coverage, allocation, and performance
+  qualification. Runtime migration and bundles are supported; SQL script
+  generation containing safe operations rejects before producing partial
+  output because SQLite cannot express the required catalog-dependent guards.
+- Extend the versioned report schemas and `SafeMigrationProviderEnvironment`
+  engine-family contract with the `sqlite` value.
+- Preserve data and foreign-key actions during SQLite table rebuilds by
+  suspending enforcement before the local rebuild transaction, running the
+  official EF rewrite as one operation stream, validating the affected
+  relationship closure when enforcement was originally enabled, and restoring
+  the original enforcement mode afterwards. Provider-owned operation runs
+  retain EF's list-wide rewrite semantics, mixed provider/safe migrations can
+  share a structural segment, and pending migrations are analyzed against their
+  own initialized cumulative target models.
+- Compare SQLite SQL expressions without normalizing string-literal case or
+  whitespace, preserve multiline partial-index predicates, parse commented
+  table SQL without treating comments as schema syntax, recognize comments as
+  trivia in compound table options, and accept every SQLite high-byte unquoted
+  identifier character. Primary-key names, generated expressions, partial-index
+  filters, `AUTOINCREMENT`, and check constraints are detected only as SQL
+  tokens, never from string literals. Hand-authored column checks retain
+  SQLite's latest applicable `CONSTRAINT` name across following checks. Rebuild
+  ownership compares complete column, index, primary-key, unique, check, and
+  foreign-key shape and rejects provider constraint options that the target
+  model cannot prove.
+- Project SQLite table-drop dependencies through ordered table and foreign-key
+  creation, rename, replacement, and drop operations. External dependents block
+  before DDL, while a self-referencing table or a dependent removed earlier in
+  the stream does not create a false blocker.
+- Match EF's transient required-column backfill defaults through the provider
+  CLR type and provider literal mapping, including value-converted enums. A
+  retained foreign key whose principal table is absent blocks only when a child
+  row carries a complete non-null key.
+- Bound SQLite runtime catalog work with snapshot reuse across data-only
+  commands, one top-level table-clause split, shared identifier scanning, and
+  cached schema patterns. Non-structural operations no longer rebuild model-wide
+  artifact dictionaries. Performance budgets cover both a 200-table catalog and
+  a 1,000-table catalog carrying indexes and foreign keys.
+
 ### Changed
 
 - Pending hand-authored migrations that drop a column before explicitly
   dropping every known dependent constraint and index now fail during
   preflight and direct SQL generation. Reorder those operations so dependency
   drops precede the column drop, then recreate terminal-model dependencies.
+- Require SQLite 3.46.1 or later and depend on
+  `Microsoft.EntityFrameworkCore.Sqlite.Core` so applications retain explicit
+  ownership of the native SQLite or SQLCipher bundle.
 
 ### Fixed
 
+- Register MySQL/MariaDB, PostgreSQL, and SQLite design-time services before
+  the .NET SDK hashes generated assembly attributes. Adding or removing a
+  direct EF Design or EF Tools reference after an earlier runtime-only build
+  now updates the compiled registration through an ordinary incremental build
+  without requiring a clean or rebuild.
 - Rewrite standalone EF primary-key, unique, check, and foreign-key adds and
   drops into their SafeMigrations counterparts. Dependency-ordered initial
   migrations no longer leave a raw `AddForeignKey` that collides with an
@@ -964,7 +1044,8 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.1...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.2...HEAD
+[10.4.2]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.1...v10.4.2
 [10.4.1]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.0...v10.4.1
 [10.4.0]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.3.2...v10.4.0
 [10.3.2]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.3.1...v10.3.2

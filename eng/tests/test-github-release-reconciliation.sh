@@ -207,7 +207,8 @@ create_case() {
     for package_id in \
         Doka.EntityFrameworkCore.SafeMigrations \
         Doka.EntityFrameworkCore.SafeMigrations.MySql \
-        Doka.EntityFrameworkCore.SafeMigrations.PostgreSql; do
+        Doka.EntityFrameworkCore.SafeMigrations.PostgreSql \
+        Doka.EntityFrameworkCore.SafeMigrations.Sqlite; do
         printf '%s primary\n' "$package_id" \
             >"$case_root/artifacts/packages/$package_id.$fixture_version.nupkg"
         printf '%s symbols\n' "$package_id" \
@@ -320,11 +321,11 @@ jq -e \
     '.isDraft == true
       and .isImmutable == false
       and .isPrerelease == true
-      and (.assets | length) == 9' \
+      and (.assets | length) == 11' \
     "$fresh_case/state/release.json" >/dev/null
 grep -Fxq "GitHub Release draft is complete and verified." "$fresh_case/stage.stdout"
 assert_empty "$fresh_case/stage.stderr"
-test "$(grep -c '^release upload ' "$fresh_case/state/commands.log")" -eq 9
+test "$(grep -c '^release upload ' "$fresh_case/state/commands.log")" -eq 11
 test "$(grep -c '^release edit ' "$fresh_case/state/commands.log" || true)" -eq 0
 test "$(grep -c '^api --paginate ' "$fresh_case/state/commands.log")" -ge 2
 grep -Fq "$release_inventory_command" "$fresh_case/state/commands.log"
@@ -337,7 +338,7 @@ jq -e \
     '.isDraft == false
       and .isImmutable == true
       and .isPrerelease == true
-      and (.assets | length) == 9' \
+      and (.assets | length) == 11' \
     "$fresh_case/state/release.json" >/dev/null
 grep -Fxq "3" "$fresh_case/state/release-verify-count"
 grep -Fq "Waiting for GitHub Release and asset attestations (1/3)..." \
@@ -374,7 +375,7 @@ jq -e \
     '.isDraft == true
       and .isImmutable == false
       and .isPrerelease == false
-      and (.assets | length) == 9' \
+      and (.assets | length) == 11' \
     "$stable_case/state/release.json" >/dev/null
 if grep -Fq -- "--prerelease" "$stable_case/state/commands.log"; then
     echo "Stable draft was incorrectly classified as a prerelease." >&2
@@ -400,7 +401,7 @@ create_remote_draft "$partial_case"
 run_reconciler "$partial_case" stage \
     >"$partial_case/stage.stdout" \
     2>"$partial_case/stage.stderr"
-test "$(grep -c '^release upload ' "$partial_case/state/commands.log")" -eq 8
+test "$(grep -c '^release upload ' "$partial_case/state/commands.log")" -eq 10
 test "$(grep -c '^release create ' "$partial_case/state/commands.log" || true)" -eq 0
 assert_empty "$partial_case/stage.stderr"
 
@@ -412,7 +413,7 @@ run_reconciler \
     2>"$asset_visibility_case/publish.stderr"
 grep -Fxq "3" "$asset_visibility_case/state/release-verify-count"
 test "$(grep -c '^release verify-asset ' \
-    "$asset_visibility_case/state/commands.log")" -eq 11
+    "$asset_visibility_case/state/commands.log")" -eq 13
 grep -Fq "Waiting for GitHub Release and asset attestations (2/3)..." \
     "$asset_visibility_case/publish.stderr"
 grep -Fxq "Immutable GitHub Release and every asset attestation are verified." \
@@ -464,7 +465,7 @@ if run_reconciler "$package_shape_case" stage \
     echo "Invalid primary and symbol package distribution unexpectedly passed." >&2
     exit 1
 fi
-grep -Fxq "Expected exactly three primary packages and three symbol packages." \
+grep -Fxq "Expected exactly four primary packages and four symbol packages." \
     "$package_shape_case/stage.stderr"
 test ! -f "$package_shape_case/state/commands.log"
 

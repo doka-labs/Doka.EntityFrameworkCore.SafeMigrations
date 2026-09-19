@@ -30,6 +30,12 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
 
     bool ISafeMigrationProjectedKeyAnalyzer.SharesUniqueConstraintAndIndexIdentity => true;
 
+    StringComparer ISafeMigrationProviderObjectIdentityNormalizer.IdentifierComparer => StringComparer.Ordinal;
+
+    string ISafeMigrationProviderObjectIdentityNormalizer.NormalizeIdentifier(
+        string identifier
+    ) => identifier;
+
     string? ISafeMigrationProviderObjectIdentityNormalizer.NormalizeSchema(
         string? schema
     ) => schema is not null && StringComparer.Ordinal.Equals(schema, _currentDatabase)
@@ -50,6 +56,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         // WHY: Doka 10.3.x maps this operation only to ALTER DATABASE's
         // character-set default. Existing tables, columns, indexes,
         // constraints, and rows retain their catalog state.
+
         return operation is AlterDatabaseOperation;
     }
 
@@ -161,9 +168,11 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
             var expectedUniqueIndexes = MySqlSafeMigrationPlanCapture.CreateExpectedUniqueIndexes(
                 operations,
                 _currentDatabase);
+
             var expectedTableConstraints = SafeMigrationExpectedTableConstraints.FromOperations(
                 operations,
                 schema => MySqlTableIdentity.NormalizeDatabase(schema, _currentDatabase));
+
             var results = new List<SafeMigrationProviderAnalysis>(operations.Count);
             var separatorBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Separator);
             var trailerBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Trailer);
@@ -177,6 +186,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                     context.Model,
                     expectedUniqueIndexes,
                     expectedTableConstraints);
+
                 AttachIndexPhysicalEnvironments(operationWindow, plans, indexEnvironments);
                 var shortCircuitStates = await FindShortCircuitStatesAsync(
                     connection,
@@ -407,6 +417,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
             expectedTableConstraints,
             includeAnalysisEvidence,
             includeTransitionEvidence);
+
         _ = _sqlGenerator.Generate(operations, model);
 
         return capture.Complete();
@@ -1592,6 +1603,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
             await using (var tableCommand = connection.CreateCommand())
             {
                 ApplyCommandTimeout(tableCommand, commandTimeout);
+
                 tableCommand.CommandText = BuildUnexpectedTableSql();
                 await ReadUnexpectedAsync(tableCommand, expected, findings, seen, cancellationToken);
             }

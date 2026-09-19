@@ -12,7 +12,8 @@ workflow. They were not reduced feature releases or a plan to move unfinished
 functionality into a later version.
 
 - Prepare the repository for public contribution and auditable maintenance.
-- Qualify all three packages together: Core, MySQL/MariaDB, and PostgreSQL.
+- Qualify all published packages together: Core, MySQL/MariaDB, PostgreSQL,
+  and, beginning with its first release, SQLite.
 - Exercise the real candidate workflow before stable publication, including
   protected approval, signed identity, exact-byte publication, and readback.
 - Validate heterogeneous legacy convergence, runtime/history semantics,
@@ -54,11 +55,13 @@ examples and removes redundant package release-notes metadata. Published stable
 10.3.2 fails closed when SafeMigrations design-time assets are missing and
 adopts Doka 10.4.0's commandless handler result for the internal runtime guard.
 Published stable 10.4.0 adds allocation-bounded, self-describing report views
-and corrects MariaDB JSON collation diagnostics. Prepared stable 10.4.1 closes
+and corrects MariaDB JSON collation diagnostics. Published stable 10.4.1 closes
 ordered prerequisite-state, semantic-alias, physical-key feasibility, and
-composite-key catalog-matching defects. These releases follow changed
-dependency conditions and confirmed correctness requirements; they are not
-deferred initial scope.
+composite-key catalog-matching defects. Prepared stable 10.4.2 adds a
+separately packaged SQLite adapter with transactional, model-owned rebuilds
+and closes verified convergence and incremental design-time registration
+defects. These releases follow changed dependency conditions and confirmed
+correctness requirements; they are not deferred initial scope.
 
 Requalify affected behavior before adopting a provider, EF Core, database,
 SDK, action, or tooling update. Preserve public API, report, migration, data

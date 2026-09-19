@@ -7,7 +7,7 @@ Do not report an exploitable vulnerability in a public issue, pull request, or d
 ## System and scope
 
 This policy covers the SafeMigrations repository, its Core, MySQL/MariaDB,
-and PostgreSQL packages, and its build and release tooling. SafeMigrations is
+PostgreSQL, and SQLite packages, and its build and release tooling. SafeMigrations is
 an in-process EF Core library, not an authentication service or database
 server. The consuming application selects the database endpoint, credentials,
 migration assembly, configuration, and execution authority.
@@ -75,7 +75,9 @@ change another repository without permission.
 
 ## Limitations and compensating controls
 
-MySQL/MariaDB DDL can commit before a later failure. Ordinary migration SQL
+MySQL/MariaDB DDL can commit before a later failure. SQLite rebuilds require
+an exclusive writer window and enough temporary disk space, while their
+SafeMigrations-owned mutation batch remains transactional. Ordinary migration SQL
 is not classified by read-only analysis, and a malicious database can lie
 about its own catalog. Operators need least privilege, reviewed migrations,
 a write fence, current backups with a restore drill, and per-instance
@@ -90,16 +92,16 @@ changes.
 
 ## Supported Versions
 
-This policy covers all three SafeMigrations packages. Stable 10.4.x is the
+This policy covers all four SafeMigrations packages. Stable 10.4.x is the
 currently supported line; a dated changelog entry is not proof that a
-particular version has been published. Version 10.4.0 is the latest confirmed
-published release, and source is prepared for the 10.4.1 maintenance release.
-After verified publication, 10.4.1 becomes the latest supported patch in the
-same stable line.
+particular version has been published. Version 10.4.1 is the latest confirmed
+published release. This source is prepared for stable 10.4.2, including the
+first SQLite package; its support begins only after verified publication and
+package readback.
 
 | Release state | Security support |
 | --- | --- |
-| Prepared 10.4.1 source | Not a published support claim until release and package readback succeed |
+| Prepared 10.4.2 source | Not a published support claim until release and package readback succeed |
 | Stable 10.4.x | Supported release line; fixes may require updating to its latest published patch |
 | Stable 10.3.x | Superseded by the stable 10.4.x line |
 | Stable 10.2.x | Superseded by the stable 10.3.x line |
@@ -125,7 +127,7 @@ first agree on a secure transfer channel; no public PGP key is advertised here.
 
 Include as much of the following as possible:
 
-- The affected package versions and exact MySQL, MariaDB, or PostgreSQL version.
+- The affected package versions and exact MySQL, MariaDB, PostgreSQL, or SQLite version.
 - A minimal synthetic reproducer, starting schema/data shape, migration path,
   and the expected versus observed security boundary.
 - Required privileges, configuration, attacker control, and potential impact.

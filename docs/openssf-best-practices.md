@@ -124,7 +124,7 @@ override the externally reported Passing result.
 | `build` | MUST | Prepared | [Contributing](../CONTRIBUTING.md) locked SDK/build | Successful reproducible invocation from reviewed source | C |
 | `build_common_tools` | SUGGESTED | Prepared | .NET SDK/MSBuild, shell, Python | Document required tools and execute build | C |
 | `build_floss_tools` | SHOULD | Prepared | SDK and repository-owned scripts | Verify tool licensing; Rider is not required to build | C |
-| `test` | MUST | Prepared | [Qualification](support-and-qualification.md) three suites | Complete results for the assessed commit/engine matrix | R |
+| `test` | MUST | Prepared | [Qualification](support-and-qualification.md) four suites | Complete results for the assessed commit/engine matrix | R |
 | `test_invocation` | SHOULD | Prepared | [Contributing](../CONTRIBUTING.md) test commands | New contributor reproduces documented invocation with Docker | C |
 | `test_most` | SUGGESTED | Evidence | [Coverage](support-and-qualification.md#coverage-gate), behavioral matrix, and [assessed run](https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/actions/runs/33079411038) | Preserve scoped coverage and boundary-test evidence for the assessed revision | R |
 | `test_continuous_integration` | SUGGESTED | External | Enabled [CI](../.github/workflows/ci.yml), protected pull requests, and public hosted run history | Preserve successful execution for every proposed change before merge | M |
@@ -246,7 +246,7 @@ or two-person review history.
 | `test_invocation` | MUST | Prepared | [Contributing](../CONTRIBUTING.md) | Reproducible test invocation by a new contributor | C |
 | `test_continuous_integration` | MUST | External | Enabled shared CI workflow and public run history | Evidence that protected acceptance continuously requires the complete intended gate | M |
 | `test_statement_coverage90` | MUST | Evidence | Product line floors above 90% | Measured statement evidence or justified mapping; exclude only legitimate non-product scope | R |
-| `test_branch_coverage80` | MUST | Evidence | Core 80%, MySQL/MariaDB 75%, PostgreSQL 84% floors | Actual applicable branch coverage; current floor cannot guarantee this criterion | R |
+| `test_branch_coverage80` | MUST | Evidence | Core 80%, MySQL/MariaDB 75%, PostgreSQL 84%, SQLite 75% floors | Actual applicable branch coverage; current floor cannot guarantee this criterion | R |
 | `crypto_used_network` | MUST | Assess | Hosting/connector transport boundaries | Actual required production transport evidence | M |
 | `crypto_tls12` | MUST | Assess | Delegated TLS configuration | Verify applicable protocol/cipher settings | M |
 | `hardened_site` | MUST | External | GitHub/NuGet hosted sites | Check applicable site headers/host controls; no project site is invented | M |

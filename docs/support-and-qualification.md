@@ -10,6 +10,7 @@ with roll-forward disabled. SafeMigrations supports EF Core 10 only.
 | Core | `Microsoft.EntityFrameworkCore.Relational` `[10.0.11,10.1.0)` |
 | MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` `[10.4.0,10.5.0)` |
 | PostgreSQL | `Npgsql.EntityFrameworkCore.PostgreSQL` `[10.0.3,11.0.0)` |
+| SQLite | EF Core SQLite Core `[10.0.11,10.1.0)`; application-owned native bundle |
 
 The MySQL/MariaDB package requires Doka 10.4.0 or a compatible later 10.4 patch
 release and rejects the next minor line. This boundary avoids an exact
@@ -27,12 +28,11 @@ rechecked on 2026-08-27. Bounded package ranges describe compatibility; the
 committed lockfiles identify the exact graph selected by a particular
 revision.
 
-Published stable 10.4.0 is the latest verified public release. This source is
-prepared for stable 10.4.1 with the same public API, dependency ranges, report
-schemas, and engine matrix. The maintenance release corrects ordered
-prerequisite projection and MySQL/MariaDB physical-key feasibility; only the
-blocking release workflow and exact public package readback establish its
-qualification.
+Published stable 10.4.1 is the latest verified public release. This source is
+prepared for stable 10.4.2 with the first SQLite package and the verified
+convergence and incremental design-time registration fixes described in the
+changelog. Only the blocking release workflow and exact public package
+readback establish its qualification.
 
 ## Engine matrix
 
@@ -53,11 +53,16 @@ images:
 | PostgreSQL 16 | `postgres:16.15@sha256:e17e86066e5ef83e0952a9347f5c792b7ece00972e2aa787a6986f471b3dd3d5` |
 | PostgreSQL 17 | `postgres:17.11@sha256:e38411452a464af89e5adadb8d223bf53b898d47d6ef918b2d58c08707350449` |
 | PostgreSQL 18 | `postgres:18.6@sha256:06cad38a5d9f5d24b4d83d86def30795d5e4b757fedbf5281172b576dedcd941` |
+| SQLite | 3.46.1 or later; application-owned native bundle |
 
 MySQL/MariaDB support follows Doka's canonical feature profiles. PostgreSQL
 support spans major versions 14 through 18; every supported major is an
-independent release-gate cell. A new endpoint or removed upstream version
-requires a reviewed support-contract change and fresh evidence.
+independent release-gate cell. SQLite xUnit qualification uses isolated
+in-process databases, including private-cache file-backed concurrent
+`MigrateAsync` callers that exercise EF's migration lock. The EF tooling gate
+applies Strict and legacy migrations and bundles twice to asserted file
+databases from the locked package graph. A new endpoint or removed upstream
+version requires a reviewed support-contract change and fresh evidence.
 
 At the 2026-08-27 source review, PostgreSQL 14 through 18 are the upstream
 supported majors and the pinned versions above are their current minor
@@ -90,13 +95,14 @@ profile whose results can diverge from the committed graph.
 
 ## Behavioral evidence
 
-The executable test inventory consists of three independent xUnit assemblies
+The executable test inventory consists of four independent xUnit assemblies
 and focused engineering checks:
 
 - [provider-neutral Core tests](../tests/Doka.EntityFrameworkCore.SafeMigrations.Tests);
 - [MySQL/MariaDB tests](../tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests);
 - [PostgreSQL tests](../tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests);
-- FsCheck properties in all three assemblies for generated Core-contract,
+- [SQLite tests](../tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests);
+- FsCheck properties across the Core and server-provider assemblies for generated Core-contract,
   identifier-rendering, catalog-normalization, and provider-boundary inputs;
 - [coverage verifier tests](../eng/tests/test_verify_coverage.py);
 - package-content, package-only consumer, SBOM, EF tooling, and public NuGet
@@ -106,11 +112,14 @@ Test results from the qualified commit are the authority for current case
 counts. Counts are not duplicated here because parameterized cases and the
 engineering suites evolve independently of the support contract.
 
-Provider tests use real Docker servers and cover:
+Server-provider tests use real Docker servers. SQLite xUnit tests use isolated
+in-process databases; the SQLite EF tooling gate owns asserted file-database
+coverage. The provider-specific suites collectively cover:
 
 - all 23 operation kinds;
-- all 22 supported non-null CLR literal families plus literal `NULL`, with
-  provider-specific convergence or pre-DDL fail-closed classification;
+- all 22 supported non-null CLR literal families plus literal `NULL` across the
+  server providers, with provider-specific convergence or pre-DDL fail-closed
+  classification;
 - missing, matching, transition-ready, different, unsupported, data-blocked,
   and prerequisite-missing states;
 - `ExistenceOnly`, `ThrowIfDifferent`, and `RepairIfSafe`;
@@ -149,10 +158,11 @@ Provider tests use real Docker servers and cover:
 - PostgreSQL non-default schemas, cross-schema foreign keys, and
   same-named-object isolation;
 - fail-closed schema qualification across every MySQL/MariaDB operation family;
-- connection-disposal guard recovery, partial-command retry, least privilege,
-  and provider migration locks;
-- four concurrent migrators on one database and parallel independent
-  databases;
+- server-provider connection-disposal guard recovery, partial-command retry,
+  least privilege, and provider migration locks;
+- four concurrent migrators on one server database and parallel independent
+  server databases, plus two concurrent SQLite migrators against an asserted
+  private-cache file database;
 - normal EF operations mixed with safe operations;
 - safe table, source-frozen model-managed ensure/update/delete, raw typed
   seed/update/delete-data, and following non-unique-index ordering, plus
@@ -174,8 +184,8 @@ Provider tests use real Docker servers and cover:
   prerequisite projection;
 - exact and semantic-alias `Drop -> Ensure` replacement for primary keys,
   unique constraints, checks, foreign keys, and indexes, including live
-  execution/postflight and negative intervening-DML controls on both provider
-  families;
+  execution/postflight and negative intervening-DML controls on both server
+  provider families;
 - model-managed single/composite keys, mixed absent/source/target batches,
   unique/check conflicts, source drift, retry, idempotent replay, trigger
   postconditions, cancellation, and compare-and-swap races;
@@ -194,6 +204,12 @@ Provider tests use real Docker servers and cover:
 - PostgreSQL-owned and caller-owned analysis transactions, including accepted
   read-only `RepeatableRead`/`Serializable` scopes and fail-closed rejection of
   read-write or weaker-isolation caller transactions.
+- SQLite `main` identity, attached-database rejection, catalog normalization,
+  generated columns, semantic aliases, atomic provider-owned rebuilds, and
+  fail-closed unmanaged triggers, views, virtual tables, expression or partial
+  indexes, `STRICT`, and `WITHOUT ROWID` boundaries.
+- SQLite runtime and bundle application with identical replay, plus fail-closed
+  safe-operation script generation that leaves no partial output.
 
 The provider-analyzer contract accepts the ordered safe-operation batch. Each
 provider first classifies table and referenced-column prerequisites, then
@@ -204,8 +220,8 @@ windows. The unexpected-object inventory remains scoped to the expected table
 set for child objects while retaining complete table discovery and provider-
 verified semantic-alias reconciliation. Projection applies global ordered
 results without per-operation catalog roundtrips, and no partial report is
-published after a later failure. Every engine profile also qualifies 100,000
-deterministically ordered mixed operations. That workload covers `Missing`,
+published after a later failure. Every server-provider engine profile also
+qualifies 100,000 deterministically ordered mixed operations. That workload covers `Missing`,
 `Matching`, `Different`, `Unsupported`, `DataBlocked`, and
 `PrerequisiteMissing`, `TransitionReady`, all seven planned actions, and
 heterogeneous table, column, index, primary-key, unique, check, foreign-key, and
@@ -224,6 +240,10 @@ Every engine matrix cell also runs:
 - idempotent no-transaction script;
 - Migration Bundle twice against a separate database;
 - exact Core history verification.
+
+SQLite runs the corresponding database update and Migration Bundle paths twice.
+Safe-operation SQL scripts are a qualified negative boundary because SQLite has
+no procedural language for the required catalog-dependent decisions.
 
 ## Qualified capability boundaries
 
@@ -290,8 +310,9 @@ capability.
 
 ## Coverage gate
 
-The release workflow runs all three test assemblies against pinned MariaDB
-11.8 and PostgreSQL 18 images with Microsoft's built-in code-coverage
+The release workflow runs all four test assemblies. Server adapters use pinned
+MariaDB 11.8 and PostgreSQL 18 images; SQLite uses its locked in-process runtime
+with Microsoft's built-in code-coverage
 collector. `eng/verify-coverage.py` conservatively merges Cobertura line and
 branch evidence by product source line and excludes test and third-party
 assemblies by exact package name.
@@ -303,6 +324,7 @@ assemblies by exact package name.
 | Core | 92% | 80% |
 | MySQL/MariaDB adapter | 92% | 75% |
 | PostgreSQL adapter | 94% | 84% |
+| SQLite adapter | 90% | 75% |
 
 The behavioral and engine matrices remain mandatory even when the numeric
 floor passes. A threshold reduction requires reviewed evidence and must not be
@@ -310,11 +332,11 @@ used to hide an uncovered regression.
 
 ## Performance and memory
 
-`eng/performance-budgets.json` defines explicit Core, MySQL/MariaDB, and
-PostgreSQL benchmark sets with duration baselines, coarse hosted-runner
-ceilings, and strict allocation ceilings at 1, 100, and 1000 operations. Three
-independently restored and executed benchmark projects enforce the Core,
-MySQL/MariaDB, and PostgreSQL dependency boundaries for:
+`eng/performance-budgets.json` defines explicit Core, MySQL/MariaDB,
+PostgreSQL, and SQLite benchmark sets with duration baselines, coarse hosted-
+runner ceilings, and strict allocation ceilings at 1, 100, and 1000 operations.
+Four independently restored and executed benchmark projects enforce the Core
+and provider dependency boundaries for:
 
 - intent construction;
 - decision planning;
@@ -336,12 +358,12 @@ Changes to a baseline or ceiling require captured before/after evidence on the
 same runner class and a review of asymptotic behavior; a budget must not be
 raised merely to make CI green.
 
-The MySQL/MariaDB benchmark has no Npgsql dependency, and the PostgreSQL
-benchmark has no Doka MySQL dependency. Shared measurement and workload source
-is linked at compile time; no benchmark assembly introduces a cross-provider
-runtime edge.
+The MySQL/MariaDB benchmark has no Npgsql or SQLite dependency, the PostgreSQL
+benchmark has no Doka MySQL or SQLite dependency, and the SQLite benchmark has
+no server-provider dependency. Shared measurement and workload source is linked
+at compile time; no benchmark assembly introduces a cross-provider runtime edge.
 
-Every provider engine cell additionally runs 20 complete pooled
+Every server-provider engine cell additionally runs 20 complete pooled
 `SafeMigrationRunner` invocations against 100 expected tables, then repeats them
 after adding 1,000 foreign tables with child objects. The cell stores p50/p95
 JSON evidence and fails unless assessments are unchanged, foreign child rows
@@ -350,7 +372,7 @@ remain excluded by the expected-table scope, and noisy p95 is at most
 roundtrips. This is a same-runner relative SLO; it is not an absolute
 cross-machine latency promise.
 
-Every provider engine cell also analyzes 100,000 ordered mixed operations whose
+Every server-provider engine cell also analyzes 100,000 ordered mixed operations whose
 observations cover every state and planner action, including model-managed
 ensure, update, and delete. The analysis workload also includes accepted
 `VARCHAR` widening, accepted narrowing, data-blocked narrowing, and the
@@ -362,6 +384,14 @@ managed allocations, command count, maximum batch rows/cells, and maximum
 generated command bytes. These are scalability and allocation gates, not an
 absolute wall-clock promise across different runner hardware.
 
+SQLite has engine-appropriate gates instead of inheriting server-transport
+claims. Its live suite applies and replays 50,000 mixed model-managed row
+transitions. Its allocation and duration budgets analyze the same 384-row
+operation set against both a 200-table catalog and a 1,000-table catalog whose
+foreign tables carry indexes and foreign keys. The latter intentionally
+measures whole-catalog discovery cost and prevents that cost from remaining
+outside the release budget.
+
 After locked restore, the quality workflow rejects warning-level Roslyn style
 violations and unnecessary imports. Rider/ReSharper remains the repository
 formatter for layout rules that Roslyn cannot represent.
@@ -371,14 +401,15 @@ formatter for layout rules that Roslyn cannot represent.
 `eng/qualify-packages.sh`:
 
 1. packs the same Release build twice;
-2. compares all three `.nupkg` and three `.snupkg` files byte-for-byte;
+2. compares all four `.nupkg` and four `.snupkg` files byte-for-byte;
 3. verifies the exact file set, metadata, dependency shape, assemblies, XML,
    symbols, README, license, and report schemas;
 4. builds and runs an isolated consumer using packages only;
 5. emits sorted SHA-256 checksums.
 
-The two package-consumer fixtures are normal Solution projects in local
-`Source` mode so Rider loads their complete C# and MSBuild models. That mode
+The three provider package-consumer fixtures, plus the split MySQL package
+topology, are normal Solution projects in local `Source` mode so Rider loads
+their complete C# and MSBuild models. That mode
 uses the matching provider `ProjectReference` and participates in locked
 Solution restore, formatting, and build gates. Package qualification copies
 the fixtures into a temporary root and explicitly selects `Package` mode. That
@@ -389,7 +420,7 @@ evidence.
 
 The Microsoft SBOM Tool binary is downloaded at version 4.1.5 and verified
 against the platform-specific release digest before execution. The generated
-SPDX 2.2 manifest must validate all six packages plus the checksum file and
+SPDX 2.2 manifest must validate all eight packages plus the checksum file and
 contain the required resolved package graph.
 
 Every future release adds GitHub/Sigstore build provenance and SBOM
@@ -399,16 +430,18 @@ that differs from the qualified package only by NuGet's `.signature.p7s`
 entry. Publication validates the exact SLSA subject inventory and verifies the
 portable bundle against the release workflow and qualified commit before the
 protected environment obtains a short-lived NuGet credential. The final
-nine-asset immutable GitHub Release is then covered by GitHub's native Release
+eleven-asset immutable GitHub Release is then covered by GitHub's native Release
 and release-asset verification.
 
 ## Primary references
 
 - [.NET 10 release metadata](https://dotnetcli.blob.core.windows.net/dotnet/release-metadata/10.0/releases.json),
   retrieved 2026-08-27.
-- [EF Core Relational 10.0.11 package](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.Relational/10.0.11)
-  and [Npgsql EF Core 10.0.3 package](https://www.nuget.org/packages/Npgsql.EntityFrameworkCore.PostgreSQL/10.0.3),
-  retrieved 2026-08-27.
+- [EF Core Relational 10.0.11 package](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.Relational/10.0.11),
+  [Npgsql EF Core 10.0.3 package](https://www.nuget.org/packages/Npgsql.EntityFrameworkCore.PostgreSQL/10.0.3),
+  [EF Core SQLite Core 10.0.11 package](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.Sqlite.Core/10.0.11),
+  and [EF Core custom SQLite versions](https://learn.microsoft.com/en-us/dotnet/standard/data/sqlite/custom-versions),
+  retrieved 2026-09-18.
 - [Doka 10.2.0 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.2.0),
   [release notes](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.2.0/CHANGELOG.md),
   [provider configuration](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.2.0/docs/provider-configuration.md),

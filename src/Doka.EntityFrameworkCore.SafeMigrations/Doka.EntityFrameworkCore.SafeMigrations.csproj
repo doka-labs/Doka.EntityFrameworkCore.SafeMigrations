@@ -9,9 +9,9 @@
     <Description>
       Core abstractions, planning layer, and MigrationBuilder extension methods for
       Doka.EntityFrameworkCore.SafeMigrations - safe, idempotent, provider-neutral EF Core
-      migration operations for MySQL, MariaDB and PostgreSQL.
+      migration operations for MySQL, MariaDB, PostgreSQL and SQLite.
     </Description>
-    <PackageTags>efcore;entityframeworkcore;migrations;safe-migrations;idempotent;mysql;mariadb;postgresql</PackageTags>
+    <PackageTags>efcore;entityframeworkcore;migrations;safe-migrations;idempotent;mysql;mariadb;postgresql;sqlite</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

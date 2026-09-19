@@ -38,6 +38,9 @@
   <Folder Name="/eng/package-consumer/PostgreSQL/">
     <Project Path="eng/package-consumer/PostgreSql/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.PackageConsumer.csproj" />
   </Folder>
+  <Folder Name="/eng/package-consumer/SQLite/">
+    <Project Path="eng/package-consumer/Sqlite/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.PackageConsumer.csproj" />
+  </Folder>
   <Folder Name="/eng/ef-ownership/">
     <Project Path="eng/ef-ownership/Core/Doka.EntityFrameworkCore.SafeMigrations.EfOwnership.Core.csproj" />
     <Project Path="eng/ef-ownership/Custom/Doka.EntityFrameworkCore.SafeMigrations.EfOwnership.Custom.csproj" />
@@ -51,6 +54,9 @@
   <Folder Name="/benchmarks/PostgreSQL/">
     <Project Path="benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks.csproj" />
   </Folder>
+  <Folder Name="/benchmarks/SQLite/">
+    <Project Path="benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks.csproj" />
+  </Folder>
   <Folder Name="/samples/CrossProvider/">
     <Project Path="samples/Doka.EntityFrameworkCore.SafeMigrations.Sample/Doka.EntityFrameworkCore.SafeMigrations.Sample.csproj" />
   </Folder>
@@ -63,6 +69,9 @@
   <Folder Name="/src/PostgreSQL/">
     <Project Path="src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.csproj" />
   </Folder>
+  <Folder Name="/src/SQLite/">
+    <Project Path="src/Doka.EntityFrameworkCore.SafeMigrations.Sqlite/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.csproj" />
+  </Folder>
   <Folder Name="/tests/Core/">
     <Project Path="tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Doka.EntityFrameworkCore.SafeMigrations.Tests.csproj" />
   </Folder>
@@ -71,5 +80,8 @@
   </Folder>
   <Folder Name="/tests/PostgreSQL/">
     <Project Path="tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tests/SQLite/">
+    <Project Path="tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests.csproj" />
   </Folder>
 </Solution>

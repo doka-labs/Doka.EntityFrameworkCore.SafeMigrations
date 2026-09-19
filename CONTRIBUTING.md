@@ -8,7 +8,7 @@ unredacted migration reports in issues, pull requests, or test fixtures.
 ## Prerequisites
 
 - .NET SDK 10.0.400, selected by `global.json`
-- Docker for MySQL, MariaDB, and PostgreSQL tests
+- Docker for MySQL, MariaDB, and PostgreSQL tests; SQLite tests run in-process
 - Bash, `jq`, `curl`, `unzip`, and `rsync` for engineering gates
 - Python 3 for the merged coverage threshold check
 - the exact `Doka.EntityFrameworkCore.MySql` package selected by the committed
@@ -30,6 +30,7 @@ dotnet build Doka.EntityFrameworkCore.SafeMigrations.slnx --configuration Releas
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Doka.EntityFrameworkCore.SafeMigrations.Tests.csproj --configuration Release
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests.csproj --configuration Release
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.csproj --configuration Release
+dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests.csproj --configuration Release
 ```
 
 The provider fixtures use Testcontainers with dynamically assigned host ports,
@@ -62,9 +63,11 @@ dotnet build Doka.EntityFrameworkCore.SafeMigrations.slnx --configuration Releas
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Doka.EntityFrameworkCore.SafeMigrations.Tests.csproj --configuration Release --no-build --no-restore
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests.csproj --configuration Release --no-build --no-restore
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.csproj --configuration Release --no-build --no-restore
+dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests.csproj --configuration Release --no-build --no-restore
 dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks.csproj --configuration Release --no-build --no-restore
 dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks.csproj --configuration Release --no-build --no-restore
 dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks.csproj --configuration Release --no-build --no-restore
+dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks.csproj --configuration Release --no-build --no-restore
 python3 -m unittest eng/tests/test_verify_coverage.py -v
 bash eng/tests/test-release-version.sh
 bash -e -c 'while IFS= read -r -d "" script; do bash -n "$script"; done < <(find eng -type f -name "*.sh" -print0)'
@@ -73,7 +76,7 @@ dotnet format Doka.EntityFrameworkCore.SafeMigrations.slnx style --diagnostics I
 ```
 
 The reusable quality workflow additionally collects Microsoft Cobertura output
-from all three test assemblies, merges product lines conservatively, and runs:
+from all four test assemblies, merges product lines conservatively, and runs:
 
 ```bash
 python3 eng/verify-coverage.py \
@@ -117,15 +120,15 @@ Every operation or facet change requires:
 - constructor/definition and planner tests;
 - live missing, matching, different, unsupported, and data-blocked coverage as
   applicable;
-- MySQL/MariaDB and PostgreSQL parity or an explicit provider capability
-  rejection;
+- MySQL/MariaDB, PostgreSQL, and SQLite parity or an explicit provider
+  capability rejection;
 - true EF migration/history behavior;
 - preflight and postflight behavior;
 - idempotent second run and failure recovery;
 - package consumer and Public API review when surface changes.
 
 Design-time scaffolding changes additionally require strict and legacy source
-generation for both providers, generated-source compilation, direct Design,
+generation for every affected provider, generated-source compilation, direct Design,
 Tools-only, and runtime-only package-consumer profiles, and fail-closed
 negative coverage for unexpected generated shapes or annotations.
 

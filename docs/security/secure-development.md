@@ -57,7 +57,7 @@ never by treating a successful restore or empty delta as proof that no
 vulnerability exists.
 
 An EF Design or Tools update also crosses the source-generation trust boundary.
-Re-run strict and legacy scaffolding for both providers, compile the generated
+Re-run strict and legacy scaffolding for every provider, compile the generated
 source, exercise the direct-Design, Tools-only, runtime-only, and excluded
 SafeMigrations-build-assets package profiles, and retain negative tests for
 unexpected generator shapes and unmodeled provider annotations.

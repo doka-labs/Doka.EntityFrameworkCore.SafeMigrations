@@ -17,10 +17,10 @@ public sealed class SafeMigrationProviderEnvironment
         EngineFamily = SafeMigrationDefinitionValidator.Required(engineFamily, nameof(engineFamily));
         ServerVersion = SafeMigrationDefinitionValidator.Required(serverVersion, nameof(serverVersion));
 
-        if (EngineFamily is not ("mysql" or "mariadb" or "postgresql"))
+        if (EngineFamily is not ("mysql" or "mariadb" or "postgresql" or "sqlite"))
         {
             throw new ArgumentException(
-                "The engine family must be mysql, mariadb, or postgresql.",
+                "The engine family must be mysql, mariadb, postgresql, or sqlite.",
                 nameof(engineFamily));
         }
     }

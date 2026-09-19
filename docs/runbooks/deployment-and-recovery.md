@@ -53,6 +53,11 @@ transaction, configure it as read-only with `RepeatableRead` or `Serializable`
 before invoking the runner. SafeMigrations rejects weaker or read-write caller
 transactions without disposing, committing, or rolling them back.
 
+SQLite analysis addresses only the `main` database and rejects attached
+database qualifiers. Use the same connection string and file path for analysis
+and execution. Confirm that the database directory and temporary storage have
+capacity for the largest modeled table rebuild before entering the window.
+
 Gate interpretation:
 
 | Status | Operator action |
@@ -100,6 +105,10 @@ lock-duration, storage, and rollback assessment; it is not an online-DDL claim.
    CLI path, or the qualified Bundle with the exact analyzed target migration.
    Do not omit the target and thereby select an unchecked latest migration.
    Do not wrap MySQL/MariaDB migration DDL in a caller-owned business transaction.
+   SQLite SafeMigrations rebuilds own one atomic transaction and must run with
+   no competing writer. Foreign-key enforcement is restored after the rebuild,
+   but EF records migration history separately. If the process stops between
+   those steps, inspect both schema and history before a reviewed replay.
 3. Keep the process alive until the provider migration lock is released.
 4. Do not run `Down` automatically after a failure.
 5. Capture the exact exception type, provider error code, SafeMigrations/Doka
@@ -125,6 +134,12 @@ earlier statements may already be committed. Normal transactional scripts and
 transaction-suppressed provider commands also require checking their actual
 boundaries. In every case, inspect catalog and history after failure and run
 the same reviewed final-state postflight before accepting the deployment.
+
+SQLite SQL script generation deliberately rejects a migration containing safe
+operations before returning output. SQLite cannot express the required live
+catalog decisions and guarded rebuilds in a portable static script. Use the
+qualified runtime migration, EF CLI database-update, or Migration Bundle path
+instead; do not translate the runtime command batch into hand-authored SQL.
 
 ## Postflight
 
@@ -178,6 +193,7 @@ Only then release the write fence and mark the instance complete.
 | Preflight blocked | Target DDL was not executed by SafeMigrations | Correct drift/data/unsupported intent; review a forward migration; rerun preflight. |
 | MySQL/MariaDB runtime guard | Earlier DDL in the migration may be committed | Keep writer fenced, inspect catalog/history, correct the classified cause, rerun the same pending migration. |
 | PostgreSQL transactional command | Current migration transaction normally rolled back | Confirm history and catalog; correct the cause; rerun. Account for explicitly transaction-suppressed provider operations. |
+| SQLite transactional rebuild | SafeMigrations-owned rebuild and data copy roll back together; unrelated provider operations follow their own EF transaction contract | Keep the single-writer fence, inspect catalog/history and available storage, correct the cause, then rerun the pending migration. |
 | Process lost after DDL | History may or may not contain the row | Read catalog and history; never infer success from process exit alone; rerun guarded pending migration or postflight applied migration. |
 | Postflight failed with history present | Migration is recorded but target contract is not satisfied | Stop traffic, preserve evidence, issue a reviewed forward-fix migration or restore backup. Do not edit history as a shortcut. |
 | Model-managed compare-and-swap or postcondition failed | A row, dependent row, trigger result, or constraint changed after the approved source state | Keep writes fenced, inspect the affected key through protected operator tooling, correct the conflict or author a new forward migration, then rerun preflight. Never weaken the operation into an upsert or edit an applied migration. |
@@ -237,6 +253,7 @@ not cause SafeMigrations to relax the contract for other instances.
 - [MySQL backup and recovery](https://dev.mysql.com/doc/refman/8.4/en/backup-and-recovery.html)
 - [MariaDB backup and restore overview](https://mariadb.com/docs/server/server-usage/backing-up-and-restoring-databases)
 - [PostgreSQL backup and restore](https://www.postgresql.org/docs/current/backup.html)
+- [SQLite backup API](https://www.sqlite.org/backup.html)
 - [EF Core applying migrations](https://learn.microsoft.com/ef/core/managing-schemas/migrations/applying)
 
 See [Failure codes](failure-codes.md) for classified response details.

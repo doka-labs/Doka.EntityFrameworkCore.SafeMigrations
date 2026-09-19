@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Doka.EntityFrameworkCore.SafeMigrations.Sqlite</AssemblyName>
+    <RootNamespace>Doka.EntityFrameworkCore.SafeMigrations.Sqlite</RootNamespace>
+
+    <!-- NuGet packaging -->
+    <IsPackable>true</IsPackable>
+    <PackageId>Doka.EntityFrameworkCore.SafeMigrations.Sqlite</PackageId>
+    <Description>
+      SQLite provider for Doka.EntityFrameworkCore.SafeMigrations - safe, idempotent,
+      provider-aware EF Core migration operations on the bundle-neutral SQLite 10 provider core.
+    </Description>
+    <PackageTags>efcore;entityframeworkcore;migrations;safe-migrations;idempotent;sqlite</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+    <None Include="buildTransitive\Doka.EntityFrameworkCore.SafeMigrations.Sqlite.props"
+          Pack="true"
+          PackagePath="buildTransitive\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite.Core" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <ProjectReference
+      Include="..\Doka.EntityFrameworkCore.SafeMigrations\Doka.EntityFrameworkCore.SafeMigrations.csproj" />
+  </ItemGroup>
+</Project>

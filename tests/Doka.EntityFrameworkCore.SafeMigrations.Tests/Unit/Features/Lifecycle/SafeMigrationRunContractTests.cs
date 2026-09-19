@@ -405,7 +405,7 @@ public sealed class SafeMigrationRunContractTests
                 .GetProperty("environment")
                 .GetProperty("properties")
                 .GetProperty("engineFamily"),
-            ["mysql", "mariadb", "postgresql"]);
+            ["mysql", "mariadb", "postgresql", "sqlite"]);
         AssertSchemaEnum(
             definitions
                 .GetProperty("assessment")
@@ -513,6 +513,7 @@ public sealed class SafeMigrationRunContractTests
         using var document = JsonDocument.Parse(SafeMigrationReportJson.SerializeToUtf8Bytes(
             report,
             SafeMigrationReportSelection.BlockingOnly));
+
         using var schema = LoadReportViewSchema();
         var root = document.RootElement;
         var schemaRoot = schema.RootElement;
@@ -586,7 +587,7 @@ public sealed class SafeMigrationRunContractTests
     [Fact]
     public void ReportAndEnvironmentRejectValuesOutsideThePackagedSchemaContract()
     {
-        Assert.Throws<ArgumentException>(() => new SafeMigrationProviderEnvironment("provider", "sqlite", "1.0"));
+        Assert.Throws<ArgumentException>(() => new SafeMigrationProviderEnvironment("provider", "sqlserver", "1.0"));
         Assert.Throws<ArgumentException>(() => CreateReport(modelFingerprint: new string('a', 64)));
         Assert.Throws<ArgumentException>(() => CreateReport(contractFingerprint: "ABC"));
         Assert.Throws<ArgumentOutOfRangeException>(() => new SafeMigrationAssessment(
@@ -715,6 +716,7 @@ public sealed class SafeMigrationRunContractTests
     )
     {
         var environment = new SafeMigrationProviderEnvironment("npgsql_postgresql", "postgresql", "18.6");
+
         return new SafeMigrationRunReport(
             mode,
             status,
@@ -845,6 +847,7 @@ public sealed class SafeMigrationRunContractTests
                     .GetProperty(referenceValue[definitionsPrefix.Length..]),
                 value,
                 rootSchema);
+
             return;
         }
 

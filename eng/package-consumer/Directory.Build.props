@@ -4,7 +4,9 @@
   <PropertyGroup Label="Package qualification">
     <SafeMigrationsPackageConsumerMode Condition="'$(SafeMigrationsPackageConsumerMode)' == ''">Source</SafeMigrationsPackageConsumerMode>
     <SafeMigrationsEfToolingReference Condition="'$(SafeMigrationsEfToolingReference)' == ''">Design</SafeMigrationsEfToolingReference>
-    <ArtifactsProjectName>$(MSBuildProjectName).$(SafeMigrationsPackageConsumerMode).$(SafeMigrationsEfToolingReference)</ArtifactsProjectName>
+    <ArtifactsProjectName
+      Condition="'$(ArtifactsProjectName)' == ''"
+    >$(MSBuildProjectName).$(SafeMigrationsPackageConsumerMode).$(SafeMigrationsEfToolingReference)</ArtifactsProjectName>
     <BaseIntermediateOutputPath>$(ArtifactsPath)/obj/$(ArtifactsProjectName)/</BaseIntermediateOutputPath>
     <MSBuildProjectExtensionsPath>$(BaseIntermediateOutputPath)</MSBuildProjectExtensionsPath>
   </PropertyGroup>

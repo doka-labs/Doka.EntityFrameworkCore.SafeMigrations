@@ -7,7 +7,8 @@ each `lib/net10.0` assembly. After installing the provider package, use IDE
 completion/Quick Documentation for the selected package version. The
 [Core](../src/Doka.EntityFrameworkCore.SafeMigrations/PublicAPI.Shipped.txt),
 [MySQL/MariaDB](../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/PublicAPI.Shipped.txt),
-and [PostgreSQL](../src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/PublicAPI.Shipped.txt)
+[PostgreSQL](../src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/PublicAPI.Shipped.txt),
+and [SQLite](../src/Doka.EntityFrameworkCore.SafeMigrations.Sqlite/PublicAPI.Shipped.txt)
 API baselines are review inventories, not substitutes for this guide or XML.
 The initial public surface shipped with `10.0.0-rc.1`; `10.0.0-rc.2` added
 source-frozen legacy-convergence policy selection and provider-context
@@ -33,28 +34,36 @@ public API and generated operation contract. Published stable 10.3.2 preserves
 them again while hardening design-time registration detection and consuming
 Doka 10.4.0's commandless operation result. Published stable 10.4.0 adds
 self-describing report-view serialization without changing canonical report-v2
-bytes and corrects MariaDB JSON collation diagnostics. Prepared stable 10.4.1
+bytes and corrects MariaDB JSON collation diagnostics. Published stable 10.4.1
 preserves that public API, generated-operation contract, and report schemas
-while correcting ordered prerequisite and physical-identity projection. Strict
-scaffolding remains the default. A successful release run and exact-version
-public package readback remain the authority for a published API.
+while correcting ordered prerequisite and physical-identity projection.
+Prepared stable 10.4.2 adds the SQLite package and its provider-specific public
+registration and generator surface. Existing Core, MySQL/MariaDB, and
+PostgreSQL public APIs remain compatible. Strict scaffolding remains the
+default. A successful release run and exact-version public package readback
+remain the authority for a published API.
 
 ## Packages and registration
 
 Core types use `Doka.EntityFrameworkCore.SafeMigrations`. The provider-specific
-registration namespaces append `.MySql` or `.PostgreSql`.
+registration namespaces append `.MySql`, `.PostgreSql`, or `.Sqlite`.
 
 | Entry point | Inputs and result | Boundary |
 | --- | --- | --- |
 | `UseMySqlSafeMigrations()` | Configured EF options builder; returns the builder | Supports both call orders with Doka `UseMySql`; declares the required user-variable capability for MySQL and MariaDB |
 | `UsePostgreSqlSafeMigrations()` | Configured EF options builder; returns the builder | Add after `UseNpgsql` |
+| `UseSqliteSafeMigrations()` | Configured EF options builder; returns the builder | Add after `UseSqlite`; supports the primary `main` database |
 | `UseMySqlSafeMigrations(configure)` | Safe scaffolding mode plus normal MySQL/MariaDB registration | `Strict` is the builder default; selection is written into new migration source |
 | `UsePostgreSqlSafeMigrations(configure)` | Safe scaffolding mode plus normal PostgreSQL registration | Same source-frozen design-time contract |
+| `UseSqliteSafeMigrations(configure)` | Safe scaffolding mode plus normal SQLite registration | Same source-frozen design-time contract |
 | `UseMySqlSafeMigrations<TCanonicalMigrationContext>()` | Canonical context type on the non-generic options builder | Derived runtime type must be assignable and preserve the canonical model |
 | `UsePostgreSqlSafeMigrations<TCanonicalMigrationContext>()` | Canonical context type | Same model/assembly/history boundary |
+| `UseSqliteSafeMigrations<TCanonicalMigrationContext>()` | Canonical context type | Same model/assembly/history boundary |
 | `UsePostgreSqlSafeMigrations<TBaselineGenerator, TCanonicalMigrationContext>()` | Selected Npgsql-compatible generator and canonical context | Composes ordinary and safe baseline generation explicitly |
+| `UseSqliteSafeMigrations<TBaselineGenerator, TCanonicalMigrationContext>()` | Selected SQLite-compatible generator and canonical context | Composes ordinary and safe baseline generation explicitly |
 | `AddEntityFrameworkDokaMySqlSafeMigrations()` | Application-owned EF internal service collection | Also register Doka's base provider services |
 | `AddPostgreSqlSafeMigrations()` | Application-owned EF internal service collection | Also register Npgsql's base provider services |
+| `AddSqliteSafeMigrations()` | Application-owned EF internal service collection | Also register EF Core SQLite's base provider services |
 
 Typed options-builder overloads retain the `TContext` return type. Their type
 parameter lists differ from the non-generic builder overloads; use IDE
@@ -86,6 +95,12 @@ operations remain unsupported. The comparison is exact and does not inherit
 environment-specific `lower_case_table_names` behavior. See
 [MySQL and MariaDB DDL behavior](mysql-mariadb-ddl-behavior.md#current-database-qualification).
 
+On SQLite, an explicit `main` qualifier and an omitted qualifier share one
+physical identity. Attached database qualifiers fail with
+`database_qualifier_mismatch`. Table rebuilds require complete model ownership;
+safe-operation SQL script generation is unsupported, while runtime migration
+and Migration Bundles are supported. See [SQLite behavior](sqlite-behavior.md).
+
 ## Scaffolding configuration
 
 Import the provider namespace for the registration extension and the Core
@@ -95,6 +110,7 @@ namespace for its shared configuration types:
 using Doka.EntityFrameworkCore.SafeMigrations;
 using Doka.EntityFrameworkCore.SafeMigrations.MySql;
 // or: using Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
+// or: using Doka.EntityFrameworkCore.SafeMigrations.Sqlite;
 ```
 
 The configure callback receives `SafeMigrationOptionsBuilder`. Its complete
