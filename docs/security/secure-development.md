@@ -28,17 +28,21 @@ acceptance criteria, not invented labels or an empty template.
 ## Analysis and dependencies
 
 [Directory.Build.props](../../Directory.Build.props) enables nullable analysis,
-warnings-as-errors, the SDK's recommended .NET analyzers, locked restore, and
-NuGet audit of all dependencies. SDK code-analysis rules are separate from
-compiler warnings. The shared quality workflow additionally runs public API,
-style/import, architecture, coverage, performance, engineering, package, and
-SBOM checks. Record the SDK and enabled rules with analysis evidence; a build
-command name alone does not establish which analysis ran.
+warnings-as-errors, the SDK's recommended .NET analyzers, and NuGet audit of all
+dependencies. Publishable projects additionally enable locked restore through
+[src/Directory.Build.props](../../src/Directory.Build.props). SDK code-analysis
+rules are separate from compiler warnings. The shared quality workflow
+additionally runs public API, style/import, architecture, coverage, performance,
+engineering, package, and SBOM checks. Record the SDK and enabled rules with
+analysis evidence; a build command name alone does not establish which analysis
+ran.
 
-The committed lockfiles define the exact qualified dependency graph. Dependabot
-proposes declaration and lockfile updates through ordinary pull requests, where
-the complete quality workflow tests the proposed graph. GitHub Automatic
-Dependency Submission supplies resolved base and head snapshots to the hosted
+The four committed package-project lockfiles define the exact graph used to
+compile and qualify package artifacts. Engineering projects resolve the central
+declarations during CI. Dependabot proposes declaration and package-lockfile
+updates through ordinary pull requests, where the complete quality workflow
+tests every resolved graph. GitHub Automatic Dependency Submission supplies
+resolved base and head snapshots to the hosted
 Dependency Graph. The separate Dependency Review workflow compares the
 pull-request delta with the official action, rejects new high-or-critical
 vulnerabilities and dependencies outside the approved SPDX license set, and

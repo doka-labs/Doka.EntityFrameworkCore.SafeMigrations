@@ -1,8 +1,8 @@
 # EF Core and provider upgrade boundary
 
 SafeMigrations integrates with three different public provider boundaries. An
-upgrade is accepted only after the full locked restore, package, engine, and
-tooling gates pass; compilation alone is insufficient.
+upgrade is accepted only after locked publishable-package restore, package,
+engine, and tooling gates pass; compilation alone is insufficient.
 
 ## MySQL and MariaDB boundary
 
@@ -186,16 +186,18 @@ path so this compatibility fix does not multiply allocations across large
 models.
 
 Facet-isolation tests and provider-specific golden digests run against the
-committed locked dependency graph. The exact canonical snapshot initialization,
-`IMigrationsModelDiffer`, and fingerprint path used by the runner is covered by
-provider duration/allocation budgets.
+centrally declared dependency graph resolved for their test projects. The exact
+canonical snapshot initialization, `IMigrationsModelDiffer`, and fingerprint
+path used by the runner is covered by provider duration/allocation budgets.
 
 ## Qualified dependency ranges
 
-Central package declarations use bounded ranges. Lockfiles establish the exact
-qualified graph. Dependabot updates the declarations and lockfiles through a
+Central package declarations use bounded ranges. The four publishable package
+lockfiles establish the exact graph used to compile and qualify package
+artifacts. Dependabot updates the declarations and those lockfiles through a
 reviewed pull request, where the complete provider, tooling, package, coverage,
-and performance workflow runs against the proposed graph.
+and performance workflow resolves and tests every execution project's proposed
+graph.
 
 The declared range must never be widened beyond the profiles actually tested.
 Publishable SafeMigrations candidates and stable packages must depend on a
@@ -206,14 +208,17 @@ The Doka boundary therefore stops at the next minor rather than the next major.
 Patch releases within the qualified minor line follow Doka's compatible-fix
 contract, while a new minor may revise the binary or behavioral SPI and requires
 an explicit range change plus the complete upgrade evidence below. Committed
-lockfiles keep repository builds reproducible at the exact qualified patch.
+package-project lockfiles preserve the package build at the exact qualified
+patch; engineering projects resolve the central declarations during CI.
 
 ## Required upgrade evidence
 
 Every EF, Doka, Npgsql, or supported database update requires:
 
-1. locked restore and warning-free Release build;
-2. review of the proposed declarations and exact lockfile resolutions;
+1. locked package-project restore, resolved engineering-project restore, and a
+   warning-free Release build;
+2. review of the proposed declarations, package lockfile resolutions, and
+   resolved engineering graphs;
 3. core planner, fingerprint, definition, report, and model-guard tests;
 4. all supported MySQL/MariaDB and PostgreSQL engine endpoints plus SQLite;
 5. missing, matching, different, unsupported, and data-blocked states;
@@ -289,6 +294,10 @@ unless the entry records a later date:
   (rechecked 2026-09-10)
 - [Doka 10.4.0 signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.4.0)
   (rechecked 2026-09-10)
+- [Doka.EntityFrameworkCore.MySql 10.4.2](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.4.2)
+  (rechecked 2026-09-21)
+- [Doka 10.4.2 signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.4.2)
+  (rechecked 2026-09-21)
 
 The exact release evidence belongs in the workflow run, lockfiles, package
 SBOM, and final plan-to-ship reconciliation, not in an unchecked comment.

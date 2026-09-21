@@ -152,7 +152,7 @@ fi
 
 cd "${repository_root}"
 dotnet restore "${project}" \
-  --locked-mode --disable-parallel --disable-build-servers -m:1 /nodeReuse:false
+  --disable-parallel --disable-build-servers -m:1 /nodeReuse:false
 dotnet build "${project}" \
   --configuration Release --no-restore --disable-build-servers -m:1 /nodeReuse:false
 dotnet tool restore --tool-manifest "${repository_root}/.config/dotnet-tools.json" \
@@ -833,8 +833,9 @@ dotnet ef migrations script --project "${project}" --context SafeMigrationDbCont
 dotnet ef migrations script --project "${project}" --context SafeMigrationDbContext --no-build \
   --configuration Release --idempotent --no-transactions \
   --output "${artifacts_dir}/migration-idempotent-no-transactions.sql"
-dotnet ef migrations bundle --project "${project}" --context SafeMigrationDbContext \
-  --configuration Release --output "${artifacts_dir}/efbundle" --force
+dotnet ef migrations bundle \
+  --project "${project}" --context SafeMigrationDbContext \
+  --configuration Release --output "${artifacts_dir}/efbundle" --force --verbose
 "${artifacts_dir}/efbundle" --connection "${bundle_connection}"
 "${artifacts_dir}/efbundle" --connection "${bundle_connection}"
 

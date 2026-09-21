@@ -94,7 +94,7 @@ Runtime migration and Migration Bundles are supported. SQL scripts containing
 safe operations reject because SQLite cannot encode their live catalog branch.
 
 The current MySQL/MariaDB adapter consumes Doka through the bounded
-`[10.4.0,10.5.0)` NuGet dependency range. Doka 10.3.0 introduced typed
+`[10.4.2,10.5.0)` NuGet dependency range. Doka 10.3.0 introduced typed
 read-only migration metadata for Guid storage, value generation, and index
 prefixes. Doka 10.4.0 adds an explicit commandless consumed result, which the
 internal design-time-services guard uses without emitting synthetic SQL.
@@ -221,6 +221,13 @@ being accepted through broad string normalization.
   qualification remains the release acceptance gate.
 - 2026-09-18: D-013 amended this decision with official-provider SQLite
   composition, atomic rebuild batches, and a fail-closed script boundary.
+- 2026-09-21: Raised the dependency floor to `[10.4.2,10.5.0)`. Doka 10.4.1
+  introduced retained database character-set and collation metadata in
+  generated migrations, while 10.4.2 is the current qualified provider patch
+  and minimum consumer patch. The MySQL/MariaDB package lockfile resolves the
+  public 10.4.2 package; its signed `v10.4.2` tag identifies commit
+  `b2408bfbe29517d742734d06d848081cdb9e1de0`. Complete SafeMigrations
+  qualification remains the release acceptance gate.
 
 ### Implementation References
 
@@ -264,4 +271,8 @@ being accepted through broad string normalization.
 - [Doka.EntityFrameworkCore.MySql 10.4.0 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.4.0) (primary package metadata; retrieved 2026-09-10)
 - [Doka 10.4.0 signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.4.0) (primary release identity; retrieved 2026-09-10)
 - [Doka 10.4.0 migration-operation handler contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.4.0/docs/migration-operation-handlers.md) (primary source; retrieved 2026-09-10)
+- [Doka.EntityFrameworkCore.MySql 10.4.1 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.4.1) (primary package metadata; retrieved 2026-09-21)
+- [Doka 10.4.1 signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.4.1) (primary release identity; retrieved 2026-09-21)
+- [Doka.EntityFrameworkCore.MySql 10.4.2 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.4.2) (primary package metadata; retrieved 2026-09-21)
+- [Doka 10.4.2 signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.4.2) (primary release identity; retrieved 2026-09-21)
 - [Npgsql EF Core provider and configuration](https://www.npgsql.org/efcore/) (primary source; retrieved 2026-08-26)

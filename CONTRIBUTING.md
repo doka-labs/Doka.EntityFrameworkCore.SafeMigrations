@@ -7,7 +7,7 @@ unredacted migration reports in issues, pull requests, or test fixtures.
 
 ## Prerequisites
 
-- .NET SDK 10.0.400, selected by `global.json`
+- .NET SDK 10.0.401, selected by `global.json`
 - Docker for MySQL, MariaDB, and PostgreSQL tests; SQLite tests run in-process
 - Bash, `jq`, `curl`, `unzip`, and `rsync` for engineering gates
 - Python 3 for the merged coverage threshold check
@@ -20,7 +20,7 @@ real package boundary.
 ## Restore and build
 
 ```bash
-dotnet restore Doka.EntityFrameworkCore.SafeMigrations.slnx --locked-mode
+dotnet restore Doka.EntityFrameworkCore.SafeMigrations.slnx
 dotnet build Doka.EntityFrameworkCore.SafeMigrations.slnx --configuration Release --no-restore
 ```
 
@@ -58,7 +58,7 @@ dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.
 Run the relevant focused tests while developing. Before review, run:
 
 ```bash
-dotnet restore Doka.EntityFrameworkCore.SafeMigrations.slnx --locked-mode
+dotnet restore Doka.EntityFrameworkCore.SafeMigrations.slnx
 dotnet build Doka.EntityFrameworkCore.SafeMigrations.slnx --configuration Release --no-restore
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Doka.EntityFrameworkCore.SafeMigrations.Tests.csproj --configuration Release --no-build --no-restore
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests.csproj --configuration Release --no-build --no-restore

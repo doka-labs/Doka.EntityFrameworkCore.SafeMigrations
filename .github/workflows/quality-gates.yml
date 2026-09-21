@@ -48,7 +48,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: 10.0.400
+          global-json-file: global.json
 
       - name: Verify engineering scripts
         run: |
@@ -56,16 +56,17 @@ jobs:
             bash -n "$script"
           done < <(find eng -type f -name '*.sh' -print0)
           bash eng/tests/test-dependency-snapshot-headers.sh
+          bash eng/tests/test-dependency-maintenance.sh
           bash eng/tests/test-github-release-reconciliation.sh
           bash eng/tests/test-pre-tag-check.sh
           bash eng/tests/test-release-provenance.sh
           bash eng/tests/test-release-version.sh
           python3 -m unittest eng/tests/test_verify_coverage.py -v
 
-      - name: Locked restore
+      - name: Restore repository dependency graph
         run: >-
           dotnet restore Doka.EntityFrameworkCore.SafeMigrations.slnx
-          --locked-mode --disable-parallel --disable-build-servers -m:1
+          --disable-parallel --disable-build-servers -m:1
           /nodeReuse:false
 
       - name: Verify warning-level code style
@@ -186,12 +187,12 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: 10.0.400
+          global-json-file: global.json
 
-      - name: Locked restore
+      - name: Restore repository dependency graph
         run: >-
           dotnet restore Doka.EntityFrameworkCore.SafeMigrations.slnx
-          --locked-mode --disable-parallel --disable-build-servers -m:1
+          --disable-parallel --disable-build-servers -m:1
           /nodeReuse:false
 
       - name: Release build
@@ -292,13 +293,13 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: 10.0.400
+          global-json-file: global.json
 
-      - name: Locked restore
+      - name: Restore repository dependency graph
         run: >-
           dotnet restore
           tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests.csproj
-          --locked-mode --disable-parallel --disable-build-servers -m:1
+          --disable-parallel --disable-build-servers -m:1
           /nodeReuse:false
 
       - name: Release build
@@ -366,13 +367,13 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: 10.0.400
+          global-json-file: global.json
 
-      - name: Locked restore
+      - name: Restore repository dependency graph
         run: >-
           dotnet restore
           tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.csproj
-          --locked-mode --disable-parallel --disable-build-servers -m:1
+          --disable-parallel --disable-build-servers -m:1
           /nodeReuse:false
 
       - name: Release build
@@ -423,13 +424,13 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: 10.0.400
+          global-json-file: global.json
 
-      - name: Locked restore
+      - name: Restore repository dependency graph
         run: >-
           dotnet restore
           tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests.csproj
-          --locked-mode --disable-parallel --disable-build-servers -m:1
+          --disable-parallel --disable-build-servers -m:1
           /nodeReuse:false
 
       - name: Release build

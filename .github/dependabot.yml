@@ -1,9 +1,13 @@
 version: 2
 updates:
-  # Central Package Management and committed lock files form one qualified
-  # dependency graph. Group normal updates so one pull request exercises the
-  # complete provider, tooling, package, coverage, and performance matrix.
-  # The cooldown does not delay security updates.
+  # Central Package Management defines the shipped dependency ranges. The four
+  # publishable package lock files preserve their qualified compile graphs.
+  # Test, benchmark, sample, and engineering projects intentionally restore from
+  # the same central declarations without maintaining per-project lock files.
+  # D-006 records the accepted loss of content-hash and transitive-diff evidence
+  # for those execution projects.
+  # Group normal updates so one pull request exercises the complete
+  # qualification matrix. The cooldown does not delay security updates.
   - package-ecosystem: nuget
     directory: /
     schedule:
