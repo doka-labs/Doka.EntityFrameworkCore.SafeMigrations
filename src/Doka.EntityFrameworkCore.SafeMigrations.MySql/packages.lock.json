@@ -4,9 +4,9 @@
     "net10.0": {
       "Doka.EntityFrameworkCore.MySql": {
         "type": "Direct",
-        "requested": "[10.4.0, 10.5.0)",
-        "resolved": "10.4.0",
-        "contentHash": "26v8gBizSG+e8LbV76V1Op41z4DVvf+2o+mOwfvQXfwJLHPg+AOPxT5dlJTAlsUse1d2Bv8Mmq3qo/ZzsxVADg==",
+        "requested": "[10.4.1, 10.5.0)",
+        "resolved": "10.4.1",
+        "contentHash": "zM/AhMvUKDZ+oTzjufrsKllUSeJj7kdrRqZt2UyFnB+/AaVRDmG1aN7thQP2YrSrF4h39fJaNNzx1yiKjT3/VQ==",
         "dependencies": {
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.8, 10.1.0)",
           "MySqlConnector": "[2.5.0, 3.0.0)",
@@ -41,9 +41,9 @@
       },
       "Microsoft.Extensions.DependencyInjection.Abstractions": {
         "type": "Direct",
-        "requested": "[10.0.11, 10.1.0)",
-        "resolved": "10.0.11",
-        "contentHash": "/a1aJz4m7ylhEDf25ugQChLQoN5XwoGjWw/BoR/ZWWKsO1v4DdJElS1uyngahz4B/eOzjFk1KNTkarRLE5wsIg=="
+        "requested": "[10.0.12, 10.1.0)",
+        "resolved": "10.0.12",
+        "contentHash": "9/qymSh7hVDMGTGwrLz8MRp5zRyXy9adGDOs4HwRdnLil3oZGYuWeZjbmHgCQ9BL1qBroVfgUK3U/nb61617Cw=="
       },
       "Humanizer.Core": {
         "type": "Transitive",
