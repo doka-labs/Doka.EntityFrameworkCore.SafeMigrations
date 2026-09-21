@@ -4,6 +4,12 @@
   <PropertyGroup>
     <VersionPrefix>10.4.2</VersionPrefix>
     <PackageVersion Condition="'$(PackageVersion)' == ''">$(VersionPrefix)-dev</PackageVersion>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <!-- The committed locks record the platform-neutral graph. EF Migration
+         Bundles publish for the runner RID, which such a lock cannot validate. -->
+    <RestoreLockedMode
+      Condition="'$(ContinuousIntegrationBuild)' == 'true'
+                 And '$(RuntimeIdentifier)' == ''">true</RestoreLockedMode>
     <Authors>Dominic Kalkbrenner</Authors>
     <Company>Doka Labs</Company>
     <Copyright>Copyright (c) 2026 Dominic Kalkbrenner</Copyright>

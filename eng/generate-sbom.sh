@@ -113,7 +113,6 @@ rsync -a \
     "$repo_root/" "$component_root/"
 
 dotnet restore "$component_root/Doka.EntityFrameworkCore.SafeMigrations.slnx" \
-    --locked-mode \
     --disable-parallel \
     --disable-build-servers \
     -m:1 \

@@ -46,7 +46,7 @@ mkdir -p "$database_directory"
 
 cd "$repository_root"
 dotnet restore "$project" \
-    --locked-mode --disable-parallel --disable-build-servers -m:1 /nodeReuse:false
+    --disable-parallel --disable-build-servers -m:1 /nodeReuse:false
 dotnet build "$project" \
     --configuration Release --no-restore --disable-build-servers -m:1 /nodeReuse:false
 dotnet tool restore --tool-manifest "$repository_root/.config/dotnet-tools.json" \
@@ -118,11 +118,11 @@ dotnet ef database update \
     --configuration Release \
     --no-build
 
-# WHY: `dotnet ef migrations bundle` publishes for the current RID and rewrites
-# copied project lock files. Build the readback consumer before that isolated
-# publish so locked restore still validates the committed source-and-design graph.
+# WHY: `dotnet ef migrations bundle` publishes for the current RID and may
+# rewrite copied package-project lock files. Build the readback consumer first
+# so the later mutation cannot influence its source-graph verification.
 dotnet restore "$consumer_project" \
-    --locked-mode --disable-parallel --disable-build-servers -m:1 /nodeReuse:false \
+    --disable-parallel --disable-build-servers -m:1 /nodeReuse:false \
     -p:SafeMigrationsPackageConsumerMode=Source \
     -p:SafeMigrationsEfToolingReference=Design
 dotnet build "$consumer_project" \
@@ -136,6 +136,7 @@ dotnet ef migrations bundle \
     --context SqliteToolingDbContext \
     --configuration Release \
     --no-build \
+    --verbose \
     --output "$strict_bundle_path"
 
 legacy_bundle_path="$work_dir/sqlite-legacy-migration-bundle"
@@ -144,6 +145,7 @@ dotnet ef migrations bundle \
     --context SqliteLegacyToolingDbContext \
     --configuration Release \
     --no-build \
+    --verbose \
     --output "$legacy_bundle_path"
 
 strict_bundle_connection="Data Source=$database_directory/strict-bundle.db;Foreign Keys=True"

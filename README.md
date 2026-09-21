@@ -27,7 +27,7 @@ equivalent.
 - `Doka.EntityFrameworkCore.SafeMigrations`: provider-neutral intent,
   definitions, planning, reports, and `MigrationBuilder` extensions
 - `Doka.EntityFrameworkCore.SafeMigrations.MySql`: MySQL and MariaDB adapter on
-  the public `Doka.EntityFrameworkCore.MySql` 10.4.0 operation-handler and
+  the public `Doka.EntityFrameworkCore.MySql` 10.4.2 operation-handler and
   typed migration-metadata SPI
 - `Doka.EntityFrameworkCore.SafeMigrations.PostgreSql`: PostgreSQL adapter on
   Npgsql 10
@@ -47,16 +47,14 @@ when that matrix executes. The exact successful run, not this table, is release
 evidence. See [Support and qualification](docs/support-and-qualification.md).
 
 The initial complete stable delivery is 10.0.0. The latest confirmed published
-release is 10.4.1. This source is prepared for stable 10.4.2, which adds the
-SQLite provider and includes the verified convergence and incremental
-design-time registration fixes described in the changelog. Only a successful
-release run and verified public packages establish 10.4.2 availability or
-qualification. See the [changelog](CHANGELOG.md).
+release is 10.4.2. Subsequent source changes establish no future release until
+the blocking release workflow and public package readback succeed. See the
+[changelog](CHANGELOG.md).
 
 ## Installation
 
 Install one provider package. The core package is included transitively. The
-commands select the prepared stable release exactly so restore does
+commands select the published stable release exactly so restore does
 not move to a different package version implicitly. Confirm the matching
 published release and all four NuGet package pages before installation; source
 or changelog entries alone do not establish package availability.
@@ -121,8 +119,8 @@ services.AddDbContext<AppDbContext>(options =>
 });
 ```
 
-`UseMySqlSafeMigrations()` declares its user-variable requirement through Doka
-10.4.0. For a provider-owned connection string, Doka supplies
+`UseMySqlSafeMigrations()` declares its user-variable requirement through the
+Doka 10.4 line. For a provider-owned connection string, Doka supplies
 `AllowUserVariables=true` when it was omitted. An explicitly contradictory
 setting is rejected. Caller-owned `DbConnection` and `MySqlDataSource` inputs
 are never mutated and must already use `AllowUserVariables=true` and
@@ -524,7 +522,7 @@ qualified length change. Doka's exact Boolean conversion accepts only absent,
 null, false, or true literal defaults. An expression default or a foreign-key
 dependency keeps the Boolean transition blocked because a single-column repair
 cannot prove that separate behavioral or coupled-type contract.
-Doka 10.4.0's typed metadata must recognize every MySQL/MariaDB annotation.
+Doka 10.4.2's typed metadata must recognize every MySQL/MariaDB annotation.
 Unknown, malformed, contradictory, or unsupported metadata rejects. Existing
 `NULL` rows make a `NOT NULL` repair `DataBlocked`. Other type-family,
 collation, computed/generated, identity, row-version, and unsupported
@@ -848,7 +846,7 @@ See [Deployment and recovery](docs/runbooks/deployment-and-recovery.md) and
 The SDK is fixed by `global.json`.
 
 ```bash
-dotnet restore Doka.EntityFrameworkCore.SafeMigrations.slnx --locked-mode
+dotnet restore Doka.EntityFrameworkCore.SafeMigrations.slnx
 dotnet build Doka.EntityFrameworkCore.SafeMigrations.slnx --configuration Release --no-restore
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Doka.EntityFrameworkCore.SafeMigrations.Tests.csproj --configuration Release
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests.csproj --configuration Release

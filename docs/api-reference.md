@@ -37,8 +37,8 @@ self-describing report-view serialization without changing canonical report-v2
 bytes and corrects MariaDB JSON collation diagnostics. Published stable 10.4.1
 preserves that public API, generated-operation contract, and report schemas
 while correcting ordered prerequisite and physical-identity projection.
-Prepared stable 10.4.2 adds the SQLite package and its provider-specific public
-registration and generator surface. Existing Core, MySQL/MariaDB, and
+Published stable 10.4.2 adds the SQLite package and its provider-specific
+public registration and generator surface. Existing Core, MySQL/MariaDB, and
 PostgreSQL public APIs remain compatible. Strict scaffolding remains the
 default. A successful release run and exact-version public package readback
 remain the authority for a published API.

@@ -35,8 +35,10 @@ annotations](../.scorecard.yml) document why library dependency patch ranges
 are not applicable to the pinned-dependency check. An annotation adds visible
 maintainer context and can suppress the annotated check's code-scanning alert;
 it does not change the published numeric score. Central Package Management,
-committed lock files, locked restore, SHA-pinned Actions, and digest-pinned
-container images remain the enforceable build controls.
+publishable-package lock files, locked restore for those package projects,
+SHA-pinned Actions, and digest-pinned container images remain the enforceable
+build controls. Engineering projects resolve the same central declarations in
+the complete CI matrix without committed lockfiles.
 
 The README exposes live links for both external systems. Best Practices project
 14265 was verified as Passing on 2026-08-28. The Scorecard workflow has produced

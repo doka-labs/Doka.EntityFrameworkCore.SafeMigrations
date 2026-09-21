@@ -2,39 +2,46 @@
 
 ## Support contract
 
-All publishable projects target `net10.0`. The repository pins SDK 10.0.400
+All publishable projects target `net10.0`. The repository pins SDK 10.0.401
 with roll-forward disabled. SafeMigrations supports EF Core 10 only.
 
 | Package | Runtime dependency contract |
 | --- | --- |
-| Core | `Microsoft.EntityFrameworkCore.Relational` `[10.0.11,10.1.0)` |
-| MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` `[10.4.0,10.5.0)` |
+| Core | `Microsoft.EntityFrameworkCore.Relational` `[10.0.12,10.1.0)` |
+| MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` `[10.4.2,10.5.0)` |
 | PostgreSQL | `Npgsql.EntityFrameworkCore.PostgreSQL` `[10.0.3,11.0.0)` |
-| SQLite | EF Core SQLite Core `[10.0.11,10.1.0)`; application-owned native bundle |
+| SQLite | EF Core SQLite Core `[10.0.12,10.1.0)`; application-owned native bundle |
 
-The MySQL/MariaDB package requires Doka 10.4.0 or a compatible later 10.4 patch
+The MySQL/MariaDB package requires Doka 10.4.2 or a compatible later 10.4 patch
 release and rejects the next minor line. This boundary avoids an exact
 transitive pin without claiming compatibility across an unqualified behavioral
 SPI revision. CI does not build Doka and never uses a cross-repository
 ProjectReference. The committed lockfiles were regenerated from the public
-Doka 10.4.0 package. Its commandless operation result and retained typed
-migration metadata were rechecked against signed tag `v10.4.0`, commit
-`dffabcafc74934f2645c9bc4cde43fda37051e28`, on 2026-09-10. The complete
-package, engine, tooling, coverage, and performance matrix remains the
+Doka 10.4.2 package. Its commandless operation result, retained typed migration
+metadata, and database collation contract were rechecked against signed tag
+`v10.4.2`, commit `b2408bfbe29517d742734d06d848081cdb9e1de0`, on
+2026-09-21. The complete package, engine, tooling, coverage, and performance
+matrix remains the
 SafeMigrations release gate; a local Doka ProjectReference or locally packed
 candidate is not release evidence.
 The remaining declared dependency graph and .NET 10 release metadata were
-rechecked on 2026-08-27. Bounded package ranges describe compatibility; the
-committed lockfiles identify the exact graph selected by a particular
-revision.
+rechecked on 2026-09-21. Bounded package ranges describe compatibility. The
+four package-project lockfiles identify the exact dependency graph used to
+compile and qualify the package artifacts in a particular revision; they do
+not constrain a consumer's NuGet resolution or lock the engineering projects.
 
-Published stable 10.4.1 is the latest verified public release. This source is
-prepared for stable 10.4.2 with the first SQLite package and the verified
-convergence and incremental design-time registration fixes described in the
-changelog. Only the blocking release workflow and exact public package
-readback establish its qualification.
+Published stable 10.4.2 is the latest verified public release. Subsequent
+source changes establish no future release until the blocking release workflow
+and exact public package readback succeed.
 
 ## Engine matrix
+
+Every GitHub-hosted Linux job is pinned to `ubuntu-24.04`. This also fixes the
+benchmark jobs to that runner label instead of inheriting the moving
+`ubuntu-latest` label. Ubuntu 26.04 requires a dedicated upgrade with the
+complete qualification workflow and reviewed performance evidence before the
+repository switches as one unit. The repository intentionally does not
+maintain a permanent second Ubuntu matrix.
 
 The reusable workflow `.github/workflows/quality-gates.yml` is invoked by CI,
 release candidates, and stable releases. It declares these exact qualification
@@ -61,8 +68,9 @@ independent release-gate cell. SQLite xUnit qualification uses isolated
 in-process databases, including private-cache file-backed concurrent
 `MigrateAsync` callers that exercise EF's migration lock. The EF tooling gate
 applies Strict and legacy migrations and bundles twice to asserted file
-databases from the locked package graph. A new endpoint or removed upstream
-version requires a reviewed support-contract change and fresh evidence.
+databases from the centrally declared dependency graph. A new endpoint or
+removed upstream version requires a reviewed support-contract change and fresh
+evidence.
 
 At the 2026-08-27 source review, PostgreSQL 14 through 18 are the upstream
 supported majors and the pinned versions above are their current minor
@@ -76,22 +84,40 @@ the presence of a tag or image digest in this document does not.
 
 ## Dependency qualification
 
-Central package declarations define bounded compatible ranges; committed
-lockfiles define the exact graph selected by the current revision. Dependabot
-proposes dependency and lockfile updates through ordinary pull requests. Every
-accepted update therefore runs the same complete CI workflow as product code,
-including all provider cells, package consumers, coverage, performance, and
-SBOM validation. GitHub Automatic Dependency Submission publishes resolved
-base and head snapshots to the Dependency Graph. The independent, read-only
-Dependency Review workflow compares those snapshots, rejects newly introduced
-high-or-critical vulnerabilities and licenses outside the approved SPDX set,
-and runs the official bounded retry. Because action v5.0.0 proceeds after that
-timeout even when GitHub still reports a snapshot warning, a final comparison
-header check requires the warning to be present and empty. The public REST
-reference did not specify this header on 2026-08-28; its verified contract comes
-from the immutable action source, and absence fails closed. There is no second
-repository-owned polling state machine or dynamically restored dependency
-profile whose results can diverge from the committed graph.
+Central package declarations define bounded compatible ranges. Only the four
+publishable package projects commit lockfiles. Those files preserve the exact
+compile-time graph and package content hashes used for the released artifacts;
+they do not prescribe a consumer's resolved graph. Test, benchmark, sample,
+and engineering projects resolve the same central declarations without
+committed lockfiles. CI restores package projects in locked mode and resolves
+each execution project's complete graph before building and testing it.
+EF Migration Bundles are the sole exception: EF publishes them for the runner
+RID, which the platform-neutral lockfiles cannot record, so those RID-specific
+restores run unlocked inside isolated repository copies and never modify the
+committed lockfiles.
+
+This scope intentionally trades away lockfile content-hash validation and
+transitive dependency diffs for the execution projects. The repository accepts
+that limitation because a lockfile per project caused ordinary grouped
+Dependabot updates to leave an inconsistent subset of 20 lockfiles. D-006
+records the compensating controls and the conditions that require this decision
+to be revisited.
+
+Dependabot proposes dependency and lockfile updates through ordinary pull
+requests. Every accepted update therefore runs the same complete CI workflow as
+product code, including all provider cells, package consumers, coverage,
+performance, and SBOM validation. GitHub Automatic Dependency Submission
+publishes resolved base and head snapshots to the Dependency Graph. The
+independent, read-only Dependency Review workflow compares those snapshots,
+rejects newly introduced high-or-critical vulnerabilities and licenses outside
+the approved SPDX set, and runs the official bounded retry. Because action
+v5.0.0 proceeds after that timeout even when GitHub still reports a snapshot
+warning, a final comparison header check requires the warning to be present and
+empty. The public REST reference did not specify this header on 2026-08-28; its
+verified contract comes from the immutable action source, and absence fails
+closed. There is no second repository-owned polling state machine or
+dynamically restored dependency profile whose results can diverge from the
+central declarations tested by CI.
 
 ## Behavioral evidence
 
@@ -355,8 +381,8 @@ Allocation ceilings are deterministic blocking gates. Wall-clock measurements
 on shared GitHub-hosted runners are not deterministic, so their three-times-
 baseline ceilings only catch gross regressions and are not throughput claims.
 Changes to a baseline or ceiling require captured before/after evidence on the
-same runner class and a review of asymptotic behavior; a budget must not be
-raised merely to make CI green.
+same pinned `ubuntu-24.04` runner label and a review of asymptotic behavior; a
+budget must not be raised merely to make CI green.
 
 The MySQL/MariaDB benchmark has no Npgsql or SQLite dependency, the PostgreSQL
 benchmark has no Doka MySQL or SQLite dependency, and the SQLite benchmark has
@@ -392,8 +418,9 @@ foreign tables carry indexes and foreign keys. The latter intentionally
 measures whole-catalog discovery cost and prevents that cost from remaining
 outside the release budget.
 
-After locked restore, the quality workflow rejects warning-level Roslyn style
-violations and unnecessary imports. Rider/ReSharper remains the repository
+After restoring the locked publishable package graphs, the quality workflow
+rejects warning-level Roslyn style violations and unnecessary imports.
+Rider/ReSharper remains the repository
 formatter for layout rules that Roslyn cannot represent.
 
 ## Package and supply-chain evidence
@@ -435,13 +462,16 @@ and release-asset verification.
 
 ## Primary references
 
+- [GitHub-hosted runner Ubuntu 26.04 migration announcement](https://github.com/actions/runner-images/issues/14748),
+  retrieved 2026-09-21.
 - [.NET 10 release metadata](https://dotnetcli.blob.core.windows.net/dotnet/release-metadata/10.0/releases.json),
   retrieved 2026-08-27.
-- [EF Core Relational 10.0.11 package](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.Relational/10.0.11),
+- [EF Core Relational 10.0.12 package](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.Relational/10.0.12),
+  [Dependency Injection Abstractions 10.0.12 package](https://www.nuget.org/packages/Microsoft.Extensions.DependencyInjection.Abstractions/10.0.12),
   [Npgsql EF Core 10.0.3 package](https://www.nuget.org/packages/Npgsql.EntityFrameworkCore.PostgreSQL/10.0.3),
-  [EF Core SQLite Core 10.0.11 package](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.Sqlite.Core/10.0.11),
+  [EF Core SQLite Core 10.0.12 package](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.Sqlite.Core/10.0.12),
   and [EF Core custom SQLite versions](https://learn.microsoft.com/en-us/dotnet/standard/data/sqlite/custom-versions),
-  retrieved 2026-09-18.
+  retrieved 2026-09-21.
 - [Doka 10.2.0 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.2.0),
   [release notes](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.2.0/CHANGELOG.md),
   [provider configuration](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.2.0/docs/provider-configuration.md),
@@ -454,10 +484,10 @@ and release-asset verification.
   [migration-operation metadata](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.3.0/src/Doka.EntityFrameworkCore.MySql/Migrations/MySqlMigrationOperationMetadata.cs),
   and [signed release tag](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.3.0),
   retrieved 2026-09-01.
-- [Doka 10.4.0 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.4.0),
-  [migration-operation handler contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.4.0/docs/migration-operation-handlers.md),
-  and [signed release tag](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.4.0),
-  retrieved 2026-09-10.
+- [Doka 10.4.2 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.4.2),
+  [migration-operation handler contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.4.2/docs/migration-operation-handlers.md),
+  and [signed release tag](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.4.2),
+  retrieved 2026-09-21.
 - [MySQL 8.4 InnoDB limits](https://dev.mysql.com/doc/refman/8.4/en/innodb-limits.html),
   [MySQL 8.4 CREATE INDEX](https://dev.mysql.com/doc/refman/8.4/en/create-index.html),
   [MySQL 8.4 invisible indexes](https://dev.mysql.com/doc/refman/8.4/en/invisible-indexes.html),

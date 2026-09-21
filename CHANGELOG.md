@@ -8,6 +8,28 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- Make `global.json` the sole CI SDK-version source and limit committed NuGet
+  lock files to the four publishable package projects. Test, benchmark, sample,
+  tooling, and package-consumer projects resolve the central declarations
+  during CI, while their complete matrix remains blocking. CI now locks every
+  platform-neutral package-project restore; the former root-level condition
+  never took effect. RID-specific EF Migration Bundle publishes restore
+  unlocked because platform-neutral lock files cannot describe them.
+- Raise the public package dependency floors to EF Core 10.0.12,
+  Doka.EntityFrameworkCore.MySql 10.4.2, and
+  Microsoft.Extensions.DependencyInjection.Abstractions 10.0.12 so package
+  qualification exercises the current .NET 10 servicing and Doka provider
+  patches at the declared lower bounds. Applications that reference EF Core
+  packages directly must use 10.0.12 or later to avoid a package-downgrade
+  restore failure. Doka 10.4.1 and later preserve database character-set and
+  collation metadata in generated migrations; regenerate unpublished
+  MySQL/MariaDB migrations created with an older provider before release.
+- Update the repository toolchain to .NET SDK 10.0.401 and `dotnet-ef` 10.0.12,
+  Microsoft.NET.Test.Sdk to 18.10.1, and CodeQL upload-sarif to 4.38.1.
+- Keep every GitHub-hosted Linux job on Ubuntu 24.04. A repository gate rejects
+  floating or unqualified Ubuntu runners so a future Ubuntu 26.04 adoption
+  requires an explicit, fully qualified upgrade instead of an implicit
+  `ubuntu-latest` migration.
 - Make NuGet publication explicitly dependency-ordered and same-run resumable.
   A bounded status preflight skips visible primary packages, while symbol
   pushes remain duplicate-tolerant and final signed-content readback remains

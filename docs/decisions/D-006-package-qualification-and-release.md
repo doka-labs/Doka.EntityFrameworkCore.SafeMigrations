@@ -18,8 +18,8 @@ doka-profile-version: "1.0"
 
 ## Context and Problem Statement
 
-SafeMigrations publishes Core, MySQL/MariaDB, and PostgreSQL packages at one
-version. Ordinary qualification failures must not consume a tag or public
+SafeMigrations publishes Core, MySQL/MariaDB, PostgreSQL, and SQLite packages at
+one version. Ordinary qualification failures must not consume a tag or public
 NuGet version, and publication must use the exact bytes that passed the full
 provider matrix. The workflow must also remain understandable and maintainable
 without a repository-owned release orchestration framework.
@@ -33,6 +33,7 @@ without a repository-owned release orchestration framework.
   every immutable Release asset selected as a build subject.
 - Credentials must be short-lived and scoped to the exact workflow/environment.
 - Partial multi-package publication must have a fail-closed recovery path.
+- Dependency updates must not leave only a subset of project lockfiles current.
 - GitHub, Git, .NET, and NuGet platform contracts should replace duplicated
   repository state machines and hand-written API fixtures.
 
@@ -82,6 +83,38 @@ the Release attestation asynchronously, verification uses a bounded readback
 window and fails closed after exhaustion. The focused adapter persists no
 parallel release state and does not parse the symbol server.
 
+### Repository dependency lock scope
+
+Central Package Management owns dependency floors and compatible ranges for the
+entire repository. Only the four publishable package projects commit
+`packages.lock.json`. Their lockfiles preserve the exact compile-time package
+graph and NuGet content hashes used to produce and qualify release artifacts;
+they do not control the graph selected by a consuming application.
+
+Test, benchmark, sample, and engineering projects intentionally resolve the
+central declarations without committed lockfiles. This differs from NuGet's
+recommendation to commit lockfiles for executable projects at the start of a
+dependency chain. It also means those projects do not retain lockfile
+`contentHash` validation or expose every transitive resolution change as a pull
+request diff.
+
+The limitation is accepted because maintaining one lockfile for each of the 20
+projects caused grouped Dependabot updates to regenerate only a subset and made
+otherwise coherent dependency pull requests fail locked restore. This upstream
+behavior is tracked by dependabot-core issue 13950 for Central Package
+Management, project references, and locked mode. The remaining controls are one
+cleared NuGet source, central non-floating declarations, lowest-applicable-
+version resolution, warnings as errors, automatic dependency snapshots,
+Dependency Review, full provider and engineering execution, package content
+verification, and an SPDX SBOM. These controls test the resolved graph; they do
+not recreate the omitted lockfile guarantees.
+
+A workflow that runs `dotnet restore --force-evaluate` and commits regenerated
+lockfiles back to Dependabot branches was considered and rejected. It would
+give dependency-validation automation repository write access and make CI
+mutate bot-authored pull requests. The smaller lock scope keeps validation
+read-only while the upstream regeneration defect remains open.
+
 ### Consequences
 
 - Good, because failed qualification consumes no release identity.
@@ -96,6 +129,8 @@ parallel release state and does not parse the symbol server.
   inside the immutable Release instead of depending only on GitHub API state.
 - Good, because the engineering surface is smaller and has fewer contracts
   that can disagree with GitHub or NuGet.
+- Good, because grouped dependency updates cannot leave a hidden subset of
+  engineering lockfiles stale.
 - Bad, because four NuGet package IDs cannot be published atomically.
 - Bad, because symbol indexing is asynchronous and remains a NuGet-hosted
   validation state after upload.
@@ -103,15 +138,21 @@ parallel release state and does not parse the symbol server.
   the first NuGet write remains an idempotent same-job reconciliation.
 - Bad, because hosted environment, ruleset, immutable-release, and NuGet policy
   settings cannot be proven by local tests.
+- Bad, because non-package projects lose lockfile content-hash verification and
+  pull-request visibility for purely transitive resolution changes.
 
 ### Confirmation
 
 Require local shell syntax checks, portable-provenance and GitHub Release
 reconciliation positive/negative cases, version-validator positive/negative
-cases, locked restore, format, Release build, all test suites, coverage
-thresholds, performance budgets, deterministic package qualification,
-package-only consumers, SBOM validation, and every supported live
-provider/tooling cell.
+cases, locked restore of the four package projects, resolved restore of all
+execution projects, format, Release build, all test suites, coverage thresholds,
+performance budgets, deterministic package qualification, package-only
+consumers, SBOM validation, and every supported live provider/tooling cell.
+Locked restore covers every platform-neutral CI restore of the package
+projects. EF Migration Bundles publish for the runner RID, which the
+platform-neutral lockfiles cannot record, so those RID-specific restores run
+unlocked inside isolated repository copies.
 
 The first actual RC must additionally prove the hosted protected wait, OIDC
 exchange, authorized tag verification, public signed-package readback,
@@ -157,6 +198,13 @@ owns independent consumer readback.
 - The package family stops sharing one version or grows beyond the existing
   non-atomic recovery model.
 - An actual release incident reveals ambiguous identity or recovery behavior.
+- NuGet adds a repository-wide lock mechanism, or dependabot-core issue 13950
+  is resolved and Dependabot reliably regenerates every affected project
+  lockfile in one grouped pull request.
+- A second package source, a floating declaration, or a restore-resolution
+  incident weakens the current centrally declared single-source graph.
+- Dependency Review or SBOM evidence no longer exposes the resolved engineering
+  graph required by the qualification workflow.
 
 ### Decision History
 
@@ -174,6 +222,15 @@ owns independent consumer readback.
 - 2026-09-18: D-013 expanded qualification, exact-byte publication,
   reconciliation, SBOM, and readback from three to four version-aligned NuGet
   package IDs for the SQLite provider release.
+- 2026-09-21: Limited committed lockfiles to the four publishable package
+  projects after grouped Dependabot updates left a subset of 20 project
+  lockfiles stale. Recorded the lost execution-project content-hash and
+  transitive-diff guarantees, compensating controls, and re-evaluation triggers.
+- 2026-09-21: The former root-level locked-restore condition was evaluated
+  before `ContinuousIntegrationBuild` was defined, so only explicit
+  `--locked-mode` restores had been locked. Moving it behind the root import
+  activated it and made the RID-specific EF Migration Bundle restores fail;
+  locked restore now excludes restores with a `RuntimeIdentifier`.
 
 ### Implementation References
 
@@ -199,3 +256,5 @@ owns independent consumer readback.
 - [OpenSSF Signed-Releases check](https://github.com/ossf/scorecard/blob/main/docs/checks.md#signed-releases) (primary source; retrieved 2026-08-29)
 - [NuGet Trusted Publishing](https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing) (primary source; retrieved 2026-08-26)
 - [`dotnet nuget push`](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-nuget-push) (primary source; retrieved 2026-08-26)
+- [NuGet PackageReference lockfile guidance](https://learn.microsoft.com/en-us/nuget/consume-packages/package-references-in-project-files#locking-dependencies) (primary source; retrieved 2026-09-21)
+- [dependabot-core issue 13950](https://github.com/dependabot/dependabot-core/issues/13950) (primary upstream issue; retrieved 2026-09-21)

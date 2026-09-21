@@ -1,10 +1,10 @@
 # Documentation
 
 This is the task-oriented entry point for SafeMigrations documentation. The
-latest confirmed published release is 10.4.1. This source is prepared for the
-stable 10.4.2 release described in the changelog; package
-availability and OpenSSF status are established by their linked external
-registries, not by source documentation alone.
+latest confirmed published release is 10.4.2. Subsequent source changes
+establish no future release; package availability and OpenSSF status are
+established by their linked external registries, not by source documentation
+alone.
 
 ## Use and deploy
 
