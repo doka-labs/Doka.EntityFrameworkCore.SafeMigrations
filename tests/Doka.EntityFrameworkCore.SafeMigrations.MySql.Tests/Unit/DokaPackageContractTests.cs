@@ -41,6 +41,41 @@ public sealed class DokaPackageContractTests
             columns[0]["Doka:MySql:ValueGenerationStrategy"]);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AnnotatedColumnRename_UsesShapePreservingNativeDokaSql(
+        bool isMariaDb
+    )
+    {
+        // Arrange
+        using var context = CreateContext(CreateServerVersion(isMariaDb));
+        var operation = new RenameColumnOperation
+        {
+            Name = "old_code",
+            NewName = "new_code",
+            Table = "users",
+        };
+
+        operation["Doka:MySql:CharSet"] = "utf8mb4";
+        operation["Relational:Collation"] = "utf8mb4_unicode_ci";
+
+        // Act
+        var compatibility = SafeMigrationOperationCompatibility.Normalize(
+            operation,
+            MySqlSafeMigrationProviderOperationAdapter.Instance);
+        var sql = string.Concat(
+            context.GetService<IMigrationsSqlGenerator>()
+                .Generate([operation], context.Model)
+                .Select(static command => command.CommandText));
+
+        // Assert
+        Assert.Equal(SafeMigrationOperationCompatibilityKind.Safe, compatibility.Kind);
+        Assert.IsType<RenameColumnIntent>(Assert.IsType<SafeMigrationOperation>(compatibility.Operation).Intent);
+        Assert.Contains("RENAME COLUMN `old_code` TO `new_code`", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("CHANGE COLUMN", sql, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void ScopedCommand_SnapshotsInputsAndExposesExecutionOrder()
     {
@@ -63,6 +98,46 @@ public sealed class DokaPackageContractTests
         Assert.Equal(
             command.CommandText,
             string.Concat(command.Fragments.Select(static fragment => fragment.CommandText.ToString())));
+    }
+
+    [Fact]
+    public void MultiCommandBaselineWithoutCleanup_PreservesProviderBoundaries()
+    {
+        // Arrange
+        MySqlMigrationCommandSpec[] commands =
+        [
+            MySqlMigrationCommandSpec.Create("SELECT 1;", transactionSuppressed: true),
+            MySqlMigrationCommandSpec.Create("SELECT 2;", transactionSuppressed: true),
+        ];
+
+        // Act
+        var exception = Record.Exception(() => MySqlSafeMigrationOperationHandler.ValidateMultiCommandCleanup(commands));
+
+        // Assert
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void MultiCommandBaselineWithCleanup_RejectsBeforeGuardedExecution()
+    {
+        // Arrange
+        MySqlMigrationCommandSpec[] commands =
+        [
+            MySqlMigrationCommandSpec.CreateScoped(
+                ["SET @value = 1;"],
+                "SELECT @value;",
+                ["SET @value = NULL;"],
+                transactionSuppressed: true),
+            MySqlMigrationCommandSpec.Create("SELECT 2;", transactionSuppressed: true),
+        ];
+
+        // Act
+        var exception = Record.Exception(() => MySqlSafeMigrationOperationHandler.ValidateMultiCommandCleanup(commands));
+
+        // Assert
+        var invalidOperation = Assert.IsType<InvalidOperationException>(exception);
+
+        Assert.Contains("provider cleanup", invalidOperation.Message, StringComparison.Ordinal);
     }
 
     [Fact]

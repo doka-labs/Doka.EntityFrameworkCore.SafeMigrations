@@ -32,6 +32,17 @@ internal sealed partial class SafeMigrationPreflightProjection
             return StructureStateUnknown();
         }
 
+        if (IsProjectedTableStructureUnknown(intent.Table, intent.Schema))
+        {
+            // WHY: A drop or provider-certified rename can change dependent
+            // definitions. Only absence of an unrelated, safely additive
+            // column survives that structural uncertainty.
+            return liveAnalysis.ObservedState == SafeMigrationObservedState.Missing
+                && SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(intent.Definition)
+                    ? liveAnalysis
+                    : StructureStateUnknown();
+        }
+
         if (!TryGet(intent.Table, intent.Schema, out var table))
         {
             var unprojectedAnalysis = SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(intent.Definition)
@@ -131,6 +142,17 @@ internal sealed partial class SafeMigrationPreflightProjection
         SafeMigrationProviderAnalysis liveAnalysis
     )
     {
+        if (IsProjectedColumnMissing(intent.Table, intent.Schema, intent.NewName)
+            && liveAnalysis.ObservedState is SafeMigrationObservedState.Matching
+                or SafeMigrationObservedState.Different)
+        {
+            // WHY: Rename analysis can be Different only because both names
+            // exist in the immutable live snapshot. An accepted earlier drop of
+            // the target removes that conflict and proves the rename is now applicable.
+
+            return Analysis(SafeMigrationObservedState.Matching);
+        }
+
         if (IsProjectedColumnMissing(intent.Table, intent.Schema, intent.Name))
         {
             return Analysis(SafeMigrationObservedState.Missing);
@@ -167,10 +189,10 @@ internal sealed partial class SafeMigrationPreflightProjection
         SafeMigrationDecision decision
     )
     {
-        var key = new TableKey(intent.Table, intent.Schema);
-        if (_prerequisites.TryGetValue(key, out var prerequisites)
-            && decision.Action is SafeMigrationAction.Apply or SafeMigrationAction.NoOp or SafeMigrationAction.Repair)
+        if (decision.Action is SafeMigrationAction.Apply or SafeMigrationAction.NoOp or SafeMigrationAction.Repair)
         {
+            var prerequisites = GetOrCreateProviderPrerequisites(intent.Table, intent.Schema);
+
             prerequisites.Columns[intent.Definition.Name] = ProjectedColumn.From(
                 intent.Definition,
                 addedToExistingTable: decision.Action == SafeMigrationAction.Apply && !prerequisites.NewlyCreated);
@@ -209,9 +231,10 @@ internal sealed partial class SafeMigrationPreflightProjection
         SafeMigrationDecision decision
     )
     {
-        if (decision.Action == SafeMigrationAction.Repair
-            && _prerequisites.TryGetValue(new TableKey(intent.Table, intent.Schema), out var prerequisites))
+        if (decision.Action is SafeMigrationAction.NoOp or SafeMigrationAction.Repair)
         {
+            var prerequisites = GetOrCreateProviderPrerequisites(intent.Table, intent.Schema);
+
             prerequisites.Columns[intent.Definition.Name] = ProjectedColumn.From(
                 intent.Definition,
                 addedToExistingTable: false);
@@ -297,6 +320,21 @@ internal sealed partial class SafeMigrationPreflightProjection
         // expressions, and foreign keys outside the locally projected table.
         // Later safe operations must not trust the catalog snapshot captured
         // before the ordered migration started.
+        if (_providerOperationProjection?.PreservesUnrelatedColumnAbsence(intent) == true)
+        {
+            InvalidateModelManagedDataProjection();
+            SetProjectedTableStructureUnknown(intent.Table, intent.Schema);
+            RemoveProjectedColumnDefinitions(intent.Table, intent.Schema);
+            RemoveDroppedPhysicalKeys(intent.Table, intent.Schema);
+            RenameProjectedColumnDefinition(
+                intent.Table,
+                intent.Schema,
+                intent.Name,
+                intent.NewName);
+
+            return;
+        }
+
         SetOpaqueProviderPostcondition(mayMutateData: false);
     }
 

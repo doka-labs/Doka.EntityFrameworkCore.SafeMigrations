@@ -87,7 +87,8 @@ public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
             {
                 var structuralOperations = new List<MigrationOperation>();
                 while (ordinal < operations.Count
-                       && SqliteSafeMigrationOperationClassifier.CanParticipateInStructuralBatch(operations[ordinal]))
+                       && SqliteSafeMigrationOperationClassifier.CanParticipateInStructuralBatch(
+                           operations[ordinal]))
                 {
                     structuralOperations.Add(operations[ordinal]);
                     ordinal++;
@@ -131,7 +132,8 @@ public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
                 while (ordinal < operations.Count
                        && operations[ordinal] is not SafeMigrationOperation
                        && operations[ordinal] is not SafeMigrationDesignTimeServicesRequiredOperation
-                       && !SqliteSafeMigrationOperationClassifier.CanParticipateInStructuralBatch(operations[ordinal]))
+                       && !SqliteSafeMigrationOperationClassifier.CanParticipateInStructuralBatch(
+                           operations[ordinal]))
                 {
                     providerOperations.Add(operations[ordinal]);
                     ordinal++;

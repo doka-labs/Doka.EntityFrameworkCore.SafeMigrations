@@ -2,6 +2,18 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 public sealed class SafeMigrationScaffoldingTests
 {
+    /// <summary>Gets the ordinary EF operations delegated by disabled scaffolding.</summary>
+    public static TheoryData<MigrationOperation> DisabledUnsupportedOperations => new()
+    {
+        new AlterTableOperation { Name = "items" },
+        new CreateSequenceOperation { Name = "item_ids", ClrType = typeof(long) },
+        new AlterSequenceOperation { Name = "item_ids" },
+        new DropSequenceOperation { Name = "item_ids" },
+        new RenameSequenceOperation { Name = "item_ids", NewName = "product_ids" },
+        new RestartSequenceOperation { Name = "item_ids", StartValue = 42 },
+        new SqlOperation { Sql = "SELECT 1;" },
+    };
+
     [Fact]
     public void OptionsBuilderDefaultsToStrictFailClosedConfiguration()
     {
@@ -105,6 +117,67 @@ public sealed class SafeMigrationScaffoldingTests
     }
 
     [Theory]
+    [MemberData(
+        nameof(SafeMigrationOperationCompatibilityTests.SupportedOperations),
+        MemberType = typeof(SafeMigrationOperationCompatibilityTests))]
+    public void DisabledScaffoldingDelegatesEverySupportedStandardOperationToEfCore(
+        MigrationOperation operation,
+        Type expectedIntentType
+    )
+    {
+        // Arrange
+        var generator = CreateOperationGenerator(SafeMigrationScaffoldingMode.Strict, isEnabled: false);
+        var builder = new IndentedStringBuilder();
+        var efMethod = operation.GetType().Name.Replace("Operation", string.Empty, StringComparison.Ordinal);
+        var normalized = SafeMigrationOperationCompatibility.Normalize(operation, providerAdapter: null);
+
+        // Act
+        generator.Generate("migrationBuilder", [operation], builder);
+
+        // Assert
+        Assert.Equal(expectedIntentType, Assert.IsType<SafeMigrationOperation>(normalized.Operation).Intent.GetType());
+        Assert.Contains($"migrationBuilder.{efMethod}", builder.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("Doka.EntityFrameworkCore.SafeMigrations", builder.ToString(), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [MemberData(nameof(DisabledUnsupportedOperations))]
+    public void DisabledScaffoldingDelegatesUnsupportedStandardOperationsToEfCore(
+        MigrationOperation operation
+    )
+    {
+        // Arrange
+        var generator = CreateOperationGenerator(SafeMigrationScaffoldingMode.Strict, isEnabled: false);
+        var builder = new IndentedStringBuilder();
+        var efMethod = operation.GetType().Name.Replace("Operation", string.Empty, StringComparison.Ordinal);
+
+        // Act
+        generator.Generate("migrationBuilder", [operation], builder);
+
+        // Assert
+        Assert.Contains($"migrationBuilder.{efMethod}", builder.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("Doka.EntityFrameworkCore.SafeMigrations", builder.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void UnknownOperationStopsGenerationBeforePublishingSource()
+    {
+        // Arrange
+        var generator = CreateOperationGenerator(SafeMigrationScaffoldingMode.Strict);
+        var builder = new IndentedStringBuilder();
+
+        // Act
+        var exception = Record.Exception(() => generator.Generate(
+            "migrationBuilder",
+            [new UnknownMigrationOperation()],
+            builder));
+
+        // Assert
+        Assert.IsType<NotSupportedException>(exception);
+        Assert.Equal(string.Empty, builder.ToString());
+    }
+
+    [Theory]
     [InlineData(SafeMigrationScaffoldingMode.Strict)]
     [InlineData(SafeMigrationScaffoldingMode.LegacyConvergence)]
     public void SchemaGenerationUsesSafeOperationsForBothScaffoldingModes(
@@ -151,6 +224,355 @@ public sealed class SafeMigrationScaffoldingTests
         Assert.DoesNotContain(".EnsureSchemaExists(", source, StringComparison.Ordinal);
         Assert.DoesNotContain(".DropSchemaIfExists(", source, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void ColumnGenerationCapturesCompleteProviderOperationsInsideSafeCalls()
+    {
+        // Arrange
+        var generator = CreateOperationGenerator(SafeMigrationScaffoldingMode.Strict);
+        var builder = new IndentedStringBuilder();
+        var addColumn = new AddColumnOperation
+        {
+            Name = "caption",
+            Table = "items",
+            ClrType = typeof(string),
+            ColumnType = "varchar(200)",
+            MaxLength = 200,
+            IsNullable = false,
+        };
+
+        addColumn["Provider:Facet"] = "value";
+
+        var alterColumn = new AlterColumnOperation
+        {
+            Name = "caption",
+            Table = "items",
+            ClrType = typeof(string),
+            ColumnType = "varchar(400)",
+            MaxLength = 400,
+            IsNullable = false,
+            OldColumn = new AddColumnOperation
+            {
+                Name = "caption",
+                Table = "items",
+                ClrType = typeof(string),
+                ColumnType = "varchar(200)",
+                MaxLength = 200,
+                IsNullable = false,
+            },
+        };
+
+        // Act
+        generator.Generate("migrationBuilder", [addColumn, alterColumn], builder);
+        var source = builder.ToString();
+
+        // Assert
+        Assert.Contains("migrationBuilder.AddColumnIfNotExistsFromModel(", source, StringComparison.Ordinal);
+        Assert.Contains(
+            "operationFactory: static operationBuilder => operationBuilder.AddColumn<string>(",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(".Annotation(\"Provider:Facet\", \"value\")", source, StringComparison.Ordinal);
+        Assert.Contains("migrationBuilder.AlterColumnIfDifferentFromModel(", source, StringComparison.Ordinal);
+        Assert.Contains("SafeMigrationPolicy.RepairIfSafe", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("migrationBuilder.AddColumn<string>(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("migrationBuilder.AlterColumn<string>(", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ProviderAdapter_AllowsCertifiedDatabaseDefaultScaffolding()
+    {
+        // Arrange
+        var generator = CreateOperationGenerator(
+            SafeMigrationScaffoldingMode.Strict,
+            providerOperationAdapters: [new TestProviderOperationAdapter()]);
+        var builder = new IndentedStringBuilder();
+        var operation = new AlterDatabaseOperation { Collation = "utf8mb4_bin" };
+
+        // Act
+        generator.Generate("migrationBuilder", [operation], builder);
+
+        // Assert
+        Assert.Contains("migrationBuilder.AlterDatabase(", builder.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ProviderAdapter_AllowsAnnotatedIndexAndDropColumnScaffolding()
+    {
+        // Arrange
+        var generator = CreateOperationGenerator(
+            SafeMigrationScaffoldingMode.Strict,
+            providerOperationAdapters: [new TestProviderOperationAdapter()]);
+        var builder = new IndentedStringBuilder();
+        var index = new CreateIndexOperation
+        {
+            Name = "ix_items_caption",
+            Table = "items",
+            Columns = ["caption"],
+        };
+        index["Test:ProviderMetadata"] = 1;
+
+        var drop = new DropColumnOperation { Name = "legacy", Table = "items" };
+        drop["Test:ProviderMetadata"] = 1;
+
+        // Act
+        generator.Generate("migrationBuilder", [index, drop], builder);
+
+        // Assert
+        var source = builder.ToString();
+
+        Assert.Contains("migrationBuilder.CreateIndexIfNotExistsFromModel(", source, StringComparison.Ordinal);
+        Assert.Contains("migrationBuilder.DropColumnIfExists(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("migrationBuilder.CreateIndex(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("migrationBuilder.DropColumn(", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MultipleProviderAdapters_RejectBeforeScaffolding()
+    {
+        // Arrange
+        ISafeMigrationProviderOperationAdapter[] adapters =
+        [
+            new TestProviderOperationAdapter(),
+            new TestProviderOperationAdapter(),
+        ];
+
+        // Act
+        var exception = Record.Exception(() => CreateOperationGenerator(
+            SafeMigrationScaffoldingMode.Strict,
+            providerOperationAdapters: adapters));
+
+        // Assert
+        var invalidOperation = Assert.IsType<InvalidOperationException>(exception);
+
+        Assert.Contains("at most one provider operation adapter", invalidOperation.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void GeneratedColumnCapturePreservesTargetAndOldProviderAnnotations()
+    {
+        // Arrange
+        var builder = new MigrationBuilder("test");
+
+        // Act
+        _ = builder.AlterColumnIfDifferentFromModel(
+            operationBuilder => operationBuilder
+                .AlterColumn<string>(
+                    name: "caption",
+                    table: "items",
+                    type: "varchar(400)",
+                    maxLength: 400,
+                    nullable: false,
+                    oldClrType: typeof(string),
+                    oldType: "varchar(200)",
+                    oldMaxLength: 200)
+                .Annotation("Provider:Target", "target")
+                .OldAnnotation("Provider:Old", "old"));
+
+        // Assert
+        var operation = Assert.IsType<SafeMigrationOperation>(Assert.Single(builder.Operations));
+        var intent = Assert.IsType<AlterColumnIntent>(operation.Intent);
+
+        Assert.Equal("target", Assert.Single(intent.Definition.ProviderAnnotations).Value);
+        Assert.Equal("old", Assert.Single(intent.OldDefinition!.ProviderAnnotations).Value);
+        Assert.Equal(SafeMigrationPolicy.RepairIfSafe, operation.Policy);
+    }
+
+    [Fact]
+    public void GeneratedColumnCapture_RejectsCallbackWithoutAnOperation()
+    {
+        // Arrange
+        var builder = new MigrationBuilder("test");
+
+        // Act
+        var exception = Record.Exception(() => builder.AddColumnIfNotExistsFromModel(
+            static _ => { }));
+
+        // Assert
+        Assert.IsType<InvalidOperationException>(exception);
+        Assert.Empty(builder.Operations);
+    }
+
+    [Fact]
+    public void GeneratedColumnCapture_RejectsCallbackWithTheWrongOperationType()
+    {
+        // Arrange
+        var builder = new MigrationBuilder("test");
+
+        // Act
+        var exception = Record.Exception(() => builder.AddColumnIfNotExistsFromModel(
+            static builder => builder.DropColumn("legacy", "items")));
+
+        // Assert
+        Assert.IsType<InvalidOperationException>(exception);
+        Assert.Empty(builder.Operations);
+    }
+
+    [Fact]
+    public void GeneratedColumnCapture_RejectsCallbackWithMultipleOperations()
+    {
+        // Arrange
+        var builder = new MigrationBuilder("test");
+
+        // Act
+        var exception = Record.Exception(() => builder.AddColumnIfNotExistsFromModel(
+            static builder =>
+            {
+                builder.AddColumn<int>("left", "items", nullable: false);
+                builder.AddColumn<int>("right", "items", nullable: false);
+            }));
+
+        // Assert
+        Assert.IsType<InvalidOperationException>(exception);
+        Assert.Empty(builder.Operations);
+    }
+
+    [Fact]
+    public void GeneratedColumnCapture_RollsBackAnOperationWhenTheCallbackThrows()
+    {
+        // Arrange
+        var builder = new MigrationBuilder("test");
+
+        // Act
+        var exception = Record.Exception(() => builder.AddColumnIfNotExistsFromModel(
+            static migrationBuilder =>
+            {
+                migrationBuilder.AddColumn<int>("caption", "items", nullable: false);
+
+                throw new InvalidOperationException("callback failed");
+            }));
+
+        // Assert
+        var invalidOperation = Assert.IsType<InvalidOperationException>(exception);
+        Assert.Equal("callback failed", invalidOperation.Message);
+        Assert.Empty(builder.Operations);
+    }
+
+    [Fact]
+    public void DropAndRenameGenerationUsesClosedSafeOperations()
+    {
+        // Arrange
+        var generator = CreateOperationGenerator(SafeMigrationScaffoldingMode.Strict);
+        var builder = new IndentedStringBuilder();
+        MigrationOperation[] operations =
+        [
+            new DropColumnOperation { Name = "legacy", Table = "items" },
+            new RenameColumnOperation { Name = "caption", Table = "items", NewName = "name" },
+            new RenameTableOperation { Name = "items", NewName = "products" },
+            new RenameIndexOperation
+            {
+                Name = "ix_items_caption",
+                Table = "items",
+                NewName = "ix_items_name",
+            },
+        ];
+
+        // Act
+        generator.Generate("migrationBuilder", operations, builder);
+        var source = builder.ToString();
+
+        // Assert
+        Assert.Contains(".DropColumnIfExists(", source, StringComparison.Ordinal);
+        Assert.Contains(".RenameColumnIfExists(", source, StringComparison.Ordinal);
+        Assert.Contains(".RenameTableIfExists(", source, StringComparison.Ordinal);
+        Assert.Contains(".RenameIndexIfExists(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("migrationBuilder.DropColumn(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("migrationBuilder.RenameColumn(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("migrationBuilder.RenameTable(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("migrationBuilder.RenameIndex(", source, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [MemberData(nameof(UnsupportedScaffoldingOperations))]
+    public void EnabledScaffoldingRejectsOperationsWithoutSafeContracts(
+        MigrationOperation operation
+    )
+    {
+        // Arrange
+        var generator = CreateOperationGenerator(SafeMigrationScaffoldingMode.Strict);
+        var builder = new IndentedStringBuilder();
+
+        // Act
+        var exception = Record.Exception(() =>
+            generator.Generate("migrationBuilder", [operation], builder));
+
+        // Assert
+        var unsupported = Assert.IsType<NotSupportedException>(exception);
+
+        Assert.Contains(operation.GetType().FullName!, unsupported.Message, StringComparison.Ordinal);
+        Assert.Empty(builder.ToString());
+    }
+
+    [Fact]
+    public void EnabledScaffolding_DoesNotPublishAValidPrefixBeforeAnUnsupportedOperation()
+    {
+        // Arrange
+        var generator = CreateOperationGenerator(SafeMigrationScaffoldingMode.Strict);
+        var builder = new IndentedStringBuilder();
+        MigrationOperation[] operations =
+        [
+            new DropColumnOperation { Name = "legacy", Table = "items" },
+            new SqlOperation { Sql = "DELETE FROM items;" },
+        ];
+
+        // Act
+        var exception = Record.Exception(() => generator.Generate("migrationBuilder", operations, builder));
+
+        // Assert
+        var unsupported = Assert.IsType<NotSupportedException>(exception);
+
+        Assert.Contains(typeof(SqlOperation).FullName!, unsupported.Message, StringComparison.Ordinal);
+        Assert.Empty(builder.ToString());
+    }
+
+    [Fact]
+    public void GeneratorOverridesEveryEfCoreTypedOperationHandler()
+    {
+        // Arrange
+        var baseOperationTypes = typeof(CSharpMigrationOperationGenerator)
+            .GetMethods(BindingFlags.Instance | BindingFlags.NonPublic)
+            .Where(static method => method.Name == "Generate")
+            .Where(static method => method.GetParameters() is
+                [
+                    { ParameterType: var operationType },
+                    { ParameterType: var builderType },
+                ]
+                && typeof(MigrationOperation).IsAssignableFrom(operationType)
+                && builderType == typeof(IndentedStringBuilder))
+            .Select(static method => method.GetParameters()[0].ParameterType)
+            .OrderBy(static type => type.FullName, StringComparer.Ordinal)
+            .ToArray();
+
+        // Act
+        var overriddenOperationTypes = typeof(SafeMigrationCSharpMigrationOperationGenerator)
+            .GetMethods(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+            .Where(static method => method.Name == "Generate")
+            .Where(static method => method.GetParameters() is
+                [
+                    { ParameterType: var operationType },
+                    { ParameterType: var builderType },
+                ]
+                && typeof(MigrationOperation).IsAssignableFrom(operationType)
+                && builderType == typeof(IndentedStringBuilder))
+            .Select(static method => method.GetParameters()[0].ParameterType)
+            .OrderBy(static type => type.FullName, StringComparer.Ordinal)
+            .ToArray();
+
+        // Assert
+        Assert.Equal(baseOperationTypes, overriddenOperationTypes);
+    }
+
+    public static TheoryData<MigrationOperation> UnsupportedScaffoldingOperations => new()
+    {
+        new AlterDatabaseOperation(),
+        new AlterTableOperation { Name = "items" },
+        new CreateSequenceOperation { Name = "item_ids" },
+        new AlterSequenceOperation { Name = "item_ids" },
+        new DropSequenceOperation { Name = "item_ids" },
+        new RenameSequenceOperation { Name = "item_ids", NewName = "product_ids" },
+        new RestartSequenceOperation { Name = "item_ids", StartValue = 42 },
+        new SqlOperation { Sql = "SELECT 1;" },
+    };
 
     [Theory]
     [InlineData(true, ".DropIndexIfExists(")]
@@ -248,6 +670,30 @@ public sealed class SafeMigrationScaffoldingTests
         Assert.Contains("descending: [false, true]", source, StringComparison.Ordinal);
         Assert.DoesNotContain("migrationBuilder.CreateIndex(", source, StringComparison.Ordinal);
         Assert.DoesNotContain("new[]", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void IndexGeneration_RejectsUnprojectedProviderMetadataBeforeEmittingSource()
+    {
+        // Arrange
+        var generator = CreateOperationGenerator(SafeMigrationScaffoldingMode.Strict);
+        var builder = new IndentedStringBuilder();
+        var operation = new CreateIndexOperation
+        {
+            Name = "ix_users_email",
+            Table = "users",
+            Columns = ["email"],
+        };
+
+        operation["Provider:Unknown"] = "value";
+
+        // Act
+        var exception = Record.Exception(() => generator.Generate("migrationBuilder", [operation], builder));
+
+        // Assert
+        var unsupported = Assert.IsType<NotSupportedException>(exception);
+        Assert.Contains(typeof(CreateIndexOperation).FullName!, unsupported.Message, StringComparison.Ordinal);
+        Assert.Empty(builder.ToString());
     }
 
     [Fact]
@@ -499,7 +945,7 @@ public sealed class SafeMigrationScaffoldingTests
         var exception = Assert.Throws<InvalidOperationException>(() =>
             generator.Generate("migrationBuilder", [operation], builder));
 
-        Assert.Equal("migrationBuilder", builder.ToString());
+        Assert.Empty(builder.ToString());
         Assert.Contains("ck_users_reference", exception.Message, StringComparison.Ordinal);
         Assert.Contains("trailing_token", exception.Message, StringComparison.Ordinal);
     }
@@ -522,7 +968,7 @@ public sealed class SafeMigrationScaffoldingTests
         var exception = Assert.Throws<InvalidOperationException>(() =>
             generator.Generate("migrationBuilder", [operation], builder));
 
-        Assert.Equal("migrationBuilder", builder.ToString());
+        Assert.Empty(builder.ToString());
         Assert.Contains("Provider:PhysicalOption", exception.Message, StringComparison.Ordinal);
         Assert.Contains("lossy constraint contract", exception.Message, StringComparison.Ordinal);
     }
@@ -544,7 +990,7 @@ public sealed class SafeMigrationScaffoldingTests
         var exception = Assert.Throws<InvalidOperationException>(() =>
             generator.Generate("migrationBuilder", [operation], builder));
 
-        Assert.Equal("migrationBuilder", builder.ToString());
+        Assert.Empty(builder.ToString());
         Assert.Contains("does not identify its principal columns", exception.Message, StringComparison.Ordinal);
     }
 
@@ -563,7 +1009,7 @@ public sealed class SafeMigrationScaffoldingTests
         var exception = Assert.Throws<InvalidOperationException>(() =>
             generator.Generate("migrationBuilder", [operation], builder));
 
-        Assert.Equal("migrationBuilder", builder.ToString());
+        Assert.Empty(builder.ToString());
         Assert.Contains("incomplete key-column contract", exception.Message, StringComparison.Ordinal);
     }
 
@@ -585,7 +1031,7 @@ public sealed class SafeMigrationScaffoldingTests
         var exception = Assert.Throws<InvalidOperationException>(() =>
             generator.Generate("migrationBuilder", [operation], builder));
 
-        Assert.Equal("migrationBuilder", builder.ToString());
+        Assert.Empty(builder.ToString());
         Assert.Contains("undefined delete referential action", exception.Message, StringComparison.Ordinal);
     }
 
@@ -606,7 +1052,7 @@ public sealed class SafeMigrationScaffoldingTests
         var exception = Assert.Throws<InvalidOperationException>(() =>
             generator.Generate("migrationBuilder", [operation], builder));
 
-        Assert.Equal("migrationBuilder", builder.ToString());
+        Assert.Empty(builder.ToString());
         Assert.Contains("different dependent and principal column counts", exception.Message, StringComparison.Ordinal);
     }
 
@@ -1279,7 +1725,8 @@ public sealed class SafeMigrationScaffoldingTests
         SafeMigrationScaffoldingMode mode,
         bool isEnabled = true,
         SafeMigrationPolicy legacyConvergencePolicy = SafeMigrationPolicy.ThrowIfDifferent,
-        IEnumerable<ISafeMigrationCreateIndexScaffoldingProjector>? createIndexProjectors = null
+        IEnumerable<ISafeMigrationCreateIndexScaffoldingProjector>? createIndexProjectors = null,
+        IEnumerable<ISafeMigrationProviderOperationAdapter>? providerOperationAdapters = null
     )
     {
         var services = new ServiceCollection();
@@ -1292,8 +1739,40 @@ public sealed class SafeMigrationScaffoldingTests
         return new SafeMigrationCSharpMigrationOperationGenerator(
             dependencies,
             new SafeMigrationScaffoldingConfiguration(isEnabled, mode, legacyConvergencePolicy),
-            createIndexProjectors ?? []);
+            createIndexProjectors ?? [],
+            providerOperationAdapters ?? []);
     }
+
+    private sealed class TestProviderOperationAdapter : ISafeMigrationProviderOperationAdapter
+    {
+        public bool TryNormalize(
+            MigrationOperation operation,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(true)]
+            out SafeMigrationOperation? safeOperation
+        )
+        {
+            safeOperation = operation switch
+            {
+                CreateIndexOperation index when index["Test:ProviderMetadata"] is not null =>
+                    new SafeMigrationOperation(
+                        new EnsureIndexIntent(SafeMigrationExpectedDefinitionFactory.From(index)),
+                        SafeMigrationPolicy.ThrowIfDifferent),
+                DropColumnOperation column when column["Test:ProviderMetadata"] is not null =>
+                    new SafeMigrationOperation(
+                        new DropColumnIntent(column.Name, column.Table, column.Schema),
+                        SafeMigrationPolicy.ThrowIfDifferent),
+                _ => null,
+            };
+
+            return safeOperation is not null;
+        }
+
+        public bool IsCertifiedPassthrough(
+            MigrationOperation operation
+        ) => operation is AlterDatabaseOperation;
+    }
+
+    private sealed class UnknownMigrationOperation : MigrationOperation { }
 
     private static SafeMigrationCSharpMigrationsGenerator CreateMigrationsGenerator(
         IMigrationsCodeGenerator providerGenerator,

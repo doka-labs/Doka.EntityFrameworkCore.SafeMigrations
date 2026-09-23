@@ -145,6 +145,7 @@ public sealed class PostgreSqlServiceCompositionTests
     [Fact]
     public void RuntimeSqlGenerator_ConsumesLeadingDesignTimeServicesGuard()
     {
+        // Arrange
         var options = new DbContextOptionsBuilder<SafeMigrationDbContext>();
         options.UseNpgsql("Host=localhost;Database=composition;Username=test;Password=test");
         ((DbContextOptionsBuilder)options).UsePostgreSqlSafeMigrations();
@@ -152,32 +153,101 @@ public sealed class PostgreSqlServiceCompositionTests
         using var context = new SafeMigrationDbContext(options.Options);
         var generator = context.GetService<IMigrationsSqlGenerator>();
 
+        // Act
         var commands = generator.Generate(
             [new SafeMigrationDesignTimeServicesRequiredOperation()],
             context.Model);
 
+        // Assert
         Assert.Empty(commands);
     }
 
     [Fact]
     public void RuntimeSqlGenerator_RejectsMisplacedDesignTimeServicesGuard()
     {
+        // Arrange
         var options = new DbContextOptionsBuilder<SafeMigrationDbContext>();
         options.UseNpgsql("Host=localhost;Database=composition;Username=test;Password=test");
         ((DbContextOptionsBuilder)options).UsePostgreSqlSafeMigrations();
 
         using var context = new SafeMigrationDbContext(options.Options);
         var generator = context.GetService<IMigrationsSqlGenerator>();
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureSchemaExists("application");
+
         MigrationOperation[] operations =
         [
-            new SqlOperation { Sql = "SELECT 1;" },
+            .. builder.Operations,
             new SafeMigrationDesignTimeServicesRequiredOperation(),
         ];
 
-        var exception = Assert.Throws<InvalidOperationException>(() =>
+        // Act
+        var exception = Record.Exception(() =>
             generator.Generate(operations, context.Model));
 
-        Assert.Contains("must be the first migration operation", exception.Message, StringComparison.Ordinal);
+        // Assert
+        var invalidOperation = Assert.IsType<InvalidOperationException>(exception);
+
+        Assert.Contains("must be the first migration operation", invalidOperation.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RuntimeSqlGenerator_PassesEfHistoryBootstrapSqlToTheProviderWithoutAModel()
+    {
+        // Arrange
+        using var context = CreateRuntimeContext();
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+        var historySql = context
+            .GetService<IHistoryRepository>()
+            .GetCreateIfNotExistsScript();
+
+        // Act
+        var commands = generator.Generate([new SqlOperation { Sql = historySql }], model: null);
+        var command = commands.Single();
+
+        // Assert
+        Assert.Single(commands);
+        Assert.Contains("CREATE TABLE IF NOT EXISTS", historySql, StringComparison.Ordinal);
+        Assert.DoesNotContain("SafeMigrations", historySql, StringComparison.Ordinal);
+        Assert.Equal(historySql.Trim(), command.CommandText.Trim());
+    }
+
+    [Fact]
+    public void DirectlyConstructedGenerator_WithBuiltInBaselineRecognizesExactHistoryBootstrap()
+    {
+        // Arrange
+        using var context = CreateRuntimeContext();
+        var generator = new PostgreSqlSafeMigrationsSqlGenerator(
+            context.GetService<IPostgreSqlSafeMigrationsBaselineGenerator>(),
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
+        var historySql = context.GetService<IHistoryRepository>().GetCreateIfNotExistsScript();
+
+        // Act
+        var commands = generator.Generate([new SqlOperation { Sql = historySql }], model: null);
+
+        // Assert
+        var command = Assert.Single(commands);
+
+        Assert.Equal(historySql.Trim(), command.CommandText.Trim());
+    }
+
+    [Fact]
+    public void RuntimeSqlGenerator_PassesArbitraryModelLessSqlToTheProvider()
+    {
+        // Arrange
+        using var context = CreateRuntimeContext();
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+
+        // Act
+        var commands = generator.Generate(
+            [new SqlOperation { Sql = "SELECT 1;" }],
+            model: null);
+
+        // Assert
+        var command = Assert.Single(commands);
+
+        Assert.Equal("SELECT 1;", command.CommandText.Trim());
     }
 
     [Fact]
@@ -219,8 +289,9 @@ public sealed class PostgreSqlServiceCompositionTests
     }
 
     [Fact]
-    public void CustomBaselineGeneratorReceivesOrdinaryAndSafeMigrationBaselines()
+    public void CustomBaselineGeneratorRendersRawSqlBeforeASafeOperation()
     {
+        // Arrange
         var options = new DbContextOptionsBuilder<SafeMigrationDbContext>();
         options.UseNpgsql("Host=localhost;Database=composition;Username=test;Password=test");
         ((DbContextOptionsBuilder)options)
@@ -236,16 +307,15 @@ public sealed class PostgreSqlServiceCompositionTests
             SafeMigrationPolicy.ThrowIfDifferent);
 
         RecordingNpgsqlMigrationsSqlGenerator.Clear();
+
+        // Act
         var commands = generator.Generate(migrationBuilder.Operations, context.Model);
 
-        Assert.NotEmpty(commands);
-        Assert.Contains(
-            RecordingNpgsqlMigrationsSqlGenerator.ObservedOperationTypes,
-            type => type == typeof(SqlOperation));
-        Assert.Contains(
-            RecordingNpgsqlMigrationsSqlGenerator.ObservedOperationTypes,
-            type => type == typeof(AddColumnOperation));
-        Assert.Contains(commands, command => command.CommandText.StartsWith("DO $doka_", StringComparison.Ordinal));
+        // Assert
+        Assert.Equal(2, commands.Count);
+        Assert.Equal("SELECT 1;", commands[0].CommandText.Trim());
+        Assert.StartsWith("DO $doka_", commands[1].CommandText, StringComparison.Ordinal);
+        Assert.NotEmpty(RecordingNpgsqlMigrationsSqlGenerator.ObservedOperationTypes);
     }
 
     [Fact]

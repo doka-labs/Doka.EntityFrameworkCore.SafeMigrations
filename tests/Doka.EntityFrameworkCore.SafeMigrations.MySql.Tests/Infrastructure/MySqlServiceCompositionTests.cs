@@ -115,6 +115,7 @@ public sealed class MySqlServiceCompositionTests
     [Fact]
     public void RuntimeSqlGenerator_ConsumesLeadingDesignTimeServicesGuardWithoutChangingNeighborCommands()
     {
+        // Arrange
         var options = new DbContextOptionsBuilder<DbContext>();
         options.UseMySql(
             "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test",
@@ -123,25 +124,56 @@ public sealed class MySqlServiceCompositionTests
 
         using var context = new DbContext(options.Options);
         var generator = context.GetService<IMigrationsSqlGenerator>();
+        var alterDatabase = new AlterDatabaseOperation { Collation = "utf8mb4_unicode_ci" };
+        alterDatabase["Doka:MySql:CharSet"] = "utf8mb4";
 
         MigrationOperation[] operations =
         [
             new SafeMigrationDesignTimeServicesRequiredOperation(),
-            new SqlOperation { Sql = "SELECT 1;" },
-            new SqlOperation { Sql = "SELECT 2;" },
+            alterDatabase,
         ];
 
+        // Act
         var commands = generator.Generate(operations, context.Model);
 
-        Assert.Collection(
-            commands,
-            command => Assert.Equal("SELECT 1;", command.CommandText.Trim()),
-            command => Assert.Equal("SELECT 2;", command.CommandText.Trim()));
+        // Assert
+        var command = Assert.Single(commands);
+        Assert.Contains("ALTER DATABASE", command.CommandText, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("DO 0", command.CommandText, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RuntimeSqlGenerator_LeavesOrdinaryDropColumnProviderOwned()
+    {
+        // Arrange
+        var options = new DbContextOptionsBuilder<DbContext>();
+        options.UseMySql(
+            "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test",
+            MySqlServerVersion.MySql(new Version(8, 4, 11)));
+        ((DbContextOptionsBuilder)options).UseMySqlSafeMigrations();
+
+        using var context = new DbContext(options.Options);
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+        var operation = new DropColumnOperation
+        {
+            Table = "historical_drop",
+            Name = "obsolete",
+        };
+
+        // Act
+        var commands = generator.Generate([operation], context.Model);
+
+        // Assert
+        var command = Assert.Single(commands);
+
+        Assert.Contains("DROP COLUMN `obsolete`", command.CommandText, StringComparison.Ordinal);
+        Assert.DoesNotContain("doka_sm", command.CommandText, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
     public void RuntimeSqlGenerator_RejectsMisplacedDesignTimeServicesGuard()
     {
+        // Arrange
         var options = new DbContextOptionsBuilder<DbContext>();
         options.UseMySql(
             "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test",
@@ -150,19 +182,77 @@ public sealed class MySqlServiceCompositionTests
 
         using var context = new DbContext(options.Options);
         var generator = context.GetService<IMigrationsSqlGenerator>();
+        var alterDatabase = new AlterDatabaseOperation { Collation = "utf8mb4_unicode_ci" };
+        alterDatabase["Doka:MySql:CharSet"] = "utf8mb4";
+
         MigrationOperation[] operations =
         [
-            new SqlOperation { Sql = "SELECT 1;" },
+            alterDatabase,
             new SafeMigrationDesignTimeServicesRequiredOperation(),
         ];
 
-        var exception = Assert.Throws<MySqlMigrationOperationHandlerException>(() =>
+        // Act
+        var exception = Record.Exception(() =>
             generator.Generate(operations, context.Model));
+
+        // Assert
+        var handlerException = Assert.IsType<MySqlMigrationOperationHandlerException>(exception);
 
         Assert.Contains(
             "must be the first migration operation",
-            exception.InnerException?.Message,
+            handlerException.InnerException?.Message,
             StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RuntimeSqlGenerator_PassesEfHistoryBootstrapSqlToTheProviderWithoutAModel()
+    {
+        // Arrange
+        var options = new DbContextOptionsBuilder<DbContext>();
+        options.UseMySql(
+            "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test",
+            MySqlServerVersion.MySql(new Version(8, 4, 11)));
+        ((DbContextOptionsBuilder)options).UseMySqlSafeMigrations();
+
+        using var context = new DbContext(options.Options);
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+        var historySql = context
+            .GetService<IHistoryRepository>()
+            .GetCreateIfNotExistsScript();
+
+        // Act
+        var commands = generator.Generate([new SqlOperation { Sql = historySql }], model: null);
+        var command = commands.Single();
+
+        // Assert
+        Assert.Single(commands);
+        Assert.Contains("CREATE TABLE IF NOT EXISTS", historySql, StringComparison.Ordinal);
+        Assert.DoesNotContain("SafeMigrations", historySql, StringComparison.Ordinal);
+        Assert.Equal(historySql.Trim(), command.CommandText.Trim());
+    }
+
+    [Fact]
+    public void RuntimeSqlGenerator_PassesArbitraryModelLessSqlToTheProvider()
+    {
+        // Arrange
+        var options = new DbContextOptionsBuilder<DbContext>();
+        options.UseMySql(
+            "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test",
+            MySqlServerVersion.MySql(new Version(8, 4, 11)));
+        ((DbContextOptionsBuilder)options).UseMySqlSafeMigrations();
+
+        using var context = new DbContext(options.Options);
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+
+        // Act
+        var commands = generator.Generate(
+            [new SqlOperation { Sql = "SELECT 1;" }],
+            model: null);
+
+        // Assert
+        var command = Assert.Single(commands);
+
+        Assert.Equal("SELECT 1;", command.CommandText.Trim());
     }
 
     [Fact]

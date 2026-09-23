@@ -16,12 +16,13 @@ public enum SafeMigrationReportStatus
     /// <summary>No migration operations were supplied or remain pending.</summary>
     NoOperations = 0,
 
-    /// <summary>Every safe operation is accepted and no provider-owned operation is present.</summary>
+    /// <summary>Every supplied operation is safe and accepted.</summary>
     Ready = 1,
 
     /// <summary>
-    /// Safe operations are accepted, while ordinary provider-owned EF operations
-    /// are listed but cannot be read-only classified by SafeMigrations.
+    /// Safe operations are accepted, but at least one ordinary EF or provider
+    /// operation was not analyzed by SafeMigrations. This status does not
+    /// certify the effects of that operation.
     /// </summary>
     ReadyWithProviderOperations = 2,
 
@@ -37,7 +38,7 @@ public sealed class SafeMigrationAssessment
     /// <param name="operationType">The exact CLR migration-operation type name.</param>
     /// <param name="isSafeOperation">Whether the assessment represents a SafeMigrations operation.</param>
     /// <param name="operationKind">The SafeMigrations operation family.</param>
-    /// <param name="objectName">The database object name, or null for provider-owned operations.</param>
+    /// <param name="objectName">The database object name, or null for a non-safe operation.</param>
     /// <param name="observedState">The provider-classified live state.</param>
     /// <param name="action">The provider-neutral action selected for the operation.</param>
     /// <param name="postconditionSatisfied">Whether the operation's final target condition currently holds.</param>
@@ -74,7 +75,7 @@ public sealed class SafeMigrationAssessment
     /// <param name="operationType">The exact CLR migration-operation type name.</param>
     /// <param name="isSafeOperation">Whether the assessment represents a SafeMigrations operation.</param>
     /// <param name="operationKind">The SafeMigrations operation family.</param>
-    /// <param name="objectName">The database object name, or null for provider-owned operations.</param>
+    /// <param name="objectName">The database object name, or null for a non-safe operation.</param>
     /// <param name="observedState">The provider-classified live state.</param>
     /// <param name="action">The provider-neutral action selected for the operation.</param>
     /// <param name="postconditionSatisfied">Whether the operation's final target condition currently holds.</param>

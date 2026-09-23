@@ -16,14 +16,13 @@ The MySQL/MariaDB package requires Doka 10.4.2 or a compatible later 10.4 patch
 release and rejects the next minor line. This boundary avoids an exact
 transitive pin without claiming compatibility across an unqualified behavioral
 SPI revision. CI does not build Doka and never uses a cross-repository
-ProjectReference. The committed lockfiles were regenerated from the public
-Doka 10.4.2 package. Its commandless operation result, retained typed migration
-metadata, and database collation contract were rechecked against signed tag
-`v10.4.2`, commit `b2408bfbe29517d742734d06d848081cdb9e1de0`, on
-2026-09-21. The complete package, engine, tooling, coverage, and performance
-matrix remains the
-SafeMigrations release gate; a local Doka ProjectReference or locally packed
-candidate is not release evidence.
+ProjectReference. The MySQL/MariaDB package lockfile resolves the public
+Doka 10.4.2 package. Its signed release tag identifies source commit
+`b2408bfbe29517d742734d06d848081cdb9e1de0`. The complete package, engine,
+tooling, coverage, and performance matrix remains the SafeMigrations release
+gate; a local Doka ProjectReference or locally packed candidate is not release
+evidence.
+
 The remaining declared dependency graph and .NET 10 release metadata were
 rechecked on 2026-09-21. Bounded package ranges describe compatibility. The
 four package-project lockfiles identify the exact dependency graph used to

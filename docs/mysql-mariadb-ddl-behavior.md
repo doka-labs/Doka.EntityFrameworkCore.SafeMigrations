@@ -138,11 +138,15 @@ accepted.
 
 Every schema- or data-bearing safe operation returns exactly one Doka 10.4.0
 scoped migration command. Its bounded fragment list contains ordered setup,
-one body, and reverse-order cleanup. The internal design-time-services guard
-instead returns Doka's explicit commandless consumed result. A data-reading
-classifier adds setup fragments for lazy state evaluation without adding EF
-command boundaries. This shape reduces executor dispatch while retaining
-independent SQL commands inside the provider-owned scope.
+exactly one guarded provider body, and reverse-order cleanup. The
+single-provider-command case retains the established prepared-statement hot
+path. A multi-command provider transition, such as a non-null backfill followed
+by column DDL, stays behind one decision and receives one final postcondition.
+The internal design-time-services guard instead returns Doka's explicit
+commandless consumed result. A data-reading classifier adds setup fragments for
+lazy state evaluation without adding EF command boundaries. This shape reduces
+executor dispatch while retaining independent SQL commands inside the
+provider-owned scope.
 
 ## Model-managed data
 
@@ -200,6 +204,13 @@ versioned Doka adapter rather than provider-neutral Core; another provider's
 operation with the same EF type remains opaque unless that provider proves its
 own effect.
 
+Multi-command provider baselines retain their command order, but their
+boundaries are combined under one guarded decision and final postcondition.
+If any command also carries provider cleanup fragments, SafeMigrations rejects
+the whole baseline before guarded execution: per-command and failure cleanup
+cannot both be run exactly once with the current command contract. A single
+scoped command retains the provider's cleanup behavior.
+
 ## Automatic legacy column repair
 
 A generated legacy-convergence migration retains `ThrowIfDifferent` unless its
@@ -240,8 +251,14 @@ non-Boolean target, and the reverse `TINYINT(1) -> BIT(1)` remain blocked.
 Doka's typed metadata contract must recognize every provider annotation and
 prove that Guid storage and value-generation metadata are consistent with the
 complete column shape. Existing `NULL` values block a repair to `NOT NULL`
+unless a structurally proven non-null default permits Doka's guarded backfill
 before target DDL. Other store-family, collation, generated-value, row-version,
 and unsupported provider-metadata differences remain fail-closed.
+
+This proof accepts non-null literals and parsed, typed SQL expressions with a
+guaranteed non-null shape, such as a current value or `COALESCE` with a proven
+non-null argument. Raw SQL text, casts, binary arithmetic, and column
+references do not qualify.
 
 MySQL and MariaDB require `MODIFY COLUMN` to carry the complete target column
 definition. SafeMigrations therefore asks Doka to render that complete
@@ -318,12 +335,12 @@ can truncate 16 maximum-length identifiers.
 Automatic scaffolding emits `DropIndexIfExists` for an EF `DropIndex`
 operation. Preflight also recognizes a manually retained ordinary provider
 `DropIndexOperation`. Once the exact table, schema, and index name has an
-accepted drop, a following ordinary column BTREE ensure is projected as
-missing. The live analyzer still proves referenced columns, physical key width,
-and unique-data safety before that projection. Unsupported, data-blocked, and
-prerequisite-missing results are never converted to readiness. A differently
-named semantic index conflict is also retained because dropping the expected
-name cannot remove that object.
+accepted drop, a following ordinary column BTREE ensure is projected
+as missing. The live analyzer still proves referenced columns, physical key
+width, and unique-data safety before that projection. Unsupported,
+data-blocked, and prerequisite-missing results are never converted to
+readiness. A differently named semantic index conflict is also retained because
+dropping the expected name cannot remove that object.
 
 EF represents a drop and a create as ordered migration operations; the
 SafeMigrations projection follows that order without mutating the database
@@ -408,8 +425,8 @@ index and do not block creation under a different name.
 `Cleanup` fragments. SafeMigrations embeds the exact body as UTF-8 hexadecimal
 prepared SQL and carries provider setup and cleanup into its outer scope; it no
 longer lexes or rewrites provider command text. The scope uses one transaction-
-suppression value, matching the single baseline command boundary required by a
-safe intent.
+suppression value across the complete provider-rendered command sequence and
+rejects a sequence with mixed suppression requirements.
 
 For column value generation, `AutoIncrement` is compared against `c.EXTRA`.
 `None` and `ClientGuid` both require the absence of `auto_increment`; the

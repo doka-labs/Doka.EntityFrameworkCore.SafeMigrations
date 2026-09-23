@@ -6,6 +6,7 @@ global using System.Diagnostics.Metrics;
 global using System.Globalization;
 global using System.IO;
 global using System.Linq;
+global using System.Reflection;
 global using System.Security.Cryptography;
 global using System.Text;
 global using System.Text.Json;

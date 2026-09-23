@@ -474,6 +474,52 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     }
 
     [Fact]
+    public void AcceptedMissingColumnProjectsFollowingIndexAsMissing()
+    {
+        // Arrange
+        var projection = new SafeMigrationPreflightProjection();
+        ObserveAccepted(
+            projection,
+            new EnsureColumnIntent("items", Column("category_id")),
+            SafeMigrationObservedState.Missing);
+
+        // Act
+        var analysis = projection.Project(
+            new SafeMigrationOperation(
+                new EnsureIndexIntent(
+                    new ExpectedIndexDefinition(
+                        "ix_items_category_id",
+                        "items",
+                        [new ExpectedIndexKeyDefinition(column: "category_id")])),
+                SafeMigrationPolicy.ThrowIfDifferent),
+            Live(SafeMigrationObservedState.PrerequisiteMissing));
+
+        // Assert
+        Assert.Equal(SafeMigrationObservedState.Missing, analysis.ObservedState);
+    }
+
+    [Fact]
+    public void AcceptedTargetDropProjectsFollowingColumnRenameAsMatching()
+    {
+        // Arrange
+        var projection = new SafeMigrationPreflightProjection();
+        ObserveAccepted(
+            projection,
+            new DropColumnIntent("legacy", "items"),
+            SafeMigrationObservedState.Matching);
+
+        // Act
+        var analysis = projection.Project(
+            new SafeMigrationOperation(
+                new RenameColumnIntent("replacement", "items", "legacy"),
+                SafeMigrationPolicy.ThrowIfDifferent),
+            Live(SafeMigrationObservedState.Different));
+
+        // Assert
+        Assert.Equal(SafeMigrationObservedState.Matching, analysis.ObservedState);
+    }
+
+    [Fact]
     public void ExistingTableRenameInvalidatesPreBatchStructureEvidence()
     {
         var projection = new SafeMigrationPreflightProjection();

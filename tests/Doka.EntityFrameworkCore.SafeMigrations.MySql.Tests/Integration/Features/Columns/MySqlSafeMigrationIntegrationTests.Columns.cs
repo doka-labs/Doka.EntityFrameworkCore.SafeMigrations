@@ -3,8 +3,9 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 public sealed partial class MySqlSafeMigrationIntegrationTests
 {
     [Fact]
-    public async Task OrdinaryNullableTimestamp_RequiresAndExecutesExplicitSqlBackfill()
+    public async Task OrdinaryNullableTimestampWithoutBackfill_IsRejectedBeforeDdl()
     {
+        // Arrange
         var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -29,19 +30,108 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         var generator = context.GetService<IMigrationsSqlGenerator>();
 
-        var exception = Assert.Throws<InvalidOperationException>(() => generator.Generate([operation], context.Model));
+        // Act
+        var exception = Record.Exception(() =>
+            generator.Generate([operation], context.Model));
 
-        Assert.Contains("explicit DefaultValue or DefaultValueSql", exception.Message, StringComparison.Ordinal);
+        // Assert
+        var providerException = Assert.IsType<InvalidOperationException>(exception);
+
+        Assert.Contains(
+            "explicit DefaultValue or DefaultValueSql",
+            providerException.Message,
+            StringComparison.Ordinal);
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM `timestamp_repair` WHERE `occurred_at` IS NULL;"));
+    }
 
-        operation.DefaultValueSql = "CURRENT_TIMESTAMP(6)";
+    [Fact]
+    public async Task OrdinaryAlterColumnRemainsProviderOwnedDuringPreflight()
+    {
+        // Arrange
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `historical_alter` (`id` int NOT NULL, `caption` varchar(100) NULL);");
 
-        await ExecuteOperationsAsync(context, [operation]);
+        await using var context = CreateContext(connectionString);
+        var operation = new AlterColumnOperation
+        {
+            Table = "historical_alter",
+            Name = "caption",
+            ClrType = typeof(string),
+            ColumnType = "varchar(200)",
+            IsNullable = true,
+            OldColumn =
+            {
+                ClrType = typeof(string),
+                ColumnType = "varchar(100)",
+                IsNullable = true,
+            },
+        };
 
+        // Act
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(context, [operation], new SafeMigrationRunOptions("historical-alter"));
+
+        // Assert
+        var assessment = Assert.Single(report.Assessments);
+
+        Assert.Equal(SafeMigrationReportStatus.ReadyWithProviderOperations, report.Status);
+        Assert.False(assessment.IsSafeOperation);
+        Assert.Equal("provider_owned_not_analyzed", assessment.Code);
+        Assert.Equal(
+            100,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS "
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'historical_alter' "
+                + "AND COLUMN_NAME = 'caption';"));
+    }
+
+    [Fact]
+    public async Task OrdinaryNullableTimestampWithBackfill_ConvergesTheColumn()
+    {
+        // Arrange
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `timestamp_repair` (`id` int NOT NULL, `occurred_at` timestamp(6) NULL); "
+            + "INSERT INTO `timestamp_repair` (`id`, `occurred_at`) VALUES (1, NULL);");
+
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.AlterColumnIfDifferent(
+            "timestamp_repair",
+            new ExpectedColumnDefinition(
+                "occurred_at",
+                typeof(DateTime),
+                isNullable: false,
+                storeType: "timestamp(6)",
+                defaultValue: SafeMigrationDefaultValue.Sql(
+                    SafeMigrationSql.Current(SafeMigrationSqlCurrentValue.Timestamp, precision: 6))),
+            new ExpectedColumnDefinition(
+                "occurred_at",
+                typeof(DateTime),
+                isNullable: true,
+                storeType: "timestamp(6)"),
+            SafeMigrationPolicy.RepairIfSafe);
+
+        // Act
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("timestamp-backfill"));
+
+        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations);
+
+        // Assert
+        Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
+        Assert.Equal(SafeMigrationAction.Repair, Assert.Single(report.Assessments).Action);
         Assert.Equal(
             0,
             await ScalarIntAsync(
@@ -53,6 +143,60 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 connectionString,
                 "SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'timestamp_repair' "
+                + "AND COLUMN_NAME = 'occurred_at';"));
+    }
+
+    [Fact]
+    public async Task OrdinaryNullableTimestampWithNullSqlBackfill_IsRejectedBeforeDdl()
+    {
+        // Arrange
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `timestamp_null_backfill` (`id` int NOT NULL, `occurred_at` timestamp(6) NULL); "
+            + "INSERT INTO `timestamp_null_backfill` (`id`, `occurred_at`) VALUES (1, NULL);");
+
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.AlterColumnIfDifferent(
+            "timestamp_null_backfill",
+            new ExpectedColumnDefinition(
+                "occurred_at",
+                typeof(DateTime),
+                isNullable: false,
+                storeType: "timestamp(6)",
+                defaultValue: SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal(null))),
+            new ExpectedColumnDefinition(
+                "occurred_at",
+                typeof(DateTime),
+                isNullable: true,
+                storeType: "timestamp(6)"),
+            SafeMigrationPolicy.RepairIfSafe);
+
+        // Act
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("timestamp-null-backfill"));
+
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+
+        // Assert
+        var providerException = Assert.IsType<MySqlException>(exception);
+
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(SafeMigrationAction.RejectDataBlocked, Assert.Single(report.Assessments).Action);
+        Assert.Contains("doka_sm_data_blocked", providerException.Message, StringComparison.Ordinal);
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM `timestamp_null_backfill` WHERE `occurred_at` IS NULL;"));
+        Assert.Equal(
+            "YES",
+            await ScalarStringAsync(
+                connectionString,
+                "SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS "
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'timestamp_null_backfill' "
                 + "AND COLUMN_NAME = 'occurred_at';"));
     }
 

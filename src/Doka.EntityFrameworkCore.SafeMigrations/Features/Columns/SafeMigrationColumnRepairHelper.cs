@@ -50,6 +50,59 @@ internal static class SafeMigrationColumnRepairHelper
     }
 
     /// <summary>
+    /// Determines whether a declared default is structurally guaranteed to
+    /// produce a non-null value for an existing row.
+    /// </summary>
+    /// <param name="defaultValue">The captured default-value contract.</param>
+    /// <returns><see langword="true" /> when null replacement is provable.</returns>
+    internal static bool HasProvablyNonNullDefault(
+        SafeMigrationDefaultValue defaultValue
+    )
+    {
+        ArgumentNullException.ThrowIfNull(defaultValue);
+
+        return defaultValue.Kind switch
+        {
+            SafeMigrationDefaultValueKind.None => false,
+            SafeMigrationDefaultValueKind.Literal => !defaultValue.IsNullLiteral,
+            SafeMigrationDefaultValueKind.Sql when defaultValue.StructuredExpression is not null =>
+                IsProvablyNonNull(defaultValue.StructuredExpression),
+            SafeMigrationDefaultValueKind.Sql => false,
+            _ => throw new ArgumentOutOfRangeException(nameof(defaultValue)),
+        };
+    }
+
+    private static bool IsProvablyNonNull(
+        SafeMigrationSqlExpression expression
+    ) => expression switch
+    {
+        SafeMigrationSqlLiteralExpression value => value.Value is not null,
+        SafeMigrationSqlUnaryExpression value => IsProvablyNonNull(value.Operand),
+        // WHY: Even non-null operands can yield NULL for division by zero.
+        SafeMigrationSqlBinaryExpression => false,
+        SafeMigrationSqlNullTestExpression => true,
+        SafeMigrationSqlBetweenExpression value =>
+            IsProvablyNonNull(value.Operand)
+            && IsProvablyNonNull(value.Lower)
+            && IsProvablyNonNull(value.Upper),
+        SafeMigrationSqlInExpression value =>
+            IsProvablyNonNull(value.Operand) && value.Values.All(IsProvablyNonNull),
+        SafeMigrationSqlFunctionExpression value
+            when StringComparer.OrdinalIgnoreCase.Equals(value.Name, "COALESCE") =>
+                value.Arguments.Any(IsProvablyNonNull),
+        // WHY: Cast behavior depends on the provider and SQL mode. An invalid
+        // conversion must never authorize a nullability backfill.
+        SafeMigrationSqlCastExpression => false,
+        SafeMigrationSqlCollateExpression value => IsProvablyNonNull(value.Operand),
+        SafeMigrationSqlCurrentValueExpression => true,
+        SafeMigrationSqlIdentifierExpression
+            or SafeMigrationSqlFunctionExpression
+            or SafeMigrationSqlProviderFragmentExpression
+            or SafeMigrationSqlOpaqueExpression => false,
+        _ => throw new UnreachableException(),
+    };
+
+    /// <summary>
     /// Determines whether provider-neutral column facets can be converged after
     /// the active provider has independently validated its own metadata.
     /// </summary>

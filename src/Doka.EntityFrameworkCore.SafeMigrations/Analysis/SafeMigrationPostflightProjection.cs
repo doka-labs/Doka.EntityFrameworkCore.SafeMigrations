@@ -24,20 +24,31 @@ internal sealed class SafeMigrationPostflightProjection
         // Postflight observes only the final catalog. Walk backwards so the
         // final safe writer for one exact resource remains authoritative while
         // earlier transient states cannot make an ordered replacement fail.
-        // Ordinary provider operations never enter this reduction because
-        // SafeMigrations does not own or infer their final effects.
+        // Provider-certified pass-through operations never enter this
+        // reduction because they own no SafeMigrations catalog resource.
         for (var ordinal = operations.Count - 1; ordinal >= 0; ordinal--)
         {
             if (operations[ordinal] is not SafeMigrationOperation safeOperation
-                || !TryCreateResource(
+                || !TryCreateResources(
                     safeOperation.Intent,
                     objectIdentityNormalizer,
-                    out var resource))
+                    out var primaryResource,
+                    out var secondaryResource))
             {
                 continue;
             }
 
-            if (!finalWriters.Add(resource))
+            var superseded = !finalWriters.Add(primaryResource);
+            if (secondaryResource.Kind != PostflightResourceKind.Unknown)
+            {
+                // WHY: A rename makes earlier source and target writers
+                // transient, but its own postcondition proves only source
+                // absence. A later target-only writer must not suppress that
+                // source check.
+                finalWriters.Add(secondaryResource);
+            }
+
+            if (superseded)
             {
                 _supersededOrdinals.Add(ordinal);
             }
@@ -54,10 +65,11 @@ internal sealed class SafeMigrationPostflightProjection
         int ordinal
     ) => _supersededOrdinals.Contains(ordinal);
 
-    private static bool TryCreateResource(
+    private static bool TryCreateResources(
         SafeMigrationIntent intent,
         ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer,
-        out PostflightResource resource
+        out PostflightResource primaryResource,
+        out PostflightResource secondaryResource
     )
     {
         string? Normalize(
@@ -66,7 +78,7 @@ internal sealed class SafeMigrationPostflightProjection
             ? schema
             : objectIdentityNormalizer.NormalizeSchema(schema);
 
-        resource = intent switch
+        primaryResource = intent switch
         {
             EnsureSchemaIntent value =>
                 new PostflightResource(PostflightResourceKind.Schema, Normalize(value.Name), null, null),
@@ -184,7 +196,30 @@ internal sealed class SafeMigrationPostflightProjection
             _ => default,
         };
 
-        return resource.Kind != PostflightResourceKind.Unknown;
+        // WHY: A rename owns the final state of both its source and target.
+        // Registering both identities prevents an earlier target drop or source
+        // ensure from failing postflight after the ordered rename succeeds.
+        secondaryResource = intent switch
+        {
+            RenameTableIntent value => new PostflightResource(
+                PostflightResourceKind.Table,
+                Normalize(value.NewSchema ?? value.Schema),
+                value.NewName ?? value.Name,
+                null),
+            RenameColumnIntent value => new PostflightResource(
+                PostflightResourceKind.Column,
+                Normalize(value.Schema),
+                value.Table,
+                value.NewName),
+            RenameIndexIntent value => new PostflightResource(
+                PostflightResourceKind.Index,
+                Normalize(value.Schema),
+                value.Table,
+                value.NewName),
+            _ => default,
+        };
+
+        return primaryResource.Kind != PostflightResourceKind.Unknown;
     }
 
     private enum PostflightResourceKind

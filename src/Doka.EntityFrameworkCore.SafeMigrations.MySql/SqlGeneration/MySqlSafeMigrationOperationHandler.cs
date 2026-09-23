@@ -82,16 +82,12 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
                 "safe_catalog_plan_capture");
         }
 
-        var baseline = RenderBaseline(operation, runtimePlan, context);
-        var baselineCommand = GetSingleBaselineCommand(baseline);
-        var baselineFragments = GetBaselineFragments(baselineCommand);
-        var defaultSuppression = baselineCommand.TransactionSuppressed;
-        var repairFragments = RenderRepairBaseline(
+        var baseline = GetBaselineBatch(RenderBaseline(operation, runtimePlan, context));
+        var repair = RenderRepairBaseline(
             operation,
             runtimePlan,
             context,
-            baselineFragments,
-            defaultSuppression);
+            baseline);
 
         var renderedParameterValues = runtimePlan
             .ParameterValues
@@ -101,7 +97,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         // A connection-local temporary table turns rejected decisions and a
         // failed postcondition into deterministic server errors without a
         // persistent stored routine or shared database object.
-        var setupCommands = new List<string>(24 + baselineFragments.SetupCommands.Count)
+        var setupCommands = new List<string>(24)
         {
             BuildAssertionSetupSql(),
         };
@@ -165,55 +161,36 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
 
         setupCommands.Add(BuildActionAssignment(operation, runtimePlan.RepairCapability));
         setupCommands.Add(BuildDecisionAssertionSql());
-        setupCommands.AddRange(baselineFragments.SetupCommands);
 
-        // PREPARE selects the real DDL only for apply or repair; every no-op
-        // path executes the harmless placeholder on the same guarded path.
-        // AlterColumn already renders its reviewed transition as the baseline;
-        // EnsureColumn needs the separately rendered full-definition repair.
-        var repairBody = repairFragments?.BodyCommand
-            ?? (operation is { Policy: SafeMigrationPolicy.RepairIfSafe, Intent: AlterColumnIntent }
-                && runtimePlan.RepairCapability == SafeMigrationRepairCapability.Safe
-                ? baselineFragments.BodyCommand
-                : null);
-
-        setupCommands.Add(
-            BuildPreparedSqlAssignment(
-                baselineFragments.BodyCommand,
-                repairBody));
-        setupCommands.Add($"PREPARE {PreparedStatementName} FROM @doka_sm_sql;");
-
-        var bodyCommand = $"EXECUTE {PreparedStatementName};\n"
-            + "SET @doka_sm_post_ok = CASE "
-            + "WHEN @doka_sm_action IN ('apply', 'repair') "
-            + "THEN COALESCE(("
-            + $"{runtimePlan.RenderPreparedExecutionPostcondition(renderedParameterValues)}), FALSE) "
-            + "ELSE TRUE END;\n"
-            + "INSERT INTO `__doka_sm_assert` "
-            + "(`different_code`, `unsupported_code`, `data_blocked_code`, "
-            + "`prerequisite_missing_code`, `postcondition_code`) "
-            + "SELECT 4, 5, 6, 7, 1 WHERE NOT COALESCE(@doka_sm_post_ok, FALSE);";
-
-        var cleanupCommands = new List<string>(3 + baselineFragments.CleanupCommands.Count)
+        var prepareBaselineInSetup = baseline.Commands.Count == 1;
+        if (prepareBaselineInSetup)
         {
-            BuildGuardCleanupSql(),
-        };
+            var command = baseline.Commands[0];
 
-        // CreateScoped reverses cleanup input at the public boundary. Doka's
-        // provider-rendered cleanup fragments already describe execution
-        // order, so add them in reverse before the prepared-statement cleanup.
-        for (var index = baselineFragments.CleanupCommands.Count - 1; index >= 0; index--)
-        {
-            cleanupCommands.Add(baselineFragments.CleanupCommands[index]);
+            // WHY: Preserve the established single-command hot path. Only
+            // genuine provider sequences need command-local preparation in the body.
+            setupCommands.AddRange(command.SetupCommands);
+            setupCommands.Add(
+                BuildPreparedSqlAssignment(
+                    command.BodyCommand,
+                    GetRepairBody(operation, runtimePlan, repair, command, commandOrdinal: 0)));
+            setupCommands.Add($"PREPARE {PreparedStatementName} FROM @doka_sm_sql;");
         }
 
-        cleanupCommands.Add(BuildPreparedStatementCleanupSql());
+        var bodyCommand = BuildGuardedBaselineBody(
+            operation,
+            runtimePlan,
+            baseline,
+            repair,
+            renderedParameterValues,
+            prepareBaselineInSetup);
+        var cleanupCommands = BuildCleanupCommands(baseline);
 
         var scopedCommand = MySqlMigrationCommandSpec.CreateScoped(
             setupCommands,
             bodyCommand,
             cleanupCommands,
-            defaultSuppression);
+            baseline.TransactionSuppressed);
 
         return MySqlMigrationOperationResult.Generated([scopedCommand], "safe_guarded_operation");
     }
@@ -580,17 +557,56 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         }
     }
 
-    private static MySqlMigrationCommandSpec GetSingleBaselineCommand(
+    internal static void ValidateMultiCommandCleanup(
+        IReadOnlyList<MySqlMigrationCommandSpec> commands
+    )
+    {
+        ArgumentNullException.ThrowIfNull(commands);
+
+        if (commands.Count < 2)
+        {
+            return;
+        }
+
+        // WHY: Per-command cleanup is needed before a later provider command,
+        // while scope cleanup is needed after failure. Until the provider
+        // supplies a once-only cleanup contract, executing both is unsafe.
+        if (commands.Any(static command => command.Fragments.Any(static fragment =>
+                fragment.Kind == MySqlMigrationCommandFragmentKind.Cleanup)))
+        {
+            throw new InvalidOperationException(
+                "A multi-command MySQL baseline with provider cleanup cannot be guarded safely.");
+        }
+    }
+
+    private static BaselineBatch GetBaselineBatch(
         IReadOnlyList<MySqlMigrationCommandSpec> baseline
     )
     {
-        if (baseline.Count != 1)
+        if (baseline.Count == 0)
         {
             throw new InvalidOperationException(
-                "A SafeMigrations operation must render exactly one MySQL baseline command boundary.");
+                "A SafeMigrations operation must render at least one MySQL baseline command boundary.");
         }
 
-        return baseline[0];
+        ValidateMultiCommandCleanup(baseline);
+
+        var transactionSuppressed = baseline[0].TransactionSuppressed;
+        var commands = new BaselineFragments[baseline.Count];
+
+        for (var index = 0; index < baseline.Count; index++)
+        {
+            var command = baseline[index];
+            if (command.TransactionSuppressed != transactionSuppressed)
+            {
+                throw new InvalidOperationException(
+                    "A multi-command SafeMigrations operation requires uniform MySQL transaction suppression.");
+            }
+
+            commands[index] = GetBaselineFragments(command);
+        }
+
+        return new BaselineBatch(commands, transactionSuppressed);
     }
 
     private static BaselineFragments GetBaselineFragments(
@@ -662,6 +678,129 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
     private static string BuildPreparedStatementCleanupSql() => $"PREPARE {PreparedStatementName} FROM 'DO 0'; "
         + $"DEALLOCATE PREPARE {PreparedStatementName};";
 
+    private static string BuildGuardedBaselineBody(
+        SafeMigrationOperation operation,
+        MySqlSafeMigrationRuntimePlan runtimePlan,
+        BaselineBatch baseline,
+        BaselineBatch? repair,
+        IReadOnlyList<string> renderedParameterValues,
+        bool preparedInSetup
+    )
+    {
+        if (preparedInSetup)
+        {
+            // WHY: The common single-command path does not need incremental
+            // composition. Direct concatenation allocates the final command
+            // once instead of growing a StringBuilder for every operation.
+            return $"EXECUTE {PreparedStatementName};\n"
+                + "SET @doka_sm_post_ok = CASE "
+                + "WHEN @doka_sm_action IN ('apply', 'repair') "
+                + "THEN COALESCE(("
+                + runtimePlan.RenderPreparedExecutionPostcondition(renderedParameterValues)
+                + "), FALSE) "
+                + "ELSE TRUE END;\n"
+                + "INSERT INTO `__doka_sm_assert` "
+                + "(`different_code`, `unsupported_code`, `data_blocked_code`, "
+                + "`prerequisite_missing_code`, `postcondition_code`) "
+                + "SELECT 4, 5, 6, 7, 1 WHERE NOT COALESCE(@doka_sm_post_ok, FALSE);";
+        }
+
+        var builder = new StringBuilder();
+        for (var index = 0; index < baseline.Commands.Count; index++)
+        {
+            var command = baseline.Commands[index];
+            foreach (var setupCommand in command.SetupCommands)
+            {
+                AppendCommand(builder, setupCommand);
+            }
+
+            // WHY: One EF migration operation can legitimately render an
+            // ordered provider sequence, for example a data backfill followed
+            // by ALTER TABLE. Keep every command behind the same decision and
+            // verify the final state after the full sequence.
+            AppendCommand(
+                builder,
+                BuildPreparedSqlAssignment(
+                    command.BodyCommand,
+                    GetRepairBody(operation, runtimePlan, repair, command, index)));
+            AppendCommand(builder, $"PREPARE {PreparedStatementName} FROM @doka_sm_sql;");
+            AppendCommand(builder, $"EXECUTE {PreparedStatementName};");
+            AppendCommand(builder, $"DEALLOCATE PREPARE {PreparedStatementName};");
+        }
+
+        builder.Append(BuildPostconditionBody(runtimePlan, renderedParameterValues));
+
+        return builder.ToString();
+    }
+
+    private static string BuildPostconditionBody(
+        MySqlSafeMigrationRuntimePlan runtimePlan,
+        IReadOnlyList<string> renderedParameterValues
+    ) => "SET @doka_sm_post_ok = CASE "
+        + "WHEN @doka_sm_action IN ('apply', 'repair') "
+        + "THEN COALESCE(("
+        + runtimePlan.RenderPreparedExecutionPostcondition(renderedParameterValues)
+        + "), FALSE) "
+        + "ELSE TRUE END;\n"
+        + "INSERT INTO `__doka_sm_assert` "
+        + "(`different_code`, `unsupported_code`, `data_blocked_code`, "
+        + "`prerequisite_missing_code`, `postcondition_code`) "
+        + "SELECT 4, 5, 6, 7, 1 WHERE NOT COALESCE(@doka_sm_post_ok, FALSE);\n";
+
+    private static string? GetRepairBody(
+        SafeMigrationOperation operation,
+        MySqlSafeMigrationRuntimePlan runtimePlan,
+        BaselineBatch? repair,
+        BaselineFragments applyCommand,
+        int commandOrdinal
+    ) => repair?.Commands[commandOrdinal].BodyCommand
+        ?? (operation is { Policy: SafeMigrationPolicy.RepairIfSafe, Intent: AlterColumnIntent }
+            && runtimePlan.RepairCapability == SafeMigrationRepairCapability.Safe
+                ? applyCommand.BodyCommand
+                : null);
+
+    private static List<string> BuildCleanupCommands(
+        BaselineBatch baseline
+    )
+    {
+        var cleanupCommandCount = 0;
+        foreach (var command in baseline.Commands)
+        {
+            cleanupCommandCount += command.CleanupCommands.Count;
+        }
+
+        var commands = new List<string>(2 + cleanupCommandCount)
+        {
+            BuildGuardCleanupSql(),
+        };
+
+        // WHY: CreateScoped reverses cleanup input. Add provider cleanup in
+        // reverse scope order and reverse execution order so failure in any
+        // command unwinds every acquired provider resource before guard state is reset.
+        foreach (var command in baseline.Commands)
+        {
+            for (var index = command.CleanupCommands.Count - 1; index >= 0; index--)
+            {
+                commands.Add(command.CleanupCommands[index]);
+            }
+        }
+
+        commands.Add(BuildPreparedStatementCleanupSql());
+
+        return commands;
+    }
+
+    private static void AppendCommand(
+        StringBuilder builder,
+        string command
+    )
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentException.ThrowIfNullOrWhiteSpace(command);
+
+        builder.AppendLine(command);
+    }
+
     private static string BuildGuardCleanupSql() => "SET @doka_sm_state = NULL, @doka_sm_action = NULL, "
         + "@doka_sm_repair_ok = NULL, @doka_sm_prerequisite_ok = NULL, @doka_sm_sql = NULL, "
         + "@doka_sm_post_ok = NULL, @doka_sm_data_probe_required = NULL, @doka_sm_data_blocked = NULL; "
@@ -706,12 +845,11 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         return context.RenderStandardOperation(standardOperation);
     }
 
-    private BaselineFragments? RenderRepairBaseline(
+    private BaselineBatch? RenderRepairBaseline(
         SafeMigrationOperation operation,
         MySqlSafeMigrationRuntimePlan runtimePlan,
         MySqlMigrationOperationContext context,
-        BaselineFragments applyFragments,
-        bool applyTransactionSuppressed
+        BaselineBatch apply
     )
     {
         if (operation.Policy != SafeMigrationPolicy.RepairIfSafe
@@ -731,18 +869,30 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             static collation => collation.Schema is null ? collation.Name : null,
             MySqlSafeMigrationColumnMetadata.CanSafelyConverge);
 
-        var repairCommand = GetSingleBaselineCommand(context.RenderStandardOperation(repairOperation));
-        var repairFragments = GetBaselineFragments(repairCommand);
-
-        if (repairCommand.TransactionSuppressed != applyTransactionSuppressed
-            || !applyFragments.SetupCommands.SequenceEqual(repairFragments.SetupCommands, StringComparer.Ordinal)
-            || !applyFragments.CleanupCommands.SequenceEqual(repairFragments.CleanupCommands, StringComparer.Ordinal))
+        var repair = GetBaselineBatch(context.RenderStandardOperation(repairOperation));
+        if (repair.TransactionSuppressed != apply.TransactionSuppressed
+            || repair.Commands.Count != apply.Commands.Count)
         {
             throw new InvalidOperationException(
                 "Provider-rendered apply and repair commands require incompatible MySQL command scopes.");
         }
 
-        return repairFragments;
+        for (var index = 0; index < apply.Commands.Count; index++)
+        {
+            var applyCommand = apply.Commands[index];
+            var repairCommand = repair.Commands[index];
+
+            if (!applyCommand.SetupCommands.SequenceEqual(repairCommand.SetupCommands, StringComparer.Ordinal)
+                || !applyCommand.CleanupCommands.SequenceEqual(
+                    repairCommand.CleanupCommands,
+                    StringComparer.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "Provider-rendered apply and repair commands require incompatible MySQL command scopes.");
+            }
+        }
+
+        return repair;
     }
 
     private static string BuildActionAssignment(
@@ -884,5 +1034,10 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         IReadOnlyList<string> SetupCommands,
         string BodyCommand,
         IReadOnlyList<string> CleanupCommands
+    );
+
+    private sealed record BaselineBatch(
+        IReadOnlyList<BaselineFragments> Commands,
+        bool TransactionSuppressed
     );
 }

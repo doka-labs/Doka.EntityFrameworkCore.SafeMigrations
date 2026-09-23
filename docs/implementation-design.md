@@ -89,9 +89,9 @@ duplicates Doka's engine-feature profile.
 `Doka.EntityFrameworkCore.SafeMigrations.PostgreSql` decorates Npgsql's public
 migrations generator boundary. It intercepts only `SafeMigrationOperation` and
 delegates every ordinary EF operation to the provider generator. Safe commands
-use parameter-free migration SQL because EF migration scripts have no runtime
-parameter channel; all identifiers and literals are rendered by Npgsql/EF SQL
-helpers and type mappings.
+use parameter-free migration SQL
+because EF migration scripts have no runtime parameter channel; all identifiers
+and literals are rendered by Npgsql/EF SQL helpers and type mappings.
 
 The read-only PostgreSQL analyzer builds parameterized `pg_catalog` queries
 directly. Guarded runtime execution uses PostgreSQL anonymous blocks and normal
@@ -101,9 +101,9 @@ EF transaction semantics.
 
 `Doka.EntityFrameworkCore.SafeMigrations.Sqlite` composes the official EF Core
 SQLite migrations generator. It delegates every ordinary operation unchanged
-and wraps only `SafeMigrationOperation`. Runtime catalog classification reads
-`sqlite_schema` and provider PRAGMAs from the active connection; `main` and an
-omitted qualifier share one identity while attached databases reject.
+and wraps only `SafeMigrationOperation`. Runtime catalog classification
+reads `sqlite_schema` and provider PRAGMAs from the active connection; `main`
+and an omitted qualifier share one identity while attached databases reject.
 
 SQLite structural operations that the engine cannot alter directly are
 analyzed as one contiguous batch. Once every operation is accepted, the
@@ -134,6 +134,8 @@ the operation as normal DDL:
 - SQLite rejects the unknown safe envelope when its adapter is absent;
   incompatible generator registration also fails closed;
 - multiple owners for the same exact operation type are rejected;
+- scaffolding stops before publishing source for an operation SafeMigrations
+  cannot model; and
 - provider-owned ordinary operations continue through the base provider.
 
 Integration tests prove that missing and conflicting registration writes
@@ -259,17 +261,23 @@ complete key. Multiple projectors, unrecognized operation metadata, malformed
 prefix counts, or negative values stop scaffolding. PostgreSQL registers no
 projector and retains the ordinary generated index calls.
 
-`Strict` rewrites table creation, index creation, index removal, table removal,
-standalone primary-key, unique, check, and foreign-key adds and drops, and
-model-managed data produced from `HasData`. Constraint adds freeze the existing
-`ThrowIfDifferent` contract; drops make only absence idempotent. Operations with
-unrepresentable annotations, implicit foreign-key principal columns, or opaque
-check SQL stop scaffolding. `LegacyConvergence` rewrites the same forward
-operations but replaces `Down` with a deterministic exception:
+`Strict` rewrites schema ensure/drop; table create/drop/rename; column
+add/alter/drop/rename; index create/drop/rename; standalone primary-key, unique,
+check, and foreign-key adds and drops; and model-managed data produced from
+`HasData`. Add and alter columns are captured through one generated callback so
+the sealed definition retains every provider annotation. Constraint adds freeze
+the existing `ThrowIfDifferent` contract; drops make only absence idempotent.
+Operations with unrepresentable annotations, implicit foreign-key principal
+columns, or opaque check SQL stop scaffolding. `LegacyConvergence` rewrites the
+same forward operations but replaces `Down` with a deterministic exception:
 adopted legacy objects have no provable destructive inverse. The inverse model
 difference is still verified before that replacement because safe forward
-updates and deletes require captured source values. Other EF operations are
-delegated unchanged so their policy cannot be guessed by the scaffolder.
+updates and deletes require captured source values. The generator renders the
+complete body into scratch output before publishing it. Raw SQL, raw data
+operations, `AlterTable`, sequences, and every unknown shape therefore reject
+without returning a partially safe migration. EF Core's internally generated
+history setup is outside the scaffolded migration body. Existing
+migration-authored SQL remains provider-owned at runtime.
 
 The model-differ decorator first delegates to the active Doka or Npgsql differ,
 then completes data-operation store types from public source and target
@@ -545,10 +553,9 @@ Preflight is a separate API. `ISafeMigrationRunner`:
   canonical migration model;
 - reads provider/engine/server identity;
 - runs ordered safe-operation classification in bounded parameterized chunks;
-- projects earlier accepted safe operations and recognized deterministic
-  structural postconditions of ordered ordinary EF operations into later
-  preflight observations;
-- reports ordinary provider-owned operations as not analyzable;
+- reports ordinary EF and provider operations as not analyzed, projects only
+  bounded postconditions, invalidates uncertain dependent proofs, and requires
+  independent artifact and postcondition review;
 - inventories unexpected additive objects without deleting them;
 - emits model and operation-contract fingerprints.
 
@@ -613,25 +620,14 @@ field representation. A blocked report with no selected blocker fails closed;
 future status/action contracts cannot become invisible through an old filter.
 
 Operation-contract fingerprints include safe intent, expected definitions,
-policy, and ordering. Ordinary provider operations contribute only their CLR
-type marker. Their properties and SQL require separate review and the digest
-of the immutable deployment artifact; they are not fully bound by that hash.
-Recognized ordinary create/add/alter/drop/rename table and column operations may
-contribute a conditional structural postcondition to later prerequisite
-projection. Their assessment remains `provider_owned_not_analyzed`, and no
-facet or data-safety claim is inferred beyond the bounded projection facts.
-Source-frozen model-managed operations contribute bounded row evidence and the
-ordered projection described above. Raw `InsertDataOperation`,
-`UpdateDataOperation`, and `DeleteDataOperation` entries cannot change schema
-prerequisites, so they preserve known table and column presence. They can change
-every row-level precondition directly or through triggers, so they mark all
-previously projected data state and every live pre-batch row-safety result
-uncertain. Later structural provider operations preserve this marker instead
-of presenting their newer structural timestamp as a new data proof. A later
-non-unique index can still project `Missing`; a missing unique index, primary
-key, unique/check/foreign constraint, unsafe column addition, or
-nullability-tightening repair remains blocked until its post-DML data state is
-independently provable.
+policy, annotations, and ordering. An ordinary EF operation contributes
+only its CLR type marker and still requires the immutable deployment artifact
+digest. Source-frozen model-managed operations contribute bounded row evidence
+and the ordered projection described above. Raw `InsertDataOperation`,
+`UpdateDataOperation`, `DeleteDataOperation`, SQL, `AlterTable`, sequences, and
+unknown operation types contribute only their CLR type marker and execute
+through the provider unchanged. A preflight may first perform read-only
+provider analysis, but it cannot approve such an operation.
 
 Each optimizer-visible statement contains at most 32 operations. At most eight
 statements travel in one ADO.NET batch, bounded by 16,000 parameters and 4 MiB
@@ -659,21 +655,18 @@ Preflight cannot eliminate time-of-check/time-of-use drift. Deployment must
 prevent out-of-band DDL and data writes that invalidate checked constraints.
 Runtime guards and postflight remain authoritative.
 
-The projection tracks only prerequisites established by accepted earlier safe
-operations or deterministic structural postconditions of recognized earlier
-ordinary EF operations. Add/create/alter/drop/rename table and column operations
-update compact presence and unique-index safety facts in operation order; they
-do not create complete projected table definitions. For a unique index on an
+The preflight projection tracks accepted safe operations and recognized
+postconditions of ordinary provider operations in operation order. Table and
+column transitions update compact presence and unique-index safety facts;
+these are not complete projected table definitions. For a unique index on an
 existing table, a live `PrerequisiteMissing` result becomes projected `Missing`
 only when every referenced column is known and a newly added key column is
 nullable, non-computed, has no non-null default, and uses default null-distinct
 semantics. Other unique transitions remain blocked. Typed EF data operations
-retain only structural facts and invalidate projected data safety. Every
-ordinary operation still requires independent review and postcondition
-evidence. A recognized structural operation invalidates any complete projected
-table image that its provider-owned side effects could make stale. An
-unrecognized operation discards all projection facts, because arbitrary DDL or
-data changes cannot safely carry earlier inferences forward.
+reach this projection only after conversion to source-frozen model-managed safe
+operations. An opaque provider effect invalidates projection evidence; later
+safe operations must reestablish their prerequisites or fail closed. The
+ordinary provider operation itself remains reported as not analyzed.
 
 Existing convergence tables retain a compact accepted-constraint catalog
 separately from complete table definitions. Exact names detect definition
@@ -732,11 +725,12 @@ truncated `GROUP_CONCAT` value.
 Provider-specific exemptions are internal and proof-based. Doka 10.3.x maps
 `AlterDatabaseOperation` only to the database character-set default, which does
 not mutate existing table, column, index, constraint, or row state. The
-MySQL/MariaDB analyzer can therefore retain existing table-scoped facts while still
-reporting the operation as provider-owned. Core does not grant that exemption
-by operation type: Npgsql 10.0.3 also uses `AlterDatabaseOperation` for
-extensions, enums, ranges, and other database artifacts, so PostgreSQL and an
-unknown provider continue to invalidate the projection fail-closed.
+MySQL/MariaDB adapter can therefore certify that exact bounded shape during
+scaffolding and retain existing table-scoped facts during preflight. Core does
+not grant that exemption by operation type: Npgsql 10.0.3 also uses
+`AlterDatabaseOperation` for extensions, enums, ranges, and other database
+artifacts. PostgreSQL and unknown-provider scaffolding therefore reject that
+new source; existing operations remain provider-owned at runtime.
 
 `AnalyzePendingMigrationsAsync` calls provider validation before EF's
 `IHistoryRepository.GetAppliedMigrationsAsync` path. This ordering is required
@@ -779,11 +773,12 @@ Every multi-command provider plan is idempotent at command boundaries. Tests
 cover failure after earlier standard DDL, same-session recovery after a guard
 failure, cancellation during blocked DDL, cleanup failure with pool eviction,
 and repeat execution. Doka 10.4.0 executes every handler-authored guard as one
-bounded scope with ordered setup, one body, and reverse-order cleanup. Cleanup
-runs after success, failure, or cancellation with an independent cancellation
-token. A cleanup failure closes the connection and evicts its physical session
-from the pool. Recovery remains forward fix or restore from a tested backup; a
-heterogeneous convergence baseline has no destructive `Down`.
+bounded scope with ordered setup, one body containing the guarded provider
+sequence, and reverse-order cleanup. Cleanup runs after success, failure, or
+cancellation with an independent cancellation token. A cleanup failure closes
+the connection and evicts its physical session from the pool. Recovery remains
+forward fix or restore from a tested backup; a heterogeneous convergence
+baseline has no destructive `Down`.
 
 ## Performance and memory
 

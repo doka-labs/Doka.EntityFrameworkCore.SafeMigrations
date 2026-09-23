@@ -3,6 +3,7 @@ global using System.Buffers;
 global using System.Collections.Generic;
 global using System.Data.Common;
 global using System.Diagnostics;
+global using System.Diagnostics.CodeAnalysis;
 global using System.Globalization;
 global using System.Linq;
 global using System.Text;

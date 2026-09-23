@@ -16,19 +16,23 @@ internal sealed class SafeMigrationCSharpMigrationOperationGenerator : CSharpMig
 
     private readonly SafeMigrationScaffoldingConfiguration _configuration;
     private readonly ISafeMigrationCreateIndexScaffoldingProjector? _createIndexProjector;
+    private readonly ISafeMigrationProviderOperationAdapter? _providerOperationAdapter;
 
     /// <summary>Initializes the SafeMigrations operation generator.</summary>
     /// <param name="dependencies">The EF Core C# operation-generator dependencies.</param>
     /// <param name="configuration">The immutable scaffolding configuration.</param>
     /// <param name="createIndexProjectors">The active provider's create-index metadata projectors.</param>
+    /// <param name="providerOperationAdapters">The active provider's standard-operation adapters.</param>
     public SafeMigrationCSharpMigrationOperationGenerator(
         CSharpMigrationOperationGeneratorDependencies dependencies,
         SafeMigrationScaffoldingConfiguration configuration,
-        IEnumerable<ISafeMigrationCreateIndexScaffoldingProjector> createIndexProjectors
+        IEnumerable<ISafeMigrationCreateIndexScaffoldingProjector> createIndexProjectors,
+        IEnumerable<ISafeMigrationProviderOperationAdapter> providerOperationAdapters
     ) : base(dependencies)
     {
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(createIndexProjectors);
+        ArgumentNullException.ThrowIfNull(providerOperationAdapters);
 
         var projectorSnapshot = createIndexProjectors.ToArray();
         if (projectorSnapshot.Length > 1)
@@ -39,6 +43,15 @@ internal sealed class SafeMigrationCSharpMigrationOperationGenerator : CSharpMig
 
         _configuration = configuration;
         _createIndexProjector = projectorSnapshot.SingleOrDefault();
+
+        var adapterSnapshot = providerOperationAdapters.ToArray();
+        if (adapterSnapshot.Length > 1)
+        {
+            throw new InvalidOperationException(
+                "SafeMigrations requires at most one provider operation adapter per active provider.");
+        }
+
+        _providerOperationAdapter = adapterSnapshot.SingleOrDefault();
     }
 
     /// <inheritdoc />
@@ -59,7 +72,38 @@ internal sealed class SafeMigrationCSharpMigrationOperationGenerator : CSharpMig
             return;
         }
 
-        base.Generate(builderName, operations, builder);
+        if (!_configuration.IsEnabled)
+        {
+            base.Generate(builderName, operations, builder);
+            return;
+        }
+
+        // WHY: EF renders an operation stream incrementally. A later unsupported
+        // operation must not leave an apparently usable prefix in the generated
+        // migration source, so publish the stream only after every operation has
+        // passed its SafeMigrations contract and rendered successfully.
+        var validatedSource = CreateScratchBuilder(builder);
+
+        base.Generate(builderName, operations, validatedSource);
+        // WHY: The outer builder supplies the first-line indentation itself.
+        // The scratch builder already rendered that indentation for validation;
+        // retaining it would double-indent the first generated operation.
+        builder.Append(validatedSource.ToString().TrimStart(' ', '\t'));
+    }
+
+    /// <inheritdoc />
+    protected override void Generate(
+        MigrationOperation operation,
+        IndentedStringBuilder builder
+    )
+    {
+        if (!_configuration.IsEnabled)
+        {
+            base.Generate(operation, builder);
+            return;
+        }
+
+        throw SafeMigrationOperationCompatibility.Unsupported(operation);
     }
 
     /// <inheritdoc />
@@ -74,6 +118,7 @@ internal sealed class SafeMigrationCSharpMigrationOperationGenerator : CSharpMig
             return;
         }
 
+        ValidateSafeCompatibility(operation);
         var replacement = _configuration.Mode switch
         {
             SafeMigrationScaffoldingMode.Strict => ".CreateTableIfNotExists(",
@@ -107,6 +152,7 @@ internal sealed class SafeMigrationCSharpMigrationOperationGenerator : CSharpMig
             return;
         }
 
+        ValidateSafeCompatibility(operation);
         GenerateWithReplacement(operation, builder, ".EnsureSchema(", ".EnsureSchemaExists(");
     }
 
@@ -122,8 +168,174 @@ internal sealed class SafeMigrationCSharpMigrationOperationGenerator : CSharpMig
             return;
         }
 
+        ValidateSafeCompatibility(operation);
         GenerateWithReplacement(operation, builder, ".DropSchema(", ".DropSchemaIfExists(");
     }
+
+    /// <inheritdoc />
+    protected override void Generate(
+        AddColumnOperation operation,
+        IndentedStringBuilder builder
+    )
+    {
+        if (!_configuration.IsEnabled)
+        {
+            base.Generate(operation, builder);
+            return;
+        }
+
+        GenerateCapturedColumnOperation(
+            operation,
+            builder,
+            ".AddColumnIfNotExistsFromModel(",
+            SafeMigrationPolicy.ThrowIfDifferent);
+    }
+
+    /// <inheritdoc />
+    protected override void Generate(
+        AlterColumnOperation operation,
+        IndentedStringBuilder builder
+    )
+    {
+        if (!_configuration.IsEnabled)
+        {
+            base.Generate(operation, builder);
+            return;
+        }
+
+        GenerateCapturedColumnOperation(
+            operation,
+            builder,
+            ".AlterColumnIfDifferentFromModel(",
+            SafeMigrationPolicy.RepairIfSafe);
+    }
+
+    /// <inheritdoc />
+    protected override void Generate(
+        DropColumnOperation operation,
+        IndentedStringBuilder builder
+    )
+    {
+        if (!_configuration.IsEnabled)
+        {
+            base.Generate(operation, builder);
+            return;
+        }
+
+        ValidateSafeCompatibility(operation);
+        AppendDropColumnCall(builder, operation);
+    }
+
+    /// <inheritdoc />
+    protected override void Generate(
+        RenameColumnOperation operation,
+        IndentedStringBuilder builder
+    )
+    {
+        if (!_configuration.IsEnabled)
+        {
+            base.Generate(operation, builder);
+            return;
+        }
+
+        ValidateSafeCompatibility(operation);
+        AppendRenameColumnCall(builder, operation);
+    }
+
+    /// <inheritdoc />
+    protected override void Generate(
+        RenameTableOperation operation,
+        IndentedStringBuilder builder
+    )
+    {
+        if (!_configuration.IsEnabled)
+        {
+            base.Generate(operation, builder);
+            return;
+        }
+
+        ValidateSafeCompatibility(operation);
+        AppendRenameTableCall(builder, operation);
+    }
+
+    /// <inheritdoc />
+    protected override void Generate(
+        RenameIndexOperation operation,
+        IndentedStringBuilder builder
+    )
+    {
+        if (!_configuration.IsEnabled)
+        {
+            base.Generate(operation, builder);
+            return;
+        }
+
+        ValidateSafeCompatibility(operation);
+        AppendRenameIndexCall(builder, operation);
+    }
+
+    /// <inheritdoc />
+    protected override void Generate(
+        AlterDatabaseOperation operation,
+        IndentedStringBuilder builder
+    )
+    {
+        if (!_configuration.IsEnabled)
+        {
+            base.Generate(operation, builder);
+            return;
+        }
+
+        var compatibility = SafeMigrationOperationCompatibility.Normalize(operation, _providerOperationAdapter);
+        if (compatibility.Kind != SafeMigrationOperationCompatibilityKind.CertifiedProvider)
+        {
+            throw SafeMigrationOperationCompatibility.Unsupported(operation);
+        }
+
+        base.Generate(operation, builder);
+    }
+
+    /// <inheritdoc />
+    protected override void Generate(
+        AlterTableOperation operation,
+        IndentedStringBuilder builder
+    ) => GenerateUnsupported(operation, builder);
+
+    /// <inheritdoc />
+    protected override void Generate(
+        CreateSequenceOperation operation,
+        IndentedStringBuilder builder
+    ) => GenerateUnsupported(operation, builder);
+
+    /// <inheritdoc />
+    protected override void Generate(
+        AlterSequenceOperation operation,
+        IndentedStringBuilder builder
+    ) => GenerateUnsupported(operation, builder);
+
+    /// <inheritdoc />
+    protected override void Generate(
+        DropSequenceOperation operation,
+        IndentedStringBuilder builder
+    ) => GenerateUnsupported(operation, builder);
+
+    /// <inheritdoc />
+    protected override void Generate(
+        RenameSequenceOperation operation,
+        IndentedStringBuilder builder
+    ) => GenerateUnsupported(operation, builder);
+
+    /// <inheritdoc />
+    protected override void Generate(
+        RestartSequenceOperation operation,
+        IndentedStringBuilder builder
+    ) => GenerateUnsupported(operation, builder);
+
+    /// <inheritdoc />
+    protected override void Generate(
+        SqlOperation operation,
+        IndentedStringBuilder builder
+    ) => GenerateUnsupported(operation, builder);
 
     /// <inheritdoc />
     protected override void Generate(
@@ -965,6 +1177,7 @@ internal sealed class SafeMigrationCSharpMigrationOperationGenerator : CSharpMig
             return;
         }
 
+        ValidateSafeCompatibility(operation);
         GenerateWithReplacement(operation, builder, ".DropTable(", ".DropTableIfExists(");
     }
 
@@ -980,6 +1193,7 @@ internal sealed class SafeMigrationCSharpMigrationOperationGenerator : CSharpMig
             return;
         }
 
+        ValidateSafeCompatibility(operation);
         GenerateWithReplacement(operation, builder, ".DropIndex(", ".DropIndexIfExists(");
     }
 
@@ -997,6 +1211,8 @@ internal sealed class SafeMigrationCSharpMigrationOperationGenerator : CSharpMig
 
         var projection = _createIndexProjector?.Project(operation)
             ?? new SafeMigrationCreateIndexScaffoldingProjection(operation, PrefixLengths: null);
+
+        ValidateSafeCompatibility(projection.Operation);
 
         var baseline = CreateScratchBuilder(builder);
         base.Generate(projection.Operation, baseline);
@@ -1060,6 +1276,212 @@ internal sealed class SafeMigrationCSharpMigrationOperationGenerator : CSharpMig
         return source.Insert(
             closeParenthesis,
             string.Concat(",", newline, argumentIndent, "prefixLengths: [", prefixValues, "]"));
+    }
+
+    private void GenerateCapturedColumnOperation(
+        ColumnOperation operation,
+        IndentedStringBuilder builder,
+        string method,
+        SafeMigrationPolicy policy
+    )
+    {
+        var baseline = CreateScratchBuilder(builder);
+        switch (operation)
+        {
+            case AddColumnOperation addColumn:
+                base.Generate(addColumn, baseline);
+                break;
+            case AlterColumnOperation alterColumn:
+                base.Generate(alterColumn, baseline);
+                break;
+            default:
+                throw new UnreachableException();
+        }
+
+        var source = baseline.ToString();
+        var invocationStart = source.IndexOf('.', StringComparison.Ordinal);
+        if (invocationStart < 0
+            || source.AsSpan(0, invocationStart).ContainsAnyExcept(' ', '\t'))
+        {
+            throw new InvalidOperationException(
+                $"The EF Core C# operation generator emitted an unexpected {operation.GetType().Name} shape. "
+                + "SafeMigrations stopped instead of generating ambiguous migration code.");
+        }
+
+        builder
+            .AppendLine(method)
+            .IncrementIndent()
+            .Append("operationFactory: static operationBuilder => operationBuilder")
+            .Append(source[invocationStart..])
+            .AppendLine(",")
+            .Append("policy: global::Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationPolicy.")
+            .Append(policy.ToString())
+            .DecrementIndent()
+            .Append(')');
+    }
+
+    private void ValidateSafeCompatibility(
+        MigrationOperation operation
+    )
+    {
+        var compatibility = SafeMigrationOperationCompatibility.Normalize(operation, _providerOperationAdapter);
+        if (compatibility.Kind != SafeMigrationOperationCompatibilityKind.Safe)
+        {
+            throw SafeMigrationOperationCompatibility.Unsupported(operation);
+        }
+    }
+
+    private void GenerateUnsupported(
+        MigrationOperation operation,
+        IndentedStringBuilder builder
+    )
+    {
+        if (!_configuration.IsEnabled)
+        {
+            switch (operation)
+            {
+                case AlterTableOperation value:
+                    base.Generate(value, builder);
+                    return;
+                case CreateSequenceOperation value:
+                    base.Generate(value, builder);
+                    return;
+                case AlterSequenceOperation value:
+                    base.Generate(value, builder);
+                    return;
+                case DropSequenceOperation value:
+                    base.Generate(value, builder);
+                    return;
+                case RenameSequenceOperation value:
+                    base.Generate(value, builder);
+                    return;
+                case RestartSequenceOperation value:
+                    base.Generate(value, builder);
+                    return;
+                case SqlOperation value:
+                    base.Generate(value, builder);
+                    return;
+                default:
+                    throw new UnreachableException();
+            }
+        }
+
+        throw SafeMigrationOperationCompatibility.Unsupported(operation);
+    }
+
+    private void AppendDropColumnCall(
+        IndentedStringBuilder builder,
+        DropColumnOperation operation
+    )
+    {
+        builder
+            .AppendLine(".DropColumnIfExists(")
+            .IncrementIndent()
+            .Append("name: ")
+            .Append(Dependencies.CSharpHelper.Literal(operation.Name))
+            .AppendLine(",")
+            .Append("table: ")
+            .Append(Dependencies.CSharpHelper.Literal(operation.Table));
+
+        AppendOptionalSchemaAndClose(builder, operation.Schema);
+    }
+
+    private void AppendRenameColumnCall(
+        IndentedStringBuilder builder,
+        RenameColumnOperation operation
+    )
+    {
+        builder
+            .AppendLine(".RenameColumnIfExists(")
+            .IncrementIndent()
+            .Append("name: ")
+            .Append(Dependencies.CSharpHelper.Literal(operation.Name))
+            .AppendLine(",")
+            .Append("table: ")
+            .Append(Dependencies.CSharpHelper.Literal(operation.Table))
+            .AppendLine(",")
+            .Append("newName: ")
+            .Append(Dependencies.CSharpHelper.Literal(operation.NewName));
+
+        AppendOptionalSchemaAndClose(builder, operation.Schema);
+    }
+
+    private void AppendRenameTableCall(
+        IndentedStringBuilder builder,
+        RenameTableOperation operation
+    )
+    {
+        builder
+            .AppendLine(".RenameTableIfExists(")
+            .IncrementIndent()
+            .Append("name: ")
+            .Append(Dependencies.CSharpHelper.Literal(operation.Name));
+
+        if (operation.NewName is not null)
+        {
+            builder
+                .AppendLine(",")
+                .Append("newName: ")
+                .Append(Dependencies.CSharpHelper.Literal(operation.NewName));
+        }
+
+        if (operation.Schema is not null)
+        {
+            builder
+                .AppendLine(",")
+                .Append("schema: ")
+                .Append(Dependencies.CSharpHelper.Literal(operation.Schema));
+        }
+
+        if (operation.NewSchema is not null)
+        {
+            builder
+                .AppendLine(",")
+                .Append("newSchema: ")
+                .Append(Dependencies.CSharpHelper.Literal(operation.NewSchema));
+        }
+
+        builder
+            .DecrementIndent()
+            .Append(')');
+    }
+
+    private void AppendRenameIndexCall(
+        IndentedStringBuilder builder,
+        RenameIndexOperation operation
+    )
+    {
+        builder
+            .AppendLine(".RenameIndexIfExists(")
+            .IncrementIndent()
+            .Append("name: ")
+            .Append(Dependencies.CSharpHelper.Literal(operation.Name))
+            .AppendLine(",")
+            .Append("table: ")
+            .Append(Dependencies.CSharpHelper.Literal(operation.Table))
+            .AppendLine(",")
+            .Append("newName: ")
+            .Append(Dependencies.CSharpHelper.Literal(operation.NewName));
+
+        AppendOptionalSchemaAndClose(builder, operation.Schema);
+    }
+
+    private void AppendOptionalSchemaAndClose(
+        IndentedStringBuilder builder,
+        string? schema
+    )
+    {
+        if (schema is not null)
+        {
+            builder
+                .AppendLine(",")
+                .Append("schema: ")
+                .Append(Dependencies.CSharpHelper.Literal(schema));
+        }
+
+        builder
+            .DecrementIndent()
+            .Append(')');
     }
 
     private void GenerateWithReplacement(

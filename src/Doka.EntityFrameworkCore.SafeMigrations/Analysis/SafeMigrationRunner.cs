@@ -135,6 +135,10 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
         cancellationToken.ThrowIfCancellationRequested();
 
         _providerAnalyzer.ValidateContext(context);
+
+        // WHY: A published migration keeps the meaning it had when it was
+        // authored. SafeMigrations classifies its own operations and leaves every
+        // other operation to the provider; only scaffolding shapes new source.
         SafeMigrationModelManagedDataContractValidator.Validate(operations);
 
         // Validate the canonical Core model before trusting any catalog result

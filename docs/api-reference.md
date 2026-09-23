@@ -194,9 +194,15 @@ mapping is:
 
 | EF operation | `Strict` source | `LegacyConvergence` source |
 | --- | --- | --- |
+| `EnsureSchema`, `DropSchema` | `EnsureSchemaExists`, `DropSchemaIfExists` | Same |
 | `CreateTable` | `CreateTableIfNotExists` | `ConvergeTableFromModel` |
+| `RenameTable`, `DropTable` | `RenameTableIfExists`, `DropTableIfExists` | Same |
+| `AddColumn` | `AddColumnIfNotExistsFromModel` | Same |
+| `AlterColumn` | `AlterColumnIfDifferentFromModel` with `RepairIfSafe` | Same |
+| `DropColumn`, `RenameColumn` | `DropColumnIfExists`, `RenameColumnIfExists` | Same |
 | Single-column `CreateIndex` | `CreateIndexIfNotExistsFromModel`, or the prefix-aware counterpart on MySQL/MariaDB | Same |
 | Multi-column `CreateIndex` | `CreateCompositeIndexIfNotExistsFromModel`, or the prefix-aware counterpart on MySQL/MariaDB | Same |
+| `DropIndex`, `RenameIndex` | `DropIndexIfExists`, `RenameIndexIfExists` | Same |
 | Standalone `AddPrimaryKey`, `AddUniqueConstraint`, `AddCheckConstraint`, `AddForeignKey` | Corresponding `*IfNotExists` method with `ThrowIfDifferent` | Same |
 | Standalone primary-key, unique, check, or foreign-key drop | Corresponding `*IfExists` method | Same |
 | Model-managed insert from `HasData` | `EnsureModelManagedDataFromModel` | Same |
@@ -218,9 +224,16 @@ without exposing it. Accepted repair DDL reports `TableRewritePossible`; it is
 not an online-DDL guarantee.
 
 Doka's typed contract must recognize every MySQL/MariaDB column annotation.
-Nullability tightening with existing `NULL` values is `DataBlocked`. Other
+Nullability tightening with existing `NULL` values is `DataBlocked` unless a
+structurally proven non-null default permits a guarded backfill. Other
 type-family, collation, generated, identity, row-version, contradictory
 metadata, and unsupported drift remains fail-closed.
+
+The proof accepts a non-null literal or a parsed, typed SQL expression whose
+structure guarantees non-null, for example a current-value node, a null test,
+or `COALESCE` with a proven non-null argument. Unparsed SQL text, column
+references, casts, binary arithmetic, opaque fragments, and general SQL
+functions do not qualify. This is a structural proof, not a data scan.
 
 The [migration authoring guide](migration-authoring.md) contains complete
 generated strict and legacy-convergence migrations plus the equivalent
@@ -274,13 +287,20 @@ EF output compatible with the repository's warning-level namespace and
 constant-array analyzers without marking reviewable migration source as
 auto-generated or suppressing diagnostics.
 
-The design-time replacement does not rewrite add/alter/drop column, constraint,
-rename, or schema operations. Those retain EF behavior unless the migration
-author selects an explicit SafeMigrations API. Raw hand-authored or existing
-data operations are not reinterpreted either. Only newly scaffolded
-model-managed operations whose source and inverse model differences can be
-paired exactly are converted. This is an intentional policy boundary, not a
-partial interpretation of those operations.
+The design-time replacement rewrites every supported structural operation in
+the table above. It validates and renders the complete operation stream in
+scratch output before returning generated source, so one unsupported operation
+cannot leave a partially safe migration body. Raw SQL, `AlterTable`, sequences,
+and raw hand-authored data operations reject instead of retaining ordinary EF
+execution. Only model-managed operations whose source and inverse model
+differences pair exactly are converted. Newly scaffolded migration bodies
+reject every raw `SqlOperation`. EF Core's internal history setup is outside
+that body. Existing migration-authored SQL remains provider-owned at runtime.
+
+Existing migration source is neither rewritten nor reinterpreted. At runtime an
+ordinary EF operation reaches the configured provider unchanged by
+SafeMigrations and is reported as not analyzed. Provider-version changes remain
+a separate compatibility concern.
 
 ## MigrationBuilder operations
 
@@ -293,7 +313,7 @@ operations and returns the original `MigrationBuilder`.
 | --- | --- | --- |
 | Schema | `EnsureSchemaExists` | `DropSchemaIfExists` |
 | Table | `EnsureTable`, `ConvergeTable` | `CreateTableIfNotExists<TColumns>`, `ConvergeTableFromModel<TColumns>`, `DropTableIfExists`, `RenameTableIfExists` |
-| Column | `EnsureColumn`, `AlterColumnIfDifferent` | `AddColumnIfNotExists<T>`, `DropColumnIfExists`, `RenameColumnIfExists` |
+| Column | `EnsureColumn`, `AlterColumnIfDifferent` | `AddColumnIfNotExists<T>`, `AddColumnIfNotExistsFromModel`, `AlterColumnIfDifferentFromModel`, `DropColumnIfExists`, `RenameColumnIfExists` |
 | Index | `EnsureIndex` | `CreateIndexIfNotExists`, `CreateIndexIfNotExistsFromModel`, `CreateCompositeIndexIfNotExistsFromModel`, `CreateIndexWithPrefixesIfNotExistsFromModel`, `CreateCompositeIndexWithPrefixesIfNotExistsFromModel`, `DropIndexIfExists`, `RenameIndexIfExists` |
 | Primary key | `EnsurePrimaryKey` | `AddPrimaryKeyIfNotExists`, `DropPrimaryKeyIfExists` |
 | Unique constraint | `EnsureUniqueConstraint` | `AddUniqueConstraintIfNotExists`, `DropUniqueConstraintIfExists` |
@@ -306,6 +326,12 @@ schema, ordered members, and expected facets. Explicit ensure APIs require a
 `SafeMigrationPolicy`; familiar create/add overloads generally default to
 `ThrowIfDifferent`. Schema and drop/rename helpers select their defined policy
 internally. Check the overload rather than assuming every method takes policy.
+
+`AddColumnIfNotExistsFromModel` captures one EF `AddColumnOperation` from the
+callback, including provider annotations, and defaults to `ThrowIfDifferent`.
+`AlterColumnIfDifferentFromModel` captures one EF `AlterColumnOperation` with
+its old-column definition; unlike the other `FromModel` helpers, it defaults
+to `RepairIfSafe`. Its existing-data transition still requires provider proof.
 
 Named ensure operations use semantic identity with exact-name precedence. If
 the expected name exists, all modeled facets must match. If it is absent, a
@@ -449,8 +475,8 @@ returns `Task<SafeMigrationRunReport>`:
 | Method | Additional input | Result |
 | --- | --- | --- |
 | `AnalyzePendingMigrationsAsync` | Pending sequence resolved through EF history and configured migration assembly | Preflight report |
-| `AnalyzeAsync` | Explicit ordered `IReadOnlyList<MigrationOperation>` | Preflight report including earlier safe operations and conditional structural postconditions of recognized ordinary EF operations |
-| `VerifyAsync` | Explicit ordered operations whose effective final postconditions must hold | Postflight report; the final safe writer for an exact resource supersedes its earlier safe writers, without projecting provider-owned effects |
+| `AnalyzeAsync` | Explicit ordered `IReadOnlyList<MigrationOperation>` | Preflight report over the whole operation stream |
+| `VerifyAsync` | Explicit ordered operations whose effective final postconditions must hold | Postflight report; the final safe writer for a physical resource supersedes its earlier writers |
 
 `SafeMigrationRunOptions` requires a nonempty pseudonymous `instanceId` and
 optionally takes `targetMigrationId` and `expectedModelFingerprint`. The
@@ -464,12 +490,13 @@ computes the runtime fingerprint. For a snapshot-free contract, provide an
 independently established `expectedModelFingerprint` if target-model equality
 is required. Omitting both leaves no external target-model comparison.
 
-Bind execution to the non-null target actually analyzed, keep the migration
-assembly unchanged, and review ordinary provider operations separately.
-Recognized ordinary table/column operations may satisfy a later safe
-prerequisite in the ordered projection, but remain
-`provider_owned_not_analyzed`; this conditional projection is not an analysis
-or approval of their DDL.
+Bind execution to the non-null target actually analyzed and keep the migration
+assembly unchanged. SafeMigrations analyzes its own operations. Ordinary EF
+operations in existing migrations retain provider-owned behavior and are
+reported as `provider_owned_not_analyzed`; this API cannot approve their effects,
+so they need independent postcondition evidence. Recognized deterministic
+table or column postconditions may conditionally satisfy a later safe
+prerequisite, but this projection does not approve the provider-owned DDL.
 Accepted legacy-convergence columns and constraints also remain visible to
 following safe operations on an existing table. Constraint creation projects
 `Missing` only from provider `PrerequisiteMissing` evidence when all referenced
@@ -506,8 +533,10 @@ specifically targeted preflight.
 
 `VerifyAsync` checks the effective final postconditions against the live
 catalog; it does not replay history or apply preflight projection. For repeated
-safe writes to the same exact resource, the last writer is authoritative and
-earlier assessments use `postcondition_superseded`. Provider-owned operations
+safe writes to the same physical resource, the last writer is authoritative and
+earlier assessments use `postcondition_superseded`. A rename checks both source
+and destination identities: a destination-only write cannot supersede its
+source-absence check, but a later source write can. Provider-owned operations
 never participate in that reduction. The same ordered operations can therefore
 describe drop/recreate or successive-definition execution and final
 verification. A rename still proves only source absence, so complete
@@ -565,17 +594,17 @@ These digests are comparison evidence, not security signatures and not
 migration identity.
 
 `SafeMigrationContractFingerprint.Create(operations)` fingerprints ordered
-safe intents, definitions, policies, and operation annotations. Ordinary
-provider operations contribute only their CLR type name, not their properties
-or SQL text. The fingerprint is therefore not a digest of the complete
-migration artifact. Keep that artifact's independent digest and review ordinary
-operations separately.
+safe intents, definitions, policies, and operation annotations. The runner
+does not normalize ordinary EF operations in published migrations. These
+operations contribute only their CLR type name, so the fingerprint is not a
+digest of the complete migration artifact. Keep that artifact's independent
+digest.
 
 | Status | Meaning |
 | --- | --- |
 | `NoOperations` | No operation was assessed; verify intended target/history separately |
 | `Ready` | Preflight permits the safe sequence subject to external gates; postflight confirms all supplied safe postconditions |
-| `ReadyWithProviderOperations` | Ordinary EF/provider operations need independent review and postconditions |
+| `ReadyWithProviderOperations` | Safe operations are accepted, but ordinary EF or provider operations remain unanalyzed and need independent artifact and postcondition review |
 | `Blocked` | One or more operations reject; do not execute/continue deployment |
 
 `SafeMigrationObservedState.TransitionReady` is used only when a captured

@@ -137,7 +137,8 @@ package qualification across the support matrix. Require evidence for:
 - options registration in both call orders and explicit internal-service-
   provider use;
 - no target DDL or success-history row when ownership is absent or conflicting;
-- ordinary provider operations mixed with safe operations;
+- newly scaffolded standard operations rendered as safe source, with existing
+  migration operations left provider-owned and unmodified;
 - custom Npgsql baseline use for ordinary DDL and safe-operation baselines;
 - rejection of unsupported transaction-suppressed guarded PostgreSQL commands;
 - command fragment order and scope behavior without SQL parsing;
@@ -228,6 +229,16 @@ being accepted through broad string normalization.
   public 10.4.2 package; its signed `v10.4.2` tag identifies commit
   `b2408bfbe29517d742734d06d848081cdb9e1de0`. Complete SafeMigrations
   qualification remains the release acceptance gate.
+- 2026-09-22: Required whole-stream compatibility validation during scaffolding.
+  Supported structural operations render to safe source, and unsupported new
+  source rejects before publication. Existing ordinary EF migration operations
+  remain provider-owned during analysis and execution.
+
+### 2026-09-22 Compatibility Amendment
+
+Provider rendering remains authoritative for every ordinary EF operation. Core
+guards only its own safe operations; scaffolding prevents unmodellable source
+where it is created instead of rejecting published migrations later.
 
 ### Implementation References
 

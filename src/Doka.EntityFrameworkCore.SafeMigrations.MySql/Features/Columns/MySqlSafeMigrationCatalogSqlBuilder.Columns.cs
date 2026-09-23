@@ -209,10 +209,14 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             ? BuildColumnMatches(intent.Table, intent.OldDefinition!, isMariaDb)
             : "FALSE";
 
+        var hasProvablyNonNullBackfill =
+            SafeMigrationColumnRepairHelper.HasProvablyNonNullDefault(intent.Definition.DefaultValue);
+
         var nullBlocked =
             repairCapability == SafeMigrationRepairCapability.Safe
             && intent.OldDefinition!.IsNullable
             && !intent.Definition.IsNullable
+            && !hasProvablyNonNullBackfill
                 ? $"({repairPrecondition}) AND EXISTS (SELECT 1 FROM {Delimited(intent.Table, intent.Schema)} WHERE "
                 + $"{Delimited(intent.Definition.Name)} IS NULL LIMIT 1)"
                 : "FALSE";
@@ -227,7 +231,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         {
             MayRequireNullabilityDataProof = repairCapability == SafeMigrationRepairCapability.Safe
                 && intent.OldDefinition!.IsNullable
-                && !intent.Definition.IsNullable,
+                && !intent.Definition.IsNullable
+                && !hasProvablyNonNullBackfill,
         };
     }
 

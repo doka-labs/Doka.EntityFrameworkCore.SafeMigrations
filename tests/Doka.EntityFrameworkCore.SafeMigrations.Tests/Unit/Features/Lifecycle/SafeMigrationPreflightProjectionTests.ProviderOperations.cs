@@ -9,6 +9,24 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         ) => operation is AlterDatabaseOperation;
     }
 
+    private sealed class RenameAbsenceProjection : ISafeMigrationProviderOperationProjection
+    {
+        public bool WasQueried { get; private set; }
+
+        public bool PreservesExistingTableState(
+            MigrationOperation operation
+        ) => false;
+
+        public bool PreservesUnrelatedColumnAbsence(
+            RenameColumnIntent operation
+        )
+        {
+            WasQueried = true;
+
+            return true;
+        }
+    }
+
     [Fact]
     public void ProviderAddColumnProjectsFollowingNonUniqueIndexPrerequisite()
     {
@@ -287,6 +305,94 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         Assert.Equal(SafeMigrationObservedState.Matching, analysis.ObservedState);
         Assert.Equal("projected_matching", analysis.Code);
+    }
+
+    [Theory]
+    [InlineData(true, SafeMigrationObservedState.Missing, SafeMigrationAction.Apply)]
+    [InlineData(false, SafeMigrationObservedState.PrerequisiteMissing, SafeMigrationAction.RejectPrerequisiteMissing)]
+    public void ProviderDropColumnRetainsOnlySafeAdditiveColumnEvidence(
+        bool isNullable,
+        SafeMigrationObservedState expectedState,
+        SafeMigrationAction expectedAction
+    )
+    {
+        // Arrange
+        var projection = new SafeMigrationPreflightProjection();
+        var definition = new ExpectedColumnDefinition(
+            "new_value",
+            typeof(int),
+            isNullable,
+            "int");
+
+        projection.ObserveProviderPostcondition(
+            new DropColumnOperation { Name = "old_value", Table = "items" });
+
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", definition),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        // Act
+        var analysis = projection.Project(operation, Live(SafeMigrationObservedState.Missing));
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            operation.Intent.Kind,
+            analysis.ObservedState,
+            operation.Policy,
+            analysis.RepairCapability);
+
+        // Assert
+        Assert.Equal(expectedState, analysis.ObservedState);
+        Assert.Equal(expectedAction, decision.Action);
+    }
+
+    [Theory]
+    [InlineData(true, SafeMigrationObservedState.Missing, SafeMigrationAction.Apply)]
+    [InlineData(false, SafeMigrationObservedState.PrerequisiteMissing, SafeMigrationAction.RejectPrerequisiteMissing)]
+    public void ProviderCertifiedRenameRetainsOnlySafeUnrelatedColumnAbsence(
+        bool isNullable,
+        SafeMigrationObservedState expectedState,
+        SafeMigrationAction expectedAction
+    )
+    {
+        // Arrange
+        var providerProjection = new RenameAbsenceProjection();
+        var projection = new SafeMigrationPreflightProjection(providerProjection);
+        var renameOperation = new SafeMigrationOperation(
+            new RenameColumnIntent("old_value", "items", "renamed_value"),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var renameLive = Live(SafeMigrationObservedState.Matching);
+        var unrelated = new ExpectedColumnDefinition(
+            "new_value",
+            typeof(int),
+            isNullable,
+            storeType: "int");
+
+        var columnOperation = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", unrelated),
+            SafeMigrationPolicy.RepairIfSafe);
+
+        // Act
+        var renameAnalysis = projection.Project(renameOperation, renameLive);
+        var renameDecision = SafeMigrationDecisionPlanner.Plan(
+            renameOperation.Intent.Kind,
+            renameAnalysis.ObservedState,
+            renameOperation.Policy,
+            renameAnalysis.RepairCapability);
+
+        projection.Observe(renameOperation, renameLive, renameAnalysis, renameDecision);
+
+        var columnAnalysis = projection.Project(columnOperation, Live(SafeMigrationObservedState.Missing));
+        var columnDecision = SafeMigrationDecisionPlanner.Plan(
+            columnOperation.Intent.Kind,
+            columnAnalysis.ObservedState,
+            columnOperation.Policy,
+            columnAnalysis.RepairCapability);
+
+        // Assert
+        Assert.Equal(SafeMigrationAction.Apply, renameDecision.Action);
+        Assert.True(providerProjection.WasQueried);
+        Assert.Equal(expectedState, columnAnalysis.ObservedState);
+        Assert.Equal(expectedAction, columnDecision.Action);
     }
 
     [Fact]

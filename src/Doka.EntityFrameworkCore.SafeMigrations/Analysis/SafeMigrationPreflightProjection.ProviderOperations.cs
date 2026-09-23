@@ -376,9 +376,9 @@ internal sealed partial class SafeMigrationPreflightProjection
         }
         catch (Exception exception) when (exception is ArgumentException or NotSupportedException)
         {
-            // WHY: Ordinary EF operations are provider-owned and must remain
-            // executable even when an annotation cannot be snapshotted. Only a
-            // later safe operation is blocked from trusting an incomplete shape.
+            // WHY: Ordinary EF operations remain provider-owned and executable
+            // even when an annotation cannot be snapshotted. Only a later safe
+            // operation must not trust a definition captured incompletely.
             SetProjectedColumnUnknown(table, schema, operation.Name);
         }
     }
