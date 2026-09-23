@@ -29,9 +29,15 @@ Safe operations execute through EF runtime migration or a Migration Bundle.
 A contiguous structural segment is analyzed in order before its first target
 command. Operations accepted as `Apply` or `Repair` are passed together to the
 official SQLite generator so related rebuild steps stay one provider-owned
-unit. SafeMigrations executes ordinary structural units inside the caller
+unit. SafeMigrations executes structural units inside the caller
 transaction or a local transaction that it commits only after every
 postcondition succeeds.
+
+An accepted column rename on an existing table invalidates dependent schema
+evidence. A later safely additive column with a distinct name may still use
+the proven live absence of that column: SQLite cannot create it by renaming
+another column. Existing column definitions, indexes, and constraints do not
+inherit this proof and remain blocked until their post-state is known.
 
 For table rebuilds, EF emits foreign-key mode commands outside its transaction.
 SafeMigrations therefore owns a transaction-suppressed boundary, records the

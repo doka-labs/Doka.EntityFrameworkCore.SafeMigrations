@@ -54,12 +54,29 @@ public abstract class SqliteToolingDbContextBase<TContext> : DbContext
         ModelBuilder modelBuilder
     )
     {
+        var targetState = StringComparer.Ordinal.Equals(
+            Environment.GetEnvironmentVariable("SAFE_MIGRATIONS_SQLITE_TOOLING_STATE"),
+            "target");
+
         modelBuilder.Entity<ToolingEntity>(entity =>
         {
             entity.ToTable("tooling_entities");
             entity.HasKey(value => value.Id);
             entity.Property(value => value.Code).HasMaxLength(80).IsRequired();
             entity.HasIndex(value => value.Code).IsUnique();
+            entity.Property<string?>("RenamedCode")
+                .HasColumnName(targetState ? "renamed_code" : "old_code")
+                .HasMaxLength(32);
+
+            if (targetState)
+            {
+                entity.Property<string?>("AddedCode").HasMaxLength(32);
+            }
+            else
+            {
+                entity.Property<int?>("LegacyCode");
+            }
+
             entity.HasData(new ToolingEntity { Id = 1, Code = "baseline" });
         });
     }

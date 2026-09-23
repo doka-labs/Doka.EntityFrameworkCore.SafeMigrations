@@ -53,6 +53,7 @@ dotnet tool restore --tool-manifest "$repository_root/.config/dotnet-tools.json"
     --disable-parallel
 
 export SAFE_MIGRATIONS_SQLITE_CONNECTION_STRING="Data Source=$database_directory/strict-cli.db;Foreign Keys=True"
+unset SAFE_MIGRATIONS_SQLITE_TOOLING_STATE
 dotnet ef migrations add "$strict_migration_name" \
     --project "$project" \
     --context SqliteToolingDbContext \
@@ -76,6 +77,57 @@ if [[ -z "$strict_migration_file" || -z "$legacy_migration_file" ]]; then
     echo "SQLite tooling did not scaffold both strict and legacy migrations." >&2
     exit 1
 fi
+
+# WHY: A compiled baseline snapshot is required before EF can scaffold the
+# add/drop/rename transition against the previous model rather than null.
+dotnet build "$project" \
+    --configuration Release --no-restore --disable-build-servers -m:1 /nodeReuse:false
+export SAFE_MIGRATIONS_SQLITE_TOOLING_STATE="target"
+
+strict_transition_name="SqliteStrictColumnTransition"
+legacy_transition_name="SqliteLegacyColumnTransition"
+export SAFE_MIGRATIONS_SQLITE_CONNECTION_STRING="Data Source=$database_directory/strict-cli.db;Foreign Keys=True"
+dotnet ef migrations add "$strict_transition_name" \
+    --project "$project" \
+    --context SqliteToolingDbContext \
+    --output-dir "$strict_output_directory" \
+    --configuration Release \
+    --no-build
+
+export SAFE_MIGRATIONS_SQLITE_CONNECTION_STRING="Data Source=$database_directory/legacy-cli.db;Foreign Keys=True"
+dotnet ef migrations add "$legacy_transition_name" \
+    --project "$project" \
+    --context SqliteLegacyToolingDbContext \
+    --output-dir "$legacy_output_directory" \
+    --configuration Release \
+    --no-build
+
+strict_transition_file="$(find "$project_directory/$strict_output_directory" \
+    -type f -name "*_${strict_transition_name}.cs" -print -quit)"
+legacy_transition_file="$(find "$project_directory/$legacy_output_directory" \
+    -type f -name "*_${legacy_transition_name}.cs" -print -quit)"
+if [[ -z "$strict_transition_file" || -z "$legacy_transition_file" ]]; then
+    echo "SQLite tooling did not scaffold both column transitions." >&2
+    exit 1
+fi
+
+for migration in "$strict_transition_file" "$legacy_transition_file"; do
+    if ! grep -Eq '^        migrationBuilder\.DropColumnIfExists\(' "$migration"; then
+        echo "SQLite column-transition scaffolding has incorrect first-operation indentation." >&2
+        exit 1
+    fi
+
+    for expected in \
+        'migrationBuilder.AddColumnIfNotExistsFromModel(' \
+        'migrationBuilder.DropColumnIfExists(' \
+        'migrationBuilder.RenameColumnIfExists('; do
+        if ! grep -Fq "$expected" "$migration"; then
+            echo "SQLite column-transition scaffolding is missing: $expected" >&2
+            grep -n 'migrationBuilder\.' "$migration" >&2 || true
+            exit 1
+        fi
+    done
+done
 
 grep -Fq 'migrationBuilder.CreateTableIfNotExists(' "$strict_migration_file"
 grep -Fq 'migrationBuilder.EnsureModelManagedDataFromModel(' "$strict_migration_file"

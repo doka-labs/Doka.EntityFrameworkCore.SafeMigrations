@@ -9,9 +9,10 @@ public static partial class SafeMigrationContractFingerprint
     /// <summary>Creates the lowercase contract fingerprint.</summary>
     /// <remarks>
     /// Safe operations contribute their ordered intents, definitions, policies,
-    /// and operation annotations.
-    /// Ordinary provider operations contribute only their CLR type name, not their
-    /// properties or SQL. Use an independent artifact digest to bind their full content.
+    /// and operation annotations. Ordinary EF and provider operations contribute
+    /// only their CLR type name, not their properties or SQL. The runner does
+    /// not reinterpret published migrations; use an independent artifact digest
+    /// to bind the full content of provider-owned operations.
     /// </remarks>
     /// <param name="operations">The ordered migration operations.</param>
     /// <returns>The lowercase SHA-256 fingerprint.</returns>

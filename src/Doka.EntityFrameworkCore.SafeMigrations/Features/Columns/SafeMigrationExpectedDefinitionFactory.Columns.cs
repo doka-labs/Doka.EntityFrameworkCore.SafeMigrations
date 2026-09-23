@@ -11,8 +11,25 @@ internal static partial class SafeMigrationExpectedDefinitionFactory
     {
         ArgumentNullException.ThrowIfNull(operation);
 
+        return From(operation, operation.Name);
+    }
+
+    /// <summary>
+    /// Captures a column definition with the owning operation's identity.
+    /// EF Core leaves the nested old-column identity empty in generated alter operations.
+    /// </summary>
+    /// <param name="operation">The EF Core column operation to snapshot.</param>
+    /// <param name="name">The owning column name.</param>
+    /// <returns>The complete SafeMigrations column definition.</returns>
+    public static ExpectedColumnDefinition From(
+        ColumnOperation operation,
+        string name
+    )
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+
         return new ExpectedColumnDefinition(
-            operation.Name,
+            name,
             operation.ClrType,
             operation.IsNullable,
             operation.ColumnType,

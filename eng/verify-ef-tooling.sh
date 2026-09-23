@@ -400,9 +400,13 @@ for migration in "${strict_transition_migration}" "${legacy_transition_migration
   for expected in \
     'migrationBuilder.EnsureModelManagedDataFromModel(' \
     'migrationBuilder.UpdateModelManagedDataFromModel(' \
-    'migrationBuilder.DeleteModelManagedDataFromModel('; do
+    'migrationBuilder.DeleteModelManagedDataFromModel(' \
+    'migrationBuilder.AddColumnIfNotExistsFromModel(' \
+    'migrationBuilder.DropColumnIfExists(' \
+    'migrationBuilder.RenameColumnIfExists('; do
     if ! grep -Fq "${expected}" "${migration}"; then
-      echo "Data-transition scaffolding output is missing: ${expected}" >&2
+      echo "Data-transition scaffolding output is missing from ${migration}: ${expected}" >&2
+      grep -n 'migrationBuilder\.' "${migration}" >&2 || true
       exit 1
     fi
   done

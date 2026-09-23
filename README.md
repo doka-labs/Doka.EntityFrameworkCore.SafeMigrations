@@ -372,17 +372,30 @@ not runtime switches for existing migration files. The policy accepts only
 and a non-default legacy policy without `LegacyConvergence` fail during options
 configuration.
 
-Automatic rewriting covers scaffolded `CreateTable`, `CreateIndex`,
-`DropIndex`, and `DropTable` operations, standalone primary-key, unique,
-check, and foreign-key adds and drops, plus data changes derived from
-`HasData`. Constraint adds freeze `ThrowIfDifferent`; constraint drops make
-only absence idempotent. Unsupported operation annotations, an implicit
-foreign-key principal-column list, or check SQL outside the structured grammar
-stops scaffolding rather than losing semantics. Model-managed inserts, updates,
-and deletes become source-frozen SafeMigrations operations. Other EF operations
-remain ordinary EF migration operations. When a later migration needs
-catalog-aware handling for a column, rename, or schema operation, use the
-corresponding SafeMigrations builder API and review the resulting contract.
+Automatic rewriting covers scaffolded schema ensure/drop, table
+create/drop/rename, column add/alter/drop/rename, index create/drop/rename,
+standalone primary-key, unique, check, and foreign-key adds and drops, plus data
+changes derived from `HasData`. Add and alter columns use generated callbacks
+that retain the complete provider operation and its annotations before sealing
+the SafeMigrations definition. Constraint adds freeze `ThrowIfDifferent`;
+constraint drops make only absence idempotent. Unsupported operation
+annotations, an implicit foreign-key principal-column list, or check SQL
+outside the structured grammar stops scaffolding rather than losing semantics.
+Model-managed inserts, updates, and deletes become source-frozen
+SafeMigrations operations.
+
+Existing migration source remains unchanged by this feature. SafeMigrations
+analyzes and guards only its own operations;
+every ordinary EF operation is handed to the provider unchanged and listed in
+the report as not analyzed, which invalidates the projected proofs that depend
+on it. Nothing reinterprets a published migration after the fact. Source that
+SafeMigrations cannot model is prevented where it is created, at scaffolding
+time.
+
+SafeMigrations does not rewrite pending or replayed historical operations,
+including raw SQL, `HasData` data operations, and sequences. They continue
+through the configured provider's runtime generator. Only migrations
+scaffolded after the upgrade use the new safe builder calls.
 
 Provider identity annotations on scaffolded columns are captured immutably and
 participate in fingerprints, live-catalog comparison, and final DDL. This
@@ -522,12 +535,18 @@ qualified length change. Doka's exact Boolean conversion accepts only absent,
 null, false, or true literal defaults. An expression default or a foreign-key
 dependency keeps the Boolean transition blocked because a single-column repair
 cannot prove that separate behavioral or coupled-type contract.
-Doka 10.4.2's typed metadata must recognize every MySQL/MariaDB annotation.
+Doka's typed metadata must recognize every MySQL/MariaDB annotation.
 Unknown, malformed, contradictory, or unsupported metadata rejects. Existing
-`NULL` rows make a `NOT NULL` repair `DataBlocked`. Other type-family,
+`NULL` rows make a `NOT NULL` repair `DataBlocked` unless a structurally proven
+non-null default permits Doka's guarded backfill. Other type-family,
 collation, computed/generated, identity, row-version, and unsupported
 provider-metadata drift rejects without mutation. The table container alone
 never hides missing children.
+
+A structurally proven non-null default is a non-null literal or a parsed,
+typed SQL expression whose shape proves a non-null result, such as a current
+value or `COALESCE` with a proven non-null argument. Raw SQL text, casts,
+binary arithmetic, and ordinary column references do not provide that proof.
 
 SQLite uses the official provider's model-owned rebuild path for changes that
 the engine cannot alter directly. A rebuild is accepted only when the terminal
@@ -590,15 +609,13 @@ await context.GetService<IMigrator>().MigrateAsync(targetMigration, Cancellation
 
 This narrow example executes only a safe-only `Ready` report and binds execution
 to the exact analyzed target, not the latest migration in the assembly.
-`ReadyWithProviderOperations` requires separate review and postconditions for
-ordinary provider operations; `NoOperations` requires checking intended history
-and postconditions rather than executing an unqualified target. A blocked report
-must stop deployment. Propagate a deployment cancellation token when available.
-Typed EF seed/update/delete-data operations retain preceding structural facts
-for a later non-unique safe index, but they remain independently reviewable and
-invalidate every projected or live pre-batch data-safety proof. A later unique
-index or additive data-validating constraint therefore remains fail-closed;
-subsequent structural provider operations do not clear that uncertainty.
+`ReadyWithProviderOperations` also covers ordinary EF and provider operations
+from existing or manually authored migrations. SafeMigrations does not analyze
+their effects; this status is not their safety approval and requires independent
+artifact and postcondition review. `NoOperations` requires
+checking intended history and postconditions rather than executing an
+unqualified target. A blocked report must stop deployment. Propagate a
+deployment cancellation token when available.
 Keep the migration assembly fixed and the required write/DDL fences in place;
 preflight does not reserve database state. The
 [deployment runbook](docs/runbooks/deployment-and-recovery.md) owns these checks
@@ -610,10 +627,10 @@ For an explicit execution contract, use `AnalyzeAsync` before migration. Use
 exact safe schema, table, column, index, primary-key, or named-constraint
 resource is written more than once, postflight treats only its final safe
 writer as authoritative. Earlier assessments remain ordered and report
-`postcondition_superseded` with a satisfied effective postcondition. Ordinary
-provider operations never supersede a safe postcondition because their effects
-are not owned or inferred. A rename proves source absence only; add an explicit
-ensure for the destination when its complete final definition must be verified.
+`postcondition_superseded` with a satisfied effective postcondition. A rename
+owns both its source and destination identities for final-writer selection, but
+its own postcondition proves source absence only. Add an explicit ensure for
+the destination when its complete final definition must be verified.
 The [postflight procedure](docs/runbooks/deployment-and-recovery.md#postflight)
 binds each contract's fingerprint to the same deployment artifact and target.
 
@@ -627,10 +644,13 @@ can be raised as `SafeMigrationPreflightException` through
 `report.ThrowIfBlocked()` while retaining the complete immutable report.
 
 The contract fingerprint covers safe intents, definitions, policies, operation
-annotations, and order; ordinary provider operations contribute only their CLR
-type, not their SQL or other properties. Retain the immutable artifact digest
-and independent review for those operations. Serialize with
-`SafeMigrationReportJson`; the package includes the current
+annotations, and order. Ordinary EF operations in published migrations retain
+their provider-owned behavior and contribute only their CLR type; their SQL and
+properties are not captured by this fingerprint. Newly scaffolded
+`LegacyConvergence` source may use a different policy and fingerprint from
+strict source. Retain the immutable artifact digest and independent review for
+every provider-owned operation.
+Serialize with `SafeMigrationReportJson`; the package includes the current
 [`safe-migration-run-report-v2` schema](schemas/safe-migration-run-report-v2.schema.json).
 The [version 1 schema](schemas/safe-migration-run-report-v1.schema.json) remains
 available for readers of previously persisted reports.

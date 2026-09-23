@@ -3,6 +3,76 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 public sealed partial class SqliteSafeMigrationCatalogIntegrationTests
 {
     [Fact]
+    public async Task ExistingTableDropRenameAndIndependentAdd_ApplyInOneStructuralBatch()
+    {
+        // Arrange
+        await using var connection = await OpenConnectionAsync();
+        await ExecuteSqlAsync(
+            connection,
+            "CREATE TABLE column_transition (Id INTEGER NOT NULL, old_code TEXT NULL, "
+            + "LegacyCode INTEGER NULL, CONSTRAINT PK_column_transition PRIMARY KEY (Id)); "
+            + "INSERT INTO column_transition (Id, old_code, LegacyCode) VALUES (1, 'kept', 7);");
+        await using var context = new SqliteColumnTransitionTestContext(connection);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.DropColumnIfExists("LegacyCode", "column_transition");
+        builder.RenameColumnIfExists("old_code", "column_transition", "renamed_code");
+        builder.AddColumnIfNotExists<string>(
+            "AddedCode",
+            "column_transition",
+            type: "TEXT",
+            nullable: true);
+
+        // Act
+        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations);
+
+        // Assert
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connection,
+                "SELECT COUNT(*) FROM column_transition "
+                + "WHERE Id = 1 AND renamed_code = 'kept' AND AddedCode IS NULL;"));
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connection,
+                "SELECT COUNT(*) FROM pragma_table_xinfo('column_transition') "
+                + "WHERE name IN ('old_code', 'LegacyCode');"));
+    }
+
+    [Fact]
+    public async Task ExistingTableRename_DoesNotTrustStaleDefinitionOfRenamedTarget()
+    {
+        // Arrange
+        await using var connection = await OpenConnectionAsync();
+        await ExecuteSqlAsync(
+            connection,
+            "CREATE TABLE rename_target (Id INTEGER NOT NULL, old_code TEXT NULL, "
+            + "CONSTRAINT PK_rename_target PRIMARY KEY (Id));");
+        await using var context = new SqliteColumnTransitionTestContext(connection);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.RenameColumnIfExists("old_code", "rename_target", "renamed_code");
+        builder.AddColumnIfNotExists<int>(
+            "renamed_code",
+            "rename_target",
+            type: "INTEGER",
+            nullable: true);
+
+        // Act
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => ExecuteOperationsAsync(context, builder.Operations));
+
+        // Assert
+        Assert.Contains("projected_structure_state_unknown", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connection,
+                "SELECT COUNT(*) FROM pragma_table_xinfo('rename_target') WHERE name = 'old_code';"));
+    }
+
+    [Fact]
     public async Task TableLifecycle_CreateRenameDropAndReplayRemainIdempotent()
     {
         await using var connection = await OpenConnectionAsync();

@@ -95,6 +95,83 @@ public sealed class SafeMigrationPostflightProjectionTests
     }
 
     [Theory]
+    [MemberData(nameof(RenameFinalWriterCases))]
+    public void RenameSupersedesEarlierWritersForItsSourceAndTarget(
+        SafeMigrationIntent sourceWriter,
+        SafeMigrationIntent targetWriter,
+        SafeMigrationIntent rename
+    )
+    {
+        // Arrange
+        var sourceOperations = new MigrationOperation[]
+        {
+            Safe(sourceWriter),
+            Safe(rename),
+        };
+        var targetOperations = new MigrationOperation[]
+        {
+            Safe(targetWriter),
+            Safe(rename),
+        };
+
+        // Act
+        var sourceProjection = new SafeMigrationPostflightProjection(sourceOperations);
+        var targetProjection = new SafeMigrationPostflightProjection(targetOperations);
+
+        // Assert
+        Assert.True(sourceProjection.IsSuperseded(0));
+        Assert.False(sourceProjection.IsSuperseded(1));
+        Assert.True(targetProjection.IsSuperseded(0));
+        Assert.False(targetProjection.IsSuperseded(1));
+    }
+
+    [Theory]
+    [MemberData(nameof(RenameFinalWriterCases))]
+    public void LaterTargetWriterDoesNotSupersedeRenameSourcePostcondition(
+        SafeMigrationIntent _,
+        SafeMigrationIntent targetWriter,
+        SafeMigrationIntent rename
+    )
+    {
+        // Arrange
+        MigrationOperation[] operations =
+        [
+            Safe(rename),
+            Safe(targetWriter),
+        ];
+
+        // Act
+        var projection = new SafeMigrationPostflightProjection(operations);
+
+        // Assert
+        Assert.False(projection.IsSuperseded(0));
+        Assert.False(projection.IsSuperseded(1));
+    }
+
+    [Theory]
+    [MemberData(nameof(RenameFinalWriterCases))]
+    public void LaterSourceWriterSupersedesRenameSourcePostcondition(
+        SafeMigrationIntent sourceWriter,
+        SafeMigrationIntent _,
+        SafeMigrationIntent rename
+    )
+    {
+        // Arrange
+        MigrationOperation[] operations =
+        [
+            Safe(rename),
+            Safe(sourceWriter),
+        ];
+
+        // Act
+        var projection = new SafeMigrationPostflightProjection(operations);
+
+        // Assert
+        Assert.True(projection.IsSuperseded(0));
+        Assert.False(projection.IsSuperseded(1));
+    }
+
+    [Theory]
     [InlineData(true)]
     [InlineData(false)]
     public void ProviderNormalizedIdentitySupersedesAcrossEveryQualifiedResourceFamily(
@@ -108,16 +185,14 @@ public sealed class SafeMigrationPostflightProjectionTests
         var normalizer = new CurrentDatabaseIdentityNormalizer(database);
 
         // Act
-        Assert.Equal(earlier.Length, later.Length);
-        var projections = new SafeMigrationPostflightProjection[earlier.Length];
-        for (var index = 0; index < earlier.Length; index++)
-        {
-            projections[index] = new SafeMigrationPostflightProjection(
-                [earlier[index], later[index]],
-                normalizer);
-        }
+        var projections = earlier
+            .Zip(later, (first, second) => new SafeMigrationPostflightProjection([first, second], normalizer))
+            .ToArray();
 
         // Assert
+        Assert.Equal(earlier.Length, later.Length);
+        Assert.Equal(earlier.Length, projections.Length);
+
         for (var index = 0; index < projections.Length; index++)
         {
             Assert.True(
@@ -180,6 +255,26 @@ public sealed class SafeMigrationPostflightProjectionTests
     private static SafeMigrationOperation Safe(
         SafeMigrationIntent intent
     ) => new(intent, SafeMigrationPolicy.ThrowIfDifferent);
+
+    public static TheoryData<SafeMigrationIntent, SafeMigrationIntent, SafeMigrationIntent>
+        RenameFinalWriterCases => new()
+        {
+            {
+                new DropTableIntent("source"),
+                new DropTableIntent("target"),
+                new RenameTableIntent("source", "target")
+            },
+            {
+                new DropColumnIntent("source", "records"),
+                new DropColumnIntent("target", "records"),
+                new RenameColumnIntent("source", "records", "target")
+            },
+            {
+                new DropIndexIntent("source", "records"),
+                new DropIndexIntent("target", "records"),
+                new RenameIndexIntent("source", "records", "target")
+            },
+        };
 
     private static string Describe(
         SafeMigrationIntent intent

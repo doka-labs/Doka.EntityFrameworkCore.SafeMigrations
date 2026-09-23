@@ -8,6 +8,20 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- Scaffold schema, table, column, index, and constraint operations directly to
+  their safe builder forms, and stop before publishing source that
+  SafeMigrations cannot model: raw SQL, raw data changes, sequences,
+  `AlterTable`, and unknown metadata no longer enter newly generated
+  migrations. SafeMigrations does not rewrite already published operations;
+  ordinary EF operations continue to reach the configured provider unchanged
+  and remain listed in the report as not analyzed.
+- Add `AddColumnIfNotExistsFromModel` and `AlterColumnIfDifferentFromModel` as
+  explicit source-frozen column builder APIs. Generated MySQL/MariaDB drops
+  and renames accept Doka's recognized column-identity metadata while unknown
+  provider annotations still stop scaffolding.
+- Make ordered preflight fail closed after a table-structure change when a later
+  column add is not provably safe. This can change an existing migration's
+  analysis report from `Ready` to `Blocked` without changing its runtime SQL.
 - Make `global.json` the sole CI SDK-version source and limit committed NuGet
   lock files to the four publishable package projects. Test, benchmark, sample,
   tooling, and package-consumer projects resolve the central declarations
@@ -34,6 +48,22 @@ All notable changes are documented here. The format follows
   A bounded status preflight skips visible primary packages, while symbol
   pushes remain duplicate-tolerant and final signed-content readback remains
   mandatory.
+
+### Fixed
+
+- Execute every command in an ordered MySQL/MariaDB provider transition behind
+  one SafeMigrations decision and verify its final postcondition after the full
+  sequence. This permits provider-generated non-null backfill plus column DDL
+  without exposing an unguarded intermediate command.
+- Keep a rename's source-absence postcondition authoritative when a later
+  operation writes only its destination. The rename still supersedes earlier
+  source and destination writers, while a later source writer supersedes the
+  rename itself.
+- Preserve SQLite's proof that a column rename cannot create an unrelated
+  column. An ordered drop, rename, and nullable add can now execute in one
+  guarded structural batch; dependent definitions remain fail-closed.
+- Accept Doka's validated column-identity annotations on generated MySQL/MariaDB
+  drop and rename operations while continuing to reject unknown provider metadata.
 
 ## [10.4.2] - 2026-09-19
 

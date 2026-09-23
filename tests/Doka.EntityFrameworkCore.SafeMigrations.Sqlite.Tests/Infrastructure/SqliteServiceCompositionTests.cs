@@ -18,6 +18,58 @@ public sealed class SqliteServiceCompositionTests
     }
 
     [Fact]
+    public async Task RuntimeSqlGenerator_PassesEfHistoryBootstrapSqlToTheProviderWithoutAModel()
+    {
+        // Arrange
+        await using var connection = await SqliteIntegrationTestBase.OpenConnectionAsync();
+        await using var context = new SqliteSafeMigrationTestContext(connection);
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+        var historySql = context
+            .GetService<IHistoryRepository>()
+            .GetCreateIfNotExistsScript();
+        var relationalConnection = context.GetService<IRelationalConnection>();
+        await using var historyTableQuery = connection.CreateCommand();
+        historyTableQuery.CommandText = "SELECT COUNT(*) FROM main.sqlite_schema "
+            + "WHERE type = 'table' AND name = '__EFMigrationsHistory';";
+
+        // Act
+        var commands = generator.Generate([new SqlOperation { Sql = historySql }], model: null);
+        var command = commands.Single();
+        _ = await command.ExecuteNonQueryAsync(relationalConnection);
+        var historyTableCount = Convert.ToInt32(
+            await historyTableQuery.ExecuteScalarAsync(CancellationToken.None),
+            CultureInfo.InvariantCulture);
+
+        // Assert
+        Assert.Single(commands);
+        Assert.Contains("CREATE TABLE IF NOT EXISTS", historySql, StringComparison.Ordinal);
+        Assert.DoesNotContain("SafeMigrations batch", historySql, StringComparison.Ordinal);
+        Assert.Equal(historySql.Trim(), command.CommandText.Trim());
+        Assert.Same(connection, relationalConnection.DbConnection);
+        Assert.Equal(ConnectionState.Open, connection.State);
+        Assert.Equal(1, historyTableCount);
+    }
+
+    [Fact]
+    public async Task RuntimeSqlGenerator_PassesArbitraryModelLessSqlToTheProvider()
+    {
+        // Arrange
+        await using var connection = await SqliteIntegrationTestBase.OpenConnectionAsync();
+        await using var context = new SqliteSafeMigrationTestContext(connection);
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+
+        // Act
+        var commands = generator.Generate(
+            [new SqlOperation { Sql = "SELECT 1;" }],
+            model: null);
+
+        // Assert
+        var command = Assert.Single(commands);
+
+        Assert.Equal("SELECT 1;", command.CommandText.Trim());
+    }
+
+    [Fact]
     public void RegistrationWithoutSqliteProvider_FailsWithProviderSpecificMessage()
     {
         var options = new DbContextOptionsBuilder();

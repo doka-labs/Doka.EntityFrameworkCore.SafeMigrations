@@ -356,6 +356,15 @@ public abstract class SafeMigrationDataTransitionScaffoldingDbContext : DbContex
                 .HasMaxLength(320)
                 .IsRequired();
 
+            entity.Property<string?>("RenamedCode")
+                .HasColumnName(targetState ? "renamed_code" : "old_code")
+                .HasMaxLength(32);
+
+            if (targetState)
+            {
+                entity.Property<string?>("AddedCode").HasMaxLength(32);
+            }
+
             entity.HasData(targetState
                 ?
                 [
@@ -367,6 +376,19 @@ public abstract class SafeMigrationDataTransitionScaffoldingDbContext : DbContex
                     new SafeMigrationDataTransitionUser { Id = 1, Email = "administrator@example.test", },
                     new SafeMigrationDataTransitionUser { Id = 2, Email = "member@example.test", },
                 ]);
+        });
+
+        // WHY: EF can interpret a removed and added column on the same table
+        // as a rename. A separate persistent table proves the DropColumn path.
+        modelBuilder.Entity<SafeMigrationDataTransitionAuxiliary>(entity =>
+        {
+            entity.ToTable("scaffolding_transition_auxiliary");
+            entity.HasKey(value => value.Id);
+
+            if (!targetState)
+            {
+                entity.Property<int?>("LegacyCode");
+            }
         });
 
         if (targetState)
@@ -425,6 +447,11 @@ public sealed class SafeMigrationDataTransitionRequest
     public int Id { get; set; }
 
     public string Caption { get; set; } = string.Empty;
+}
+
+internal sealed class SafeMigrationDataTransitionAuxiliary
+{
+    public int Id { get; set; }
 }
 
 public sealed class StrictSafeMigrationDataTransitionScaffoldingDbContextFactory

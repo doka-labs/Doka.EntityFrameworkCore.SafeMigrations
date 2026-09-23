@@ -384,12 +384,17 @@ values, mutable operational data, temporary test data, or large datasets in
 bootstrap workflow for those cases. See the official
 [EF Core model-managed-data guidance](https://learn.microsoft.com/en-us/ef/core/modeling/data-seeding).
 
-SafeMigrations does not reinterpret existing migration files. If an unapplied
-migration still contains raw model-managed data calls, remove it and scaffold
-it again after upgrading. Never replace an already applied migration; express
-the correction as a new forward migration. A hand-authored raw data operation
-remains `provider_owned_not_analyzed` because SafeMigrations cannot prove its
-model origin or reconstruct missing old values.
+SafeMigrations never rewrites or reinterprets existing migration source. An
+ordinary EF operation in an older migration reaches the configured provider
+unchanged by SafeMigrations; the report lists it as not analyzed. Only
+migrations scaffolded after the upgrade use the safe builder calls. Never
+replace an already applied migration; express the correction as a new forward
+migration.
+
+New scaffolding rejects hand-authored raw data operations because SafeMigrations
+cannot prove their model origin or reconstruct missing old values. Operations
+in already published migrations remain provider-owned and are reported as
+`provider_owned_not_analyzed` rather than being reinterpreted.
 
 ### Excluded-table ownership in an extended application context
 
@@ -553,33 +558,32 @@ write cannot become approval or truncation.
 
 Doka's typed metadata contract must recognize every MySQL/MariaDB annotation
 and prove it consistent with the column shape. Existing `NULL` rows make a
-`NOT NULL` repair `DataBlocked`. Character-family, collation, generated,
+`NOT NULL` repair `DataBlocked` unless a structurally proven non-null default
+permits Doka's guarded backfill. Character-family, collation, generated,
 identity, row-version, malformed, contradictory, or unsupported drift rejects
 before target DDL. MySQL and MariaDB use Doka's complete `MODIFY COLUMN`
 definition; PostgreSQL uses its provider-rendered type and facet statements.
 Accepted length and Boolean repairs report `TableRewritePossible`, so a
 maintenance-window decision remains separate from the losslessness decision.
 
-Ordered preflight projects deterministic structural postconditions of preceding
-ordinary EF table and column operations into later safe prerequisites. For
-example, an ordinary `AddColumnOperation` followed by a safe index can produce
-`projected_missing` rather than the catalog's historical
-`prerequisite_missing`. The ordinary operation remains
-`provider_owned_not_analyzed`, the overall result remains
-`ReadyWithProviderOperations`, and deployment approval still requires an
-independent review and postcondition for that operation. Projection describes
-the state only if the earlier provider operation succeeds; it does not convert
-ordinary DDL into a SafeMigrations operation.
-Raw hand-authored or previously compiled typed EF insert, update, and
-delete-data operations preserve structural table/column prerequisites for a
-later non-unique index, but invalidate every earlier projected or live
-pre-batch data-safety proof. Newly scaffolded HasData operations instead use
-the source-frozen model-managed contract above. A later unique index or additive
-data-validating constraint after raw data therefore remains blocked rather than
-assuming that unanalyzed values are safe. Later structural DDL does not
-re-establish row-level certainty. An unrecognized provider operation or raw SQL
-still invalidates all in-memory projection facts; represent the required state
-explicitly or reorder the safe operation after a separately reviewed boundary.
+The default must be a non-null literal or a parsed, typed SQL expression with
+a structural non-null proof, such as a current value or `COALESCE` with a proven
+non-null argument. Raw SQL text, casts, binary arithmetic, and column
+references cannot justify the backfill.
+
+Ordered preflight projects accepted safe operations into later safe
+prerequisites. A recognized deterministic postcondition of an ordinary EF
+operation, for example an `AddColumnOperation` followed by an index, can still
+produce `projected_missing` rather than the catalog's historical
+`prerequisite_missing`; the ordinary operation itself remains unanalyzed.
+
+For newly scaffolded migration source, raw hand-authored insert, update, and
+delete-data operations, raw SQL, `AlterTable`, sequences, and unknown operations
+reject the source stream before it is published. Previously compiled ordinary
+EF operations remain provider-owned at runtime. Newly scaffolded `HasData`
+operations use the source-frozen model-managed contract above. Use that contract
+or a separate audited data workflow instead of relying on an unproven operation
+between structural prerequisites.
 
 For unique indexes on an existing table, projection applies a stricter data
 safety proof. A newly added key column must be nullable, non-computed, and have

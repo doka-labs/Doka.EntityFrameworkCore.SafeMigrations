@@ -146,8 +146,10 @@ instead; do not translate the runtime command batch into hand-authored SQL.
 Call `ISafeMigrationRunner.VerifyAsync` with the final-state contract reviewed
 before the deployment, and retain the JSON report. This API checks effective
 final postconditions against the live catalog; it does not apply preflight
-projection. For repeated safe writes to the same exact resource, only the final
-safe writer is authoritative. Earlier ordered assessments report
+projection. For repeated safe writes to the same physical resource, only the
+final safe writer is authoritative. A rename writes both source and destination
+identities: a later destination-only write does not supersede its source-absence
+check, but a later source write does. Earlier ordered assessments report
 `postcondition_superseded` and an effective satisfied postcondition. This
 supports reviewed drop/recreate and successive-definition streams without
 requiring their transient states to exist after the migration. Ordinary
@@ -170,7 +172,7 @@ Then verify:
   proves no target conditions;
 - every safe operation has `postconditionSatisfied: true`; an earlier safe
   writer may additionally carry `postcondition_superseded` when a later safe
-  writer owns the same exact resource;
+  writer owns its checked physical resource;
 - provider, instance, model fingerprint, and target migration match the
   approved deployment identity;
 - the postflight contract fingerprint matches the independently approved

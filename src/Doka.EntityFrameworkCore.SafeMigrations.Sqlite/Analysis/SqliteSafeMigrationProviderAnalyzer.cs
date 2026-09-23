@@ -432,6 +432,18 @@ internal sealed class SqliteSafeMigrationProviderAnalyzer : ISafeMigrationProvid
     }
 
     /// <inheritdoc />
+    public bool PreservesUnrelatedColumnAbsence(
+        RenameColumnIntent operation
+    )
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+
+        // WHY: SQLite rewrites dependent schema text during RENAME COLUMN, but
+        // it cannot create a third, unrelated column in the renamed table.
+        return true;
+    }
+
+    /// <inheritdoc />
     public bool IsSequenceAwareAnalysis(
         SafeMigrationOperation operation,
         SafeMigrationProviderAnalysis analysis

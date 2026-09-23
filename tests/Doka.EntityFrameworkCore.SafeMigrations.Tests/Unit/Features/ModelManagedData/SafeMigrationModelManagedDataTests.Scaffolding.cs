@@ -130,7 +130,7 @@ public sealed partial class SafeMigrationModelManagedDataTests
 
             Assert.Contains("unpaired", exception.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Contains(operation.GetType().Name, exception.Message, StringComparison.Ordinal);
-            Assert.Equal("migrationBuilder", builder.ToString());
+            Assert.Empty(builder.ToString());
         }
     }
 
@@ -274,7 +274,8 @@ public sealed partial class SafeMigrationModelManagedDataTests
             new SafeMigrationScaffoldingConfiguration(
                 isEnabled,
                 SafeMigrationScaffoldingMode.Strict),
-            createIndexProjectors: []);
+            createIndexProjectors: [],
+            providerOperationAdapters: []);
     }
 
     private enum ModelDifferRegistration

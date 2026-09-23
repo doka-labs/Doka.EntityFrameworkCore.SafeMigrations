@@ -1,8 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 /// <summary>
-/// Describes provider-owned migration operations whose postconditions can be
-/// projected without invalidating existing table-scoped preflight evidence.
+/// Describes explicitly certified provider operations whose bounded effects
+/// preserve existing table-scoped preflight evidence.
 /// </summary>
 internal interface ISafeMigrationProviderOperationProjection
 {
@@ -10,7 +10,7 @@ internal interface ISafeMigrationProviderOperationProjection
     /// Determines whether the operation provably preserves every existing
     /// table, column, constraint, index, and row observation.
     /// </summary>
-    /// <param name="operation">The provider-owned operation to classify.</param>
+    /// <param name="operation">The provider operation to classify.</param>
     /// <returns>
     /// <see langword="true"/> only when the provider guarantees that all
     /// existing table-scoped evidence remains valid; otherwise,
@@ -19,6 +19,16 @@ internal interface ISafeMigrationProviderOperationProjection
     bool PreservesExistingTableState(
         MigrationOperation operation
     );
+
+    /// <summary>
+    /// Determines whether a column rename preserves the absence of every
+    /// unrelated column, even when dependent schema objects may change.
+    /// </summary>
+    /// <param name="operation">The accepted column rename.</param>
+    /// <returns><see langword="true"/> only for a provider with this guarantee.</returns>
+    bool PreservesUnrelatedColumnAbsence(
+        RenameColumnIntent operation
+    ) => false;
 
     /// <summary>
     /// Determines whether a provider analysis already incorporates the ordered

@@ -125,16 +125,15 @@ disabling analysis. Every insertion preserves the LF or CRLF convention found
 in provider-generated source; mixed line endings and standalone carriage
 returns fail closed.
 
-Automatic rewriting covers `CreateTable`, `CreateIndex`, `DropIndex`, and
-`DropTable`, plus standalone primary-key, unique, check, and foreign-key adds
-and drops. Constraint adds freeze `ThrowIfDifferent`; drops make only absence
-idempotent. Their EF operations contain the complete semantic identity required
-by the existing SafeMigrations contracts. Unrepresentable operation annotations,
-implicit foreign-key principal columns, and opaque check SQL stop scaffolding.
-Add/alter/drop column, rename, and schema operations remain ordinary EF
-operations unless the author chooses the corresponding explicit SafeMigrations
-API. This keeps repair and ownership policy explicit where it cannot be inferred
-from the current model.
+Automatic rewriting covers schema ensure/drop; table create/drop/rename;
+column add/alter/drop/rename; index create/drop/rename; and supported named-
+constraint adds and drops. Constraint adds freeze `ThrowIfDifferent`; drops
+make only absence idempotent. Generated add/alter column callbacks capture the
+complete EF operation, including provider annotations, before sealing the
+expected definition. Unrepresentable annotations, implicit foreign-key
+principal columns, opaque check SQL, raw data or SQL operations, sequences,
+and unknown operation shapes stop the complete scaffolding stream before any
+partial migration source is published.
 
 The typed table callback captures EF's column and constraint operations into
 immutable definitions. Provider column annotations use a closed snapshot value
@@ -170,8 +169,9 @@ freezes both values into source.
   preserved only as C# text.
 - Good, because a reviewed legacy baseline can repair common mutable column
   drift without giving type or generated-value drift implicit authority.
-- Bad, because migration authors must still select explicit safe APIs for later
-  column, rename, and schema operations that require catalog-aware behavior.
+- Bad, because migration authors must still select explicit safe APIs for
+  operations whose provider-specific contract is not covered by automatic
+  scaffolding.
 - Bad, because a newly emitted provider operation annotation remains blocked
   until its catalog equivalence has an explicit adapter implementation.
 
@@ -287,6 +287,24 @@ snapshots already required for catalog comparison and hashing.
   including migrations without an `EnsureTable` operation.
 - 2026-09-18: D-013 extended automatic strict and legacy-convergence
   scaffolding to the SQLite provider package and EF tooling gate.
+- 2026-09-22: Extended automatic rewriting to every supported schema, table,
+  column, index, and named-constraint operation, and made the generator
+  validate the complete operation stream before publishing source. Already
+  published migrations keep their behavior; the change applies only to source
+  scaffolded from this release onward.
+
+### 2026-09-22 Compatibility Amendment
+
+The previous release contract through 10.4.2 covered fewer automatically
+rewritten operations. Strict and legacy scaffolding now emit closed SafeMigrations
+calls for schema ensure/drop; table create/drop/rename; column
+add/alter/drop/rename; index create/drop/rename; and supported named-constraint
+adds and drops. Generated add/alter column callbacks capture the complete EF
+operation, including provider annotations, before sealing the expected
+definition. Raw SQL, raw data operations, `AlterTable`, sequences, ambiguous
+metadata, and unknown operations reject the complete source stream. Existing
+migration files remain immutable and keep executing with the behavior they had
+when they were authored; nothing reinterprets them at analysis or execution.
 
 ### Implementation References
 

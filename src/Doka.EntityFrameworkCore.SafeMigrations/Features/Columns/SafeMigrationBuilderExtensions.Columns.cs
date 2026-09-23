@@ -98,6 +98,35 @@ public static partial class SafeMigrationBuilderExtensions
         return migrationBuilder.EnsureColumn(table, definition, policy, schema);
     }
 
+    /// <summary>
+    /// Captures one complete EF Core add-column operation emitted by the
+    /// scaffolder and replaces it with an immutable SafeMigrations operation.
+    /// </summary>
+    /// <param name="migrationBuilder">The EF Core migration builder that receives the operation.</param>
+    /// <param name="operationFactory">
+    /// The generated callback that appends exactly one add-column operation,
+    /// including all provider annotations.
+    /// </param>
+    /// <param name="policy">The conflict policy for the operation.</param>
+    /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
+    /// <exception cref="ArgumentNullException">
+    /// <paramref name="migrationBuilder"/> or <paramref name="operationFactory"/> is null.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The callback does not append exactly one add-column operation.
+    /// </exception>
+    public static OperationBuilder<SafeMigrationOperation> AddColumnIfNotExistsFromModel(
+        this MigrationBuilder migrationBuilder,
+        Action<MigrationBuilder> operationFactory,
+        SafeMigrationPolicy policy = SafeMigrationPolicy.ThrowIfDifferent
+    )
+    {
+        var operation = CaptureColumnOperation<AddColumnOperation>(migrationBuilder, operationFactory);
+        var definition = SafeMigrationExpectedDefinitionFactory.From(operation);
+
+        return migrationBuilder.EnsureColumn(operation.Table, definition, policy, operation.Schema);
+    }
+
     /// <summary>Drops a column when it exists.</summary>
     /// <param name="migrationBuilder">The EF Core migration builder that receives the operation.</param>
     /// <param name="name">The database object name.</param>
@@ -148,4 +177,88 @@ public static partial class SafeMigrationBuilderExtensions
         SafeMigrationPolicy policy,
         string? schema = null
     ) => Add(migrationBuilder, new AlterColumnIntent(table, definition, oldDefinition, schema), policy);
+
+    /// <summary>
+    /// Captures one complete EF Core alter-column operation emitted by the
+    /// scaffolder and replaces it with an immutable SafeMigrations operation.
+    /// </summary>
+    /// <param name="migrationBuilder">The EF Core migration builder that receives the operation.</param>
+    /// <param name="operationFactory">
+    /// The generated callback that appends exactly one alter-column operation,
+    /// including the old definition and all provider annotations.
+    /// </param>
+    /// <param name="policy">The conflict policy for the reviewed transition.</param>
+    /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
+    /// <exception cref="ArgumentNullException">
+    /// <paramref name="migrationBuilder"/> or <paramref name="operationFactory"/> is null.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The callback does not append exactly one alter-column operation.
+    /// </exception>
+    public static OperationBuilder<SafeMigrationOperation> AlterColumnIfDifferentFromModel(
+        this MigrationBuilder migrationBuilder,
+        Action<MigrationBuilder> operationFactory,
+        SafeMigrationPolicy policy = SafeMigrationPolicy.RepairIfSafe
+    )
+    {
+        var operation = CaptureColumnOperation<AlterColumnOperation>(migrationBuilder, operationFactory);
+        var definition = SafeMigrationExpectedDefinitionFactory.From(operation);
+        var oldDefinition = SafeMigrationExpectedDefinitionFactory.From(operation.OldColumn, operation.Name);
+
+        return migrationBuilder.AlterColumnIfDifferent(
+            operation.Table,
+            definition,
+            oldDefinition,
+            policy,
+            operation.Schema);
+    }
+
+    private static TOperation CaptureColumnOperation<TOperation>(
+        MigrationBuilder migrationBuilder,
+        Action<MigrationBuilder> operationFactory
+    )
+        where TOperation : ColumnOperation
+    {
+        ArgumentNullException.ThrowIfNull(migrationBuilder);
+        ArgumentNullException.ThrowIfNull(operationFactory);
+
+        var operationCount = migrationBuilder.Operations.Count;
+        try
+        {
+            operationFactory(migrationBuilder);
+        }
+        catch
+        {
+            RemoveCapturedOperations(migrationBuilder, operationCount);
+
+            throw;
+        }
+
+        if (migrationBuilder.Operations.Count != operationCount + 1
+            || migrationBuilder.Operations[^1] is not TOperation operation)
+        {
+            // WHY: The callback is public migration code. Roll back every
+            // appended operation before failing so a caller cannot catch the
+            // validation error and accidentally retain unguarded EF operations.
+            RemoveCapturedOperations(migrationBuilder, operationCount);
+
+            throw new InvalidOperationException(
+                $"The generated callback did not append exactly one {typeof(TOperation).Name}.");
+        }
+
+        migrationBuilder.Operations.RemoveAt(operationCount);
+
+        return operation;
+    }
+
+    private static void RemoveCapturedOperations(
+        MigrationBuilder migrationBuilder,
+        int operationCount
+    )
+    {
+        while (migrationBuilder.Operations.Count > operationCount)
+        {
+            migrationBuilder.Operations.RemoveAt(migrationBuilder.Operations.Count - 1);
+        }
+    }
 }

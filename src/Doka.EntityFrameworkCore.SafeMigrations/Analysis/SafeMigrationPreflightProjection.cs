@@ -212,10 +212,11 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
     }
 
     /// <summary>
-    /// Projects deterministic structural postconditions of an ordered ordinary
-    /// EF operation without claiming that SafeMigrations analyzed the operation.
+    /// Conservatively updates projected evidence after a non-safe operation.
+    /// Provider-specific preservation can retain existing evidence; otherwise
+    /// recognized postconditions are projected and uncertain facts invalidated.
     /// </summary>
-    /// <param name="operation">The provider-owned operation that precedes later safe operations.</param>
+    /// <param name="operation">The non-safe operation that precedes later safe operations.</param>
     public void ObserveProviderPostcondition(
         MigrationOperation operation
     )
@@ -224,10 +225,9 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
 
         if (_providerOperationProjection?.PreservesExistingTableState(operation) == true)
         {
-            // WHY: Only the active provider can prove that one of its ordinary
-            // operations leaves every existing table-scoped fact unchanged.
-            // Unknown providers and operations continue through the fail-closed
-            // structural invalidation below.
+            // WHY: The provider owns whether this ordinary operation preserves
+            // existing table-scoped evidence. Other operations continue through
+            // conservative postcondition projection or invalidation.
 
             return;
         }
