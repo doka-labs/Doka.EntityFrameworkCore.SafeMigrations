@@ -94,12 +94,13 @@ changes.
 
 This policy covers all four SafeMigrations packages. Stable 10.4.x is the
 currently supported line; a dated changelog entry is not proof that a
-particular version has been published. Version 10.4.2 is the latest confirmed
-published release. Subsequent source changes become supported only after
-verified publication and package readback.
+particular version has been published. At preparation time, 10.4.2 is the
+latest confirmed published release. This source prepares 10.4.3, which becomes
+a supported release only after verified publication and package readback.
 
 | Release state | Security support |
 | --- | --- |
+| Prepared 10.4.3 source | Not a published support claim until release and package readback succeed |
 | Stable 10.4.x | Supported release line; fixes may require updating to its latest published patch |
 | Stable 10.3.x | Superseded by the stable 10.4.x line |
 | Stable 10.2.x | Superseded by the stable 10.3.x line |

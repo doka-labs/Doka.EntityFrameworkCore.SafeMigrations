@@ -39,9 +39,11 @@ preserves that public API, generated-operation contract, and report schemas
 while correcting ordered prerequisite and physical-identity projection.
 Published stable 10.4.2 adds the SQLite package and its provider-specific
 public registration and generator surface. Existing Core, MySQL/MariaDB, and
-PostgreSQL public APIs remain compatible. Strict scaffolding remains the
-default. A successful release run and exact-version public package readback
-remain the authority for a published API.
+PostgreSQL public APIs remain compatible. The 10.4.3 source adds the Core
+`AddColumnIfNotExistsFromModel` and `AlterColumnIfDifferentFromModel` methods
+and extends safe scaffolding to supported structural operations. Strict
+scaffolding remains the default. A successful release run and exact-version
+public package readback remain the authority for a published API.
 
 ## Packages and registration
 
