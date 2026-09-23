@@ -2,7 +2,7 @@
   <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
 
   <PropertyGroup>
-    <VersionPrefix>10.4.2</VersionPrefix>
+    <VersionPrefix>10.4.3</VersionPrefix>
     <PackageVersion Condition="'$(PackageVersion)' == ''">$(VersionPrefix)-dev</PackageVersion>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <!-- The committed locks record the platform-neutral graph. EF Migration

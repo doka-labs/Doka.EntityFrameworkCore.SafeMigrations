@@ -6,6 +6,21 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+## [10.4.3] - 2026-09-24
+
+Prepared a stable patch release that completes safe scaffolding for supported
+structural operations and guards ordered MySQL/MariaDB provider transitions.
+It adds two Core column-builder APIs, does not rewrite existing migration
+source or history, and keeps the report schema unchanged. Ordered preflight
+may newly block an unproven column add. Dependency maintenance and resumable
+NuGet publication from this release line are included below.
+
+These notes do not establish publication. Require the successful stable
+release run, the authorized signed `v10.4.3` tag, and verified public package,
+symbol, GitHub Release, provenance, SBOM, and attestation readback before
+selecting 10.4.3. All four package IDs must be published at the exact same
+version.
+
 ### Changed
 
 - Scaffold schema, table, column, index, and constraint operations directly to
@@ -1103,7 +1118,8 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.2...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.3...HEAD
+[10.4.3]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.2...v10.4.3
 [10.4.2]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.1...v10.4.2
 [10.4.1]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.0...v10.4.1
 [10.4.0]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.3.2...v10.4.0

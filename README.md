@@ -46,35 +46,35 @@ The CI and release workflows pin the exact patch tags and image digests used
 when that matrix executes. The exact successful run, not this table, is release
 evidence. See [Support and qualification](docs/support-and-qualification.md).
 
-The initial complete stable delivery is 10.0.0. The latest confirmed published
-release is 10.4.2. Subsequent source changes establish no future release until
-the blocking release workflow and public package readback succeed. See the
-[changelog](CHANGELOG.md).
+The initial complete stable delivery is 10.0.0. At preparation time, 10.4.2
+is the latest confirmed published release. This source prepares stable 10.4.3;
+only the blocking release workflow and readback of all four public packages
+establish its availability. See the [changelog](CHANGELOG.md).
 
 ## Installation
 
 Install one provider package. The core package is included transitively. The
-commands select the published stable release exactly so restore does
-not move to a different package version implicitly. Confirm the matching
-published release and all four NuGet package pages before installation; source
-or changelog entries alone do not establish package availability.
+commands select the intended 10.4.3 release exactly so restore does not move
+to a different package version implicitly. Use them only after the matching
+release and all four NuGet package pages are public; source or changelog
+entries alone do not establish package availability.
 
 ```bash
-package_version='10.4.2'
+package_version='10.4.3'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.MySql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.4.2'
+package_version='10.4.3'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.4.2'
+package_version='10.4.3'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.Sqlite --version "$package_version"
 ```
 
