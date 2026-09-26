@@ -46,35 +46,44 @@ The CI and release workflows pin the exact patch tags and image digests used
 when that matrix executes. The exact successful run, not this table, is release
 evidence. See [Support and qualification](docs/support-and-qualification.md).
 
-The initial complete stable delivery is 10.0.0. At preparation time, 10.4.2
-is the latest confirmed published release. This source prepares stable 10.4.3;
+The initial complete stable delivery is 10.0.0. At preparation time, 10.4.3
+is the latest confirmed published release. This source prepares stable 10.4.4;
 only the blocking release workflow and readback of all four public packages
 establish its availability. See the [changelog](CHANGELOG.md).
+
+The 10.4.4 patch corrects read-only preflight for mixed legacy-convergence and
+strict migration streams containing raw SQL. Unprovable later safe operations
+report `ValidateAtRuntime` with their SQL origin; unchanged runtime guards
+decide after that SQL executes. Proven conflicts remain blocked. Canonical
+reports use schema v3 and filtered views use v2; consumers must handle the new
+action/status values and report versions. Existing migration source and history
+are not rewritten. See the
+[report contract](docs/api-reference.md#reports-serialization-and-failure).
 
 ## Installation
 
 Install one provider package. The core package is included transitively. The
-commands select the intended 10.4.3 release exactly so restore does not move
+commands select the intended 10.4.4 release exactly so restore does not move
 to a different package version implicitly. Use them only after the matching
 release and all four NuGet package pages are public; source or changelog
 entries alone do not establish package availability.
 
 ```bash
-package_version='10.4.3'
+package_version='10.4.4'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.MySql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.4.3'
+package_version='10.4.4'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.4.3'
+package_version='10.4.4'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.Sqlite --version "$package_version"
 ```
 

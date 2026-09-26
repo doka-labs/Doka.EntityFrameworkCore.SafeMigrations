@@ -1,8 +1,1 @@
 #nullable enable
-Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAction.ValidateAtRuntime = 7 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAction
-Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAssessment.DeferredOrigin.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDeferredOrigin?
-Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDeferredOrigin
-Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDeferredOrigin.MigrationId.get -> string?
-Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDeferredOrigin.OperationOrdinal.get -> int
-Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDeferredOrigin.OperationType.get -> string!
-Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationReportStatus.RuntimeValidationRequired = 4 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationReportStatus

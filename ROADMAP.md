@@ -60,8 +60,10 @@ ordered prerequisite-state, semantic-alias, physical-key feasibility, and
 composite-key catalog-matching defects. Published stable 10.4.2 adds a
 separately packaged SQLite adapter with transactional, model-owned rebuilds
 and closes verified convergence and incremental design-time registration
-defects. The 10.4.3 source line completes safe structural-operation
-scaffolding and corrects ordered provider transitions; publication still
+defects. Published stable 10.4.3 completes safe structural-operation scaffolding
+and corrects ordered provider transitions. The prepared 10.4.4 patch corrects
+opaque-SQL mixed-stream preflight without rewriting migration source or runtime
+guards, and versions the corresponding report contract. Publication still
 requires the full release gate. These releases follow changed dependency
 conditions and confirmed correctness requirements; they are not deferred
 initial scope.

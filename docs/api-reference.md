@@ -39,10 +39,17 @@ preserves that public API, generated-operation contract, and report schemas
 while correcting ordered prerequisite and physical-identity projection.
 Published stable 10.4.2 adds the SQLite package and its provider-specific
 public registration and generator surface. Existing Core, MySQL/MariaDB, and
-PostgreSQL public APIs remain compatible. The 10.4.3 source adds the Core
+PostgreSQL public APIs remain compatible. Published stable 10.4.3 adds the Core
 `AddColumnIfNotExistsFromModel` and `AlterColumnIfDifferentFromModel` methods
 and extends safe scaffolding to supported structural operations. Strict
-scaffolding remains the default. A successful release run and exact-version
+scaffolding remains the default. The prepared 10.4.4 patch adds
+`SafeMigrationDeferredOrigin`, `SafeMigrationAssessment.DeferredOrigin`,
+`SafeMigrationAction.ValidateAtRuntime`, and
+`SafeMigrationReportStatus.RuntimeValidationRequired`. Canonical reports advance
+to schema v3 and filtered views to v2. Consumers must update exhaustive enum
+handling and schema validation, and rebuild references to the compiled
+`CurrentSchemaVersion` constant. Existing migration source, runtime guards,
+and history remain unchanged. A successful release run and exact-version
 public package readback remain the authority for a published API.
 
 ## Packages and registration
