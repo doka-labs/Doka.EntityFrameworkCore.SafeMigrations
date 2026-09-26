@@ -206,6 +206,7 @@ public sealed class SafeMigrationRunContractTests
             (Value: SafeMigrationReportStatus.Ready, Code: "ready"),
             (Value: SafeMigrationReportStatus.ReadyWithProviderOperations, Code: "ready_with_provider_operations"),
             (Value: SafeMigrationReportStatus.Blocked, Code: "blocked"),
+            (Value: SafeMigrationReportStatus.RuntimeValidationRequired, Code: "runtime_validation_required"),
         };
 
         foreach (var mode in modes)
@@ -279,6 +280,7 @@ public sealed class SafeMigrationRunContractTests
             (Value: SafeMigrationAction.RejectDifferent, Code: "reject_different"),
             (Value: SafeMigrationAction.RejectDataBlocked, Code: "reject_data_blocked"),
             (Value: SafeMigrationAction.RejectPrerequisiteMissing, Code: "reject_prerequisite_missing"),
+            (Value: SafeMigrationAction.ValidateAtRuntime, Code: "validate_at_runtime"),
         };
 
         var operationalImpacts = new[]
@@ -311,13 +313,18 @@ public sealed class SafeMigrationRunContractTests
                 $"object_{index}",
                 states[index % states.Length].Value,
                 actions[index % actions.Length].Value,
-                index % 2 == 0,
+                actions[index % actions.Length].Value == SafeMigrationAction.ValidateAtRuntime
+                    ? null
+                    : index % 2 == 0,
                 "stable_code",
                 "provider_analysis",
                 "policy_decision",
                 operationalImpacts[index % operationalImpacts.Length].Value,
                 index == 0
                     ? [new SafeMigrationFacetDifference("column_max_length", "200", "10")]
+                    : null,
+                actions[index % actions.Length].Value == SafeMigrationAction.ValidateAtRuntime
+                    ? new SafeMigrationDeferredOrigin(null, 0, typeof(SqlOperation).FullName!)
                     : null))
             .Append(
                 new SafeMigrationAssessment(
@@ -779,7 +786,7 @@ public sealed class SafeMigrationRunContractTests
             Path.Combine(
                 AppContext.BaseDirectory,
                 "schemas",
-                "safe-migration-report-view-v1.schema.json")));
+                "safe-migration-report-view-v2.schema.json")));
 
     private static void AssertSchemaEnum(
         JsonElement schema,

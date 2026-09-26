@@ -65,8 +65,12 @@ deterministic structural postconditions to a later safe prerequisite. They
 remain explicitly `provider_owned_not_analyzed`, keep the report at
 `ReadyWithProviderOperations`, and require independent review and postcondition
 evidence. Provider-owned effects invalidate complete projected shapes that may
-have become stale; an unrecognized operation invalidates all accumulated
-projection facts rather than carrying an unknown effect forward.
+have become stale. Unknown provider effects invalidate accumulated projection
+facts. Raw SQL additionally marks later unprovable safe assessments
+`ValidateAtRuntime` and gives the report `RuntimeValidationRequired`; it never
+projects a hypothetical SQL effect. Invariantly unsupported contracts and
+proven earlier conflicts remain blocked. Runtime guards still classify each
+safe operation after preceding SQL executes.
 
 Existing legacy-convergence tables retain accepted column, candidate-key,
 constraint, and index prerequisites without claiming a complete table image.
@@ -273,6 +277,12 @@ installations.
   matching now uses ordinal rows instead of session-bounded aggregation.
 - 2026-09-18: D-013 added SQLite analysis, atomic runtime batches, postflight,
   and migration-lock recovery boundaries.
+- 2026-09-26: Distinguished opaque raw SQL from proven missing prerequisites
+  in mixed pending streams. The read-only preflight exposes runtime-validation
+  uncertainty and the SQL origin; immutable provider capability failures stay
+  blocked. SQLite no longer treats raw SQL as preserving table state, and raw
+  SQL uncertainty takes precedence over sequence-aware live evidence. Guarded
+  execution, EF history, and postflight ownership remain unchanged.
 
 ### Implementation References
 

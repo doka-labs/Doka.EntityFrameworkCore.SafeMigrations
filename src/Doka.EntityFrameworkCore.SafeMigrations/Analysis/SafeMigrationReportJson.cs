@@ -3,7 +3,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// <summary>Writes the versioned SafeMigrations report JSON contract.</summary>
 public static class SafeMigrationReportJson
 {
-    private const int CurrentReportViewSchemaVersion = 1;
+    private const int CurrentReportViewSchemaVersion = 2;
 
     private const int MaximumInitialBufferSize = 16 * 1024 * 1024;
 
@@ -28,7 +28,7 @@ public static class SafeMigrationReportJson
             + ((long)report.Assessments.Count * EstimatedAssessmentSize)
             + ((long)report.UnexpectedObjects.Count * EstimatedUnexpectedObjectSize);
 
-        // WHY: Report v2 adds bounded diagnostic fields to every assessment.
+        // WHY: Bounded diagnostic fields accompany every assessment.
         // A proportional first buffer avoids repeated full-buffer copies while
         // the cap prevents a caller-controlled count from forcing one huge
         // speculative allocation before the first JSON token is written.
@@ -343,6 +343,19 @@ public static class SafeMigrationReportJson
         }
 
         writer.WriteEndArray();
+        if (assessment.DeferredOrigin is { } origin)
+        {
+            writer.WriteStartObject("deferredOrigin");
+            WriteNullableString(writer, "migrationId", origin.MigrationId);
+            writer.WriteNumber("operationOrdinal", origin.OperationOrdinal);
+            writer.WriteString("operationType", origin.OperationType);
+            writer.WriteEndObject();
+        }
+        else
+        {
+            writer.WriteNull("deferredOrigin");
+        }
+
         writer.WriteEndObject();
     }
 
@@ -395,6 +408,7 @@ public static class SafeMigrationReportJson
         SafeMigrationReportStatus.Ready => "ready",
         SafeMigrationReportStatus.ReadyWithProviderOperations => "ready_with_provider_operations",
         SafeMigrationReportStatus.Blocked => "blocked",
+        SafeMigrationReportStatus.RuntimeValidationRequired => "runtime_validation_required",
         _ => throw new ArgumentOutOfRangeException(nameof(value)),
     };
 
@@ -453,6 +467,7 @@ public static class SafeMigrationReportJson
         SafeMigrationAction.RejectUnsupported => "reject_unsupported",
         SafeMigrationAction.RejectDataBlocked => "reject_data_blocked",
         SafeMigrationAction.RejectPrerequisiteMissing => "reject_prerequisite_missing",
+        SafeMigrationAction.ValidateAtRuntime => "validate_at_runtime",
         _ => throw new ArgumentOutOfRangeException(nameof(value)),
     };
 

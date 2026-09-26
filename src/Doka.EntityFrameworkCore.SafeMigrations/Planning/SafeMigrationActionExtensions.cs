@@ -14,6 +14,7 @@ internal static class SafeMigrationActionExtensions
         SafeMigrationAction.RejectDifferent => true,
         SafeMigrationAction.RejectDataBlocked => true,
         SafeMigrationAction.RejectPrerequisiteMissing => true,
+        SafeMigrationAction.ValidateAtRuntime => false,
         _ => throw new ArgumentOutOfRangeException(nameof(action)),
     };
 }

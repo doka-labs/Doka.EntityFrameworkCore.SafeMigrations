@@ -2,6 +2,247 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 public sealed partial class SafeMigrationPreflightProjectionTests
 {
+    private sealed class ProjectionPrecedenceProbe(
+        bool sequenceAware
+    ) : ISafeMigrationProviderOperationProjection, ISafeMigrationProviderObjectIdentityNormalizer
+    {
+        /// <summary>Gets how often physical identity was checked before projection.</summary>
+        public int IdentityChecks { get; private set; }
+
+        /// <summary>Gets how often lower-priority ordered provider evidence was consulted.</summary>
+        public int SequenceChecks { get; private set; }
+
+        /// <inheritdoc />
+        public StringComparer IdentifierComparer => StringComparer.Ordinal;
+
+        /// <inheritdoc />
+        public string NormalizeIdentifier(
+            string identifier
+        ) => identifier;
+
+        /// <inheritdoc />
+        public string? NormalizeSchema(
+            string? schema
+        ) => schema;
+
+        /// <inheritdoc />
+        public bool IsObjectIdentityMismatch(
+            SafeMigrationProviderAnalysis analysis
+        )
+        {
+            IdentityChecks++;
+
+            return StringComparer.Ordinal.Equals(analysis.Code, "database_qualifier_mismatch");
+        }
+
+        /// <inheritdoc />
+        public bool PreservesExistingTableState(
+            MigrationOperation operation
+        ) => false;
+
+        /// <inheritdoc />
+        public bool IsSequenceAwareAnalysis(
+            SafeMigrationOperation operation,
+            SafeMigrationProviderAnalysis analysis
+        )
+        {
+            SequenceChecks++;
+
+            return sequenceAware;
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void IdentityMismatchPrecedesInvariantRejectionAndOpaqueSql(
+        bool invariantUnsupported
+    )
+    {
+        var probe = new ProjectionPrecedenceProbe(sequenceAware: true);
+        var projection = new SafeMigrationPreflightProjection(probe, objectIdentityNormalizer: probe);
+        var operation = new SafeMigrationOperation(
+            new EnsureTableIntent(
+                new ExpectedTableDefinition("items", [Column("id")]),
+                SafeMigrationTableMode.StrictDefinition),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var live = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Unsupported,
+            SafeMigrationRepairCapability.None,
+            postconditionSatisfied: false,
+            "database_qualifier_mismatch")
+        {
+            IsInvariantUnsupported = invariantUnsupported,
+        };
+
+        projection.ObserveProviderPostcondition(new SqlOperation { Sql = "SELECT 1;" });
+
+        var analysis = projection.Project(operation, live);
+
+        Assert.Same(live, analysis);
+        Assert.Equal(1, probe.IdentityChecks);
+        Assert.Equal(0, probe.SequenceChecks);
+        Assert.False(analysis.IsOpaqueProjectionUnknown);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void InvariantUnsupportedPrecedesProjectedFactsAndOpaqueState(
+        bool opaqueSql,
+        bool opaqueProvider
+    )
+    {
+        var probe = new ProjectionPrecedenceProbe(sequenceAware: true);
+        var projection = new SafeMigrationPreflightProjection(probe, objectIdentityNormalizer: probe);
+        var table = new CreateTableOperation { Name = "items" };
+
+        table.Columns.Add(ProviderColumn("id", "items", isNullable: false, defaultValue: 0));
+        projection.ObserveProviderPostcondition(table);
+
+        if (opaqueProvider)
+        {
+            projection.ObserveProviderPostcondition(new AlterDatabaseOperation());
+        }
+
+        if (opaqueSql)
+        {
+            projection.ObserveProviderPostcondition(new SqlOperation { Sql = "SELECT 1;" });
+        }
+
+        var operation = new SafeMigrationOperation(
+            new EnsureTableIntent(
+                SafeMigrationExpectedDefinitionFactory.From(table),
+                SafeMigrationTableMode.StrictDefinition),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var live = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Unsupported,
+            SafeMigrationRepairCapability.None,
+            postconditionSatisfied: false,
+            "unsupported_contract")
+        {
+            IsInvariantUnsupported = true,
+        };
+
+        var analysis = projection.Project(operation, live);
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            operation.Intent.Kind,
+            analysis.ObservedState,
+            operation.Policy,
+            analysis.RepairCapability);
+
+        Assert.Same(live, analysis);
+        Assert.Equal(SafeMigrationAction.RejectUnsupported, decision.Action);
+        Assert.Equal(1, probe.IdentityChecks);
+        Assert.Equal(0, probe.SequenceChecks);
+        Assert.False(analysis.IsOpaqueProjectionUnknown);
+    }
+
+    [Theory]
+    [InlineData(false, SafeMigrationObservedState.Matching)]
+    [InlineData(true, SafeMigrationObservedState.PrerequisiteMissing)]
+    public void CatalogDependentUnsupportedDoesNotBypassProjection(
+        bool opaqueSql,
+        SafeMigrationObservedState expectedState
+    )
+    {
+        var probe = new ProjectionPrecedenceProbe(sequenceAware: false);
+        var projection = new SafeMigrationPreflightProjection(probe, objectIdentityNormalizer: probe);
+        var table = new CreateTableOperation { Name = "items" };
+
+        table.Columns.Add(ProviderColumn("id", "items", isNullable: false, defaultValue: 0));
+        projection.ObserveProviderPostcondition(table);
+
+        if (opaqueSql)
+        {
+            projection.ObserveProviderPostcondition(new SqlOperation { Sql = "SELECT 1;" });
+        }
+
+        var operation = new SafeMigrationOperation(
+            new EnsureTableIntent(
+                SafeMigrationExpectedDefinitionFactory.From(table),
+                SafeMigrationTableMode.StrictDefinition),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var live = Live(SafeMigrationObservedState.Unsupported);
+
+        var analysis = projection.Project(operation, live);
+
+        Assert.NotSame(live, analysis);
+        Assert.Equal(expectedState, analysis.ObservedState);
+        Assert.Equal(opaqueSql, analysis.IsOpaqueProjectionUnknown);
+        Assert.Equal(1, probe.IdentityChecks);
+        Assert.Equal(opaqueSql ? 0 : 1, probe.SequenceChecks);
+    }
+
+    [Fact]
+    public void OpaqueSqlPrecedesSequenceAwareProviderAnalysis()
+    {
+        var probe = new ProjectionPrecedenceProbe(sequenceAware: true);
+        var projection = new SafeMigrationPreflightProjection(probe, objectIdentityNormalizer: probe);
+        var operation = new SafeMigrationOperation(
+            new DropTableIntent("items"),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var live = Live(SafeMigrationObservedState.Matching);
+
+        projection.ObserveProviderPostcondition(new SqlOperation { Sql = "SELECT 1;" });
+
+        var analysis = projection.Project(operation, live);
+
+        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
+        Assert.Equal("projected_structure_state_unknown", analysis.Code);
+        Assert.True(analysis.IsOpaqueProjectionUnknown);
+        Assert.Equal(1, probe.IdentityChecks);
+        Assert.Equal(0, probe.SequenceChecks);
+    }
+
+    [Fact]
+    public void SequenceAwareProviderAnalysisPrecedesGenericOpacity()
+    {
+        var probe = new ProjectionPrecedenceProbe(sequenceAware: true);
+        var projection = new SafeMigrationPreflightProjection(probe, objectIdentityNormalizer: probe);
+        var operation = new SafeMigrationOperation(
+            new DropTableIntent("items"),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var live = Live(SafeMigrationObservedState.Matching);
+
+        projection.ObserveProviderPostcondition(new AlterDatabaseOperation());
+
+        var analysis = projection.Project(operation, live);
+
+        Assert.Same(live, analysis);
+        Assert.False(analysis.IsOpaqueProjectionUnknown);
+        Assert.Equal(1, probe.IdentityChecks);
+        Assert.Equal(1, probe.SequenceChecks);
+    }
+
+    [Fact]
+    public void GenericOpacityInvalidatesAnalysisWithoutOrderedProviderProof()
+    {
+        var probe = new ProjectionPrecedenceProbe(sequenceAware: false);
+        var projection = new SafeMigrationPreflightProjection(probe, objectIdentityNormalizer: probe);
+        var operation = new SafeMigrationOperation(
+            new DropTableIntent("items"),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var live = Live(SafeMigrationObservedState.Matching);
+
+        projection.ObserveProviderPostcondition(new AlterDatabaseOperation());
+
+        var analysis = projection.Project(operation, live);
+
+        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
+        Assert.True(analysis.IsOpaqueProjectionUnknown);
+        Assert.Equal(1, probe.IdentityChecks);
+        Assert.Equal(1, probe.SequenceChecks);
+    }
+
     private sealed class AlterDatabaseProjection : ISafeMigrationProviderOperationProjection
     {
         public bool PreservesExistingTableState(

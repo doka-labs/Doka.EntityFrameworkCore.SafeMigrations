@@ -6,6 +6,52 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+## [10.4.4] - 2026-09-26
+
+Prepared a stable bugfix for read-only preflight over mixed legacy-convergence
+and strict migration streams containing raw SQL. Existing migration source,
+ordered runtime guards, history, dependency ranges, and engine support remain
+unchanged. All four packages share this version.
+
+These notes do not establish publication. Require the successful stable
+release run, the authorized signed `v10.4.4` tag, and verified public package,
+symbol, GitHub Release, provenance, SBOM, and attestation readback before
+selecting 10.4.4.
+
+### Added
+
+- Report deferred validation explicitly with `SafeMigrationAction.ValidateAtRuntime`,
+  `SafeMigrationReportStatus.RuntimeValidationRequired`, and
+  `SafeMigrationAssessment.DeferredOrigin`. The origin identifies the preceding
+  raw SQL by migration ID, stream ordinal, and operation type without including
+  SQL text or data values.
+
+### Changed
+
+- `ThrowIfBlocked()` now permits a mixed pending stream whose later safe
+  operations cannot be classified after raw migration SQL. Such operations
+  report `ValidateAtRuntime` and the SQL origin; their unchanged runtime guards
+  still decide after the SQL executes. Proven conflicts and invariantly
+  unsupported contracts remain blocked. This changes the preflight deployment
+  gate, not published migration source or runtime SQL.
+- The canonical report schema advances to v3 and the filtered view schema to
+  v2; previous schemas remain packaged. Breaking for consumers with exhaustive
+  `SafeMigrationAction` or `SafeMigrationReportStatus` switches, or readers
+  restricted to run-report v2 or view v1: handle the new enum values and schemas
+  explicitly.
+  `CurrentSchemaVersion` is a compiled constant, so rebuild consumers that use
+  it after updating the package.
+- Group all four test projects directly under the solution's `tests` folder
+  without changing project paths or test execution settings.
+
+### Fixed
+
+- Preserve diagnostic enrichment metadata and projection precedence across
+  providers so raw SQL does not conceal independently proven or invariant
+  rejections while catalog-dependent states remain deferred.
+- Do not claim that SQLite raw SQL preserves previously observed table state
+  during read-only preflight.
+
 ## [10.4.3] - 2026-09-24
 
 Prepared a stable patch release that completes safe scaffolding for supported
@@ -1118,7 +1164,8 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.3...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.4...HEAD
+[10.4.4]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.3...v10.4.4
 [10.4.3]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.2...v10.4.3
 [10.4.2]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.1...v10.4.2
 [10.4.1]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.0...v10.4.1

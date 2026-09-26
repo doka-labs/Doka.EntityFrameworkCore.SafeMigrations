@@ -89,6 +89,7 @@ internal static class SafeMigrationTelemetry
         SafeMigrationReportStatus.Ready => "ready",
         SafeMigrationReportStatus.ReadyWithProviderOperations => "ready_with_provider_operations",
         SafeMigrationReportStatus.Blocked => "blocked",
+        SafeMigrationReportStatus.RuntimeValidationRequired => "runtime_validation_required",
         _ => throw new ArgumentOutOfRangeException(nameof(status)),
     };
 }

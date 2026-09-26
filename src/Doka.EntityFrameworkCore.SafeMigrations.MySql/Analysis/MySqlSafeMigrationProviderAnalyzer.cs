@@ -547,22 +547,12 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
     )
     {
         var current = results[ordinal];
-        results[ordinal] = new SafeMigrationProviderAnalysis(
-            current.ObservedState,
-            current.RepairCapability,
-            current.PostconditionSatisfied,
-            current.Code,
-            current.OperationalImpact,
-            differences)
-        {
-            IndexPhysicalEnvironment = current.IndexPhysicalEnvironment,
-            MatchedObjectName = current.MatchedObjectName,
-            ModelManagedDataEvidence = current.ModelManagedDataEvidence,
-            RequiresLiveDataProof = current.RequiresLiveDataProof
-                || (plan.MayRequireNullabilityDataProof
-                    && differences.Any(static difference =>
-                        StringComparer.Ordinal.Equals(difference.Facet, "column_nullability"))),
-        };
+
+        results[ordinal] = current.WithDifferences(
+            differences,
+            plan.MayRequireNullabilityDataProof
+                && differences.Any(static difference =>
+                    StringComparer.Ordinal.Equals(difference.Facet, "column_nullability")));
     }
 
     private async Task<MySqlDataProbeResult?[]> ResolveDataProbeResultsAsync(
@@ -1259,6 +1249,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         shortCircuit.Code)
     {
         IndexPhysicalEnvironment = plan.IndexPhysicalEnvironment,
+        IsInvariantUnsupported = shortCircuit.State == SafeMigrationObservedState.Unsupported
+            && plan.IsStaticallyUnsupported,
     };
 
     private static async Task<string?> ReadCurrentDatabaseAsync(
@@ -1386,6 +1378,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                         differences)
                     {
                         IndexPhysicalEnvironment = plan.IndexPhysicalEnvironment,
+                        IsInvariantUnsupported = state == SafeMigrationObservedState.Unsupported
+                            && plan.IsStaticallyUnsupported,
                         MatchedObjectName = state == SafeMigrationObservedState.Matching
                             && !reader.IsDBNull(8)
                                 ? reader.GetString(8)

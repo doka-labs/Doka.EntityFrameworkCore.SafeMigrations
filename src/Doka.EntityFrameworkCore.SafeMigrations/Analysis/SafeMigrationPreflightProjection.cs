@@ -23,7 +23,10 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
     private readonly HashSet<TableKey> _projectedStructurallyModifiedTables;
     private readonly Dictionary<TableKey, HashSet<string>> _projectedChangedColumns;
     private bool _hasOpaqueProviderPostcondition;
+    private bool _hasOpaqueSqlPostcondition;
     private long _providerDataMutationVersion;
+
+    internal bool HasOpaqueSqlPostcondition => _hasOpaqueSqlPostcondition;
 
     public SafeMigrationPreflightProjection(
         ISafeMigrationProviderOperationProjection? providerOperationProjection = null,
@@ -72,21 +75,31 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
             return liveAnalysis;
         }
 
+        if (liveAnalysis.IsInvariantUnsupported)
+        {
+            // WHY: Opaque SQL may repair live state, but it cannot make an
+            // unsupported operation contract or server version supported.
+            return liveAnalysis;
+        }
+
+        if (_hasOpaqueSqlPostcondition)
+        {
+            // WHY: Provider analysis is captured before ordered operations run.
+            // Raw SQL can invalidate even sequence-aware results computed from
+            // the original stream. Safe renames may be opaque to generic
+            // projection, but their provider-proven sequence results still hold.
+            return StructureStateUnknown();
+        }
+
         if (_providerOperationProjection?.IsSequenceAwareAnalysis(operation, liveAnalysis) == true)
         {
-            // WHY: Some providers can derive a blocking dependency from the
-            // complete ordered operation stream. Replacing that result with a
-            // generic structural fallback would discard stronger evidence.
-
+            // WHY: A provider result that accounts for the ordered safe stream
+            // remains authoritative despite generic structural uncertainty.
             return liveAnalysis;
         }
 
         if (_hasOpaqueProviderPostcondition)
         {
-            // WHY: Provider analysis is captured before ordered operations run.
-            // Arbitrary provider SQL can invalidate every historical catalog
-            // observation, so no later safe operation may reuse that evidence.
-
             return StructureStateUnknown();
         }
 
@@ -273,6 +286,7 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
                 // inferred structure so an opaque SQL operation cannot make a
                 // later additive constraint appear safe.
                 SetOpaqueProviderPostcondition(mayMutateData: true);
+                _hasOpaqueSqlPostcondition |= operation is SqlOperation;
                 break;
         }
 
@@ -769,7 +783,11 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
         SafeMigrationObservedState.PrerequisiteMissing,
         SafeMigrationRepairCapability.None,
         postconditionSatisfied: false,
-        "projected_structure_state_unknown");
+        "projected_structure_state_unknown"
+    )
+    {
+        IsOpaqueProjectionUnknown = true,
+    };
 
     private static SafeMigrationProviderAnalysis AnalyzeDefinition<T>(
         IReadOnlyDictionary<string, T> definitions,

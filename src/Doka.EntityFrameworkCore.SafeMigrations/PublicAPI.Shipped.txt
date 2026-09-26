@@ -1,4 +1,11 @@
 #nullable enable
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAction.ValidateAtRuntime = 7 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAction
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAssessment.DeferredOrigin.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDeferredOrigin?
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDeferredOrigin
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDeferredOrigin.MigrationId.get -> string?
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDeferredOrigin.OperationOrdinal.get -> int
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDeferredOrigin.OperationType.get -> string!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationReportStatus.RuntimeValidationRequired = 4 -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationReportStatus
 static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationBuilderExtensions.CreateCompositeIndexWithPrefixesIfNotExistsFromModel(this Microsoft.EntityFrameworkCore.Migrations.MigrationBuilder! migrationBuilder, string! name, string! table, string![]! columns, int[]! prefixLengths, string? schema = null, bool unique = false, bool[]? descending = null, string? filter = null) -> Microsoft.EntityFrameworkCore.Migrations.Operations.Builders.OperationBuilder<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperation!>!
 static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationBuilderExtensions.CreateIndexWithPrefixesIfNotExistsFromModel(this Microsoft.EntityFrameworkCore.Migrations.MigrationBuilder! migrationBuilder, string! name, string! table, string! column, int[]! prefixLengths, string? schema = null, bool unique = false, bool[]? descending = null, string? filter = null) -> Microsoft.EntityFrameworkCore.Migrations.Operations.Builders.OperationBuilder<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperation!>!
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOptionsBuilder
@@ -435,7 +442,7 @@ const Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDiagnostics.RunCountM
 const Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDiagnostics.RunDurationMetricName = "safe_migrations.run.duration" -> string!
 const Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDiagnostics.RunFailureCountMetricName = "safe_migrations.run.failure.count" -> string!
 const Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDiagnostics.RunbookBaseUrl = "https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/blob/main/docs/runbooks/" -> string!
-const Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationRunReport.CurrentSchemaVersion = 2 -> int
+const Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationRunReport.CurrentSchemaVersion = 3 -> int
 override Doka.EntityFrameworkCore.SafeMigrations.AlterColumnIntent.ObjectName.get -> string!
 override Doka.EntityFrameworkCore.SafeMigrations.DropCheckConstraintIntent.ObjectName.get -> string!
 override Doka.EntityFrameworkCore.SafeMigrations.DropColumnIntent.ObjectName.get -> string!

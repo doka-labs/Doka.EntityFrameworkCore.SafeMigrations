@@ -157,6 +157,11 @@ recovery. D-005 remains authoritative for evidence bounds and privacy.
 - 2026-09-05: Implemented provider proofs, grouped runtime guards, ordered
   projection, report schema version 2, live tests, scale qualification, public
   APIs, and operator documentation; status changed from accepted to implemented.
+- 2026-09-26: Re-evaluated the report-consumer trigger. Schema v3 adds a
+  nullable raw-SQL deferral origin and explicit runtime-validation values
+  without expanding typed facet differences or exposing managed values.
+  Previously persisted v1/v2 reports retain their packaged schemas; consumers
+  pinned to v2 must adopt the new wire contract deliberately.
 
 ### Implementation References
 

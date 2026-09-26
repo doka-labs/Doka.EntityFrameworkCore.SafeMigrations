@@ -131,12 +131,18 @@ recovery policy.
 - 2026-09-10: Implemented selection, streaming serialization, closed schema,
   tests, performance gate, and operator documentation; status changed from
   accepted to implemented.
+- 2026-09-25: The canonical report advanced to schema v3 to distinguish
+  runtime validation after raw SQL from proven preflight blockers. Report views
+  advanced to v2 with the deferred origin. `NonMatching` includes deferred
+  assessments; `BlockingOnly` excludes them because they are not proven
+  blockers. Both earlier schemas remain packaged for persisted artifacts.
 
 ### Implementation References
 
 - [Report serializer](../../src/Doka.EntityFrameworkCore.SafeMigrations/Analysis/SafeMigrationReportJson.cs)
 - [Selection API](../../src/Doka.EntityFrameworkCore.SafeMigrations/Analysis/SafeMigrationReportSelection.cs)
-- [Report-view schema](../../schemas/safe-migration-report-view-v1.schema.json)
+- [Current report-view schema](../../schemas/safe-migration-report-view-v2.schema.json)
+- [Earlier report-view schema](../../schemas/safe-migration-report-view-v1.schema.json)
 - [API reference](../api-reference.md#reports-serialization-and-failure)
 - [Deployment runbook](../runbooks/deployment-and-recovery.md#preflight)
 

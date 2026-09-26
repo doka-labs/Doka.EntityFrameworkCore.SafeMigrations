@@ -45,7 +45,7 @@ IDs, migration IDs, and fingerprints. Store them with access controls and an
 organization-defined retention period, linked to the protected deployment
 inventory. Do not publish them unredacted in GitHub issues or telemetry.
 
-Schema-version-2 facet differences and operational-impact values are protected
+Schema-version-3 facet differences and operational-impact values are protected
 report evidence only. Never promote facet expected/actual values, object names,
 managed-row mismatch details, or exception summaries into metric tags. Stable
 analysis/decision codes can be correlated in the protected deployment record;

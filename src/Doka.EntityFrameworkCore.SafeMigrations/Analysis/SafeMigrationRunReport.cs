@@ -28,6 +28,48 @@ public enum SafeMigrationReportStatus
 
     /// <summary>At least one safe operation is rejected or has not converged.</summary>
     Blocked = 3,
+
+    /// <summary>
+    /// No conflict is proven, but opaque SQL prevents a read-only preflight
+    /// from classifying later safe operations. Their runtime guards must decide.
+    /// </summary>
+    RuntimeValidationRequired = 4,
+}
+
+/// <summary>Identifies the earlier operation that made a preflight projection opaque.</summary>
+public sealed class SafeMigrationDeferredOrigin
+{
+    /// <summary>Initializes the source of an unknown projected state.</summary>
+    /// <param name="migrationId">The owning migration ID, when the pending stream is known.</param>
+    /// <param name="operationOrdinal">The zero-based ordinal in the analyzed operation stream.</param>
+    /// <param name="operationType">The exact CLR operation type name.</param>
+    internal SafeMigrationDeferredOrigin(
+        string? migrationId,
+        int operationOrdinal,
+        string operationType
+    )
+    {
+        if (migrationId is not null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(migrationId);
+        }
+
+        ArgumentOutOfRangeException.ThrowIfNegative(operationOrdinal);
+        ArgumentException.ThrowIfNullOrWhiteSpace(operationType);
+
+        MigrationId = migrationId;
+        OperationOrdinal = operationOrdinal;
+        OperationType = operationType;
+    }
+
+    /// <summary>Gets the owning migration ID, or null for an ad-hoc operation stream.</summary>
+    public string? MigrationId { get; }
+
+    /// <summary>Gets the zero-based ordinal in the analyzed operation stream.</summary>
+    public int OperationOrdinal { get; }
+
+    /// <summary>Gets the exact CLR operation type name.</summary>
+    public string OperationType { get; }
 }
 
 /// <summary>Contains one immutable operation assessment.</summary>
@@ -98,6 +140,54 @@ public sealed class SafeMigrationAssessment
         string decisionCode,
         SafeMigrationOperationalImpact operationalImpact,
         IEnumerable<SafeMigrationFacetDifference>? differences
+    ) : this(
+        ordinal,
+        operationType,
+        isSafeOperation,
+        operationKind,
+        objectName,
+        observedState,
+        action,
+        postconditionSatisfied,
+        code,
+        analysisCode,
+        decisionCode,
+        operationalImpact,
+        differences,
+        deferredOrigin: null)
+    {
+    }
+
+    /// <summary>Initializes an assessment with an optional deferred-validation origin.</summary>
+    /// <param name="ordinal">The zero-based operation ordinal.</param>
+    /// <param name="operationType">The exact CLR migration-operation type name.</param>
+    /// <param name="isSafeOperation">Whether the assessment represents a SafeMigrations operation.</param>
+    /// <param name="operationKind">The SafeMigrations operation family.</param>
+    /// <param name="objectName">The database object name, or null for a non-safe operation.</param>
+    /// <param name="observedState">The provider-classified live state.</param>
+    /// <param name="action">The provider-neutral action selected for the operation.</param>
+    /// <param name="postconditionSatisfied">Whether the operation's final target condition currently holds.</param>
+    /// <param name="code">The stable aggregate result code.</param>
+    /// <param name="analysisCode">The stable provider analysis code.</param>
+    /// <param name="decisionCode">The stable provider-neutral decision code.</param>
+    /// <param name="operationalImpact">The provider-proven execution-impact classification.</param>
+    /// <param name="differences">The bounded typed facet differences.</param>
+    /// <param name="deferredOrigin">The preceding opaque operation when runtime validation is required.</param>
+    internal SafeMigrationAssessment(
+        int ordinal,
+        string operationType,
+        bool isSafeOperation,
+        SafeMigrationOperationKind? operationKind,
+        string? objectName,
+        SafeMigrationObservedState? observedState,
+        SafeMigrationAction? action,
+        bool? postconditionSatisfied,
+        string code,
+        string analysisCode,
+        string decisionCode,
+        SafeMigrationOperationalImpact operationalImpact,
+        IEnumerable<SafeMigrationFacetDifference>? differences,
+        SafeMigrationDeferredOrigin? deferredOrigin
     )
     {
         ArgumentOutOfRangeException.ThrowIfNegative(ordinal);
@@ -129,6 +219,13 @@ public sealed class SafeMigrationAssessment
             throw new ArgumentOutOfRangeException(nameof(operationalImpact));
         }
 
+        if ((action == SafeMigrationAction.ValidateAtRuntime) != (deferredOrigin is not null))
+        {
+            throw new ArgumentException(
+                "A runtime-validation action requires exactly one deferred origin.",
+                nameof(deferredOrigin));
+        }
+
         var differenceSnapshot = (differences ?? []).ToArray();
         if (differenceSnapshot.Any(static difference => difference is null))
         {
@@ -156,6 +253,7 @@ public sealed class SafeMigrationAssessment
         DecisionCode = decisionCode;
         OperationalImpact = operationalImpact;
         Differences = Array.AsReadOnly(differenceSnapshot);
+        DeferredOrigin = deferredOrigin;
     }
 
     /// <summary>Gets the zero-based operation ordinal.</summary>
@@ -196,13 +294,16 @@ public sealed class SafeMigrationAssessment
 
     /// <summary>Gets the bounded typed facet differences.</summary>
     public IReadOnlyList<SafeMigrationFacetDifference> Differences { get; }
+
+    /// <summary>Gets the opaque operation requiring a later runtime decision, if any.</summary>
+    public SafeMigrationDeferredOrigin? DeferredOrigin { get; }
 }
 
 /// <summary>Contains an immutable preflight or postflight report.</summary>
 public sealed class SafeMigrationRunReport
 {
     /// <summary>Gets the current machine-readable report schema version.</summary>
-    public const int CurrentSchemaVersion = 2;
+    public const int CurrentSchemaVersion = 3;
 
     /// <summary>Initializes a run report and snapshots its assessments.</summary>
     /// <param name="mode">Whether this is a preflight analysis or postflight verification.</param>

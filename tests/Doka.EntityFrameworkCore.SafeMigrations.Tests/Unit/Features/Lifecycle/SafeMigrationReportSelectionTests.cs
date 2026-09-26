@@ -3,6 +3,53 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 public sealed class SafeMigrationReportSelectionTests
 {
     [Fact]
+    public void DeferredAssessment_RemainsVisibleWithoutBecomingAProvenBlocker()
+    {
+        var origin = new SafeMigrationDeferredOrigin(
+            "20260925000002_DataPreparation",
+            1,
+            typeof(SqlOperation).FullName!);
+
+        var assessment = new SafeMigrationAssessment(
+            2,
+            typeof(SafeMigrationOperation).FullName!,
+            isSafeOperation: true,
+            SafeMigrationOperationKind.EnsureIndex,
+            "ux_records_code",
+            observedState: null,
+            SafeMigrationAction.ValidateAtRuntime,
+            postconditionSatisfied: null,
+            "runtime_validation_required",
+            "projected_structure_state_unknown",
+            "runtime_validation_required",
+            SafeMigrationOperationalImpact.Unknown,
+            differences: null,
+            deferredOrigin: origin);
+
+        var report = CreateReport(
+            SafeMigrationReportMode.Preflight,
+            SafeMigrationReportStatus.RuntimeValidationRequired,
+            [assessment]);
+
+        using var nonMatching = JsonDocument.Parse(SafeMigrationReportJson.SerializeToUtf8Bytes(
+            report,
+            SafeMigrationReportSelection.NonMatching));
+
+        using var blockingOnly = JsonDocument.Parse(SafeMigrationReportJson.SerializeToUtf8Bytes(
+            report,
+            SafeMigrationReportSelection.BlockingOnly));
+
+        var deferred = nonMatching.RootElement.GetProperty("assessments")[0];
+        var deferredOrigin = deferred.GetProperty("deferredOrigin");
+
+        Assert.Equal("20260925000002_DataPreparation", deferredOrigin.GetProperty("migrationId").GetString());
+        Assert.Equal(1, deferredOrigin.GetProperty("operationOrdinal").GetInt32());
+        Assert.Equal(typeof(SqlOperation).FullName, deferredOrigin.GetProperty("operationType").GetString());
+        Assert.Empty(blockingOnly.RootElement.GetProperty("assessments").EnumerateArray());
+        report.ThrowIfBlocked();
+    }
+
+    [Fact]
     public void CompleteView_IsSelfDescribingAndPreservesTheCompleteSourceOrder()
     {
         var report = CreateReport(
@@ -21,7 +68,7 @@ public sealed class SafeMigrationReportSelectionTests
         var root = document.RootElement;
         var sourceReport = root.GetProperty("sourceReport");
 
-        Assert.Equal(1, root.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(2, root.GetProperty("schemaVersion").GetInt32());
         Assert.Equal("safe_migration_report_view", root.GetProperty("documentKind").GetString());
         Assert.Equal("complete", root.GetProperty("selection").GetString());
         Assert.Equal(report.SchemaVersion, sourceReport.GetProperty("schemaVersion").GetInt32());

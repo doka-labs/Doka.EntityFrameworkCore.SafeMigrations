@@ -2,6 +2,229 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
 public sealed partial class SqliteSafeMigrationCatalogIntegrationTests
 {
+    [Fact]
+    public async Task RawSqlRemovingDependentTable_DefersStaleIncomingForeignKeyEvidence()
+    {
+        await using var connection = await OpenConnectionAsync();
+        await ExecuteSqlAsync(
+            connection,
+            "CREATE TABLE raw_drop_parent (Id INTEGER NOT NULL PRIMARY KEY); "
+            + "CREATE TABLE raw_drop_child (Id INTEGER NOT NULL PRIMARY KEY, ParentId INTEGER NULL, "
+            + "FOREIGN KEY (ParentId) REFERENCES raw_drop_parent (Id));");
+
+        await using var context = CreateContext(connection);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        _ = builder.Sql("DROP TABLE raw_drop_child;");
+        builder.DropTableIfExists("raw_drop_parent");
+        var runner = context.GetService<ISafeMigrationRunner>();
+
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sqlite-raw-dependent-drop"));
+
+        await ExecuteOperationsAsync(context, builder.Operations);
+
+        var remainingTables = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM sqlite_schema WHERE type = 'table' "
+            + "AND name IN ('raw_drop_parent', 'raw_drop_child');");
+
+        Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
+        Assert.Equal(SafeMigrationAction.ValidateAtRuntime, preflight.Assessments[1].Action);
+        Assert.Equal(0, remainingTables);
+    }
+
+    [Fact]
+    public async Task RawSqlAfterSafeRename_DefersStaleIncomingForeignKeyEvidence()
+    {
+        await using var connection = await OpenConnectionAsync();
+        await ExecuteSqlAsync(
+            connection,
+            "CREATE TABLE renamed_drop_parent (Id INTEGER NOT NULL PRIMARY KEY); "
+            + "CREATE TABLE renamed_drop_child (Id INTEGER NOT NULL PRIMARY KEY, ParentId INTEGER NULL, "
+            + "FOREIGN KEY (ParentId) REFERENCES renamed_drop_parent (Id));");
+
+        await using var context = CreateContext(connection);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.RenameTableIfExists("renamed_drop_parent", "renamed_drop_target");
+        _ = builder.Sql("DROP TABLE renamed_drop_child;");
+        builder.DropTableIfExists("renamed_drop_target");
+        var runner = context.GetService<ISafeMigrationRunner>();
+
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sqlite-rename-raw-dependent-drop"));
+
+        await ExecuteOperationsAsync(context, builder.Operations);
+
+        var remainingTables = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM sqlite_schema WHERE type = 'table' "
+            + "AND name IN ('renamed_drop_parent', 'renamed_drop_target', 'renamed_drop_child');");
+
+        Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
+        Assert.Equal(SafeMigrationAction.ValidateAtRuntime, preflight.Assessments[2].Action);
+        Assert.Equal(1, preflight.Assessments[2].DeferredOrigin?.OperationOrdinal);
+        Assert.Equal(0, remainingTables);
+    }
+
+    [Fact]
+    public async Task RawSql_DoesNotDeferUnsupportedSchemaDrop()
+    {
+        await using var connection = await OpenConnectionAsync();
+        await using var context = CreateContext(connection);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        _ = builder.Sql("SELECT 1;");
+        builder.DropSchemaIfExists("main");
+        var runner = context.GetService<ISafeMigrationRunner>();
+
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sqlite-raw-unsupported-schema-drop"));
+
+        Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
+        Assert.Equal(SafeMigrationAction.RejectUnsupported, preflight.Assessments[1].Action);
+        Assert.Equal("schema_operations", preflight.Assessments[1].AnalysisCode);
+        Assert.Null(preflight.Assessments[1].DeferredOrigin);
+    }
+
+    [Fact]
+    public async Task RawSql_DoesNotDeferUnsupportedIndexContract()
+    {
+        await using var connection = await OpenConnectionAsync();
+        await using var context = CreateContext(connection);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        _ = builder.Sql("SELECT 1;");
+        builder.CreateIndexIfNotExists(
+            "ix_unapproved",
+            "missing_table",
+            ["code"],
+            nullOrders: [SafeMigrationIndexNullOrder.First]);
+        var runner = context.GetService<ISafeMigrationRunner>();
+
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sqlite-raw-unsupported-index-option"));
+
+        Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
+        Assert.Equal(SafeMigrationAction.RejectUnsupported, preflight.Assessments[1].Action);
+        Assert.Equal("index_key_provider_option", preflight.Assessments[1].AnalysisCode);
+        Assert.Null(preflight.Assessments[1].DeferredOrigin);
+    }
+
+    [Fact]
+    public async Task RawSql_DoesNotLetVirtualTableMaskUnsupportedIndexContract()
+    {
+        await using var connection = await OpenConnectionAsync();
+        await ExecuteSqlAsync(connection, "CREATE VIRTUAL TABLE search_documents USING fts5(content);");
+        await using var context = CreateContext(connection);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        _ = builder.Sql("SELECT 1;");
+        builder.CreateIndexIfNotExists(
+            "ix_unapproved",
+            "search_documents",
+            ["content"],
+            nullOrders: [SafeMigrationIndexNullOrder.First]);
+        var runner = context.GetService<ISafeMigrationRunner>();
+
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sqlite-raw-virtual-unsupported-index"));
+
+        Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
+        Assert.Equal(SafeMigrationAction.RejectUnsupported, preflight.Assessments[1].Action);
+        Assert.Equal("index_key_provider_option", preflight.Assessments[1].AnalysisCode);
+        Assert.Null(preflight.Assessments[1].DeferredOrigin);
+    }
+
+    [Fact]
+    public async Task RawSql_DefersVirtualTableBoundaryWhenIndexContractIsSupported()
+    {
+        await using var connection = await OpenConnectionAsync();
+        await ExecuteSqlAsync(connection, "CREATE VIRTUAL TABLE search_documents USING fts5(content);");
+        await using var context = CreateContext(connection);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        _ = builder.Sql("SELECT 1;");
+        builder.CreateIndexIfNotExists("ix_search_documents_content", "search_documents", ["content"]);
+        var runner = context.GetService<ISafeMigrationRunner>();
+
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sqlite-raw-virtual-supported-index"));
+
+        Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
+        Assert.Equal(SafeMigrationAction.ValidateAtRuntime, preflight.Assessments[1].Action);
+        Assert.Equal("projected_structure_state_unknown", preflight.Assessments[1].AnalysisCode);
+    }
+
+    [Fact]
+    public async Task RawSql_DoesNotDeferUnsupportedCheckExpression()
+    {
+        await using var connection = await OpenConnectionAsync();
+        await ExecuteSqlAsync(connection, "CREATE TABLE check_target (Id INTEGER NOT NULL PRIMARY KEY);");
+        await using var context = CreateContext(connection);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        _ = builder.Sql("SELECT 1;");
+        builder.EnsureCheckConstraint(
+            ExpectedCheckConstraintDefinition.FromExpression(
+                "ck_check_target_id",
+                "check_target",
+                SafeMigrationSql.ProviderFragment("foreign_provider", "Id > 0")),
+            SafeMigrationPolicy.ThrowIfDifferent);
+        var runner = context.GetService<ISafeMigrationRunner>();
+
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sqlite-raw-unsupported-check-expression"));
+
+        Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
+        Assert.Equal(SafeMigrationAction.RejectUnsupported, preflight.Assessments[1].Action);
+        Assert.Equal("check_expression", preflight.Assessments[1].AnalysisCode);
+        Assert.Null(preflight.Assessments[1].DeferredOrigin);
+    }
+
+    [Fact]
+    public async Task RawSql_DefersCatalogDependentStoredGeneratedColumnRejection()
+    {
+        await using var connection = await OpenConnectionAsync();
+        await ExecuteSqlAsync(connection, "CREATE TABLE generated_values (a INTEGER NOT NULL, b INTEGER NOT NULL);");
+        await using var context = CreateContext(connection);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        _ = builder.Sql("SELECT 1;");
+        builder.EnsureColumn(
+            "generated_values",
+            new ExpectedColumnDefinition(
+                "sum_value",
+                typeof(int),
+                isNullable: false,
+                storeType: "INTEGER",
+                computedExpression: SafeMigrationSql.Binary(
+                    SafeMigrationSql.Identifier("a"),
+                    SafeMigrationSqlBinaryOperator.Add,
+                    SafeMigrationSql.Identifier("b")),
+                isStored: true),
+            SafeMigrationPolicy.ThrowIfDifferent);
+        var runner = context.GetService<ISafeMigrationRunner>();
+
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sqlite-raw-stored-generated-column"));
+
+        // WHY: Raw SQL could rebuild the table with the target column before
+        // the guarded ensure, so this live-only rejection is not invariant.
+        Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
+        Assert.Equal(SafeMigrationAction.ValidateAtRuntime, preflight.Assessments[1].Action);
+        Assert.Equal("projected_structure_state_unknown", preflight.Assessments[1].AnalysisCode);
+    }
+
     [Theory]
     [InlineData("CASCADE", true)]
     [InlineData("SET NULL", true)]
