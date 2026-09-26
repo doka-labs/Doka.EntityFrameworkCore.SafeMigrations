@@ -20,10 +20,16 @@
     <None Include="..\..\schemas\safe-migration-report-view-v1.schema.json"
           Pack="true"
           PackagePath="schemas\" />
+    <None Include="..\..\schemas\safe-migration-report-view-v2.schema.json"
+          Pack="true"
+          PackagePath="schemas\" />
     <None Include="..\..\schemas\safe-migration-run-report-v1.schema.json"
           Pack="true"
           PackagePath="schemas\" />
     <None Include="..\..\schemas\safe-migration-run-report-v2.schema.json"
+          Pack="true"
+          PackagePath="schemas\" />
+    <None Include="..\..\schemas\safe-migration-run-report-v3.schema.json"
           Pack="true"
           PackagePath="schemas\" />
   </ItemGroup>

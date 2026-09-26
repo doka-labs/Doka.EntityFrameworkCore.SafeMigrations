@@ -3,6 +3,73 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 public sealed class SqliteSafeMigrationIntegrationTests : SqliteIntegrationTestBase
 {
     [Fact]
+    public async Task DataPreparationSql_DefersPreflightAndAllowsGuardedUniqueIndex()
+    {
+        await using var connection = await OpenConnectionAsync();
+        await ExecuteSqlAsync(
+            connection,
+            "CREATE TABLE mixed_records (id INTEGER NOT NULL PRIMARY KEY, code TEXT NOT NULL); "
+            + "INSERT INTO mixed_records VALUES (1, 'duplicate'), (2, 'duplicate');");
+
+        await using var context = CreateContext(connection);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        _ = builder.Sql("UPDATE mixed_records SET code = code || id WHERE code = 'duplicate';");
+        builder.CreateIndexIfNotExists("ux_mixed_records_code", "mixed_records", ["code"], unique: true);
+        var runner = context.GetService<ISafeMigrationRunner>();
+
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sqlite-opaque-sql"));
+
+        await ExecuteOperationsAsync(context, builder.Operations);
+
+        var indexCount = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM pragma_index_list('mixed_records') "
+            + "WHERE name = 'ux_mixed_records_code';");
+
+        Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
+        Assert.Equal(SafeMigrationAction.ValidateAtRuntime, preflight.Assessments[1].Action);
+        Assert.Equal(1, indexCount);
+    }
+
+    [Fact]
+    public async Task DataRegressionSql_DefersPreflightButRuntimeGuardRejectsUniqueIndex()
+    {
+        await using var connection = await OpenConnectionAsync();
+        await ExecuteSqlAsync(
+            connection,
+            "CREATE TABLE mixed_records (id INTEGER NOT NULL PRIMARY KEY, code TEXT NOT NULL); "
+            + "INSERT INTO mixed_records VALUES (1, 'first'), (2, 'second');");
+
+        await using var context = CreateContext(connection);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        _ = builder.Sql("UPDATE mixed_records SET code = 'duplicate';");
+        builder.CreateIndexIfNotExists("ux_mixed_records_code", "mixed_records", ["code"], unique: true);
+        var runner = context.GetService<ISafeMigrationRunner>();
+
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sqlite-opaque-sql-reject"));
+
+        var exception = await Record.ExceptionAsync(
+            () => ExecuteOperationsAsync(context, builder.Operations));
+
+        var indexCount = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM pragma_index_list('mixed_records') "
+            + "WHERE name = 'ux_mixed_records_code';");
+
+        Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
+        Assert.Equal(SafeMigrationAction.ValidateAtRuntime, preflight.Assessments[1].Action);
+        var rejection = Assert.IsType<InvalidOperationException>(exception);
+        Assert.Contains("data_blocked", rejection.Message, StringComparison.Ordinal);
+        Assert.Equal(0, indexCount);
+    }
+
+    [Fact]
     public async Task GranularTableColumnAndIndexLifecycle_AppliesReplaysAndVerifies()
     {
         await using var connection = await OpenConnectionAsync();

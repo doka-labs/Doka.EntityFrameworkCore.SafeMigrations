@@ -574,7 +574,7 @@ fingerprints, ordered `SafeMigrationAssessment` entries, and unexpected objects.
 Collections are immutable. `SafeMigrationUnexpectedObject` identifies preserved
 objects; it is not an instruction to remove them.
 
-Each schema-version-2 assessment exposes:
+Each schema-version-3 assessment exposes:
 
 | Member | Contract |
 | --- | --- |
@@ -583,6 +583,7 @@ Each schema-version-2 assessment exposes:
 | `DecisionCode` | Provider-neutral policy-decision code |
 | `Differences` | At most 16 typed catalog-facet differences with bounded printable ASCII metadata |
 | `OperationalImpact` | `NotApplicable`, `TableRewritePossible`, or `Unknown` |
+| `DeferredOrigin` | Owning migration ID when known, zero-based operation ordinal, and CLR type of the earlier raw SQL operation requiring runtime validation; otherwise null |
 
 Representative difference facets include `column_store_type`,
 `column_max_length`, `column_collation`, `foreign_key_delete_behavior`,
@@ -607,6 +608,7 @@ digest.
 | `NoOperations` | No operation was assessed; verify intended target/history separately |
 | `Ready` | Preflight permits the safe sequence subject to external gates; postflight confirms all supplied safe postconditions |
 | `ReadyWithProviderOperations` | Safe operations are accepted, but ordinary EF or provider operations remain unanalyzed and need independent artifact and postcondition review |
+| `RuntimeValidationRequired` | Earlier raw SQL makes later safe states unprovable from a read-only snapshot; review the SQL independently and rely on the ordered runtime guards |
 | `Blocked` | One or more operations reject; do not execute/continue deployment |
 
 `SafeMigrationObservedState.TransitionReady` is used only when a captured
@@ -620,9 +622,10 @@ snake-case values.
 `SafeMigrationReportJson.SerializeToUtf8Bytes(report)` returns a new
 byte array. `Write(writer, report)` uses a caller-owned `Utf8JsonWriter` and
 does not replace the caller's lifetime management. The packaged
-[version 2 JSON Schema](../schemas/safe-migration-run-report-v2.schema.json)
+[version 3 JSON Schema](../schemas/safe-migration-run-report-v3.schema.json)
 defines the current wire contract. The
-[version 1 schema](../schemas/safe-migration-run-report-v1.schema.json) remains
+[version 1](../schemas/safe-migration-run-report-v1.schema.json) and
+[version 2](../schemas/safe-migration-run-report-v2.schema.json) schemas remain
 available for previously persisted reports. Treat every report as sensitive;
 it can identify schema objects even though telemetry excludes them.
 
@@ -636,7 +639,7 @@ view rather than changing the canonical report contract:
 | `BlockingOnly` | Preflight rejects or failed safe postconditions | Excluded |
 
 Every report view uses
-[`safe-migration-report-view-v1`](../schemas/safe-migration-report-view-v1.schema.json)
+[`safe-migration-report-view-v2`](../schemas/safe-migration-report-view-v2.schema.json)
 and carries `documentKind`, selection, source report identity, source totals,
 included totals, and the selected arrays. Selection scans the immutable source
 without allocating a filtered collection and preserves original order and
@@ -644,6 +647,16 @@ ordinals. A non-blocked source produces a valid empty `BlockingOnly` view. A
 source marked `Blocked` without a selectable blocker fails closed because the
 view could otherwise conceal an unknown or inconsistent blocking contract.
 Zero and undefined enum values throw before output is written.
+
+`RuntimeValidationRequired` is a preflight status distinct from `Ready` and
+`Blocked`. A later safe assessment with `ValidateAtRuntime` has nullable state
+and postcondition, code `runtime_validation_required`, and a `DeferredOrigin`
+containing the preceding raw SQL's migration ID (null for ad-hoc streams),
+stream ordinal, and CLR operation type. `ThrowIfBlocked()` does not throw for
+this status; runtime guards make the actual decision in operation order.
+Independently proven blockers remain `Blocked`. The
+[version 1 view schema](../schemas/safe-migration-report-view-v1.schema.json)
+remains available for previously persisted views.
 
 Invalid input can throw `ArgumentException`/derived exceptions; canonical model
 drift throws `SafeMigrationModelMismatchException`; invalid integration can

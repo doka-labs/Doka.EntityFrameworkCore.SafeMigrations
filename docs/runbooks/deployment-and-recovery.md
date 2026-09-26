@@ -65,6 +65,7 @@ Gate interpretation:
 | `NoOperations` | Confirm the intended migration is already present; do not assume success from status alone. |
 | `Ready` | Continue if all external deployment gates are also satisfied. |
 | `ReadyWithProviderOperations` | Review ordinary EF operations manually; SafeMigrations cannot read-only classify them. |
+| `RuntimeValidationRequired` | Review the reported raw SQL origin and its effects independently. Proceed only through the guarded migration runtime; later safe actions may still reject after earlier DDL. |
 | `Blocked` | Stop before `Migrate`; use the failure-code runbook. |
 
 Unexpected objects are inventory findings, not deletion instructions. Preserve

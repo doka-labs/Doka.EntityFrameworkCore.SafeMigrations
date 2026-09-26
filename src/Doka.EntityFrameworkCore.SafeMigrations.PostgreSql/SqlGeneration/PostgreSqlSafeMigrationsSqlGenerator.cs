@@ -517,6 +517,8 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         SafeMigrationAction.RejectUnsupported => "reject_unsupported",
         SafeMigrationAction.RejectDataBlocked => "reject_data_blocked",
         SafeMigrationAction.RejectPrerequisiteMissing => "reject_prerequisite_missing",
+        SafeMigrationAction.ValidateAtRuntime => throw new InvalidOperationException(
+            "A report-only runtime-validation action cannot generate migration SQL."),
         _ => throw new ArgumentOutOfRangeException(nameof(action)),
     };
 

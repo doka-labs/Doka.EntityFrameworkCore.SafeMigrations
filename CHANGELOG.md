@@ -6,6 +6,26 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- `ThrowIfBlocked()` now permits a mixed pending stream whose later safe
+  operations cannot be classified after raw migration SQL. Such operations
+  report `ValidateAtRuntime` and the SQL origin; their unchanged runtime guards
+  still decide after the SQL executes. Proven conflicts and invariantly
+  unsupported contracts remain blocked. This changes the preflight deployment
+  gate, not published migration source or runtime SQL.
+- The canonical report schema advances to v3 and the filtered view schema to
+  v2; previous schemas remain packaged. Breaking for consumers with exhaustive
+  `SafeMigrationAction` or `SafeMigrationReportStatus` switches, or report
+  readers accepting only v2: handle the new enum values and schema explicitly.
+  `CurrentSchemaVersion` is a compiled constant, so rebuild consumers that use
+  it after updating the package.
+
+### Fixed
+
+- Do not claim that SQLite raw SQL preserves previously observed table state
+  during read-only preflight.
+
 ## [10.4.3] - 2026-09-24
 
 Prepared a stable patch release that completes safe scaffolding for supported

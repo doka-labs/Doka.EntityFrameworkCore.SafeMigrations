@@ -428,7 +428,10 @@ internal sealed class SqliteSafeMigrationProviderAnalyzer : ISafeMigrationProvid
     {
         ArgumentNullException.ThrowIfNull(operation);
 
-        return operation is SqlOperation;
+        // WHY: SQLite executes arbitrary SQL as a provider command and
+        // invalidates its runtime catalog cache afterward. Read-only preflight
+        // cannot claim that the same SQL preserves earlier catalog evidence.
+        return false;
     }
 
     /// <inheritdoc />
@@ -471,7 +474,7 @@ internal sealed class SqliteSafeMigrationProviderAnalyzer : ISafeMigrationProvid
 
         if (!SqliteSafeMigrationLimits.IsSupportedVersion(snapshot.Version))
         {
-            return Unsupported("sqlite_version");
+            return InvariantUnsupported("sqlite_version");
         }
 
         if (HasForeignQualifier(operation.Intent))
@@ -484,13 +487,21 @@ internal sealed class SqliteSafeMigrationProviderAnalyzer : ISafeMigrationProvid
             && snapshot.Tables.TryGetValue(tableName, out var targetTable)
             && targetTable.Sql.StartsWith("CREATE VIRTUAL TABLE", StringComparison.OrdinalIgnoreCase))
         {
+            var invariantUnsupported = InvariantUnsupportedFeature(operation.Intent);
+            if (invariantUnsupported is not null)
+            {
+                // WHY: Raw SQL may replace a virtual table with an ordinary
+                // table, but cannot repair an unsupported target definition.
+                return InvariantUnsupported(invariantUnsupported);
+            }
+
             return Unsupported("virtual_table");
         }
 
         var analysis = operation.Intent switch
         {
             EnsureSchemaIntent value => AnalyzeEnsureSchema(value),
-            DropSchemaIntent => Unsupported("schema_operations"),
+            DropSchemaIntent => InvariantUnsupported("schema_operations"),
             EnsureTableIntent value => AnalyzeEnsureTable(snapshot, value),
             DropTableIntent value => AnalyzeDropTable(snapshot, value, operation, rebuildArtifacts),
             RenameTableIntent value => AnalyzeRenameTable(snapshot, value),
@@ -516,7 +527,7 @@ internal sealed class SqliteSafeMigrationProviderAnalyzer : ISafeMigrationProvid
                 rebuildArtifacts),
             DropForeignKeyIntent value => AnalyzeDropForeignKey(snapshot, value),
             ModelManagedDataIntent value => AnalyzeModelManagedData(snapshot, connection, transaction, value),
-            _ => Unsupported("operation_kind"),
+            _ => InvariantUnsupported("operation_kind"),
         };
 
         var decision = SafeMigrationDecisionPlanner.Plan(
@@ -556,6 +567,19 @@ internal sealed class SqliteSafeMigrationProviderAnalyzer : ISafeMigrationProvid
         return analysis;
     }
 
+    private string? InvariantUnsupportedFeature(
+        SafeMigrationIntent intent
+    ) => intent switch
+    {
+        EnsureTableIntent value => TableUnsupportedFeature(value.Definition),
+        EnsureColumnIntent value => ColumnUnsupportedFeature(value.Definition),
+        AlterColumnIntent value => ColumnUnsupportedFeature(value.Definition)
+            ?? (value.OldDefinition is null ? null : ColumnUnsupportedFeature(value.OldDefinition)),
+        EnsureIndexIntent value => IndexUnsupportedFeature(value.Definition),
+        EnsureCheckConstraintIntent value when RenderCheck(value.Definition) is null => "check_expression",
+        _ => null,
+    };
+
     private static SafeMigrationProviderAnalysis AnalyzeEnsureSchema(
         EnsureSchemaIntent intent
     ) => s_identifierComparer.Equals(intent.Name, "main")
@@ -570,7 +594,7 @@ internal sealed class SqliteSafeMigrationProviderAnalyzer : ISafeMigrationProvid
         var unsupported = TableUnsupportedFeature(intent.Definition);
         if (unsupported is not null)
         {
-            return Unsupported(unsupported);
+            return InvariantUnsupported(unsupported);
         }
 
         if (!snapshot.Tables.TryGetValue(intent.Definition.Table, out var table))
@@ -644,7 +668,7 @@ internal sealed class SqliteSafeMigrationProviderAnalyzer : ISafeMigrationProvid
         var unsupported = ColumnUnsupportedFeature(intent.Definition);
         if (unsupported is not null)
         {
-            return Unsupported(unsupported);
+            return InvariantUnsupported(unsupported);
         }
 
         if (!snapshot.Tables.TryGetValue(intent.Table, out var table))
@@ -691,7 +715,7 @@ internal sealed class SqliteSafeMigrationProviderAnalyzer : ISafeMigrationProvid
 
         if (unsupported is not null)
         {
-            return Unsupported(unsupported);
+            return InvariantUnsupported(unsupported);
         }
 
         if (!snapshot.Tables.TryGetValue(intent.Table, out var table)
@@ -772,16 +796,18 @@ internal sealed class SqliteSafeMigrationProviderAnalyzer : ISafeMigrationProvid
         EnsureIndexIntent intent
     )
     {
+        var unsupported = IndexUnsupportedFeature(intent.Definition);
+        if (unsupported is not null)
+        {
+            // WHY: A missing table can be created by earlier raw SQL, but it
+            // cannot make an unsupported index definition executable.
+            return InvariantUnsupported(unsupported);
+        }
+
         if (!snapshot.Tables.TryGetValue(intent.Definition.Table, out var table)
             || intent.Definition.Keys.Any(key => key.Column is not null && !table.Columns.ContainsKey(key.Column)))
         {
             return PrerequisiteMissing();
-        }
-
-        var unsupported = IndexUnsupportedFeature(intent.Definition);
-        if (unsupported is not null)
-        {
-            return Unsupported(unsupported);
         }
 
         var named = table.Indexes.FirstOrDefault(index =>
@@ -981,15 +1007,17 @@ internal sealed class SqliteSafeMigrationProviderAnalyzer : ISafeMigrationProvid
         SqliteRebuildArtifactContract rebuildArtifacts
     )
     {
-        if (!snapshot.Tables.TryGetValue(intent.Definition.Table, out var table))
-        {
-            return PrerequisiteMissing();
-        }
-
         var expectedSql = RenderCheck(intent.Definition);
         if (expectedSql is null)
         {
-            return Unsupported("check_expression");
+            // WHY: Catalog changes can satisfy table prerequisites, not an
+            // expression the provider cannot represent.
+            return InvariantUnsupported("check_expression");
+        }
+
+        if (!snapshot.Tables.TryGetValue(intent.Definition.Table, out var table))
+        {
+            return PrerequisiteMissing();
         }
 
         var named = table.Checks.FirstOrDefault(value =>
@@ -2530,6 +2558,19 @@ internal sealed class SqliteSafeMigrationProviderAnalyzer : ISafeMigrationProvid
         SafeMigrationRepairCapability.None,
         postconditionSatisfied: false,
         code);
+
+    private static SafeMigrationProviderAnalysis InvariantUnsupported(
+        string code
+    ) => new(
+        SafeMigrationObservedState.Unsupported,
+        SafeMigrationRepairCapability.None,
+        postconditionSatisfied: false,
+        code)
+    {
+        // WHY: This failure depends on the immutable operation contract or
+        // engine version, so preceding raw SQL cannot make it executable.
+        IsInvariantUnsupported = true,
+    };
 
     private static SafeMigrationProviderAnalysis DataBlocked(
         string code

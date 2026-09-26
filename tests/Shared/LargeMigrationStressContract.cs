@@ -877,7 +877,20 @@ internal sealed class LargeMigrationStressExpectation
         }
 
         Assert.DoesNotContain(0, stateCounts);
-        Assert.DoesNotContain(0, actionCounts);
+
+        foreach (var action in Enum.GetValues<SafeMigrationAction>())
+        {
+            if (action == SafeMigrationAction.ValidateAtRuntime)
+            {
+                // WHY: This stress stream contains no raw SQL, so a deferred
+                // runtime decision would conceal a projection regression.
+                Assert.Equal(0, actionCounts[(int)action]);
+
+                continue;
+            }
+
+            Assert.True(actionCounts[(int)action] > 0, $"Action {action} was not exercised.");
+        }
     }
 }
 

@@ -616,6 +616,11 @@ artifact and postcondition review. `NoOperations` requires
 checking intended history and postconditions rather than executing an
 unqualified target. A blocked report must stop deployment. Propagate a
 deployment cancellation token when available.
+
+`RuntimeValidationRequired` is not accepted by this safe-only example:
+review the preceding SQL and its deployment effects separately, then rely on
+the later safe operations' runtime guards in the approved execution path.
+
 Keep the migration assembly fixed and the required write/DDL fences in place;
 preflight does not reserve database state. The
 [deployment runbook](docs/runbooks/deployment-and-recovery.md) owns these checks
@@ -636,8 +641,8 @@ binds each contract's fingerprint to the same deployment artifact and target.
 
 Reports include provider and engine identity, model and operation-contract
 SHA-256 fingerprints, ordered assessments, preserved unexpected objects, and
-stable codes. Report schema version 2 separates provider `AnalysisCode` from
-the policy `DecisionCode`, carries bounded typed facet differences, and states
+stable codes. The current report schema v3 retains separate provider
+`AnalysisCode` and policy `DecisionCode`, bounded typed facet differences, and
 the known `OperationalImpact`. Detailed evidence remains in the report, never
 in metric labels, and model-managed values remain redacted. A blocked preflight
 can be raised as `SafeMigrationPreflightException` through
@@ -651,9 +656,23 @@ properties are not captured by this fingerprint. Newly scaffolded
 strict source. Retain the immutable artifact digest and independent review for
 every provider-owned operation.
 Serialize with `SafeMigrationReportJson`; the package includes the current
-[`safe-migration-run-report-v2` schema](schemas/safe-migration-run-report-v2.schema.json).
-The [version 1 schema](schemas/safe-migration-run-report-v1.schema.json) remains
+[`safe-migration-run-report-v3` schema](schemas/safe-migration-run-report-v3.schema.json).
+The [version 1](schemas/safe-migration-run-report-v1.schema.json) and
+[version 2](schemas/safe-migration-run-report-v2.schema.json) schemas remain
 available for readers of previously persisted reports.
+
+When pending migrations contain raw SQL followed by safe operations, read-only
+preflight cannot infer the SQL effect from the initial catalog snapshot. Later
+safe operations whose state is therefore unprovable have action
+`ValidateAtRuntime`, no claimed observed state or
+postcondition, and a `DeferredOrigin` identifying the SQL operation and its
+owning migration. The aggregate status is `RuntimeValidationRequired` unless
+another operation is definitively blocked; invariantly unsupported contracts
+remain blocked even after raw SQL. `ThrowIfBlocked()` permits this
+status, but it is not a proof that the remaining operations will succeed: each
+safe operation is catalog- and data-checked again when execution reaches it.
+Raw SQL itself remains provider-owned and unanalyzed. On MySQL/MariaDB, earlier
+DDL can already be committed if a later guard rejects the migration.
 
 For focused operator output, serialize a self-describing report view instead
 of copying or mutating the immutable report:
@@ -669,8 +688,12 @@ assessments, and `BlockingOnly` includes only the assessments that block the
 current preflight or postflight phase. The view retains source identity and
 total/included counts, preserves assessment order, and never includes
 unexpected objects in `BlockingOnly`. It uses the distinct packaged
-[`safe-migration-report-view-v1` schema](schemas/safe-migration-report-view-v1.schema.json);
-the existing one-argument serializer remains the canonical complete report v2.
+[`safe-migration-report-view-v2` schema](schemas/safe-migration-report-view-v2.schema.json);
+the existing one-argument serializer remains the canonical complete report v3.
+The [version 1 view schema](schemas/safe-migration-report-view-v1.schema.json)
+remains available for previously persisted views. `NonMatching` retains deferred
+assessments and their origins; `BlockingOnly` does not present them as proven
+blockers.
 
 Do not encode a preflight-only operation inside `Migration.Up`. EF would record
 the migration as applied after successful command execution even when the

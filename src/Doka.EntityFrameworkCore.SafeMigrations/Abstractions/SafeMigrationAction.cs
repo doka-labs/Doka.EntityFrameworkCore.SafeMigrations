@@ -25,4 +25,10 @@ public enum SafeMigrationAction
 
     /// <summary>Reject because a required parent object is absent.</summary>
     RejectPrerequisiteMissing = 6,
+
+    /// <summary>
+    /// Defer classification until the guarded runtime operation observes the
+    /// database after an earlier opaque SQL operation.
+    /// </summary>
+    ValidateAtRuntime = 7,
 }

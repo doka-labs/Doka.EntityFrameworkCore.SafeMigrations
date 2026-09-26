@@ -62,6 +62,7 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
 
         var operations = new List<MigrationOperation>();
         var targetModels = new List<IModel?>();
+        var migrationIds = new List<string>();
 
         // Reconstruct the pending Up-operation stream in the migration-ID order
         // used for target selection throughout this method.
@@ -84,6 +85,7 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
 
             operations.AddRange(migration.UpOperations);
             targetModels.AddRange(Enumerable.Repeat(migration.TargetModel, migration.UpOperations.Count));
+            migrationIds.AddRange(Enumerable.Repeat(migrationEntry.Key, migration.UpOperations.Count));
         }
 
         return await RunAsync(
@@ -92,6 +94,7 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
             SafeMigrationReportMode.Preflight,
             new SafeMigrationRunOptions(options.InstanceId, targetMigrationId, options.ExpectedModelFingerprint),
             targetModels,
+            migrationIds,
             cancellationToken);
     }
 
@@ -101,7 +104,7 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
         IReadOnlyList<MigrationOperation> operations,
         SafeMigrationRunOptions options,
         CancellationToken cancellationToken = default
-    ) => RunAsync(context, operations, SafeMigrationReportMode.Preflight, options, null, cancellationToken);
+    ) => RunAsync(context, operations, SafeMigrationReportMode.Preflight, options, null, null, cancellationToken);
 
     /// <inheritdoc />
     public Task<SafeMigrationRunReport> VerifyAsync(
@@ -109,7 +112,7 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
         IReadOnlyList<MigrationOperation> operations,
         SafeMigrationRunOptions options,
         CancellationToken cancellationToken = default
-    ) => RunAsync(context, operations, SafeMigrationReportMode.Postflight, options, null, cancellationToken);
+    ) => RunAsync(context, operations, SafeMigrationReportMode.Postflight, options, null, null, cancellationToken);
 
     private async Task<SafeMigrationRunReport> RunAsync(
         DbContext context,
@@ -117,6 +120,7 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
         SafeMigrationReportMode mode,
         SafeMigrationRunOptions options,
         List<IModel?>? targetModels,
+        List<string>? migrationIds,
         CancellationToken cancellationToken
     )
     {
@@ -130,6 +134,14 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
             throw new ArgumentException(
                 "The target-model sequence must align with the migration-operation sequence.",
                 nameof(targetModels));
+        }
+
+        if (migrationIds is not null
+            && migrationIds.Count != operations.Count)
+        {
+            throw new ArgumentException(
+                "The migration-ID sequence must align with the migration-operation sequence.",
+                nameof(migrationIds));
         }
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -195,6 +207,7 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
                 generatedAtUtc,
                 environment,
                 targetModels,
+                migrationIds,
                 cancellationToken);
 
             activity?.SetStatus(ActivityStatusCode.Ok);
@@ -272,12 +285,15 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
         DateTimeOffset generatedAtUtc,
         SafeMigrationProviderEnvironment environment,
         List<IModel?>? targetModels,
+        List<string>? migrationIds,
         CancellationToken cancellationToken
     )
     {
         var assessments = new List<SafeMigrationAssessment>(operations.Count);
         var blocked = false;
         var hasProviderOperations = false;
+        var hasDeferredOperations = false;
+        SafeMigrationDeferredOrigin? rawSqlOrigin = null;
 
         var safeOperations = operations
             .OfType<SafeMigrationOperation>()
@@ -344,13 +360,55 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
                         SafeMigrationOperationalImpact.NotApplicable,
                         differences: null));
 
-                preflightProjection?.ObserveProviderPostcondition(operation);
+                if (preflightProjection is not null)
+                {
+                    preflightProjection.ObserveProviderPostcondition(operation);
+
+                    if (preflightProjection.HasOpaqueSqlPostcondition
+                        && operation is SqlOperation)
+                    {
+                        rawSqlOrigin ??= new SafeMigrationDeferredOrigin(
+                            migrationIds?[ordinal],
+                            ordinal,
+                            operation.GetType().FullName ?? operation.GetType().Name);
+                    }
+                }
 
                 continue;
             }
 
             var liveAnalysis = liveAnalyses[safeOperationOrdinal++];
             var analysis = preflightProjection?.Project(safeOperation, liveAnalysis) ?? liveAnalysis;
+
+            if (mode == SafeMigrationReportMode.Preflight
+                && rawSqlOrigin is not null
+                && analysis.IsOpaqueProjectionUnknown)
+            {
+                // WHY: Raw SQL can change any catalog or row state. The immutable
+                // batch analysis cannot prove this later operation's state, but
+                // its runtime guard will analyze it after the SQL has executed.
+                // Do not project an effect that has not yet been established.
+                hasDeferredOperations = true;
+                assessments.Add(
+                    new SafeMigrationAssessment(
+                        ordinal,
+                        typeof(SafeMigrationOperation).FullName!,
+                        isSafeOperation: true,
+                        safeOperation.Intent.Kind,
+                        safeOperation.Intent.ObjectName,
+                        observedState: null,
+                        SafeMigrationAction.ValidateAtRuntime,
+                        postconditionSatisfied: null,
+                        "runtime_validation_required",
+                        analysis.Code,
+                        "runtime_validation_required",
+                        SafeMigrationOperationalImpact.Unknown,
+                        differences: null,
+                        deferredOrigin: rawSqlOrigin));
+
+                continue;
+            }
+
             var decision = SafeMigrationDecisionPlanner.Plan(
                 safeOperation.Intent.Kind,
                 analysis.ObservedState,
@@ -397,9 +455,11 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
             ? SafeMigrationReportStatus.NoOperations
             : blocked
                 ? SafeMigrationReportStatus.Blocked
-                : hasProviderOperations
-                    ? SafeMigrationReportStatus.ReadyWithProviderOperations
-                    : SafeMigrationReportStatus.Ready;
+                : hasDeferredOperations
+                    ? SafeMigrationReportStatus.RuntimeValidationRequired
+                    : hasProviderOperations
+                        ? SafeMigrationReportStatus.ReadyWithProviderOperations
+                        : SafeMigrationReportStatus.Ready;
 
         var unexpectedObjects = await _providerAnalyzer.FindUnexpectedObjectsAsync(
             context,

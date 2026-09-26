@@ -8,7 +8,7 @@ contract fingerprints, and the protected deployment record.
 ## Which code appears in a report
 
 Provider analysis, the public decision planner, the run report, and database
-errors are distinct contracts. Report schema version 2 exposes all three
+errors are distinct contracts. Report schema version 3 exposes all three
 layers explicitly:
 
 - `AnalysisCode` is the provider observation or capability result;
@@ -109,7 +109,8 @@ data/prerequisite result uses its planner rejection code.
 | `projected_matching` | Preflight projection observes a match after earlier accepted operations virtually. |
 | `projected_different` | Preflight projection observes a conflict between ordered operations. |
 | `projected_data_state_unknown` | A typed EF data operation preserved structural facts but invalidated a projected or live pre-batch row-safety proof. The public blocked assessment uses `prerequisite_missing`; do not execute the dependent operation without a separately provable post-DML state. |
-| `projected_structure_state_unknown` | Projected structure is unknown after an opaque or unresolved mutation. |
+| `projected_structure_state_unknown` | Projected structure is unknown after an opaque or unresolved mutation. After raw SQL, a later safe assessment instead uses `runtime_validation_required` with the SQL origin; other unresolved transitions remain blocked. |
+| `runtime_validation_required` | Raw SQL may have changed catalog or rows before a later safe operation. The read-only report has no proven action; its guarded runtime analysis must decide after the SQL executes. |
 | `projected_dependency_handoff` | Ordered model-managed deletes exactly cover the live dependent rows, so the proved dependency transition is handed to the following principal-row delete. |
 | `postcondition_superseded` | A later safe operation is the final writer for the same exact catalog resource. The earlier ordered assessment remains visible and has a satisfied effective postcondition; provider-owned operations can never produce this code. |
 | `provider_owned_not_analyzed` | Ordinary EF/provider operation is present and is not classified as safe. A recognized deterministic table/column postcondition may be projected conditionally into a later safe prerequisite. Typed insert/update/delete-data operations retain those structural facts but invalidate data-safety proofs; the provider operation itself remains unanalyzed. |
@@ -129,9 +130,15 @@ Typed EF data operations preserve only structural prerequisites for a later
 non-unique index. A data-dependent unique index or additive constraint remains
 blocked even when the live analyzer observed absence before the ordered data
 operation. A later structural provider operation cannot clear that uncertainty.
-If an unrecognized provider operation or raw SQL separates the prerequisite
-from the safe operation, projection facts are discarded and the later operation
-uses the live analyzer result.
+If an unrecognized provider operation separates the prerequisite from the safe
+operation, projection facts are discarded and the later operation remains
+blocked when its state cannot be proven. Raw SQL in an ordered pending stream
+also discards those facts. Later safe operations whose state is unprovable are
+marked `ValidateAtRuntime` with the SQL origin instead of claiming a physically
+missing prerequisite. Immutable unsupported contracts remain blocked.
+`BlockingOnly` excludes the deferred actions; use
+`NonMatching` to inspect them. `ThrowIfBlocked()` permits their report status,
+but cannot approve the raw SQL or promise that runtime guards will pass.
 
 An accepted exact-name index drop can project a following ordinary column
 BTREE ensure to `projected_missing`. It cannot override
@@ -142,7 +149,7 @@ ordinary drop independently; correct the target definition or live data first.
 
 ## Facet differences and operational impact
 
-Schema-version-2 assessments may contain up to 16 bounded typed differences.
+Schema-version-3 assessments may contain up to 16 bounded typed differences.
 Use these to identify the exact mismatch before changing a migration:
 
 Ordered FK or index name lists longer than 256 characters appear as labelled
@@ -188,8 +195,8 @@ the four reject actions; postflight views contain failed safe postconditions.
 The view preserves source ordinals and difference evidence while excluding
 non-blockers and unexpected objects. Use `NonMatching` when preserved
 unexpected objects or accepted-but-not-converged assessments are relevant.
-Validate the result against `safe-migration-report-view-v1`; it is not a
-schema-v2 report with entries silently removed.
+Validate the result against `safe-migration-report-view-v2`; it is not a
+schema-v3 report with entries silently removed.
 
 ## Accepting planner decision codes
 

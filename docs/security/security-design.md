@@ -222,6 +222,9 @@ labels. Model-managed drift uses only the category
 row exists and never return the value, key, or a derived fragment. The typed
 preflight exception retains the immutable report while limiting its message to
 one deterministic bounded conflict summary.
+Report schema version 3 additionally carries a migration ID and operation type
+for deferred runtime validation after raw SQL. This origin is protected report
+content, not a telemetry dimension; SQL text and row values remain excluded.
 
 Selected report views retain the same protected assessment fields and are not
 redaction. `BlockingOnly` reduces operator noise and excludes unexpected-object

@@ -610,14 +610,25 @@ evidence remains out of metrics. `SafeMigrationPreflightException` attaches the
 immutable blocked report and renders one bounded deterministic conflict summary
 for hosts that prefer an exception boundary.
 
-Explicit report selection writes a separate report-view schema version 1. The
-serializer first counts selected entries and then streams them directly from
-the immutable source report, so it can emit accurate source/included totals and
-size its bounded initial buffer without allocating a filtered array or DTO
-graph. `Complete`, `NonMatching`, and phase-specific `BlockingOnly` selection
-share the canonical assessment writer and therefore retain the same bounded
-field representation. A blocked report with no selected blocker fails closed;
-future status/action contracts cannot become invisible through an old filter.
+Explicit report selection writes a separate report-view schema, currently
+version 2. The serializer first counts selected entries and then streams them
+directly from the immutable source report, so it can emit accurate
+source/included totals and size its bounded initial buffer without allocating
+a filtered array or DTO graph. `Complete`, `NonMatching`, and phase-specific
+`BlockingOnly` selection share the canonical assessment writer and therefore
+retain the same bounded field representation. A blocked report with no selected
+blocker fails closed; future status/action contracts cannot become invisible
+through an old filter.
+
+Report schema version 3 and report-view schema version 2 add the distinct
+`RuntimeValidationRequired` preflight outcome. After raw SQL makes the ordered
+projection opaque, later safe assessments carry `ValidateAtRuntime` and the
+first SQL operation's migration ID, stream ordinal, and CLR type. The runner
+does not substitute the stale batch catalog result, project a hypothetical
+safe effect, or treat this outcome as read-only `Ready`. Independently proven
+conflicts remain blocked. The existing guarded runtime operation performs its
+own live catalog and data check after preceding operations; on nontransactional
+DDL engines, a later rejection may follow already committed work.
 
 Operation-contract fingerprints include safe intent, expected definitions,
 policy, annotations, and ordering. An ordinary EF operation contributes
@@ -664,9 +675,11 @@ only when every referenced column is known and a newly added key column is
 nullable, non-computed, has no non-null default, and uses default null-distinct
 semantics. Other unique transitions remain blocked. Typed EF data operations
 reach this projection only after conversion to source-frozen model-managed safe
-operations. An opaque provider effect invalidates projection evidence; later
-safe operations must reestablish their prerequisites or fail closed. The
-ordinary provider operation itself remains reported as not analyzed.
+operations. An opaque provider effect invalidates projection evidence. After
+raw SQL, later safe operations with an unprovable state report runtime
+validation rather than a proven missing prerequisite. Immutable unsupported
+contracts, earlier proven conflicts, and other unproven provider effects remain
+blocked. The ordinary provider operation itself remains reported as not analyzed.
 
 Existing convergence tables retain a compact accepted-constraint catalog
 separately from complete table definitions. Exact names detect definition
