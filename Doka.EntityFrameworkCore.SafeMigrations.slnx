@@ -72,16 +72,10 @@
   <Folder Name="/src/SQLite/">
     <Project Path="src/Doka.EntityFrameworkCore.SafeMigrations.Sqlite/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.csproj" />
   </Folder>
-  <Folder Name="/tests/Core/">
+  <Folder Name="/tests/">
     <Project Path="tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Doka.EntityFrameworkCore.SafeMigrations.Tests.csproj" />
-  </Folder>
-  <Folder Name="/tests/MySQL-MariaDB/">
     <Project Path="tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests.csproj" />
-  </Folder>
-  <Folder Name="/tests/PostgreSQL/">
     <Project Path="tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.csproj" />
-  </Folder>
-  <Folder Name="/tests/SQLite/">
     <Project Path="tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests.csproj" />
   </Folder>
 </Solution>
