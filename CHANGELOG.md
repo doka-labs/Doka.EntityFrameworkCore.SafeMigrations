@@ -6,6 +6,13 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Reduce the Dependabot cooldown for NuGet, GitHub Actions, and .NET SDK updates
+  from seven to three days while preserving weekly schedules, grouping, and
+  open pull request limits. Security updates remain unaffected.
+- Update the SHA-pinned CodeQL upload-sarif action from 4.38.1 to 4.38.2.
+
 ## [10.4.4] - 2026-09-26
 
 Prepared a stable bugfix for read-only preflight over mixed legacy-convergence
