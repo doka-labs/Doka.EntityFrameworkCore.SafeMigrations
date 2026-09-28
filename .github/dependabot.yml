@@ -7,7 +7,8 @@ updates:
   # D-006 records the accepted loss of content-hash and transitive-diff evidence
   # for those execution projects.
   # Group normal updates so one pull request exercises the complete
-  # qualification matrix. The cooldown does not delay security updates.
+  # qualification matrix. Three days leave time for early release feedback
+  # without requiring a full week's minimum age. Security updates are not delayed.
   - package-ecosystem: nuget
     directory: /
     schedule:
@@ -16,7 +17,7 @@ updates:
       time: "06:00"
       timezone: Europe/Berlin
     cooldown:
-      default-days: 7
+      default-days: 3
     groups:
       nuget-dependencies:
         patterns:
@@ -40,7 +41,7 @@ updates:
       time: "06:00"
       timezone: Europe/Berlin
     cooldown:
-      default-days: 7
+      default-days: 3
     groups:
       github-actions:
         patterns:
@@ -64,7 +65,7 @@ updates:
       time: "06:00"
       timezone: Europe/Berlin
     cooldown:
-      default-days: 7
+      default-days: 3
     open-pull-requests-limit: 1
     commit-message:
       prefix: chore
