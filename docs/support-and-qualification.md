@@ -29,10 +29,10 @@ four package-project lockfiles identify the exact dependency graph used to
 compile and qualify the package artifacts in a particular revision; they do
 not constrain a consumer's NuGet resolution or lock the engineering projects.
 
-At preparation time, 10.4.3 is the latest confirmed published SafeMigrations
-release. This source prepares 10.4.4; its declared support contract does not
-establish publication. The blocking release workflow and exact public readback
-of all four package IDs remain the release evidence.
+At preparation time, 10.4.4 is the latest stable tag. This source prepares
+10.4.5; its declared support contract does not establish publication. The
+blocking release workflow and exact public readback of all four package IDs
+remain the release evidence.
 
 ## Engine matrix
 
@@ -205,6 +205,9 @@ coverage. The provider-specific suites collectively cover:
   `PRIMARY` separation, and duplicate-row controls;
 - maximum-length 16-column primary and unique keys matched by ordinal catalog
   rows independently of `group_concat_max_len`, with reversed-order controls;
+- MySQL/MariaDB composite-index candidates whose generated catalog-reference
+  count remains constant as the number of key parts grows, with functional
+  classification on both engines;
 - physical-identity binding for semantic unique, check, foreign-key, and index
   aliases, including drop/rename invalidation and ambiguous fail-closed
   prerequisite projection;

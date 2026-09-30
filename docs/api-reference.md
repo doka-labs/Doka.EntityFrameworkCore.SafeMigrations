@@ -42,15 +42,18 @@ public registration and generator surface. Existing Core, MySQL/MariaDB, and
 PostgreSQL public APIs remain compatible. Published stable 10.4.3 adds the Core
 `AddColumnIfNotExistsFromModel` and `AlterColumnIfDifferentFromModel` methods
 and extends safe scaffolding to supported structural operations. Strict
-scaffolding remains the default. The prepared 10.4.4 patch adds
+scaffolding remains the default. Stable 10.4.4 adds
 `SafeMigrationDeferredOrigin`, `SafeMigrationAssessment.DeferredOrigin`,
 `SafeMigrationAction.ValidateAtRuntime`, and
 `SafeMigrationReportStatus.RuntimeValidationRequired`. Canonical reports advance
 to schema v3 and filtered views to v2. Consumers must update exhaustive enum
 handling and schema validation, and rebuild references to the compiled
 `CurrentSchemaVersion` constant. Existing migration source, runtime guards,
-and history remain unchanged. A successful release run and exact-version
-public package readback remain the authority for a published API.
+and history remain unchanged. The prepared 10.4.5 patch preserves that public
+API, generated migration source, report schemas, and history. It changes only
+the MySQL/MariaDB index-catalog comparison query shape. A successful release
+run and exact-version public package readback remain the authority for a
+published API.
 
 ## Packages and registration
 

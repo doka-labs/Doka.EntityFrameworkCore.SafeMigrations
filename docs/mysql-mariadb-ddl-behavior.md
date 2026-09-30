@@ -330,6 +330,13 @@ every key column before any earlier drop can execute. Constraint column order is
 matched by ordinal catalog rows, not `GROUP_CONCAT`, whose default session limit
 can truncate 16 maximum-length identifiers.
 
+Candidate-index matching groups `INFORMATION_SCHEMA.STATISTICS` rows by index
+name and checks the complete key contract with ordinal aggregates. This avoids
+correlated catalog queries for each key part while preserving uniqueness,
+visibility, method, sort, and prefix checks. The number of catalog references
+in generated guard SQL stays constant as key width grows; the key predicates
+still grow with the definition. This is not an absolute command-time guarantee.
+
 ## Ordered index replacement
 
 Automatic scaffolding emits `DropIndexIfExists` for an EF `DropIndex`
@@ -549,6 +556,10 @@ line is admitted implicitly.
   (retrieved 2026-09-12)
 - [MySQL `group_concat_max_len`](https://dev.mysql.com/doc/refman/8.4/en/server-system-variables.html#sysvar_group_concat_max_len)
   (retrieved 2026-09-12)
+- [MySQL INFORMATION_SCHEMA.STATISTICS](https://dev.mysql.com/doc/refman/8.4/en/information-schema-statistics-table.html)
+  (retrieved 2026-09-30)
+- [MariaDB INFORMATION_SCHEMA.STATISTICS](https://mariadb.com/docs/server/reference/system-tables/information-schema/information-schema-tables/information-schema-statistics-table)
+  (retrieved 2026-09-30)
 - [MySQL CREATE INDEX](https://dev.mysql.com/doc/refman/8.4/en/create-index.html)
   (retrieved 2026-09-12)
 - [MySQL invisible indexes](https://dev.mysql.com/doc/refman/8.4/en/invisible-indexes.html)
