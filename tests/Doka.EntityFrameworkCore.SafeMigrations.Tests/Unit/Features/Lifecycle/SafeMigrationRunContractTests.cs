@@ -412,7 +412,7 @@ public sealed class SafeMigrationRunContractTests
                 .GetProperty("environment")
                 .GetProperty("properties")
                 .GetProperty("engineFamily"),
-            ["mysql", "mariadb", "postgresql", "sqlite"]);
+            ["mysql", "mariadb", "postgresql", "sqlite", "sqlserver"]);
         AssertSchemaEnum(
             definitions
                 .GetProperty("assessment")
@@ -591,10 +591,19 @@ public sealed class SafeMigrationRunContractTests
                 == true);
     }
 
+    /// <summary>Accepts the SQL Server engine family in the versioned report contract.</summary>
+    [Fact]
+    public void EnvironmentAcceptsSqlServerEngineFamily()
+    {
+        var environment = new SafeMigrationProviderEnvironment("efcore_sqlserver", "sqlserver", "16.0");
+
+        Assert.Equal("sqlserver", environment.EngineFamily);
+    }
+
     [Fact]
     public void ReportAndEnvironmentRejectValuesOutsideThePackagedSchemaContract()
     {
-        Assert.Throws<ArgumentException>(() => new SafeMigrationProviderEnvironment("provider", "sqlserver", "1.0"));
+        Assert.Throws<ArgumentException>(() => new SafeMigrationProviderEnvironment("provider", "oracle", "1.0"));
         Assert.Throws<ArgumentException>(() => CreateReport(modelFingerprint: new string('a', 64)));
         Assert.Throws<ArgumentException>(() => CreateReport(contractFingerprint: "ABC"));
         Assert.Throws<ArgumentOutOfRangeException>(() => new SafeMigrationAssessment(

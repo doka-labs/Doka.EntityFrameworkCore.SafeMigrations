@@ -13,7 +13,7 @@ functionality into a later version.
 
 - Prepare the repository for public contribution and auditable maintenance.
 - Qualify all published packages together: Core, MySQL/MariaDB, PostgreSQL,
-  and, beginning with its first release, SQLite.
+  SQLite, and, beginning with its first release, SQL Server.
 - Exercise the real candidate workflow before stable publication, including
   protected approval, signed identity, exact-byte publication, and readback.
 - Validate heterogeneous legacy convergence, runtime/history semantics,

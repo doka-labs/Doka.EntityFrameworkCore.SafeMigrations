@@ -18,8 +18,9 @@ doka-profile-version: "1.0"
 
 ## Context and Problem Statement
 
-SafeMigrations publishes Core, MySQL/MariaDB, PostgreSQL, and SQLite packages at
-one version. Ordinary qualification failures must not consume a tag or public
+SafeMigrations publishes Core and provider packages at one version. The SQL
+Server provider extends the release set to five packages. Ordinary qualification
+failures must not consume a tag or public
 NuGet version, and publication must use the exact bytes that passed the full
 provider matrix. The workflow must also remain understandable and maintainable
 without a repository-owned release orchestration framework.
@@ -67,14 +68,14 @@ entry except NuGet's added `.signature.p7s`.
 
 Before requesting the NuGet credential, the protected job downloads the exact
 same-run provenance artifact, validates its SLSA v1 envelope and complete
-ten-subject name/digest inventory, and verifies every subject with
+twelve-subject name/digest inventory, and verifies every subject with
 `gh attestation verify --bundle` pinned to the repository, release workflow,
 workflow commit, source ref, source commit, and hosted-runner boundary. It then
 creates a GitHub Release draft with the expected title, Changelog-derived
-notes, classification, exact eight package files, `SHA256SUMS`, the SPDX
+notes, classification, exact ten package files, `SHA256SUMS`, the SPDX
 manifest, and `release-provenance.intoto.jsonl`. A retry retains digest-matching
 assets, uploads missing assets, and rejects every mismatch. Only a completely
-read-back eleven-asset draft permits the first NuGet push.
+read-back thirteen-asset draft permits the first NuGet push.
 
 After signed public NuGet content matches the qualified packages, the job
 publishes the draft. GitHub's immutable-release and release-asset verification
@@ -86,7 +87,7 @@ parallel release state and does not parse the symbol server.
 ### Repository dependency lock scope
 
 Central Package Management owns dependency floors and compatible ranges for the
-entire repository. Only the four publishable package projects commit
+entire repository. Only the five publishable package projects commit
 `packages.lock.json`. Their lockfiles preserve the exact compile-time package
 graph and NuGet content hashes used to produce and qualify release artifacts;
 they do not control the graph selected by a consuming application.
@@ -131,7 +132,7 @@ read-only while the upstream regeneration defect remains open.
   that can disagree with GitHub or NuGet.
 - Good, because grouped dependency updates cannot leave a hidden subset of
   engineering lockfiles stale.
-- Bad, because four NuGet package IDs cannot be published atomically.
+- Bad, because five NuGet package IDs cannot be published atomically.
 - Bad, because symbol indexing is asynchronous and remains a NuGet-hosted
   validation state after upload.
 - Bad, because GitHub and NuGet still cannot commit atomically; recovery after
@@ -145,7 +146,7 @@ read-only while the upstream regeneration defect remains open.
 
 Require local shell syntax checks, portable-provenance and GitHub Release
 reconciliation positive/negative cases, version-validator positive/negative
-cases, locked restore of the four package projects, resolved restore of all
+cases, locked restore of the five package projects, resolved restore of all
 execution projects, format, Release build, all test suites, coverage thresholds,
 performance budgets, deterministic package qualification, package-only
 consumers, SBOM validation, and every supported live provider/tooling cell.
@@ -182,7 +183,7 @@ for that hosted evidence.
 
 - Good, because it can model every observed partial state explicitly.
 - Bad, because it duplicates platform contracts, requires extensive fixture
-  maintenance, and adds more failure modes than the four-package release needs.
+  maintenance, and adds more failure modes than the five-package release needs.
 
 ## More Information
 
@@ -231,6 +232,9 @@ owns independent consumer readback.
   `--locked-mode` restores had been locked. Moving it behind the root import
   activated it and made the RID-specific EF Migration Bundle restores fail;
   locked restore now excludes restores with a `RuntimeIdentifier`.
+- 2026-09-30: Expanded the release set to five version-aligned package IDs for
+  SQL Server. The five-package contract applies to the provider's first release;
+  the 10.4.5 release contract remains the four-package historical set.
 
 ### Implementation References
 

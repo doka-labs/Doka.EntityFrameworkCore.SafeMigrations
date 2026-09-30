@@ -1,0 +1,259 @@
+namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
+
+public sealed partial class SqlServerSafeMigrationIntegrationTests
+{
+    /// <summary>A live inline proof cannot survive removal of its table or only candidate key.</summary>
+    [SqlServerLiveTheory]
+    [InlineData("table")]
+    [InlineData("primary")]
+    [InlineData("unique")]
+    [InlineData("index")]
+    public async Task RemovedPrincipalPrerequisiteBlocksLaterInlineForeignKey(string removal)
+    {
+        // Arrange
+        var connectionString = await Fixture.CreateDatabaseAsync();
+        var key = removal switch
+        {
+            "unique" => "CONSTRAINT UQ_inline_principal UNIQUE (Id)",
+            "index" => string.Empty,
+            _ => "CONSTRAINT PK_inline_principal PRIMARY KEY (Id)",
+        };
+
+        await ExecuteSqlAsync(connectionString,
+            "CREATE TABLE dbo.inline_principal (Id int NOT NULL"
+            + (key.Length == 0 ? string.Empty : ", " + key) + ");"
+            + (removal == "index"
+                ? " CREATE UNIQUE INDEX IX_inline_principal ON dbo.inline_principal(Id);"
+                : string.Empty));
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+
+        switch (removal)
+        {
+            case "table":
+                builder.DropTableIfExists("inline_principal");
+                break;
+            case "primary":
+                builder.DropPrimaryKeyIfExists("PK_inline_principal", "inline_principal");
+                break;
+            case "unique":
+                builder.DropUniqueConstraintIfExists("UQ_inline_principal", "inline_principal");
+                break;
+            case "index":
+                builder.DropIndexIfExists("IX_inline_principal", "inline_principal");
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(removal));
+        }
+
+        builder.EnsureTable(InlineDependent("inline_principal"),
+            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+
+        // Act
+        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
+            new SafeMigrationRunOptions("removed-inline-prerequisite"));
+
+        // Assert
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
+        Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, report.Assessments[1].Action);
+    }
+
+    /// <summary>An inline FK follows the accepted physical principal rename, not its old name.</summary>
+    [SqlServerLiveTheory]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    public async Task InlineForeignKeyUsesCurrentPrincipalAfterRename(
+        bool useNewName,
+        bool expectedReady
+    )
+    {
+        // Arrange
+        var connectionString = await Fixture.CreateDatabaseAsync();
+        await ExecuteSqlAsync(connectionString,
+            "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY);");
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.RenameTableIfExists("inline_principal", "renamed_principal");
+        builder.EnsureTable(InlineDependent(useNewName ? "renamed_principal" : "inline_principal"),
+            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+
+        // Act
+        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
+            new SafeMigrationRunOptions("renamed-inline-principal"));
+
+        // Assert
+        Assert.Equal(expectedReady ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked,
+            report.Status);
+        Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
+        Assert.Equal(expectedReady ? SafeMigrationAction.Apply : SafeMigrationAction.RejectPrerequisiteMissing,
+            report.Assessments[1].Action);
+    }
+
+    /// <summary>A surviving alternate candidate key retains valid inline prerequisites.</summary>
+    [SqlServerLiveFact]
+    public async Task DroppedCandidateKeyDoesNotInvalidateSurvivingEquivalentKey()
+    {
+        // Arrange
+        var connectionString = await Fixture.CreateDatabaseAsync();
+        await ExecuteSqlAsync(connectionString,
+            "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY, "
+            + "CONSTRAINT UQ_inline_principal UNIQUE (Id));");
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.DropPrimaryKeyIfExists("PK_inline_principal", "inline_principal");
+        builder.EnsureTable(InlineDependent("inline_principal"),
+            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+
+        // Act
+        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
+            new SafeMigrationRunOptions("surviving-inline-candidate-key"));
+
+        // Assert
+        Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
+        Assert.All(report.Assessments, assessment => Assert.Equal(SafeMigrationAction.Apply, assessment.Action));
+    }
+
+    /// <summary>Accepted FK or dependent removal reconciles an incoming-FK-only immutable drop conflict.</summary>
+    [SqlServerLiveTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RemovedIncomingForeignKeyPermitsSameStreamPrincipalDrop(bool dropChild)
+    {
+        // Arrange
+        var connectionString = await Fixture.CreateDatabaseAsync();
+        await ExecuteSqlAsync(connectionString,
+            "CREATE TABLE dbo.drop_principal (Id int NOT NULL CONSTRAINT PK_drop_principal PRIMARY KEY); "
+            + "CREATE TABLE dbo.drop_dependent (ParentId int NOT NULL, "
+            + "CONSTRAINT FK_drop_dependent FOREIGN KEY (ParentId) REFERENCES dbo.drop_principal(Id));");
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+
+        if (dropChild)
+        {
+            builder.DropTableIfExists("drop_dependent");
+        }
+        else
+        {
+            builder.DropForeignKeyIfExists("FK_drop_dependent", "drop_dependent");
+        }
+
+        builder.DropTableIfExists("drop_principal");
+
+        // Act
+        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
+            new SafeMigrationRunOptions("ordered-incoming-fk-drop"));
+
+        await ExecuteOperationsAsync(context, builder.Operations);
+        var remaining = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.drop_principal');");
+
+        // Assert
+        Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
+        Assert.All(report.Assessments, assessment => Assert.Equal(SafeMigrationAction.Apply, assessment.Action));
+        Assert.Equal(0, remaining);
+    }
+
+    /// <summary>Removing an incoming FK cannot remove an independent schema-bound dependency.</summary>
+    [SqlServerLiveFact]
+    public async Task RemovedIncomingForeignKeyDoesNotBypassOtherDropDependencies()
+    {
+        // Arrange
+        var connectionString = await Fixture.CreateDatabaseAsync();
+        await ExecuteSqlAsync(connectionString,
+            "CREATE TABLE dbo.drop_principal (Id int NOT NULL CONSTRAINT PK_drop_principal PRIMARY KEY); "
+            + "CREATE TABLE dbo.drop_dependent (ParentId int NOT NULL, "
+            + "CONSTRAINT FK_drop_dependent FOREIGN KEY (ParentId) REFERENCES dbo.drop_principal(Id));");
+        await ExecuteSqlAsync(connectionString,
+            "CREATE VIEW dbo.bound_principal WITH SCHEMABINDING AS SELECT Id FROM dbo.drop_principal;");
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.DropForeignKeyIfExists("FK_drop_dependent", "drop_dependent");
+        builder.DropTableIfExists("drop_principal");
+
+        // Act
+        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
+            new SafeMigrationRunOptions("independent-drop-dependency"));
+
+        // Assert
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
+        Assert.Equal(SafeMigrationAction.RejectDifferent, report.Assessments[1].Action);
+    }
+
+    /// <summary>
+    /// Catalog-equivalent live spellings retain a candidate key, while a real different column does not.
+    /// </summary>
+    [SqlServerLiveTheory]
+    [InlineData("id", true)]
+    [InlineData("OtherId", false)]
+    public async Task InlineForeignKeyMatchesPhysicalPrincipalColumn(
+        string principalColumn,
+        bool expectedReady
+    )
+    {
+        // Arrange
+        var connectionString = await Fixture.CreateDatabaseAsync();
+        await ExecuteSqlAsync(connectionString,
+            "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY, "
+            + "OtherId int NOT NULL);");
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureTable(new ExpectedTableDefinition("inline_dependent",
+            [new ExpectedColumnDefinition("ParentId", typeof(int), false, "int")],
+            foreignKeys: [new ExpectedForeignKeyDefinition("FK_inline_dependent", "inline_dependent",
+                ["ParentId"], "inline_principal", [principalColumn])]),
+            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+
+        // Act
+        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
+            new SafeMigrationRunOptions("inline-physical-column-id"));
+
+        // Assert
+        Assert.Equal(expectedReady ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked,
+            report.Status);
+        Assert.Equal(expectedReady ? SafeMigrationAction.Apply : SafeMigrationAction.RejectPrerequisiteMissing,
+            report.Assessments[0].Action);
+    }
+
+    /// <summary>
+    /// Accepted column renames retain physical key membership only under the current principal column.
+    /// </summary>
+    [SqlServerLiveTheory]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    public async Task InlineForeignKeyUsesCurrentPrincipalColumnAfterRename(
+        bool useNewName,
+        bool expectedReady
+    )
+    {
+        // Arrange
+        var connectionString = await Fixture.CreateDatabaseAsync();
+        await ExecuteSqlAsync(connectionString,
+            "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY);");
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.RenameColumnIfExists("Id", "inline_principal", "RenamedId");
+        builder.EnsureTable(new ExpectedTableDefinition("inline_dependent",
+            [new ExpectedColumnDefinition("ParentId", typeof(int), false, "int")],
+            foreignKeys: [new ExpectedForeignKeyDefinition("FK_inline_dependent", "inline_dependent",
+                ["ParentId"], "inline_principal", [useNewName ? "RenamedId" : "Id"])]),
+            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+
+        // Act
+        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
+            new SafeMigrationRunOptions("inline-renamed-physical-column-id"));
+
+        // Assert
+        Assert.Equal(expectedReady ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked,
+            report.Status);
+        Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
+        Assert.Equal(expectedReady ? SafeMigrationAction.Apply : SafeMigrationAction.RejectPrerequisiteMissing,
+            report.Assessments[1].Action);
+    }
+
+    private static ExpectedTableDefinition InlineDependent(string principalTable)
+        => new("inline_dependent", [new ExpectedColumnDefinition("ParentId", typeof(int), false, "int")],
+            foreignKeys: [new ExpectedForeignKeyDefinition("FK_inline_dependent", "inline_dependent",
+                ["ParentId"], principalTable, ["Id"])]);
+}

@@ -735,6 +735,90 @@ public sealed class SafeMigrationScaffoldingTests
         Assert.Empty(safeOperation.GetAnnotations());
     }
 
+    /// <summary>Preserves included columns in generated source and the captured index contract.</summary>
+    [Fact]
+    public void ProjectedIndexIncludesAreRenderedAndCapturedAsNonKeyColumns()
+    {
+        // Arrange
+        var generator = CreateOperationGenerator(
+            SafeMigrationScaffoldingMode.Strict,
+            createIndexProjectors: [new TestIncludedIndexProjector(["display_name"])]);
+
+        var sourceBuilder = new IndentedStringBuilder();
+        var operation = new CreateIndexOperation
+        {
+            Name = "ix_users_tenant_email",
+            Table = "users",
+            Columns = ["tenant_id", "email"],
+        };
+
+        var migrationBuilder = new MigrationBuilder("test");
+
+        // Act
+        generator.Generate("migrationBuilder", [operation], sourceBuilder);
+        _ = migrationBuilder.CreateCompositeIndexWithIncludesIfNotExistsFromModel(
+            operation.Name,
+            operation.Table,
+            operation.Columns,
+            ["display_name"]);
+
+        // Assert
+        var safeOperation = Assert.IsType<SafeMigrationOperation>(Assert.Single(migrationBuilder.Operations));
+        var intent = Assert.IsType<EnsureIndexIntent>(safeOperation.Intent);
+
+        Assert.Contains(
+            ".CreateCompositeIndexWithIncludesIfNotExistsFromModel(",
+            sourceBuilder.ToString(),
+            StringComparison.Ordinal);
+        Assert.Contains("includedColumns: [\"display_name\"]", sourceBuilder.ToString(), StringComparison.Ordinal);
+        Assert.Equal("display_name", Assert.Single(intent.Definition.IncludedColumns));
+        Assert.Empty(safeOperation.GetAnnotations());
+    }
+
+    /// <summary>Rejects an index key repeated as an included column without adding an operation.</summary>
+    [Fact]
+    public void IndexIncludeProjectionRejectsKeyColumnAsInclude()
+    {
+        // Arrange
+        var migrationBuilder = new MigrationBuilder("test");
+
+        // Act
+        var exception = Record.Exception(() => migrationBuilder.CreateIndexWithIncludesIfNotExistsFromModel(
+            "ix_users_email",
+            "users",
+            "email",
+            ["email"]));
+
+        // Assert
+        Assert.IsType<ArgumentException>(exception);
+        Assert.Empty(migrationBuilder.Operations);
+    }
+
+    /// <summary>Rejects a provider projection that mixes prefix and include metadata.</summary>
+    [Fact]
+    public void IndexGenerationRejectsAmbiguousPrefixAndIncludeProjection()
+    {
+        // Arrange
+        var generator = CreateOperationGenerator(
+            SafeMigrationScaffoldingMode.Strict,
+            createIndexProjectors: [new TestIndexProjector([16], ["display_name"])]);
+
+        var sourceBuilder = new IndentedStringBuilder();
+        var operation = new CreateIndexOperation
+        {
+            Name = "ix_users_email",
+            Table = "users",
+            Columns = ["email"],
+        };
+
+        // Act
+        var exception = Record.Exception(() => generator.Generate("migrationBuilder", [operation], sourceBuilder));
+
+        // Assert
+        Assert.IsType<InvalidOperationException>(exception);
+        Assert.Empty(sourceBuilder.ToString());
+    }
+
     [Theory]
     [InlineData(-1)]
     [InlineData(0, 64)]
@@ -1939,11 +2023,21 @@ public sealed class SafeMigrationScaffoldingTests
     }
 
     private sealed class TestIndexProjector(
-        IReadOnlyList<int> prefixLengths
+        IReadOnlyList<int> prefixLengths,
+        IReadOnlyList<string>? includedColumns = null
     ) : ISafeMigrationCreateIndexScaffoldingProjector
     {
         public SafeMigrationCreateIndexScaffoldingProjection Project(
             CreateIndexOperation operation
-        ) => new(operation, prefixLengths);
+        ) => new(operation, prefixLengths, includedColumns);
+    }
+
+    private sealed class TestIncludedIndexProjector(
+        IReadOnlyList<string> includedColumns
+    ) : ISafeMigrationCreateIndexScaffoldingProjector
+    {
+        public SafeMigrationCreateIndexScaffoldingProjection Project(
+            CreateIndexOperation operation
+        ) => new(operation, PrefixLengths: null, includedColumns);
     }
 }

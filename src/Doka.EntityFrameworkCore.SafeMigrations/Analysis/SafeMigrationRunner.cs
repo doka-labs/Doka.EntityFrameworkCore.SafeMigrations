@@ -331,7 +331,8 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
             ? new SafeMigrationPreflightProjection(
                 _providerAnalyzer as ISafeMigrationProviderOperationProjection,
                 _providerAnalyzer as ISafeMigrationProjectedKeyAnalyzer,
-                objectIdentityNormalizer)
+                objectIdentityNormalizer,
+                _providerAnalyzer as ISafeMigrationProjectedDependencyAnalyzer)
             : null;
 
         var safeOperationOrdinal = 0;

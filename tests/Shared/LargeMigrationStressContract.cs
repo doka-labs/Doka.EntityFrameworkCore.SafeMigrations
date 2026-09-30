@@ -4,6 +4,7 @@ internal enum LargeMigrationStressDialect
 {
     MySql,
     PostgreSql,
+    SqlServer,
 }
 
 internal static class LargeMigrationStressContract
@@ -33,7 +34,9 @@ internal static class LargeMigrationStressContract
             scenarios[ordinal % scenarios.Count].AddOperation(builder, ordinal);
         }
 
-        return new LargeMigrationStressExpectation(scenarios);
+        return new LargeMigrationStressExpectation(
+            scenarios,
+            allowUnexpectedObjects: dialect == LargeMigrationStressDialect.SqlServer);
     }
 
     public static IEnumerable<int> ModelManagedUpdateOrdinals(
@@ -60,6 +63,11 @@ internal static class LargeMigrationStressContract
         LargeMigrationStressDialect dialect
     )
     {
+        if (dialect == LargeMigrationStressDialect.SqlServer)
+        {
+            return CreateSqlServerScenarios();
+        }
+
         var integerStoreType = dialect == LargeMigrationStressDialect.MySql ? "int" : "integer";
         var textStoreType = dialect == LargeMigrationStressDialect.MySql
             ? "varchar(40)"
@@ -692,6 +700,110 @@ internal static class LargeMigrationStressContract
         _ => throw new ArgumentOutOfRangeException(nameof(dialect)),
     };
 
+    private static List<LargeMigrationStressScenario> CreateSqlServerScenarios()
+    {
+        // WHY: SQL Server must prove CHECK/default contracts with its own
+        // extended-property stamps. The existing MySQL/PostgreSQL fixture cannot
+        // represent those physical identities, so stress only independently
+        // provable SQL Server states while preserving all action families.
+        return
+        [
+            Scenario(
+                (builder, _) => builder.EnsureColumn(
+                    "sqlserver_stress_target",
+                    new ExpectedColumnDefinition("id", typeof(int), false, "int"),
+                    SafeMigrationPolicy.ThrowIfDifferent),
+                _ => "id",
+                SafeMigrationOperationKind.EnsureColumn,
+                SafeMigrationObservedState.Matching,
+                SafeMigrationAction.NoOp,
+                postconditionSatisfied: true),
+            Scenario(
+                (builder, ordinal) => builder.EnsureTable(
+                    new ExpectedTableDefinition(
+                        MissingTable(ordinal),
+                        [new ExpectedColumnDefinition("id", typeof(int), false, "int")]),
+                    SafeMigrationTableMode.StrictDefinition,
+                    SafeMigrationPolicy.ThrowIfDifferent),
+                MissingTable,
+                SafeMigrationOperationKind.EnsureTable,
+                SafeMigrationObservedState.Missing,
+                SafeMigrationAction.Apply),
+            Scenario(
+                (builder, _) => builder.EnsureColumn(
+                    "sqlserver_stress_target",
+                    new ExpectedColumnDefinition("id", typeof(long), false, "bigint"),
+                    SafeMigrationPolicy.ThrowIfDifferent),
+                _ => "id",
+                SafeMigrationOperationKind.EnsureColumn,
+                SafeMigrationObservedState.Different,
+                SafeMigrationAction.RejectDifferent),
+            Scenario(
+                (builder, _) => builder.EnsureIndex(
+                    new ExpectedIndexDefinition(
+                        "ix_sqlserver_stress_unsupported",
+                        "sqlserver_stress_target",
+                        [new ExpectedIndexKeyDefinition("id")],
+                        method: "hash"),
+                    SafeMigrationPolicy.ThrowIfDifferent),
+                _ => "ix_sqlserver_stress_unsupported",
+                SafeMigrationOperationKind.EnsureIndex,
+                SafeMigrationObservedState.Unsupported,
+                SafeMigrationAction.RejectUnsupported),
+            Scenario(
+                (builder, _) => builder.EnsureColumn(
+                    "sqlserver_stress_target",
+                    new ExpectedColumnDefinition("required_value", typeof(int), false, "int"),
+                    SafeMigrationPolicy.RepairIfSafe),
+                _ => "required_value",
+                SafeMigrationOperationKind.EnsureColumn,
+                SafeMigrationObservedState.DataBlocked,
+                SafeMigrationAction.RejectDataBlocked),
+            Scenario(
+                (builder, _) => builder.EnsureColumn(
+                    "sqlserver_stress_missing_parent",
+                    new ExpectedColumnDefinition("value", typeof(int), true, "int"),
+                    SafeMigrationPolicy.ThrowIfDifferent),
+                _ => "value",
+                SafeMigrationOperationKind.EnsureColumn,
+                SafeMigrationObservedState.PrerequisiteMissing,
+                SafeMigrationAction.RejectPrerequisiteMissing),
+            Scenario(
+                (builder, _) => builder.AlterColumnIfDifferent(
+                    "sqlserver_stress_alter",
+                    new ExpectedColumnDefinition("caption", typeof(string), false, "varchar(20)", maxLength: 20),
+                    new ExpectedColumnDefinition("caption", typeof(string), false, "varchar(10)", maxLength: 10),
+                    SafeMigrationPolicy.RepairIfSafe),
+                _ => "caption",
+                SafeMigrationOperationKind.AlterColumn,
+                SafeMigrationObservedState.Different,
+                SafeMigrationAction.Repair,
+                convergesOnFirstAcceptedMutation: true),
+            Scenario(
+                (builder, _) => builder.UpdateModelManagedDataFromModel(
+                    "sqlserver_stress_managed",
+                    ["id"],
+                    ["int"],
+                    new object?[,] { { 1 } },
+                    ["managed_value"],
+                    ["nvarchar(32)"],
+                    new object?[,] { { "source" } },
+                    new object?[,] { { "target" } }),
+                _ => "sqlserver_stress_managed",
+                SafeMigrationOperationKind.UpdateModelManagedData,
+                SafeMigrationObservedState.TransitionReady,
+                SafeMigrationAction.Apply,
+                convergesOnFirstAcceptedMutation: true),
+            Scenario(
+                (builder, _) => builder.DropTableIfExists("sqlserver_stress_absent"),
+                _ => "sqlserver_stress_absent",
+                SafeMigrationOperationKind.DropTable,
+                SafeMigrationObservedState.Missing,
+                SafeMigrationAction.NoOp,
+                postconditionSatisfied: true),
+        ];
+    }
+
     private static LargeMigrationStressScenario Scenario(
         Action<MigrationBuilder, int> addOperation,
         Func<int, string> objectName,
@@ -761,14 +873,17 @@ internal static class LargeMigrationStressContract
 internal sealed class LargeMigrationStressExpectation
 {
     private readonly IReadOnlyList<LargeMigrationStressScenario> _scenarios;
+    private readonly bool _allowUnexpectedObjects;
 
     public LargeMigrationStressExpectation(
-        IReadOnlyList<LargeMigrationStressScenario> scenarios
+        IReadOnlyList<LargeMigrationStressScenario> scenarios,
+        bool allowUnexpectedObjects = false
     )
     {
         ArgumentNullException.ThrowIfNull(scenarios);
 
         _scenarios = scenarios;
+        _allowUnexpectedObjects = allowUnexpectedObjects;
     }
 
     public void AssertReport(
@@ -780,7 +895,11 @@ internal sealed class LargeMigrationStressExpectation
         Assert.Equal(SafeMigrationReportMode.Preflight, report.Mode);
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(LargeMigrationStressContract.OperationCount, report.Assessments.Count);
-        Assert.Empty(report.UnexpectedObjects);
+        if (!_allowUnexpectedObjects)
+        {
+            Assert.Empty(report.UnexpectedObjects);
+        }
+
 
         var stateCounts = new int[Enum.GetValues<SafeMigrationObservedState>().Length];
         var actionCounts = new int[Enum.GetValues<SafeMigrationAction>().Length];

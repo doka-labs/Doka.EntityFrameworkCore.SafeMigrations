@@ -5,11 +5,14 @@
 [assembly: InternalsVisibleTo("Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests")]
 [assembly: InternalsVisibleTo("Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests")]
 [assembly: InternalsVisibleTo("Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests")]
+[assembly: InternalsVisibleTo("Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests")]
 
 [assembly: InternalsVisibleTo("Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks")]
 [assembly: InternalsVisibleTo("Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks")]
 [assembly: InternalsVisibleTo("Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks")]
+[assembly: InternalsVisibleTo("Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks")]
 
 [assembly: InternalsVisibleTo("Doka.EntityFrameworkCore.SafeMigrations.MySql")]
 [assembly: InternalsVisibleTo("Doka.EntityFrameworkCore.SafeMigrations.PostgreSql")]
 [assembly: InternalsVisibleTo("Doka.EntityFrameworkCore.SafeMigrations.Sqlite")]
+[assembly: InternalsVisibleTo("Doka.EntityFrameworkCore.SafeMigrations.SqlServer")]

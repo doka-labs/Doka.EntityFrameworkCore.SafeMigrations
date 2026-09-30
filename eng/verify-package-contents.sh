@@ -45,6 +45,7 @@ package_ids=(
     Doka.EntityFrameworkCore.SafeMigrations.MySql
     Doka.EntityFrameworkCore.SafeMigrations.PostgreSql
     Doka.EntityFrameworkCore.SafeMigrations.Sqlite
+    Doka.EntityFrameworkCore.SafeMigrations.SqlServer
 )
 expected_files=()
 for package_id in "${package_ids[@]}"; do
@@ -125,7 +126,7 @@ for report_schema in "${report_schemas[@]}"; do
     fi
 done
 
-if grep -Eq '<dependency id="(Doka\.EntityFrameworkCore\.MySql|Npgsql\.EntityFrameworkCore\.PostgreSQL|Microsoft\.EntityFrameworkCore\.Sqlite(\.Core)?|Doka\.EntityFrameworkCore\.SafeMigrations\.(MySql|PostgreSql|Sqlite))"' \
+if grep -Eq '<dependency id="(Doka\.EntityFrameworkCore\.MySql|Npgsql\.EntityFrameworkCore\.PostgreSQL|Microsoft\.EntityFrameworkCore\.Sqlite(\.Core)?|Microsoft\.EntityFrameworkCore\.SqlServer|Doka\.EntityFrameworkCore\.SafeMigrations\.(MySql|PostgreSql|Sqlite|SqlServer))"' \
     <<<"$core_nuspec"; then
     echo "Core package resolved a provider-specific dependency." >&2
     exit 1
@@ -139,9 +140,9 @@ mysql_entries="$(unzip -Z1 \
 grep -Fxq 'buildTransitive/Doka.EntityFrameworkCore.SafeMigrations.MySql.props' <<<"$mysql_entries"
 grep -Fq '<dependency id="Doka.EntityFrameworkCore.MySql"' <<<"$mysql_nuspec"
 grep -Fq '<dependency id="Doka.EntityFrameworkCore.SafeMigrations"' <<<"$mysql_nuspec"
-if grep -Eq '<dependency id="(Npgsql\.EntityFrameworkCore\.PostgreSQL|Microsoft\.EntityFrameworkCore\.Sqlite(\.Core)?|Doka\.EntityFrameworkCore\.SafeMigrations\.(PostgreSql|Sqlite))"' \
+if grep -Eq '<dependency id="(Npgsql\.EntityFrameworkCore\.PostgreSQL|Microsoft\.EntityFrameworkCore\.Sqlite(\.Core)?|Microsoft\.EntityFrameworkCore\.SqlServer|Doka\.EntityFrameworkCore\.SafeMigrations\.(PostgreSql|Sqlite|SqlServer))"' \
     <<<"$mysql_nuspec"; then
-    echo "MySQL/MariaDB package resolved a PostgreSQL or SQLite dependency." >&2
+    echo "MySQL/MariaDB package resolved another provider dependency." >&2
     exit 1
 fi
 
@@ -163,9 +164,9 @@ postgres_entries="$(unzip -Z1 \
 grep -Fxq 'buildTransitive/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.props' <<<"$postgres_entries"
 grep -Fq '<dependency id="Npgsql.EntityFrameworkCore.PostgreSQL"' <<<"$postgres_nuspec"
 grep -Fq '<dependency id="Doka.EntityFrameworkCore.SafeMigrations"' <<<"$postgres_nuspec"
-if grep -Eq '<dependency id="(Doka\.EntityFrameworkCore\.MySql|Microsoft\.EntityFrameworkCore\.Sqlite(\.Core)?|Doka\.EntityFrameworkCore\.SafeMigrations\.(MySql|Sqlite))"' \
+if grep -Eq '<dependency id="(Doka\.EntityFrameworkCore\.MySql|Microsoft\.EntityFrameworkCore\.Sqlite(\.Core)?|Microsoft\.EntityFrameworkCore\.SqlServer|Doka\.EntityFrameworkCore\.SafeMigrations\.(MySql|Sqlite|SqlServer))"' \
     <<<"$postgres_nuspec"; then
-    echo "PostgreSQL package resolved a MySQL/MariaDB or SQLite dependency." >&2
+    echo "PostgreSQL package resolved another provider dependency." >&2
     exit 1
 fi
 
@@ -181,9 +182,23 @@ if grep -Fq '<dependency id="Microsoft.EntityFrameworkCore.Sqlite"' <<<"$sqlite_
     exit 1
 fi
 grep -Fq '<dependency id="Doka.EntityFrameworkCore.SafeMigrations"' <<<"$sqlite_nuspec"
-if grep -Eq '<dependency id="(Doka\.EntityFrameworkCore\.MySql|Npgsql\.EntityFrameworkCore\.PostgreSQL|Doka\.EntityFrameworkCore\.SafeMigrations\.(MySql|PostgreSql))"' \
+if grep -Eq '<dependency id="(Doka\.EntityFrameworkCore\.MySql|Npgsql\.EntityFrameworkCore\.PostgreSQL|Microsoft\.EntityFrameworkCore\.SqlServer|Doka\.EntityFrameworkCore\.SafeMigrations\.(MySql|PostgreSql|SqlServer))"' \
     <<<"$sqlite_nuspec"; then
-    echo "SQLite package resolved a MySQL/MariaDB or PostgreSQL dependency." >&2
+    echo "SQLite package resolved another provider dependency." >&2
+    exit 1
+fi
+
+sqlserver_nuspec="$(unzip -p \
+    "$package_dir/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.$package_version.nupkg" \
+    Doka.EntityFrameworkCore.SafeMigrations.SqlServer.nuspec)"
+sqlserver_entries="$(unzip -Z1 \
+    "$package_dir/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.$package_version.nupkg")"
+grep -Fxq 'buildTransitive/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.props' <<<"$sqlserver_entries"
+grep -Fq '<dependency id="Microsoft.EntityFrameworkCore.SqlServer"' <<<"$sqlserver_nuspec"
+grep -Fq '<dependency id="Doka.EntityFrameworkCore.SafeMigrations"' <<<"$sqlserver_nuspec"
+if grep -Eq '<dependency id="(Doka\.EntityFrameworkCore\.MySql|Npgsql\.EntityFrameworkCore\.PostgreSQL|Microsoft\.EntityFrameworkCore\.Sqlite(\.Core)?|Doka\.EntityFrameworkCore\.SafeMigrations\.(MySql|PostgreSql|Sqlite))"' \
+    <<<"$sqlserver_nuspec"; then
+    echo "SQL Server package resolved a MySQL/MariaDB, PostgreSQL, or SQLite dependency." >&2
     exit 1
 fi
 

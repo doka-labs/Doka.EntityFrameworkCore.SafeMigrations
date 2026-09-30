@@ -9,6 +9,7 @@
     <ProjectReference Include="..\..\src\Doka.EntityFrameworkCore.SafeMigrations.MySql\Doka.EntityFrameworkCore.SafeMigrations.MySql.csproj" />
     <ProjectReference Include="..\..\src\Doka.EntityFrameworkCore.SafeMigrations.PostgreSql\Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.csproj" />
     <ProjectReference Include="..\..\src\Doka.EntityFrameworkCore.SafeMigrations.Sqlite\Doka.EntityFrameworkCore.SafeMigrations.Sqlite.csproj" />
+    <ProjectReference Include="..\..\src\Doka.EntityFrameworkCore.SafeMigrations.SqlServer\Doka.EntityFrameworkCore.SafeMigrations.SqlServer.csproj" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
   </ItemGroup>
 </Project>

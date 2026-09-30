@@ -1,9 +1,12 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
-internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationProjectedColumnSource
+internal sealed partial class SafeMigrationPreflightProjection :
+    ISafeMigrationProjectedColumnSource,
+    ISafeMigrationProjectedTableSource
 {
     private readonly ISafeMigrationProviderOperationProjection? _providerOperationProjection;
     private readonly ISafeMigrationProjectedKeyAnalyzer? _projectedKeyAnalyzer;
+    private readonly ISafeMigrationProjectedDependencyAnalyzer? _projectedDependencyAnalyzer;
     private readonly ISafeMigrationProviderObjectIdentityNormalizer? _objectIdentityNormalizer;
     private readonly Dictionary<TableKey, ProjectedTable> _tables;
 
@@ -31,12 +34,14 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
     public SafeMigrationPreflightProjection(
         ISafeMigrationProviderOperationProjection? providerOperationProjection = null,
         ISafeMigrationProjectedKeyAnalyzer? projectedKeyAnalyzer = null,
-        ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer = null
+        ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer = null,
+        ISafeMigrationProjectedDependencyAnalyzer? projectedDependencyAnalyzer = null
     )
     {
         _providerOperationProjection = providerOperationProjection;
         _projectedKeyAnalyzer = projectedKeyAnalyzer;
         _objectIdentityNormalizer = objectIdentityNormalizer;
+        _projectedDependencyAnalyzer = projectedDependencyAnalyzer;
 
         var tableComparer = new TableKeyComparer(objectIdentityNormalizer);
         var indexComparer = new IndexKeyComparer(objectIdentityNormalizer);
@@ -103,7 +108,7 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
             return StructureStateUnknown();
         }
 
-        return operation.Intent switch
+        var projectedAnalysis = operation.Intent switch
         {
             EnsureSchemaIntent value => Project(value, liveAnalysis),
             DropSchemaIntent value => Project(value, liveAnalysis),
@@ -128,6 +133,12 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
             ModelManagedDataIntent value => Project(value, liveAnalysis),
             _ => liveAnalysis,
         };
+
+        // WHY: Provider-neutral shape projection cannot prove provider-specific
+        // dependency graphs. Recheck those rules after the accepted earlier
+        // operations have changed the projected physical state.
+        return _projectedDependencyAnalyzer?.ValidateProjectedOperation(operation, projectedAnalysis, this)
+            ?? projectedAnalysis;
     }
 
     public void Observe(
@@ -146,6 +157,8 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
         {
             return;
         }
+
+        _projectedDependencyAnalyzer?.ObserveAcceptedOperation(operation, liveAnalysis, analysis, decision);
 
         // WHY: Preflight never mutates the database. Accepted operations instead
         // update this in-memory catalog so later operations observe prior ones.
@@ -236,6 +249,8 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
     {
         ArgumentNullException.ThrowIfNull(operation);
 
+        _projectedDependencyAnalyzer?.ObserveProviderOperation(operation);
+
         if (_providerOperationProjection?.PreservesExistingTableState(operation) == true)
         {
             // WHY: The provider owns whether this ordinary operation preserves
@@ -319,6 +334,34 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
         string column,
         [NotNullWhen(true)] out ExpectedColumnDefinition? definition
     ) => TryGetProjectedColumnDefinition(table, schema, column, out definition);
+
+    bool ISafeMigrationProjectedTableSource.TryGetProjectedTableState(
+        string table,
+        string? schema,
+        out SafeMigrationProjectedTableState state
+    )
+    {
+        var key = new TableKey(table, schema);
+        var hasPrerequisites = _prerequisites.TryGetValue(key, out var prerequisites);
+
+        if (!hasPrerequisites && !_tables.ContainsKey(key))
+        {
+            state = default;
+
+            return false;
+        }
+
+        // WHY: A created table is empty only until an accepted data mutation.
+        // Providers must consume both facts rather than infer row safety from
+        // the creation marker alone.
+        state = new SafeMigrationProjectedTableState(
+            prerequisites?.NewlyCreated == true,
+            HasUnanalyzedDataChanges(table, schema),
+            prerequisites?.PrimaryKeyWasDropped == true,
+            IsProjectedTableStructureUnknown(table, schema));
+
+        return true;
+    }
 
     private void SetProjectedColumnDefinition(
         string table,

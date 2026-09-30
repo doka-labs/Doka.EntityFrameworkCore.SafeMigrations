@@ -6,7 +6,7 @@ SafeMigrations turns an ordered EF Core migration into a deterministic
 convergence contract. Provider-neutral code owns intent, policy, expected
 definitions, planning, fingerprints, and reports. Provider packages own live
 catalog interpretation and SQL generation. The database remains authoritative
-for observed state; neither provider tries to reconstruct history from names or
+for observed state; no provider tries to reconstruct history from names or
 SQL text.
 
 ```text
@@ -22,7 +22,7 @@ MigrationBuilder extension
 ```
 
 Core has no compile-time dependency on MySQL, MariaDB, PostgreSQL, SQLite,
-Doka's provider, Npgsql, or Microsoft.Data.Sqlite.
+SQL Server, Doka's provider, Npgsql, or a provider-specific EF package.
 
 Source ownership follows the hybrid vertical-slice contract in
 [Vertical-slice architecture](vertical-slice-architecture.md). Public
@@ -122,6 +122,25 @@ engine has no procedural branch that can evaluate their catalog-dependent
 decision. Script generation therefore rejects before returning partial output.
 Runtime migration and Migration Bundles execute the guarded command objects.
 
+### SQL Server
+
+`Doka.EntityFrameworkCore.SafeMigrations.SqlServer` composes the official EF
+Core SQL Server migrations generator. Ordinary EF operations remain provider
+owned; only the exact SafeMigrations envelope is classified and guarded.
+The adapter reads bounded `sys.*` catalog evidence and emits T-SQL checks
+immediately around its target operation. SQL Server's metadata-visibility
+rules make absent rows ambiguous without adequate catalog permissions, so
+unprovable visibility fails closed. Primary and unique constraints share
+backing-index identity, whereas defaults are separate schema objects.
+
+Unqualified safe-operation names require the caller's default schema to be
+`dbo`; callers with another default schema must qualify the schema explicitly.
+This prevents a catalog/EF-baseline identity split. The first SQL Server
+release requires independent Linux/x86-64 qualification of 2019, 2022, and
+2025. Azure SQL services and
+Synapse are outside this first release's declared support matrix. See
+[SQL Server behavior](sqlserver-behavior.md).
+
 ## Fail-closed ownership
 
 A safe operation is never encoded as an annotation on an ordinary EF
@@ -132,6 +151,8 @@ the operation as normal DDL:
 - Npgsql rejects the unknown safe envelope when its adapter is absent;
   incompatible SafeMigrations generator registration also fails closed;
 - SQLite rejects the unknown safe envelope when its adapter is absent;
+  incompatible generator registration also fails closed;
+- SQL Server rejects the unknown safe envelope when its adapter is absent;
   incompatible generator registration also fails closed;
 - multiple owners for the same exact operation type are rejected;
 - scaffolding stops before publishing source for an operation SafeMigrations

@@ -18,9 +18,9 @@ doka-profile-version: "1.0"
 
 ## Context and Problem Statement
 
-SafeMigrations expresses the same migration intent for MySQL, MariaDB, and
-PostgreSQL, but their catalogs, supported facets, SQL generation, and failure
-behavior differ. A consumer using one database family must not restore or
+SafeMigrations expresses the same migration intent for MySQL, MariaDB,
+PostgreSQL, SQLite, and SQL Server, but their catalogs, supported facets, SQL
+generation, and failure behavior differ. A consumer using one database family must not restore or
 initialize the other provider. Core policy must not acquire provider-specific
 branches as individual features evolve.
 
@@ -35,7 +35,7 @@ shared migration lifecycle.
 
 ## Decision Drivers
 
-- Core knows neither MySQL/MariaDB nor PostgreSQL.
+- Core knows no database provider.
 - MySQL and MariaDB share one adapter package but retain explicit engine
   capability distinctions; PostgreSQL has its own adapter.
 - Consumers, tests, benchmarks, and package qualification expose separate
@@ -68,6 +68,8 @@ The package dependency direction is explicit:
   Npgsql and owns PostgreSQL behavior.
 - `Doka.EntityFrameworkCore.SafeMigrations.Sqlite` depends on Core and the
   official EF Core SQLite provider and owns SQLite behavior.
+- `Doka.EntityFrameworkCore.SafeMigrations.SqlServer` depends on Core and the
+  official EF Core SQL Server provider and owns SQL Server behavior.
 - No adapter references another adapter. Core does not reference an adapter.
 
 Inside each package, source ownership mirrors Schemas, Tables, Columns,
@@ -99,7 +101,7 @@ files. Package-only consumers verify the actual published package graph.
 
 ### Confirmation
 
-Build the complete solution and run all four test projects. Inspect changed
+Build the complete solution and run all five test projects. Inspect changed
 project references and package graphs when adding a slice or project:
 provider-crossing dependencies, missing mirrored ownership, feature behavior
 in central dispatchers, and aggregate test ownership remain rejected in
@@ -177,6 +179,9 @@ the folder layout itself is not performance evidence.
   provider-wide composition exception for catalog capture, rebuild
   authorization, and command execution that jointly materialize multiple Core
   feature intents.
+- 2026-09-30: Added the independent SQL Server package, test, benchmark, and
+  package-consumer boundaries without adding an adapter dependency to Core or
+  another provider.
 
 ### Implementation References
 
@@ -189,6 +194,7 @@ the folder layout itself is not performance evidence.
 - [MySQL/MariaDB features](../../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/Features)
 - [PostgreSQL features](../../src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/Features)
 - [SQLite provider](../../src/Doka.EntityFrameworkCore.SafeMigrations.Sqlite)
+- [SQL Server provider](../../src/Doka.EntityFrameworkCore.SafeMigrations.SqlServer)
 - [Package qualification](../../eng/qualify-packages.sh)
 - [Performance budgets](../../eng/performance-budgets.json)
 

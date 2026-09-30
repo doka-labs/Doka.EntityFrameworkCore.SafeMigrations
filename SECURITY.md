@@ -92,9 +92,9 @@ changes.
 
 ## Supported Versions
 
-This policy covers all four SafeMigrations packages. Stable 10.4.x is the
-currently supported line; a dated changelog entry is not proof that a
-particular version has been published. The latest stable tag is 10.4.4. This
+This policy covers every SafeMigrations package and provider project in this
+source tree. Stable 10.4.x is the currently supported line; a dated changelog
+entry is not proof of publication. The latest stable tag is 10.4.4. This
 source prepares 10.4.5, which becomes a supported release only after verified
 publication and package readback.
 

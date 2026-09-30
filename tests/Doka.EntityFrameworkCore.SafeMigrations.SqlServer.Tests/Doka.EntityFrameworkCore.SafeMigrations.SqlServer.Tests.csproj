@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Compile Include="..\Shared\LivePerformanceEvidence.cs"
+             Link="Infrastructure\LivePerformanceEvidence.cs" />
+    <Compile Include="..\Shared\LargeMigrationStressContract.cs"
+             Link="Infrastructure\LargeMigrationStressContract.cs" />
+    <Compile Include="..\Shared\ModelManagedDataLargeExecutionContract.cs"
+             Link="Infrastructure\ModelManagedDataLargeExecutionContract.cs" />
+    <ProjectReference Include="..\..\src\Doka.EntityFrameworkCore.SafeMigrations\Doka.EntityFrameworkCore.SafeMigrations.csproj" />
+    <ProjectReference Include="..\..\src\Doka.EntityFrameworkCore.SafeMigrations.SqlServer\Doka.EntityFrameworkCore.SafeMigrations.SqlServer.csproj" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive; compile</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Testcontainers.MsSql" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+</Project>

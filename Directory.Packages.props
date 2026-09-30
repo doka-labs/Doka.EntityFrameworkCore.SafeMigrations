@@ -32,6 +32,10 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite.Core" Version="$(EfCorePackageVersion)" />
   </ItemGroup>
 
+  <ItemGroup Label="Production - SQL Server">
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="$(EfCorePackageVersion)" />
+  </ItemGroup>
+
   <ItemGroup Label="Production analyzers">
     <PackageVersion Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" Version="5.6.0" />
   </ItemGroup>
@@ -49,6 +53,10 @@
 
   <ItemGroup Label="Tests - PostgreSQL">
     <PackageVersion Include="Testcontainers.PostgreSql" Version="$(TestcontainersPackageVersion)" />
+  </ItemGroup>
+
+  <ItemGroup Label="Tests - SQL Server">
+    <PackageVersion Include="Testcontainers.MsSql" Version="$(TestcontainersPackageVersion)" />
   </ItemGroup>
 
 </Project>

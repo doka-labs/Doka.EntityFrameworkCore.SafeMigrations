@@ -1,6 +1,6 @@
 # EF Core and provider upgrade boundary
 
-SafeMigrations integrates with three different public provider boundaries. An
+SafeMigrations integrates with multiple public provider boundaries. An
 upgrade is accepted only after locked publishable-package restore, package,
 engine, and tooling gates pass; compilation alone is insufficient.
 
@@ -117,6 +117,20 @@ databases, and other unproven dependencies reject before mutation. The rebuild
 and its data copy run in one transaction, require a single writer, and must be
 qualified with realistic file-system capacity and lock behavior.
 
+## SQL Server boundary
+
+The unreleased `.SqlServer` package composes EF Core's SQL Server migrations
+generator and analyzes guarded operations against `sys.*` catalog metadata.
+Ordinary EF operations remain provider-owned. Metadata visibility, database
+collation, default-schema resolution, backing-index identity, and default
+constraint ownership are part of its behavioral boundary. An EF Core SQL
+Server upgrade must requalify generated SQL, catalog matching, and runtime
+guards on SQL Server 2019, 2022, and 2025 separately; a successful compile is
+not sufficient. Unqualified safe operations require a `dbo` caller default
+schema. SQL Server services outside the container matrix remain unqualified.
+
+See [SQL Server behavior](sqlserver-behavior.md) for the operational contract.
+
 ## Design-time C# generation boundary
 
 SafeMigrations composes EF Core's public design-time service contracts, but the
@@ -192,7 +206,7 @@ path used by the runner is covered by provider duration/allocation budgets.
 
 ## Qualified dependency ranges
 
-Central package declarations use bounded ranges. The four publishable package
+Central package declarations use bounded ranges. The five publishable package
 lockfiles establish the exact graph used to compile and qualify package
 artifacts. Dependabot updates the declarations and those lockfiles through a
 reviewed pull request, where the complete provider, tooling, package, coverage,

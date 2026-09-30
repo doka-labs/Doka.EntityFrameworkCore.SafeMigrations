@@ -6,7 +6,7 @@ SafeMigrations uses a hybrid vertical-slice architecture. Public API and
 provider package boundaries remain stable, while implementation ownership is
 organized by migration capability instead of by technical layer alone.
 
-The architecture has four package-level boundaries:
+The architecture has five package-level boundaries:
 
 - `Doka.EntityFrameworkCore.SafeMigrations` owns provider-neutral contracts,
   policy, lifecycle, reports, fingerprints, and feature definitions.
@@ -17,9 +17,12 @@ The architecture has four package-level boundaries:
 - `Doka.EntityFrameworkCore.SafeMigrations.Sqlite` owns SQLite classification,
   guarded runtime commands, and atomic model-owned rebuild composition through
   the official EF Core provider.
+- `Doka.EntityFrameworkCore.SafeMigrations.SqlServer` owns SQL Server catalog
+  classification and guarded T-SQL command generation through the official
+  EF Core provider.
 
 These boundaries also apply to tests, benchmarks, and package consumers. Core,
-MySQL/MariaDB, PostgreSQL, and SQLite have independent projects and restore graphs.
+MySQL/MariaDB, PostgreSQL, SQLite, and SQL Server have independent projects and restore graphs.
 Provider packages may depend on Core, but never on each other. The package-only
 qualification restores one consumer per provider package so a combined test
 application cannot conceal an accidental cross-provider dependency.
@@ -44,14 +47,18 @@ src/Doka.EntityFrameworkCore.SafeMigrations.MySql/Features/<slice>/
 src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/Features/<slice>/
 src/Doka.EntityFrameworkCore.SafeMigrations.Sqlite/Analysis/
 src/Doka.EntityFrameworkCore.SafeMigrations.Sqlite/SqlGeneration/
+src/Doka.EntityFrameworkCore.SafeMigrations.SqlServer/Analysis/
+src/Doka.EntityFrameworkCore.SafeMigrations.SqlServer/SqlGeneration/
 tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Unit/Features/<slice>/
 tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Integration/Features/<slice>/
 tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Integration/Features/<slice>/
 tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests/Integration/
+tests/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests/Integration/
 benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks/
 benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks/
 benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks/
 benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks/
+benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks/
 ```
 
 The provider test trees additionally contain `Lifecycle` and `Identifiers`;
@@ -169,7 +176,7 @@ the production row/cell batching limits and persist command/allocation evidence.
 The vertical-slice architecture remains conformant only while:
 
 1. every operation kind is owned by exactly one core feature slice;
-2. all three provider packages mirror all feature slices or document their
+2. all four provider packages mirror all feature slices or document their
    provider-specific composition boundary;
 3. central dispatchers contain routing but no feature-specific rules;
 4. public API baselines match the reviewed contract, with shipped/unshipped

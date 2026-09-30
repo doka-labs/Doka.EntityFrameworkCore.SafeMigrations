@@ -6,6 +6,19 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Add a separate SQL Server provider package for EF Core 10 and SQL Server
+  2019, 2022, and 2025. Provider catalog analysis, guarded execution,
+  design-time registration, package qualification, benchmarks, and x86-64
+  live-engine checks are independent of the existing adapters.
+- Add `CreateIndexWithIncludesIfNotExistsFromModel` and
+  `CreateCompositeIndexWithIncludesIfNotExistsFromModel` to preserve SQL Server
+  included columns in scaffolded safe indexes.
+- Extend the report engine-family schema with `sqlserver`. Report schema
+  versions and existing migration histories remain unchanged; consumers with
+  exhaustive engine-family handling must recognize the new value.
+
 ## [10.4.5] - 2026-09-30
 
 Prepare a stable maintenance release that bounds composite-index catalog
