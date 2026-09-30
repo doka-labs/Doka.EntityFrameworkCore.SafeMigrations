@@ -2,6 +2,29 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 public sealed class MySqlGuardCommandPlanTests
 {
+    /// <summary>Checks catalog scan count stays bounded as composite indexes gain key parts.</summary>
+    [Fact]
+    public void WideIndexDoesNotAddCatalogScansPerKeyPart()
+    {
+        // Arrange
+        using var context = CreateContext();
+        var oneKey = new MigrationBuilder(context.Database.ProviderName!);
+        oneKey.CreateIndexIfNotExists("ix_items_keys", "items", ["a"]);
+        var sixKeys = new MigrationBuilder(context.Database.ProviderName!);
+        sixKeys.CreateIndexIfNotExists("ix_items_keys", "items", ["a", "b", "c", "d", "e", "f"]);
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+
+        // Act
+        var oneKeySql = Assert.Single(generator.Generate(oneKey.Operations, context.Model)).CommandText;
+        var sixKeySql = Assert.Single(generator.Generate(sixKeys.Operations, context.Model)).CommandText;
+        var oneKeyScans = Count(oneKeySql, "INFORMATION_SCHEMA.STATISTICS");
+        var sixKeyScans = Count(sixKeySql, "INFORMATION_SCHEMA.STATISTICS");
+
+        // Assert
+        Assert.True(oneKeyScans > 0);
+        Assert.Equal(oneKeyScans, sixKeyScans);
+    }
+
     [Fact]
     public void RuntimeSqlGenerator_RejectsKnownIndexBeforeColumnDropWithoutEnsureTable()
     {

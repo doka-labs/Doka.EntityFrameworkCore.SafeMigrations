@@ -46,12 +46,17 @@ The CI and release workflows pin the exact patch tags and image digests used
 when that matrix executes. The exact successful run, not this table, is release
 evidence. See [Support and qualification](docs/support-and-qualification.md).
 
-The initial complete stable delivery is 10.0.0. At preparation time, 10.4.3
-is the latest confirmed published release. This source prepares stable 10.4.4;
-only the blocking release workflow and readback of all four public packages
-establish its availability. See the [changelog](CHANGELOG.md).
+The initial complete stable delivery is 10.0.0. The latest stable tag is
+10.4.4. This source prepares stable 10.4.5; only the blocking release workflow
+and readback of all four public packages establish its availability. See the
+[changelog](CHANGELOG.md).
 
-The 10.4.4 patch corrects read-only preflight for mixed legacy-convergence and
+The 10.4.5 patch bounds MySQL/MariaDB composite-index catalog analysis by
+grouping candidate index rows instead of repeating a catalog query for every
+key part. The index-matching contract, generated migrations, runtime DDL,
+public APIs, report schemas, and migration history remain unchanged.
+
+The 10.4.4 patch corrected read-only preflight for mixed legacy-convergence and
 strict migration streams containing raw SQL. Unprovable later safe operations
 report `ValidateAtRuntime` with their SQL origin; unchanged runtime guards
 decide after that SQL executes. Proven conflicts remain blocked. Canonical
@@ -63,27 +68,27 @@ are not rewritten. See the
 ## Installation
 
 Install one provider package. The core package is included transitively. The
-commands select the intended 10.4.4 release exactly so restore does not move
+commands select the intended 10.4.5 release exactly so restore does not move
 to a different package version implicitly. Use them only after the matching
 release and all four NuGet package pages are public; source or changelog
 entries alone do not establish package availability.
 
 ```bash
-package_version='10.4.4'
+package_version='10.4.5'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.MySql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.4.4'
+package_version='10.4.5'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.4.4'
+package_version='10.4.5'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.Sqlite --version "$package_version"
 ```
 

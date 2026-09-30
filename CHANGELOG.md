@@ -6,12 +6,33 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+## [10.4.5] - 2026-09-30
+
+Prepare a stable maintenance release that bounds composite-index catalog
+analysis on MySQL and MariaDB and includes dependency-workflow maintenance.
+Core, PostgreSQL, and SQLite behavior, public APIs, generated migrations,
+runtime DDL, migration history, report schemas, and dependency ranges remain
+unchanged. All four packages share this version.
+
+These notes do not establish publication. Require the successful stable
+release run, the authorized signed `v10.4.5` tag, and verified public package,
+symbol, GitHub Release, provenance, SBOM, and attestation readback before
+selecting 10.4.5.
+
 ### Changed
 
 - Reduce the Dependabot cooldown for NuGet, GitHub Actions, and .NET SDK updates
   from seven to three days while preserving weekly schedules, grouping, and
   open pull request limits. Security updates remain unaffected.
 - Update the SHA-pinned CodeQL upload-sarif action from 4.38.1 to 4.38.2.
+
+### Fixed
+
+- Match MySQL/MariaDB composite-index candidates by grouped
+  `INFORMATION_SCHEMA.STATISTICS` rows instead of correlated catalog queries
+  for every key part. Preserve ordered key, uniqueness, visibility, method,
+  sort, and prefix checks while keeping catalog references independent of key
+  count. This also applies to expected table-index prerequisites.
 
 ## [10.4.4] - 2026-09-26
 
@@ -1171,7 +1192,8 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.4...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.5...HEAD
+[10.4.5]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.4...v10.4.5
 [10.4.4]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.3...v10.4.4
 [10.4.3]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.2...v10.4.3
 [10.4.2]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.1...v10.4.2

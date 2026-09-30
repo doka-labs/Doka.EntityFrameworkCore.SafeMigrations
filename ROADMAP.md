@@ -61,12 +61,13 @@ composite-key catalog-matching defects. Published stable 10.4.2 adds a
 separately packaged SQLite adapter with transactional, model-owned rebuilds
 and closes verified convergence and incremental design-time registration
 defects. Published stable 10.4.3 completes safe structural-operation scaffolding
-and corrects ordered provider transitions. The prepared 10.4.4 patch corrects
-opaque-SQL mixed-stream preflight without rewriting migration source or runtime
-guards, and versions the corresponding report contract. Publication still
-requires the full release gate. These releases follow changed dependency
-conditions and confirmed correctness requirements; they are not deferred
-initial scope.
+and corrects ordered provider transitions. Stable 10.4.4 corrects opaque-SQL
+mixed-stream preflight without rewriting migration source or runtime guards,
+and versions the corresponding report contract. The prepared 10.4.5 patch
+bounds MySQL/MariaDB composite-index catalog analysis and includes dependency-
+workflow maintenance. Publication still requires the full release gate. These
+releases follow changed dependency conditions and confirmed correctness
+requirements; they are not deferred initial scope.
 
 Requalify affected behavior before adopting a provider, EF Core, database,
 SDK, action, or tooling update. Preserve public API, report, migration, data

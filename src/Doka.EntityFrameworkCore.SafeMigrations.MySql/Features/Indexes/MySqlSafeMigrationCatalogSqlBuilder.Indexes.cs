@@ -266,44 +266,39 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         bool requireExpectedName
     )
     {
-        const string candidate = "candidate";
-        var matching = BuildIndexCandidateMatches(definition, isMariaDb, candidate);
+        const string candidate = "s";
+        var matching = BuildGroupedIndexCandidateMatches(definition, isMariaDb);
         var nameOperator = requireExpectedName ? "=" : "<>";
 
+        // WHY: Correlated scans for every key part make one index classification
+        // repeatedly materialize INFORMATION_SCHEMA.STATISTICS on MySQL.
         return $"SELECT {candidate}.INDEX_NAME AS candidate_name FROM INFORMATION_SCHEMA.STATISTICS {candidate} "
             + $"WHERE {candidate}.TABLE_SCHEMA = DATABASE() "
             + $"AND {candidate}.TABLE_NAME = {Literal(definition.Table)} "
             + $"AND {candidate}.INDEX_NAME <> 'PRIMARY' "
             + $"AND {candidate}.INDEX_NAME {nameOperator} {Literal(definition.Name)} "
-            + $"AND {candidate}.SEQ_IN_INDEX = 1 AND {matching}";
+            + $"GROUP BY {candidate}.INDEX_NAME HAVING {matching}";
     }
 
-    private string BuildIndexCandidateMatches(
+    private string BuildGroupedIndexCandidateMatches(
         ExpectedIndexDefinition definition,
-        bool isMariaDb,
-        string candidate
+        bool isMariaDb
     )
     {
+        var keyCount = definition.Keys.Count.ToString(CultureInfo.InvariantCulture);
+        var visibility = isMariaDb ? "s.IGNORED = 'NO'" : "s.IS_VISIBLE = 'YES'";
         var conditions = new List<string>
         {
-            $"(SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS s "
-            + $"WHERE s.TABLE_SCHEMA = DATABASE() AND s.TABLE_NAME = {Literal(definition.Table)} "
-            + $"AND s.INDEX_NAME = {candidate}.INDEX_NAME) "
-            + $"= {definition.Keys.Count.ToString(CultureInfo.InvariantCulture)}",
-            $"NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS s "
-            + $"WHERE s.TABLE_SCHEMA = DATABASE() AND s.TABLE_NAME = {Literal(definition.Table)} "
-            + $"AND s.INDEX_NAME = {candidate}.INDEX_NAME "
-            + $"AND s.NON_UNIQUE <> {(definition.Unique ? "0" : "1")})",
-            isMariaDb ? $"{candidate}.IGNORED = 'NO'" : $"{candidate}.IS_VISIBLE = 'YES'",
+            $"COUNT(*) = {keyCount}",
+            $"SUM(CASE WHEN s.NON_UNIQUE = {(definition.Unique ? "0" : "1")} "
+            + $"THEN 1 ELSE 0 END) = {keyCount}",
+            $"SUM(CASE WHEN s.SEQ_IN_INDEX = 1 AND {visibility} THEN 1 ELSE 0 END) = 1",
         };
 
         if (definition.Method is not null)
         {
             conditions.Add(
-                $"NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS s "
-                + $"WHERE s.TABLE_SCHEMA = DATABASE() AND s.TABLE_NAME = {Literal(definition.Table)} "
-                + $"AND s.INDEX_NAME = {candidate}.INDEX_NAME "
-                + $"AND s.INDEX_TYPE <> {Literal(definition.Method)})");
+                $"SUM(CASE WHEN s.INDEX_TYPE = {Literal(definition.Method)} THEN 1 ELSE 0 END) = {keyCount}");
         }
 
         for (var ordinal = 0; ordinal < definition.Keys.Count; ordinal++)
@@ -327,13 +322,24 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             };
 
             conditions.Add(
-                $"EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS s "
-                + $"WHERE s.TABLE_SCHEMA = DATABASE() AND s.TABLE_NAME = {Literal(definition.Table)} "
-                + $"AND s.INDEX_NAME = {candidate}.INDEX_NAME "
-                + $"AND {string.Join(" AND ", keyConditions)})");
+                $"SUM(CASE WHEN {string.Join(" AND ", keyConditions)} THEN 1 ELSE 0 END) = 1");
         }
 
         return $"({string.Join(" AND ", conditions)})";
+    }
+
+    private string BuildIndexCandidateMatches(
+        ExpectedIndexDefinition definition,
+        bool isMariaDb,
+        string candidate
+    )
+    {
+        var matching = BuildGroupedIndexCandidateMatches(definition, isMariaDb);
+
+        return "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS s "
+            + $"WHERE s.TABLE_SCHEMA = DATABASE() AND s.TABLE_NAME = {Literal(definition.Table)} "
+            + $"AND s.INDEX_NAME = {candidate}.INDEX_NAME "
+            + $"GROUP BY s.INDEX_NAME HAVING {matching})";
     }
 
     private static string BuildIndexSortMatches(
