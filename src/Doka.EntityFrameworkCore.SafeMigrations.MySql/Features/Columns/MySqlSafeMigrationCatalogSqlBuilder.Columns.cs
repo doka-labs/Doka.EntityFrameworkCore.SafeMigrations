@@ -1125,15 +1125,36 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             .Trim()
             .ToLowerInvariant();
 
-        var parts = normalized.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        var integerType = parts[0] is "tinyint" or "smallint" or "mediumint" or "int" or "integer" or "bigint";
-        if (!integerType)
+        var type = normalized.AsSpan();
+        var separator = type.IndexOf(' ');
+        var name = separator < 0 ? type : type[..separator];
+        var canonicalType = name switch
+        {
+            "tinyint" => "tinyint",
+            "smallint" => "smallint",
+            "mediumint" => "mediumint",
+            "int" or "integer" => "int",
+            "bigint" => "bigint",
+            _ => null,
+        };
+
+        if (canonicalType is null)
         {
             return $"LOWER(c.COLUMN_TYPE) = {Literal(normalized)}";
         }
 
-        var canonicalType = parts[0] == "integer" ? "int" : parts[0];
-        var expectedUnsigned = parts.Contains("unsigned", StringComparer.Ordinal);
+        // WHY: MariaDB display widths are ignored for integer families, but the
+        // literal-space modifier grammar and unsigned semantics must remain exact.
+        var expectedUnsigned = false;
+        foreach (var range in type.Split(' '))
+        {
+            if (type[range].SequenceEqual("unsigned"))
+            {
+                expectedUnsigned = true;
+                break;
+            }
+        }
+
         var expected = expectedUnsigned ? $"{canonicalType} unsigned" : canonicalType;
 
         return $"CONCAT(LOWER(c.DATA_TYPE), "

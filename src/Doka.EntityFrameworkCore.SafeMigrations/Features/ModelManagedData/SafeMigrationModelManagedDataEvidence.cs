@@ -10,6 +10,7 @@ internal enum SafeMigrationModelManagedRowState : byte
 
 internal sealed class SafeMigrationModelManagedDataEvidence
 {
+    /// <summary>Validates and snapshots caller-owned row and dependency evidence.</summary>
     public SafeMigrationModelManagedDataEvidence(
         SafeMigrationModelManagedRowState[] rowStates,
         long[] dependencyCounts
@@ -32,10 +33,19 @@ internal sealed class SafeMigrationModelManagedDataEvidence
         DependencyCounts = dependencyCounts.ToArray();
     }
 
-    public SafeMigrationModelManagedRowState[] RowStates { get; }
+    // WHY: Parse creates and validates both arrays itself. Only that private path may
+    // transfer ownership without making a second full snapshot of provider evidence.
+    private SafeMigrationModelManagedDataEvidence()
+    {
+    }
 
-    public long[] DependencyCounts { get; }
+    /// <summary>Gets the owned row classifications in authored order.</summary>
+    public SafeMigrationModelManagedRowState[] RowStates { get; private init; } = [];
 
+    /// <summary>Gets the owned incoming dependency counts in authored order.</summary>
+    public long[] DependencyCounts { get; private init; } = [];
+
+    /// <summary>Parses compact provider evidence while retaining exact state and cardinality checks.</summary>
     public static SafeMigrationModelManagedDataEvidence Parse(
         string rowStates,
         int expectedRowCount,
@@ -68,20 +78,25 @@ internal sealed class SafeMigrationModelManagedDataEvidence
             };
         }
 
-        var counts = dependencyCounts.Length == 0
-            ? []
-            : dependencyCounts
-                .Split(',', StringSplitOptions.None)
-                .Select(value => long.TryParse(
-                        value,
-                        NumberStyles.None,
-                        CultureInfo.InvariantCulture,
-                        out var count)
-                    && count >= 0
-                        ? count
-                        : throw new InvalidOperationException(
-                            $"The {providerName} model-managed dependency evidence is invalid."))
-                .ToArray();
+        var payload = dependencyCounts.AsSpan();
+        var counts = payload.IsEmpty ? [] : new long[payload.Count(',') + 1];
+        var countIndex = 0;
+        if (!payload.IsEmpty)
+        {
+            foreach (var range in payload.Split(','))
+            {
+                // WHY: Empty fields and signs remain invalid. Span slices remove transient
+                // token strings without weakening the invariant nonnegative integer contract.
+                if (!long.TryParse(payload[range], NumberStyles.None, CultureInfo.InvariantCulture, out var count)
+                    || count < 0)
+                {
+                    throw new InvalidOperationException(
+                        $"The {providerName} model-managed dependency evidence is invalid.");
+                }
+
+                counts[countIndex++] = count;
+            }
+        }
 
         if (counts.Length != expectedDependencyCount)
         {
@@ -89,6 +104,10 @@ internal sealed class SafeMigrationModelManagedDataEvidence
                 $"The {providerName} model-managed dependency evidence has an inconsistent entry count.");
         }
 
-        return new SafeMigrationModelManagedDataEvidence(states, counts);
+        return new SafeMigrationModelManagedDataEvidence
+        {
+            RowStates = states,
+            DependencyCounts = counts,
+        };
     }
 }

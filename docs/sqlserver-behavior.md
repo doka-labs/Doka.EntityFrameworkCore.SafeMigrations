@@ -264,6 +264,24 @@ fail the analysis without publishing a partial report. Delayed classifiers use
 an explicit ordinal parameter for reusable inner SQL; name-binding and physical
 prerequisite guards are unchanged.
 
+Equal immutable classifier plans share a baseline result only within the same
+512-plan capture. Equality includes physical, prerequisite, data and diagnostic
+facets; differing contracts are queried independently. Every operation still
+receives its original result slot and ordered projection. No live result is
+retained across captures or analysis invocations.
+
+Catalog command assembly writes directly into the final string after the
+UTF-8 payload bound has been checked. Scalar type and identity arguments are
+parsed through synchronous span slices; column-binding inventory is streamed
+into bounded chunks rather than duplicated in one complete tuple array.
+These allocation changes do not retain pooled buffers or live evidence.
+
+An exact live column match may survive an accepted drop of an unrelated column,
+even when aggregate allocation becomes unknown. This requires the unchanged
+captured physical binding. Own-column changes, dropped owners, accepted renames
+and opaque provider effects cannot reuse that original match. Allocation checks
+for newly added columns remain independent and fail closed when unproven.
+
 This does not reorder migration execution, parallelize database commands, or
 weaken the analysis lock, transaction, or runtime guards. External writes still
 require deployment exclusion; batching is not snapshot isolation.

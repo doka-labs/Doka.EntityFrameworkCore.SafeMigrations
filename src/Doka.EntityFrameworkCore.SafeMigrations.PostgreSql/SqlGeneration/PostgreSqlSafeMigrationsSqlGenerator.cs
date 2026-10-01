@@ -429,7 +429,16 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
                 builder.Append('\n');
             }
 
-            builder.Append(EnsureTerminated(baseline[index].CommandText));
+            // WHY: Append the trimmed baseline directly; copying it into a temporary
+            // terminated string adds a full SQL allocation before the final guarded block.
+            var sql = baseline[index].CommandText.AsSpan().TrimEnd();
+            builder.Append(sql);
+            if (sql.IsEmpty
+                || sql[^1] != ';')
+            {
+                builder.Append(';');
+            }
+
         }
 
         return builder.ToString();
@@ -521,14 +530,6 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             "A report-only runtime-validation action cannot generate migration SQL."),
         _ => throw new ArgumentOutOfRangeException(nameof(action)),
     };
-
-    private static string EnsureTerminated(
-        string sql
-    ) => sql
-        .TrimEnd()
-        .EndsWith(';')
-        ? sql.TrimEnd()
-        : $"{sql.TrimEnd()};";
 
     private static string SelectDollarTag(
         params ReadOnlySpan<string> sqlParts

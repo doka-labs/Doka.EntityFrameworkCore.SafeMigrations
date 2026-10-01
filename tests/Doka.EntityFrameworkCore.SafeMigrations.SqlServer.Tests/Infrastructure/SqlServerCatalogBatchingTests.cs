@@ -66,8 +66,8 @@ public sealed class SqlServerCatalogBatchingTests
                 .Select(index => (index % 9) switch
                 {
                     3 => null,
-                    1 or 8 => metadata,
-                    _ => delayed,
+                    1 or 8 => DistinctPlan(metadata, index),
+                    _ => DistinctPlan(delayed, index),
                 })
                 .ToArray();
 
@@ -155,7 +155,8 @@ public sealed class SqlServerCatalogBatchingTests
 
         // Act
         await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-            connection, null, null, [plan, plan, plan, plan], 0, results, CancellationToken.None);
+            connection, null, null, Enumerable.Range(0, 4).Select(index => DistinctPlan(plan, index)).ToArray(),
+            0, results, CancellationToken.None);
 
         // Assert
         Assert.Equal(nativeBatch ? delayed ? 4 : 2 : 0, connection.BatchExecutions);
@@ -228,7 +229,8 @@ public sealed class SqlServerCatalogBatchingTests
         // Act
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-                connection, null, null, [Plan(false), Plan(false)], 0, results, CancellationToken.None));
+                connection, null, null, [DistinctPlan(Plan(false), 0), DistinctPlan(Plan(false), 1)],
+                0, results, CancellationToken.None));
 
         // Assert
         Assert.Contains(corruption == "missing" ? "inconsistent row count" : "invalid ordinal",
@@ -419,7 +421,7 @@ public sealed class SqlServerCatalogBatchingTests
             AfterRowRead = _ => cancellation.Cancel(),
         };
 
-        var plans = Enumerable.Repeat(Plan(false), 257).ToArray();
+        var plans = Enumerable.Range(0, 257).Select(index => DistinctPlan(Plan(false), index)).ToArray();
         var results = new SafeMigrationProviderAnalysis[plans.Length];
 
         // Act
@@ -448,7 +450,7 @@ public sealed class SqlServerCatalogBatchingTests
             AfterNextResult = () => cancellation.Cancel(),
         };
 
-        var plans = Enumerable.Repeat(Plan(false), 257).ToArray();
+        var plans = Enumerable.Range(0, 257).Select(index => DistinctPlan(Plan(false), index)).ToArray();
         var results = new SafeMigrationProviderAnalysis[plans.Length];
 
         // Act
@@ -485,7 +487,7 @@ public sealed class SqlServerCatalogBatchingTests
             },
         };
 
-        var plans = Enumerable.Repeat(Plan(false), 257).ToArray();
+        var plans = Enumerable.Range(0, 257).Select(index => DistinctPlan(Plan(false), index)).ToArray();
         var results = new SafeMigrationProviderAnalysis[plans.Length];
 
         // Act
@@ -521,8 +523,152 @@ public sealed class SqlServerCatalogBatchingTests
             second[..second.IndexOf(parameterBoundary, StringComparison.Ordinal)]);
     }
 
+    /// <summary>Equal immutable plans share one baseline result while retaining every original result slot.</summary>
+    /// <param name="delayed">Whether the classifier requires delayed binding.</param>
+    /// <param name="nativeBatch">Whether the connection exposes native batching.</param>
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task EqualPlans_UseOneClassifierAndRestoreSkippedOriginalSlots(bool delayed, bool nativeBatch)
+    {
+        // Arrange
+        await using var connection = new SqlServerCatalogTestConnection(nativeBatch);
+        var plan = DistinctPlan(Plan(delayed), 42);
+        var plans = Enumerable.Range(0, 512).Select(index => index == 7 ? null : plan with { }).ToArray();
+        const int captureStart = 17;
+        var results = Enumerable.Repeat(Unsupported(), captureStart + plans.Length).ToArray();
+
+        // Act
+        await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
+            connection, null, null, plans, captureStart, results, CancellationToken.None);
+
+        // Assert
+        Assert.Single(connection.RecordedStatements);
+        Assert.Equal(1, connection.RowsRead);
+        Assert.Equal(nativeBatch ? 1 : 0, connection.BatchExecutions);
+        Assert.Equal(nativeBatch ? 0 : 1, connection.CommandExecutions);
+        Assert.Equal(SafeMigrationObservedState.Different, results[captureStart].ObservedState);
+        Assert.Same(plan.DifferentDifference, Assert.Single(results[captureStart].Differences));
+        Assert.All(results.Take(captureStart), result => Assert.Equal(
+            SafeMigrationObservedState.Unsupported, result.ObservedState));
+        for (var index = 0; index < plans.Length; index++)
+        {
+            if (index == 7)
+            {
+                Assert.Equal(SafeMigrationObservedState.Unsupported, results[captureStart + index].ObservedState);
+            }
+            else
+            {
+                Assert.Same(results[captureStart], results[captureStart + index]);
+            }
+        }
+    }
+
+    /// <summary>Contract differences prevent reuse even when state SQL and object names are identical.</summary>
+    [Fact]
+    public async Task DifferentSafetyAndEvidenceContracts_AreNotCoalesced()
+    {
+        // Arrange
+        await using var connection = new SqlServerCatalogTestConnection();
+        var plan = Plan(false);
+        SqlServerSafeMigrationRuntimePlan?[] plans =
+        [
+            plan,
+            plan with { PhysicalTableSupportExpression = "1" },
+            plan with { PrerequisiteExpression = "2" },
+            plan with { StateEvaluationGuardExpression = "2" },
+            plan with { StateEvaluationGuardFailureExpression = "N'missing'" },
+            plan with { ColumnLayoutFailureExpression = "NULL" },
+            plan with { DiagnosticEvidenceExpression = "NULL" },
+            plan with { MatchedObjectNameExpression = "NULL" },
+            plan with { ModelManagedRowEvidenceExpression = "NULL" },
+            plan with { ModelManagedDependencyCountsExpression = "NULL" },
+            plan with { ClassificationCodeExpression = "NULL" },
+            plan with { CatalogPreambleSql = "DECLARE @probe int = 1;" },
+            plan with { MayRequireNullabilityDataProof = true },
+            DistinctPlan(plan, 42),
+        ];
+
+        var results = new SafeMigrationProviderAnalysis[plans.Length];
+
+        // Act
+        await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
+            connection, null, null, plans, 0, results, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(plans.Length, connection.RowsRead);
+        Assert.Equal(Enumerable.Range(0, plans.Length).Select(State), results.Select(result => result.ObservedState));
+    }
+
+    /// <summary>Reuse never crosses captures or analyzer invocations, where live state may have changed.</summary>
+    [Fact]
+    public async Task RepeatedCapture_QueriesTheBaselineAgain()
+    {
+        // Arrange
+        await using var connection = new SqlServerCatalogTestConnection();
+        var first = new SafeMigrationProviderAnalysis[512];
+        var second = new SafeMigrationProviderAnalysis[512];
+        var plans = Enumerable.Repeat(Plan(false), 512).ToArray();
+
+        // Act
+        await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
+            connection, null, null, plans, 0, first, CancellationToken.None);
+        await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
+            connection, null, null, plans, 0, second, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(2, connection.RecordedStatements.Count);
+        Assert.Equal(2, connection.RowsRead);
+        Assert.NotSame(first[0], second[0]);
+        Assert.All(first, result => Assert.Same(first[0], result));
+        Assert.All(second, result => Assert.Same(second[0], result));
+    }
+
+    /// <summary>Separately generated production column classifiers reuse their unchanged baseline contracts.</summary>
+    [Fact]
+    public async Task ProductionColumnPlans_AreReusedWithoutSharingPlanInstances()
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext(
+            "Server=localhost;Database=packing;Integrated Security=true;");
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+
+        await using var connection = new SqlServerCatalogTestConnection();
+        var ensure = new SafeMigrationOperation(new EnsureColumnIntent("items",
+            new ExpectedColumnDefinition("id", typeof(int), false, "int")), SafeMigrationPolicy.ThrowIfDifferent);
+
+        var alter = new SafeMigrationOperation(new AlterColumnIntent("items",
+            new ExpectedColumnDefinition("caption", typeof(string), false, "varchar(20)", maxLength: 20),
+            new ExpectedColumnDefinition("caption", typeof(string), false, "varchar(10)", maxLength: 10)),
+            SafeMigrationPolicy.RepairIfSafe);
+
+        var plans = Enumerable.Range(0, 512).Select(index => catalog.Build(index % 2 == 0 ? ensure : alter)).ToArray();
+        var results = new SafeMigrationProviderAnalysis[plans.Length];
+
+        // Act
+        await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
+            connection, null, null, plans, 0, results, CancellationToken.None);
+
+        // Assert
+        Assert.NotSame(plans[0], plans[2]);
+        Assert.Equal(plans[0], plans[2]);
+        Assert.Equal(2, connection.RowsRead);
+        for (var index = 0; index < results.Length; index++)
+        {
+            Assert.Same(results[index % 2], results[index]);
+        }
+    }
+
     private static SqlServerSafeMigrationRuntimePlan Plan(bool delayed)
         => new("N'missing'", "0", SafeMigrationRepairCapability.None, "0") { RequiresDelayedBinding = delayed };
+
+    /// <summary>Gives a classifier a distinct immutable diagnostic contract without changing its SQL shape.</summary>
+    private static SqlServerSafeMigrationRuntimePlan DistinctPlan(SqlServerSafeMigrationRuntimePlan plan, int ordinal)
+        => plan with { DifferentDifference = new SafeMigrationFacetDifference("test_contract", ordinal.ToString(
+            CultureInfo.InvariantCulture), "actual") };
 
     private static SafeMigrationProviderAnalysis Unsupported()
         => new(SafeMigrationObservedState.Unsupported, SafeMigrationRepairCapability.None, false, "test_unsupported");

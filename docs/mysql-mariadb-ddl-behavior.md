@@ -146,13 +146,21 @@ The internal design-time-services guard instead returns Doka's explicit
 commandless consumed result. A data-reading classifier adds setup fragments for
 lazy state evaluation without adding EF command boundaries.
 
-At runtime, adjacent short SafeMigrations-owned setup fragments are grouped in
-their original order to reduce database transport exchanges. Each new group is
+At runtime, owned prepared-SQL assignments include their immediately following
+`PREPARE`/`EXECUTE`/`DEALLOCATE` controls in the same final string allocation.
+The baseline assignment includes only `PREPARE`; its execution and postcondition
+remain in the separate guarded body. Semicolons and exact statement order are
+preserved, including dependent user-variable assignments. No completed large
+assignment string is copied to append controls.
+
+Adjacent short SafeMigrations-owned setup fragments are also grouped in
+their original order to reduce database transport exchanges. Each copied group is
 limited to 256 UTF-8 bytes and the largest previous individual setup/body
 payload, whichever is smaller. Large SQL fragments retain their original string
 references instead of being copied into a group. The original
 128-fragment and 1,048,576-character scope limits are checked before grouping;
-grouping cannot admit a scope that the provider would otherwise reject. The
+controls fused directly into assignments still count as original fragments.
+Grouping cannot admit a scope that the provider would otherwise reject. The
 concatenated script text is unchanged. Opaque provider setup remains an
 independent boundary, as do the guarded body and every cleanup command. Keeping
 cleanup independent lets later cleanup run even if an earlier cleanup fails.
@@ -161,8 +169,10 @@ Grouping does not combine operations or cache live state. Every operation still
 evaluates its own identity, prerequisites, data safety, decision, and
 postcondition immediately around its body. Caller cancellation is forwarded,
 and cleanup retains its independent cancellation token. The configured command
-timeout now applies to a grouped setup command instead of each former fragment;
-it is not a separate timeout per SQL statement. See
+timeout applies to each fused or grouped setup command instead of each former fragment;
+it is not a separate timeout per SQL statement. Fusing controls can increase the
+largest individual assignment dispatch by its fixed ASCII control suffix, while
+the total SQL payload and original full-scope text limit remain unchanged. See
 [MySqlConnector command cancellation](https://mysqlconnector.net/overview/command-cancellation/).
 No server durability, storage-engine, or transaction setting is changed. Actual
 DDL can still incur the documented implicit commits.

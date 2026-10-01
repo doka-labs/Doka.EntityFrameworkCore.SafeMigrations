@@ -35,12 +35,38 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         // Partitioning the bounded capture avoids a transport split on every binding-mode change. Original
         // ordinals still own their result slots; the runner applies ordered projection afterwards, unchanged.
         var order = new int[plans.Length];
+        var representatives = new int[plans.Length];
+        var distinct = new Dictionary<SqlServerSafeMigrationRuntimePlan, int>(plans.Length);
+        for (var index = 0; index < plans.Length; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            representatives[index] = index;
+            if (plans[index] is not { } plan)
+            {
+                continue;
+            }
+
+            // WHY: Analysis captures one immutable baseline before ordered projection. Exact plan equality
+            // includes every physical, data, diagnostic and evidence facet, not merely the object name.
+            // Coalesce only within this bounded capture; never retain a live result between invocations.
+            if (distinct.TryGetValue(plan, out var representative))
+            {
+                representatives[index] = representative;
+            }
+            else
+            {
+                distinct.Add(plan, index);
+            }
+        }
+
         var count = 0;
         for (var mode = 0; mode < 2; mode++)
         {
             for (var index = 0; index < plans.Length; index++)
             {
-                if (plans[index] is { } plan && RequiresDelayedCatalogBinding(plan) == (mode == 1))
+                if (representatives[index] == index && plans[index] is { } plan
+                    && RequiresDelayedCatalogBinding(plan) == (mode == 1))
                 {
                     order[count++] = index;
                 }
@@ -54,6 +80,16 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
             next = await ReadCatalogBatchAsync(connection, transaction, commandTimeout, plans,
                 captureStart, order, count, next, results, cancellationToken);
+        }
+
+        for (var index = 0; index < plans.Length; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (representatives[index] != index)
+            {
+                results[captureStart + index] = results[captureStart + representatives[index]];
+            }
         }
     }
 
@@ -135,7 +171,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             }
 
             var command = batch.CreateCommand();
-            command.CommandText = prefix + string.Join(separator, selections) + trailer;
+            command.CommandText = BuildCatalogCommandText(selections, prefix, separator, trailer);
             payload += statementPayload;
         }
 
@@ -161,5 +197,44 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         }
 
         return next;
+    }
+
+    /// <summary>Assembles an already bounded catalog statement without changing its SQL shape.</summary>
+    internal static string BuildCatalogCommandText(
+        IReadOnlyList<string> selections,
+        string prefix,
+        string separator,
+        string trailer
+    )
+    {
+        var length = checked(prefix.Length + trailer.Length
+            + (Math.Max(0, selections.Count - 1) * separator.Length));
+
+        for (var index = 0; index < selections.Count; index++)
+        {
+            length = checked(length + selections[index].Length);
+        }
+
+        // WHY: Joining first creates another complete SQL buffer. Fill the final string
+        // directly; the caller has already enforced the independent UTF-8 payload limit.
+        return string.Create(length, (selections, prefix, separator, trailer), static (destination, state) =>
+        {
+            state.prefix.AsSpan().CopyTo(destination);
+            destination = destination[state.prefix.Length..];
+            for (var index = 0; index < state.selections.Count; index++)
+            {
+                if (index > 0)
+                {
+                    state.separator.AsSpan().CopyTo(destination);
+                    destination = destination[state.separator.Length..];
+                }
+
+                var selection = state.selections[index];
+                selection.AsSpan().CopyTo(destination);
+                destination = destination[selection.Length..];
+            }
+
+            state.trailer.AsSpan().CopyTo(destination);
+        });
     }
 }

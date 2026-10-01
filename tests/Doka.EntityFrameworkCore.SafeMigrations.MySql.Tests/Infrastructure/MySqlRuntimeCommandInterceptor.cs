@@ -12,6 +12,7 @@ internal sealed class MySqlRuntimeCommandInterceptor : DbCommandInterceptor
     private string? _setupInjection;
     private Action? _setupStarted;
     private bool _injectCompactedPrepareGroup;
+    private bool _injectDataProbeGroup;
 
     /// <summary>Gets the number of started commands across all observed categories.</summary>
     public long CommandCount { get; private set; }
@@ -28,6 +29,9 @@ internal sealed class MySqlRuntimeCommandInterceptor : DbCommandInterceptor
     /// <summary>Gets whether injection targeted three prepared setup statements in one dispatched command.</summary>
     public bool CompactedPrepareGroupWasInjected { get; private set; }
 
+    /// <summary>Gets whether injection reached the fused data probe instead of another prepared group.</summary>
+    public bool DataProbePrepareGroupWasInjected { get; private set; }
+
     /// <summary>Gets the original grouped command size before adding the test-owned failure probe.</summary>
     public int? OriginalCompactedPrepareGroupPayloadBytes { get; private set; }
 
@@ -42,6 +46,7 @@ internal sealed class MySqlRuntimeCommandInterceptor : DbCommandInterceptor
         _setupInjection = sql;
         _setupStarted = setupStarted;
         _injectCompactedPrepareGroup = false;
+        _injectDataProbeGroup = false;
     }
 
     /// <summary>Injects SQL after acquired PREPARE within a real compacted setup command.</summary>
@@ -55,6 +60,21 @@ internal sealed class MySqlRuntimeCommandInterceptor : DbCommandInterceptor
         _setupInjection = sql;
         _setupStarted = setupStarted;
         _injectCompactedPrepareGroup = true;
+        _injectDataProbeGroup = false;
+    }
+
+    /// <summary>Interrupts the fused data probe after PREPARE acquires its session resources.</summary>
+    /// <param name="sql">The test-owned failure or blocking statements followed by their sentinel.</param>
+    /// <param name="setupStarted">An optional cancellation action scheduled at the targeted command dispatch.</param>
+    public void InjectFirstCompactedDataProbeGroup(
+        string sql,
+        Action? setupStarted = null
+    )
+    {
+        _setupInjection = sql;
+        _setupStarted = setupStarted;
+        _injectCompactedPrepareGroup = true;
+        _injectDataProbeGroup = true;
     }
 
     /// <summary>Resets counters between initial application and history-only replay.</summary>
@@ -290,15 +310,21 @@ internal sealed class MySqlRuntimeCommandInterceptor : DbCommandInterceptor
             if (_injectCompactedPrepareGroup)
             {
                 var offset = command.CommandText.IndexOf(PreparedSetupGroup, StringComparison.Ordinal);
-                if (offset >= 0)
+                var assignmentPrefix = _injectDataProbeGroup
+                    ? "SET @doka_sm_sql = CASE WHEN @doka_sm_data_probe_required"
+                    : "SET @doka_sm_sql =";
+
+                if (offset >= 0 && command.CommandText.StartsWith(assignmentPrefix, StringComparison.Ordinal))
                 {
-                    // WHY: A contiguous triple proves this is actual grouping, not an untouched setup fragment.
+                    // WHY: The assignment and contiguous triple must share the actual dispatch;
+                    // an isolated short PREPARE group cannot prove the fused large-command boundary.
                     OriginalCompactedPrepareGroupPayloadBytes = Encoding.UTF8.GetByteCount(command.CommandText);
                     command.CommandText = command.CommandText.Insert(
                         offset + PreparedSetupStatement.Length,
                         "\n" + _setupInjection + "\n");
 
                     CompactedPrepareGroupWasInjected = true;
+                    DataProbePrepareGroupWasInjected = _injectDataProbeGroup;
                     CompleteSetupInjection(command);
                 }
             }

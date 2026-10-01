@@ -316,6 +316,28 @@ internal sealed partial class SafeMigrationPreflightProjection
     )
     {
         var key = new TableKey(table, schema);
+        var acceptedDefinitionsExist = _prerequisites.TryGetValue(key, out var prerequisites)
+            && (prerequisites.Indexes.HasPhysicalDefinitions
+                || (SharesUniqueConstraintAndIndexIdentity && prerequisites.UniqueConstraints.HasPhysicalDefinitions));
+
+        if (!acceptedDefinitionsExist
+            && (!_tables.TryGetValue(key, out var projectedTable) || projectedTable.Indexes.Count == 0))
+        {
+            return;
+        }
+
+        // WHY: Keep capturing predicates in a separate method so the common no-index
+        // column stream does not allocate their closure before reaching this fast path.
+        InvalidatePopulatedIndexesForColumn(table, schema, column);
+    }
+
+    private void InvalidatePopulatedIndexesForColumn(
+        string table,
+        string? schema,
+        string column
+    )
+    {
+        var key = new TableKey(table, schema);
         var candidateKeyInvalidated = false;
         if (_prerequisites.TryGetValue(key, out var prerequisites))
         {
@@ -396,9 +418,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         _prerequisites.Clear();
         _droppedPhysicalKeys.Clear();
         _projectedCandidateKeyMutationTables.Clear();
-        _projectedColumnDefinitions.Clear();
-        _projectedMissingColumns.Clear();
-        _projectedUnknownColumns.Clear();
+        _projectedColumnStates.Clear();
         _projectedMissingTables.Clear();
         _projectedUnknownTableStructures.Clear();
         _projectedStructurallyModifiedTables.Clear();

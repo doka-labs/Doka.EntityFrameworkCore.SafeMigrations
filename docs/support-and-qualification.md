@@ -378,6 +378,18 @@ used to hide an uncovered regression.
 PostgreSQL, SQLite, and SQL Server benchmark sets with duration baselines,
 coarse hosted-runner ceilings, and strict allocation ceilings at 1, 100, and
 1000 operations.
+
+Prepared-input CPU regressions separately bound shared seed and diagnostic
+evidence parsing, accepted-column projection, MySQL/MariaDB runtime generation
+and SQL Server catalog-string assembly allocations. Runtime-generation SQL
+fingerprints retain exact MySQL/MariaDB guards, statement order and cleanup;
+PostgreSQL text and SQLite catalog regressions cover whitespace, comments,
+quoted tokens and ordered keys. They exclude input construction and asynchronous
+database latency. Parsed evidence owns its final arrays and field strings;
+caller-owned evidence still receives defensive snapshots. These checks do not
+measure disk flush latency, establish an end-to-end migration latency claim,
+or replace live migration, recovery and native SQL Server qualification.
+
 The SQL Server set declares eleven generation, analyzer-plan, model-managed
 data, repair, and canonical-model cases. Its initial duration values are the
 exact medians from the five-sample macOS ARM64 developer capture at
@@ -392,7 +404,14 @@ This capture is explicitly measurement-only and is not GitHub-hosted x64
 qualification. The quality workflow can retain a separate x64 capture in
 `sqlserver-baseline.json`; its ordinary performance gate remains mandatory.
 Until the complete pinned x64 workflow passes, SQL Server qualification
-remains unestablished. The five independently restored benchmark projects
+remains unestablished. SQL Server live workloads append timestamped stage markers
+under `artifacts/performance/live/sqlserver-*-progress.log` before potentially
+long-running phases. The existing always-upload artifact preserves these markers
+even when a job does not produce its final TRX. They contain fixed workload/stage
+identifiers, not SQL, database names or connection strings; they are diagnostics,
+not successful qualification evidence.
+
+The five independently restored benchmark projects
 enforce the Core and provider dependency boundaries for:
 
 - intent construction;

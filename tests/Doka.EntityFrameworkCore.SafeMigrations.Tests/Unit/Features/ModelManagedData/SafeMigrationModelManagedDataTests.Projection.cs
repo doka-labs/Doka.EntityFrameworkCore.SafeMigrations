@@ -141,18 +141,24 @@ public sealed partial class SafeMigrationModelManagedDataTests
         Assert.Equal("projected_missing", projected.Code);
     }
 
+    /// <summary>A dropped owner cannot retain the created table's empty-row seed proof.</summary>
     [Fact]
     public void ProviderTableDropInvalidatesNewTableEmptyRowProof()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         var live = Live(SafeMigrationObservedState.PrerequisiteMissing);
 
         projection.ObserveProviderPostcondition(ProviderRoleTable());
         projection.ObserveProviderPostcondition(new DropTableOperation { Name = "roles", });
 
+        // Act
         var projected = projection.Project(RoleEnsure(), live);
 
-        Assert.Same(live, projected);
+        // Assert
+        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, projected.ObservedState);
+        Assert.Equal("projected_prerequisite_missing", projected.Code);
+        Assert.False(projected.PostconditionSatisfied);
     }
 
     [Fact]
@@ -411,41 +417,41 @@ public sealed partial class SafeMigrationModelManagedDataTests
         Assert.Equal("projected_structure_state_unknown", projected.Code);
     }
 
-    [Fact]
-    public void StructuralIdentityChangesInvalidateModelManagedRowProjection()
+    /// <summary>
+    /// Structural identity changes invalidate seed evidence with the strongest available owner proof.
+    /// </summary>
+    /// <param name="mutation">The accepted structural operation.</param>
+    /// <param name="expectedCode">The expected projected diagnostic.</param>
+    [Theory]
+    [InlineData("column-drop", "test_live")]
+    [InlineData("column-rename", "projected_structure_state_unknown")]
+    [InlineData("table-drop", "projected_prerequisite_missing")]
+    [InlineData("table-rename", "projected_structure_state_unknown")]
+    public void StructuralIdentityChangesInvalidateModelManagedRowProjection(string mutation, string expectedCode)
     {
-        var structuralOperations = new (MigrationOperation Operation, string ExpectedCode)[]
+        // Arrange
+        MigrationOperation operation = mutation switch
         {
-            (new DropColumnOperation { Table = "roles", Name = "name", }, "test_live"),
-            (
-                new RenameColumnOperation
-                {
-                    Table = "roles",
-                    Name = "name",
-                    NewName = "display_name",
-                },
-                "projected_structure_state_unknown"),
-            (new DropTableOperation { Name = "roles", }, "test_live"),
-            (
-                new RenameTableOperation
-                {
-                    Name = "roles",
-                    NewName = "renamed_roles",
-                },
-                "projected_structure_state_unknown"),
+            "column-drop" => new DropColumnOperation { Table = "roles", Name = "name" },
+            "column-rename" => new RenameColumnOperation
+            {
+                Table = "roles", Name = "name", NewName = "display_name",
+            },
+            "table-drop" => new DropTableOperation { Name = "roles" },
+            "table-rename" => new RenameTableOperation { Name = "roles", NewName = "renamed_roles" },
+            _ => throw new ArgumentOutOfRangeException(nameof(mutation)),
         };
 
-        foreach (var (operation, expectedCode) in structuralOperations)
-        {
-            var projection = ProjectionWithAcceptedRole();
+        var projection = ProjectionWithAcceptedRole();
 
-            projection.ObserveProviderPostcondition(operation);
+        projection.ObserveProviderPostcondition(operation);
 
-            var projected = projection.Project(RoleUpdate(), Live(SafeMigrationObservedState.PrerequisiteMissing));
+        // Act
+        var projected = projection.Project(RoleUpdate(), Live(SafeMigrationObservedState.PrerequisiteMissing));
 
-            Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, projected.ObservedState);
-            Assert.Equal(expectedCode, projected.Code);
-        }
+        // Assert
+        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, projected.ObservedState);
+        Assert.Equal(expectedCode, projected.Code);
     }
 
     [Fact]

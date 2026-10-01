@@ -22,7 +22,9 @@ All notable changes are documented here. The format follows
 ### Changed
 
 - Reduce MySQL/MariaDB migration transport exchanges by grouping owned setup
-  fragments within each guarded operation. Preserve exact SQL text and order,
+  fragments and directly emitting prepared assignments with their immediate
+  controls within each guarded operation, without copying completed large SQL
+  strings. Preserve exact SQL text and order,
   original scope bounds, opaque provider setup, the guarded body, and
   independently attempted cleanup. Keep fresh per-operation checks and existing
   transaction, history, and server durability contracts.
@@ -34,6 +36,20 @@ All notable changes are documented here. The format follows
   ordered projection. Parameterize delayed classifier ordinals so identical
   inner SQL can reuse its compilation plan. Payload and transport limits,
   runtime operation order, and public contracts remain unchanged.
+- Coalesce equal SQL Server baseline classifier plans within each bounded
+  capture. Restore immutable evidence to original operation slots without
+  caching results across captures or analysis invocations.
+- Store projected column definitions, absence and uncertainty by owning table
+  instead of rescanning all accumulated column states during table creation,
+  recreation and rename.
+- Reduce temporary allocations in shared seed and diagnostic evidence parsing
+  and ordered column projection. Use spans for numeric evidence, MariaDB integer
+  modifiers, SQL Server scalar facets and SQLite catalog slices. Reuse Boolean
+  terms and empty fragment lists during MySQL/MariaDB runtime generation; append
+  PostgreSQL baselines without intermediate SQL copies. Assemble bounded SQL
+  Server catalog commands directly into their final strings and stream column
+  bindings in bounded chunks. Preserve ownership, validation, SQL text,
+  diagnostic codes, query limits and execution contracts.
 - Approve exact CI dependency-license exceptions for SQL Server's transitive
   Microsoft.Data.SqlClient.SNI.runtime 6.0.2 and
   Microsoft.Identity.Client.NativeInterop 0.20.6. Validate every hosted
@@ -46,6 +62,16 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- Preserve an unchanged SQL Server column's exact match after an unrelated
+  accepted column drop. Invalidate that certificate after changes to the
+  matched column, table replacement, renames and opaque provider operations.
+- Honor accepted missing-table ownership before historical matching evidence
+  across column, index, constraint and model-managed operations. Recreated
+  tables restore ownership; opaque SQL still requires fresh runtime validation.
+- Distinguish SQL Server dynamic-batch cancellation from inherited session
+  `IDENTITY_INSERT` state in live recovery tests. Persist bounded live-workload
+  stage markers before awaited phases so a job timeout retains diagnostic
+  evidence without database identifiers, SQL or connection strings.
 - Preserve the captured SQL Server column-allocation rejection after an
   accepted column drop instead of masking it as an unknown prerequisite.
   Keep opaque-SQL follow-ups deferred to runtime validation and cover both

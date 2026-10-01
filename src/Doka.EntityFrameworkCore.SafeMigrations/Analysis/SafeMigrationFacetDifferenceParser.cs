@@ -11,6 +11,10 @@ internal static class SafeMigrationFacetDifferenceParser
     private const int MaximumPayloadLength = SafeMigrationFacetDifference.MaximumDifferenceCount
         * ((SafeMigrationFacetDifference.MaximumValueLength * 2) + 67);
 
+    /// <summary>Parses bounded evidence into owned values without copying intermediate records.</summary>
+    /// <param name="payload">The provider's delimiter-separated evidence payload.</param>
+    /// <param name="providerName">The non-sensitive provider name used for malformed-output diagnostics.</param>
+    /// <returns>The ordered, immutable evidence collection.</returns>
     public static IReadOnlyList<SafeMigrationFacetDifference> Parse(
         string? payload,
         string providerName
@@ -25,42 +29,84 @@ internal static class SafeMigrationFacetDifferenceParser
 
         if (payload.Length > MaximumPayloadLength)
         {
-            // WHY: Validate the total envelope before Split allocates strings
-            // from malformed provider output. Valid SQL projections remain
+            // WHY: Validate the total envelope before scanning malformed provider output.
+            // Valid SQL projections remain
             // well below this bound because every record has three capped fields.
             throw Malformed(providerName);
         }
 
-        var records = payload.Split(RecordSeparator, StringSplitOptions.RemoveEmptyEntries);
-        if (records.Length > SafeMigrationFacetDifference.MaximumDifferenceCount)
+        var source = payload.AsSpan();
+        var recordCount = 0;
+        foreach (var range in source.Split(RecordSeparator))
         {
-            throw Malformed(providerName);
+            if (!source[range].IsEmpty
+                && ++recordCount > SafeMigrationFacetDifference.MaximumDifferenceCount)
+            {
+                throw Malformed(providerName);
+            }
         }
 
-        var differences = new SafeMigrationFacetDifference[records.Length];
-        for (var ordinal = 0; ordinal < records.Length; ordinal++)
+        // WHY: The first pass preserves the record cap without allocating record strings;
+        // only the three final, validated field strings need to outlive this span scan.
+        var differences = new SafeMigrationFacetDifference[recordCount];
+        var ordinal = 0;
+        foreach (var range in source.Split(RecordSeparator))
         {
-            var fields = records[ordinal].Split(FieldSeparator, StringSplitOptions.None);
-            if (fields.Length != 3
-                || !IsSafe(fields[0], maximumLength: 64)
-                || !IsSafe(fields[1], SafeMigrationFacetDifference.MaximumValueLength)
-                || !IsSafe(fields[2], SafeMigrationFacetDifference.MaximumValueLength))
+            var record = source[range];
+            if (record.IsEmpty)
+            {
+                continue;
+            }
+
+            var firstSeparator = record.IndexOf(FieldSeparator);
+            var secondSeparator = firstSeparator < 0
+                ? -1
+                : record[(firstSeparator + 1)..].IndexOf(FieldSeparator);
+            if (firstSeparator < 0
+                || secondSeparator < 0)
             {
                 throw Malformed(providerName);
             }
 
-            differences[ordinal] = new SafeMigrationFacetDifference(fields[0], fields[1], fields[2]);
+            secondSeparator += firstSeparator + 1;
+            var facet = record[..firstSeparator];
+            var expected = record[(firstSeparator + 1)..secondSeparator];
+            var actual = record[(secondSeparator + 1)..];
+            if (!IsSafe(facet, maximumLength: 64)
+                || !IsSafe(expected, SafeMigrationFacetDifference.MaximumValueLength)
+                || !IsSafe(actual, SafeMigrationFacetDifference.MaximumValueLength))
+            {
+                throw Malformed(providerName);
+            }
+
+            differences[ordinal++] = new SafeMigrationFacetDifference(
+                facet.ToString(), expected.ToString(), actual.ToString());
         }
 
         return Array.AsReadOnly(differences);
     }
 
     private static bool IsSafe(
-        string value,
+        ReadOnlySpan<char> value,
         int maximumLength
-    ) => value.Length is > 0
-        && value.Length <= maximumLength
-        && value.All(static character => character is >= ' ' and <= '~');
+    )
+    {
+        if (value.IsEmpty
+            || value.Length > maximumLength)
+        {
+            return false;
+        }
+
+        foreach (var character in value)
+        {
+            if (character is < ' ' or > '~')
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     private static InvalidOperationException Malformed(
         string providerName

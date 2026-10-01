@@ -77,7 +77,9 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.True(observer.CompactedPrepareGroupWasInjected);
         Assert.True(result.SetupWasInjected);
         var originalPayloadBytes = Assert.IsType<int>(observer.OriginalCompactedPrepareGroupPayloadBytes);
-        Assert.InRange(originalPayloadBytes, 1, 256);
+        // WHY: This must interrupt the real assignment-plus-prepared-control batch,
+        // not just the older small-control compaction tested independently.
+        Assert.True(originalPayloadBytes > 256);
         Assert.Equal(1, result.CompactedPrepareAcquired);
         Assert.Equal(0, result.SetupSentinelExecuted);
         Assert.Equal(0, result.BodiesBeforeRecovery);
@@ -125,6 +127,82 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         if (failSetup)
         {
             Assert.Equal(1146, Assert.IsType<MySqlException>(result.Exception).Number);
+            Assert.Equal(0, result.BodiesBeforeRecovery);
+        }
+        else
+        {
+            Assert.Null(result.Exception);
+            Assert.Equal(1, result.BodiesBeforeRecovery);
+        }
+
+        Assert.Equal(0, result.SentinelExecuted);
+        Assert.Equal(1, result.Cleanup.VariablesCleared);
+        Assert.Equal(1146, result.Cleanup.TemporaryTableError);
+        Assert.Equal(1243, result.Cleanup.PreparedStatementError);
+        Assert.Equal(result.SessionBefore, result.SessionAfter);
+        Assert.Equal(1, result.PreservedRows);
+        Assert.Equal(1, result.TargetColumns);
+    }
+
+    /// <summary>Exercises the fused lazy prepared setup on the synchronous provider execution path.</summary>
+    /// <param name="failureMode">Whether execution succeeds, raises a server error, or times out after PREPARE.</param>
+    [Theory]
+    [InlineData("success")]
+    [InlineData("error")]
+    [InlineData("timeout")]
+    public async Task RuntimeSynchronousPreparedScope_PreservesDataCleanupAndRecovery(string failureMode)
+    {
+        // Arrange
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `runtime_sync_rows` (`Id` int NOT NULL, PRIMARY KEY (`Id`)); "
+            + "INSERT INTO `runtime_sync_rows` VALUES (1);");
+
+        await using var blocker = failureMode == "timeout"
+            ? await AcquireRuntimeSetupLockAsync(connectionString)
+            : null;
+
+        var observer = new MySqlRuntimeCommandInterceptor();
+        if (failureMode != "success")
+        {
+            var probe = failureMode == "error"
+                ? "SELECT * FROM `runtime_missing_sync_probe`;"
+                : "SELECT `Id` FROM `runtime_setup_lock` WHERE `Id` = 1 FOR UPDATE;";
+
+            observer.InjectFirstCompactedPrepareGroup(
+                probe + " SET @runtime_sync_sentinel = 1;");
+        }
+
+        await using var context = CreateRuntimeContext(connectionString, observer);
+        context.Database.SetCommandTimeout(failureMode == "timeout" ? 1 : 60);
+        await context.Database.OpenConnectionAsync(CancellationToken.None);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        // WHY: Only explicit repair classification needs this lazy row-safety path;
+        // the default strict add would not reach the acquired-PREPARE probe.
+        builder.AddColumnIfNotExists<string>(
+            "Note", "runtime_sync_rows", type: "varchar(20)", nullable: false, defaultValue: "preserved",
+            policy: SafeMigrationPolicy.RepairIfSafe);
+
+        // Act
+        var result = ExecuteRuntimeSynchronousRecovery(context, observer, builder.Operations);
+
+        // Assert
+        if (failureMode != "success")
+        {
+            var exception = Assert.IsType<MySqlException>(result.Exception);
+            if (failureMode == "timeout")
+            {
+                Assert.Equal(MySqlErrorCode.CommandTimeoutExpired, exception.ErrorCode);
+                Assert.Equal(1, observer.InjectedCommandTimeout);
+            }
+            else
+            {
+                Assert.Equal(1146, exception.Number);
+            }
+
+            Assert.True(observer.CompactedPrepareGroupWasInjected);
+            Assert.True(observer.OriginalCompactedPrepareGroupPayloadBytes > 256);
             Assert.Equal(0, result.BodiesBeforeRecovery);
         }
         else

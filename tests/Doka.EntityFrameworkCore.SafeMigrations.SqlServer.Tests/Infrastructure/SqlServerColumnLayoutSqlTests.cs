@@ -165,6 +165,55 @@ public sealed class SqlServerColumnLayoutSqlTests
         Assert.DoesNotContain("sys.default_constraints", plan.StateExpression, StringComparison.Ordinal);
     }
 
+    /// <summary>Argument slices retain exact scalar bounds and reject malformed or extra tokens.</summary>
+    /// <param name="storeType">The authored physical scalar type.</param>
+    /// <param name="clrType">The corresponding CLR scalar family.</param>
+    /// <param name="expected">Whether the physical facets are supported.</param>
+    [Theory]
+    [InlineData("varchar(8000)", typeof(string), true)]
+    [InlineData("nvarchar(4000)", typeof(string), true)]
+    [InlineData("varchar(max)", typeof(string), true)]
+    [InlineData("decimal(12, 3)", typeof(decimal), true)]
+    [InlineData("numeric(38,0)", typeof(decimal), true)]
+    [InlineData("datetime2", typeof(DateTime), true)]
+    [InlineData("datetime2(0)", typeof(DateTime), true)]
+    [InlineData("time(7)", typeof(TimeSpan), true)]
+    [InlineData("varchar(8001)", typeof(string), false)]
+    [InlineData("nvarchar(4001)", typeof(string), false)]
+    [InlineData("varchar(32768)", typeof(string), false)]
+    [InlineData("char(max)", typeof(string), false)]
+    [InlineData("varchar()", typeof(string), false)]
+    [InlineData("varchar(1,2)", typeof(string), false)]
+    [InlineData("varchar(1", typeof(string), false)]
+    [InlineData("decimal", typeof(decimal), false)]
+    [InlineData("decimal()", typeof(decimal), false)]
+    [InlineData("decimal(12)", typeof(decimal), false)]
+    [InlineData("decimal(,3)", typeof(decimal), false)]
+    [InlineData("decimal(12,)", typeof(decimal), false)]
+    [InlineData("decimal(12,3,0)", typeof(decimal), false)]
+    [InlineData("decimal(0,0)", typeof(decimal), false)]
+    [InlineData("decimal(39,0)", typeof(decimal), false)]
+    [InlineData("decimal(12,13)", typeof(decimal), false)]
+    [InlineData("decimal(256,0)", typeof(decimal), false)]
+    [InlineData("decimal(+12,3)", typeof(decimal), false)]
+    [InlineData("datetime2()", typeof(DateTime), false)]
+    [InlineData("datetime2(8)", typeof(DateTime), false)]
+    [InlineData("time(1,2)", typeof(TimeSpan), false)]
+    [InlineData("int(4)", typeof(int), false)]
+    public void StoreTypeArgumentsPreserveExactFacetValidation(string storeType, Type clrType, bool expected)
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext(ConnectionString);
+        var catalog = CreateLayoutCatalog(context);
+        var definition = new ExpectedColumnDefinition("Value", clrType, true, storeType);
+
+        // Act
+        var actual = catalog.TryGetColumnStorageLayout(definition, out _);
+
+        // Assert
+        Assert.Equal(expected, actual);
+    }
+
     private static SqlServerSafeMigrationCatalogSqlBuilder CreateLayoutCatalog(
         DbContext context
     ) => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());

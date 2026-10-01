@@ -14,6 +14,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task Analyzer_OneHundredThousandMixedOperationsRemainBoundedOrderedAndComplete()
     {
         // Arrange
+        SqlServerLiveQualificationEvidence.WriteStage("mixed-100k", "fixture-setup");
         var connectionString = await Fixture.CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.sqlserver_stress_target (id int NOT NULL); "
@@ -22,6 +23,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
             + "INSERT INTO dbo.sqlserver_stress_alter VALUES ('short'); "
             + "CREATE TABLE dbo.sqlserver_stress_managed (id int NOT NULL PRIMARY KEY, "
             + "managed_value nvarchar(32) NOT NULL);");
+        SqlServerLiveQualificationEvidence.WriteStage("mixed-100k", "populate-source-rows");
         await PopulateStressModelManagedRowsAsync(connectionString);
         await using var context = CreateContext(connectionString);
         context.Database.SetCommandTimeout(PerformanceFixtureCommandTimeoutSeconds);
@@ -29,11 +31,13 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
         var expectation = LargeMigrationStressContract.Populate(builder, LargeMigrationStressDialect.SqlServer);
 
         // Act
+        SqlServerLiveQualificationEvidence.WriteStage("mixed-100k", "analyze");
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
             context, builder.Operations, new SafeMigrationRunOptions("sqlserver-large-mixed-migration"));
 
         // Assert
         expectation.AssertReport(report);
+        SqlServerLiveQualificationEvidence.WriteStage("mixed-100k", "completed");
     }
 
     /// <summary>
@@ -44,10 +48,12 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task ModelManagedData_FiftyThousandMixedRowsConvergeAndReplayIdempotently()
     {
         // Arrange
+        SqlServerLiveQualificationEvidence.WriteStage("managed-50k", "fixture-setup");
         var connectionString = await Fixture.CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.large_model_managed_rows (id int NOT NULL PRIMARY KEY, "
             + "managed_value nvarchar(32) NOT NULL);");
+        SqlServerLiveQualificationEvidence.WriteStage("managed-50k", "populate-source-rows");
         await PopulateLargeModelManagedRowsAsync(connectionString);
         await using var context = CreateContext(connectionString);
         context.Database.SetCommandTimeout(PerformanceFixtureCommandTimeoutSeconds);
@@ -58,18 +64,23 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
         var commands = context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model);
 
         // Act
+        SqlServerLiveQualificationEvidence.WriteStage("managed-50k", "initial-analysis");
         var initial = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(() => runner.AnalyzeAsync(
             context, builder.Operations, new SafeMigrationRunOptions("sqlserver-large-model-managed-data")));
 
+        SqlServerLiveQualificationEvidence.WriteStage("managed-50k", "initial-execution");
         var initialExecution = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations));
 
+        SqlServerLiveQualificationEvidence.WriteStage("managed-50k", "replay-execution");
         var replayExecution = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations));
 
+        SqlServerLiveQualificationEvidence.WriteStage("managed-50k", "replay-analysis");
         var replay = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(() => runner.AnalyzeAsync(
             context, builder.Operations, new SafeMigrationRunOptions("sqlserver-large-model-managed-data-replay")));
 
+        SqlServerLiveQualificationEvidence.WriteStage("managed-50k", "verify-rows");
         var rowCount = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.large_model_managed_rows;");
         var targetRowCount = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM dbo.large_model_managed_rows WHERE managed_value = N'target';");
@@ -86,6 +97,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
         Assert.Equal(expectation.FinalRowCount, rowCount);
         Assert.Equal(expectation.FinalRowCount, targetRowCount);
         Assert.Equal(0, deletedRangeCount);
+        SqlServerLiveQualificationEvidence.WriteStage("managed-50k", "completed");
     }
 
     /// <summary>
@@ -96,6 +108,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task FullRunner_LiveCatalogP95RemainsBoundedWithForeignObjectsAndPooling()
     {
         // Arrange
+        SqlServerLiveQualificationEvidence.WriteStage("catalog-p95", "fixture-setup");
         var databaseConnectionString = await Fixture.CreateDatabaseAsync();
         var connectionString = new SqlConnectionStringBuilder(databaseConnectionString)
         {
@@ -120,11 +133,14 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
         var environment = await context.GetService<ISafeMigrationProviderAnalyzer>().GetEnvironmentAsync(context);
 
         // Act
+        SqlServerLiveQualificationEvidence.WriteStage("catalog-p95", "clean-samples");
         var clean = await LivePerformanceEvidence.MeasureAsync(() =>
             runner.AnalyzeAsync(context, builder.Operations, options));
 
+        SqlServerLiveQualificationEvidence.WriteStage("catalog-p95", "create-foreign-objects");
         await ExecuteSqlAsync(connectionString,
             BuildSqlServerPerformanceTables("foreign_perf_", ForeignPerformanceTableCount, includeIndex: true));
+        SqlServerLiveQualificationEvidence.WriteStage("catalog-p95", "noisy-samples");
         var noisy = await LivePerformanceEvidence.MeasureAsync(() =>
             runner.AnalyzeAsync(context, builder.Operations, options));
 
@@ -143,6 +159,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
             noisy.LastReport.Assessments.Select(static value => value.Code));
         Assert.True(noisy.P95Milliseconds <= (clean.P95Milliseconds * 2d) + 250d,
             $"Noisy p95 {noisy.P95Milliseconds:F3} ms exceeded clean p95 {clean.P95Milliseconds:F3} ms.");
+        SqlServerLiveQualificationEvidence.WriteStage("catalog-p95", "completed");
     }
 
     private static string BuildSqlServerPerformanceTables(

@@ -4,6 +4,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
     ISafeMigrationProviderAnalyzer,
     ISafeMigrationProviderObjectIdentityNormalizer,
+    ISafeMigrationProviderOperationProjection,
     ISafeMigrationProjectedKeyAnalyzer,
     ISafeMigrationProjectedDependencyAnalyzer
 {
@@ -60,6 +61,27 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
     /// <inheritdoc />
     public bool IsObjectIdentityMismatch(SafeMigrationProviderAnalysis analysis)
         => analysis.Code is "default_schema_mismatch" or "identifier_collation_unproven";
+
+    /// <inheritdoc />
+    public bool PreservesExistingTableState(MigrationOperation operation) => false;
+
+    /// <inheritdoc />
+    public bool IsSequenceAwareAnalysis(
+        SafeMigrationOperation operation,
+        SafeMigrationProviderAnalysis analysis
+    )
+    {
+        // WHY: A positive binding names the unchanged physical column captured with this exact live match.
+        // Drops remove bindings, repairs invalidate the changed binding, and newly allocated columns use
+        // negative identities. Aggregate row-layout uncertainty must not erase this narrower certificate.
+        return !_columnMatchingEvidenceInvalidated
+            && analysis.ObservedState == SafeMigrationObservedState.Matching
+            && operation.Intent is EnsureColumnIntent column
+            && _projectedColumnLayouts.TryGetValue((column.Schema ?? "dbo", column.Table), out var layout)
+            && layout is not null
+            && layout.Bindings.TryGetValue(column.Definition.Name, out var identity)
+            && identity > 0;
+    }
 
     /// <inheritdoc />
     public SafeMigrationProviderAnalysis? ValidateOpaqueProviderPostcondition(
@@ -836,7 +858,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
         var code = reader.IsDBNull(4)
             ? state == SafeMigrationObservedState.Unsupported
                 ? plan.UnsupportedCode ?? "classified_unsupported"
-                : $"classified_{StateCode(state)}"
+                : StateCode(state)
             : reader.GetString(4);
 
         var evidence = plan.ModelManagedRowEvidenceExpression is null || reader.IsDBNull(5)
@@ -897,13 +919,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
 
     private static string StateCode(SafeMigrationObservedState state) => state switch
     {
-        SafeMigrationObservedState.Missing => "missing",
-        SafeMigrationObservedState.Matching => "matching",
-        SafeMigrationObservedState.Different => "different",
-        SafeMigrationObservedState.Unsupported => "unsupported",
-        SafeMigrationObservedState.DataBlocked => "data_blocked",
-        SafeMigrationObservedState.PrerequisiteMissing => "prerequisite_missing",
-        SafeMigrationObservedState.TransitionReady => "transition_ready",
+        SafeMigrationObservedState.Missing => "classified_missing",
+        SafeMigrationObservedState.Matching => "classified_matching",
+        SafeMigrationObservedState.Different => "classified_different",
+        SafeMigrationObservedState.Unsupported => "classified_unsupported",
+        SafeMigrationObservedState.DataBlocked => "classified_data_blocked",
+        SafeMigrationObservedState.PrerequisiteMissing => "classified_prerequisite_missing",
+        SafeMigrationObservedState.TransitionReady => "classified_transition_ready",
         _ => throw new ArgumentOutOfRangeException(nameof(state)),
     };
 

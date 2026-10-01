@@ -383,6 +383,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             or "real" or "smallint" or "smallmoney" or "tinyint";
     }
 
+    /// <summary>Parses supported physical scalar facets without materializing numeric argument tokens.</summary>
     private static bool TryParseStoreType(
         string value,
         out SqlServerColumnType type
@@ -391,11 +392,12 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         var storeType = value.Trim().ToLowerInvariant();
         var opening = storeType.IndexOf('(');
         var name = opening < 0 ? storeType : storeType[..opening].TrimEnd();
-        var arguments = opening < 0 || !storeType.EndsWith(')')
-            ? null
-            : storeType[(opening + 1)..^1];
+        // WHY: Canonical type names remain owned strings, but numeric arguments
+        // are consumed synchronously and need no substring or split-array snapshot.
+        var hasArguments = opening >= 0 && storeType.EndsWith(')');
+        var arguments = hasArguments ? storeType.AsSpan(opening + 1, storeType.Length - opening - 2) : default;
 
-        if (opening >= 0 && arguments is null)
+        if (opening >= 0 && !hasArguments)
         {
             type = default;
 
@@ -419,14 +421,14 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
         if (name is "char" or "nchar" or "varchar" or "nvarchar" or "binary" or "varbinary")
         {
-            if (arguments is null)
+            if (!hasArguments)
             {
                 type = default;
 
                 return false;
             }
 
-            if (arguments == "max")
+            if (arguments.SequenceEqual("max"))
             {
                 if (name is not ("varchar" or "nvarchar" or "varbinary"))
                 {
@@ -461,10 +463,12 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
         if (name is "decimal" or "numeric")
         {
-            var parts = arguments?.Split(',');
-            if (parts is not { Length: 2 }
-                || !byte.TryParse(parts[0].Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var p)
-                || !byte.TryParse(parts[1].Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var s))
+            var separator = arguments.IndexOf(',');
+            if (separator < 0 || arguments[(separator + 1)..].Contains(',')
+                || !byte.TryParse(
+                    arguments[..separator].Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var p)
+                || !byte.TryParse(
+                    arguments[(separator + 1)..].Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var s))
             {
                 type = default;
 
@@ -483,7 +487,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
         if (name is "datetime2" or "datetimeoffset" or "time")
         {
-            if (arguments is null)
+            if (!hasArguments)
             {
                 scale = 7;
             }
@@ -505,7 +509,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             }
         }
 
-        if (arguments is not null
+        if (hasArguments
             && name is not ("char" or "nchar" or "varchar" or "nvarchar" or "binary" or "varbinary"
                 or "decimal" or "numeric" or "datetime2" or "datetimeoffset" or "time"))
         {

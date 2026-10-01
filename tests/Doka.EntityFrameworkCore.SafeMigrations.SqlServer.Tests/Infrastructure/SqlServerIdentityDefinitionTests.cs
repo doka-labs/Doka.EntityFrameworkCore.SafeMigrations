@@ -136,6 +136,41 @@ public sealed class SqlServerIdentityDefinitionTests
         Assert.Equal(supported ? null : "identity_definition_unproven", plan.UnsupportedCode);
     }
 
+    /// <summary>Identity argument slices retain signed values and reject missing or extra fields.</summary>
+    /// <param name="identity">The authored seed and increment payload.</param>
+    /// <param name="supported">Whether the pair is a complete valid identity definition.</param>
+    [Theory]
+    [InlineData("1,1", true)]
+    [InlineData(" +1, -1 ", true)]
+    [InlineData("-9223372036854775808,9223372036854775807", true)]
+    [InlineData("", false)]
+    [InlineData("1", false)]
+    [InlineData("1,", false)]
+    [InlineData(",1", false)]
+    [InlineData("1,1,1", false)]
+    [InlineData("1,,1", false)]
+    [InlineData("1,0", false)]
+    [InlineData("9223372036854775808,1", false)]
+    [InlineData("1,not-a-number", false)]
+    public void IdentityArgumentsPreserveExactPairValidation(string identity, bool supported)
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext(ConnectionString);
+        var column = new ExpectedColumnDefinition("Id", typeof(long), false, "bigint")
+        {
+            ProviderAnnotations = IdentityAnnotations(identity),
+        };
+
+        var operation = new SafeMigrationOperation(new EnsureColumnIntent("identity_items", column),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        // Act
+        var plan = CreateIdentityCatalog(context).Build(operation);
+
+        // Assert
+        Assert.Equal(!supported, plan.IsStaticallyUnsupported);
+    }
+
     /// <summary>Shares the occupied-slot prerequisite and lossless, nonthrowing identity metadata proof.</summary>
     [Fact]
     public void IdentityCatalog_ProvesTheSlotAndAllAuthoredMetadataBeforeDdl()

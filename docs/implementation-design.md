@@ -841,6 +841,10 @@ The runtime path has:
   UTF-8 bytes and the largest previous single setup/body payload, retaining
   large strings by reference and preserving original scope limits, opaque
   provider setup, body and independent cleanup boundaries;
+- direct final-buffer emission of owned prepared assignments with their
+  immediate control suffixes, avoiding both separate transport and large
+  completed-string copies; fused controls retain their original logical
+  fragment count and do not include opaque provider setup, body or cleanup;
 - at most one immutable decision-SQL cache entry per scoped MySQL/MariaDB
   handler, keyed only by operation kind, policy and structural repair
   capability; no operation, model, live state or row-safety evidence is cached;

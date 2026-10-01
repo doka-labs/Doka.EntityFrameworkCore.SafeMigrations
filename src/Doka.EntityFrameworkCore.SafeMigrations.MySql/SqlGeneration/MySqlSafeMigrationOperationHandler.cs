@@ -5,6 +5,9 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
     private const string HandlerIdentifier = "Doka.EntityFrameworkCore.SafeMigrations.MySql.SafeMigrationOperation";
     private const string IndexPrefixLengthAnnotation = "Doka:MySql:IndexPrefixLength";
     private const string PreparedStatementName = "doka_sm_statement";
+    private const string PrepareStatementSql = "PREPARE " + PreparedStatementName + " FROM @doka_sm_sql;";
+    private const string EvaluatePreparedStatementSql = PrepareStatementSql
+        + "EXECUTE " + PreparedStatementName + ";DEALLOCATE PREPARE " + PreparedStatementName + ";";
     private static readonly IReadOnlyList<ExpectedIndexDefinition> s_emptyUniqueIndexes = [];
 
     private readonly MySqlSafeMigrationCatalogSqlBuilder _catalogSqlBuilder;
@@ -103,6 +106,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             BuildAssertionSetupSql(),
         };
 
+        var fusedSetupFragmentCount = 0;
         if (runtimePlan.RequiresLazyStateEvaluation)
         {
             if (runtimePlan.CurrentDatabaseQualificationExpression is not null)
@@ -133,9 +137,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             if (runtimePlan.StateEvaluationGuardFailureExpression is not null)
             {
                 setupCommands.Add(BuildGuardEvaluationAssignment(runtimePlan, renderedParameterValues));
-                setupCommands.Add($"PREPARE {PreparedStatementName} FROM @doka_sm_sql;");
-                setupCommands.Add($"EXECUTE {PreparedStatementName};");
-                setupCommands.Add($"DEALLOCATE PREPARE {PreparedStatementName};");
+                fusedSetupFragmentCount += 3;
             }
 
             if (runtimePlan.DataProbe is not null)
@@ -143,15 +145,11 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
                 setupCommands.Add(BuildTransitionEligibilityAssignment(runtimePlan, renderedParameterValues));
                 setupCommands.Add(BuildDataProbeRequiredAssignment(runtimePlan, renderedParameterValues));
                 setupCommands.Add(BuildDataProbeEvaluationAssignment(runtimePlan, renderedParameterValues));
-                setupCommands.Add($"PREPARE {PreparedStatementName} FROM @doka_sm_sql;");
-                setupCommands.Add($"EXECUTE {PreparedStatementName};");
-                setupCommands.Add($"DEALLOCATE PREPARE {PreparedStatementName};");
+                fusedSetupFragmentCount += 3;
             }
 
             setupCommands.Add(BuildStateEvaluationAssignment(runtimePlan, renderedParameterValues));
-            setupCommands.Add($"PREPARE {PreparedStatementName} FROM @doka_sm_sql;");
-            setupCommands.Add($"EXECUTE {PreparedStatementName};");
-            setupCommands.Add($"DEALLOCATE PREPARE {PreparedStatementName};");
+            fusedSetupFragmentCount += 3;
         }
         else
         {
@@ -177,8 +175,9 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             setupCommands.Add(
                 BuildPreparedSqlAssignment(
                     command.BodyCommand,
-                    GetRepairBody(operation, runtimePlan, repair, command, commandOrdinal: 0)));
-            setupCommands.Add($"PREPARE {PreparedStatementName} FROM @doka_sm_sql;");
+                    GetRepairBody(operation, runtimePlan, repair, command, commandOrdinal: 0),
+                    prepareInSetup: true));
+            fusedSetupFragmentCount++;
         }
 
         var bodyCommand = BuildGuardedBaselineBody(
@@ -198,7 +197,8 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             bodyCommand,
             cleanupCommands,
             providerSetupOffset,
-            providerSetupCount);
+            providerSetupCount,
+            fusedSetupFragmentCount);
 
         var scopedCommand = MySqlMigrationCommandSpec.CreateScoped(
             compactedSetup,
@@ -405,7 +405,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         return BuildHexAssignment(
             "SET @doka_sm_sql = CASE WHEN @doka_sm_state IS NULL THEN CONVERT(0x",
             statement,
-            " USING utf8mb4) ELSE 'DO 0' END;");
+            " USING utf8mb4) ELSE 'DO 0' END;" + EvaluatePreparedStatementSql);
     }
 
     private static string BuildTransitionEligibilityAssignment(
@@ -437,7 +437,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         return BuildHexAssignment(
             "SET @doka_sm_sql = CASE WHEN @doka_sm_data_probe_required THEN CONVERT(0x",
             statement,
-            " USING utf8mb4) ELSE 'DO 0' END;");
+            " USING utf8mb4) ELSE 'DO 0' END;" + EvaluatePreparedStatementSql);
     }
 
     private static string BuildGuardEvaluationAssignment(
@@ -456,7 +456,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         return BuildHexAssignment(
             "SET @doka_sm_sql = CASE WHEN @doka_sm_state IS NULL THEN CONVERT(0x",
             statement,
-            " USING utf8mb4) ELSE 'DO 0' END;");
+            " USING utf8mb4) ELSE 'DO 0' END;" + EvaluatePreparedStatementSql);
     }
 
     private static string BuildInitialLazyStateAssignment(
@@ -468,14 +468,21 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         : "SET @doka_sm_state = CASE WHEN NOT @doka_sm_prerequisite_ok THEN 'prerequisite_missing' "
             + "ELSE NULL END, @doka_sm_repair_ok = FALSE;";
 
+    /// <summary>Encodes the guarded provider body once, optionally preparing it in the same setup dispatch.</summary>
+    /// <param name="applyDdl">The provider-rendered apply statement.</param>
+    /// <param name="repairDdl">The separately guarded safe repair statement, when available.</param>
+    /// <param name="prepareInSetup">Whether the immediate PREPARE belongs to this owned setup assignment.</param>
+    /// <returns>The exact assignment and optional control suffix, never the guarded body execution.</returns>
     private static string BuildPreparedSqlAssignment(
         string applyDdl,
-        string? repairDdl
+        string? repairDdl,
+        bool prepareInSetup = false
     )
     {
         const string applyPrefix = "SET @doka_sm_sql = CASE WHEN @doka_sm_action = 'apply' THEN CONVERT(0x";
         const string repairPrefix = " USING utf8mb4) WHEN @doka_sm_action = 'repair' THEN CONVERT(0x";
-        const string suffix = " USING utf8mb4) ELSE 'DO 0' END;";
+        const string assignmentSuffix = " USING utf8mb4) ELSE 'DO 0' END;";
+        var suffix = prepareInSetup ? assignmentSuffix + PrepareStatementSql : assignmentSuffix;
 
         var repairMaximumByteCount = repairDdl is null ? 0 : Encoding.UTF8.GetMaxByteCount(repairDdl.Length);
         var maximumByteCount = checked(
@@ -502,7 +509,8 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
                     Buffer: buffer,
                     ApplyByteCount: applyByteCount,
                     RepairByteCount: repairByteCount,
-                    HasRepair: repairDdl is not null),
+                    HasRepair: repairDdl is not null,
+                    Suffix: suffix),
                 static (destination, state) =>
                 {
                     applyPrefix.AsSpan().CopyTo(destination);
@@ -524,7 +532,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
                         offset += state.RepairByteCount * 2;
                     }
 
-                    suffix.AsSpan().CopyTo(destination[offset..]);
+                    state.Suffix.AsSpan().CopyTo(destination[offset..]);
                 });
         }
         finally
@@ -552,6 +560,9 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             // for large guarded migrations. Write both representations into
             // the final immutable command while retaining byte-exact SQL-mode-
             // independent prepared statements.
+            // WHY: Append immediate owned PREPARE/EXECUTE/DEALLOCATE bytes in this allocation,
+            // not by copying the completed assignment. Semicolons preserve dependent SET evaluation,
+            // and the original logical fragment count still gates the smaller transport sequence.
             return string.Create(
                 checked(prefix.Length + hexadecimalLength + suffix.Length),
                 (Prefix: prefix, Buffer: buffer, ByteCount: byteCount, Suffix: suffix),
@@ -644,8 +655,10 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             return new BaselineFragments([], NormalizePreparedBody(command.CommandText), []);
         }
 
-        var setupCommands = new List<string>(command.Fragments.Count);
-        var cleanupCommands = new List<string>(command.Fragments.Count);
+        // WHY: Most provider baselines contain only a body; empty setup/cleanup
+        // roles must not allocate a list and backing array for every column.
+        List<string>? setupCommands = null;
+        List<string>? cleanupCommands = null;
         string? bodyCommand = null;
 
         foreach (var fragment in command.Fragments)
@@ -654,7 +667,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             switch (fragment.Kind)
             {
                 case MySqlMigrationCommandFragmentKind.Setup:
-                    setupCommands.Add(commandText);
+                    (setupCommands ??= []).Add(commandText);
                     break;
                 case MySqlMigrationCommandFragmentKind.Body when bodyCommand is null:
                     bodyCommand = NormalizePreparedBody(commandText);
@@ -663,7 +676,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
                     throw new InvalidOperationException(
                         "A provider-rendered MySQL baseline contains more than one body fragment.");
                 case MySqlMigrationCommandFragmentKind.Cleanup:
-                    cleanupCommands.Add(commandText);
+                    (cleanupCommands ??= []).Add(commandText);
                     break;
                 default:
                     throw new InvalidOperationException(
@@ -677,7 +690,11 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             throw new InvalidOperationException("A provider-rendered MySQL baseline does not contain a body fragment.");
         }
 
-        return new BaselineFragments(setupCommands, bodyCommand, cleanupCommands);
+        // WHY: Coalesce through the immutable interface; a List-typed [] fallback would allocate empty lists.
+        return new BaselineFragments(
+            (IReadOnlyList<string>?)setupCommands ?? Array.Empty<string>(),
+            bodyCommand,
+            (IReadOnlyList<string>?)cleanupCommands ?? Array.Empty<string>());
     }
 
     private static string NormalizePreparedBody(

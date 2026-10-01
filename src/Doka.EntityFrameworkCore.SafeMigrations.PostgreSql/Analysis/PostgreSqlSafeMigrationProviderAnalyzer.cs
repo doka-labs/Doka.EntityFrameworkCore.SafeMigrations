@@ -993,7 +993,7 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
 
     private static SafeMigrationProviderAnalysis ShortCircuitAnalysis(
         SafeMigrationObservedState state
-    ) => new(state, SafeMigrationRepairCapability.None, false, $"classified_{StateCode(state)}");
+    ) => new(state, SafeMigrationRepairCapability.None, false, ClassificationCode(state));
 
     private static async Task ReadAnalysisAsync(
         SafeMigrationCatalogBatch batch,
@@ -1027,7 +1027,7 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
                     var code = reader.IsDBNull(4)
                         ? state == SafeMigrationObservedState.Unsupported
                             ? plan.UnsupportedCode ?? "classified_unsupported"
-                            : $"classified_{StateCode(state)}"
+                            : ClassificationCode(state)
                         : reader.GetString(4);
 
                     var evidence = plan.ModelManagedRowEvidenceExpression is null
@@ -1384,17 +1384,17 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
         _ => throw new InvalidOperationException("The PostgreSQL SafeMigrations classifier returned an unknown state."),
     };
 
-    private static string StateCode(
+    private static string ClassificationCode(
         SafeMigrationObservedState state
     ) => state switch
     {
-        SafeMigrationObservedState.Missing => "missing",
-        SafeMigrationObservedState.Matching => "matching",
-        SafeMigrationObservedState.Different => "different",
-        SafeMigrationObservedState.Unsupported => "unsupported",
-        SafeMigrationObservedState.DataBlocked => "data_blocked",
-        SafeMigrationObservedState.PrerequisiteMissing => "prerequisite_missing",
-        SafeMigrationObservedState.TransitionReady => "transition_ready",
+        SafeMigrationObservedState.Missing => "classified_missing",
+        SafeMigrationObservedState.Matching => "classified_matching",
+        SafeMigrationObservedState.Different => "classified_different",
+        SafeMigrationObservedState.Unsupported => "classified_unsupported",
+        SafeMigrationObservedState.DataBlocked => "classified_data_blocked",
+        SafeMigrationObservedState.PrerequisiteMissing => "classified_prerequisite_missing",
+        SafeMigrationObservedState.TransitionReady => "classified_transition_ready",
         _ => throw new ArgumentOutOfRangeException(nameof(state)),
     };
 
@@ -1453,7 +1453,7 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
         string schema,
         string? table,
         string name
-    ) => new(kind, schema, table, name, $"unexpected_{ObjectCode(kind)}");
+    ) => new(kind, schema, table, name, UnexpectedObjectCode(kind));
 
     private static SafeMigrationDatabaseObjectKind ParseObjectKind(
         string value
@@ -1470,17 +1470,17 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
             "The PostgreSQL unexpected-object inventory returned an unknown object kind."),
     };
 
-    private static string ObjectCode(
+    private static string UnexpectedObjectCode(
         SafeMigrationDatabaseObjectKind kind
     ) => kind switch
     {
-        SafeMigrationDatabaseObjectKind.Table => "table",
-        SafeMigrationDatabaseObjectKind.Column => "column",
-        SafeMigrationDatabaseObjectKind.Index => "index",
-        SafeMigrationDatabaseObjectKind.PrimaryKey => "primary_key",
-        SafeMigrationDatabaseObjectKind.UniqueConstraint => "unique_constraint",
-        SafeMigrationDatabaseObjectKind.CheckConstraint => "check_constraint",
-        SafeMigrationDatabaseObjectKind.ForeignKey => "foreign_key",
+        SafeMigrationDatabaseObjectKind.Table => "unexpected_table",
+        SafeMigrationDatabaseObjectKind.Column => "unexpected_column",
+        SafeMigrationDatabaseObjectKind.Index => "unexpected_index",
+        SafeMigrationDatabaseObjectKind.PrimaryKey => "unexpected_primary_key",
+        SafeMigrationDatabaseObjectKind.UniqueConstraint => "unexpected_unique_constraint",
+        SafeMigrationDatabaseObjectKind.CheckConstraint => "unexpected_check_constraint",
+        SafeMigrationDatabaseObjectKind.ForeignKey => "unexpected_foreign_key",
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 

@@ -3,8 +3,13 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 {
     private readonly Dictionary<(string Schema, string Table), ColumnLayoutState?> _projectedColumnLayouts = [];
+    private bool _columnMatchingEvidenceInvalidated;
 
-    private void ResetProjectedColumnLayouts() => _projectedColumnLayouts.Clear();
+    private void ResetProjectedColumnLayouts()
+    {
+        _projectedColumnLayouts.Clear();
+        _columnMatchingEvidenceInvalidated = false;
+    }
 
     /// <summary>Reads compact layout aggregates and requested physical identities in bounded metadata groups.</summary>
     /// <param name="connection">The open, identity-validated analysis connection.</param>
@@ -101,8 +106,10 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             }
         }
 
+        // WHY: The requested inventory is frozen here. Stream it into bounded chunks
+        // instead of retaining a second complete tuple array alongside the catalog maps.
         var bindings = requested.SelectMany(static pair => pair.Value.Select(name =>
-            (pair.Key.Schema, pair.Key.Table, Name: name))).ToArray();
+            (pair.Key.Schema, pair.Key.Table, Name: name)));
 
         foreach (var chunk in bindings.Chunk(SafeMigrationCatalogQueryLimits.MaximumInventoryValues))
         {
@@ -375,6 +382,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     else
                     {
                         layout.IsKnown = false;
+                        layout.Bindings.Remove(column.Definition.Name);
                     }
                 }
 
@@ -383,15 +391,20 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 DropProjectedLayoutColumn(column.Schema, column.Table, column.Name);
                 break;
             case RenameColumnIntent column:
+                // WHY: A rename can reuse a previously dropped name. Its positive physical binding then
+                // belongs to another original column, not to the immutable live match for the reused name.
+                _columnMatchingEvidenceInvalidated = true;
                 RenameProjectedLayoutColumn(column.Schema, column.Table, column.Name, column.NewName);
                 break;
             case AlterColumnIntent column:
                 InvalidateProjectedColumnLayout(column.Schema, column.Table);
+                RemoveProjectedMatchingColumnBinding(column.Schema, column.Table, column.Definition.Name);
                 break;
             case DropTableIntent table:
                 _projectedColumnLayouts[(table.Schema ?? "dbo", table.Table)] = null;
                 break;
             case RenameTableIntent table:
+                _columnMatchingEvidenceInvalidated = true;
                 TransferProjectedColumnLayout(table.Schema, table.Name,
                     table.NewSchema ?? table.Schema, table.NewName ?? table.Name);
                 break;
@@ -419,6 +432,10 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         MigrationOperation operation
     )
     {
+        // WHY: A captured exact match survives a safe drop of another column, not arbitrary provider SQL.
+        // Do not let this narrow certificate bypass Core's opaque-provider boundary after an unknown effect.
+        _columnMatchingEvidenceInvalidated = true;
+
         if (_projectedColumnLayouts.Count == 0)
         {
             return;
@@ -522,6 +539,17 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         if (_projectedColumnLayouts.TryGetValue((schema ?? "dbo", table), out var layout) && layout is not null)
         {
             layout.IsKnown = false;
+        }
+    }
+
+    /// <summary>
+    /// Invalidates the original exact-match certificate without discarding unrelated physical identities.
+    /// </summary>
+    private void RemoveProjectedMatchingColumnBinding(string? schema, string table, string name)
+    {
+        if (_projectedColumnLayouts.TryGetValue((schema ?? "dbo", table), out var layout) && layout is not null)
+        {
+            layout.Bindings.Remove(name);
         }
     }
 

@@ -16,13 +16,17 @@ internal static class MySqlSafeMigrationSetupCommandCompactor
     /// <param name="cleanupCommands">The independently attempted cleanup sequence.</param>
     /// <param name="providerSetupOffset">The first opaque provider setup fragment.</param>
     /// <param name="providerSetupCount">The number of consecutive opaque provider setup fragments.</param>
+    /// <param name="fusedSetupFragmentCount">
+    /// The original control fragments already emitted directly into owned assignment strings.
+    /// </param>
     /// <returns>The compacted sequence, or the original sequence when no grouping is possible.</returns>
     internal static IReadOnlyList<string> Compact(
         IReadOnlyList<string> setupCommands,
         string bodyCommand,
         IReadOnlyList<string> cleanupCommands,
         int providerSetupOffset,
-        int providerSetupCount
+        int providerSetupCount,
+        int fusedSetupFragmentCount = 0
     )
     {
         ArgumentNullException.ThrowIfNull(setupCommands);
@@ -32,6 +36,18 @@ internal static class MySqlSafeMigrationSetupCommandCompactor
         ArgumentOutOfRangeException.ThrowIfGreaterThan(providerSetupOffset, setupCommands.Count);
         ArgumentOutOfRangeException.ThrowIfNegative(providerSetupCount);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(providerSetupCount, setupCommands.Count - providerSetupOffset);
+        ArgumentOutOfRangeException.ThrowIfNegative(fusedSetupFragmentCount);
+
+        if (fusedSetupFragmentCount > 0
+            && (long)setupCommands.Count + cleanupCommands.Count + 1 + fusedSetupFragmentCount
+            > MaximumOriginalFragmentCount)
+        {
+            // WHY: Returning an already-fused list would let CreateScoped accept an originally
+            // oversized scope. Reject before compaction; the physical count cannot prove admission.
+            throw new ArgumentException(
+                "The original MySQL migration scope exceeds the supported fragment count.",
+                nameof(setupCommands));
+        }
 
         if (!FitsOriginalScope(setupCommands, bodyCommand, cleanupCommands))
         {

@@ -58,7 +58,8 @@ public sealed class SqlServerProjectedColumnLayoutTests
         var analyzer = Analyzer(context);
         CaptureLayout(analyzer, 2, 5004, true);
         CaptureBinding(analyzer, "Removed", 2);
-        var projection = new SafeMigrationPreflightProjection(projectedDependencyAnalyzer: analyzer);
+        var projection = new SafeMigrationPreflightProjection(
+            providerOperationProjection: analyzer, projectedDependencyAnalyzer: analyzer);
         var drop = new SafeMigrationOperation(new DropColumnIntent("Removed", "layout_probe"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
@@ -74,6 +75,34 @@ public sealed class SqlServerProjectedColumnLayoutTests
         Assert.Equal("column_layout_unproven", result.Code);
         Assert.Equal(SafeMigrationAction.RejectUnsupported, Decision(column, result).Action);
         Assert.False(result.IsOpaqueProjectionUnknown);
+    }
+
+    /// <summary>An unrelated accepted drop does not invalidate an existing column's exact live match.</summary>
+    [Fact]
+    public void AcceptedUnrelatedDrop_PreservesExistingMatchingColumn()
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext(ConnectionString);
+        var analyzer = Analyzer(context);
+        CaptureLayout(analyzer, 2, 8, true);
+        CaptureBinding(analyzer, "Id", 1);
+        CaptureBinding(analyzer, "Removed", 2);
+        var projection = new SafeMigrationPreflightProjection(
+            providerOperationProjection: analyzer, projectedDependencyAnalyzer: analyzer);
+        var drop = new SafeMigrationOperation(new DropColumnIntent("Removed", "layout_probe"),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var matching = Live(SafeMigrationObservedState.Matching);
+        projection.Observe(drop, matching, matching, Decision(drop, matching));
+        var column = new SafeMigrationOperation(new EnsureColumnIntent("layout_probe",
+            new ExpectedColumnDefinition("Id", typeof(int), false, "int")), SafeMigrationPolicy.ThrowIfDifferent);
+
+        // Act
+        var result = projection.Project(column, matching);
+
+        // Assert
+        Assert.Equal(SafeMigrationObservedState.Matching, result.ObservedState);
+        Assert.Equal(SafeMigrationAction.NoOp, Decision(column, result).Action);
     }
 
     /// <summary>Unknown state without captured layout cannot be reclassified as a provider rejection.</summary>
@@ -211,6 +240,142 @@ public sealed class SqlServerProjectedColumnLayoutTests
         }
     }
 
+    /// <summary>Changed, removed or opaque physical identities cannot reuse a captured exact match.</summary>
+    /// <param name="mutation">The accepted change preceding the stale live result.</param>
+    [Theory]
+    [InlineData("column_drop")]
+    [InlineData("column_alter")]
+    [InlineData("table_drop")]
+    [InlineData("provider")]
+    [InlineData("sql")]
+    public void ChangedColumnIdentity_DoesNotReuseStaleMatching(string mutation)
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext(ConnectionString);
+        var analyzer = Analyzer(context);
+        CaptureLayout(analyzer, 2, 8, true);
+        CaptureBinding(analyzer, "Id", 1);
+        var projection = new SafeMigrationPreflightProjection(
+            providerOperationProjection: analyzer, projectedDependencyAnalyzer: analyzer);
+        var column = new SafeMigrationOperation(new EnsureColumnIntent("layout_probe",
+            new ExpectedColumnDefinition("Id", typeof(int), false, "int")), SafeMigrationPolicy.ThrowIfDifferent);
+
+        var matching = Live(SafeMigrationObservedState.Matching);
+        if (mutation is "provider" or "sql")
+        {
+            projection.ObserveProviderPostcondition(mutation == "sql"
+                ? new SqlOperation { Sql = "SELECT 1;" }
+                : new AlterTableOperation { Name = "layout_probe" });
+        }
+        else
+        {
+            SafeMigrationIntent intent = mutation switch
+            {
+                "column_drop" => new DropColumnIntent("Id", "layout_probe"),
+                "table_drop" => new DropTableIntent("layout_probe"),
+                "column_alter" => new AlterColumnIntent("layout_probe",
+                    new ExpectedColumnDefinition("Id", typeof(int), true, "int")),
+                _ => throw new ArgumentOutOfRangeException(nameof(mutation)),
+            };
+
+            var operation = new SafeMigrationOperation(intent, SafeMigrationPolicy.RepairIfSafe);
+            var accepted = mutation == "column_alter"
+                ? new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
+                    SafeMigrationRepairCapability.Safe, false, "test_safe_repair")
+                : matching;
+
+            projection.Observe(operation, matching, accepted, Decision(operation, accepted));
+        }
+
+        // Act
+        var result = projection.Project(column, matching);
+        var reusesLiveMatch = analyzer.IsSequenceAwareAnalysis(column, matching);
+
+        // Assert
+        Assert.False(reusesLiveMatch);
+        Assert.NotEqual(SafeMigrationObservedState.Matching, result.ObservedState);
+    }
+
+    /// <summary>A renamed physical column or table cannot inherit another object's original match.</summary>
+    /// <param name="renameTable">Whether the reused name belongs to a table instead of a column.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void DropThenRenameToOriginalName_DoesNotReuseAnotherPhysicalIdentity(bool renameTable)
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext(ConnectionString);
+        var analyzer = Analyzer(context);
+        CaptureLayout(analyzer, 2, 8, true);
+        CaptureBinding(analyzer, "Id", 1);
+        CaptureBinding(analyzer, "Replacement", 2);
+        var projection = new SafeMigrationPreflightProjection(
+            providerOperationProjection: analyzer, projectedDependencyAnalyzer: analyzer);
+        var matching = Live(SafeMigrationObservedState.Matching);
+        var drop = new SafeMigrationOperation(renameTable
+            ? new DropTableIntent("layout_probe")
+            : new DropColumnIntent("Id", "layout_probe"), SafeMigrationPolicy.ThrowIfDifferent);
+
+        var rename = new SafeMigrationOperation(renameTable
+            ? new RenameTableIntent("source", "layout_probe")
+            : new RenameColumnIntent("Replacement", "layout_probe", "Id"), SafeMigrationPolicy.ThrowIfDifferent);
+
+        if (renameTable)
+        {
+            CaptureLayout(analyzer, 1, 4, true, tableName: "source");
+            CaptureBinding(analyzer, "Id", 1, tableName: "source");
+        }
+
+        projection.Observe(drop, matching, matching, Decision(drop, matching));
+        projection.Observe(rename, matching, matching, Decision(rename, matching));
+        var column = new SafeMigrationOperation(new EnsureColumnIntent("layout_probe",
+            new ExpectedColumnDefinition("Id", typeof(int), false, "int")), SafeMigrationPolicy.ThrowIfDifferent);
+
+        // Act
+        var reusesLiveMatch = analyzer.IsSequenceAwareAnalysis(column, matching);
+        var result = projection.Project(column, matching);
+
+        // Assert
+        Assert.False(reusesLiveMatch);
+        Assert.NotEqual(SafeMigrationObservedState.Matching, result.ObservedState);
+    }
+
+    /// <summary>Recreated columns have new identities and cannot reuse the removed table's captured match.</summary>
+    [Fact]
+    public void RecreatedTableColumn_DoesNotReuseHistoricalMatching()
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext(ConnectionString);
+        var analyzer = Analyzer(context);
+        CaptureLayout(analyzer, 1, 4, true);
+        CaptureBinding(analyzer, "Id", 1);
+        var projection = new SafeMigrationPreflightProjection(
+            providerOperationProjection: analyzer, projectedDependencyAnalyzer: analyzer);
+        var matching = Live(SafeMigrationObservedState.Matching);
+        var drop = new SafeMigrationOperation(new DropTableIntent("layout_probe"),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        projection.Observe(drop, matching, matching, Decision(drop, matching));
+        var create = new SafeMigrationOperation(new EnsureTableIntent(new ExpectedTableDefinition("layout_probe",
+            [new ExpectedColumnDefinition("Id", typeof(int), true, "int")]), SafeMigrationTableMode.StrictDefinition),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var missing = Live(SafeMigrationObservedState.Missing);
+
+        projection.Observe(create, missing, missing, Decision(create, missing));
+        var column = new SafeMigrationOperation(new EnsureColumnIntent("layout_probe",
+            new ExpectedColumnDefinition("Id", typeof(int), false, "int")), SafeMigrationPolicy.ThrowIfDifferent);
+
+        // Act
+        var result = projection.Project(column, matching);
+        var reusesLiveMatch = analyzer.IsSequenceAwareAnalysis(column, matching);
+
+        // Assert
+        Assert.False(reusesLiveMatch);
+        Assert.Equal(SafeMigrationObservedState.Different, result.ObservedState);
+        Assert.Equal(SafeMigrationAction.RejectDifferent, Decision(column, result).Action);
+    }
+
     private static SqlServerSafeMigrationProviderAnalyzer Analyzer(DbContext context)
         => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
@@ -241,7 +406,8 @@ public sealed class SqlServerProjectedColumnLayoutTests
         SqlServerSafeMigrationProviderAnalyzer analyzer,
         int columns,
         int fixedBytes,
-        bool known
+        bool known,
+        string tableName = "layout_probe"
     )
     {
         using var table = new DataTable();
@@ -253,7 +419,7 @@ public sealed class SqlServerProjectedColumnLayoutTests
         table.Columns.Add("variables", typeof(int));
         table.Columns.Add("clustered", typeof(int));
         table.Columns.Add("known", typeof(bool));
-        table.Rows.Add("dbo", "layout_probe", columns, fixedBytes, 0, 0, 0, known);
+        table.Rows.Add("dbo", tableName, columns, fixedBytes, 0, 0, 0, known);
 
         using var reader = table.CreateDataReader();
 
@@ -264,7 +430,8 @@ public sealed class SqlServerProjectedColumnLayoutTests
     private static void CaptureBinding(
         SqlServerSafeMigrationProviderAnalyzer analyzer,
         string name,
-        int identity
+        int identity,
+        string tableName = "layout_probe"
     )
     {
         using var table = new DataTable();
@@ -274,7 +441,7 @@ public sealed class SqlServerProjectedColumnLayoutTests
         table.Columns.Add("identity", typeof(int));
         table.Columns.Add("variable", typeof(int));
         table.Columns.Add("clustered", typeof(bool));
-        table.Rows.Add("dbo", "layout_probe", name, identity, 0, false);
+        table.Rows.Add("dbo", tableName, name, identity, 0, false);
 
         using var reader = table.CreateDataReader();
 

@@ -199,6 +199,104 @@ public sealed class MySqlSetupCommandCompactorTests
         Assert.Equal(string.Concat(setup) + body + "DO 0;DO 0;", scope.CommandText);
     }
 
+    /// <summary>Directly fused controls still count toward the original provider fragment ceiling.</summary>
+    /// <param name="fusedFragments">The controls already included in final assignment allocations.</param>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(3)]
+    [InlineData(6)]
+    [InlineData(9)]
+    [InlineData(10)]
+    public void FusedControlsRetainExactOriginalFragmentAdmission(int fusedFragments)
+    {
+        // Arrange
+        var setup = Enumerable.Repeat("DO 0;", 125 - fusedFragments).ToArray();
+        var body = new string('x', 100);
+
+        // Act
+        var compacted = MySqlSafeMigrationSetupCommandCompactor.Compact(
+            setup, body, ["DO 0;", "DO 0;"], setup.Length, 0, fusedFragments);
+
+        var scope = MySqlMigrationCommandSpec.CreateScoped(compacted, body, ["DO 0;", "DO 0;"]);
+
+        // Assert
+        Assert.True(compacted.Count < setup.Length);
+        Assert.Equal(string.Concat(setup) + body + "DO 0;DO 0;", scope.CommandText);
+    }
+
+    /// <summary>A physically small fused scope cannot hide an originally oversized sequence.</summary>
+    /// <param name="fusedFragments">The controls removed from the physical fragment list.</param>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(3)]
+    [InlineData(6)]
+    [InlineData(9)]
+    [InlineData(10)]
+    [InlineData(int.MaxValue)]
+    public void FusedControlsRejectOriginalFragmentOverflow(int fusedFragments)
+    {
+        // Arrange
+        var count = fusedFragments == int.MaxValue ? 1 : 126 - fusedFragments;
+        var setup = Enumerable.Repeat("DO 0;", count).ToArray();
+
+        // Act
+        var exception = Record.Exception(() => MySqlSafeMigrationSetupCommandCompactor.Compact(
+            setup, "DO 0;", ["DO 0;", "DO 0;"], setup.Length, 0, fusedFragments));
+
+        // Assert
+        Assert.IsType<ArgumentException>(exception);
+    }
+
+    /// <summary>Negative fusion accounting cannot weaken the original scope admission.</summary>
+    [Fact]
+    public void NegativeFusedFragmentCountIsRejected()
+    {
+        // Arrange
+        string[] setup = ["DO 0;"];
+
+        // Act
+        var exception = Record.Exception(() => MySqlSafeMigrationSetupCommandCompactor.Compact(
+            setup, "DO 0;", ["DO 0;"], 1, 0, fusedSetupFragmentCount: -1));
+
+        // Assert
+        Assert.IsType<ArgumentOutOfRangeException>(exception);
+    }
+
+    /// <summary>Fusion preserves the provider's exact full-scope text ceiling and its rejection.</summary>
+    /// <param name="textLength">The complete original SQL length, including body and cleanup.</param>
+    /// <param name="accepted">Whether the original text fits the provider ceiling.</param>
+    [Theory]
+    [InlineData(1_048_576, true)]
+    [InlineData(1_048_577, false)]
+    public void FusedControlsRetainOriginalTextAdmission(int textLength, bool accepted)
+    {
+        // Arrange
+        string[] setup = [new string('x', textLength - 15)];
+        MySqlMigrationCommandSpec? scope = null;
+
+        // Act
+        var exception = Record.Exception(() =>
+        {
+            var compacted = MySqlSafeMigrationSetupCommandCompactor.Compact(
+                setup, "DO 0;", ["DO 0;", "DO 0;"], 1, 0, fusedSetupFragmentCount: 3);
+
+            scope = MySqlMigrationCommandSpec.CreateScoped(compacted, "DO 0;", ["DO 0;", "DO 0;"]);
+        });
+
+        // Assert
+        if (accepted)
+        {
+            Assert.Null(exception);
+            Assert.NotNull(scope);
+            Assert.Equal(textLength, scope.CommandText.Length);
+        }
+        else
+        {
+            Assert.IsType<ArgumentException>(exception);
+            Assert.Null(scope);
+        }
+    }
+
     /// <summary>Already minimal inputs are returned unchanged without an extra collection allocation.</summary>
     [Fact]
     public void UnchangedGroupingReusesOriginalSequence()

@@ -1207,24 +1207,33 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         Assert.Same(live, afterAlter);
     }
 
+    /// <summary>
+    /// Provider table creation grants child prerequisites and its later drop removes that owner proof.
+    /// </summary>
     [Fact]
     public void ProviderCreateAndDropTableProjectAndInvalidateNewTableSafety()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         var createTable = new CreateTableOperation { Name = "items", };
+
         createTable.Columns.Add(ProviderColumn("external_id", "items", isNullable: false, defaultValue: 0));
 
+        var live = Live(SafeMigrationObservedState.PrerequisiteMissing);
+
+        // Act
         projection.ObserveProviderPostcondition(createTable);
 
         var projected = ProjectIndex(projection, "items", "external_id", unique: true);
 
         projection.ObserveProviderPostcondition(new DropTableOperation { Name = "items", });
 
-        var live = Live(SafeMigrationObservedState.PrerequisiteMissing);
         var afterDrop = ProjectIndex(projection, "items", "external_id", unique: true, live);
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.Missing, projected.ObservedState);
-        Assert.Same(live, afterDrop);
+        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, afterDrop.ObservedState);
+        Assert.Equal("projected_prerequisite_missing", afterDrop.Code);
     }
 
     [Fact]

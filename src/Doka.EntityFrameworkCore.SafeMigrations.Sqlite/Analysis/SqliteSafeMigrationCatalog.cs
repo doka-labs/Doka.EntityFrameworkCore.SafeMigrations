@@ -675,8 +675,7 @@ internal static class SqliteSafeMigrationCatalog
             else if (character == ')'
                      && --depth == 0)
             {
-                return sql[(openParenthesis + 1)..index]
-                    .Trim();
+                return sql.AsSpan(openParenthesis + 1, index - openParenthesis - 1).Trim().ToString();
             }
         }
 
@@ -793,8 +792,7 @@ internal static class SqliteSafeMigrationCatalog
             {
                 if (depth == 0)
                 {
-                    yield return sql[start..index]
-                        .Trim();
+                    yield return sql.AsSpan(start, index - start).Trim().ToString();
                     yield break;
                 }
 
@@ -803,15 +801,14 @@ internal static class SqliteSafeMigrationCatalog
             else if (character == ','
                      && depth == 0)
             {
-                yield return sql[start..index]
-                    .Trim();
+                yield return sql.AsSpan(start, index - start).Trim().ToString();
                 start = index + 1;
             }
         }
 
         if (start < sql.Length)
         {
-            yield return sql[start..].Trim();
+            yield return sql.AsSpan(start).Trim().ToString();
         }
     }
 
@@ -911,8 +908,7 @@ internal static class SqliteSafeMigrationCatalog
         var where = SqliteSqlIdentifierScanner.IndexOfKeyword(sql, "WHERE");
 
         return where >= 0
-            ? sql[(where + "WHERE".Length)..]
-                .Trim()
+            ? sql.AsSpan(where + "WHERE".Length).Trim().ToString()
             : null;
     }
 
@@ -941,6 +937,14 @@ internal static class SqliteSafeMigrationCatalog
         string sql
     )
     {
+        // WHY: Most catalog definitions contain no comment markers. Reuse their
+        // immutable SQL instead of copying it; possible markers still use the quote-aware scanner.
+        if (!sql.Contains("--", StringComparison.Ordinal)
+            && !sql.Contains("/*", StringComparison.Ordinal))
+        {
+            return sql;
+        }
+
         var builder = new StringBuilder(sql.Length);
         var quote = '\0';
         for (var index = 0; index < sql.Length; index++)
@@ -1069,10 +1073,23 @@ internal static class SqliteSafeMigrationCatalog
     private static bool IdentifiersEqual(
         string[] left,
         string[] right
-    ) => left.Length == right.Length
-        && left
-            .Zip(right)
-            .All(pair => s_identifierComparer.Equals(pair.First, pair.Second));
+    )
+    {
+        if (left.Length != right.Length)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < left.Length; index++)
+        {
+            if (!s_identifierComparer.Equals(left[index], right[index]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     private static ReferentialAction ParseReferentialAction(
         string value

@@ -25,7 +25,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(sampleCount, results.Count);
         // WHY: Reject unbatched transport without fixing packing details or dumping full schema records on failure.
         Assert.All(results.Select(static result => result.ExecutedCommands), commandCount =>
-            Assert.InRange(commandCount, 1, (RuntimeOperationCount * 17) + 5));
+            Assert.InRange(commandCount, 1, (RuntimeOperationCount * 14) + 5));
 
         Assert.All(results, result =>
         {

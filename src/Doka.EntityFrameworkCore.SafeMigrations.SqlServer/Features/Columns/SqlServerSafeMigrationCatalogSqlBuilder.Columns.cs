@@ -337,11 +337,17 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                         return false;
                     }
 
-                    var parts = identity.Split(',');
-                    if (parts.Length != 2
-                        || !long.TryParse(parts[0].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture,
+                    // WHY: Exactly two values define identity metadata. Slice them
+                    // without allocating tokens while still rejecting extra separators.
+                    var identityValues = identity.AsSpan();
+                    var separator = identityValues.IndexOf(',');
+                    if (separator < 0 || identityValues[(separator + 1)..].Contains(',')
+                        || !long.TryParse(
+                            identityValues[..separator].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture,
                             out seed)
-                        || !long.TryParse(parts[1].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture,
+                        || !long.TryParse(
+                            identityValues[(separator + 1)..].Trim(), NumberStyles.Integer,
+                            CultureInfo.InvariantCulture,
                             out increment))
                     {
                         return false;
