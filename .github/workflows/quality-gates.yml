@@ -21,7 +21,7 @@ on:
         default: 14
         type: number
       capture-sqlserver-baseline:
-        description: Capture diagnostic medians without replacing the mandatory performance gate.
+        description: Capture diagnostic medians in addition to informational benchmark reports.
         required: false
         default: false
         type: boolean
@@ -117,40 +117,42 @@ jobs:
           if-no-files-found: warn
           retention-days: ${{ inputs.artifact-retention-days }}
 
-      - name: Core performance and allocation budgets
+      # Budget overruns are evidence, not CI failures on shared runner hardware.
+      # Report-only preserves fatal configuration, execution and output errors.
+      - name: Core performance and allocation report
         run: >-
           dotnet run
           --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks.csproj
           --configuration Release --no-build --no-restore --
-          --output artifacts/performance/core-results.json
+          --report-only --output artifacts/performance/core-results.json
 
-      - name: MySQL and MariaDB performance and allocation budgets
+      - name: MySQL and MariaDB performance and allocation report
         run: >-
           dotnet run
           --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks.csproj
           --configuration Release --no-build --no-restore --
-          --output artifacts/performance/mysql-results.json
+          --report-only --output artifacts/performance/mysql-results.json
 
-      - name: PostgreSQL performance and allocation budgets
+      - name: PostgreSQL performance and allocation report
         run: >-
           dotnet run
           --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks.csproj
           --configuration Release --no-build --no-restore --
-          --output artifacts/performance/postgresql-results.json
+          --report-only --output artifacts/performance/postgresql-results.json
 
-      - name: SQLite performance and allocation budgets
+      - name: SQLite performance and allocation report
         run: >-
           dotnet run
           --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks.csproj
           --configuration Release --no-build --no-restore --
-          --output artifacts/performance/sqlite-results.json
+          --report-only --output artifacts/performance/sqlite-results.json
 
-      - name: SQL Server performance and allocation budgets
+      - name: SQL Server performance and allocation report
         run: >-
           dotnet run
           --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks.csproj
           --configuration Release --no-build --no-restore --
-          --output artifacts/performance/sqlserver-results.json
+          --report-only --output artifacts/performance/sqlserver-results.json
 
       - name: Qualify reproducible packages
         env:

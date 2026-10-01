@@ -148,7 +148,7 @@ Require local shell syntax checks, portable-provenance and GitHub Release
 reconciliation positive/negative cases, version-validator positive/negative
 cases, locked restore of the five package projects, resolved restore of all
 execution projects, format, Release build, all test suites, coverage thresholds,
-performance budgets, deterministic package qualification, package-only
+informational performance reports, deterministic package qualification, package-only
 consumers, SBOM validation, and every supported live provider/tooling cell.
 Locked restore covers every platform-neutral CI restore of the package
 projects. EF Migration Bundles publish for the runner RID, which the
@@ -235,6 +235,12 @@ owns independent consumer readback.
 - 2026-09-30: Expanded the release set to five version-aligned package IDs for
   SQL Server. The five-package contract applies to the provider's first release;
   the 10.4.5 release contract remains the four-package historical set.
+- 2026-10-02: Made duration and allocation benchmark overruns informational in
+  the shared CI/release workflow. Keep all five benchmark sets, unchanged numeric
+  comparison limits, measurements and failed JSON verdicts. The shared runner's
+  explicit report-only mode changes only the exit policy of a complete report;
+  configuration, execution and report-write failures remain fatal. Strict manual
+  comparison and all product-correctness qualification gates remain unchanged.
 
 ### Implementation References
 

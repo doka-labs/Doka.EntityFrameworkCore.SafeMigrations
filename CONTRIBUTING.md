@@ -73,17 +73,24 @@ dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Doka.Entit
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.csproj --configuration Release --no-build --no-restore
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests.csproj --configuration Release --no-build --no-restore
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests.csproj --configuration Release --no-build --no-restore
-dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks.csproj --configuration Release --no-build --no-restore
-dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks.csproj --configuration Release --no-build --no-restore
-dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks.csproj --configuration Release --no-build --no-restore
-dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks.csproj --configuration Release --no-build --no-restore
-dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks.csproj --configuration Release --no-build --no-restore
+dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks.csproj --configuration Release --no-build --no-restore -- --report-only
+dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks.csproj --configuration Release --no-build --no-restore -- --report-only
+dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks.csproj --configuration Release --no-build --no-restore -- --report-only
+dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks.csproj --configuration Release --no-build --no-restore -- --report-only
+dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks.csproj --configuration Release --no-build --no-restore -- --report-only
 python3 -m unittest eng/tests/test_verify_coverage.py -v
 bash eng/tests/test-release-version.sh
 bash -e -c 'while IFS= read -r -d "" script; do bash -n "$script"; done < <(find eng -type f -name "*.sh" -print0)'
 dotnet format Doka.EntityFrameworkCore.SafeMigrations.slnx style --severity warn --verify-no-changes --no-restore
 dotnet format Doka.EntityFrameworkCore.SafeMigrations.slnx style --diagnostics IDE0005 --severity hidden --verify-no-changes --no-restore
 ```
+
+All five benchmark sets run as informational evidence in CI and release
+qualification. `--report-only` retains measurements, unchanged comparison limits,
+and failed budget verdicts in JSON and console output without rejecting the run.
+Invalid configuration, incomplete measurements, execution exceptions, and output
+failures still fail. Omit `--report-only` for an explicitly strict local budget
+comparison; benchmark limits must not be raised merely to make a run pass.
 
 The reusable quality workflow additionally collects Microsoft Cobertura output
 from all five test assemblies, merges product lines conservatively, and runs:

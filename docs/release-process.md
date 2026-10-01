@@ -27,7 +27,6 @@ CI and release call the same reusable quality workflow. It enforces:
 - locked restore, formatting, warning-free Release build, Core tests, and
   Public API analyzers;
 - merged line and branch coverage thresholds;
-- Core, MySQL/MariaDB, PostgreSQL, SQLite, and SQL Server performance/allocation budgets;
 - all supported MySQL, MariaDB, PostgreSQL, and SQL Server integration cells
   plus the locked in-process SQLite runtime;
 - EF CLI migrations, supported scripts, and Migration Bundles in every engine
@@ -35,6 +34,13 @@ CI and release call the same reusable quality workflow. It enforces:
 - deterministic double-pack, exact package contents, provider separation, and
   isolated package-only consumers; and
 - SPDX 2.2 SBOM generation and validation.
+
+It also runs Core, MySQL/MariaDB, PostgreSQL, SQLite, and SQL Server benchmarks
+in `--report-only` mode. Budget overruns remain visible in the retained evidence
+but do not block qualification on shared hardware. Invalid benchmark
+configuration, execution failures, incomplete measurements and report-write
+failures remain blocking. Build, tests, coverage, tooling, package and SBOM gates
+are unchanged.
 
 The PostgreSQL EF tooling probe waits for the final TCP listener, never the
 image's temporary socket-only initialization server. Large live performance

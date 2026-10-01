@@ -244,7 +244,7 @@ Every EF, Doka, Npgsql, or supported database update requires:
    and Migration Bundle;
 9. deterministic pack, exact contents, package-only consumer, and Public API
    validation;
-10. performance/allocation budgets, pooled clean/noisy live p95 evidence, and
+10. informational performance/allocation reports, pooled clean/noisy live p95 evidence, and
     SPDX SBOM validation.
 
 If any behavior changes, update expected definitions or provider logic only

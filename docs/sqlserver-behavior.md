@@ -345,6 +345,10 @@ generates normal and idempotent SQL scripts for both, applies each migration
 twice, builds a migration bundle for each context, applies each bundle twice
 to another database, and checks both model-managed rows and migration history.
 The three engine cells, package-content checks, locked restore, merged
-coverage, allocation budgets, SBOM, and public NuGet readback are all
+coverage, SBOM, and public NuGet readback are all
 blocking. A successful build or a skipped ARM64 live test is not a substitute
 for this evidence.
+
+The SQL Server benchmark report is also retained. Its duration and allocation
+budget overruns are informational, not release blockers; malformed configuration,
+failed execution and missing output still fail qualification.

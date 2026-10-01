@@ -21,6 +21,11 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- Report Core and all provider benchmark budget overruns as informational CI
+  and release evidence instead of blocking qualification on shared hardware.
+  Preserve measured durations, allocations, comparison limits and JSON verdicts.
+  Keep malformed configuration, incomplete workloads, execution exceptions and
+  output failures blocking; retain strict manual budget evaluation.
 - Reduce MySQL/MariaDB migration transport exchanges by grouping owned setup
   fragments and directly emitting prepared assignments with their immediate
   controls within each guarded operation, without copying completed large SQL

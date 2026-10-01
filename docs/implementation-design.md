@@ -870,14 +870,17 @@ payload, duration and generation-allocation evidence without SQL text or
 connection information. Local workload timings are not production speedup
 claims. See [MySQL/MariaDB runtime boundaries](mysql-mariadb-ddl-behavior.md#session-local-guard-shape).
 
-The repository gates construction, planning, all provider generators, and
+The repository measures construction, planning, all provider generators, and
 report serialization at 1, 100, and 1000 operations, plus blocker-view
-selection across 50,000 assessments, against strict allocation ceilings and
+selection across 50,000 assessments, against allocation comparison limits and
 coarse wall-clock ceilings in schema-versioned Core,
-MySQL/MariaDB, and PostgreSQL sets in `eng/performance-budgets.json`; missing,
+MySQL/MariaDB, PostgreSQL, SQLite, and SQL Server sets in `eng/performance-budgets.json`; missing,
 duplicate, unknown, and orphaned measurements fail the run. The broad duration
-ceilings account for shared hosted-runner CPU variance and only detect gross
-regressions. It separately gates
+ceilings provide regression evidence rather than a cross-machine pass guarantee.
+All five CI benchmark sets use `--report-only`: numeric overruns retain false
+JSON verdicts without blocking qualification. Configuration, execution and
+output failures remain fatal; strict manual comparison remains available by
+omitting that flag. The repository separately measures
 the canonical snapshot initialization, `IMigrationsModelDiffer` comparison,
 and model fingerprint path used by the runner.
 
@@ -888,7 +891,7 @@ assessment counts, and unexpected-object counts; noisy p95 must remain within
 `2 * clean p95 + 250 ms`, and foreign child objects must not escape the
 server-side expected-table scope.
 
-The construction budgets are deterministic regression and allocation gates;
+The construction budgets are informational regression and allocation evidence;
 the live measurements are same-runner relative SLO evidence rather than an
 absolute cross-machine throughput claim.
 

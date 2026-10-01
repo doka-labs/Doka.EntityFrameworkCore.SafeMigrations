@@ -138,9 +138,11 @@ Run every provider fingerprint suite and PostgreSQL facet-isolation cases
 under the qualified dependency profiles. A stable digest in one provider or
 runtime process does not prove all relational facets are represented.
 
-Run all four benchmark projects using the commands in CONTRIBUTING and
-the versioned performance budgets. Require complete, non-duplicate, known
-measurements for construction, planning, SQL generation, model comparison,
+Run all five benchmark projects using the report-only commands in CONTRIBUTING
+and the versioned performance comparisons. Budget overruns are informational;
+configuration, execution and report-write failures remain blocking.
+Require complete, non-duplicate, known measurements for construction,
+planning, SQL generation, model comparison,
 fingerprinting, and serialization as applicable.
 
 The live provider suites also verify multi-chunk ordering and noisy catalog

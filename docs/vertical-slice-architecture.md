@@ -182,8 +182,8 @@ The vertical-slice architecture remains conformant only while:
 4. public API baselines match the reviewed contract, with shipped/unshipped
    status maintained according to the release process;
 5. locked Release build and format checks pass;
-6. unit, provider live, EF tooling, package-consumer, and performance gates
-   remain green;
+6. unit, provider live, EF tooling and package-consumer gates remain green,
+   and complete informational performance evidence is retained;
 7. project references, namespace ownership, focused tests, and code review keep
    feature behavior out of aggregate dispatchers and shared fixtures.
 

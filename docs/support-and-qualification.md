@@ -376,8 +376,17 @@ used to hide an uncovered regression.
 
 `eng/performance-budgets.json` defines explicit Core, MySQL/MariaDB,
 PostgreSQL, SQLite, and SQL Server benchmark sets with duration baselines,
-coarse hosted-runner ceilings, and strict allocation ceilings at 1, 100, and
+coarse duration comparison limits, and allocation comparison limits at 1, 100, and
 1000 operations.
+
+All five benchmark sets run in `--report-only` mode in CI and release
+qualification. Duration and allocation overruns remain visible in console output
+as `EXCEEDED (informational)` and in JSON as `passed: false`, but do not reject
+qualification on shared hardware. The complete measurements and unchanged limits
+remain in `artifacts/performance`. Invalid configuration, missing/duplicate/unknown
+workloads, execution exceptions and report-write failures still fail the run.
+Build, tests, coverage, live-engine, tooling, package and SBOM gates remain blocking.
+Omit `--report-only` for a deliberately strict manual budget comparison.
 
 Prepared-input CPU regressions separately bound shared seed and diagnostic
 evidence parsing, accepted-column projection, MySQL/MariaDB runtime generation
@@ -402,7 +411,7 @@ the block minimum gives very small cases more than 25% headroom.
 
 This capture is explicitly measurement-only and is not GitHub-hosted x64
 qualification. The quality workflow can retain a separate x64 capture in
-`sqlserver-baseline.json`; its ordinary performance gate remains mandatory.
+`sqlserver-baseline.json`; its ordinary benchmark report is also retained.
 Until the complete pinned x64 workflow passes, SQL Server qualification
 remains unestablished. SQL Server live workloads append timestamped stage markers
 under `artifacts/performance/live/sqlserver-*-progress.log` before potentially
@@ -436,9 +445,11 @@ workload does not substitute ordinary generation or an unsupported-operation
 classification for the repair path; startup rejects a plan that is unsupported
 or lacks safe repair capability.
 
-Allocation ceilings are deterministic blocking gates. Wall-clock measurements
-on shared GitHub-hosted runners are not deterministic, so their three-times-
-baseline ceilings only catch gross regressions and are not throughput claims.
+Benchmark duration and allocation ceilings are informational comparison limits,
+not blocking CI gates. Wall-clock measurements on shared GitHub-hosted runners
+are not deterministic; their three-times-baseline comparisons are regression
+evidence, not throughput claims. Budget evaluation remains unchanged in the
+reports rather than redefining an overrun as a passed measurement.
 Changes to a baseline or ceiling require captured before/after evidence on the
 same pinned `ubuntu-24.04` runner label and a review of asymptotic behavior; a
 budget must not be raised merely to make CI green.
@@ -459,14 +470,14 @@ remains fail-closed while any declared budget is absent.
 
 These initial budgets retain their macOS ARM64 developer-measurement
 provenance. They do not establish a measured `ubuntu-24.04` x64 baseline or a
-successful hosted budget gate; those remain separate qualification evidence.
+same-hardware hosted comparison; those remain separate performance evidence.
 
 For capture on the pinned x64 Linux runner, dispatch the existing CI workflow
 with `capture-sqlserver-baseline` enabled. The optional capture retains a
-measurement-only `sqlserver-baseline.json` artifact; all ordinary qualification
-gates, including SQL Server performance budgets, still run and remain mandatory.
-The diagnostic capture precedes budget evaluation so its evidence can be
-retained even when a later budget gate fails.
+measurement-only `sqlserver-baseline.json` artifact. All blocking qualification
+gates and the informational SQL Server budget report still run. The diagnostic
+capture precedes budget reporting; neither a duration nor allocation overrun
+in that report rejects the run.
 
 The MySQL/MariaDB benchmark has no Npgsql or SQLite dependency, the PostgreSQL
 benchmark has no Doka MySQL or SQLite dependency, and the SQLite benchmark has
