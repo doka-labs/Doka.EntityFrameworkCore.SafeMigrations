@@ -19,6 +19,18 @@ All notable changes are documented here. The format follows
   versions and existing migration histories remain unchanged; consumers with
   exhaustive engine-family handling must recognize the new value.
 
+### Changed
+
+- Approve exact CI dependency-license exceptions for SQL Server's transitive
+  Microsoft.Data.SqlClient.SNI.runtime 6.0.2 and
+  Microsoft.Identity.Client.NativeInterop 0.20.6. Validate every hosted
+  dependency-diff page against these versions; preserve the global SPDX,
+  vulnerability, Scorecard, and complete-snapshot gates. Published packages
+  contain no Microsoft dependency binaries.
+- Update the private development analyzer to Microsoft.CodeAnalysis.Analyzers
+  5.9.0 from the maintained Roslyn repository. Package-content verification
+  rejects development analyzer dependencies in published package manifests.
+
 ### Fixed
 
 - Correct SQL Server column-layout catalog syntax and single-dependency

@@ -40,6 +40,13 @@
     <PackageVersion Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" Version="5.6.0" />
   </ItemGroup>
 
+  <ItemGroup Label="Development analyzers">
+    <!-- The maintained package identifies dotnet/roslyn, not the retired
+         analyzer repository. Keep its assets private in every project so
+         updating diagnostics never adds a published runtime dependency. -->
+    <GlobalPackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="5.9.0" PrivateAssets="all" />
+  </ItemGroup>
+
   <ItemGroup Label="Tests">
     <PackageVersion Include="FsCheck.Xunit" Version="3.4.0" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />

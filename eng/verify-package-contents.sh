@@ -100,6 +100,12 @@ for package_id in "${package_ids[@]}"; do
         exit 1
     fi
 
+    if grep -Eq '<dependency id="Microsoft\.CodeAnalysis\.(Analyzers|PublicApiAnalyzers)"' \
+        <<<"$nuspec_content"; then
+        echo "Development analyzer dependency leaked into $nupkg." >&2
+        exit 1
+    fi
+
     if ! cmp -s "$script_dir/../README.md" <(unzip -p "$nupkg" README.md); then
         echo "Packaged README.md differs from the repository contract in $nupkg." >&2
         exit 1
