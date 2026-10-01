@@ -144,9 +144,37 @@ path. A multi-command provider transition, such as a non-null backfill followed
 by column DDL, stays behind one decision and receives one final postcondition.
 The internal design-time-services guard instead returns Doka's explicit
 commandless consumed result. A data-reading classifier adds setup fragments for
-lazy state evaluation without adding EF command boundaries. This shape reduces
-executor dispatch while retaining independent SQL commands inside the
-provider-owned scope.
+lazy state evaluation without adding EF command boundaries.
+
+At runtime, adjacent short SafeMigrations-owned setup fragments are grouped in
+their original order to reduce database transport exchanges. Each new group is
+limited to 256 UTF-8 bytes and the largest previous individual setup/body
+payload, whichever is smaller. Large SQL fragments retain their original string
+references instead of being copied into a group. The original
+128-fragment and 1,048,576-character scope limits are checked before grouping;
+grouping cannot admit a scope that the provider would otherwise reject. The
+concatenated script text is unchanged. Opaque provider setup remains an
+independent boundary, as do the guarded body and every cleanup command. Keeping
+cleanup independent lets later cleanup run even if an earlier cleanup fails.
+
+Grouping does not combine operations or cache live state. Every operation still
+evaluates its own identity, prerequisites, data safety, decision, and
+postcondition immediately around its body. Caller cancellation is forwarded,
+and cleanup retains its independent cancellation token. The configured command
+timeout now applies to a grouped setup command instead of each former fragment;
+it is not a separate timeout per SQL statement. See
+[MySqlConnector command cancellation](https://mysqlconnector.net/overview/command-cancellation/).
+No server durability, storage-engine, or transaction setting is changed. Actual
+DDL can still incur the documented implicit commits.
+
+The scoped handler also retains at most one immutable decision-SQL assignment,
+keyed only by operation kind, conflict policy, and structural repair capability.
+Replacing that entry does not retain an operation, model, or catalog evidence.
+All identity, prerequisite, row-safety, repair-precondition, and postcondition
+queries remain freshly evaluated. Invalid planner inputs fail without replacing
+the last valid entry. The key and SQL are published together through
+[.NET volatile reference access](https://learn.microsoft.com/en-us/dotnet/api/system.threading.volatile?view=net-10.0);
+this does not enable concurrent use of a DbContext or migration generator.
 
 ## Model-managed data
 

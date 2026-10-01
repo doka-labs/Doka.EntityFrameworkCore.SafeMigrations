@@ -837,6 +837,13 @@ The runtime path has:
 
 - one exact Doka registry lookup/dispatch and one guarded command scope per
   MySQL/MariaDB safe operation, reusing the scoped handler instance;
+- stable grouping of short owned same-operation setup SQL, bounded by 256
+  UTF-8 bytes and the largest previous single setup/body payload, retaining
+  large strings by reference and preserving original scope limits, opaque
+  provider setup, body and independent cleanup boundaries;
+- at most one immutable decision-SQL cache entry per scoped MySQL/MariaDB
+  handler, keyed only by operation kind, policy and structural repair
+  capability; no operation, model, live state or row-safety evidence is cached;
 - no reflection, JSON intent serialization, type-name deserialization, or
   service-provider lookup per operation;
 - input/model-, command-, assessment-, and catalog-inventory-dependent
@@ -847,6 +854,17 @@ The runtime path has:
 - caller-owned report serialization support;
 - allocation-bounded report-view selection without filtered collections;
 - bounded telemetry tags without object names or connection data.
+
+MySQL/MariaDB setup grouping reduces command exchanges without combining
+operations, reusing catalog evidence, or changing script text. Command timeout
+granularity follows the grouped setup invocation; caller cancellation and
+independent cleanup remain authoritative. Runtime regression workloads exercise
+actual `Database.MigrateAsync` without explicit preflight against empty,
+matching, partial and safely widened catalogs, then verify schema, rows,
+migration history and history-only replay. They persist aggregate command,
+payload, duration and generation-allocation evidence without SQL text or
+connection information. Local workload timings are not production speedup
+claims. See [MySQL/MariaDB runtime boundaries](mysql-mariadb-ddl-behavior.md#session-local-guard-shape).
 
 The repository gates construction, planning, all provider generators, and
 report serialization at 1, 100, and 1000 operations, plus blocker-view

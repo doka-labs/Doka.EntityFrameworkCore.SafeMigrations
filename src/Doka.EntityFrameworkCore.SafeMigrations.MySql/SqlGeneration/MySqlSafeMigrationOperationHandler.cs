@@ -16,6 +16,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
     private readonly RelationalTypeMapping _stringMapping;
     private Dictionary<ModelTableKey, IReadOnlyList<ExpectedIndexDefinition>>? _modelUniqueIndexes;
     private IModel? _modelUniqueIndexSource;
+    private ActionAssignmentCacheEntry? _actionAssignmentCache;
 
     public MySqlSafeMigrationOperationHandler(
         IRelationalTypeMappingSource typeMappingSource,
@@ -159,16 +160,19 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
                 + $"@doka_sm_repair_ok = ({runtimePlan.RenderPreparedRepairPrecondition(renderedParameterValues)});");
         }
 
-        setupCommands.Add(BuildActionAssignment(operation, runtimePlan.RepairCapability));
+        setupCommands.Add(BuildActionAssignment(operation.Intent.Kind, operation.Policy, runtimePlan.RepairCapability));
         setupCommands.Add(BuildDecisionAssertionSql());
 
         var prepareBaselineInSetup = baseline.Commands.Count == 1;
+        var providerSetupOffset = setupCommands.Count;
+        var providerSetupCount = 0;
         if (prepareBaselineInSetup)
         {
             var command = baseline.Commands[0];
 
             // WHY: Preserve the established single-command hot path. Only
             // genuine provider sequences need command-local preparation in the body.
+            providerSetupCount = command.SetupCommands.Count;
             setupCommands.AddRange(command.SetupCommands);
             setupCommands.Add(
                 BuildPreparedSqlAssignment(
@@ -184,10 +188,20 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             repair,
             renderedParameterValues,
             prepareBaselineInSetup);
+
         var cleanupCommands = BuildCleanupCommands(baseline);
 
-        var scopedCommand = MySqlMigrationCommandSpec.CreateScoped(
+        // WHY: Reduce owned setup transport without joining opaque provider setup, the guarded
+        // body or independent cleanup. Fresh checks and exact script text remain operation-local.
+        var compactedSetup = MySqlSafeMigrationSetupCommandCompactor.Compact(
             setupCommands,
+            bodyCommand,
+            cleanupCommands,
+            providerSetupOffset,
+            providerSetupCount);
+
+        var scopedCommand = MySqlMigrationCommandSpec.CreateScoped(
+            compactedSetup,
             bodyCommand,
             cleanupCommands,
             baseline.TransactionSuppressed);
@@ -349,6 +363,18 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
     private readonly record struct ModelTableKey(
         string Table,
         string? Schema
+    );
+
+    /// <summary>Retains one pure decision assignment without retaining an operation or live evidence.</summary>
+    /// <param name="Kind">The canonical planner operation kind.</param>
+    /// <param name="Policy">The canonical planner policy.</param>
+    /// <param name="RepairCapability">The provider's structural repair capability.</param>
+    /// <param name="Sql">The complete immutable assignment for this exact tuple.</param>
+    private sealed record ActionAssignmentCacheEntry(
+        SafeMigrationOperationKind Kind,
+        SafeMigrationPolicy Policy,
+        SafeMigrationRepairCapability RepairCapability,
+        string Sql
     );
 
     private static string BuildStateEvaluationAssignment(
@@ -895,11 +921,26 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         return repair;
     }
 
-    private static string BuildActionAssignment(
-        SafeMigrationOperation operation,
+    /// <summary>Renders the canonical decision table, reusing only an exact pure-input assignment.</summary>
+    /// <param name="kind">The canonical planner operation family.</param>
+    /// <param name="policy">The canonical conflict policy.</param>
+    /// <param name="repairCapability">The structural repair capability, not a cached row-safety result.</param>
+    /// <returns>The immutable decision assignment for the exact tuple.</returns>
+    internal string BuildActionAssignment(
+        SafeMigrationOperationKind kind,
+        SafeMigrationPolicy policy,
         SafeMigrationRepairCapability repairCapability
     )
     {
+        var cached = Volatile.Read(ref _actionAssignmentCache);
+        if (cached is not null
+            && cached.Kind == kind
+            && cached.Policy == policy
+            && cached.RepairCapability == repairCapability)
+        {
+            return cached.Sql;
+        }
+
         ReadOnlySpan<SafeMigrationObservedState> states =
         [
             SafeMigrationObservedState.Missing,
@@ -918,9 +959,9 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         foreach (var state in states)
         {
             var decision = SafeMigrationDecisionPlanner.Plan(
-                operation.Intent.Kind,
+                kind,
                 state,
-                operation.Policy,
+                policy,
                 repairCapability);
 
             builder
@@ -943,9 +984,15 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             }
         }
 
-        return builder
+        var sql = builder
             .Append("ELSE 'reject_unsupported' END;")
             .ToString();
+
+        // WHY: Adjacent columns repeatedly render the same planner tuple. Keep one immutable entry,
+        // not a growing cache or any live safety evidence; atomic publication cannot mix keys and SQL.
+        Volatile.Write(ref _actionAssignmentCache, new ActionAssignmentCacheEntry(kind, policy, repairCapability, sql));
+
+        return sql;
     }
 
     private static string StateCode(

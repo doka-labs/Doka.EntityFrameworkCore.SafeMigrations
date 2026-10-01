@@ -21,6 +21,14 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- Reduce MySQL/MariaDB migration transport exchanges by grouping owned setup
+  fragments within each guarded operation. Preserve exact SQL text and order,
+  original scope bounds, opaque provider setup, the guarded body, and
+  independently attempted cleanup. Keep fresh per-operation checks and existing
+  transaction, history, and server durability contracts.
+- Reuse one immutable MySQL/MariaDB decision-SQL assignment per scoped handler
+  for identical operation-kind, policy, and structural repair-capability inputs.
+  Bound retained cache memory to one entry without caching live state or proofs.
 - Pack SQL Server's read-only catalog classifiers by binding mode within
   bounded captures, retaining original operation ordinals and unchanged
   ordered projection. Parameterize delayed classifier ordinals so identical
