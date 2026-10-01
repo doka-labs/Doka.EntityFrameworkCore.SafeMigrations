@@ -69,6 +69,78 @@ public sealed class SqlServerProjectedSeedProofTests
         Assert.Equal(expected, analysis.ObservedState);
     }
 
+    /// <summary>An accepted managed mutation discards an earlier captured insert-key proof.</summary>
+    [Theory]
+    [InlineData(false, false, SafeMigrationObservedState.Missing, "projected_seed_key_data_safe")]
+    [InlineData(true, false, SafeMigrationObservedState.PrerequisiteMissing, "projected_key_data_state_unknown")]
+    [InlineData(true, true, SafeMigrationObservedState.PrerequisiteMissing, "projected_key_data_state_unknown")]
+    public async Task AcceptedManagedMutation_DiscardsCapturedInsertKeyProof(
+        bool mutate,
+        bool delete,
+        SafeMigrationObservedState expected,
+        string expectedCode
+    )
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext(ConnectionString);
+        var analyzer = new SqlServerSafeMigrationProviderAnalyzer(
+            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+
+        var table = Table();
+        var tableOperation = new SafeMigrationOperation(
+            new EnsureTableIntent(table, SafeMigrationTableMode.StrictDefinition),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var seedOperation = new SafeMigrationOperation(Seed(), SafeMigrationPolicy.ThrowIfDifferent);
+        var indexIntent = new EnsureIndexIntent(new ExpectedIndexDefinition("IX_seeds_Code", "seeds",
+            [new ExpectedIndexKeyDefinition("Code")], unique: true));
+
+        var indexOperation = new SafeMigrationOperation(indexIntent, SafeMigrationPolicy.ThrowIfDifferent);
+        var mutation = new MigrationBuilder(context.Database.ProviderName!);
+        if (delete)
+        {
+            mutation.DeleteModelManagedDataFromModel("seeds", ["Id"], ["int"], new object?[,] { { 2 } },
+                ["Code"], ["nvarchar(20)"], new object?[,] { { "second" } });
+        }
+        else
+        {
+            mutation.UpdateModelManagedDataFromModel("seeds", ["Id"], ["int"], new object?[,] { { 2 } },
+                ["Code"], ["nvarchar(20)"], new object?[,] { { "second" } }, new object?[,] { { "changed" } });
+        }
+
+        var mutationOperation = (SafeMigrationOperation)mutation.Operations.Single();
+        var missing = Analysis(SafeMigrationObservedState.Missing, "missing");
+        var transition = Analysis(SafeMigrationObservedState.TransitionReady, "transition_ready");
+        var apply = new SafeMigrationDecision(SafeMigrationAction.Apply, "apply");
+        var source = new Source(table, newlyCreated: true);
+        var keyAnalyzer = (ISafeMigrationProjectedKeyAnalyzer)analyzer;
+
+        // Act
+        var contractFailure = Record.Exception(() => SafeMigrationModelManagedDataContractValidator.Validate(
+            [tableOperation, seedOperation, mutationOperation, indexOperation]));
+
+        await analyzer.CaptureProjectedSeedProofsAsync([tableOperation, seedOperation, indexOperation],
+            static (_, _) => Task.FromResult(1), CancellationToken.None);
+        analyzer.ObserveAcceptedOperation(tableOperation, missing, missing, apply);
+        analyzer.ObserveAcceptedOperation(seedOperation, missing, missing, apply);
+        var before = keyAnalyzer.ValidateProjectedIndex(indexIntent, source, missing, missing);
+        if (mutate)
+        {
+            // WHY: The observer consumes an accepted decision independently of
+            // the runner. Distinct keys keep this provider probe Core-linear.
+            analyzer.ObserveAcceptedOperation(mutationOperation, transition, transition, apply);
+        }
+
+        var after = keyAnalyzer.ValidateProjectedIndex(indexIntent, source, missing, missing);
+
+        // Assert
+        Assert.Null(contractFailure);
+        Assert.Equal(SafeMigrationObservedState.Missing, before.ObservedState);
+        Assert.Equal("projected_seed_key_data_safe", before.Code);
+        Assert.Equal(expected, after.ObservedState);
+        Assert.Equal(expectedCode, after.Code);
+    }
+
     /// <summary>Only the exact immutable accepted insert order can consume the captured provider result.</summary>
     [Theory]
     [InlineData(false, true)]

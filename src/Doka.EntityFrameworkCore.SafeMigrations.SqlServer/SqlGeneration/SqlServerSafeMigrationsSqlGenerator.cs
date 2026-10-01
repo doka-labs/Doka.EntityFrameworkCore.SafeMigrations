@@ -163,7 +163,8 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
 
             if (!plan.IsStaticallyUnsupported
                 && baseline.Count == 0
-                && safeOperation.Intent is not EnsureSchemaIntent { Name: "dbo" })
+                && safeOperation.Intent is not EnsureSchemaIntent { Name: "dbo" }
+                && !IsUnchangedTableRename(safeOperation.Intent))
             {
                 throw new InvalidOperationException(
                     "A supported SQL Server SafeMigrations operation has no baseline command.");
@@ -275,10 +276,26 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
                 options);
         }
 
+        if (IsUnchangedTableRename(operation.Intent))
+        {
+            // WHY: A repeated identity still requires the runtime object-kind
+            // and policy guards, but sp_rename and schema transfer have no
+            // work to perform. The guarded command remains non-empty.
+            return [];
+        }
+
         var baselineOperation = SafeMigrationStandardOperationFactory.Create(
             operation.Intent,
             _expressionRenderer.Render,
             static collation => collation.Schema is null ? collation.Name : null);
+
+        if (operation.Intent is RenameTableIntent rename && baselineOperation is RenameTableOperation renameTable)
+        {
+            // WHY: EF interprets an omitted NewSchema as a transfer to the
+            // principal's default schema. A safe rename without a requested
+            // transfer must instead preserve its explicitly qualified source.
+            renameTable.NewSchema = rename.NewSchema ?? rename.Schema;
+        }
 
         if (operation.Intent is EnsureIndexIntent { Definition.IncludedColumns.Count: > 0 } index
             && baselineOperation is CreateIndexOperation createIndex)
@@ -290,6 +307,12 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
 
         return _baselineGenerator.Generate([baselineOperation], model, options);
     }
+
+    /// <summary>Identifies the exact safe rename whose guarded contract needs no physical DDL.</summary>
+    private static bool IsUnchangedTableRename(SafeMigrationIntent intent)
+        => intent is RenameTableIntent rename
+            && (rename.NewName ?? rename.Name) == rename.Name
+            && (rename.NewSchema ?? rename.Schema ?? "dbo") == (rename.Schema ?? "dbo");
 
     private IReadOnlyList<MigrationCommand> RenderRepairBaseline(
         SafeMigrationOperation operation,

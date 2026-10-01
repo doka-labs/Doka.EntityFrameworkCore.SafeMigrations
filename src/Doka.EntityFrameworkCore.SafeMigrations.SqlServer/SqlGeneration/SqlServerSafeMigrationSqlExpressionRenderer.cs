@@ -338,7 +338,20 @@ internal sealed class SqlServerSafeMigrationSqlExpressionRenderer
             var mapping = _typeMappingSource.FindMapping(expression.Value.GetType())
                 ?? throw new NotSupportedException("SQL Server cannot map the structured literal.");
 
+            var temporal = expression.Value is DateTime or DateTimeOffset or DateOnly or TimeOnly or TimeSpan;
+            if (temporal)
+            {
+                // WHY: Temporal CLR literals must retain their natural source
+                // type. Legacy datetime text parsing rejects seven fractional
+                // digits and offsets that typed temporal conversion supports.
+                builder.Append("CAST(");
+            }
+
             builder.Append(mapping.GenerateSqlLiteral(expression.Value));
+            if (temporal)
+            {
+                builder.Append(" AS ").Append(mapping.StoreType).Append(')');
+            }
         }
 
         if (expression.StoreType is not null)

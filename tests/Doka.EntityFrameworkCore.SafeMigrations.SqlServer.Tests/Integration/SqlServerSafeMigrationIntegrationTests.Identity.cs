@@ -73,10 +73,48 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
             context,
             builder.Operations,
             new SafeMigrationRunOptions("sqlserver-hidden-metadata"));
+        var existingTables = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM sys.tables WHERE object_id=OBJECT_ID(N'dbo.hidden_orders');");
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.NotEqual(SafeMigrationObservedState.Missing, Assert.Single(report.Assessments).ObservedState);
+        var assessment = Assert.Single(report.Assessments);
+
+        Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
+        Assert.Equal("catalog_metadata_not_visible", assessment.AnalysisCode);
+        Assert.Empty(report.UnexpectedObjects);
+        Assert.Equal(1, existingTables);
+    }
+
+    /// <summary>A direct inventory request cannot silently treat hidden metadata as an empty catalog.</summary>
+    [SqlServerLiveFact]
+    public async Task RestrictedMetadataVisibility_DirectInventoryFailsWithoutPriorAnalysis()
+    {
+        // Arrange
+        var connectionString = await Fixture.CreateDatabaseAsync();
+        var login = $"sm_user_{Guid.NewGuid():N}";
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.hidden_orders (Id int NOT NULL);");
+        await ExecuteSqlAsync(connectionString,
+            $"CREATE LOGIN [{login}] WITH PASSWORD = '{RestrictedLoginPassword}', CHECK_POLICY = OFF;");
+        await ExecuteSqlAsync(connectionString, $"CREATE USER [{login}] FOR LOGIN [{login}];");
+        var userConnectionString = new SqlConnectionStringBuilder(connectionString)
+        {
+            UserID = login,
+            Password = RestrictedLoginPassword,
+        }.ConnectionString;
+
+        await using var context = CreateContext(userConnectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.CreateTableIfNotExists("hidden_orders",
+            table => new { Id = table.Column<int>(type: "int", nullable: false) });
+
+        // Act
+        var failure = await Record.ExceptionAsync(() => context.GetService<ISafeMigrationProviderAnalyzer>()
+            .FindUnexpectedObjectsAsync(context, builder.Operations));
+
+        // Assert
+        Assert.Contains("requires database metadata visibility", Assert.IsType<InvalidOperationException>(failure).Message,
+            StringComparison.Ordinal);
     }
 
     /// <summary>

@@ -26,6 +26,12 @@ that an object is missing: SQL Server filters metadata by principal
 permissions. The adapter must reject an unprovable state instead of treating
 an invisible object as absent. See [Microsoft's metadata visibility contract](https://learn.microsoft.com/en-us/sql/relational-databases/security/metadata-visibility-configuration?view=sql-server-ver17).
 
+If analysis rejects metadata visibility or object identity, the blocked report
+preserves that invariant diagnosis and does not enumerate unexpected objects.
+An empty inventory in such a report does not prove that no unexpected objects
+exist. Direct inventory requests without a preceding rejected analysis still
+fail when catalog visibility or physical identity cannot be established.
+
 SQL Server stores primary and unique constraints through backing indexes,
 while default constraints are separate schema objects. Matching therefore
 has to inspect physical identity, ordered key columns, index facets, trust

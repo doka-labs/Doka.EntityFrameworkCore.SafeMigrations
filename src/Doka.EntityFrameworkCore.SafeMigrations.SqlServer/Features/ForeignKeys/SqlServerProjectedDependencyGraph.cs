@@ -5,6 +5,8 @@ internal sealed class SqlServerProjectedDependencyGraph : ISafeMigrationProjecte
 {
     private readonly Dictionary<TableKey, int> _tables = [];
     private readonly HashSet<int> _missingTables = [];
+    private readonly HashSet<TableKey> _nonTableNames = [];
+    private readonly HashSet<int> _renameSafeTables = [];
     private readonly Dictionary<string, int> _schemas = new(StringComparer.Ordinal);
     private readonly HashSet<int> _missingSchemas = [];
     private readonly HashSet<int> _schemasWithOtherObjects = [];
@@ -131,11 +133,14 @@ internal sealed class SqlServerProjectedDependencyGraph : ISafeMigrationProjecte
                 + "CONVERT(bit, CASE WHEN EXISTS (SELECT 1 FROM sys.triggers tr JOIN sys.trigger_events te "
                 + "ON te.object_id = tr.object_id WHERE tr.parent_id = t.object_id "
                 + "AND tr.is_instead_of_trigger = 1 AND te.type_desc = N'UPDATE') THEN 1 ELSE 0 END), "
-                + "ix.index_id, kc.unique_index_id, c.column_id "
+                + "ix.index_id, kc.unique_index_id, c.column_id, occupied.object_id "
                 + $"FROM (VALUES {values}) requested(schema_name, table_name, column_name, fk_name) "
                 + "LEFT JOIN sys.schemas s ON s.name = requested.schema_name COLLATE CATALOG_DEFAULT "
                 + "LEFT JOIN sys.tables t ON t.schema_id = s.schema_id "
                 + "AND t.name = requested.table_name COLLATE CATALOG_DEFAULT "
+                + "LEFT JOIN sys.objects occupied ON occupied.schema_id = s.schema_id "
+                + "AND occupied.name = requested.table_name COLLATE CATALOG_DEFAULT "
+                + "AND occupied.parent_object_id = 0 "
                 + "LEFT JOIN sys.columns c ON c.object_id = t.object_id "
                 + "AND c.name = requested.column_name COLLATE CATALOG_DEFAULT "
                 + "LEFT JOIN sys.foreign_keys fk ON fk.parent_object_id = t.object_id "
@@ -155,6 +160,10 @@ internal sealed class SqlServerProjectedDependencyGraph : ISafeMigrationProjecte
                 if (reader.IsDBNull(5))
                 {
                     graph._missingTables.Add(tableId);
+                    if (!reader.IsDBNull(15))
+                    {
+                        graph._nonTableNames.Add(new TableKey(schema, table));
+                    }
                 }
 
                 graph._schemas[schema] = reader.IsDBNull(4) ? graph.GetSchema(schema) : reader.GetInt32(4);
@@ -250,6 +259,64 @@ internal sealed class SqlServerProjectedDependencyGraph : ISafeMigrationProjecte
         }
 
         return graph;
+    }
+
+    /// <summary>Recovers only complete provider graph proofs after an accepted ordinary-table rename.</summary>
+    /// <param name="operation">The operation following an opaque generic provider postcondition.</param>
+    /// <param name="liveAnalysis">The immutable provider assessment before ordered mutations.</param>
+    /// <param name="columns">The surviving accepted authored column contracts.</param>
+    /// <returns>A complete ordered assessment, or null when the graph cannot prove it.</returns>
+    internal SafeMigrationProviderAnalysis? ValidateOpaqueProviderPostcondition(
+        SafeMigrationOperation operation,
+        SafeMigrationProviderAnalysis liveAnalysis,
+        ISafeMigrationProjectedColumnSource columns
+    )
+    {
+        if (_unknown || liveAnalysis.IsInvariantUnsupported
+            || liveAnalysis.ObservedState is SafeMigrationObservedState.Unsupported
+                or SafeMigrationObservedState.DataBlocked)
+        {
+            return null;
+        }
+
+        switch (operation.Intent)
+        {
+            case EnsureSchemaIntent or DropSchemaIntent:
+                return ValidateSchemaOperation(operation.Intent, liveAnalysis);
+            case EnsureTableIntent table when liveAnalysis.ObservedState
+                is SafeMigrationObservedState.Missing or SafeMigrationObservedState.PrerequisiteMissing:
+                var key = new TableKey(table.Definition.Schema ?? "dbo", table.Definition.Table);
+
+                if (!_missingTables.Contains(GetTable(table.Definition.Table, table.Definition.Schema))
+                    || _nonTableNames.Contains(key))
+                {
+                    return null;
+                }
+
+                if (!SchemaExists(table.Definition.Schema))
+                {
+                    return Rejected("projected_schema_missing");
+                }
+
+                var assessment = ValidateForeignKeys(
+                    table.Definition.ForeignKeys, liveAnalysis, columns, table.Definition);
+
+                // WHY: Core cannot retain a complete existing-table model after
+                // a rename. This graph instead binds each surviving parent key
+                // and storage proof to its physical ids; no stale name or absent
+                // row proof is promoted merely because the original table was missing.
+                return assessment.ObservedState == SafeMigrationObservedState.PrerequisiteMissing
+                        && assessment.Code is "classified_prerequisite_missing" or "inline_foreign_key_prerequisite"
+                        && HasAllInlinePrerequisites(table.Definition, columns)
+                    ? new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Missing,
+                        SafeMigrationRepairCapability.None, false, "projected_inline_prerequisites_ready")
+                    : assessment;
+            case RenameTableIntent table:
+                return liveAnalysis.ObservedState == SafeMigrationObservedState.Different
+                    ? null : ValidateOrderedRename(table);
+            default:
+                return null;
+        }
     }
 
     /// <inheritdoc />
@@ -394,6 +461,7 @@ internal sealed class SqlServerProjectedDependencyGraph : ISafeMigrationProjecte
                 RemoveTable(table.Table, table.Schema);
                 break;
             case RenameTableIntent table:
+                _renameSafeTables.Add(GetTable(table.Name, table.Schema));
                 RenameTable(table.Name, table.Schema, table.NewName ?? table.Name, table.NewSchema ?? table.Schema);
                 break;
             case RenameColumnIntent column:
@@ -806,6 +874,7 @@ internal sealed class SqlServerProjectedDependencyGraph : ISafeMigrationProjecte
 
         _missingTables.Add(id);
         _createdTables.Remove(id);
+        _renameSafeTables.Remove(id);
         _triggers.Remove(id);
         _candidateKeys.RemoveTable(id);
         foreach (var key in _columns.Keys.Where(key => key.Table == id).ToArray())
@@ -924,6 +993,10 @@ internal sealed class SqlServerProjectedDependencyGraph : ISafeMigrationProjecte
     )
     {
         var id = GetTable(table, schema);
+        if (table == newTable && (schema ?? "dbo") == (newSchema ?? "dbo"))
+        {
+            return;
+        }
 
         _tables[new TableKey(newSchema ?? "dbo", newTable)] = id;
         _tableSchemas[id] = GetSchema(newSchema ?? "dbo");
@@ -931,6 +1004,36 @@ internal sealed class SqlServerProjectedDependencyGraph : ISafeMigrationProjecte
 
         _tables[new TableKey(schema ?? "dbo", table)] = missingSourceId;
         _missingTables.Add(missingSourceId);
+    }
+
+    private SafeMigrationProviderAnalysis? ValidateOrderedRename(
+        RenameTableIntent intent
+    )
+    {
+        var source = GetTable(intent.Name, intent.Schema);
+        var targetName = new TableKey(intent.NewSchema ?? intent.Schema ?? "dbo", intent.NewName ?? intent.Name);
+        var target = GetTable(targetName.Table, targetName.Schema);
+        if (!_renameSafeTables.Contains(source) || _missingTables.Contains(source))
+        {
+            return null;
+        }
+
+        if (!SchemaExists(targetName.Schema))
+        {
+            return Rejected("projected_schema_missing");
+        }
+
+        if (target != source && (!_missingTables.Contains(target) || _nonTableNames.Contains(targetName)))
+        {
+            return new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
+                SafeMigrationRepairCapability.None, false, "projected_rename_target_occupied");
+        }
+
+        // WHY: Only an accepted prior rename carries this proof that the same
+        // ordinary physical table has no unsafe textual dependencies. Catalog
+        // absence under the later source name alone cannot authorize a rename.
+        return new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Matching,
+            SafeMigrationRepairCapability.None, target == source, "projected_rename_source_ready");
     }
 
     private int GetTable(

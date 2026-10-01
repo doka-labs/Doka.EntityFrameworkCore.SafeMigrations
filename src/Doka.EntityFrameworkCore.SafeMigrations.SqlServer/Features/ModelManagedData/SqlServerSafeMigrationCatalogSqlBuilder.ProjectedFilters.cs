@@ -81,9 +81,10 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             return _typeMappingSource.FindMapping(explicitType)?.StoreTypeNameBase ?? string.Empty;
         }
 
-        // WHY: CLR mapping types are not necessarily SQL literal types. Date
-        // and GUID mappings emit quoted varchar constants, while integral
-        // constants outside int range bind as decimal rather than bigint.
+        // WHY: CLR mapping types are not necessarily SQL literal types. GUID
+        // mappings emit quoted varchar constants, while integral constants
+        // outside int range bind as decimal rather than bigint. Temporal
+        // literals retain an explicit natural source conversion.
         var rendered = _expressionRenderer.Render(literal);
         if (rendered.StartsWith("N'", StringComparison.Ordinal))
         {
@@ -100,7 +101,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             return "varbinary";
         }
 
-        if (rendered.StartsWith("CAST(", StringComparison.OrdinalIgnoreCase))
+        if (rendered.StartsWith("CAST(", StringComparison.OrdinalIgnoreCase)
+            || rendered.StartsWith("TRY_CAST(", StringComparison.OrdinalIgnoreCase))
         {
             return literal.Value is null ? string.Empty
                 : _typeMappingSource.FindMapping(literal.Value.GetType())?.StoreTypeNameBase ?? string.Empty;

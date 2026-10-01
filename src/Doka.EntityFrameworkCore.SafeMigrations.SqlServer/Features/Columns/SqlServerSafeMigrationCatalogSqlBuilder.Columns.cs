@@ -143,7 +143,17 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     {
         var source = ColumnExists(intent.Table, intent.Schema, intent.Name);
         var target = ColumnExists(intent.Table, intent.Schema, intent.NewName);
-        var dependent = ColumnHasDependencies(intent.Table, intent.Schema, intent.Name);
+        var tableId = TableId(intent.Table, intent.Schema);
+        var columnId = $"(SELECT c.column_id FROM sys.columns c WHERE c.object_id = {tableId} "
+            + $"AND c.name = {Literal(intent.Name)})";
+
+        // WHY: sp_rename retains column/index/FK catalog identities, so physical
+        // keys and statistics do not prevent a rename. Textual expressions are
+        // different: their references are not automatically rewritten safely.
+        var dependent = "EXISTS (SELECT 1 FROM sys.sql_expression_dependencies d "
+            + $"WHERE d.referenced_id = {tableId} "
+            + $"AND (d.referenced_minor_id = 0 OR d.referenced_minor_id = {columnId}) "
+            + "AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys fk WHERE fk.object_id = d.referencing_id))";
 
         return Plan(
             $"CASE WHEN NOT {source} THEN N'missing' WHEN {target} OR {dependent} THEN N'different' "
@@ -165,7 +175,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         }
 
         var oldMatches = ColumnMatches(intent.Table, intent.Schema, intent.OldDefinition);
-        var dependencies = ColumnHasDependencies(intent.Table, intent.Schema, intent.Definition.Name);
+        var dependencies = ColumnHasDependencies(intent.Table, intent.Schema, intent.Definition.Name,
+            allowAutomaticStatistics: true);
         var column = Delimited(intent.Definition.Name);
         var overflow = targetLength == -1
             ? "1 = 0"
@@ -507,12 +518,21 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     private string ColumnHasDependencies(
         string table,
         string? schema,
-        string column
+        string column,
+        bool allowAutomaticStatistics = false
     )
     {
         var id = TableId(table, schema);
         var columnId = $"(SELECT c.column_id FROM sys.columns c WHERE c.object_id = {id} "
             + $"AND c.name = {Literal(column)})";
+
+        // WHY: ALTER COLUMN removes optimizer-created statistics itself. Its
+        // guarded row probe can create them during compilation; only authored
+        // statistics must prevent a repair that preserves caller-owned objects.
+        var statistics = allowAutomaticStatistics
+            ? "JOIN sys.stats s ON s.object_id = sc.object_id AND s.stats_id = sc.stats_id "
+                + "AND s.auto_created = 0 "
+            : string.Empty;
 
         return $"EXISTS (SELECT 1 FROM sys.tables t WHERE t.object_id = {id} "
             + "AND (t.temporal_type <> 0 OR t.is_filetable = 1)) "
@@ -520,7 +540,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             + $"AND dc.parent_column_id = {columnId}) "
             + $"OR EXISTS (SELECT 1 FROM sys.index_columns ic WHERE ic.object_id = {id} "
             + $"AND ic.column_id = {columnId}) "
-            + $"OR EXISTS (SELECT 1 FROM sys.stats_columns sc WHERE sc.object_id = {id} "
+            + $"OR EXISTS (SELECT 1 FROM sys.stats_columns sc {statistics}WHERE sc.object_id = {id} "
             + $"AND sc.column_id = {columnId}) "
             + $"OR EXISTS (SELECT 1 FROM sys.foreign_key_columns fkc WHERE "
             + $"(fkc.parent_object_id = {id} AND fkc.parent_column_id = {columnId}) "

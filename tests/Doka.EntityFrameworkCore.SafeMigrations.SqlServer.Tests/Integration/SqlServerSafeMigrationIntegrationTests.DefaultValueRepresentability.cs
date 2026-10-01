@@ -4,10 +4,13 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
 {
     /// <summary>Stops an unrepresentable immutable datetime default before column or table DDL.</summary>
     [SqlServerLiveTheory]
-    [InlineData(false)]
-    [InlineData(true)]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
     public async Task InvalidDatetimeDefault_IsInvariantUnsupportedWithoutMutation(
-        bool inlineTable
+        bool inlineTable,
+        bool structured
     )
     {
         // Arrange
@@ -19,8 +22,12 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
             "CREATE TRIGGER doka_default_ddl_audit ON DATABASE FOR DDL_TABLE_EVENTS "
             + "AS INSERT dbo.default_ddl_events VALUES (1);");
         await using var context = CreateContext(connectionString);
+        var defaultValue = structured
+            ? SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal(DateTime.MinValue, "datetime"))
+            : SafeMigrationDefaultValue.Literal(DateTime.MinValue);
+
         var definition = new ExpectedColumnDefinition("Created", typeof(DateTime), false, "datetime",
-            defaultValue: SafeMigrationDefaultValue.Literal(DateTime.MinValue));
+            defaultValue: defaultValue);
 
         var operation = TemporalDefaultOperation(definition, inlineTable);
         var analyzer = context.GetService<ISafeMigrationProviderAnalyzer>();
@@ -56,14 +63,21 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     /// Backfills valid datetime lower bounds and datetime2 minima, then applies and replays inline defaults.
     /// </summary>
     [SqlServerLiveTheory]
-    [InlineData("datetime", 1753, false)]
-    [InlineData("datetime2", 1, false)]
-    [InlineData("datetime", 1753, true)]
-    [InlineData("datetime2", 1, true)]
+    [InlineData("datetime", 1753, false, false)]
+    [InlineData("datetime2", 1, false, false)]
+    [InlineData("datetime", 1753, true, false)]
+    [InlineData("datetime2", 1, true, false)]
+    [InlineData("smalldatetime", 1900, false, false)]
+    [InlineData("smalldatetime", 1900, true, false)]
+    [InlineData("datetime", 1753, false, true)]
+    [InlineData("datetime", 1753, true, true)]
+    [InlineData("smalldatetime", 1900, false, true)]
+    [InlineData("smalldatetime", 1900, true, true)]
     public async Task ValidTemporalLiteralDefault_AppliesBackfillsAndReplays(
         string storeType,
         int year,
-        bool inlineTable
+        bool inlineTable,
+        bool structured
     )
     {
         // Arrange
@@ -72,8 +86,12 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
             "CREATE TABLE dbo.default_items (Id int NOT NULL); INSERT dbo.default_items VALUES (1);");
         await using var context = CreateContext(connectionString);
         var value = new DateTime(year, 1, 1);
+        var defaultValue = structured
+            ? SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal(value, storeType))
+            : SafeMigrationDefaultValue.Literal(value);
+
         var definition = new ExpectedColumnDefinition("Created", typeof(DateTime), false, storeType,
-            defaultValue: SafeMigrationDefaultValue.Literal(value));
+            defaultValue: defaultValue);
 
         var operation = TemporalDefaultOperation(definition, inlineTable);
         var analyzer = context.GetService<ISafeMigrationProviderAnalyzer>();

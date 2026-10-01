@@ -780,11 +780,11 @@ internal static class LargeMigrationStressContract
                 SafeMigrationAction.Repair,
                 convergesOnFirstAcceptedMutation: true),
             Scenario(
-                (builder, _) => builder.UpdateModelManagedDataFromModel(
+                (builder, ordinal) => builder.UpdateModelManagedDataFromModel(
                     "sqlserver_stress_managed",
                     ["id"],
                     ["int"],
-                    new object?[,] { { 1 } },
+                    new object?[,] { { ModelManagedUpdateKey(ordinal) } },
                     ["managed_value"],
                     ["nvarchar(32)"],
                     new object?[,] { { "source" } },
@@ -792,8 +792,7 @@ internal static class LargeMigrationStressContract
                 _ => "sqlserver_stress_managed",
                 SafeMigrationOperationKind.UpdateModelManagedData,
                 SafeMigrationObservedState.TransitionReady,
-                SafeMigrationAction.Apply,
-                convergesOnFirstAcceptedMutation: true),
+                SafeMigrationAction.Apply),
             Scenario(
                 (builder, _) => builder.DropTableIfExists("sqlserver_stress_absent"),
                 _ => "sqlserver_stress_absent",

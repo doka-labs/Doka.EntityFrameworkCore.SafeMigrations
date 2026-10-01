@@ -877,7 +877,10 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 + $"JOIN {QualifiedTable(foreignKey.Table, foreignKey.Schema)} AS doka_dependent ON {match}))";
         });
 
-        return $"CONCAT_WS(',', {string.Join(", ", counts)})";
+        // WHY: COUNT_BIG is never NULL. Concatenation covers a single dependency
+        // and avoids CONCAT_WS's 254-argument limit; varchar(max) prevents truncation.
+        return "(" + string.Join(" + ',' + ", counts.Select(static (count, index) =>
+            index == 0 ? $"CONVERT(varchar(max), {count})" : count)) + ")";
     }
 
     private string UnmodeledIncomingForeignKey(DeleteModelManagedDataIntent intent)

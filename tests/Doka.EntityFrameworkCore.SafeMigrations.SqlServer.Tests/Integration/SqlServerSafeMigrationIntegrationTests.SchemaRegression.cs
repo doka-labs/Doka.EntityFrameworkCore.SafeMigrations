@@ -47,6 +47,90 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
         Assert.Equal(0, wrongSchemaCount);
     }
 
+    /// <summary>An explicit schema transfer is independent of a different caller default and replays safely.</summary>
+    [SqlServerLiveFact]
+    public async Task ExplicitSchemaTransfer_NonDboDefaultUsesCapturedDestinationAndReplays()
+    {
+        // Arrange
+        var connectionString = await Fixture.CreateDatabaseAsync();
+        await ExecuteSqlAsync(connectionString,
+            "EXEC sys.sp_executesql N'CREATE SCHEMA application;'; "
+            + "EXEC sys.sp_executesql N'CREATE SCHEMA destination;'; "
+            + "EXEC sys.sp_executesql N'CREATE SCHEMA caller_default;'; "
+            + "CREATE USER schema_runner WITHOUT LOGIN WITH DEFAULT_SCHEMA = caller_default; "
+            + "GRANT CONTROL TO schema_runner; "
+            + "CREATE TABLE application.orders (Id int NOT NULL); "
+            + "INSERT INTO application.orders VALUES (19);");
+        await using var context = CreateContext(connectionString);
+        await context.Database.OpenConnectionAsync();
+        await context.Database.ExecuteSqlRawAsync("EXECUTE AS USER = N'schema_runner';");
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.RenameTableIfExists("orders", schema: "application", newSchema: "destination");
+
+        // Act
+        var initial = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
+            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-qualified-transfer"));
+
+        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations);
+        var replay = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
+            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-qualified-transfer-replay"));
+
+        await context.Database.ExecuteSqlRawAsync("REVERT;");
+        var rows = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM destination.orders WHERE Id = 19;");
+
+        var wrongSchemaCount = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM sys.tables WHERE name = N'orders' "
+            + "AND schema_id <> SCHEMA_ID(N'destination');");
+
+        // Assert
+        Assert.Equal(SafeMigrationAction.Apply, Assert.Single(initial.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(replay.Assessments).Action);
+        Assert.Equal(1, rows);
+        Assert.Equal(0, wrongSchemaCount);
+    }
+
+    /// <summary>
+    /// An unchanged explicit table identity stays in its schema and still rejects wrong object kinds.
+    /// </summary>
+    [SqlServerLiveTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task IdenticalExplicitRenamePreservesPhysicalObjectKind(bool sourceIsView)
+    {
+        // Arrange
+        var connectionString = await Fixture.CreateDatabaseAsync();
+        await ExecuteSqlAsync(connectionString, "CREATE SCHEMA application;");
+        await ExecuteSqlAsync(connectionString, sourceIsView
+            ? "CREATE VIEW application.orders AS SELECT 19 AS Id;"
+            : "CREATE TABLE application.orders (Id int NOT NULL); INSERT INTO application.orders VALUES (19);");
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.RenameTableIfExists("orders", "orders", schema: "application", newSchema: "application");
+
+        // Act
+        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
+            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-unchanged-explicit-identity"));
+
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var rows = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM application.orders WHERE Id = 19;");
+
+        // Assert
+        Assert.Equal(sourceIsView ? SafeMigrationObservedState.Different : SafeMigrationObservedState.Matching,
+            Assert.Single(report.Assessments).ObservedState);
+        Assert.Equal(1, rows);
+        if (sourceIsView)
+        {
+            Assert.Equal(51001, Assert.IsType<SqlException>(exception).Number);
+        }
+        else
+        {
+            Assert.Null(exception);
+        }
+    }
+
     /// <summary>
     /// Rejects an implicit FK principal schema inside an explicit table under a non-dbo default.
     /// </summary>

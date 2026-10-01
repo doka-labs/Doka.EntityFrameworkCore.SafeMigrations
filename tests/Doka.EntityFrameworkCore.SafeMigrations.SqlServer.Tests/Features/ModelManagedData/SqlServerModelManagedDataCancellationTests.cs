@@ -8,7 +8,9 @@ public sealed class SqlServerModelManagedDataCancellationTests : SqlServerIntegr
     /// <summary>
     /// Creates the cancellation suite with an isolated SQL Server fixture.
     /// </summary>
-    public SqlServerModelManagedDataCancellationTests(SqlServerContainerFixture fixture) : base(fixture) { }
+    public SqlServerModelManagedDataCancellationTests(
+        SqlServerContainerFixture fixture
+    ) : base(fixture) { }
 
     /// <summary>
     /// Recovers generated commands automatically and requires explicit recovery for raw scripts.
@@ -33,21 +35,14 @@ public sealed class SqlServerModelManagedDataCancellationTests : SqlServerIntegr
         await using var session = new SqlConnection(connectionString);
         await session.OpenAsync();
         var originalConnectionId = session.ClientConnectionId;
-        var identityEnabled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        session.InfoMessage += (_, message) =>
-        {
-            foreach (SqlError error in message.Errors)
-            {
-                if (error.Message == IdentityInsertPauseInterceptor.ReadyMessage)
-                {
-                    identityEnabled.TrySetResult(true);
-                }
-            }
-        };
+        var readinessResource = "doka_identity_ready_" + Guid.NewGuid().ToString("N");
+        var pauseInterceptor = new SqlServerIdentityInsertPauseInterceptor(readinessResource);
+        await using var observer = new SqlConnection(connectionString);
+        await observer.OpenAsync();
         var options = new DbContextOptionsBuilder()
             .UseSqlServer(session)
             .UseSqlServerSafeMigrations()
-            .AddInterceptors(new IdentityInsertPauseInterceptor())
+            .AddInterceptors(pauseInterceptor)
             .Options;
 
         await using var context = new DbContext(options);
@@ -69,20 +64,30 @@ public sealed class SqlServerModelManagedDataCancellationTests : SqlServerIntegr
         }
 
         using var cancellation = new CancellationTokenSource();
+        using var readinessDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
 
         // Act
+        var markerInitiallyAvailable = await pauseInterceptor.CanAcquireMarkerAsync(observer);
         var execution = executeMigrationCommand
             ? seedCommand.ExecuteNonQueryAsync(connection, cancellationToken: cancellation.Token)
             : context.Database.ExecuteSqlRawAsync(seedCommand.CommandText, cancellation.Token);
 
-        // WHY: A server NOWAIT message proves ON has executed before the
-        // attention is sent. A timer-only cancellation could run before ON
-        // and would falsely certify session cleanup that never took place.
-        var readinessFailure = await Record.ExceptionAsync(() =>
-            identityEnabled.Task.WaitAsync(TimeSpan.FromSeconds(30)));
+        // WHY: The lock is acquired only after ON, and a separate session observes it without an INFO token.
+        // This proves the attention reaches a running identity-enabled batch, not work canceled before ON.
+        var readinessFailure = await Record.ExceptionAsync(() => pauseInterceptor.WaitUntilReadyAsync(
+            observer, execution, readinessDeadline.Token));
 
-        cancellation.Cancel();
-        var cancellationFailure = await Record.ExceptionAsync(() => execution);
+        var cancelRequestFailure = await Record.ExceptionAsync(() =>
+            cancellation.CancelAsync().WaitAsync(TimeSpan.FromSeconds(10)));
+
+        var cancellationFailure = await Record.ExceptionAsync(() => execution.WaitAsync(TimeSpan.FromSeconds(30)));
+        if (!execution.IsCompleted)
+        {
+            throw new InvalidOperationException("Client attention did not complete within the recovery deadline.",
+                cancellationFailure);
+        }
+
+        var markerHeldAfterAttention = !await pauseInterceptor.CanAcquireMarkerAsync(observer);
 
         Exception? leakedSessionFailure = null;
         if (!executeMigrationCommand)
@@ -100,6 +105,16 @@ public sealed class SqlServerModelManagedDataCancellationTests : SqlServerIntegr
             + "INSERT INTO dbo.identity_probe (Id) VALUES (11); "
             + "SET IDENTITY_INSERT dbo.identity_probe OFF;",
             CancellationToken.None);
+        await context.Database.ExecuteSqlRawAsync(
+            "EXEC sys.sp_releaseapplock @Resource = @resource, @LockOwner = N'Session';",
+            [new SqlParameter("@resource", SqlDbType.NVarChar, 255) { Value = readinessResource }],
+            CancellationToken.None);
+        var markerReleased = await pauseInterceptor.CanAcquireMarkerAsync(observer);
+        var quarantineFailure = Record.Exception(() =>
+        {
+            context.GetService<IMigrationsSqlGenerator>().Generate([], context.Model);
+        });
+
         if (transaction is not null)
         {
             await transaction.RollbackAsync(CancellationToken.None);
@@ -109,40 +124,27 @@ public sealed class SqlServerModelManagedDataCancellationTests : SqlServerIntegr
 
         // Assert
         Assert.Single(commands.OfType<SqlServerSafeMigrationIdentityInsertCommand>());
+        Assert.True(markerInitiallyAvailable);
         Assert.Null(readinessFailure);
+        Assert.Null(cancelRequestFailure);
+        Assert.NotNull(cancellationFailure);
         Assert.True(cancellationFailure is OperationCanceledException or SqlException);
+        if (cancellationFailure is SqlException sqlFailure)
+        {
+            Assert.DoesNotContain(sqlFailure.Errors.Cast<SqlError>(), error => error.Number == -2);
+        }
+
+        Assert.True(cancellation.IsCancellationRequested);
+        Assert.True(markerHeldAfterAttention);
+        Assert.True(markerReleased);
+        Assert.Null(quarantineFailure);
+        Assert.Null(cancellationFailure.Data[SqlServerSafeMigrationIdentityInsertCommand.RecoveryFailureDataKey]);
         Assert.Equal(ConnectionState.Open, session.State);
         Assert.Equal(originalConnectionId, session.ClientConnectionId);
         Assert.Equal(0, seedCount);
         if (!executeMigrationCommand)
         {
             Assert.Equal(8107, Assert.IsType<SqlException>(leakedSessionFailure).Number);
-        }
-    }
-
-    private sealed class IdentityInsertPauseInterceptor : Microsoft.EntityFrameworkCore.Diagnostics.DbCommandInterceptor
-    {
-        public const string ReadyMessage = "doka_sm_identity_insert_enabled";
-
-        public override ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int>>
-            NonQueryExecutingAsync(
-                System.Data.Common.DbCommand command,
-                Microsoft.EntityFrameworkCore.Diagnostics.CommandEventData eventData,
-                Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int> result,
-                CancellationToken cancellationToken = default
-            )
-        {
-            const string identityOn = "SET IDENTITY_INSERT [dbo].[identity_roles] ON;";
-
-            // WHY: This point is inside the generator's dynamic SQL literal.
-            // Double quotes for that literal, not for a separate SQL batch.
-            command.CommandText = command.CommandText.Replace(
-                identityOn,
-                identityOn + " RAISERROR (N''" + ReadyMessage + "'', 10, 1) WITH NOWAIT; "
-                    + "WAITFOR DELAY ''00:05:00'';",
-                StringComparison.Ordinal);
-
-            return new ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int>>(result);
         }
     }
 }

@@ -19,6 +19,25 @@ All notable changes are documented here. The format follows
   versions and existing migration histories remain unchanged; consumers with
   exhaustive engine-family handling must recognize the new value.
 
+### Fixed
+
+- Correct SQL Server column-layout catalog syntax and single-dependency
+  diagnostics for model-managed deletes. Match table columns through one
+  bounded catalog join, including identity and default fingerprints, instead
+  of compiling a separate correlated query for each column.
+- Preserve explicit-schema rename execution and ordered table, column, and
+  schema-transfer prerequisites only when the provider proves their physical
+  identity. Unrelated or opaque mutations still invalidate unproven state.
+- Preserve temporal literal source types before target conversion and permit
+  SQL Server's automatic-statistics handling during approved column changes
+  without relaxing user-created statistics or other dependency guards.
+- Preserve invariant metadata-visibility and identity rejections in blocked
+  reports when the optional unexpected-object inventory cannot be obtained.
+  An empty inventory in such a report is not proof of object absence.
+- Synchronize SQL Server identity-insert cancellation tests through an
+  observable session-owned application lock. Correct managed-key stress and
+  ordered seed fixtures without weakening validation or performance budgets.
+
 ## [10.4.5] - 2026-09-30
 
 Prepare a stable maintenance release that bounds composite-index catalog

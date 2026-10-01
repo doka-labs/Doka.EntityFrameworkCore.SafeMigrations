@@ -103,10 +103,35 @@ public sealed class SqlServerManagedValueRepresentationTests
 
         // Assert
         Assert.False(plan.IsStaticallyUnsupported);
-        Assert.Contains("TRY_CAST(", guard);
+        Assert.Contains("TRY_CAST(TRY_CAST(", guard);
         Assert.DoesNotContain("TRY_CAST(CAST(", guard);
         Assert.Contains(guard, plan.StateEvaluationGuardExpression);
         Assert.Contains(guard.Replace("'", "''", StringComparison.Ordinal), projected);
+    }
+
+    /// <summary>Converts CLR dates from their natural temporal type instead of legacy text parsing.</summary>
+    [Theory]
+    [InlineData("datetime", 1753)]
+    [InlineData("smalldatetime", 1900)]
+    public void ManagedLegacyTemporalValue_QualifiesTheNaturalTypedOperand(
+        string storeType,
+        int year
+    )
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext(ConnectionString);
+        var catalog = Catalog(context);
+        var value = new DateTime(year, 1, 1);
+
+        // Act
+        var guard = catalog.ManagedValueRepresentationGuard(value, storeType);
+        var overflowGuard = catalog.ManagedValueRepresentationGuard(DateTime.MinValue, storeType);
+
+        // Assert
+        Assert.StartsWith("TRY_CAST(TRY_CAST('", guard, StringComparison.Ordinal);
+        Assert.Contains(" AS datetime2) AS " + storeType + ") IS NOT NULL", guard, StringComparison.Ordinal);
+        Assert.DoesNotContain("TRY_CAST(CAST(", guard, StringComparison.Ordinal);
+        Assert.Equal("1 = 0", overflowGuard);
     }
 
     /// <summary>

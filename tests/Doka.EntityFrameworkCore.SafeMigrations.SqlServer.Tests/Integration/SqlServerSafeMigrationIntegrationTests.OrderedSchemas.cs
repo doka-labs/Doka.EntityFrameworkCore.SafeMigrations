@@ -199,6 +199,34 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
             report.Assessments[1].Action);
     }
 
+    /// <summary>A rejected schema transfer cannot move occupancy away from its actual source.</summary>
+    [SqlServerLiveTheory]
+    [InlineData("source_application")]
+    [InlineData("target_application")]
+    public async Task RejectedSchemaTransferRetainsBothLiveSchemaOccupants(string schemaToDrop)
+    {
+        // Arrange
+        var connectionString = await Fixture.CreateDatabaseAsync();
+        await ExecuteSqlAsync(connectionString, "CREATE SCHEMA source_application;");
+        await ExecuteSqlAsync(connectionString, "CREATE SCHEMA target_application;");
+        await ExecuteSqlAsync(connectionString,
+            "CREATE TABLE source_application.items (Id int NOT NULL); "
+            + "CREATE TABLE target_application.items (Id int NOT NULL);");
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.RenameTableIfExists("items", schema: "source_application", newSchema: "target_application");
+        builder.DropSchemaIfExists(schemaToDrop);
+
+        // Act
+        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
+            new SafeMigrationRunOptions("rejected-transfer-preserves-schema-occupancy"));
+
+        // Assert
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.All(report.Assessments,
+            assessment => Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action));
+    }
+
     /// <summary>Other schema-scoped objects remain blockers even after the last resident table is dropped.</summary>
     [SqlServerLiveTheory]
     [InlineData("CREATE VIEW guarded_application.remaining AS SELECT 1 AS Id;")]

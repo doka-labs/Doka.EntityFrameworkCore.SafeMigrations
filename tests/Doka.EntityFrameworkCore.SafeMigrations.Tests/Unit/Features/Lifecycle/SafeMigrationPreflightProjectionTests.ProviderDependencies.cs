@@ -2,6 +2,62 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 public sealed partial class SafeMigrationPreflightProjectionTests
 {
+    /// <summary>Requires an explicit ordered proof after a provider rename.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void OpaqueProviderTransitionRequiresAnExplicitDependencyProof(bool proven)
+    {
+        // Arrange
+        var proof = Live(SafeMigrationObservedState.Missing);
+        var validator = new DependencyProbe(opaqueReplacement: proven ? proof : null);
+        var projection = ProjectionAfterDependencyRename(validator);
+
+        // Act
+        var analysis = projection.Project(DependencyTableOperation(), Live(SafeMigrationObservedState.Missing));
+
+        // Assert
+        Assert.Equal(1, validator.OpaqueValidationCount);
+        Assert.Equal(proven ? SafeMigrationObservedState.Missing : SafeMigrationObservedState.PrerequisiteMissing,
+            analysis.ObservedState);
+        if (proven)
+        {
+            Assert.Same(proof, analysis);
+        }
+    }
+
+    /// <summary>An opaque SQL effect or invariant rejection cannot be cleared by a provider rename proof.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ProviderDependencyProofDoesNotOverrideSqlOrInvariantRejection(bool opaqueSql)
+    {
+        // Arrange
+        var validator = new DependencyProbe(opaqueReplacement: Live(SafeMigrationObservedState.Missing));
+        var projection = ProjectionAfterDependencyRename(validator);
+        var live = Live(SafeMigrationObservedState.Missing);
+        if (opaqueSql)
+        {
+            projection.ObserveProviderPostcondition(new SqlOperation { Sql = "SELECT 1;" });
+        }
+        else
+        {
+            live = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Unsupported,
+                SafeMigrationRepairCapability.None, postconditionSatisfied: false, "invariant_unsupported")
+            {
+                IsInvariantUnsupported = true,
+            };
+        }
+
+        // Act
+        var analysis = projection.Project(DependencyTableOperation(), live);
+
+        // Assert
+        Assert.Equal(0, validator.OpaqueValidationCount);
+        Assert.Equal(opaqueSql ? SafeMigrationObservedState.PrerequisiteMissing : SafeMigrationObservedState.Unsupported,
+            analysis.ObservedState);
+    }
+
     /// <summary>Lets a provider reject dependencies after neutral projection accepts a shape.</summary>
     [Fact]
     public void ProviderDependencyValidationRunsAfterNeutralProjection()
@@ -142,9 +198,27 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             SafeMigrationTableMode.StrictDefinition),
         SafeMigrationPolicy.ThrowIfDifferent);
 
-    private sealed class DependencyProbe(
-        SafeMigrationProviderAnalysis? replacement = null) : ISafeMigrationProjectedDependencyAnalyzer
+    private static SafeMigrationPreflightProjection ProjectionAfterDependencyRename(DependencyProbe validator)
     {
+        var projection = new SafeMigrationPreflightProjection(projectedDependencyAnalyzer: validator);
+        var operation = new SafeMigrationOperation(new RenameTableIntent("parent", "renamed_parent"),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var analysis = Live(SafeMigrationObservedState.Matching);
+        var decision = SafeMigrationDecisionPlanner.Plan(operation.Intent.Kind, analysis.ObservedState,
+            operation.Policy, analysis.RepairCapability);
+
+        projection.Observe(operation, analysis, analysis, decision);
+
+        return projection;
+    }
+
+    private sealed class DependencyProbe(
+        SafeMigrationProviderAnalysis? replacement = null,
+        SafeMigrationProviderAnalysis? opaqueReplacement = null) : ISafeMigrationProjectedDependencyAnalyzer
+    {
+        public int OpaqueValidationCount { get; private set; }
+
         public int ValidationCount { get; private set; }
 
         public int ObservationCount { get; private set; }
@@ -152,6 +226,16 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         public SafeMigrationObservedState? LastProjectedState { get; private set; }
 
         public MigrationOperation? LastProviderOperation { get; private set; }
+
+        public SafeMigrationProviderAnalysis? ValidateOpaqueProviderPostcondition(
+            SafeMigrationOperation operation,
+            SafeMigrationProviderAnalysis liveAnalysis,
+            ISafeMigrationProjectedColumnSource columns)
+        {
+            OpaqueValidationCount++;
+
+            return opaqueReplacement;
+        }
 
         public SafeMigrationProviderAnalysis ValidateProjectedOperation(
             SafeMigrationOperation operation,

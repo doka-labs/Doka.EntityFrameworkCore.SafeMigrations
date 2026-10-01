@@ -162,8 +162,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             return "1 = 1";
         }
 
-        // WHY: A raw CLR literal must reach the non-throwing conversion. A target-typed
-        // CAST inside that guard could raise the very conversion error it guards.
+        // WHY: The operand must reach a non-throwing target conversion. An
+        // unguarded target-typed CAST could raise the error being classified.
         // TRY_CAST also remains bindable below compatibility 110, where the
         // enclosing provider guard must classify Unsupported without SQL errors.
 
@@ -235,6 +235,19 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             ?? _typeMappingSource.FindMapping(value.GetType(), storeType)
             ?? throw new NotSupportedException($"SQL Server has no safe scalar mapping for '{storeType}'.");
 
-        return mapping.GenerateSqlLiteral(value);
+        var literal = mapping.GenerateSqlLiteral(value);
+        if (value is DateTime or DateTimeOffset or DateOnly or TimeOnly or TimeSpan
+            && TryParseStoreType(storeType, out var target)
+            && target.Name is "date" or "datetime" or "datetime2" or "datetimeoffset" or "smalldatetime" or "time")
+        {
+            // WHY: EF's natural temporal literal can contain seven fractional
+            // digits or an offset that legacy datetime text parsing rejects.
+            // Preserve its source type before the independently guarded target
+            // conversion, without a throwing CAST in the conversion proof.
+
+            return $"TRY_CAST({literal} AS {mapping.StoreType})";
+        }
+
+        return literal;
     }
 }

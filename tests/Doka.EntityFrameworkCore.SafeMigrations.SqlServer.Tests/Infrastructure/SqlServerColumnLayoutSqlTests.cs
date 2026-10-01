@@ -111,8 +111,27 @@ public sealed class SqlServerColumnLayoutSqlTests
         Assert.Contains("AS variable_columns", query, StringComparison.Ordinal);
         Assert.Contains("AS clustered_variable_extra", query, StringComparison.Ordinal);
         Assert.Contains("JOIN sys.indexes", query, StringComparison.Ordinal);
+        Assert.Contains("AS clustered_key ", query, StringComparison.Ordinal);
+        Assert.DoesNotContain("AS clustered ", query, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("system_internals", query, StringComparison.Ordinal);
         Assert.DoesNotContain("sys.dm_db", query, StringComparison.Ordinal);
+    }
+
+    /// <summary>Uses an ordinary alias in every clustered-key reference rather than a reserved keyword.</summary>
+    [Fact]
+    public void PhysicalLayout_UsesConsistentNonReservedClusteredKeyAlias()
+    {
+        // Arrange
+        const string objectId = "t.object_id";
+
+        // Act
+        var query = SqlServerSafeMigrationCatalogSqlBuilder.BuildColumnLayoutCatalogQuery(objectId);
+
+        // Assert
+        Assert.Contains("clustered_key.column_id IS NOT NULL", query, StringComparison.Ordinal);
+        Assert.Contains("ON clustered_key.object_id=c.object_id", query, StringComparison.Ordinal);
+        Assert.Contains("AND clustered_key.column_id=c.column_id", query, StringComparison.Ordinal);
+        Assert.DoesNotContain("clustered.", query, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Schema-only admission retains all scalar guards without unconsumed row-capacity work.</summary>

@@ -10,6 +10,8 @@ public sealed class SqlServerDefaultValueRepresentabilityTests
     [Theory]
     [InlineData("datetime", 1, true)]
     [InlineData("datetime", 1753, false)]
+    [InlineData("smalldatetime", 1, true)]
+    [InlineData("smalldatetime", 1900, false)]
     [InlineData("datetime2", 1, false)]
     public void LiteralDefault_UsesTheDocumentedTemporalDomain(
         string storeType,
@@ -41,6 +43,47 @@ public sealed class SqlServerDefaultValueRepresentabilityTests
         {
             Assert.Null(failure);
         }
+    }
+
+    /// <summary>Shares source-typed date conversion between literal and structured default guards.</summary>
+    [Theory]
+    [InlineData("datetime", 1753, false)]
+    [InlineData("datetime", 1753, true)]
+    [InlineData("smalldatetime", 1900, false)]
+    [InlineData("smalldatetime", 1900, true)]
+    public void ValidLegacyTemporalDefault_QualifiesItsNaturalOperandBeforeTargetConversion(
+        string storeType,
+        int year,
+        bool structured
+    )
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext(ConnectionString);
+        var value = new DateTime(year, 1, 1);
+        var defaultValue = structured
+            ? SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal(value, storeType))
+            : SafeMigrationDefaultValue.Literal(value);
+
+        var definition = new ExpectedColumnDefinition("Created", typeof(DateTime), false, storeType,
+            defaultValue: defaultValue);
+
+        var operation = new SafeMigrationOperation(new EnsureColumnIntent("default_items", definition),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var renderer = new SqlServerSafeMigrationSqlExpressionRenderer(
+            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+
+        // Act
+        var plan = CreateCatalog(context).Build(operation);
+        var rendered = renderer.Render(SafeMigrationSql.Literal(value, storeType));
+
+        // Assert
+        Assert.False(plan.IsStaticallyUnsupported);
+        var support = Assert.IsType<string>(plan.DefaultValueSupportExpression);
+        Assert.Contains("TRY_CAST(TRY_CAST('", support, StringComparison.Ordinal);
+        Assert.Contains(" AS datetime2) AS " + storeType + ") IS NOT NULL", support, StringComparison.Ordinal);
+        Assert.StartsWith("CAST(CAST('", rendered, StringComparison.Ordinal);
+        Assert.Contains(" AS datetime2) AS " + storeType + ")", rendered, StringComparison.Ordinal);
     }
 
     /// <summary>Applies the same immutable default gate to new tables and both alteration definitions.</summary>

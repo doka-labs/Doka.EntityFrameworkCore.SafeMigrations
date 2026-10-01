@@ -74,8 +74,8 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     /// Requires a physically compatible referenced key before evaluating FK rows.
     /// </summary>
     [SqlServerLiveTheory]
-    [InlineData(false, "bigint")]
-    [InlineData(true, "int")]
+    [InlineData(false, "int")]
+    [InlineData(true, "bigint")]
     public async Task ForeignKey_IncompatibleTypeOrMissingCandidateKeyRejectsPrerequisite(
         bool hasCandidateKey,
         string dependentType

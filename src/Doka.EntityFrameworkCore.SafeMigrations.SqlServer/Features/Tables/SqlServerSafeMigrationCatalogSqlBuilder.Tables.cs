@@ -116,6 +116,18 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     {
         var source = TableExists(intent.Name, intent.Schema);
         var sourceOccupied = ObjectExists(intent.Name, intent.Schema);
+        if ((intent.NewName ?? intent.Name) == intent.Name
+            && EffectiveSchema(intent.NewSchema ?? intent.Schema) == EffectiveSchema(intent.Schema))
+        {
+            // WHY: An explicitly repeated identity is not an occupied rename
+            // target. Its existing table already satisfies the postcondition;
+            // never invoke sp_rename or TRANSFER for this no-op contract.
+            return Plan(
+                $"CASE WHEN NOT {sourceOccupied} THEN N'missing' WHEN {source} "
+                + "THEN N'matching' ELSE N'different' END",
+                Bit($"NOT {sourceOccupied} OR {source}"));
+        }
+
         var target = ObjectExists(intent.NewName ?? intent.Name, intent.NewSchema ?? intent.Schema);
         var dependent = $"EXISTS (SELECT 1 FROM sys.sql_expression_dependencies d "
             + $"WHERE d.referenced_id = {TableId(intent.Name, intent.Schema)} "
@@ -158,11 +170,12 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         var requiredForeignKeys = expectedTableConstraints?.RequiredForeignKeys
             ?? definition.ForeignKeys;
 
-        var conditions = new List<string>(definition.Columns.Count + 2)
+        var conditions = new List<string>
         {
             TableExists(definition.Table, definition.Schema),
             $"(SELECT COUNT(*) FROM sys.columns c WHERE c.object_id = {TableId(definition.Table, definition.Schema)}) "
             + $"= {definition.Columns.Count.ToString(CultureInfo.InvariantCulture)}",
+            TableColumnsMatch(definition),
             NoUnexpectedConstraints(definition.Table, definition.Schema, "sys.key_constraints",
                 "constraint_object.type = 'PK'",
                 allowedPrimaryKeys.Select(static value => value.Name)),
@@ -174,11 +187,6 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             NoUnexpectedConstraints(definition.Table, definition.Schema, "sys.foreign_keys", "1 = 1",
                 allowedForeignKeys.Select(static value => value.Name)),
         };
-
-        foreach (var column in definition.Columns)
-        {
-            conditions.Add(ColumnMatches(definition.Table, definition.Schema, column));
-        }
 
         foreach (var primaryKey in allowedPrimaryKeys)
         {

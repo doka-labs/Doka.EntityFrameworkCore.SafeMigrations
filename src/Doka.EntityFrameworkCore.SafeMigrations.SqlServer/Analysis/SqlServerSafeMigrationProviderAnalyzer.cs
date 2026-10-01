@@ -24,6 +24,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
     private readonly ISqlGenerationHelper _sqlGenerationHelper;
     private readonly SqlServerSafeMigrationCatalogSqlBuilder _catalogSqlBuilder;
     private SqlServerProjectedDependencyGraph? _dependencyGraph;
+    private DbContext? _catalogInventoryRejectedContext;
     private bool _connectionQuarantined;
 
     /// <summary>
@@ -59,6 +60,22 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
     /// <inheritdoc />
     public bool IsObjectIdentityMismatch(SafeMigrationProviderAnalysis analysis)
         => analysis.Code is "default_schema_mismatch" or "identifier_collation_unproven";
+
+    /// <inheritdoc />
+    public SafeMigrationProviderAnalysis? ValidateOpaqueProviderPostcondition(
+        SafeMigrationOperation operation,
+        SafeMigrationProviderAnalysis liveAnalysis,
+        ISafeMigrationProjectedColumnSource columns
+    )
+    {
+        var orderedAnalysis = _dependencyGraph?.ValidateOpaqueProviderPostcondition(operation, liveAnalysis, columns);
+        if (orderedAnalysis is null)
+        {
+            return null;
+        }
+
+        return ValidateProjectedOperation(operation, orderedAnalysis, columns);
+    }
 
     /// <inheritdoc />
     public SafeMigrationProviderAnalysis ValidateProjectedOperation(
@@ -214,6 +231,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
     )
     {
         _dependencyGraph = null;
+        _catalogInventoryRejectedContext = null;
         _projectedKeyTables = new Dictionary<(string Schema, string Table), SqlServerProjectedKeyTable>();
         ResetProjectedSeedProofs();
         ResetProjectedIdentityProofs();
@@ -245,6 +263,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
 
             if (!environment.CanSeeDatabaseMetadata)
             {
+                _catalogInventoryRejectedContext = context;
+
                 return Enumerable.Range(0, operations.Count)
                     .Select(static _ => Unsupported("catalog_metadata_not_visible"))
                     .ToArray();
@@ -258,6 +278,12 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
                 cancellationToken);
 
             var collationUnsafe = !identifierSafe;
+            if (collationUnsafe || !environment.DefaultSchemaIsDbo
+                && operations.Any(static operation => RequiresDefaultSchema(operation.Intent)))
+            {
+                _catalogInventoryRejectedContext = context;
+            }
+
             if (identifierSafe)
             {
                 await ReadProjectedColumnLayoutsAsync(
@@ -401,6 +427,14 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
 
             if (!environment.CanSeeDatabaseMetadata)
             {
+                if (ReferenceEquals(context, _catalogInventoryRejectedContext))
+                {
+                    // WHY: Preserve the preceding invariant Unsupported report.
+                    // This empty optional inventory is not evidence of absence;
+                    // direct inventory requests without that rejection still fail.
+                    return [];
+                }
+
                 throw new InvalidOperationException(
                     "SQL Server catalog inventory requires database metadata visibility.");
             }
@@ -415,6 +449,11 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
                     context.Database.GetCommandTimeout(),
                     cancellationToken))
             {
+                if (ReferenceEquals(context, _catalogInventoryRejectedContext))
+                {
+                    return [];
+                }
+
                 throw new InvalidOperationException("SQL Server catalog inventory could not prove object identity.");
             }
 

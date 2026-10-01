@@ -9,6 +9,56 @@ public sealed class SqlServerGeneratorSafetyTests
         "Server=127.0.0.1,1433;Database=generation;"
         + "User ID=sa;Password=unused;TrustServerCertificate=True";
 
+    /// <summary>A safe rename preserves its explicit source schema unless a transfer is requested.</summary>
+    [Theory]
+    [InlineData(null, "application")]
+    [InlineData("target", "target")]
+    public void SafeRename_UsesTheSameTargetSchemaForCatalogAndBaseline(string? newSchema, string expectedSchema)
+    {
+        // Arrange
+        var options = new DbContextOptionsBuilder<SafeMigrationDbContext>();
+        options.UseSqlServer(ConnectionString);
+        ((DbContextOptionsBuilder)options)
+            .UseSqlServerSafeMigrations<RecordingBaselineGenerator, SafeMigrationDbContext>();
+        using var context = new SafeMigrationDbContext(options.Options);
+        var baseline = context.GetService<RecordingBaselineGenerator>();
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.RenameTableIfExists("orders", "renamed_orders", schema: "application", newSchema: newSchema);
+
+        // Act
+        context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model);
+
+        // Assert
+        var rename = Assert.Single(baseline.Calls.SelectMany(static operations => operations)
+            .OfType<RenameTableOperation>());
+
+        Assert.Equal("application", rename.Schema);
+        Assert.Equal(expectedSchema, rename.NewSchema);
+    }
+
+    /// <summary>An unchanged identity retains its guards without emitting rename or transfer DDL.</summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("application")]
+    public void SafeRename_UnchangedIdentityOnlyEmitsGuardedValidation(string? schema)
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext(ConnectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.RenameTableIfExists("orders", "orders", schema: schema, newSchema: schema);
+
+        // Act
+        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model);
+        var sql = string.Join("\n", commands.Select(static command => command.CommandText));
+
+        // Assert
+        Assert.NotEmpty(commands);
+        Assert.Contains("HAS_PERMS_BY_NAME", sql, StringComparison.Ordinal);
+        Assert.Contains("doka_sm_postcondition", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("sp_rename", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("TRANSFER", sql, StringComparison.Ordinal);
+    }
+
     /// <summary>
     /// Requires metadata, default-schema, action, and postcondition guards before a safe baseline.
     /// </summary>

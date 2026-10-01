@@ -130,6 +130,48 @@ public sealed class SqlServerModelManagedDataSqlTests
         Assert.Contains("doka_expected.[o1]", mutation, StringComparison.Ordinal);
     }
 
+    /// <summary>Preserves every dependency count without scalar concatenation arity or length limits.</summary>
+    /// <param name="count">The number of independently modeled incoming foreign keys.</param>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(254)]
+    public void Delete_DependencyCountsHandleEmptySingleAndLargeContracts(
+        int count
+    )
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext(ConnectionString);
+        var foreignKeys = Enumerable.Range(0, count).Select(index =>
+            new ExpectedModelManagedDataForeignKeyDefinition(
+                "dependent_" + index.ToString(CultureInfo.InvariantCulture), ["RoleId"], ["Id"])).ToArray();
+
+        var intent = new DeleteModelManagedDataIntent(
+            "roles", ["Id"], ["int"], new object?[,] { { 1 } },
+            ["Id"], ["int"], new object?[,] { { 1 } }, null, foreignKeys);
+
+        var catalog = CreateCatalog(context);
+
+        // Act
+        var plan = catalog.Build(new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent));
+
+        // Assert
+        var expression = Assert.IsType<string>(plan.ModelManagedDependencyCountsExpression);
+        Assert.Equal(count, plan.ModelManagedDependencyCount);
+        Assert.DoesNotContain("CONCAT_WS", expression, StringComparison.OrdinalIgnoreCase);
+        if (count == 0)
+        {
+            Assert.Equal("N''", expression);
+
+            return;
+        }
+
+        Assert.StartsWith("(CONVERT(varchar(max), ", expression, StringComparison.Ordinal);
+        Assert.Equal(count, expression.Split("COUNT_BIG(*)", StringSplitOptions.None).Length - 1);
+        Assert.Equal(count - 1, expression.Split(" + ',' + ", StringSplitOptions.None).Length - 1);
+    }
+
     /// <summary>
     /// Blocks source batches whose distinct CLR values collide in a database collation.
     /// </summary>

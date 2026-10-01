@@ -105,7 +105,12 @@ internal sealed partial class SafeMigrationPreflightProjection :
 
         if (_hasOpaqueProviderPostcondition)
         {
-            return StructureStateUnknown();
+            // WHY: A provider can retain physical identities across a safe
+            // rename even when neutral projection cannot. Only an explicit
+            // ordered proof may discharge this uncertainty; opaque SQL and
+            // invariant rejections have already taken precedence above.
+            return _projectedDependencyAnalyzer?.ValidateOpaqueProviderPostcondition(operation, liveAnalysis, this)
+                ?? StructureStateUnknown();
         }
 
         var projectedAnalysis = operation.Intent switch

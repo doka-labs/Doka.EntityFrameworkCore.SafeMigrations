@@ -21,8 +21,8 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
             + "CREATE TABLE dbo.sqlserver_stress_alter (caption varchar(10) NOT NULL); "
             + "INSERT INTO dbo.sqlserver_stress_alter VALUES ('short'); "
             + "CREATE TABLE dbo.sqlserver_stress_managed (id int NOT NULL PRIMARY KEY, "
-            + "managed_value nvarchar(32) NOT NULL); "
-            + "INSERT INTO dbo.sqlserver_stress_managed VALUES (1, N'source');");
+            + "managed_value nvarchar(32) NOT NULL);");
+        await PopulateStressModelManagedRowsAsync(connectionString);
         await using var context = CreateContext(connectionString);
         context.Database.SetCommandTimeout(PerformanceFixtureCommandTimeoutSeconds);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -181,6 +181,39 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
         using var bulkCopy = new SqlBulkCopy(connection)
         {
             DestinationTableName = "dbo.large_model_managed_rows",
+            BatchSize = 1000,
+            BulkCopyTimeout = PerformanceFixtureCommandTimeoutSeconds,
+        };
+
+        bulkCopy.ColumnMappings.Add("id", "id");
+        bulkCopy.ColumnMappings.Add("managed_value", "managed_value");
+
+        await bulkCopy.WriteToServerAsync(rows);
+    }
+
+    /// <summary>Creates one source row for every linear managed update in the mixed stress stream.</summary>
+    /// <param name="connectionString">The isolated stress database connection.</param>
+    /// <returns>A task that completes when all ordinal-specific source rows are available.</returns>
+    private static async Task PopulateStressModelManagedRowsAsync(
+        string connectionString
+    )
+    {
+        using var rows = new DataTable { Locale = CultureInfo.InvariantCulture };
+        rows.Columns.Add("id", typeof(int));
+        rows.Columns.Add("managed_value", typeof(string));
+        var ordinals = LargeMigrationStressContract.ModelManagedUpdateOrdinals(
+            LargeMigrationStressDialect.SqlServer);
+
+        foreach (var ordinal in ordinals)
+        {
+            rows.Rows.Add(LargeMigrationStressContract.ModelManagedUpdateKey(ordinal), "source");
+        }
+
+        await using var connection = new SqlConnection(connectionString);
+        await connection.OpenAsync();
+        using var bulkCopy = new SqlBulkCopy(connection)
+        {
+            DestinationTableName = "dbo.sqlserver_stress_managed",
             BatchSize = 1000,
             BulkCopyTimeout = PerformanceFixtureCommandTimeoutSeconds,
         };

@@ -10,7 +10,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     private const string ColumnLayoutRowFields = "COALESCE(SUM(CASE "
         + "WHEN ty.name IN (N'varchar',N'nvarchar',N'varbinary') THEN 1 ELSE 0 END),0) AS variable_columns, "
         + "COALESCE(SUM(CASE WHEN ty.name IN (N'varchar',N'nvarchar',N'varbinary') "
-        + "AND clustered.column_id IS NOT NULL AND c.max_length>24 "
+        + "AND clustered_key.column_id IS NOT NULL AND c.max_length>24 "
         + "THEN CONVERT(bigint,c.max_length-24) ELSE CONVERT(bigint,0) END),0) AS clustered_variable_extra, ";
 
     private const string ColumnLayoutScalarSource = "COALESCE(SUM(CASE "
@@ -26,8 +26,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     private const string ColumnLayoutClusteredJoin = "LEFT JOIN "
         + "(SELECT ic.object_id,ic.column_id FROM sys.index_columns AS ic "
         + "JOIN sys.indexes AS i ON i.object_id=ic.object_id AND i.index_id=ic.index_id "
-        + "WHERE i.type=1 AND ic.key_ordinal>0) AS clustered "
-        + "ON clustered.object_id=c.object_id AND clustered.column_id=c.column_id ";
+        + "WHERE i.type=1 AND ic.key_ordinal>0) AS clustered_key "
+        + "ON clustered_key.object_id=c.object_id AND clustered_key.column_id=c.column_id ";
 
     private const string ColumnLayoutSchemaQuery = ColumnLayoutScalarFields + ColumnLayoutScalarSource
         + "WHERE c.object_id=t.object_id";

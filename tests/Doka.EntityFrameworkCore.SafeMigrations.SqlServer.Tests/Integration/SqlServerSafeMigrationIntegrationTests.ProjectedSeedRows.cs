@@ -135,4 +135,47 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
             ? SafeMigrationAction.RejectUnsupported : SafeMigrationAction.Apply, report.Assessments[0].Action);
         Assert.Equal(0, rowCount);
     }
+
+    /// <summary>Valid legacy temporal values apply and replay with the same guarded typed value relation.</summary>
+    [SqlServerLiveTheory]
+    [InlineData("datetime", 1753)]
+    [InlineData("smalldatetime", 1900)]
+    [InlineData("datetime2(7)", 1)]
+    public async Task LiveManagedTemporalBoundary_AppliesAndReplaysWithoutLoss(
+        string storeType,
+        int year
+    )
+    {
+        // Arrange
+        var connectionString = await Fixture.CreateDatabaseAsync();
+        await ExecuteSqlAsync(connectionString,
+            "CREATE TABLE dbo.managed_boundary (Id int NOT NULL PRIMARY KEY, Value " + storeType + " NOT NULL);");
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        var value = new DateTime(year, 1, 1);
+        builder.EnsureModelManagedDataFromModel("managed_boundary", ["Id"], ["int"],
+            ["Id", "Value"], ["int", storeType], new object?[,] { { 1, value } });
+        var expected = value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+        // Act
+        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
+            new SafeMigrationRunOptions("sqlserver-managed-temporal-boundary-replay"));
+
+        await ExecuteOperationsAsync(context, builder.Operations);
+        var replayAnalyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context,
+            builder.Operations.Cast<SafeMigrationOperation>().ToArray());
+
+        await ExecuteOperationsAsync(context, builder.Operations);
+        var preservedRows = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM dbo.managed_boundary WHERE Id = 1 AND Value = CAST(N'"
+            + expected + "' AS datetime2(7));");
+
+        // Assert
+        Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
+        Assert.Equal(SafeMigrationAction.Apply, Assert.Single(report.Assessments).Action);
+        var replay = Assert.Single(replayAnalyses);
+        Assert.Equal(SafeMigrationObservedState.Matching, replay.ObservedState);
+        Assert.True(replay.PostconditionSatisfied);
+        Assert.Equal(1, preservedRows);
+    }
 }

@@ -127,7 +127,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
         Assert.NotEqual("projected_seed_key_data_safe", report.Assessments[^1].AnalysisCode);
     }
 
-    /// <summary>Exact repeated ensures describe one authored physical row instead of a duplicate key.</summary>
+    /// <summary>Identical ensures across migration boundaries preserve one physical row per typed key.</summary>
     [SqlServerLiveFact]
     public async Task ProjectedAuthoredUniqueKey_RepeatedIdenticalEnsureRemainsSafe()
     {
@@ -135,28 +135,53 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
         var connectionString = await Fixture.CreateDatabaseAsync();
         await using var context = CreateContext(connectionString);
         var builder = AuthoredSeedKeyBuilder(context, collation: null, "alpha", "beta");
-        builder.Operations.Insert(2, builder.Operations[1]);
+        var initialOperations = builder.Operations.Take(3).ToArray();
+        var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
+        var initial = await runner.AnalyzeAsync(context, initialOperations,
+            new SafeMigrationRunOptions("sqlserver-authored-seed-initial"));
+
+        // WHY: A published migration may transition each typed key only once.
+        // Repetition belongs to the next migration after the initial rows exist.
+        await ExecuteOperationsAsync(context, initialOperations);
+        var report = await runner.AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("sqlserver-authored-seed-repeat"));
 
+        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations);
+        var rowCount = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.authored_seed_keys;");
+        var indexCount = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.authored_seed_keys') "
+            + "AND name = N'IX_authored_seed_keys_Code' AND is_unique = 1;");
+
         // Assert
+        Assert.Equal(SafeMigrationReportStatus.Ready, initial.Status);
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
+        Assert.Equal(SafeMigrationAction.NoOp, report.Assessments[1].Action);
         Assert.Equal(SafeMigrationAction.NoOp, report.Assessments[2].Action);
-        Assert.Equal(SafeMigrationAction.Apply, report.Assessments[4].Action);
+        Assert.Equal(SafeMigrationAction.Apply, report.Assessments[3].Action);
+        Assert.Equal(2, rowCount);
+        Assert.Equal(1, indexCount);
     }
 
-    /// <summary>A captured insert proof cannot authorize a key after an accepted update or deletion.</summary>
+    /// <summary>An accepted update or deletion invalidates the following unique-key row proof.</summary>
     [SqlServerLiveTheory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ProjectedAuthoredUniqueKey_ManagedMutationInvalidatesTheLineage(bool delete)
+    public async Task ProjectedAuthoredUniqueKey_ManagedMutationInvalidatesTheLineage(
+        bool delete
+    )
     {
         // Arrange
         var connectionString = await Fixture.CreateDatabaseAsync();
         await using var context = CreateContext(connectionString);
         var builder = AuthoredSeedKeyBuilder(context, collation: null, "alpha", "beta");
+        var initialOperations = builder.Operations.Take(2).ToArray();
+
+        // WHY: Seed the mutated key in an earlier migration. The new migration
+        // inserts key two and transitions key one, each exactly once.
+        builder.Operations.RemoveAt(1);
         var mutation = new MigrationBuilder(context.Database.ProviderName!);
         if (delete)
         {
@@ -171,16 +196,37 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
                 uniqueKeys: [new ExpectedModelManagedDataUniqueKeyDefinition(["Code"])]);
         }
 
-        builder.Operations.Insert(3, mutation.Operations[0]);
+        builder.Operations.Insert(2, mutation.Operations[0]);
+        var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
+        var initial = await runner.AnalyzeAsync(context, initialOperations,
+            new SafeMigrationRunOptions("sqlserver-authored-seed-mutation-initial"));
+
+        await ExecuteOperationsAsync(context, initialOperations);
+        var report = await runner.AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("sqlserver-authored-seed-mutation"));
 
+        var originalCount = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM dbo.authored_seed_keys WHERE Id = 1 AND Code = N'alpha';");
+
+        var plannedSeedCount = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM dbo.authored_seed_keys WHERE Id = 2;");
+
+        var indexCount = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.authored_seed_keys') "
+            + "AND name = N'IX_authored_seed_keys_Code';");
+
         // Assert
+        Assert.Equal(SafeMigrationReportStatus.Ready, initial.Status);
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, report.Assessments[4].Action);
-        Assert.Equal("projected_key_data_state_unknown", report.Assessments[4].AnalysisCode);
+        Assert.Equal(SafeMigrationAction.Apply, report.Assessments[1].Action);
+        Assert.Equal(SafeMigrationAction.Apply, report.Assessments[2].Action);
+        Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, report.Assessments[3].Action);
+        Assert.Equal("projected_data_state_unknown", report.Assessments[3].AnalysisCode);
+        Assert.Equal(1, originalCount);
+        Assert.Equal(0, plannedSeedCount);
+        Assert.Equal(0, indexCount);
     }
 
     /// <summary>

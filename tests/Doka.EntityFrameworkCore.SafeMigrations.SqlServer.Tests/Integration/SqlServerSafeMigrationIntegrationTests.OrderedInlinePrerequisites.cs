@@ -90,6 +90,120 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
             report.Assessments[1].Action);
     }
 
+    /// <summary>Only the final accepted name retains an inline FK's physical principal proof.</summary>
+    [SqlServerLiveTheory]
+    [InlineData("inline_principal", false)]
+    [InlineData("intermediate_principal", false)]
+    [InlineData("renamed_principal", true)]
+    public async Task InlineForeignKeyUsesCurrentPrincipalAfterRepeatedRenames(
+        string principalTable,
+        bool expectedReady
+    )
+    {
+        // Arrange
+        var connectionString = await Fixture.CreateDatabaseAsync();
+        await ExecuteSqlAsync(connectionString,
+            "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY);");
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.RenameTableIfExists("inline_principal", "intermediate_principal");
+        builder.RenameTableIfExists("intermediate_principal", "renamed_principal");
+        builder.EnsureTable(InlineDependent(principalTable),
+            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+
+        // Act
+        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
+            new SafeMigrationRunOptions("repeated-renamed-inline-principal"));
+
+        // Assert
+        Assert.Equal(expectedReady ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked,
+            report.Status);
+        Assert.All(report.Assessments.Take(2),
+            assessment => Assert.Equal(SafeMigrationAction.Apply, assessment.Action));
+        Assert.Equal(expectedReady ? SafeMigrationAction.Apply : SafeMigrationAction.RejectPrerequisiteMissing,
+            report.Assessments[2].Action);
+    }
+
+    /// <summary>An occupied rename target cannot activate the original principal's captured proof.</summary>
+    [SqlServerLiveFact]
+    public async Task RejectedPrincipalRenameDoesNotActivateInlineStorageProof()
+    {
+        // Arrange
+        var connectionString = await Fixture.CreateDatabaseAsync();
+        await ExecuteSqlAsync(connectionString,
+            "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY); "
+            + "CREATE TABLE dbo.renamed_principal (Id bigint NOT NULL CONSTRAINT PK_occupied_principal PRIMARY KEY);");
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.RenameTableIfExists("inline_principal", "renamed_principal");
+        builder.EnsureTable(InlineDependent("renamed_principal"),
+            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+
+        // Act
+        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
+            new SafeMigrationRunOptions("rejected-renamed-inline-principal"));
+
+        // Assert
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(SafeMigrationAction.RejectDifferent, report.Assessments[0].Action);
+        Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, report.Assessments[1].Action);
+    }
+
+    /// <summary>A prior accepted rename cannot hide a table or view occupying the next target name.</summary>
+    [SqlServerLiveTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RepeatedPrincipalRenameRetainsTargetObjectKindGuard(bool targetIsView)
+    {
+        // Arrange
+        var connectionString = await Fixture.CreateDatabaseAsync();
+        await ExecuteSqlAsync(connectionString,
+            "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY);");
+        await ExecuteSqlAsync(connectionString, targetIsView
+            ? "CREATE VIEW dbo.occupied_principal AS SELECT 1 AS Id;"
+            : "CREATE TABLE dbo.occupied_principal (Id int NOT NULL);");
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.RenameTableIfExists("inline_principal", "intermediate_principal");
+        builder.RenameTableIfExists("intermediate_principal", "occupied_principal");
+
+        // Act
+        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
+            new SafeMigrationRunOptions("ordered-rename-target-kind"));
+
+        // Assert
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
+        Assert.Equal(SafeMigrationAction.RejectDifferent, report.Assessments[1].Action);
+        Assert.Equal("projected_rename_target_occupied", report.Assessments[1].AnalysisCode);
+    }
+
+    /// <summary>Opaque SQL still invalidates a renamed principal's captured inline storage proof.</summary>
+    [SqlServerLiveFact]
+    public async Task OpaqueSqlAfterRenameCannotRetainInlinePrerequisiteProof()
+    {
+        // Arrange
+        var connectionString = await Fixture.CreateDatabaseAsync();
+        await ExecuteSqlAsync(connectionString,
+            "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY);");
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.RenameTableIfExists("inline_principal", "renamed_principal");
+        builder.Sql("SELECT 1;");
+        builder.EnsureTable(InlineDependent("renamed_principal"),
+            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+
+        // Act
+        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
+            new SafeMigrationRunOptions("opaque-sql-invalidates-inline-rename"));
+
+        // Assert
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
+        Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, report.Assessments[^1].Action);
+        Assert.Equal("projected_structure_state_unknown", report.Assessments[^1].AnalysisCode);
+    }
+
     /// <summary>A surviving alternate candidate key retains valid inline prerequisites.</summary>
     [SqlServerLiveFact]
     public async Task DroppedCandidateKeyDoesNotInvalidateSurvivingEquivalentKey()
@@ -250,6 +364,56 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
         Assert.Equal(expectedReady ? SafeMigrationAction.Apply : SafeMigrationAction.RejectPrerequisiteMissing,
             report.Assessments[1].Action);
+    }
+
+    /// <summary>
+    /// Inline FKs after accepted table or column renames execute and replay under their final identities.
+    /// </summary>
+    [SqlServerLiveTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task InlineForeignKeyAfterPrincipalRenameAppliesAndReplays(bool renameColumn)
+    {
+        // Arrange
+        var connectionString = await Fixture.CreateDatabaseAsync();
+        await ExecuteSqlAsync(connectionString,
+            "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY);");
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        if (renameColumn)
+        {
+            builder.RenameColumnIfExists("Id", "inline_principal", "RenamedId");
+        }
+        else
+        {
+            builder.RenameTableIfExists("inline_principal", "renamed_principal");
+        }
+
+        builder.EnsureTable(new ExpectedTableDefinition("inline_dependent",
+            [new ExpectedColumnDefinition("ParentId", typeof(int), false, "int")],
+            foreignKeys: [new ExpectedForeignKeyDefinition("FK_inline_dependent", "inline_dependent",
+                ["ParentId"], renameColumn ? "inline_principal" : "renamed_principal",
+                [renameColumn ? "RenamedId" : "Id"])]),
+            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+
+        // Act
+        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations);
+        var replay = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
+            new SafeMigrationRunOptions("inline-renamed-principal-replay"));
+
+        var foreignKeyCount = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM sys.foreign_keys fk JOIN sys.foreign_key_columns fkc "
+            + "ON fkc.constraint_object_id = fk.object_id "
+            + "JOIN sys.columns principal ON principal.object_id = fkc.referenced_object_id "
+            + "AND principal.column_id = fkc.referenced_column_id "
+            + "WHERE fk.name = N'FK_inline_dependent' AND fk.is_disabled = 0 AND fk.is_not_trusted = 0 "
+            + $"AND principal.name = N'{(renameColumn ? "RenamedId" : "Id")}';");
+
+        // Assert
+        Assert.Equal(SafeMigrationReportStatus.Ready, replay.Status);
+        Assert.All(replay.Assessments, assessment => Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
+        Assert.Equal(1, foreignKeyCount);
     }
 
     private static ExpectedTableDefinition InlineDependent(string principalTable)
