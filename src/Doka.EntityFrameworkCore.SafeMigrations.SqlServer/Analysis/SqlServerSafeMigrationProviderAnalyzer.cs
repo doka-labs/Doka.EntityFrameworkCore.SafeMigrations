@@ -366,18 +366,16 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
                     plans[index] = plan;
                 }
 
-                while (ordinal < captureStart + count)
-                {
-                    ordinal = await ReadCatalogBatchAsync(
-                        connection,
-                        transaction,
-                        context.Database.GetCommandTimeout(),
-                        plans,
-                        captureStart,
-                        ordinal,
-                        results,
-                        cancellationToken);
-                }
+                await ReadCatalogCaptureAsync(
+                    connection,
+                    transaction,
+                    context.Database.GetCommandTimeout(),
+                    plans,
+                    captureStart,
+                    results,
+                    cancellationToken);
+
+                ordinal += count;
             }
 
             CaptureIdentitySlotConflicts(operations, results);
@@ -601,127 +599,6 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
             _ => false,
         };
 
-    private static async Task<int> ReadCatalogBatchAsync(
-        DbConnection connection,
-        DbTransaction? transaction,
-        int? commandTimeout,
-        SqlServerSafeMigrationRuntimePlan?[] plans,
-        int captureStart,
-        int start,
-        SafeMigrationProviderAnalysis[] results,
-        CancellationToken cancellationToken
-    )
-    {
-        await using var batch = new SafeMigrationCatalogBatch(connection, commandTimeout, transaction);
-        var ordinal = start;
-        var payload = 0;
-        var resultPlans = new List<(int Ordinal, SqlServerSafeMigrationRuntimePlan Plan)>();
-        var payloadFull = false;
-        while (ordinal < captureStart + plans.Length
-               && !payloadFull
-               && batch.Count < SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch)
-        {
-            while (ordinal < captureStart + plans.Length && plans[ordinal - captureStart] is null)
-            {
-                ordinal++;
-            }
-
-            if (ordinal == captureStart + plans.Length)
-            {
-                break;
-            }
-
-            var firstPlan = plans[ordinal - captureStart]!;
-            var delayed = firstPlan.RequiresDelayedBinding || firstPlan.CatalogPreambleSql is not null;
-            var prefix = delayed ? DelayedStatementPrefix : string.Empty;
-            var trailer = delayed ? DelayedStatementTrailer : SafeMigrationCatalogQueryLimits.Trailer;
-            var separator = delayed ? "\n" : SafeMigrationCatalogQueryLimits.Separator;
-            var statementPayload = Encoding.UTF8.GetByteCount(prefix) + Encoding.UTF8.GetByteCount(trailer);
-            var selections = new List<string>(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement);
-            while (ordinal < captureStart + plans.Length
-                   && selections.Count < SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                var plan = plans[ordinal - captureStart];
-                if (plan is null)
-                {
-                    ordinal++;
-
-                    continue;
-                }
-
-                if ((plan.RequiresDelayedBinding || plan.CatalogPreambleSql is not null) != delayed)
-                {
-                    break;
-                }
-
-                var selection = delayed
-                    ? BuildDelayedCatalogSelection(ordinal, plan)
-                    : BuildCatalogSelection(ordinal, plan);
-
-                var bytes = Encoding.UTF8.GetByteCount(selection);
-                var singleOperationPayload = Encoding.UTF8.GetByteCount(prefix)
-                    + bytes + Encoding.UTF8.GetByteCount(trailer);
-
-                if (singleOperationPayload > SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes)
-                {
-                    throw SafeMigrationCatalogQueryLimits.OversizedOperation(ordinal, 0, singleOperationPayload);
-                }
-
-                var addition = bytes + (selections.Count == 0 ? 0 : Encoding.UTF8.GetByteCount(separator));
-                if (payload + statementPayload + addition > SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes)
-                {
-                    payloadFull = true;
-
-                    break;
-                }
-
-                selections.Add(selection);
-                resultPlans.Add((ordinal, plan));
-                statementPayload += addition;
-                ordinal++;
-            }
-
-            if (selections.Count == 0)
-            {
-                break;
-            }
-
-            var command = batch.CreateCommand();
-            command.CommandText = prefix + string.Join(separator, selections) + trailer;
-            payload += statementPayload;
-        }
-
-        if (batch.Count == 0)
-        {
-            return ordinal;
-        }
-
-        var resultIndex = 0;
-        await batch.ForEachResultSetAsync(async (reader, token) =>
-        {
-            while (await reader.ReadAsync(token))
-            {
-                if (resultIndex >= resultPlans.Count || reader.GetInt32(0) != resultPlans[resultIndex].Ordinal)
-                {
-                    throw new InvalidOperationException("The SQL Server catalog batch returned an invalid ordinal.");
-                }
-
-                var expected = resultPlans[resultIndex];
-                results[expected.Ordinal] = ReadAnalysis(reader, expected.Plan);
-                resultIndex++;
-            }
-        }, cancellationToken);
-
-        if (resultIndex != resultPlans.Count)
-        {
-            throw new InvalidOperationException("The SQL Server catalog batch returned an inconsistent row count.");
-        }
-
-        return ordinal;
-    }
-
     /// <summary>Builds one metadata-only classifier retaining the shared physical-engine boundary.</summary>
     /// <param name="ordinal">The original operation ordinal.</param>
     /// <param name="plan">The captured catalog contract.</param>
@@ -730,10 +607,11 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
         int ordinal,
         SqlServerSafeMigrationRuntimePlan plan
     )
-        => BuildCatalogSelection(ordinal, plan, includePhysicalTableSupport: true);
+        => BuildCatalogSelection(
+            ordinal.ToString(CultureInfo.InvariantCulture), plan, includePhysicalTableSupport: true);
 
     private static string BuildCatalogSelection(
-        int ordinal,
+        string ordinal,
         SqlServerSafeMigrationRuntimePlan plan,
         bool includePhysicalTableSupport
     )
@@ -840,7 +718,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
                 + $"(SELECT ({columnLayoutFailure}) AS failure) doka_layout";
         }
 
-        return $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, ({state}), "
+        return $"SELECT {ordinal}, ({state}), "
             + $"COALESCE(({post}), 0), COALESCE(({repair}), 0), ({code}), "
             + $"({rows}), ({dependencies}), ({diagnostics}), ({matched})"
             + (supportSource.Length == 0 ? string.Empty : " FROM " + supportSource);
@@ -859,7 +737,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
         // branch before execution. Dynamic SQL is required after the catalog
         // prerequisite has succeeded, not merely an IF wrapper.
         var inner = (plan.CatalogPreambleSql is null ? string.Empty : plan.CatalogPreambleSql + "\n")
-            + BuildCatalogSelection(ordinal, plan, includePhysicalTableSupport: false);
+            + BuildCatalogSelection("@doka_ordinal", plan, includePhysicalTableSupport: false);
 
         var escaped = inner.Replace("'", "''", StringComparison.Ordinal);
         var physicalGate = plan.PhysicalTableSupportExpression is null ? string.Empty
@@ -919,7 +797,10 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
             + (plan.StateEvaluationGuardFailureExpression is null
                 ? string.Empty
                 : $"AND COALESCE(({plan.StateEvaluationGuardExpression}), 0) = 1 ")
-            + $"INSERT INTO @doka_analysis EXEC sys.sp_executesql N'{escaped}' "
+            // WHY: The ordinal labels the result, not its physical contract. Parameterizing it keeps identical
+            // delayed classifiers reusable in SQL Server's plan cache without changing name-binding guards.
+            + $"INSERT INTO @doka_analysis EXEC sys.sp_executesql N'{escaped}', "
+            + $"N'@doka_ordinal int', @doka_ordinal = {ordinal.ToString(CultureInfo.InvariantCulture)} "
             + $"ELSE INSERT INTO @doka_analysis SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, "
             + (plan.StateEvaluationGuardFailureExpression is null
                 ? "N'prerequisite_missing'"

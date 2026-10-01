@@ -178,7 +178,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
         Assert.Equal("projected_rename_target_occupied", report.Assessments[1].AnalysisCode);
     }
 
-    /// <summary>Opaque SQL still invalidates a renamed principal's captured inline storage proof.</summary>
+    /// <summary>Opaque SQL defers a renamed principal's proof, which the runtime guard safely re-establishes.</summary>
     [SqlServerLiveFact]
     public async Task OpaqueSqlAfterRenameCannotRetainInlinePrerequisiteProof()
     {
@@ -197,11 +197,86 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("opaque-sql-invalidates-inline-rename"));
 
+        var preflightFailure = Record.Exception(report.ThrowIfBlocked);
+        var preflightChildCount = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM sys.tables WHERE object_id=OBJECT_ID(N'dbo.inline_dependent',N'U');");
+
+        await ExecuteOperationsAsync(context, builder.Operations);
+        var foreignKeyCount = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM sys.foreign_keys WHERE name=N'FK_inline_dependent' "
+            + "AND parent_object_id=OBJECT_ID(N'dbo.inline_dependent',N'U') "
+            + "AND referenced_object_id=OBJECT_ID(N'dbo.renamed_principal',N'U') "
+            + "AND is_disabled=0 AND is_not_trusted=0;");
+
         // Assert
-        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, report.Status);
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
-        Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, report.Assessments[^1].Action);
+        Assert.Equal(SafeMigrationAction.ValidateAtRuntime, report.Assessments[^1].Action);
         Assert.Equal("projected_structure_state_unknown", report.Assessments[^1].AnalysisCode);
+        Assert.Null(report.Assessments[^1].ObservedState);
+        Assert.Null(report.Assessments[^1].PostconditionSatisfied);
+        var origin = Assert.IsType<SafeMigrationDeferredOrigin>(report.Assessments[^1].DeferredOrigin);
+
+        Assert.Equal(1, origin.OperationOrdinal);
+        Assert.Equal(typeof(SqlOperation).FullName, origin.OperationType);
+        Assert.Null(origin.MigrationId);
+        Assert.Null(preflightFailure);
+        Assert.Equal(0, preflightChildCount);
+        Assert.Equal(1, foreignKeyCount);
+    }
+
+    /// <summary>Opaque removal is deferred but the runtime guard rejects the missing inline prerequisite.</summary>
+    /// <param name="dropTable">Whether opaque SQL removes the whole principal instead of its only key.</param>
+    [SqlServerLiveTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OpaqueSqlAfterRenameRejectsRemovedInlinePrerequisiteBeforeChildCreation(bool dropTable)
+    {
+        // Arrange
+        var connectionString = await Fixture.CreateDatabaseAsync();
+        await ExecuteSqlAsync(connectionString,
+            "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY);");
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.RenameTableIfExists("inline_principal", "renamed_principal");
+        builder.Sql(dropTable ? "DROP TABLE dbo.renamed_principal;"
+            : "ALTER TABLE dbo.renamed_principal DROP CONSTRAINT PK_inline_principal;");
+        builder.EnsureTable(InlineDependent("renamed_principal"),
+            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+
+        // Act
+        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
+            new SafeMigrationRunOptions("opaque-sql-removes-inline-prerequisite"));
+
+        var preflightFailure = Record.Exception(report.ThrowIfBlocked);
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var childCount = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM sys.tables WHERE object_id=OBJECT_ID(N'dbo.inline_dependent',N'U');");
+
+        var principalCount = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM sys.tables WHERE object_id=OBJECT_ID(N'dbo.renamed_principal',N'U');");
+
+        var keyCount = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM sys.key_constraints "
+            + "WHERE parent_object_id=OBJECT_ID(N'dbo.renamed_principal',N'U');");
+
+        // Assert
+        Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, report.Status);
+        Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
+        Assert.Equal(SafeMigrationAction.ValidateAtRuntime, report.Assessments[^1].Action);
+        Assert.Equal("projected_structure_state_unknown", report.Assessments[^1].AnalysisCode);
+        Assert.Null(report.Assessments[^1].ObservedState);
+        Assert.Null(report.Assessments[^1].PostconditionSatisfied);
+        var origin = Assert.IsType<SafeMigrationDeferredOrigin>(report.Assessments[^1].DeferredOrigin);
+
+        Assert.Equal(1, origin.OperationOrdinal);
+        Assert.Equal(typeof(SqlOperation).FullName, origin.OperationType);
+        Assert.Null(origin.MigrationId);
+        Assert.Null(preflightFailure);
+        Assert.Equal(51004, Assert.IsType<SqlException>(failure).Number);
+        Assert.Equal(0, childCount);
+        Assert.Equal(dropTable ? 0 : 1, principalCount);
+        Assert.Equal(0, keyCount);
     }
 
     /// <summary>A surviving alternate candidate key retains valid inline prerequisites.</summary>

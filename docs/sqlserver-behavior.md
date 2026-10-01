@@ -252,6 +252,32 @@ oversized payloads remain `PrerequisiteMissing`; a proven collision is
 `DataBlocked`. Key-width, primary-key nullability, physical-table, and unknown
 structure guards still apply before this proof can be accepted.
 
+## Catalog transport and opaque SQL
+
+Read-only analysis captures at most 512 plans at a time, grouping metadata-only
+and delayed-binding classifiers within that window. Each statement contains
+at most 32 operations; each native or sequential transport contains at most
+eight statements and 4 MiB of UTF-8 SQL, including dynamic quote expansion.
+Results are checked against their original ordinal and plan, then projected in
+migration order. Missing, duplicate, unexpected, or out-of-order result rows
+fail the analysis without publishing a partial report. Delayed classifiers use
+an explicit ordinal parameter for reusable inner SQL; name-binding and physical
+prerequisite guards are unchanged.
+
+This does not reorder migration execution, parallelize database commands, or
+weaken the analysis lock, transaction, or runtime guards. External writes still
+require deployment exclusion; batching is not snapshot isolation.
+
+After opaque migration SQL, mutable structural proof is deferred rather than
+approved from stale catalog evidence. The report is
+`RuntimeValidationRequired`, and affected assessments are `ValidateAtRuntime`
+with no claimed observed state or postcondition. Runtime guards re-establish
+the prerequisites after that SQL executes. For example, harmless SQL after a
+table rename can still allow an inline foreign key, while removal of its
+principal key is rejected before the dependent table is created. Invariant
+unsupported contracts remain blocked during preflight. See
+[ordered projection](implementation-design.md#preflight-and-postflight).
+
 ## Foreign-key action prerequisites
 
 Foreign keys have a separate physical limit of 32 columns and 900 bytes;

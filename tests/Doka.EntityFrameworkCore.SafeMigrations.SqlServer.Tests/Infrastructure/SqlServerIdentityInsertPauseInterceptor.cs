@@ -89,12 +89,43 @@ internal sealed class SqlServerIdentityInsertPauseInterceptor
         CancellationToken cancellationToken = default
     )
     {
-        await using var command = observer.CreateCommand();
-        command.CommandText = "SELECT APPLOCK_TEST(N'public', @resource, N'Exclusive', N'Session');";
+        await using var command = CreateMarkerObservationCommand(observer);
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+
+        return ParseMarkerAvailability(result);
+    }
+
+    /// <summary>
+    /// Creates a non-acquiring observation of the session marker with a parameterized resource name.
+    /// </summary>
+    /// <param name="observer">The separate session observing marker availability without acquiring it.</param>
+    /// <returns>The caller-owned command using explicit SQL integer metadata.</returns>
+    public SqlCommand CreateMarkerObservationCommand(
+        SqlConnection observer
+    )
+    {
+        var command = observer.CreateCommand();
+
+        // WHY: Explicit SQL metadata fixes the scalar contract without coercing malformed CLR observations.
+        command.CommandText = "SELECT CONVERT(int, APPLOCK_TEST(N'public', @resource, N'Exclusive', N'Session'));";
         command.CommandTimeout = 5;
         command.Parameters.Add(new SqlParameter("@resource", SqlDbType.NVarChar, 255) { Value = _resource });
-        var result = await command.ExecuteScalarAsync(cancellationToken);
-        if (result is not short availability || availability is not (0 or 1))
+
+        return command;
+    }
+
+    /// <summary>
+    /// Rejects observations that are not exact lock decisions before certifying marker availability.
+    /// </summary>
+    /// <param name="result">The scalar returned by the explicit SQL integer observation.</param>
+    /// <returns>Whether the exclusive marker can be acquired by the observing session.</returns>
+    /// <exception cref="InvalidOperationException">The scalar is not an exact integer zero or one.</exception>
+    public static bool ParseMarkerAvailability(
+        object? result
+    )
+    {
+        if (result is not int availability
+            || availability is not (0 or 1))
         {
             throw new InvalidOperationException("The readiness marker observation did not return a lock decision.");
         }

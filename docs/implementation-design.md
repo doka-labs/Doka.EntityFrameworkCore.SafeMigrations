@@ -675,6 +675,23 @@ compatible wrapper that does not forward provider batching executes the same
 bounded statements through sequential `DbCommand` instances. The fallback
 does not concatenate provider SQL and preserves statement order, parameters,
 timeouts, cancellation, and all-or-nothing report publication.
+
+SQL Server captures at most 512 plans and groups metadata-only classifiers
+separately from delayed-binding classifiers inside each capture. These are
+read-only queries, with preambles confined to their own dynamic invocation;
+they do not depend on another classifier's execution. Grouping prevents a
+binding-mode change from fragmenting every statement. Each result retains its
+original ordinal and captured plan; projection still runs in migration order.
+Delayed classifiers bind that ordinal as an explicit `int` parameter to
+`sp_executesql`, leaving identical inner classifier SQL reusable across
+ordinal changes. Physical, layout, collation, default, filter, and prerequisite
+guards remain outside delayed row binding. See Microsoft's
+[dynamic batch scope and plan reuse](https://learn.microsoft.com/en-us/sql/relational-databases/system-stored-procedures/sp-executesql-transact-sql?view=sql-server-ver17).
+
+This transport optimization does not establish a database-wide immutable
+snapshot or an external-write fence. SQL Server's analysis scope and deployment
+exclusion requirements remain unchanged; live runtime guards stay authoritative.
+
 PostgreSQL holds one read-only `RepeatableRead`
 snapshot and transaction-scoped analysis advisory lock across analysis. This
 analysis lock is not an application write fence. A caller-owned

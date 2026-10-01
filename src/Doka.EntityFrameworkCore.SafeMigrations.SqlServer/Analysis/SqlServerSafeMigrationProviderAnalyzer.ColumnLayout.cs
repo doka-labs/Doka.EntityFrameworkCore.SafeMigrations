@@ -97,10 +97,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
             {
-                _projectedColumnLayouts[(reader.GetString(0), reader.GetString(1))] = new ColumnLayoutState(
-                    reader.GetInt32(2), reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5),
-                    reader.GetBoolean(7),
-                    reader.GetInt32(6));
+                CaptureProjectedColumnLayout(reader);
             }
         }
 
@@ -129,23 +126,43 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
             {
-                if (_projectedColumnLayouts.TryGetValue((reader.GetString(0), reader.GetString(1)), out var layout)
-                    && layout is not null)
-                {
-                    layout.Bindings[reader.GetString(2)] = reader.GetInt32(3);
-                    if (reader.GetInt32(4) != 0)
-                    {
-                        layout.VariableWidths[reader.GetInt32(3)] = reader.GetInt32(4);
-                        if (reader.GetBoolean(5))
-                        {
-                            layout.ClusteredVariables.Add(reader.GetInt32(3));
-                        }
-                    }
-                }
+                CaptureProjectedColumnLayoutBinding(reader);
             }
         }
 
         await ReadColumnLayoutRowPresenceAsync(connection, transaction, operations, commandTimeout, cancellationToken);
+    }
+
+    /// <summary>Captures the current compact catalog layout row for ordered allocation validation.</summary>
+    /// <param name="reader">The reader positioned at the captured layout row.</param>
+    internal void CaptureProjectedColumnLayout(
+        DbDataReader reader
+    )
+    {
+        _projectedColumnLayouts[(reader.GetString(0), reader.GetString(1))] = new ColumnLayoutState(
+            reader.GetInt32(2), reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5),
+            reader.GetBoolean(7), reader.GetInt32(6));
+    }
+
+    /// <summary>Captures the current requested physical column identity and clustered storage binding.</summary>
+    /// <param name="reader">The reader positioned at the captured binding row.</param>
+    internal void CaptureProjectedColumnLayoutBinding(
+        DbDataReader reader
+    )
+    {
+        if (_projectedColumnLayouts.TryGetValue((reader.GetString(0), reader.GetString(1)), out var layout)
+            && layout is not null)
+        {
+            layout.Bindings[reader.GetString(2)] = reader.GetInt32(3);
+            if (reader.GetInt32(4) != 0)
+            {
+                layout.VariableWidths[reader.GetInt32(3)] = reader.GetInt32(4);
+                if (reader.GetBoolean(5))
+                {
+                    layout.ClusteredVariables.Add(reader.GetInt32(3));
+                }
+            }
+        }
     }
 
     private async Task ReadColumnLayoutRowPresenceAsync(
@@ -263,8 +280,16 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         SafeMigrationProviderAnalysis analysis
     )
     {
-        if (operation.Intent is not EnsureColumnIntent column || analysis.IsInvariantUnsupported
-            || analysis.IsOpaqueProjectionUnknown || analysis.ObservedState != SafeMigrationObservedState.Missing)
+        if (operation.Intent is not EnsureColumnIntent column || analysis.IsInvariantUnsupported)
+        {
+            return analysis;
+        }
+
+        var structureUnknown = analysis.IsOpaqueProjectionUnknown
+            && analysis.ObservedState == SafeMigrationObservedState.PrerequisiteMissing
+            && analysis.Code == "projected_structure_state_unknown";
+        if (!structureUnknown && (analysis.IsOpaqueProjectionUnknown
+                || analysis.ObservedState != SafeMigrationObservedState.Missing))
         {
             return analysis;
         }
@@ -272,7 +297,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         if (!_projectedColumnLayouts.TryGetValue((column.Schema ?? "dbo", column.Table), out var layout)
             || layout is null || !_catalogSqlBuilder.TryGetColumnStorageLayout(column.Definition, out var addition))
         {
-            return ColumnLayoutFailure("column_layout_unproven");
+            return structureUnknown ? analysis : ColumnLayoutFailure("column_layout_unproven");
         }
 
         if (layout.Bindings.ContainsKey(column.Definition.Name))
@@ -285,6 +310,15 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         if (code is not null)
         {
             return ColumnLayoutFailure(code);
+        }
+
+        // WHY: A captured allocation failure remains a rejection after an
+        // accepted structural change. Available capacity never proves that an
+        // unknown target is missing or otherwise safe to execute. Raw SQL is
+        // deferred by Core before this qualifier can consume stale evidence.
+        if (structureUnknown)
+        {
+            return analysis;
         }
 
         return SqlServerSafeMigrationCatalogSqlBuilder.ColumnAdditionMaterializesRows(column.Definition, addition)

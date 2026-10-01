@@ -29,13 +29,14 @@ public sealed class SqlServerCatalogGuardSqlTests
         // Act
         var sql = SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogSelection(257, plan);
         var dynamicStart = sql.IndexOf(dynamicPrefix, StringComparison.Ordinal);
-        var fallbackStart = sql.IndexOf("' ELSE INSERT INTO @doka_analysis", StringComparison.Ordinal);
+        var fallbackStart = sql.IndexOf("', N'@doka_ordinal int'", StringComparison.Ordinal);
 
         // Assert
         Assert.True(dynamicStart >= 0);
         Assert.True(fallbackStart > dynamicStart);
         var dynamicSql = sql[(dynamicStart + dynamicPrefix.Length)..fallbackStart];
-        Assert.StartsWith("DECLARE @proof bit = 1; DECLARE @label nvarchar(20) = N''O''''Brien'';\nSELECT 257,",
+        Assert.StartsWith("DECLARE @proof bit = 1; DECLARE @label nvarchar(20) = N''O''''Brien'';\n"
+            + "SELECT @doka_ordinal,",
             dynamicSql, StringComparison.Ordinal);
         Assert.Contains("CASE WHEN @proof = 1 THEN N''matching'' ELSE N''different'' END",
             dynamicSql, StringComparison.Ordinal);

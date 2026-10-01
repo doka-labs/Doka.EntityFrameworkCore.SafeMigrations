@@ -6,6 +6,113 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 public sealed class SqlServerIdentityInsertPauseTests
 {
     /// <summary>
+    /// Binds the observation to explicit SQL integer metadata without interpolating the resource.
+    /// </summary>
+    [Theory]
+    [InlineData("ready_marker")]
+    [InlineData("ready'_marker")]
+    public void ReadinessCommand_UsesExplicitIntScalarAndParameterizedSessionMarker(
+        string resource
+    )
+    {
+        // Arrange
+        using var observer = new SqlConnection();
+        var interceptor = new SqlServerIdentityInsertPauseInterceptor(resource);
+
+        // Act
+        using var command = interceptor.CreateMarkerObservationCommand(observer);
+
+        // Assert
+        Assert.Same(observer, command.Connection);
+        Assert.Equal("SELECT CONVERT(int, APPLOCK_TEST(N'public', @resource, N'Exclusive', N'Session'));",
+            command.CommandText);
+        Assert.Equal(5, command.CommandTimeout);
+        var parameter = Assert.Single(command.Parameters.Cast<SqlParameter>());
+
+        Assert.Equal("@resource", parameter.ParameterName);
+        Assert.Equal(SqlDbType.NVarChar, parameter.SqlDbType);
+        Assert.Equal(255, parameter.Size);
+        Assert.Equal(resource, parameter.Value);
+    }
+
+    /// <summary>
+    /// Accepts only the exact SQL integer decisions for an available or held marker.
+    /// </summary>
+    [Theory]
+    [InlineData(0, false)]
+    [InlineData(1, true)]
+    public void ReadinessDecision_ExactIntZeroOrOneMapsToAvailability(
+        int result,
+        bool expectedAvailable
+    )
+    {
+        // Arrange
+        object scalar = result;
+
+        // Act
+        var available = SqlServerIdentityInsertPauseInterceptor.ParseMarkerAvailability(scalar);
+
+        // Assert
+        Assert.Equal(expectedAvailable, available);
+    }
+
+    /// <summary>
+    /// Rejects null, malformed, coercible, and out-of-domain observations rather than certifying readiness.
+    /// </summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData(-1)]
+    [InlineData(2)]
+    [InlineData(int.MinValue)]
+    [InlineData(int.MaxValue)]
+    [InlineData((short)0)]
+    [InlineData((short)1)]
+    [InlineData((byte)0)]
+    [InlineData((byte)1)]
+    [InlineData(0L)]
+    [InlineData(1L)]
+    [InlineData(0d)]
+    [InlineData(1d)]
+    [InlineData(false)]
+    [InlineData(true)]
+    [InlineData("0")]
+    [InlineData("1")]
+    public void ReadinessDecision_InvalidScalarFailsClosed(
+        object? scalar
+    )
+    {
+        // Arrange
+        Func<bool> parse = () => SqlServerIdentityInsertPauseInterceptor.ParseMarkerAvailability(scalar);
+
+        // Act
+        var exception = Record.Exception(() => parse());
+
+        // Assert
+        var failure = Assert.IsType<InvalidOperationException>(exception);
+
+        Assert.Equal("The readiness marker observation did not return a lock decision.", failure.Message);
+    }
+
+    /// <summary>
+    /// Rejects a database NULL instead of treating it as an available or held marker.
+    /// </summary>
+    [Fact]
+    public void ReadinessDecision_DatabaseNullFailsClosed()
+    {
+        // Arrange
+        var scalar = DBNull.Value;
+
+        // Act
+        var exception = Record.Exception(() =>
+            SqlServerIdentityInsertPauseInterceptor.ParseMarkerAvailability(scalar));
+
+        // Assert
+        var failure = Assert.IsType<InvalidOperationException>(exception);
+
+        Assert.Equal("The readiness marker observation did not return a lock decision.", failure.Message);
+    }
+
+    /// <summary>
     /// Publishes an observable marker after ON and preserves nested SQL literal quoting.
     /// </summary>
     [Theory]

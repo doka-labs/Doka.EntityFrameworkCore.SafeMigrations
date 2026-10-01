@@ -21,6 +21,11 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- Pack SQL Server's read-only catalog classifiers by binding mode within
+  bounded captures, retaining original operation ordinals and unchanged
+  ordered projection. Parameterize delayed classifier ordinals so identical
+  inner SQL can reuse its compilation plan. Payload and transport limits,
+  runtime operation order, and public contracts remain unchanged.
 - Approve exact CI dependency-license exceptions for SQL Server's transitive
   Microsoft.Data.SqlClient.SNI.runtime 6.0.2 and
   Microsoft.Identity.Client.NativeInterop 0.20.6. Validate every hosted
@@ -33,6 +38,13 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- Preserve the captured SQL Server column-allocation rejection after an
+  accepted column drop instead of masking it as an unknown prerequisite.
+  Keep opaque-SQL follow-ups deferred to runtime validation and cover both
+  successful revalidation and rejected missing foreign-key prerequisites.
+- Align the complete-snapshot workflow regression with its exact-version
+  license guard and give SQL Server cancellation readiness an explicit
+  integer scalar contract with fail-closed result validation.
 - Correct SQL Server column-layout catalog syntax and single-dependency
   diagnostics for model-managed deletes. Match table columns through one
   bounded catalog join, including identity and default fingerprints, instead

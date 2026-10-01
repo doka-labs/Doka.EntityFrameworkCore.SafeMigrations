@@ -3,7 +3,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 /// <summary>
 /// Exercises deterministic SQL Server client attention and retained-session recovery.
 /// </summary>
-public sealed class SqlServerModelManagedDataCancellationTests : SqlServerIntegrationTestBase
+public sealed partial class SqlServerModelManagedDataCancellationTests : SqlServerIntegrationTestBase
 {
     /// <summary>
     /// Creates the cancellation suite with an isolated SQL Server fixture.

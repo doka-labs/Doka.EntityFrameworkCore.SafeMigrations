@@ -257,24 +257,36 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
         var connectionString = await Fixture.CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.layout_probe (Id int NOT NULL, Removed char(5000) NULL);");
+        await CreateColumnLayoutAuditAsync(connectionString);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropColumnIfExists("Removed", "layout_probe");
         builder.Operations.Add(LayoutColumn("Added", "char(5000)"));
 
         // Act
+        var live = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
+            context, builder.Operations.Cast<SafeMigrationOperation>().ToArray());
+
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("sqlserver-retained-layout"));
 
+        var failure = Record.Exception(report.ThrowIfBlocked);
         var columns = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.layout_probe',N'U');");
 
+        var events = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.layout_ddl_events;");
+
         // Assert
+        Assert.Equal(SafeMigrationObservedState.Unsupported, live[1].ObservedState);
+        Assert.Equal("column_fixed_row_limit", live[1].Code);
+        Assert.False(live[1].IsInvariantUnsupported);
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
         Assert.Equal(SafeMigrationAction.RejectUnsupported, report.Assessments[1].Action);
         Assert.Equal("column_layout_unproven", report.Assessments[1].AnalysisCode);
+        Assert.IsType<SafeMigrationPreflightException>(failure);
         Assert.Equal(2, columns);
+        Assert.Equal(0, events);
     }
 
     /// <summary>
@@ -513,7 +525,9 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
         Assert.Equal(0, keys);
     }
 
-    /// <summary>Opaque effects cannot preserve an Apply decision based on a formerly known physical layout.</summary>
+    /// <summary>
+    /// Opaque allocation is deferred and the runtime layout guard rejects before the later column DDL.
+    /// </summary>
     [SqlServerLiveFact]
     public async Task OpaqueMutation_DoesNotAuthorizeFromStaleLayoutCapacity()
     {
@@ -531,12 +545,28 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, operations,
             new SafeMigrationRunOptions("sqlserver-opaque-layout"));
 
-        var columns = await ScalarIntAsync(connectionString,
+        var preflightColumns = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.layout_probe',N'U');");
 
+        var preflightFailure = Record.Exception(report.ThrowIfBlocked);
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, operations));
+        var added = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.layout_probe',N'U') "
+            + "AND name=N'Added';");
+
+        var hidden = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.layout_probe',N'U') "
+            + "AND name=N'HiddenAllocation';");
+
         // Assert
-        Assert.NotEqual(SafeMigrationAction.Apply, report.Assessments[^1].Action);
-        Assert.Equal(1, columns);
+        Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, report.Status);
+        Assert.Equal(SafeMigrationAction.ValidateAtRuntime, report.Assessments[^1].Action);
+        Assert.Equal("projected_structure_state_unknown", report.Assessments[^1].AnalysisCode);
+        Assert.Equal(1, preflightColumns);
+        Assert.Null(preflightFailure);
+        Assert.Equal(51002, Assert.IsType<SqlException>(failure).Number);
+        Assert.Equal(0, added);
+        Assert.Equal(1, hidden);
     }
 
     /// <summary>
