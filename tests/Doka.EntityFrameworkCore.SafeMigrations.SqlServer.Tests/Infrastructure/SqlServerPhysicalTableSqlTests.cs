@@ -41,9 +41,8 @@ public sealed class SqlServerPhysicalTableSqlTests
 
         // Act
         var plan = catalog.Build(operation);
-        var classifier = SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogSelection(257, plan);
-        var runtime = string.Join("\n", context.GetService<IMigrationsSqlGenerator>()
-            .Generate([operation], context.Model).Select(static command => command.CommandText));
+        var classifier = SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogTemplate(plan);
+        var runtime = SqlServerGuardedSqlTestContract.GenerateBody(context, operation);
 
         // Assert
         Assert.False(plan.IsStaticallyUnsupported);
@@ -53,7 +52,8 @@ public sealed class SqlServerPhysicalTableSqlTests
         Assert.Contains("temporal_type <> 0", gate, StringComparison.Ordinal);
         Assert.Contains("N'[dbo].[physical_items]'", gate, StringComparison.Ordinal);
         Assert.StartsWith("IF COALESCE((" + gate + "), 0) <> 1 ", classifier, StringComparison.Ordinal);
-        Assert.Contains("257, N'unsupported', 0, 0, N'physical_table_unproven'", classifier, StringComparison.Ordinal);
+        Assert.Contains("@doka_ordinal, N'unsupported', 0, 0, N'physical_table_unproven'",
+            classifier, StringComparison.Ordinal);
         var guard = "IF COALESCE((" + gate + "), 0) <> 1\nBEGIN\n    THROW 51002";
         var engineGuard = runtime.IndexOf(guard, StringComparison.Ordinal);
         var stateEvaluation = runtime.IndexOf("DECLARE @doka_state", StringComparison.Ordinal);
@@ -186,8 +186,7 @@ public sealed class SqlServerPhysicalTableSqlTests
 
         // Act
         var plan = CreateCatalog(context).Build(operation);
-        var runtime = string.Join("\n", context.GetService<IMigrationsSqlGenerator>()
-            .Generate([operation], context.Model).Select(static command => command.CommandText));
+        var runtime = SqlServerGuardedSqlTestContract.GenerateBody(context, operation);
 
         // Assert
         Assert.NotNull(plan.CatalogPreambleSql);
@@ -215,8 +214,7 @@ public sealed class SqlServerPhysicalTableSqlTests
 
         // Act
         var plan = CreateCatalog(context).Build(operation);
-        var runtime = string.Join("\n", context.GetService<IMigrationsSqlGenerator>()
-            .Generate([operation], context.Model).Select(static command => command.CommandText));
+        var runtime = SqlServerGuardedSqlTestContract.GenerateBody(context, operation);
 
         // Assert
         Assert.Null(plan.CatalogPreambleSql);

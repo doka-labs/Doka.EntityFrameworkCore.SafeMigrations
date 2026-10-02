@@ -185,7 +185,7 @@ public sealed class SqlServerIdentityDefinitionTests
         var sql = string.Join("\n", context.GetService<IMigrationsSqlGenerator>()
             .Generate([operation], context.Model).Select(static command => command.CommandText));
 
-        var classifier = SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogSelection(0, plan);
+        var classifier = SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogTemplate(plan);
 
         // Assert
         Assert.Contains("sys.identity_columns identity_slot", plan.PrerequisiteExpression, StringComparison.Ordinal);

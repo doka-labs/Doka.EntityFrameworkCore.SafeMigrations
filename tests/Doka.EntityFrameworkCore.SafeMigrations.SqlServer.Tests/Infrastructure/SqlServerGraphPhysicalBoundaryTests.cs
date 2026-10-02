@@ -29,9 +29,8 @@ public sealed class SqlServerGraphPhysicalBoundaryTests
 
         // Act
         var plan = catalog.Build(operation);
-        var classifier = SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogSelection(257, plan);
-        var runtime = string.Join("\n", context.GetService<IMigrationsSqlGenerator>()
-            .Generate(builder.Operations, context.Model).Select(static command => command.CommandText));
+        var classifier = SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogTemplate(plan);
+        var runtime = SqlServerGuardedSqlTestContract.GenerateBody(context, operation);
 
         var gate = plan.PhysicalTableSupportExpression;
         var physicalGuard = runtime.IndexOf("IF COALESCE((" + gate + "), 0) <> 1\nBEGIN\n    THROW 51002",
@@ -48,7 +47,7 @@ public sealed class SqlServerGraphPhysicalBoundaryTests
         Assert.Contains("N'[dbo].[" + table + "]'", physicalGate, StringComparison.Ordinal);
         Assert.DoesNotContain("sys.edge_constraints", physicalGate, StringComparison.Ordinal);
         Assert.StartsWith("IF COALESCE((" + gate + "), 0) <> 1 ", classifier, StringComparison.Ordinal);
-        Assert.Contains("257, N'unsupported', 0, 0, N'physical_table_unproven'", classifier,
+        Assert.Contains("@doka_ordinal, N'unsupported', 0, 0, N'physical_table_unproven'", classifier,
             StringComparison.Ordinal);
         Assert.True(physicalGuard >= 0);
         Assert.True(stateEvaluation > physicalGuard);

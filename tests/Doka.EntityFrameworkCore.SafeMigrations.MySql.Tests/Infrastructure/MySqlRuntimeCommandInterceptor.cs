@@ -13,6 +13,7 @@ internal sealed class MySqlRuntimeCommandInterceptor : DbCommandInterceptor
     private Action? _setupStarted;
     private bool _injectCompactedPrepareGroup;
     private bool _injectDataProbeGroup;
+    private bool _injectNullabilityProbeGroup;
 
     /// <summary>Gets the number of started commands across all observed categories.</summary>
     public long CommandCount { get; private set; }
@@ -32,6 +33,9 @@ internal sealed class MySqlRuntimeCommandInterceptor : DbCommandInterceptor
     /// <summary>Gets whether injection reached the fused data probe instead of another prepared group.</summary>
     public bool DataProbePrepareGroupWasInjected { get; private set; }
 
+    /// <summary>Gets whether injection reached the operation-local NULL-proof prepared group.</summary>
+    public bool NullabilityProbePrepareGroupWasInjected { get; private set; }
+
     /// <summary>Gets the original grouped command size before adding the test-owned failure probe.</summary>
     public int? OriginalCompactedPrepareGroupPayloadBytes { get; private set; }
 
@@ -47,6 +51,7 @@ internal sealed class MySqlRuntimeCommandInterceptor : DbCommandInterceptor
         _setupStarted = setupStarted;
         _injectCompactedPrepareGroup = false;
         _injectDataProbeGroup = false;
+        _injectNullabilityProbeGroup = false;
     }
 
     /// <summary>Injects SQL after acquired PREPARE within a real compacted setup command.</summary>
@@ -61,6 +66,7 @@ internal sealed class MySqlRuntimeCommandInterceptor : DbCommandInterceptor
         _setupStarted = setupStarted;
         _injectCompactedPrepareGroup = true;
         _injectDataProbeGroup = false;
+        _injectNullabilityProbeGroup = false;
     }
 
     /// <summary>Interrupts the fused data probe after PREPARE acquires its session resources.</summary>
@@ -75,6 +81,22 @@ internal sealed class MySqlRuntimeCommandInterceptor : DbCommandInterceptor
         _setupStarted = setupStarted;
         _injectCompactedPrepareGroup = true;
         _injectDataProbeGroup = true;
+        _injectNullabilityProbeGroup = false;
+    }
+
+    /// <summary>Interrupts the NULL-proof group after its prepared statement is acquired.</summary>
+    /// <param name="sql">The test-owned failure or blocking statements followed by their sentinel.</param>
+    /// <param name="setupStarted">An optional cancellation action scheduled at the targeted dispatch.</param>
+    public void InjectFirstCompactedNullabilityProbeGroup(
+        string sql,
+        Action? setupStarted = null
+    )
+    {
+        _setupInjection = sql;
+        _setupStarted = setupStarted;
+        _injectCompactedPrepareGroup = true;
+        _injectDataProbeGroup = false;
+        _injectNullabilityProbeGroup = true;
     }
 
     /// <summary>Resets counters between initial application and history-only replay.</summary>
@@ -310,7 +332,9 @@ internal sealed class MySqlRuntimeCommandInterceptor : DbCommandInterceptor
             if (_injectCompactedPrepareGroup)
             {
                 var offset = command.CommandText.IndexOf(PreparedSetupGroup, StringComparison.Ordinal);
-                var assignmentPrefix = _injectDataProbeGroup
+                var assignmentPrefix = _injectNullabilityProbeGroup
+                    ? "SET @doka_sm_column_repair_eligible ="
+                    : _injectDataProbeGroup
                     ? "SET @doka_sm_sql = CASE WHEN @doka_sm_data_probe_required"
                     : "SET @doka_sm_sql =";
 
@@ -325,6 +349,7 @@ internal sealed class MySqlRuntimeCommandInterceptor : DbCommandInterceptor
 
                     CompactedPrepareGroupWasInjected = true;
                     DataProbePrepareGroupWasInjected = _injectDataProbeGroup;
+                    NullabilityProbePrepareGroupWasInjected = _injectNullabilityProbeGroup;
                     CompleteSetupInjection(command);
                 }
             }

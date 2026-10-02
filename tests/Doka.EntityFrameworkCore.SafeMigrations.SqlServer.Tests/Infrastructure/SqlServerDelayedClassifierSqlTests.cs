@@ -29,14 +29,15 @@ public sealed class SqlServerDelayedClassifierSqlTests
         var sql = SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogSelection(ordinal, plan);
 
         // Assert
-        Assert.Contains("INSERT INTO @doka_analysis EXEC sys.sp_executesql N'SELECT @doka_ordinal,",
+        Assert.StartsWith("EXEC sys.sp_executesql N'", sql, StringComparison.Ordinal);
+        Assert.Contains("EXEC sys.sp_executesql N''SELECT @doka_ordinal,",
             sql, StringComparison.Ordinal);
         Assert.Contains("N'@doka_ordinal int', @doka_ordinal = " + ordinal.ToString(CultureInfo.InvariantCulture),
             sql, StringComparison.Ordinal);
-        Assert.Contains("ELSE INSERT INTO @doka_analysis SELECT "
-            + ordinal.ToString(CultureInfo.InvariantCulture) + ", N'prerequisite_missing'",
+        Assert.Contains("ELSE SELECT @doka_ordinal, N''prerequisite_missing''",
             sql, StringComparison.Ordinal);
-        Assert.Contains("N''matching''", sql, StringComparison.Ordinal);
+        Assert.Contains("N''''matching''''", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("INSERT INTO", sql, StringComparison.Ordinal);
         Assert.InRange(Encoding.UTF8.GetByteCount(sql), 1, SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes);
     }
 

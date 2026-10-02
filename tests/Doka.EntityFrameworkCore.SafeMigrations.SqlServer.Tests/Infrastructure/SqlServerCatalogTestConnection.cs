@@ -36,6 +36,9 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
     /// <summary>Gets the number of disposed sequential commands.</summary>
     public int CommandsDisposed { get; private set; }
 
+    /// <summary>Gets the disposed provider parameter factories that were never submitted as transport.</summary>
+    public int ParameterFactoriesDisposed { get; private set; }
+
     /// <summary>Gets the number of disposed native batches.</summary>
     public int BatchesDisposed { get; private set; }
 
@@ -56,6 +59,12 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
 
     /// <summary>Gets or sets a result-ordinal mutation applied to each statement before reader creation.</summary>
     public Func<int[], int[]>? TransformOrdinals { get; set; }
+
+    /// <summary>Gets or sets a result-set ownership mutation before synthetic reader creation.</summary>
+    public Func<int[][], int[][]>? TransformResultSets { get; set; }
+
+    /// <summary>Gets or sets a classifier metadata mutation before result-set delivery.</summary>
+    public Action<DataTable>? TransformClassifierTable { get; set; }
 
     /// <summary>Gets or sets whether reader execution fails after recording the submitted statements.</summary>
     public bool ThrowOnExecute { get; set; }
@@ -140,13 +149,14 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
         var results = new DataSet { Locale = CultureInfo.InvariantCulture };
         try
         {
-            foreach (var statement in statements)
+            for (var statementIndex = 0; statementIndex < statements.Length; statementIndex++)
             {
-                var table = new DataTable { Locale = CultureInfo.InvariantCulture };
-                results.Tables.Add(table);
-                table.Columns.Add("ordinal", typeof(int));
+                var statement = statements[statementIndex];
                 if (ReturnPresenceRows)
                 {
+                    var table = new DataTable { Locale = CultureInfo.InvariantCulture };
+                    results.Tables.Add(table);
+                    table.Columns.Add("ordinal", typeof(int));
                     table.Columns.Add("absent", typeof(int));
                     var presenceOrdinals = System.Text.RegularExpressions.Regex
                         .Matches(statement, @"\((\d+), @schema\d+, @table\d+\)")
@@ -162,37 +172,45 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
                     continue;
                 }
 
-                table.Columns.Add("state", typeof(string));
-                table.Columns.Add("postcondition", typeof(int));
-                table.Columns.Add("repair", typeof(int));
-                table.Columns.Add("code", typeof(string));
-                table.Columns.Add("row_evidence", typeof(string));
-                table.Columns.Add("dependencies", typeof(string));
-                table.Columns.Add("diagnostics", typeof(string));
-                table.Columns.Add("matched", typeof(string));
+                var delayed = statement.StartsWith("EXEC sys.sp_executesql", StringComparison.Ordinal);
+                var parameters = RecordedParameters[RecordedParameters.Count - statements.Length + statementIndex];
+                // WHY: Delayed ordinals normally come from RPC values; a full source-parameter
+                // budget uses a trusted dispatcher literal. Metadata UNIONs own one multi-row set.
+                var ordinals = delayed
+                    ? System.Text.RegularExpressions.Regex.Matches(statement,
+                        @"@doka_ordinal\s*=\s*(?<parameter>@doka_ordinal\d+)|@doka_ordinal\s*=\s*(?<literal>\d+)")
+                        .Select(match => match.Groups["parameter"].Success
+                            ? (int)parameters.Single(parameter => parameter.ParameterName
+                                == match.Groups["parameter"].Value).Value
+                            : int.Parse(match.Groups["literal"].Value, CultureInfo.InvariantCulture))
+                        .ToArray()
+                    : System.Text.RegularExpressions.Regex.Matches(statement, @"\bSELECT\s+(\d+)\s*,\s*\(")
+                        .Select(static match => int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture))
+                        .ToArray();
 
-                // WHY: Guard fallback SELECTs repeat ordinals without emitting extra rows. Only metadata
-                // selections and delayed EXEC arguments identify an operation's actual result once.
-                var ordinals = System.Text.RegularExpressions.Regex
-                    .Matches(statement, @"\bSELECT\s+(\d+)\s*,\s*\(|@doka_ordinal\s*=\s*(\d+)")
-                    .Select(static match => int.Parse(
-                        match.Groups[1].Success ? match.Groups[1].Value : match.Groups[2].Value,
-                        CultureInfo.InvariantCulture))
-                    .ToArray();
-
-                Array.Sort(ordinals);
                 ordinals = TransformOrdinals?.Invoke(ordinals) ?? ordinals;
-                foreach (var ordinal in ordinals)
-                {
-                    var state = (ordinal % 3) switch
-                    {
-                        0 => "missing",
-                        1 => "matching",
-                        _ => "different",
-                    };
+                var resultSets = delayed
+                    ? ordinals.Select(static ordinal => new[] { ordinal }).ToArray() : [ordinals];
 
-                    table.Rows.Add(ordinal, state, state == "matching" ? 1 : 0, 0,
-                        DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value);
+                resultSets = TransformResultSets?.Invoke(resultSets) ?? resultSets;
+                foreach (var resultSet in resultSets)
+                {
+                    var table = CreateClassifierResultTable();
+                    results.Tables.Add(table);
+                    foreach (var ordinal in resultSet)
+                    {
+                        var state = (ordinal % 3) switch
+                        {
+                            0 => "missing",
+                            1 => "matching",
+                            _ => "different",
+                        };
+
+                        table.Rows.Add(ordinal, state, state == "matching" ? 1 : 0, 0,
+                            DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value);
+                    }
+
+                    TransformClassifierTable?.Invoke(table);
                 }
             }
 
@@ -203,6 +221,23 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
             results.Dispose();
             throw;
         }
+    }
+
+    /// <summary>Creates the exact nine-column classifier result shape used by both transport modes.</summary>
+    private static DataTable CreateClassifierResultTable()
+    {
+        var table = new DataTable { Locale = CultureInfo.InvariantCulture };
+        table.Columns.Add("ordinal", typeof(int));
+        table.Columns.Add("state", typeof(string));
+        table.Columns.Add("postcondition", typeof(int));
+        table.Columns.Add("repair", typeof(int));
+        table.Columns.Add("code", typeof(string));
+        table.Columns.Add("row_evidence", typeof(string));
+        table.Columns.Add("dependencies", typeof(string));
+        table.Columns.Add("diagnostics", typeof(string));
+        table.Columns.Add("matched", typeof(string));
+
+        return table;
     }
 
     /// <summary>Copies synthetic parameter facets before command disposal can change the test evidence.</summary>
@@ -349,7 +384,16 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
                 _disposed = true;
                 _results?.Dispose();
                 _parameterHost.Dispose();
-                _connection.CommandsDisposed++;
+                // WHY: Native catalog statements still need a provider command to create typed
+                // parameters. It owns no SQL and is not a sequential transport command.
+                if (CommandText.Length == 0)
+                {
+                    _connection.ParameterFactoriesDisposed++;
+                }
+                else
+                {
+                    _connection.CommandsDisposed++;
+                }
             }
 
             base.Dispose(disposing);

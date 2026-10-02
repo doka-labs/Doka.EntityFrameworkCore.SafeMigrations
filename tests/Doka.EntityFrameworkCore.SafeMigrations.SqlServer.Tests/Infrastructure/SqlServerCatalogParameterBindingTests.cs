@@ -323,13 +323,11 @@ public sealed class SqlServerCatalogParameterBindingTests
         Assert.Equal(2, second.AnalysisParameters[0].Value);
         Assert.Contains("@doka_value0 = @doka_source7_0", firstSql, StringComparison.Ordinal);
         Assert.Contains("@doka_value0 = @doka_source8_0", secondSql, StringComparison.Ordinal);
-        Assert.Contains("@doka_source7_", first.AnalysisOuterStateGuardExpression, StringComparison.Ordinal);
+        Assert.Contains("@doka_value", first.AnalysisOuterStateGuardExpression, StringComparison.Ordinal);
         Assert.DoesNotContain("@doka_source7_", first.StateExpression, StringComparison.Ordinal);
         Assert.DoesNotContain("@doka_source", DelayedInner(firstSql), StringComparison.Ordinal);
         Assert.DoesNotContain("@doka_source", DelayedInner(secondSql), StringComparison.Ordinal);
         Assert.Contains("@doka_value", first.StateEvaluationGuardExpression, StringComparison.Ordinal);
-        Assert.Contains("@doka_source7_", firstSql[..firstSql.IndexOf("EXEC sys.sp_executesql", StringComparison.Ordinal)],
-            StringComparison.Ordinal);
     }
 
     /// <summary>Different parameter payloads cannot reuse a classification merely because SQL templates match.</summary>
@@ -360,6 +358,98 @@ public sealed class SqlServerCatalogParameterBindingTests
         Assert.Equal(93, Assert.Single(connection.ObservedTimeouts));
     }
 
+    /// <summary>A complete source budget remains admissible without expanding the transport parameter cap.</summary>
+    /// <param name="nativeBatch">Whether transport uses native ADO.NET batching.</param>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task OrdinalBinding_PreservesAFullSourceParameterBudget(bool nativeBatch)
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext(ConnectionString);
+        await using var connection = new SqlServerCatalogTestConnection(nativeBatch);
+        var mappings = context.GetService<IRelationalTypeMappingSource>();
+        var plan = ParameterizedConstantPlan(mappings, 0, 2000);
+        var results = new SafeMigrationProviderAnalysis[1];
+
+        // Act
+        await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
+            connection, null, null, [plan], 0, results, CancellationToken.None);
+
+        // Assert
+        var statement = Assert.Single(connection.RecordedStatements);
+        Assert.Contains("@doka_ordinal = 0,", statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("@doka_ordinal = @doka_ordinal0", statement, StringComparison.Ordinal);
+        Assert.Contains("@doka_ordinal = @doka_ordinal,", statement, StringComparison.Ordinal);
+        var parameters = Assert.Single(connection.RecordedParameters);
+        Assert.Equal(2000, parameters.Length);
+        Assert.DoesNotContain(parameters, static parameter => parameter.ParameterName.StartsWith(
+            "@doka_ordinal", StringComparison.Ordinal));
+        Assert.Equal(SafeMigrationObservedState.Missing, results[0].ObservedState);
+    }
+
+    /// <summary>A real managed-data operation retains every source at the complete transport parameter boundary.</summary>
+    /// <param name="nativeBatch">Whether transport uses native ADO.NET batching.</param>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task MaximumManagedSourceCapture_PreservesAllAuthoredValues(bool nativeBatch)
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext(ConnectionString);
+        await using var connection = new SqlServerCatalogTestConnection(nativeBatch);
+        var columns = Enumerable.Range(0, 16).Select(index => index == 0 ? "Id"
+            : "Value" + index.ToString(CultureInfo.InvariantCulture)).ToArray();
+
+        var values = new object?[125, columns.Length];
+        for (var row = 0; row < values.GetLength(0); row++)
+        {
+            for (var column = 0; column < values.GetLength(1); column++)
+            {
+                values[row, column] = row * columns.Length + column;
+            }
+        }
+
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureModelManagedDataFromModel("complete_source_capture", ["Id"], ["int"],
+            columns, Enumerable.Repeat("int", columns.Length).ToArray(), values);
+
+        var plan = BuildManagedPlan(context, 0, (SafeMigrationOperation)builder.Operations[0]);
+        var results = new SafeMigrationProviderAnalysis[1];
+
+        // Act
+        await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
+            connection, null, null, [plan], 0, results, CancellationToken.None);
+
+        // Assert
+        Assert.False(plan.IsStaticallyUnsupported);
+        Assert.True(plan.RequiresDelayedBinding);
+        Assert.Equal(125, plan.ModelManagedRowCount);
+        Assert.Equal(2000, plan.AnalysisParameters.Count);
+        var parameters = Assert.Single(connection.RecordedParameters);
+        Assert.Equal(2000, parameters.Length);
+        Assert.Equal(Enumerable.Range(0, 2000), parameters.Select(parameter => Assert.IsType<int>(parameter.Value)));
+        Assert.All(parameters, parameter =>
+        {
+            Assert.StartsWith("@doka_source0_", parameter.ParameterName, StringComparison.Ordinal);
+            Assert.Equal(DbType.Int32, parameter.DbType);
+        });
+        var statement = Assert.Single(connection.RecordedStatements);
+        Assert.Contains("@doka_ordinal = 0,", statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("INSERT INTO @doka_analysis", statement, StringComparison.Ordinal);
+        Assert.InRange(Encoding.UTF8.GetByteCount(statement)
+            + plan.AnalysisParameters.Sum(parameter => parameter.PayloadBytes), 1,
+            SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes);
+        Assert.Equal(SafeMigrationObservedState.Missing, results[0].ObservedState);
+        Assert.Equal(nativeBatch ? 1 : 0, connection.BatchExecutions);
+        Assert.Equal(nativeBatch ? 0 : 1, connection.CommandExecutions);
+        Assert.Equal(nativeBatch ? 1 : 0, connection.BatchesDisposed);
+        Assert.Equal(nativeBatch ? 0 : 1, connection.CommandsDisposed);
+        Assert.Equal(nativeBatch ? 1 : 0, connection.ParameterFactoriesDisposed);
+        Assert.All(connection.BatchPayloadBytes, bytes => Assert.InRange(bytes, 1,
+            SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes));
+    }
+
     /// <summary>Splits parameter-heavy classifiers before SQL Server's RPC parameter ceiling.</summary>
     /// <param name="nativeBatch">Whether native batching is available.</param>
     [Theory]
@@ -382,7 +472,7 @@ public sealed class SqlServerCatalogParameterBindingTests
 
         // Assert
         Assert.Equal(2, connection.RecordedStatements.Count);
-        Assert.Equal([2000, 500], connection.RecordedParameters.Select(parameters => parameters.Length));
+        Assert.Equal([1919, 606], connection.RecordedParameters.Select(parameters => parameters.Length));
         Assert.All(connection.RecordedParameters, parameters => Assert.InRange(parameters.Length, 1, 2000));
         Assert.Equal(nativeBatch ? 2 : 0, connection.BatchExecutions);
         Assert.Equal(nativeBatch ? 0 : 2, connection.CommandExecutions);
@@ -414,7 +504,7 @@ public sealed class SqlServerCatalogParameterBindingTests
         // Assert
         Assert.Equal(3, connection.BatchExecutions);
         Assert.Equal(3, connection.RecordedParameters.Count);
-        Assert.All(connection.RecordedParameters, parameters => Assert.Single(parameters));
+        Assert.All(connection.RecordedParameters, parameters => Assert.Equal(2, parameters.Length));
         Assert.All(connection.BatchPayloadBytes, bytes => Assert.InRange(bytes, 1, 4 * 1024 * 1024));
     }
 
@@ -520,7 +610,7 @@ public sealed class SqlServerCatalogParameterBindingTests
             sourceParameter: (value, _) => bindings.Add(value));
 
         var outerCatalog = new SqlServerSafeMigrationCatalogSqlBuilder(mappings, helper,
-            sourceParameter: bindings.Add);
+            sourceParameter: (value, _) => bindings.Add(value));
 
         var plan = catalog.Build(operation);
         var outerGuard = outerCatalog.BuildModelManagedDataAnalysisGuard((ModelManagedDataIntent)operation.Intent);
@@ -538,7 +628,7 @@ public sealed class SqlServerCatalogParameterBindingTests
     {
         const string prefix = "EXEC sys.sp_executesql N'";
         var start = sql.IndexOf(prefix, StringComparison.Ordinal) + prefix.Length;
-        var end = sql.IndexOf("', N'@doka_ordinal int", start, StringComparison.Ordinal);
+        var end = sql.LastIndexOf("', N'@doka_ordinal int", StringComparison.Ordinal);
 
         return sql[start..end];
     }

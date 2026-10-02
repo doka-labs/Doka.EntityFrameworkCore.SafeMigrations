@@ -144,7 +144,5 @@ public sealed class SqlServerColumnLayoutGuardSqlTests
         DbContext context,
         SafeMigrationOperation operation
     )
-        => context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model)
-            .Single(static command => command.CommandText.Contains("DECLARE @doka_state", StringComparison.Ordinal))
-            .CommandText;
+        => SqlServerGuardedSqlTestContract.GenerateBody(context, operation);
 }

@@ -18,8 +18,8 @@ public sealed class MySqlPreparedSetupFusionTests
     [InlineData("catalog", 118, 0, true)]
     [InlineData("state", 113, 1, false)]
     [InlineData("state", 113, 1, true)]
-    [InlineData("guard", 109, 2, false)]
-    [InlineData("guard", 109, 2, true)]
+    [InlineData("guard", 104, 3, false)]
+    [InlineData("guard", 104, 3, true)]
     [InlineData("data", 103, 3, false)]
     [InlineData("data", 103, 3, true)]
     public void ExactOriginalFragmentLimitIsAcceptedByHandler(
@@ -71,7 +71,7 @@ public sealed class MySqlPreparedSetupFusionTests
         Assert.StartsWith(ExecuteSql + "\n", body, StringComparison.Ordinal);
         Assert.DoesNotContain(PrepareSql, body, StringComparison.Ordinal);
         Assert.Contains("@doka_sm_post_ok", body, StringComparison.Ordinal);
-        AssertPreparedSetup(setup, evaluations, baselinePreparedInSetup: true);
+        AssertPreparedSetup(setup, evaluations, baselinePreparedInSetup: true, hasDataProbe: scenario == "data");
         Assert.Contains("CONVERT(0x" + Hex("DO 7") + " USING utf8mb4)", string.Concat(setup),
             StringComparison.Ordinal);
 
@@ -90,7 +90,7 @@ public sealed class MySqlPreparedSetupFusionTests
     [Theory]
     [InlineData("catalog", 119)]
     [InlineData("state", 114)]
-    [InlineData("guard", 110)]
+    [InlineData("guard", 105)]
     [InlineData("data", 104)]
     public void OriginalFragmentOverflowIsRejectedByHandler(
         string scenario,
@@ -126,7 +126,7 @@ public sealed class MySqlPreparedSetupFusionTests
     [Theory]
     [InlineData("catalog", 0, 7)]
     [InlineData("state", 1, 12)]
-    [InlineData("guard", 2, 16)]
+    [InlineData("guard", 3, 21)]
     [InlineData("data", 3, 22)]
     public void MultipleProviderBaselinesRetainCommandLocalPreparation(
         string scenario,
@@ -165,7 +165,7 @@ public sealed class MySqlPreparedSetupFusionTests
         Assert.Equal(2, Fragments(command, MySqlMigrationCommandFragmentKind.Cleanup).Length);
         Assert.Equal(originalFragments, OriginalSingleBaselineOverhead(scenario) - 3);
         Assert.True(command.Fragments.Count <= originalFragments - (evaluations * 3));
-        AssertPreparedSetup(setup, evaluations, baselinePreparedInSetup: false);
+        AssertPreparedSetup(setup, evaluations, baselinePreparedInSetup: false, hasDataProbe: scenario == "data");
         Assert.DoesNotContain("WHEN @doka_sm_action = 'apply'", setupSql, StringComparison.Ordinal);
         Assert.Equal(2, Count(body, PrepareSql));
         Assert.Equal(2, Count(body, ExecuteSql));
@@ -194,7 +194,7 @@ public sealed class MySqlPreparedSetupFusionTests
         // WHY: These are the established unfused scope costs, not counts obtained from the optimized handler.
         "catalog" => 10,
         "state" => 15,
-        "guard" => 19,
+        "guard" => 24,
         "data" => 25,
         _ => throw new ArgumentOutOfRangeException(nameof(scenario)),
     };
@@ -300,7 +300,8 @@ public sealed class MySqlPreparedSetupFusionTests
     private static void AssertPreparedSetup(
         IReadOnlyList<string> setup,
         int evaluations,
-        bool baselinePreparedInSetup
+        bool baselinePreparedInSetup,
+        bool hasDataProbe
     )
     {
         var setupSql = string.Concat(setup);
@@ -309,7 +310,7 @@ public sealed class MySqlPreparedSetupFusionTests
         Assert.Equal(evaluations, Count(setupSql, DeallocateSql));
         Assert.Equal(evaluations, setup.Count(text => text.EndsWith(
             PrepareSql + ExecuteSql + DeallocateSql, StringComparison.Ordinal)));
-        Assert.Equal(evaluations == 3, setupSql.Contains("SET @doka_sm_data_probe_required", StringComparison.Ordinal));
+        Assert.Equal(hasDataProbe, setupSql.Contains("SET @doka_sm_data_probe_required", StringComparison.Ordinal));
     }
 
     /// <summary>Encodes expected normalized provider bodies independently of the handler.</summary>

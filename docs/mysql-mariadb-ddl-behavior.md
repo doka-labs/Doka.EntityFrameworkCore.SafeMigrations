@@ -186,6 +186,18 @@ the last valid entry. The key and SQL are published together through
 [.NET volatile reference access](https://learn.microsoft.com/en-us/dotnet/api/system.threading.volatile?view=net-10.0);
 this does not enable concurrent use of a DbContext or migration generator.
 
+## Read-only catalog transport
+
+Read-only catalog analysis omits prerequisite transport only for the exact
+builder-certified constant `TRUE`. Nonconstant predicates, including database
+qualification, remain barriers before row-dependent queries. Independent
+diagnostic, narrowing-eligibility and already-qualified row-probe statements
+share bounded native batch transport; compatible wrappers retain sequential
+execution, timeout, cancellation, parameters and exact result validation.
+No runtime proof is reused across operations. This reduces network roundtrips
+on MariaDB; MySqlConnector does not guarantee the same wire benefit on MySQL.
+See [MySqlConnector batching](https://mysqlconnector.net/api/mysqlconnector/mysqlbatchtype/).
+
 ## Model-managed data
 
 Newly scaffolded model-managed data uses typed parameters. Keys and ordinary
@@ -272,6 +284,26 @@ into one bounded character-length scan. It uses `CHAR_LENGTH`, not byte
 `LENGTH`, returns only whether a violating row exists, and never returns a value
 or key. The successful proof can require a complete table scan. A normal B-tree
 index does not make that predicate a seek automatically.
+
+For an `EnsureColumn` nullable-to-required repair, runtime evaluates the NULL
+proof once after database, table, column and physical repair qualification.
+Classification and repair eligibility consume that same operation-local result
+and the same materialized physical repair invariant.
+A physically `NOT NULL` column, a missing column or an ineligible physical
+shape needs no NULL scan. The result is initialized for every operation and
+discarded by independent cleanup, including rejection, provider failure,
+timeout and cancellation. It is never reused after another operation or across
+analysis and runtime. Live analysis keeps its inline proof and does not trust
+session variables. Length and NULL blockers remain independent.
+The cache is not a schema lock; the deployment must still exclude out-of-band
+DDL while migration operations execute.
+
+A no-NULL result can still require a full scan of the eligible column. This
+optimization removes duplicate proof work; it does not cap examined rows,
+change durability settings or eliminate the storage engine's own DDL work.
+Generated proof tokens are expanded only outside quoted names and literals.
+Eligibility SQL retains shared source fragments until the final runtime
+assignment, avoiding an unused combined copy in analysis captures.
 
 The narrowing proof is repeated immediately before mutation. Strict conversion
 behavior plus the complete target postcondition remains authoritative if a

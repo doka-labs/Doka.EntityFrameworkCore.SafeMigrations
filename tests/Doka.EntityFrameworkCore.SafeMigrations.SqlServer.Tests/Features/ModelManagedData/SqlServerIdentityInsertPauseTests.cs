@@ -116,9 +116,12 @@ public sealed class SqlServerIdentityInsertPauseTests
     /// Publishes an observable marker after ON and preserves nested SQL literal quoting.
     /// </summary>
     [Theory]
-    [InlineData("ready_marker", "ready_marker")]
-    [InlineData("ready'_marker", "ready''''_marker")]
+    [InlineData(false, "ready_marker", "ready_marker")]
+    [InlineData(false, "ready'_marker", "ready''''_marker")]
+    [InlineData(true, "ready_marker", "ready_marker")]
+    [InlineData(true, "ready'_marker", "ready''''_marker")]
     public void PauseSql_MarkerFollowsIdentityOnWithoutFlushingInfoMessages(
+        bool isolatedGuard,
         string resource,
         string nestedResource
     )
@@ -128,18 +131,28 @@ public sealed class SqlServerIdentityInsertPauseTests
             + "INSERT INTO dbo.identity_roles (Id, Caption) VALUES (7, N''Administrator''); "
             + "SET IDENTITY_INSERT [dbo].[identity_roles] OFF;';";
 
+        var command = isolatedGuard
+            ? SqlServerGuardedSqlTestContract.EncodeScope("DECLARE @doka_state nvarchar(32);\n" + sql)
+            : sql;
+
         // Act
-        var paused = SqlServerIdentityInsertPauseInterceptor.BuildPausedCommand(sql, resource);
-        var identityOn = paused.IndexOf("SET IDENTITY_INSERT [dbo].[identity_roles] ON;", StringComparison.Ordinal);
-        var marker = paused.IndexOf("EXEC @doka_identity_ready = sys.sp_getapplock", StringComparison.Ordinal);
-        var pause = paused.IndexOf("WAITFOR DELAY ''00:05:00'';", StringComparison.Ordinal);
-        var insert = paused.IndexOf("INSERT INTO dbo.identity_roles", StringComparison.Ordinal);
+        var paused = SqlServerIdentityInsertPauseInterceptor.BuildPausedCommand(command, resource);
+        var body = isolatedGuard ? SqlServerGuardedSqlTestContract.DecodeScope(paused) : paused;
+        var baseline = SqlServerGuardedSqlTestContract.DecodeScope(
+            body.Substring(body.IndexOf("EXEC sys.sp_executesql N'", StringComparison.Ordinal)));
+
+        var identityOn = body.IndexOf("SET IDENTITY_INSERT [dbo].[identity_roles] ON;", StringComparison.Ordinal);
+        var marker = body.IndexOf("EXEC @doka_identity_ready = sys.sp_getapplock", StringComparison.Ordinal);
+        var pause = body.IndexOf("WAITFOR DELAY ''00:05:00'';", StringComparison.Ordinal);
+        var insert = body.IndexOf("INSERT INTO dbo.identity_roles", StringComparison.Ordinal);
 
         // Assert
         Assert.True(identityOn >= 0 && identityOn < marker && marker < pause && pause < insert);
-        Assert.Contains("@Resource = N''" + nestedResource + "''", paused, StringComparison.Ordinal);
-        Assert.Contains("@LockOwner = N''Session''", paused, StringComparison.Ordinal);
-        Assert.Contains("@LockTimeout = 0", paused, StringComparison.Ordinal);
+        Assert.Contains("@Resource = N''" + nestedResource + "''", body, StringComparison.Ordinal);
+        Assert.Contains("@LockOwner = N''Session''", body, StringComparison.Ordinal);
+        Assert.Contains("@LockTimeout = 0", body, StringComparison.Ordinal);
+        Assert.Contains("@Resource = N'" + resource.Replace("'", "''", StringComparison.Ordinal) + "'",
+            baseline, StringComparison.Ordinal);
         Assert.DoesNotContain("RAISERROR", paused, StringComparison.Ordinal);
         Assert.DoesNotContain("NOWAIT", paused, StringComparison.Ordinal);
     }

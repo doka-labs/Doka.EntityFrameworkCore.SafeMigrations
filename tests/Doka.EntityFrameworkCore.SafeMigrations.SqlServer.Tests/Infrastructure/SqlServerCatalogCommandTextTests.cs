@@ -20,9 +20,9 @@ public sealed class SqlServerCatalogCommandTextTests(Xunit.Abstractions.ITestOut
         var selections = Enumerable.Range(0, count)
             .Select(index => $"SELECT {index},N'escaped '' quote \u20ac \ud83d\ude00';")
             .ToArray();
-        var prefix = delayed ? "DECLARE @doka_analysis TABLE ([ordinal] int);\n" : string.Empty;
+        const string prefix = "";
         var separator = delayed ? "\n" : "\nUNION ALL\n";
-        var trailer = delayed ? "\nSELECT * FROM @doka_analysis;" : ";";
+        var trailer = delayed ? string.Empty : ";";
         var expected = prefix + string.Join(separator, selections) + trailer;
 
         // Act
@@ -42,9 +42,9 @@ public sealed class SqlServerCatalogCommandTextTests(Xunit.Abstractions.ITestOut
         const int repetitions = 100;
         const int samples = 5;
         var selections = Enumerable.Repeat(new string('x', 2_048), 32).ToArray();
-        const string prefix = "DECLARE @doka_analysis TABLE ([ordinal] int);\n";
+        const string prefix = "";
         const string separator = "\n";
-        const string trailer = "\nSELECT * FROM @doka_analysis;";
+        const string trailer = "";
         var expectedLength = prefix.Length + selections.Sum(static value => value.Length)
             + ((selections.Length - 1) * separator.Length) + trailer.Length;
 

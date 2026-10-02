@@ -53,7 +53,8 @@ public sealed class SqlServerAbsentTableCaptureTests
         Assert.Equal(nativeBatch ? 1 : 0, connection.BatchExecutions);
         Assert.Equal(nativeBatch ? 0 : 1, connection.CommandExecutions);
         Assert.Equal(nativeBatch ? 1 : 0, connection.BatchesDisposed);
-        Assert.Equal(1, connection.CommandsDisposed);
+        Assert.Equal(nativeBatch ? 0 : 1, connection.CommandsDisposed);
+        Assert.Equal(nativeBatch ? 1 : 0, connection.ParameterFactoriesDisposed);
     }
 
     /// <summary>Captures the full bounded plan window in one occupancy statement.</summary>
@@ -158,7 +159,8 @@ public sealed class SqlServerAbsentTableCaptureTests
         // Assert
         Assert.Equal(1, connection.BatchesDisposed);
         Assert.Equal(1, connection.BatchExecutions);
-        Assert.Equal(1, connection.CommandsDisposed);
+        Assert.Equal(0, connection.CommandsDisposed);
+        Assert.Equal(1, connection.ParameterFactoriesDisposed);
     }
 
     /// <summary>Provider transport failures release resources without manufacturing an absence proof.</summary>
@@ -184,7 +186,8 @@ public sealed class SqlServerAbsentTableCaptureTests
         Assert.Equal("Injected catalog execution failure.", failure.Message);
         Assert.Equal(51, Assert.Single(connection.ObservedTimeouts));
         Assert.Equal(nativeBatch ? 1 : 0, connection.BatchesDisposed);
-        Assert.Equal(1, connection.CommandsDisposed);
+        Assert.Equal(nativeBatch ? 0 : 1, connection.CommandsDisposed);
+        Assert.Equal(nativeBatch ? 1 : 0, connection.ParameterFactoriesDisposed);
     }
 
     /// <summary>Cancellation before preparation performs no occupancy query.</summary>
@@ -233,7 +236,8 @@ public sealed class SqlServerAbsentTableCaptureTests
         Assert.Same(transaction, Assert.Single(connection.ObservedTransactions));
         Assert.Equal(0, connection.TransactionsDisposed);
         Assert.Equal(nativeBatch ? 1 : 0, connection.BatchesDisposed);
-        Assert.Equal(1, connection.CommandsDisposed);
+        Assert.Equal(nativeBatch ? 0 : 1, connection.CommandsDisposed);
+        Assert.Equal(nativeBatch ? 1 : 0, connection.ParameterFactoriesDisposed);
     }
 
     /// <summary>Absence avoids full matching but keeps every authored support and prerequisite guard.</summary>

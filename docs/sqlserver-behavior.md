@@ -115,6 +115,14 @@ steps and leave an unstamped object. Replay then classifies that object as
 alone is not sufficient proof that SafeMigrations owns it. Preserve the
 catalog state and migration history before repairing such a partial run.
 
+Each complete safe-operation guard executes in a private `sp_executesql`
+variable scope. Multiple operations, including commands generated separately,
+can therefore share a normal or idempotent EF script batch without redeclaring
+the same T-SQL variables in the caller. The guard still evaluates its live state
+before mutation and retains nested dynamic name binding, postconditions and the
+caller transaction. This does not add `GO` to runtime commands or another client
+roundtrip. See Microsoft's [dynamic batch scope](https://learn.microsoft.com/en-us/sql/relational-databases/system-stored-procedures/sp-executesql-transact-sql?view=sql-server-ver17).
+
 Model-managed inserts with explicit identity values temporarily enable
 `IDENTITY_INSERT`. When the EF migrator encounters an error, cancellation, or
 timeout, its command wrapper attempts cleanup on the same connection and
@@ -262,8 +270,10 @@ including dynamic quote expansion.
 Results are checked against their original ordinal and plan, then projected in
 migration order. Missing, duplicate, unexpected, or out-of-order result rows
 fail the analysis without publishing a partial report. Delayed classifiers use
-an explicit ordinal parameter for reusable inner SQL; name-binding and physical
-prerequisite guards are unchanged.
+an explicit ordinal parameter for their complete reusable guarded template.
+Each returns one nine-column result set directly, without an aggregation table
+variable or `INSERT ... EXEC`. Name-binding and physical prerequisite guards
+are unchanged. Template reuse never means reusing row or catalog results.
 
 Table-name occupancy is read once per bounded capture. A proven missing target
 does not require full structure matching, but all schema, physical, default,
@@ -275,9 +285,9 @@ Managed-data analysis retains full source values in parameters rather than
 embedding a different seed literal in each classifier. Unicode/binary sources
 remain unbounded, temporal parameters retain full source precision, and
 decimal parameters retain their authored scale. Existing target conversion,
-ANSI encoding and capacity checks remain authoritative. Outer guards and
-inner delayed classifiers have separate parameter scopes; no target-typed
-parameter may truncate or round a value before those checks. Mutation SQL is
+ANSI encoding and capacity checks remain authoritative. The complete dynamic
+guard and its nested delayed classifier use explicit parameter scopes; no
+target-typed parameter may truncate or round a value before those checks. Mutation SQL is
 unchanged. See Microsoft's [parameter scope and plan reuse](https://learn.microsoft.com/en-us/sql/relational-databases/system-stored-procedures/sp-executesql-transact-sql?view=sql-server-ver17)
 and [parameter limits](https://learn.microsoft.com/en-us/sql/sql-server/maximum-capacity-specifications-for-sql-server?view=sql-server-ver17).
 

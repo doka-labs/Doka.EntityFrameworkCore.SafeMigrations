@@ -685,16 +685,41 @@ does not coalesce templates or change migration-order projection. SQLite keeps
 its existing snapshot/rebuild transport because it has no equivalent remote
 classifier stream.
 
+MySQL/MariaDB and PostgreSQL omit prerequisite transport only for the exact
+builder-certified constant `TRUE`; every nonconstant predicate still executes
+before dependent data binding. Independent diagnostic, narrowing-eligibility
+and already-qualified row-probe statements use the same bounded Core transport.
+Each statement owns one result set with exact ordinal and completion checks;
+aggregate parameter and UTF-8 bounds include all statements. Phase barriers
+are not merged. Npgsql batches reduce network roundtrips; MySqlConnector
+documents that benefit for MariaDB, but not necessarily for MySQL. See
+[Npgsql batching](https://www.npgsql.org/doc/basic-usage.html#batching) and
+[MySqlConnector batching](https://mysqlconnector.net/api/mysqlconnector/mysqlbatchtype/).
+
+PostgreSQL constructs operation-aware prerequisites directly without building
+and discarding a complete classifier. A payload spill restores the exact
+retained parameter objects, names, ordering and type mappings in the provider
+collection before the next statement is built; named lookup and enumeration
+must describe the same retained prefix.
+
+SQLite inventory passes its existing immutable catalog snapshot to semantic
+alias analysis within that invocation. Alias windows no longer recapture the
+complete schema. Separate analysis/inventory invocations and runtime structural
+mutations still obtain fresh snapshots; row proofs are not cached by this path.
+
 SQL Server captures at most 512 plans and groups metadata-only classifiers
 separately from delayed-binding classifiers inside each capture. These are
 read-only queries, with preambles confined to their own dynamic invocation;
 they do not depend on another classifier's execution. Grouping prevents a
 binding-mode change from fragmenting every statement. Each result retains its
 original ordinal and captured plan; projection still runs in migration order.
-Delayed classifiers bind that ordinal as an explicit `int` parameter to
-`sp_executesql`, leaving identical inner classifier SQL reusable across
-ordinal changes. Physical, layout, collation, default, filter, and prerequisite
-guards remain outside delayed row binding. See Microsoft's
+Delayed classifiers bind that ordinal as an explicit `int` parameter to a
+complete isolated `sp_executesql` classifier. Rejection and successful branches
+return one nine-column result set directly instead of inserting into a shared
+table variable with `INSERT ... EXEC`. Stable local source markers keep the
+heavy template independent of source values and original ordinals. Physical,
+layout, collation, default, filter, and prerequisite guards remain before
+nested delayed row binding. See Microsoft's
 [dynamic batch scope and plan reuse](https://learn.microsoft.com/en-us/sql/relational-databases/system-stored-procedures/sp-executesql-transact-sql?view=sql-server-ver17).
 
 SQL Server captures table-name occupancy through a bounded parameterized
@@ -709,11 +734,14 @@ Unicode and binary sources use maximum-width parameters, temporal sources
 retain seven fractional digits, and decimal sources retain their actual scale.
 Target `TRY_CAST`, ANSI roundtrip and capacity guards still run before typed
 row relations bind. Stable local parameters live inside `sp_executesql`;
-unique outer parameters feed its arguments and the pre-binding scalar guards.
+transport parameters feed the whole guard and its nested classifier explicitly.
 The SQL Server transport limit is 2,000 parameters, below the documented
 [2,100-parameter limit](https://learn.microsoft.com/en-us/sql/sql-server/maximum-capacity-specifications-for-sql-server?view=sql-server-ver17),
-with source payload included in the existing 4 MiB bound. Runtime mutation
-generation retains its literal contract.
+with source payload included in the existing 4 MiB bound. At exactly 2,000
+source parameters, the dispatcher passes its generated integer ordinal as a
+literal instead of adding another transport parameter. The inner classifier
+still receives a typed ordinal parameter; existing source capacity is retained.
+Runtime mutation generation retains its literal contract.
 
 This transport optimization does not establish a database-wide immutable
 snapshot or an external-write fence. SQL Server's analysis scope and deployment

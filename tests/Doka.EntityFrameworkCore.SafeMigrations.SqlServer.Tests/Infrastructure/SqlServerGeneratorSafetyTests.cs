@@ -72,7 +72,8 @@ public sealed class SqlServerGeneratorSafetyTests
 
         // Act
         var commands = context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model);
-        var sql = string.Join("\n", commands.Select(command => command.CommandText));
+        var sql = string.Join("\n", commands.Select(static command =>
+            SqlServerGuardedSqlTestContract.DecodeScope(command.CommandText)));
 
         // Assert
         Assert.Contains("HAS_PERMS_BY_NAME", sql, StringComparison.Ordinal);
@@ -536,13 +537,15 @@ public sealed class SqlServerGeneratorSafetyTests
 
             if (operations.Count == 1 && operations[0] is SqlOperation sqlOperation)
             {
+                var operationGuard = sqlOperation.Sql.Contains("DECLARE @doka_state", StringComparison.Ordinal);
                 if (GuardedSqlCommands is { } guardedCommands
-                    && sqlOperation.Sql.Contains("DECLARE @doka_state", StringComparison.Ordinal))
+                    && operationGuard)
                 {
                     return guardedCommands;
                 }
 
                 if (IdentifierGuardCommands is { } identifierCommands
+                    && !operationGuard
                     && sqlOperation.Sql.StartsWith("EXEC sys.sp_executesql N'", StringComparison.Ordinal))
                 {
                     return identifierCommands;

@@ -21,6 +21,27 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- Batch independent MySQL/MariaDB and PostgreSQL diagnostic, narrowing and
+  qualified row probes through the existing bounded catalog transport. Omit
+  prerequisite queries only when their captured builder predicate is constant
+  `TRUE`. Preserve prerequisite barriers, evidence, original ordinals, command
+  timeouts, cancellation, transaction ownership and sequential wrapper fallback.
+- Reuse SQLite's immutable unexpected-object inventory snapshot for its bounded
+  semantic-alias windows without retaining catalog or row proofs between
+  invocations, connections, transactions or runtime mutations.
+- Stream SQL Server delayed classifier results from isolated parameterized
+  dynamic scopes instead of aggregating through `INSERT ... EXEC` and a result
+  table variable. Keep the complete classifier template independent of original
+  ordinals and source values, with unchanged physical and name-binding guards,
+  typed source mappings, result validation and transport limits.
+- Evaluate the MySQL/MariaDB nullable-to-required row proof once per guarded
+  column operation and share it and the physical repair invariant between
+  classification and repair eligibility.
+  Skip the scan for physically non-nullable, missing or ineligible columns;
+  retain fresh evidence after every intervening operation and independent
+  cleanup on success, rejection, cancellation, timeout and provider failure.
+  Keep inline live analysis, identifier/literal text and all safety contracts
+  unchanged. Avoid copied eligibility SQL during analysis and generation.
 - Report Core and all provider benchmark budget overruns as informational CI
   and release evidence instead of blocking qualification on shared hardware.
   Preserve measured durations, allocations, comparison limits and JSON verdicts.
@@ -81,6 +102,11 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- Isolate each complete SQL Server operation guard in its own dynamic SQL
+  variable scope so multiple guarded commands can share normal or idempotent
+  EF migration script batches without duplicate variable declarations. Preserve
+  late name binding, transactional failure, postconditions and identity-insert
+  recovery; do not add client batch separators or additional client roundtrips.
 - Preserve an unchanged SQL Server column's exact match after an unrelated
   accepted column drop. Invalidate that certificate after changes to the
   matched column, table replacement, renames and opaque provider operations.

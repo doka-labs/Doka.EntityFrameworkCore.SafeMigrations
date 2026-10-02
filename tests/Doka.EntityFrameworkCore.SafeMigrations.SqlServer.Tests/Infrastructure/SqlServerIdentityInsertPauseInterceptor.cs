@@ -39,11 +39,20 @@ internal sealed class SqlServerIdentityInsertPauseInterceptor
     {
         const string identityOn = "SET IDENTITY_INSERT [dbo].[identity_roles] ON;";
         var nestedResource = resource.Replace("'", "''''", StringComparison.Ordinal);
+        var isolatedGuard = commandText.StartsWith("EXEC sys.sp_executesql N'", StringComparison.Ordinal)
+            && commandText.Contains("DECLARE @doka_state", StringComparison.Ordinal);
+
+        // WHY: The operation guard now adds a private outer scope. Inject at
+        // the baseline's existing literal level, then re-encode that one scope
+        // so apostrophes in marker resources remain valid at both levels.
+        var guardedBody = isolatedGuard
+            ? SqlServerGuardedSqlTestContract.DecodeScope(commandText)
+            : commandText;
 
         // WHY: SqlClient drains an unparameterized async batch's first response under its cancellation lock.
         // NOWAIT starts that synchronous drain, but InfoMessage is deferred until the batch finishes.
         // A session-owned lock proves ON to a separate observer without emitting the early INFO token.
-        return commandText.Replace(
+        var pausedBody = guardedBody.Replace(
             identityOn,
             identityOn + " DECLARE @doka_identity_ready int; "
                 + "EXEC @doka_identity_ready = sys.sp_getapplock @Resource = N''" + nestedResource
@@ -51,6 +60,8 @@ internal sealed class SqlServerIdentityInsertPauseInterceptor
                 + "IF @doka_identity_ready < 0 THROW 51006, ''identity readiness lock failed'', 1; "
                 + "WAITFOR DELAY ''00:05:00'';",
             StringComparison.Ordinal);
+
+        return isolatedGuard ? SqlServerGuardedSqlTestContract.EncodeScope(pausedBody) : pausedBody;
     }
 
     /// <summary>

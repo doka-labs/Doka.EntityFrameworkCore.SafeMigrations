@@ -232,8 +232,7 @@ public sealed class SqlServerDefaultValueRepresentabilityTests
         // Act
         var plan = CreateCatalog(context).Build(operation);
         var selection = SqlServerSafeMigrationProviderAnalyzer.BuildCatalogSelection(257, plan);
-        var runtime = string.Join("\n", context.GetService<IMigrationsSqlGenerator>()
-            .Generate([operation], context.Model).Select(static command => command.CommandText));
+        var runtime = SqlServerGuardedSqlTestContract.GenerateBody(context, operation);
 
         // Assert
         Assert.False(plan.IsStaticallyUnsupported);
@@ -335,7 +334,7 @@ public sealed class SqlServerDefaultValueRepresentabilityTests
         // Act
         var plan = CreateCatalog(context).Build(operation);
         var support = plan.DefaultValueSupportExpression;
-        var selection = SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogSelection(257, plan);
+        var selection = SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogTemplate(plan);
 
         // Assert
         Assert.False(plan.IsStaticallyUnsupported);
@@ -440,9 +439,8 @@ public sealed class SqlServerDefaultValueRepresentabilityTests
 
         // Act
         var plan = CreateCatalog(context).Build(operation);
-        var selection = SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogSelection(257, plan);
-        var runtime = string.Join("\n", context.GetService<IMigrationsSqlGenerator>()
-            .Generate([operation], context.Model).Select(static command => command.CommandText));
+        var selection = SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogTemplate(plan);
+        var runtime = SqlServerGuardedSqlTestContract.GenerateBody(context, operation);
 
         // Assert
         var installed = Assert.IsType<string>(plan.ColumnCollationSupportExpression);
@@ -450,7 +448,7 @@ public sealed class SqlServerDefaultValueRepresentabilityTests
         Assert.Contains("sys.fn_helpcollations()", installed, StringComparison.Ordinal);
         Assert.Contains("column_collation_unproven", selection, StringComparison.Ordinal);
         Assert.True(selection.IndexOf(installed, StringComparison.Ordinal)
-            < selection.IndexOf("DECLARE @doka_default_257", StringComparison.Ordinal));
+            < selection.IndexOf("DECLARE @doka_default", StringComparison.Ordinal));
         Assert.True(runtime.IndexOf(installed, StringComparison.Ordinal)
             < runtime.IndexOf("DECLARE @doka_default_supported", StringComparison.Ordinal));
     }

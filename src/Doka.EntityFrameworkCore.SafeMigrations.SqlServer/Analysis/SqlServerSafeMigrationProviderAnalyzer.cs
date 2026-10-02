@@ -13,13 +13,6 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
         + "@LockOwner = N'Transaction', @LockTimeout = 30000; SELECT @result;";
     private const string ReleaseScopeSql = "DECLARE @result int; EXEC @result = sys.sp_releaseapplock "
         + "@Resource = N'doka-sm-catalog-analysis', @LockOwner = N'Transaction'; SELECT @result;";
-    private const string DelayedStatementPrefix = "DECLARE @doka_analysis TABLE ("
-        + "ordinal int NOT NULL, state nvarchar(32) NOT NULL, postcondition int NOT NULL, repair int NOT NULL, "
-        + "code nvarchar(128) NULL, row_evidence nvarchar(max) NULL, dependencies nvarchar(max) NULL, "
-        + "diagnostics nvarchar(max) NULL, matched nvarchar(128) NULL);\n";
-    private const string DelayedStatementTrailer =
-        "\nSELECT ordinal, state, postcondition, repair, code, row_evidence, "
-        + "dependencies, diagnostics, matched FROM @doka_analysis ORDER BY ordinal;";
 
     private readonly IRelationalTypeMappingSource _typeMappingSource;
     private readonly ISqlGenerationHelper _sqlGenerationHelper;
@@ -406,11 +399,12 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
 
                     if (bindings is not null && bindings.Values.Count > 0)
                     {
-                        // WHY: sp_executesql cannot see its caller's parameters. The complete inner
-                        // classifier keeps stable local names; only the pre-binding scalar guard
-                        // captures outer names. Render both structurally, never rewrite SQL text.
+                        // WHY: The complete guarded classifier now owns a private dynamic scope.
+                        // Render its pre-binding scalar guard with the same stable local markers,
+                        // rather than leaking ordinal-specific transport names into cached SQL.
                         var outerBuilder = new SqlServerSafeMigrationCatalogSqlBuilder(
-                            _typeMappingSource, _sqlGenerationHelper, sourceParameter: bindings.Add);
+                            _typeMappingSource, _sqlGenerationHelper,
+                            sourceParameter: (value, _) => bindings.Add(value));
 
                         var outerGuard = outerBuilder.BuildModelManagedDataAnalysisGuard(
                             (ModelManagedDataIntent)operation.Intent);
@@ -787,11 +781,55 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
     /// <summary>Builds one delayed classifier within the complete statement payload bound.</summary>
     /// <param name="ordinal">The original operation ordinal.</param>
     /// <param name="plan">The already captured operation contract.</param>
-    /// <returns>The guarded insertion into the statement-local result table.</returns>
+    /// <param name="dispatchSlot">An optional statement-local slot owning the transport parameters.</param>
+    /// <returns>One isolated classifier returning exactly one nine-column result set.</returns>
     internal static string BuildDelayedCatalogSelection(
         int ordinal,
-        SqlServerSafeMigrationRuntimePlan plan
+        SqlServerSafeMigrationRuntimePlan plan,
+        int? dispatchSlot = null
     )
+    {
+        var definitions = BuildDelayedParameterDefinitions(plan);
+        var template = BuildDelayedCatalogTemplate(plan, definitions);
+        var arguments = new StringBuilder("@doka_ordinal = ");
+        var bindOrdinal = dispatchSlot is not null && UsesDelayedOrdinalParameter(plan);
+        arguments.Append(bindOrdinal && dispatchSlot is { } slot
+            ? DelayedOrdinalParameterName(slot)
+            : ordinal.ToString(CultureInfo.InvariantCulture));
+
+        for (var index = 0; index < plan.AnalysisParameters.Count; index++)
+        {
+            var value = plan.AnalysisParameters[index];
+            arguments.Append(", ").Append(value.Name).Append(" = ")
+                .Append(dispatchSlot is { } valueSlot
+                    ? DelayedSourceParameterName(valueSlot, index)
+                    : value.ExternalName);
+        }
+
+        // WHY: The heavyweight guarded body is compiled independently of neighboring classifiers.
+        // Original ordinals and source values are inputs, never template identities or cached results.
+        var selection = "EXEC sys.sp_executesql N'"
+            + template.Replace("'", "''", StringComparison.Ordinal)
+            + "', N'" + definitions + "', " + arguments + ";";
+
+        var bytes = Encoding.UTF8.GetByteCount(selection);
+        if (bytes > SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes)
+        {
+            throw SafeMigrationCatalogQueryLimits.OversizedOperation(
+                ordinal, plan.AnalysisParameters.Count + (bindOrdinal ? 1 : 0), bytes);
+        }
+
+        return selection;
+    }
+
+    /// <summary>Builds an ordinal-independent classifier with private proof and preamble variables.</summary>
+    /// <param name="plan">The complete captured operation contract.</param>
+    /// <returns>The guarded dynamic body; each branch returns one owned result set.</returns>
+    internal static string BuildDelayedCatalogTemplate(SqlServerSafeMigrationRuntimePlan plan)
+        => BuildDelayedCatalogTemplate(plan, BuildDelayedParameterDefinitions(plan));
+
+    /// <summary>Builds both dynamic scopes using one shared immutable parameter-definition buffer.</summary>
+    private static string BuildDelayedCatalogTemplate(SqlServerSafeMigrationRuntimePlan plan, string definitions)
     {
         // WHY: SQL Server binds table and column references in a skipped IF
         // branch before execution. Dynamic SQL is required after the catalog
@@ -800,13 +838,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
             + BuildCatalogSelection("@doka_ordinal", plan, includePhysicalTableSupport: false);
 
         var escaped = inner.Replace("'", "''", StringComparison.Ordinal);
-        var parameterDefinitions = plan.AnalysisParameters.Count == 0 ? string.Empty
-            : ", " + string.Join(", ", plan.AnalysisParameters.Select(static value =>
-                value.Name + " " + value.Mapping.StoreType));
-
         var parameterArguments = plan.AnalysisParameters.Count == 0 ? string.Empty
             : ", " + string.Join(", ", plan.AnalysisParameters.Select(static value =>
-                value.Name + " = " + value.ExternalName));
+                value.Name + " = " + value.Name));
 
         var outerStateGuard = plan.AnalysisOuterStateGuardExpression ?? plan.StateEvaluationGuardExpression;
         var outerStateFailure = plan.AnalysisOuterStateGuardFailureExpression
@@ -814,25 +848,25 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
 
         var physicalGate = plan.PhysicalTableSupportExpression is null ? string.Empty
             : $"IF COALESCE(({plan.PhysicalTableSupportExpression}), 0) <> 1 "
-                + $"INSERT INTO @doka_analysis SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, "
+                + "SELECT @doka_ordinal, "
                 + $"N'unsupported', 0, 0, N'{SqlServerSafeMigrationRuntimePlan.PhysicalTableUnsupportedCode}', "
                 + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(max), NULL), "
                 + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(128), NULL); ELSE ";
 
         var collationGate = plan.ColumnCollationSupportExpression is null ? string.Empty
             : $"IF COALESCE(({plan.ColumnCollationSupportExpression}), 0) <> 1 "
-                + $"INSERT INTO @doka_analysis SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, "
+                + "SELECT @doka_ordinal, "
                 + $"N'unsupported', 0, 0, N'{SqlServerSafeMigrationRuntimePlan.ColumnCollationUnsupportedCode}', "
                 + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(max), NULL), "
                 + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(128), NULL); ELSE ";
 
-        var layoutVariable = "@doka_layout_" + ordinal.ToString(CultureInfo.InvariantCulture);
+        const string layoutVariable = "@doka_layout";
         var layoutSetup = plan.ColumnLayoutFailureExpression is null ? string.Empty
             : $"DECLARE {layoutVariable} nvarchar(128) = ({plan.ColumnLayoutFailureExpression}); ";
 
         var layoutGate = plan.ColumnLayoutFailureExpression is null ? string.Empty
-            : $"IF {layoutVariable} IS NOT NULL INSERT INTO @doka_analysis "
-                + $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, N'unsupported', 0, 0, {layoutVariable}, "
+            : $"IF {layoutVariable} IS NOT NULL "
+                + $"SELECT @doka_ordinal, N'unsupported', 0, 0, {layoutVariable}, "
                 + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(max), NULL), "
                 + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(128), NULL); ELSE ";
 
@@ -840,7 +874,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
         var defaultSetup = string.Empty;
         if (plan.DefaultValueSupportRequiresDelayedBinding && defaultValue is not null)
         {
-            var variable = "@doka_default_" + ordinal.ToString(CultureInfo.InvariantCulture);
+            const string variable = "@doka_default";
             var scalar = ("SELECT @value = COALESCE((" + defaultValue + "), 0)")
                 .Replace("'", "''", StringComparison.Ordinal);
 
@@ -851,14 +885,14 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
 
         var defaultGate = defaultValue is null ? string.Empty
             : $"IF COALESCE(({defaultValue}), 0) <> 1 "
-                + $"INSERT INTO @doka_analysis SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, "
+                + "SELECT @doka_ordinal, "
                 + $"N'unsupported', 0, 0, N'{SqlServerSafeMigrationRuntimePlan.DefaultValueUnsupportedCode}', "
                 + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(max), NULL), "
                 + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(128), NULL); ELSE ";
 
         var indexFilterGate = plan.IndexFilterSupportExpression is null ? string.Empty
             : $"IF COALESCE(({plan.IndexFilterSupportExpression}), 0) <> 1 "
-                + $"INSERT INTO @doka_analysis SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, "
+                + "SELECT @doka_ordinal, "
                 + $"N'unsupported', 0, 0, N'{SqlServerSafeMigrationRuntimePlan.IndexFilterUnsupportedCode}', "
                 + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(max), NULL), "
                 + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(128), NULL); ELSE ";
@@ -869,12 +903,12 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
             + (outerStateFailure is null
                 ? string.Empty
                 : $"AND COALESCE(({outerStateGuard}), 0) = 1 ")
-            // WHY: The ordinal labels the result, not its physical contract. Parameterizing it keeps identical
-            // delayed classifiers reusable in SQL Server's plan cache without changing name-binding guards.
-            + $"INSERT INTO @doka_analysis EXEC sys.sp_executesql N'{escaped}', "
-            + $"N'@doka_ordinal int{parameterDefinitions}', @doka_ordinal = {ordinal.ToString(CultureInfo.InvariantCulture)}"
+            // WHY: Returning the nested SELECT directly avoids INSERT EXEC and a statement-sized
+            // table variable. Transport validates one result set per classifier before accepting evidence.
+            + $"EXEC sys.sp_executesql N'{escaped}', "
+            + $"N'{definitions}', @doka_ordinal = @doka_ordinal"
             + parameterArguments + " "
-            + $"ELSE INSERT INTO @doka_analysis SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, "
+            + "ELSE SELECT @doka_ordinal, "
             + (outerStateFailure is null
                 ? "N'prerequisite_missing'"
                 : $"CASE WHEN COALESCE(({plan.PrerequisiteExpression}), 0) = 1 "
@@ -884,17 +918,29 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
             + ", CONVERT(nvarchar(max), NULL), "
             + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(128), NULL); END; END;";
 
-        var bytes = Encoding.UTF8.GetByteCount(DelayedStatementPrefix)
-            + Encoding.UTF8.GetByteCount(selection)
-            + Encoding.UTF8.GetByteCount(DelayedStatementTrailer);
-
-        if (bytes > SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes)
-        {
-            throw SafeMigrationCatalogQueryLimits.OversizedOperation(ordinal, 0, bytes);
-        }
-
         return selection;
     }
+
+    /// <summary>Retains stable local source mappings in both levels of delayed name binding.</summary>
+    private static string BuildDelayedParameterDefinitions(SqlServerSafeMigrationRuntimePlan plan)
+        => "@doka_ordinal int" + (plan.AnalysisParameters.Count == 0 ? string.Empty
+            : ", " + string.Join(", ", plan.AnalysisParameters.Select(static value =>
+                value.Name + " " + value.Mapping.StoreType)));
+
+    /// <summary>Gets the statement-local original-ordinal transport marker.</summary>
+    private static string DelayedOrdinalParameterName(int slot)
+        => "@doka_ordinal" + slot.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>Preserves the complete source-parameter admission boundary without raising the wire limit.</summary>
+    private static bool UsesDelayedOrdinalParameter(SqlServerSafeMigrationRuntimePlan plan)
+        // WHY: A previously admissible 2,000-source capture has no spare RPC parameter. Its generated
+        // integer label can be literal only in the small outer dispatcher; the heavy classifier remains stable.
+        => plan.AnalysisParameters.Count < SqlServerCatalogParameterBindings.MaximumParameters;
+
+    /// <summary>Gets a source transport marker independent of the migration's global ordinal.</summary>
+    private static string DelayedSourceParameterName(int slot, int index)
+        => "@doka_source" + slot.ToString(CultureInfo.InvariantCulture) + "_"
+            + index.ToString(CultureInfo.InvariantCulture);
 
     private static SafeMigrationProviderAnalysis ReadAnalysis(
         DbDataReader reader,

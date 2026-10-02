@@ -13,6 +13,9 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 /// </remarks>
 public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
 {
+    private const string GuardScopePrefix = "EXEC sys.sp_executesql N'";
+    private const string GuardScopeSuffix = "';\n";
+
     private const string MetadataVisibilityExpression =
         "HAS_PERMS_BY_NAME(DB_NAME(), N'DATABASE', N'VIEW DEFINITION')";
 
@@ -509,9 +512,67 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
             .Append("        THROW 51005, N'doka_sm_postcondition', 1;\n")
             .Append("    END;\nEND;");
 
-        return builder.ToString();
+        // WHY: BEGIN/END does not scope T-SQL variables. EF script generation
+        // can concatenate operations and separate Generate calls in one batch,
+        // so the complete guard needs its own dynamic scope, not ordinal names.
+        // Existing nested scopes still defer row and DDL binding until their
+        // prerequisite gates succeed; exceptions and transactions flow outward.
+
+        return BuildIsolatedGuardSql(builder);
     }
 
+    /// <summary>Copies a completed guard into its exact-sized isolated SQL batch without mutating the source.</summary>
+    /// <param name="body">The operation-owned buffer, which must not be concurrently modified.</param>
+    /// <returns>The original guard with SQL literal quoting and one private dynamic scope.</returns>
+    /// <exception cref="ArgumentNullException">The source buffer is null.</exception>
+    /// <exception cref="OverflowException">The isolated batch length exceeds the string length domain.</exception>
+    internal static string BuildIsolatedGuardSql(
+        StringBuilder body
+    )
+    {
+        ArgumentNullException.ThrowIfNull(body);
+
+        var apostrophes = 0;
+        foreach (var chunk in body.GetChunks())
+        {
+            apostrophes += chunk.Span.Count('\'');
+        }
+
+        var length = checked(body.Length + apostrophes + GuardScopePrefix.Length + GuardScopeSuffix.Length);
+
+        // WHY: Replace/Insert expands mutable builder chunks before the final
+        // string allocation. Copy once into that final allocation and expand
+        // quotes backward, so no unread source character is overwritten and
+        // neither an intermediate flattened string nor a rented buffer is needed.
+        return string.Create(length, body, static (destination, source) =>
+        {
+            source.CopyTo(0, destination.Slice(GuardScopePrefix.Length, source.Length), source.Length);
+            var sourceOffset = GuardScopePrefix.Length + source.Length;
+            var destinationOffset = destination.Length - GuardScopeSuffix.Length;
+            while (sourceOffset > GuardScopePrefix.Length)
+            {
+                var character = destination[--sourceOffset];
+                destination[--destinationOffset] = character;
+                if (character == '\'')
+                {
+                    destination[--destinationOffset] = character;
+                }
+
+            }
+
+            GuardScopePrefix.AsSpan().CopyTo(destination);
+            GuardScopeSuffix.AsSpan().CopyTo(destination.Slice(destination.Length - GuardScopeSuffix.Length));
+        });
+    }
+
+    /// <summary>Appends a nested scalar scope without binding row expressions before their runtime gates.</summary>
+    /// <param name="builder">The operation-owned guard buffer.</param>
+    /// <param name="expression">The required scalar SQL expression to evaluate.</param>
+    /// <param name="type">The provider-owned scalar output type.</param>
+    /// <param name="targetVariable">The caller variable receiving the scalar result.</param>
+    /// <param name="indentation">The indentation before the nested scope.</param>
+    /// <param name="preambleSql">Optional catalog setup retained in the same scalar scope.</param>
+    /// <exception cref="ArgumentNullException">The required scalar expression is null.</exception>
     private static void AppendDelayedScalar(
         StringBuilder builder,
         string expression,
@@ -521,12 +582,15 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
         string? preambleSql = null
     )
     {
-        builder.Append(indentation)
-            .Append("EXEC sys.sp_executesql N'")
-            .Append(preambleSql?.Replace("'", "''", StringComparison.Ordinal))
-            .Append("\nSET @doka_value = (")
-            .Append(expression.Replace("'", "''", StringComparison.Ordinal))
-            .Append(");', N'@doka_value ")
+        // WHY: Only the optional preamble treats null as empty. A malformed
+        // required expression must still fail before any guard can be emitted.
+        ArgumentNullException.ThrowIfNull(expression);
+
+        builder.Append(indentation).Append(GuardScopePrefix);
+        AppendEscapedSqlLiteral(builder, preambleSql.AsSpan());
+        builder.Append("\nSET @doka_value = (");
+        AppendEscapedSqlLiteral(builder, expression.AsSpan());
+        builder.Append(");', N'@doka_value ")
             .Append(type)
             .Append(" OUTPUT', @doka_value = ")
             .Append(targetVariable)
@@ -554,14 +618,50 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
         }
     }
 
+    /// <summary>Appends one required statement in a nested scope that preserves late DDL binding.</summary>
+    /// <param name="builder">The operation-owned guard buffer.</param>
+    /// <param name="sql">The required provider-generated statement text.</param>
+    /// <param name="indentation">The indentation before the nested scope.</param>
+    /// <exception cref="ArgumentNullException">The required statement text is null.</exception>
     private static void AppendDynamicSql(
         StringBuilder builder,
         string sql,
         string indentation
-    ) => builder.Append(indentation)
-        .Append("EXEC sys.sp_executesql N'")
-        .Append(sql.Replace("'", "''", StringComparison.Ordinal))
-        .Append("';\n");
+    )
+    {
+        // WHY: Span conversion accepts null as empty, but an extensible baseline
+        // returning absent SQL must not silently produce an empty nested command.
+        ArgumentNullException.ThrowIfNull(sql);
+
+        builder.Append(indentation).Append(GuardScopePrefix);
+        AppendEscapedSqlLiteral(builder, sql.AsSpan());
+        builder.Append(GuardScopeSuffix);
+    }
+
+    /// <summary>Appends SQL literal escaping directly without allocating a full escaped copy of the input.</summary>
+    /// <param name="builder">The operation-owned destination receiving the escaped characters.</param>
+    /// <param name="sql">The original literal content; an empty span appends no characters.</param>
+    /// <exception cref="ArgumentNullException">The destination builder is null.</exception>
+    internal static void AppendEscapedSqlLiteral(
+        StringBuilder builder,
+        ReadOnlySpan<char> sql
+    )
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        // WHY: Delayed classifiers repeat large catalog expressions inside
+        // nested SQL literals. Append unchanged spans and doubled apostrophes
+        // directly; every other UTF-16 code unit and null-preamble behavior
+        // remain identical to the former ordinal string replacement.
+        int apostropheOffset;
+        while ((apostropheOffset = sql.IndexOf('\'')) >= 0)
+        {
+            builder.Append(sql.Slice(0, apostropheOffset)).Append("''");
+            sql = sql.Slice(apostropheOffset + 1);
+        }
+
+        builder.Append(sql);
+    }
 
     private static string BuildActionCase(
         SafeMigrationOperation operation,

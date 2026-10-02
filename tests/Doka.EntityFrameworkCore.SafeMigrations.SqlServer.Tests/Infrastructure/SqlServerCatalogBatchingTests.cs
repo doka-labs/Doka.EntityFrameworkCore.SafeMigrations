@@ -80,10 +80,11 @@ public sealed class SqlServerCatalogBatchingTests
         Assert.Equal(391, connection.BatchExecutions);
         Assert.All(connection.BatchStatementCounts, count => Assert.InRange(count, 1, 8));
         Assert.All(connection.BatchPayloadBytes, bytes => Assert.InRange(bytes, 1, 4 * 1024 * 1024));
-        Assert.All(connection.RecordedStatements, statement => Assert.InRange(
-            statement.StartsWith("DECLARE @doka_analysis", StringComparison.Ordinal)
-                ? statement.Split("@doka_ordinal = ", StringSplitOptions.None).Length - 1
-                : statement.Split("\nUNION ALL\n", StringSplitOptions.None).Length, 1, 32));
+        Assert.All(connection.RecordedStatements.Zip(connection.RecordedParameters), recorded => Assert.InRange(
+            recorded.First.StartsWith("EXEC sys.sp_executesql", StringComparison.Ordinal)
+                ? recorded.Second.Count(parameter => parameter.ParameterName.StartsWith(
+                    "@doka_ordinal", StringComparison.Ordinal))
+                : recorded.First.Split("\nUNION ALL\n", StringSplitOptions.None).Length, 1, 32));
         for (var ordinal = 0; ordinal < results.Length; ordinal++)
         {
             Assert.Equal(ordinal % 9 == 3 ? SafeMigrationObservedState.Unsupported : State(ordinal),
@@ -130,8 +131,9 @@ public sealed class SqlServerCatalogBatchingTests
 
         // Assert
         var statement = Assert.Single(connection.RecordedStatements);
-        Assert.Contains("DECLARE @doka_analysis TABLE", statement, StringComparison.Ordinal);
-        Assert.Contains("N'DECLARE @probe int = 1;\nSELECT @doka_ordinal", statement, StringComparison.Ordinal);
+        Assert.StartsWith("EXEC sys.sp_executesql N'", statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("@doka_analysis", statement, StringComparison.Ordinal);
+        Assert.Contains("N''DECLARE @probe int = 1;\nSELECT @doka_ordinal", statement, StringComparison.Ordinal);
         Assert.Equal(SafeMigrationObservedState.Missing, results[0].ObservedState);
     }
 
@@ -150,7 +152,11 @@ public sealed class SqlServerCatalogBatchingTests
     {
         // Arrange
         await using var connection = new SqlServerCatalogTestConnection(nativeBatch);
-        var plan = Plan(delayed) with { StateExpression = "N'missing' /*" + new string('\'', 1_100_000) + "*/" };
+        var plan = Plan(delayed) with
+        {
+            StateExpression = "N'missing' /*" + new string('\'', delayed ? 550_000 : 1_100_000) + "*/",
+        };
+
         var results = new SafeMigrationProviderAnalysis[4];
 
         // Act
@@ -516,11 +522,11 @@ public sealed class SqlServerCatalogBatchingTests
         var second = SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogSelection(100_000, plan);
 
         // Assert
-        Assert.Contains("N'SELECT @doka_ordinal,", first, StringComparison.Ordinal);
-        Assert.Contains("N'@doka_ordinal int', @doka_ordinal = 0 ", first, StringComparison.Ordinal);
+        Assert.Contains("N''SELECT @doka_ordinal,", first, StringComparison.Ordinal);
+        Assert.Contains("N'@doka_ordinal int', @doka_ordinal = 0;", first, StringComparison.Ordinal);
         const string parameterBoundary = "', N'@doka_ordinal int'";
-        Assert.Equal(first[..first.IndexOf(parameterBoundary, StringComparison.Ordinal)],
-            second[..second.IndexOf(parameterBoundary, StringComparison.Ordinal)]);
+        Assert.Equal(first[..first.LastIndexOf(parameterBoundary, StringComparison.Ordinal)],
+            second[..second.LastIndexOf(parameterBoundary, StringComparison.Ordinal)]);
     }
 
     /// <summary>Equal immutable plans share one baseline result while retaining every original result slot.</summary>

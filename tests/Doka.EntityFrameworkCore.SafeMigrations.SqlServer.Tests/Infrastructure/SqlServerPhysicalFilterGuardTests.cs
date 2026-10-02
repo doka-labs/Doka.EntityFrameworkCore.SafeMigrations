@@ -50,11 +50,10 @@ public sealed class SqlServerPhysicalFilterGuardTests
 
         // Act
         var plan = catalog.Build(operation);
-        var selection = unique ? SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogSelection(257, plan)
+        var selection = unique ? SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogTemplate(plan)
             : SqlServerSafeMigrationProviderAnalyzer.BuildCatalogSelection(257, plan);
 
-        var runtime = string.Join("\n", context.GetService<IMigrationsSqlGenerator>()
-            .Generate([operation], context.Model).Select(static command => command.CommandText));
+        var runtime = SqlServerGuardedSqlTestContract.GenerateBody(context, operation);
 
         // Assert
         var support = Assert.IsType<string>(plan.IndexFilterSupportExpression);
@@ -72,7 +71,7 @@ public sealed class SqlServerPhysicalFilterGuardTests
         if (unique)
         {
             Assert.True(selection.IndexOf(support, StringComparison.Ordinal)
-                < selection.IndexOf("INSERT INTO @doka_analysis EXEC", StringComparison.Ordinal));
+                < selection.IndexOf("EXEC sys.sp_executesql", StringComparison.Ordinal));
         }
         else
         {

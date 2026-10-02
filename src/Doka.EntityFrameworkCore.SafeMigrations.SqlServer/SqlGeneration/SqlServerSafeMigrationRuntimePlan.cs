@@ -59,10 +59,10 @@ internal sealed record SqlServerSafeMigrationRuntimePlan(
     /// <summary>Gets the state returned when the state-evaluation guard fails.</summary>
     public string? StateEvaluationGuardFailureExpression { get; init; }
 
-    /// <summary>Gets an analysis-only guard using outer transport parameters before dynamic binding.</summary>
+    /// <summary>Gets an analysis-only guard using stable local parameters before delayed row binding.</summary>
     public string? AnalysisOuterStateGuardExpression { get; init; }
 
-    /// <summary>Gets the outer transport failure classifier before dynamic binding.</summary>
+    /// <summary>Gets the local guarded failure classifier before delayed row binding.</summary>
     public string? AnalysisOuterStateGuardFailureExpression { get; init; }
 
     /// <summary>Gets an optional stable classification-code expression.</summary>

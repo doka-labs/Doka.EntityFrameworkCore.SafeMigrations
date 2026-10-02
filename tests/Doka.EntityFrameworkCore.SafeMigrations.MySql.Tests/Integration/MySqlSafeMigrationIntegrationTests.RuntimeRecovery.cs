@@ -5,7 +5,8 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     private const string RuntimeGuardVariablesClearedSql = "SELECT @doka_sm_state IS NULL "
         + "AND @doka_sm_action IS NULL AND @doka_sm_repair_ok IS NULL AND @doka_sm_prerequisite_ok IS NULL "
         + "AND @doka_sm_sql IS NULL AND @doka_sm_post_ok IS NULL AND @doka_sm_data_probe_required IS NULL "
-        + "AND @doka_sm_data_blocked IS NULL AND @doka_sm_transition_eligible IS NULL;";
+        + "AND @doka_sm_data_blocked IS NULL AND @doka_sm_transition_eligible IS NULL "
+        + "AND @doka_sm_nullability_blocked IS NULL AND @doka_sm_column_repair_eligible IS NULL;";
 
     /// <summary>
     /// Verifies first-error behavior and acquired-resource cleanup inside real compacted setup groups.

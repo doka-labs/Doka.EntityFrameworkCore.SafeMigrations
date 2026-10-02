@@ -120,19 +120,20 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             Math.Min(count - start, SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement
                 * SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch));
 
+        var resultSetSizes = new List<int>(resultPlans.Capacity);
         var payloadFull = false;
         while (next < count && !payloadFull
                && batch.Count < SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch)
         {
             var delayed = RequiresDelayedCatalogBinding(plans[order[next]]!);
-            var prefix = delayed ? DelayedStatementPrefix : string.Empty;
-            var trailer = delayed ? DelayedStatementTrailer : SafeMigrationCatalogQueryLimits.Trailer;
+            const string prefix = "";
+            var trailer = delayed ? string.Empty : SafeMigrationCatalogQueryLimits.Trailer;
             var separator = delayed ? "\n" : SafeMigrationCatalogQueryLimits.Separator;
             var fixedPayload = Encoding.UTF8.GetByteCount(prefix) + Encoding.UTF8.GetByteCount(trailer);
             var statementPayload = fixedPayload;
             var separatorBytes = Encoding.UTF8.GetByteCount(separator);
             var selections = new List<string>(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement);
-            var statementPlans = new List<SqlServerSafeMigrationRuntimePlan>(
+            var statementPlans = new List<(int Ordinal, SqlServerSafeMigrationRuntimePlan Plan)>(
                 SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement);
 
             var statementParameters = 0;
@@ -148,21 +149,28 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
                 var ordinal = captureStart + order[next];
                 var selection = delayed
-                    ? BuildDelayedCatalogSelection(ordinal, plan)
+                    ? BuildDelayedCatalogSelection(ordinal, plan, selections.Count)
                     : BuildCatalogSelection(ordinal, plan);
 
                 var bytes = Encoding.UTF8.GetByteCount(selection);
-                var valueBytes = plan.AnalysisParameters.Sum(static value => value.PayloadBytes);
-                if (plan.AnalysisParameters.Count > SqlServerCatalogParameterBindings.MaximumParameters
-                    || (long)fixedPayload + bytes + valueBytes > SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes)
+                // WHY: Ordinal RPC metadata contributes to both bounds, including zero-source classifiers.
+                // The full source-budget boundary uses a trusted integer dispatcher literal instead.
+                var bindOrdinal = delayed && UsesDelayedOrdinalParameter(plan);
+                var planParameters = plan.AnalysisParameters.Count + (bindOrdinal ? 1 : 0);
+                var valueBytes = plan.AnalysisParameters.Sum(static value => value.PayloadBytes)
+                    + (bindOrdinal ? 128 : 0);
+                if (planParameters > SqlServerCatalogParameterBindings.MaximumParameters
+                    || (long)fixedPayload + bytes + valueBytes
+                    > SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes)
                 {
                     throw SafeMigrationCatalogQueryLimits.OversizedOperation(
-                        ordinal, plan.AnalysisParameters.Count, checked(fixedPayload + bytes + valueBytes));
+                        ordinal, planParameters, checked(fixedPayload + bytes + valueBytes));
                 }
 
                 var addition = bytes + valueBytes + (selections.Count == 0 ? 0 : separatorBytes);
-                if ((long)payload + statementPayload + addition > SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes
-                    || parameterCount + statementParameters + plan.AnalysisParameters.Count
+                if ((long)payload + statementPayload + addition
+                    > SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes
+                    || parameterCount + statementParameters + planParameters
                     > SqlServerCatalogParameterBindings.MaximumParameters)
                 {
                     payloadFull = true;
@@ -171,9 +179,14 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 }
 
                 selections.Add(selection);
-                statementPlans.Add(plan);
-                statementParameters += plan.AnalysisParameters.Count;
+                statementPlans.Add((ordinal, plan));
+                statementParameters += planParameters;
                 resultPlans.Add((ordinal, plan));
+                if (delayed)
+                {
+                    resultSetSizes.Add(1);
+                }
+
                 statementPayload += addition;
                 next++;
             }
@@ -185,17 +198,37 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
             var command = batch.CreateCommand();
             command.CommandText = BuildCatalogCommandText(selections, prefix, separator, trailer);
+            if (!delayed)
+            {
+                resultSetSizes.Add(selections.Count);
+            }
+
             // WHY: EF's source mapping configures the real provider parameter, including converters
             // and SQL-specific facets. A factory command is never executed or attached to the batch.
             using var parameterFactory = statementParameters == 0 || command.SequentialCommand is not null
                 ? null : connection.CreateCommand();
 
-            foreach (var plan in statementPlans)
+            for (var slot = 0; slot < statementPlans.Count; slot++)
             {
-                foreach (var value in plan.AnalysisParameters)
+                var item = statementPlans[slot];
+                if (delayed && UsesDelayedOrdinalParameter(item.Plan))
                 {
+                    // WHY: DbBatchCommand parameter creation is optional even when batching works.
+                    // Use the same actual provider factory as source mappings, including native wrappers.
+                    var ordinalParameter = (command.SequentialCommand ?? parameterFactory!).CreateParameter();
+                    ordinalParameter.ParameterName = DelayedOrdinalParameterName(slot);
+                    ordinalParameter.DbType = System.Data.DbType.Int32;
+                    ordinalParameter.Value = item.Ordinal;
+                    command.Parameters.Add(ordinalParameter);
+                }
+
+                for (var index = 0; index < item.Plan.AnalysisParameters.Count; index++)
+                {
+                    var value = item.Plan.AnalysisParameters[index];
                     command.Parameters.Add(value.Mapping.CreateParameter(
-                        command.SequentialCommand ?? parameterFactory!, value.ExternalName, value.Value, nullable: false));
+                        command.SequentialCommand ?? parameterFactory!,
+                        delayed ? DelayedSourceParameterName(slot, index) : value.ExternalName,
+                        value.Value, nullable: false));
                 }
             }
 
@@ -209,11 +242,20 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         activity?.SetTag("safe_migrations.catalog.payload_bytes", payload);
 
         var resultIndex = 0;
+        var resultSetIndex = 0;
         await batch.ForEachResultSetAsync(async (reader, token) =>
         {
+            if (resultSetIndex >= resultSetSizes.Count || reader.FieldCount != 9)
+            {
+                throw new InvalidOperationException("The SQL Server catalog batch returned an invalid result set.");
+            }
+
+            var expectedRows = resultSetSizes[resultSetIndex++];
+            var rows = 0;
             while (await reader.ReadAsync(token))
             {
-                if (resultIndex >= resultPlans.Count || reader.GetInt32(0) != resultPlans[resultIndex].Ordinal)
+                if (++rows > expectedRows || resultIndex >= resultPlans.Count
+                    || reader.GetInt32(0) != resultPlans[resultIndex].Ordinal)
                 {
                     throw new InvalidOperationException("The SQL Server catalog batch returned an invalid ordinal.");
                 }
@@ -222,9 +264,16 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 results[expected.Ordinal] = ReadAnalysis(reader, expected.Plan);
                 resultIndex++;
             }
+
+            // WHY: Total row counts alone could accept an empty classifier followed by one that
+            // leaks two valid ordinals. Each isolated classifier must own exactly its one result set.
+            if (rows != expectedRows)
+            {
+                throw new InvalidOperationException("The SQL Server catalog batch returned an inconsistent row count.");
+            }
         }, cancellationToken);
 
-        if (resultIndex != resultPlans.Count)
+        if (resultIndex != resultPlans.Count || resultSetIndex != resultSetSizes.Count)
         {
             throw new InvalidOperationException("The SQL Server catalog batch returned an inconsistent row count.");
         }

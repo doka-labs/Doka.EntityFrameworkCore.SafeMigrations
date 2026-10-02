@@ -24,10 +24,10 @@ public sealed class SqlServerCatalogGuardSqlTests
             CatalogPreambleSql = "DECLARE @proof bit = 1; DECLARE @label nvarchar(20) = N'O''Brien';",
         };
 
-        const string dynamicPrefix = "INSERT INTO @doka_analysis EXEC sys.sp_executesql N'";
+        const string dynamicPrefix = "EXEC sys.sp_executesql N'";
 
         // Act
-        var sql = SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogSelection(257, plan);
+        var sql = SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogTemplate(plan);
         var dynamicStart = sql.IndexOf(dynamicPrefix, StringComparison.Ordinal);
         var fallbackStart = sql.IndexOf("', N'@doka_ordinal int'", StringComparison.Ordinal);
 

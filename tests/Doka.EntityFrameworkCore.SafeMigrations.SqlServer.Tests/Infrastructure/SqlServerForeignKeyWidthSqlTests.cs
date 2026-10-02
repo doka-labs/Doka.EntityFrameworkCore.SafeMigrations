@@ -19,7 +19,7 @@ public sealed class SqlServerForeignKeyWidthSqlTests
 
         // Act
         var plan = catalog.Build(operation);
-        var delayed = SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogSelection(257, plan);
+        var delayed = SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogTemplate(plan);
 
         // Assert
         Assert.False(plan.IsStaticallyUnsupported);
@@ -28,7 +28,7 @@ public sealed class SqlServerForeignKeyWidthSqlTests
         Assert.Contains("N'[dbo].[width_child]'", plan.PrerequisiteExpression, StringComparison.Ordinal);
         Assert.Contains("N'[dbo].[width_parent]'", plan.PrerequisiteExpression, StringComparison.Ordinal);
         var prerequisite = delayed.IndexOf(plan.PrerequisiteExpression, StringComparison.Ordinal);
-        var rowBinding = delayed.IndexOf("INSERT INTO @doka_analysis EXEC sys.sp_executesql", StringComparison.Ordinal);
+        var rowBinding = delayed.IndexOf("EXEC sys.sp_executesql", StringComparison.Ordinal);
         Assert.True(prerequisite >= 0);
         Assert.True(rowBinding > prerequisite);
     }

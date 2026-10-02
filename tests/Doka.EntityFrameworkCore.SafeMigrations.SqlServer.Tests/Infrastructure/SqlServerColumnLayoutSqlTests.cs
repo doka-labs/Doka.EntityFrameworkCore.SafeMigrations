@@ -74,9 +74,9 @@ public sealed class SqlServerColumnLayoutSqlTests
 
         // Act
         var plan = catalog.Build(operation);
-        var selection = SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogSelection(257, plan);
+        var selection = SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogTemplate(plan);
         var layoutGuard = selection.IndexOf("column_fixed_row_limit", StringComparison.Ordinal);
-        var rowBinding = selection.IndexOf("INSERT INTO @doka_analysis EXEC sys.sp_executesql",
+        var rowBinding = selection.IndexOf("EXEC sys.sp_executesql",
             StringComparison.Ordinal);
 
         // Assert

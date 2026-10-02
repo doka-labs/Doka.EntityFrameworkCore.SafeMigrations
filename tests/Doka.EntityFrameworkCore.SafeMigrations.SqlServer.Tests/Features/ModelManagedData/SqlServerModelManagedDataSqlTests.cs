@@ -233,11 +233,16 @@ public sealed class SqlServerModelManagedDataSqlTests
 
         // Act
         var commands = context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model);
+        var identityCommands = commands.OfType<SqlServerSafeMigrationIdentityInsertCommand>().ToArray();
+        var guardedBodies = identityCommands.Select(static command =>
+            SqlServerGuardedSqlTestContract.DecodeScope(command.CommandText)).ToArray();
 
         // Assert
-        var command = Assert.Single(commands.OfType<SqlServerSafeMigrationIdentityInsertCommand>());
-        Assert.Contains("IDENTITY_INSERT [dbo].[O''Brien] ON", command.CommandText, StringComparison.Ordinal);
-        Assert.Contains("IDENTITY_INSERT [dbo].[O''Brien] OFF", command.CommandText, StringComparison.Ordinal);
+        Assert.Single(identityCommands);
+        var guardedBody = Assert.Single(guardedBodies);
+
+        Assert.Contains("IDENTITY_INSERT [dbo].[O''Brien] ON", guardedBody, StringComparison.Ordinal);
+        Assert.Contains("IDENTITY_INSERT [dbo].[O''Brien] OFF", guardedBody, StringComparison.Ordinal);
     }
 
     /// <summary>

@@ -79,6 +79,16 @@ Boolean repair.
 
 ## Analysis consistency
 
+Catalog analysis omits only builder-certified constant `TRUE` prerequisites.
+Nonconstant prerequisites still complete before row-dependent queries bind.
+Independent diagnostic, narrowing-eligibility and qualified row-probe statements
+use bounded native `DbBatch` transport, with a sequential fallback for wrappers
+that do not expose batching. SQL evidence and scans remain unchanged; only
+transport is grouped. Timeout, cancellation, original ordinals, exact result
+counts and aggregate payload/parameter bounds remain enforced.
+Discarding an oversized candidate preserves the exact retained parameter
+objects and their named bindings, types, ordering and payload accounting.
+
 When no transaction is supplied, analysis creates a read-only
 `RepeatableRead` transaction and holds a transaction-scoped advisory analysis
 lock through all catalog chunks. A caller-owned transaction is accepted only

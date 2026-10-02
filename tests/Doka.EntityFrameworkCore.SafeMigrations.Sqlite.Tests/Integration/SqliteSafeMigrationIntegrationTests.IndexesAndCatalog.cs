@@ -109,9 +109,11 @@ public sealed partial class SqliteSafeMigrationCatalogIntegrationTests : SqliteI
             value => Assert.Equal("ck_status", value.Name));
     }
 
+    /// <summary>Supported semantic aliases retain genuine drift while sharing the inventory capture.</summary>
     [Fact]
     public async Task UnexpectedObjectInventory_RemovesSemanticAliasesAndRetainsOnlyPhysicalDrift()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync();
         await ExecuteSqlAsync(
             connection,
@@ -158,12 +160,16 @@ public sealed partial class SqliteSafeMigrationCatalogIntegrationTests : SqliteI
             "inventory_items",
             ["ParentId"]);
         var analyzer = context.GetService<ISafeMigrationProviderAnalyzer>();
+        var counter = new CatalogReadCounter(connection);
 
+        // Act
         var inventory = await analyzer.FindUnexpectedObjectsAsync(
             context,
             builder.Operations,
             CancellationToken.None);
 
+        // Assert
+        Assert.Equal(1, counter.Count);
         Assert.Collection(
             inventory.OrderBy(value => value.ObjectKind).ThenBy(value => value.Name, StringComparer.Ordinal),
             value =>

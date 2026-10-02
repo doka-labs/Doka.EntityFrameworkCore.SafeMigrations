@@ -23,6 +23,13 @@ names. Per-constraint conflict clauses, deferred foreign keys, and explicit
 foreign-key `MATCH` options are not represented by the EF relational target
 model and therefore reject before DDL instead of being normalized.
 
+Unexpected-object inventory reuses its captured immutable catalog snapshot for
+semantic-alias checks in each bounded window. This avoids repeated full schema
+reads within that inventory call; it is not a cache across analysis/inventory
+invocations, connections, transactions or runtime structural changes. SQLite
+catalog calls are local embedded operations, not network roundtrips. Data
+proofs and post-mutation snapshots remain fresh.
+
 ## Transactional execution
 
 Safe operations execute through EF runtime migration or a Migration Bundle.
