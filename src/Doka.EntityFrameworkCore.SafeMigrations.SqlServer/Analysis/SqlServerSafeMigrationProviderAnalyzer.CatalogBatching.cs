@@ -63,13 +63,14 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         var count = 0;
         for (var mode = 0; mode < 2; mode++)
         {
-            for (var index = 0; index < plans.Length; index++)
+            var delayed = mode == 1;
+            var selected = SafeMigrationCatalogWorkOrder.Create(plans.Length,
+                index => representatives[index] == index && plans[index] is { } plan
+                    && RequiresDelayedCatalogBinding(plan) == delayed, cancellationToken);
+
+            foreach (var index in selected)
             {
-                if (representatives[index] == index && plans[index] is { } plan
-                    && RequiresDelayedCatalogBinding(plan) == (mode == 1))
-                {
-                    order[count++] = index;
-                }
+                order[count++] = index;
             }
         }
 
@@ -114,6 +115,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         await using var batch = new SafeMigrationCatalogBatch(connection, commandTimeout, transaction);
         var next = start;
         var payload = 0;
+        var parameterCount = 0;
         var resultPlans = new List<(int Ordinal, SqlServerSafeMigrationRuntimePlan Plan)>(
             Math.Min(count - start, SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement
                 * SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch));
@@ -130,6 +132,10 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             var statementPayload = fixedPayload;
             var separatorBytes = Encoding.UTF8.GetByteCount(separator);
             var selections = new List<string>(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement);
+            var statementPlans = new List<SqlServerSafeMigrationRuntimePlan>(
+                SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement);
+
+            var statementParameters = 0;
             while (next < count && selections.Count < SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -146,13 +152,18 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     : BuildCatalogSelection(ordinal, plan);
 
                 var bytes = Encoding.UTF8.GetByteCount(selection);
-                if (fixedPayload + bytes > SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes)
+                var valueBytes = plan.AnalysisParameters.Sum(static value => value.PayloadBytes);
+                if (plan.AnalysisParameters.Count > SqlServerCatalogParameterBindings.MaximumParameters
+                    || (long)fixedPayload + bytes + valueBytes > SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes)
                 {
-                    throw SafeMigrationCatalogQueryLimits.OversizedOperation(ordinal, 0, fixedPayload + bytes);
+                    throw SafeMigrationCatalogQueryLimits.OversizedOperation(
+                        ordinal, plan.AnalysisParameters.Count, checked(fixedPayload + bytes + valueBytes));
                 }
 
-                var addition = bytes + (selections.Count == 0 ? 0 : separatorBytes);
-                if (payload + statementPayload + addition > SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes)
+                var addition = bytes + valueBytes + (selections.Count == 0 ? 0 : separatorBytes);
+                if ((long)payload + statementPayload + addition > SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes
+                    || parameterCount + statementParameters + plan.AnalysisParameters.Count
+                    > SqlServerCatalogParameterBindings.MaximumParameters)
                 {
                     payloadFull = true;
 
@@ -160,6 +171,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 }
 
                 selections.Add(selection);
+                statementPlans.Add(plan);
+                statementParameters += plan.AnalysisParameters.Count;
                 resultPlans.Add((ordinal, plan));
                 statementPayload += addition;
                 next++;
@@ -172,8 +185,28 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
             var command = batch.CreateCommand();
             command.CommandText = BuildCatalogCommandText(selections, prefix, separator, trailer);
+            // WHY: EF's source mapping configures the real provider parameter, including converters
+            // and SQL-specific facets. A factory command is never executed or attached to the batch.
+            using var parameterFactory = statementParameters == 0 || command.SequentialCommand is not null
+                ? null : connection.CreateCommand();
+
+            foreach (var plan in statementPlans)
+            {
+                foreach (var value in plan.AnalysisParameters)
+                {
+                    command.Parameters.Add(value.Mapping.CreateParameter(
+                        command.SequentialCommand ?? parameterFactory!, value.ExternalName, value.Value, nullable: false));
+                }
+            }
+
             payload += statementPayload;
+            parameterCount += statementParameters;
         }
+
+        using var activity = SafeMigrationTelemetry.StartAnalysisStage("catalog-batch", resultPlans.Count);
+        activity?.SetTag("safe_migrations.catalog.statement_count", batch.Count);
+        activity?.SetTag("safe_migrations.catalog.parameter_count", parameterCount);
+        activity?.SetTag("safe_migrations.catalog.payload_bytes", payload);
 
         var resultIndex = 0;
         await batch.ForEachResultSetAsync(async (reader, token) =>

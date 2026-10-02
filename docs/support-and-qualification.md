@@ -420,6 +420,18 @@ even when a job does not produce its final TRX. They contain fixed workload/stag
 identifiers, not SQL, database names or connection strings; they are diagnostics,
 not successful qualification evidence.
 
+The existing diagnostics ActivitySource optionally emits
+`safe_migrations.analysis.stage` activities for provider baseline capture,
+classification, bounded catalog batches, ordered projection and unexpected
+inventory. Only fixed stage labels, operation counts, batch/parameter counts
+and payload sizes are tagged, never SQL, object names or values. With no
+listeners no stage activity is allocated. SQL Server stress workloads retain
+start/completion markers and elapsed milliseconds for each stage; independent
+workloads are isolated by trace identity. Missing completion evidence still
+means the phase did not finish, not that qualification passed. Actual SQL
+Server 2019/2022/2025 x86-64 durations must be established by the pinned live
+cells; local ARM source tests cannot establish timeout closure.
+
 The five independently restored benchmark projects
 enforce the Core and provider dependency boundaries for:
 

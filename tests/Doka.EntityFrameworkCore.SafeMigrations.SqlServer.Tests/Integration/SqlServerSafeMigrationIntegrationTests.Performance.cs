@@ -29,6 +29,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
         context.Database.SetCommandTimeout(PerformanceFixtureCommandTimeoutSeconds);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         var expectation = LargeMigrationStressContract.Populate(builder, LargeMigrationStressDialect.SqlServer);
+        using var stageCapture = SqlServerLiveQualificationEvidence.CaptureAnalysisStages("mixed-100k");
 
         // Act
         SqlServerLiveQualificationEvidence.WriteStage("mixed-100k", "analyze");
@@ -37,6 +38,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
 
         // Assert
         expectation.AssertReport(report);
+        stageCapture.ThrowIfWriteFailed();
         SqlServerLiveQualificationEvidence.WriteStage("mixed-100k", "completed");
     }
 
@@ -62,6 +64,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
         var runner = context.GetService<ISafeMigrationRunner>();
         var environment = await context.GetService<ISafeMigrationProviderAnalyzer>().GetEnvironmentAsync(context);
         var commands = context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model);
+        using var stageCapture = SqlServerLiveQualificationEvidence.CaptureAnalysisStages("managed-50k");
 
         // Act
         SqlServerLiveQualificationEvidence.WriteStage("managed-50k", "initial-analysis");
@@ -97,6 +100,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
         Assert.Equal(expectation.FinalRowCount, rowCount);
         Assert.Equal(expectation.FinalRowCount, targetRowCount);
         Assert.Equal(0, deletedRangeCount);
+        stageCapture.ThrowIfWriteFailed();
         SqlServerLiveQualificationEvidence.WriteStage("managed-50k", "completed");
     }
 
@@ -131,6 +135,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
         var runner = context.GetService<ISafeMigrationRunner>();
         var options = new SafeMigrationRunOptions("sqlserver-live-performance");
         var environment = await context.GetService<ISafeMigrationProviderAnalyzer>().GetEnvironmentAsync(context);
+        using var stageCapture = SqlServerLiveQualificationEvidence.CaptureAnalysisStages("catalog-p95");
 
         // Act
         SqlServerLiveQualificationEvidence.WriteStage("catalog-p95", "clean-samples");
@@ -159,6 +164,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
             noisy.LastReport.Assessments.Select(static value => value.Code));
         Assert.True(noisy.P95Milliseconds <= (clean.P95Milliseconds * 2d) + 250d,
             $"Noisy p95 {noisy.P95Milliseconds:F3} ms exceeded clean p95 {clean.P95Milliseconds:F3} ms.");
+        stageCapture.ThrowIfWriteFailed();
         SqlServerLiveQualificationEvidence.WriteStage("catalog-p95", "completed");
     }
 

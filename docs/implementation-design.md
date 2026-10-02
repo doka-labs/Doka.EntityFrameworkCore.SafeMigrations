@@ -664,8 +664,8 @@ provider analysis, but it cannot approve such an operation.
 Each optimizer-visible statement contains at most 32 operations. At most eight
 statements travel in one ADO.NET batch, bounded by 16,000 parameters and 4 MiB
 of UTF-8 SQL plus parameter payload across the batch. MySQL/MariaDB also use
-half the live `max_allowed_packet` as an upper bound and capture Doka runtime
-plans in 512-operation windows. The complete migration-level unique-index
+half the live `max_allowed_packet` as an upper bound. MySQL/MariaDB and
+PostgreSQL capture runtime plans in 512-operation windows. The complete migration-level unique-index
 catalog is retained across those windows. Repeated typed values are interned
 within a statement, global ordinals span every statement, batch, and capture
 window, and results are published only after all work succeeds. Every raw
@@ -675,6 +675,15 @@ compatible wrapper that does not forward provider batching executes the same
 bounded statements through sequential `DbCommand` instances. The fallback
 does not concatenate provider SQL and preserves statement order, parameters,
 timeouts, cancellation, and all-or-nothing report publication.
+
+The shared bounded work selector submits unresolved original ordinals even
+when locally classified operations lie between them. MySQL/MariaDB and
+PostgreSQL retain those completed slots instead of fragmenting each classifier
+statement at the gap. Readers require exactly the submitted ordinal sequence;
+omitted, duplicate or unsubmitted rows fail before report publication. This
+does not coalesce templates or change migration-order projection. SQLite keeps
+its existing snapshot/rebuild transport because it has no equivalent remote
+classifier stream.
 
 SQL Server captures at most 512 plans and groups metadata-only classifiers
 separately from delayed-binding classifiers inside each capture. These are
@@ -687,6 +696,24 @@ Delayed classifiers bind that ordinal as an explicit `int` parameter to
 ordinal changes. Physical, layout, collation, default, filter, and prerequisite
 guards remain outside delayed row binding. See Microsoft's
 [dynamic batch scope and plan reuse](https://learn.microsoft.com/en-us/sql/relational-databases/system-stored-procedures/sp-executesql-transact-sql?view=sql-server-ver17).
+
+SQL Server captures table-name occupancy through a bounded parameterized
+`sys.schemas`/`sys.objects` query before building full table classifiers.
+Only proven absence omits the complete structure matcher; schema, physical,
+default, collation and inline-FK support checks remain. An object appearing
+after the probe is classified as different rather than accepted by name.
+There is no cross-capture or cross-analysis absence cache.
+
+Managed-data analysis binds source values independently of destination types:
+Unicode and binary sources use maximum-width parameters, temporal sources
+retain seven fractional digits, and decimal sources retain their actual scale.
+Target `TRY_CAST`, ANSI roundtrip and capacity guards still run before typed
+row relations bind. Stable local parameters live inside `sp_executesql`;
+unique outer parameters feed its arguments and the pre-binding scalar guards.
+The SQL Server transport limit is 2,000 parameters, below the documented
+[2,100-parameter limit](https://learn.microsoft.com/en-us/sql/sql-server/maximum-capacity-specifications-for-sql-server?view=sql-server-ver17),
+with source payload included in the existing 4 MiB bound. Runtime mutation
+generation retains its literal contract.
 
 This transport optimization does not establish a database-wide immutable
 snapshot or an external-write fence. SQL Server's analysis scope and deployment

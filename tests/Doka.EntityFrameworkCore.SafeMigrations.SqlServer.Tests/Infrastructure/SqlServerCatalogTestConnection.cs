@@ -12,6 +12,9 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
     /// <summary>Gets the statements submitted in transport order.</summary>
     public List<string> RecordedStatements { get; } = [];
 
+    /// <summary>Gets immutable snapshots of synthetic parameters for each recorded statement.</summary>
+    public List<SqlParameter[]> RecordedParameters { get; } = [];
+
     /// <summary>Gets the number of native batch execution attempts.</summary>
     public int BatchExecutions { get; private set; }
 
@@ -56,6 +59,12 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
 
     /// <summary>Gets or sets whether reader execution fails after recording the submitted statements.</summary>
     public bool ThrowOnExecute { get; set; }
+
+    /// <summary>Gets or sets whether occupancy probes return their two-column presence contract.</summary>
+    public bool ReturnPresenceRows { get; set; }
+
+    /// <summary>Gets or sets the occupancy proof returned for each requested local ordinal.</summary>
+    public Func<int, int>? PresenceValue { get; set; }
 
     /// <inheritdoc />
     [AllowNull]
@@ -136,6 +145,23 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
                 var table = new DataTable { Locale = CultureInfo.InvariantCulture };
                 results.Tables.Add(table);
                 table.Columns.Add("ordinal", typeof(int));
+                if (ReturnPresenceRows)
+                {
+                    table.Columns.Add("absent", typeof(int));
+                    var presenceOrdinals = System.Text.RegularExpressions.Regex
+                        .Matches(statement, @"\((\d+), @schema\d+, @table\d+\)")
+                        .Select(static match => int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture))
+                        .ToArray();
+
+                    presenceOrdinals = TransformOrdinals?.Invoke(presenceOrdinals) ?? presenceOrdinals;
+                    foreach (var ordinal in presenceOrdinals)
+                    {
+                        table.Rows.Add(ordinal, PresenceValue?.Invoke(ordinal) ?? 1);
+                    }
+
+                    continue;
+                }
+
                 table.Columns.Add("state", typeof(string));
                 table.Columns.Add("postcondition", typeof(int));
                 table.Columns.Add("repair", typeof(int));
@@ -177,6 +203,15 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
             results.Dispose();
             throw;
         }
+    }
+
+    /// <summary>Copies synthetic parameter facets before command disposal can change the test evidence.</summary>
+    private void RecordParameters(System.Data.Common.DbParameterCollection parameters)
+    {
+        // WHY: Parameters belong to disposable transport commands. Independent copies let assertions
+        // inspect source precision and payload identity without extending command lifetimes.
+        RecordedParameters.Add(parameters.Cast<SqlParameter>()
+            .Select(static parameter => (SqlParameter)((ICloneable)parameter).Clone()).ToArray());
     }
 
     private sealed class CatalogTransaction : System.Data.Common.DbTransaction
@@ -300,6 +335,7 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
             _results?.Dispose();
             _connection.ObservedTimeouts.Add(CommandTimeout);
             _connection.ObservedTransactions.Add(DbTransaction);
+            _connection.RecordParameters(Parameters);
             _results = _connection.CreateResults([CommandText], nativeBatch: false, cancellationToken);
 
             return new CatalogReader(_connection, _results.CreateDataReader());
@@ -398,6 +434,11 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
             _connection.BatchStatementCounts.Add(statements.Length);
             _connection.ObservedTimeouts.Add(Timeout);
             _connection.ObservedTransactions.Add(DbTransaction);
+            foreach (var command in _commands)
+            {
+                _connection.RecordParameters(command.Parameters);
+            }
+
             _results = _connection.CreateResults(statements, nativeBatch: true, cancellationToken);
 
             return new CatalogReader(_connection, _results.CreateDataReader());

@@ -276,6 +276,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
 
         try
         {
+            using var baselineActivity = SafeMigrationTelemetry.StartAnalysisStage("provider-baseline", operations.Count);
             var transaction = context.Database.CurrentTransaction?.GetDbTransaction();
             var environment = await ReadCatalogEnvironmentAsync(
                 connection,
@@ -339,6 +340,10 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
                 operations,
                 static schema => schema ?? "dbo");
 
+            baselineActivity?.Dispose();
+            using var classificationActivity = SafeMigrationTelemetry.StartAnalysisStage(
+                "catalog-classification", operations.Count);
+
             var results = new SafeMigrationProviderAnalysis[operations.Count];
             var ordinal = 0;
             while (ordinal < operations.Count)
@@ -349,6 +354,11 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
                 var count = Math.Min(
                     SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture,
                     operations.Count - captureStart);
+
+                var absentTargets = identifierSafe
+                    ? await ReadAbsentTableTargetsAsync(connection, transaction, operations, captureStart, count,
+                        context.Database.GetCommandTimeout(), cancellationToken)
+                    : new bool[count];
 
                 var plans = new SqlServerSafeMigrationRuntimePlan?[count];
                 for (var index = 0; index < count; index++)
@@ -377,12 +387,40 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
                         ? expectedTables.GetValueOrDefault((table.Definition.Schema, table.Definition.Table))
                         : null;
 
-                    var plan = _catalogSqlBuilder.Build(operation, expected);
+                    var bindings = operation.Intent is ModelManagedDataIntent
+                        ? new SqlServerCatalogParameterBindings(_typeMappingSource, captureStart + index)
+                        : null;
+
+                    var builder = bindings is null ? _catalogSqlBuilder
+                        : new SqlServerSafeMigrationCatalogSqlBuilder(
+                            _typeMappingSource, _sqlGenerationHelper,
+                            sourceParameter: (value, _) => bindings.Add(value));
+
+                    var plan = builder.Build(operation, expected, absentTargets[index]);
                     if (plan.IsStaticallyUnsupported)
                     {
                         results[captureStart + index] = Unsupported(plan.UnsupportedCode ?? "classified_unsupported");
 
                         continue;
+                    }
+
+                    if (bindings is not null && bindings.Values.Count > 0)
+                    {
+                        // WHY: sp_executesql cannot see its caller's parameters. The complete inner
+                        // classifier keeps stable local names; only the pre-binding scalar guard
+                        // captures outer names. Render both structurally, never rewrite SQL text.
+                        var outerBuilder = new SqlServerSafeMigrationCatalogSqlBuilder(
+                            _typeMappingSource, _sqlGenerationHelper, sourceParameter: bindings.Add);
+
+                        var outerGuard = outerBuilder.BuildModelManagedDataAnalysisGuard(
+                            (ModelManagedDataIntent)operation.Intent);
+
+                        plan = plan with
+                        {
+                            AnalysisParameters = bindings.Values,
+                            AnalysisOuterStateGuardExpression = outerGuard.Guard,
+                            AnalysisOuterStateGuardFailureExpression = outerGuard.Failure,
+                        };
                     }
 
                     plans[index] = plan;
@@ -762,6 +800,18 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
             + BuildCatalogSelection("@doka_ordinal", plan, includePhysicalTableSupport: false);
 
         var escaped = inner.Replace("'", "''", StringComparison.Ordinal);
+        var parameterDefinitions = plan.AnalysisParameters.Count == 0 ? string.Empty
+            : ", " + string.Join(", ", plan.AnalysisParameters.Select(static value =>
+                value.Name + " " + value.Mapping.StoreType));
+
+        var parameterArguments = plan.AnalysisParameters.Count == 0 ? string.Empty
+            : ", " + string.Join(", ", plan.AnalysisParameters.Select(static value =>
+                value.Name + " = " + value.ExternalName));
+
+        var outerStateGuard = plan.AnalysisOuterStateGuardExpression ?? plan.StateEvaluationGuardExpression;
+        var outerStateFailure = plan.AnalysisOuterStateGuardFailureExpression
+            ?? plan.StateEvaluationGuardFailureExpression;
+
         var physicalGate = plan.PhysicalTableSupportExpression is null ? string.Empty
             : $"IF COALESCE(({plan.PhysicalTableSupportExpression}), 0) <> 1 "
                 + $"INSERT INTO @doka_analysis SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, "
@@ -816,18 +866,19 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
         var selection = physicalGate + "BEGIN " + layoutSetup + layoutGate + collationGate
             + "BEGIN " + defaultSetup + defaultGate + indexFilterGate
             + $"IF COALESCE(({plan.PrerequisiteExpression}), 0) = 1 "
-            + (plan.StateEvaluationGuardFailureExpression is null
+            + (outerStateFailure is null
                 ? string.Empty
-                : $"AND COALESCE(({plan.StateEvaluationGuardExpression}), 0) = 1 ")
+                : $"AND COALESCE(({outerStateGuard}), 0) = 1 ")
             // WHY: The ordinal labels the result, not its physical contract. Parameterizing it keeps identical
             // delayed classifiers reusable in SQL Server's plan cache without changing name-binding guards.
             + $"INSERT INTO @doka_analysis EXEC sys.sp_executesql N'{escaped}', "
-            + $"N'@doka_ordinal int', @doka_ordinal = {ordinal.ToString(CultureInfo.InvariantCulture)} "
+            + $"N'@doka_ordinal int{parameterDefinitions}', @doka_ordinal = {ordinal.ToString(CultureInfo.InvariantCulture)}"
+            + parameterArguments + " "
             + $"ELSE INSERT INTO @doka_analysis SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, "
-            + (plan.StateEvaluationGuardFailureExpression is null
+            + (outerStateFailure is null
                 ? "N'prerequisite_missing'"
                 : $"CASE WHEN COALESCE(({plan.PrerequisiteExpression}), 0) = 1 "
-                    + $"THEN ({plan.StateEvaluationGuardFailureExpression}) ELSE N'prerequisite_missing' END")
+                    + $"THEN ({outerStateFailure}) ELSE N'prerequisite_missing' END")
             + ", "
             + "0, 0, " + (plan.PrerequisiteFailureCodeExpression ?? "CONVERT(nvarchar(128), NULL)")
             + ", CONVERT(nvarchar(max), NULL), "

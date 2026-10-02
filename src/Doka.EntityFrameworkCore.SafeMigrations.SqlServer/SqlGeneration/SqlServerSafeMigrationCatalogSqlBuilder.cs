@@ -7,6 +7,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     private readonly ISqlGenerationHelper _sqlGenerationHelper;
     private readonly Func<string, string> _literal;
     private readonly Func<object?, string, string> _valueLiteral;
+    private readonly Func<object, bool, string>? _sourceParameter;
     private readonly SqlServerSafeMigrationSqlExpressionRenderer _expressionRenderer;
 
     /// <summary>Initializes the catalog builder with the active provider services.</summary>
@@ -14,11 +15,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     /// <param name="sqlGenerationHelper">The provider's identifier delimiter.</param>
     /// <param name="literal">An optional string-literal renderer for contract probes.</param>
     /// <param name="valueLiteral">An optional typed-literal renderer for contract probes.</param>
+    /// <param name="sourceParameter">An analysis-only lossless scalar binding, before target conversion.</param>
     public SqlServerSafeMigrationCatalogSqlBuilder(
         IRelationalTypeMappingSource typeMappingSource,
         ISqlGenerationHelper sqlGenerationHelper,
         Func<string, string>? literal = null,
-        Func<object?, string, string>? valueLiteral = null
+        Func<object?, string, string>? valueLiteral = null,
+        Func<object, bool, string>? sourceParameter = null
     )
     {
         ArgumentNullException.ThrowIfNull(typeMappingSource);
@@ -29,15 +32,18 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         _expressionRenderer = new SqlServerSafeMigrationSqlExpressionRenderer(typeMappingSource, sqlGenerationHelper);
         _literal = literal ?? RenderStringLiteral;
         _valueLiteral = valueLiteral ?? RenderValueLiteral;
+        _sourceParameter = sourceParameter;
     }
 
     /// <summary>Captures one operation's catalog, prerequisite, and execution predicates.</summary>
     /// <param name="operation">The immutable safe operation.</param>
     /// <param name="expectedTableConstraints">The ordered stream's allowed intermediate table constraints.</param>
+    /// <param name="targetTableKnownAbsent">Whether an analysis-only occupancy probe proved target absence.</param>
     /// <returns>A plan retaining unsupported boundaries before SQL generation.</returns>
     public SqlServerSafeMigrationRuntimePlan Build(
         SafeMigrationOperation operation,
-        SafeMigrationExpectedTableConstraints? expectedTableConstraints = null
+        SafeMigrationExpectedTableConstraints? expectedTableConstraints = null,
+        bool targetTableKnownAbsent = false
     )
     {
         ArgumentNullException.ThrowIfNull(operation);
@@ -52,7 +58,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         {
             EnsureSchemaIntent value => BuildEnsureSchema(value),
             DropSchemaIntent value => BuildDropSchema(value),
-            EnsureTableIntent value => BuildEnsureTable(value, expectedTableConstraints),
+            EnsureTableIntent value => BuildEnsureTable(value, expectedTableConstraints, targetTableKnownAbsent),
             DropTableIntent value => BuildDropTable(value),
             RenameTableIntent value => BuildRenameTable(value),
             EnsureColumnIntent value => BuildEnsureColumn(value),

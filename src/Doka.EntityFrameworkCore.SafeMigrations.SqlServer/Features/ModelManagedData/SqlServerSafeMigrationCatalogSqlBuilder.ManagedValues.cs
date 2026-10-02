@@ -167,7 +167,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // TRY_CAST also remains bindable below compatibility 110, where the
         // enclosing provider guard must classify Unsupported without SQL errors.
 
-        return $"TRY_CAST({ManagedValueLiteral(value, storeType)} AS {storeType}) IS NOT NULL";
+        return $"TRY_CAST({ManagedValueLiteral(value, storeType, externalParameter: true)} AS {storeType}) IS NOT NULL";
     }
 
     /// <summary>Proves ANSI encoding roundtrip and byte capacity under the authored input collation.</summary>
@@ -199,7 +199,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             return "1 = 0";
         }
 
-        var literal = UnicodeManagedLiteral(text);
+        var literal = UnicodeManagedLiteral(text, externalParameter: true);
         // WHY: Applying COLLATE after conversion cannot repair code-page loss.
         // The input must already carry the destination encoding contract.
         var input = "(" + literal + " COLLATE " + (collation ?? "DATABASE_DEFAULT") + ")";
@@ -213,7 +213,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
     private string ManagedValueLiteral(
         object? value,
-        string storeType
+        string storeType,
+        bool externalParameter = false
     )
     {
         if (value is null)
@@ -223,12 +224,19 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
         if (value is string text)
         {
-            return UnicodeManagedLiteral(text);
+            return UnicodeManagedLiteral(text, externalParameter);
         }
 
         if (value is char character)
         {
-            return UnicodeManagedLiteral(character.ToString());
+            return UnicodeManagedLiteral(character.ToString(), externalParameter);
+        }
+
+        if (_sourceParameter is not null)
+        {
+            // WHY: Conversion proofs must inspect the authored source, not a value already
+            // rounded or narrowed by target-typed binding. Runtime SQL keeps the literal path.
+            return _sourceParameter(value, externalParameter);
         }
 
         var mapping = _typeMappingSource.FindMapping(value.GetType())

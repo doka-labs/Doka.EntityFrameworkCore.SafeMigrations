@@ -302,17 +302,20 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
         // Providers classify the safe subset in one batch. The projection then
         // advances sequentially without rereading the database, which preflight cannot mutate.
         IReadOnlyList<SafeMigrationProviderAnalysis> liveAnalyses;
-        if (_providerAnalyzer is ISafeMigrationProviderTargetModelAnalyzer targetModelAnalyzer)
+        using (SafeMigrationTelemetry.StartAnalysisStage("provider-classification", safeOperations.Length))
         {
-            liveAnalyses = await targetModelAnalyzer.AnalyzeAsync(
-                context,
-                operations,
-                targetModels,
-                cancellationToken);
-        }
-        else
-        {
-            liveAnalyses = await _providerAnalyzer.AnalyzeAsync(context, safeOperations, cancellationToken);
+            if (_providerAnalyzer is ISafeMigrationProviderTargetModelAnalyzer targetModelAnalyzer)
+            {
+                liveAnalyses = await targetModelAnalyzer.AnalyzeAsync(
+                    context,
+                    operations,
+                    targetModels,
+                    cancellationToken);
+            }
+            else
+            {
+                liveAnalyses = await _providerAnalyzer.AnalyzeAsync(context, safeOperations, cancellationToken);
+            }
         }
 
         if (liveAnalyses.Count != safeOperations.Length)
@@ -320,76 +323,123 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
             throw new InvalidOperationException("The SafeMigrations analyzer returned an inconsistent result count.");
         }
 
-        var objectIdentityNormalizer =
-            _providerAnalyzer as ISafeMigrationProviderObjectIdentityNormalizer;
-
-        var postflightProjection = mode == SafeMigrationReportMode.Postflight
-            ? new SafeMigrationPostflightProjection(operations, objectIdentityNormalizer)
-            : null;
-
-        var preflightProjection = mode == SafeMigrationReportMode.Preflight
-            ? new SafeMigrationPreflightProjection(
-                _providerAnalyzer as ISafeMigrationProviderOperationProjection,
-                _providerAnalyzer as ISafeMigrationProjectedKeyAnalyzer,
-                objectIdentityNormalizer,
-                _providerAnalyzer as ISafeMigrationProjectedDependencyAnalyzer)
-            : null;
-
-        var safeOperationOrdinal = 0;
-        for (var ordinal = 0; ordinal < operations.Count; ordinal++)
+        using (SafeMigrationTelemetry.StartAnalysisStage("ordered-projection", operations.Count))
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            var objectIdentityNormalizer =
+                _providerAnalyzer as ISafeMigrationProviderObjectIdentityNormalizer;
 
-            var operation = operations[ordinal];
-            if (operation is not SafeMigrationOperation safeOperation)
+            var postflightProjection = mode == SafeMigrationReportMode.Postflight
+                ? new SafeMigrationPostflightProjection(operations, objectIdentityNormalizer)
+                : null;
+
+            var preflightProjection = mode == SafeMigrationReportMode.Preflight
+                ? new SafeMigrationPreflightProjection(
+                    _providerAnalyzer as ISafeMigrationProviderOperationProjection,
+                    _providerAnalyzer as ISafeMigrationProjectedKeyAnalyzer,
+                    objectIdentityNormalizer,
+                    _providerAnalyzer as ISafeMigrationProjectedDependencyAnalyzer)
+                : null;
+
+            var safeOperationOrdinal = 0;
+            for (var ordinal = 0; ordinal < operations.Count; ordinal++)
             {
-                hasProviderOperations = true;
-                assessments.Add(
-                    new SafeMigrationAssessment(
-                        ordinal,
-                        operation.GetType().FullName
-                        ?? operation.GetType().Name,
-                        isSafeOperation: false,
-                        operationKind: null,
-                        objectName: null,
-                        observedState: null,
-                        action: null,
-                        postconditionSatisfied: null,
-                        "provider_owned_not_analyzed",
-                        analysisCode: "provider_owned_not_analyzed",
-                        decisionCode: "provider_owned_not_analyzed",
-                        SafeMigrationOperationalImpact.NotApplicable,
-                        differences: null));
+                cancellationToken.ThrowIfCancellationRequested();
 
-                if (preflightProjection is not null)
+                var operation = operations[ordinal];
+                if (operation is not SafeMigrationOperation safeOperation)
                 {
-                    preflightProjection.ObserveProviderPostcondition(operation);
-
-                    if (preflightProjection.HasOpaqueSqlPostcondition
-                        && operation is SqlOperation)
-                    {
-                        rawSqlOrigin ??= new SafeMigrationDeferredOrigin(
-                            migrationIds?[ordinal],
+                    hasProviderOperations = true;
+                    assessments.Add(
+                        new SafeMigrationAssessment(
                             ordinal,
-                            operation.GetType().FullName ?? operation.GetType().Name);
+                            operation.GetType().FullName
+                            ?? operation.GetType().Name,
+                            isSafeOperation: false,
+                            operationKind: null,
+                            objectName: null,
+                            observedState: null,
+                            action: null,
+                            postconditionSatisfied: null,
+                            "provider_owned_not_analyzed",
+                            analysisCode: "provider_owned_not_analyzed",
+                            decisionCode: "provider_owned_not_analyzed",
+                            SafeMigrationOperationalImpact.NotApplicable,
+                            differences: null));
+
+                    if (preflightProjection is not null)
+                    {
+                        preflightProjection.ObserveProviderPostcondition(operation);
+
+                        if (preflightProjection.HasOpaqueSqlPostcondition
+                            && operation is SqlOperation)
+                        {
+                            rawSqlOrigin ??= new SafeMigrationDeferredOrigin(
+                                migrationIds?[ordinal],
+                                ordinal,
+                                operation.GetType().FullName ?? operation.GetType().Name);
+                        }
                     }
+
+                    continue;
                 }
 
-                continue;
-            }
+                var liveAnalysis = liveAnalyses[safeOperationOrdinal++];
+                var analysis = preflightProjection?.Project(safeOperation, liveAnalysis) ?? liveAnalysis;
 
-            var liveAnalysis = liveAnalyses[safeOperationOrdinal++];
-            var analysis = preflightProjection?.Project(safeOperation, liveAnalysis) ?? liveAnalysis;
+                if (mode == SafeMigrationReportMode.Preflight
+                    && rawSqlOrigin is not null
+                    && analysis.IsOpaqueProjectionUnknown)
+                {
+                    // WHY: Raw SQL can change any catalog or row state. The immutable
+                    // batch analysis cannot prove this later operation's state, but
+                    // its runtime guard will analyze it after the SQL has executed.
+                    // Do not project an effect that has not yet been established.
+                    hasDeferredOperations = true;
+                    assessments.Add(
+                        new SafeMigrationAssessment(
+                            ordinal,
+                            typeof(SafeMigrationOperation).FullName!,
+                            isSafeOperation: true,
+                            safeOperation.Intent.Kind,
+                            safeOperation.Intent.ObjectName,
+                            observedState: null,
+                            SafeMigrationAction.ValidateAtRuntime,
+                            postconditionSatisfied: null,
+                            "runtime_validation_required",
+                            analysis.Code,
+                            "runtime_validation_required",
+                            SafeMigrationOperationalImpact.Unknown,
+                            differences: null,
+                            deferredOrigin: rawSqlOrigin));
 
-            if (mode == SafeMigrationReportMode.Preflight
-                && rawSqlOrigin is not null
-                && analysis.IsOpaqueProjectionUnknown)
-            {
-                // WHY: Raw SQL can change any catalog or row state. The immutable
-                // batch analysis cannot prove this later operation's state, but
-                // its runtime guard will analyze it after the SQL has executed.
-                // Do not project an effect that has not yet been established.
-                hasDeferredOperations = true;
+                    continue;
+                }
+
+                var decision = SafeMigrationDecisionPlanner.Plan(
+                    safeOperation.Intent.Kind,
+                    analysis.ObservedState,
+                    safeOperation.Policy,
+                    analysis.RepairCapability);
+
+                var postconditionSuperseded = postflightProjection?.IsSuperseded(ordinal) == true;
+                var postconditionSatisfied = analysis.PostconditionSatisfied || postconditionSuperseded;
+
+                var operationBlocked = mode == SafeMigrationReportMode.Preflight
+                    ? decision.Action.RejectsExecution()
+                    : !postconditionSatisfied;
+
+                blocked |= operationBlocked;
+                preflightProjection?.Observe(safeOperation, liveAnalysis, analysis, decision);
+                var assessmentCode = postconditionSuperseded
+                    ? "postcondition_superseded"
+                    : operationBlocked
+                        ? mode == SafeMigrationReportMode.Postflight
+                            ? "postcondition_failed"
+                            : analysis.ObservedState == SafeMigrationObservedState.Unsupported
+                                ? analysis.Code
+                                : decision.Code
+                        : analysis.Code;
+
                 assessments.Add(
                     new SafeMigrationAssessment(
                         ordinal,
@@ -397,59 +447,16 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
                         isSafeOperation: true,
                         safeOperation.Intent.Kind,
                         safeOperation.Intent.ObjectName,
-                        observedState: null,
-                        SafeMigrationAction.ValidateAtRuntime,
-                        postconditionSatisfied: null,
-                        "runtime_validation_required",
+                        analysis.ObservedState,
+                        decision.Action,
+                        postconditionSatisfied,
+                        assessmentCode,
                         analysis.Code,
-                        "runtime_validation_required",
-                        SafeMigrationOperationalImpact.Unknown,
-                        differences: null,
-                        deferredOrigin: rawSqlOrigin));
-
-                continue;
+                        decision.Code,
+                        analysis.OperationalImpact,
+                        analysis.Differences));
             }
 
-            var decision = SafeMigrationDecisionPlanner.Plan(
-                safeOperation.Intent.Kind,
-                analysis.ObservedState,
-                safeOperation.Policy,
-                analysis.RepairCapability);
-
-            var postconditionSuperseded = postflightProjection?.IsSuperseded(ordinal) == true;
-            var postconditionSatisfied = analysis.PostconditionSatisfied || postconditionSuperseded;
-
-            var operationBlocked = mode == SafeMigrationReportMode.Preflight
-                ? decision.Action.RejectsExecution()
-                : !postconditionSatisfied;
-
-            blocked |= operationBlocked;
-            preflightProjection?.Observe(safeOperation, liveAnalysis, analysis, decision);
-            var assessmentCode = postconditionSuperseded
-                ? "postcondition_superseded"
-                : operationBlocked
-                    ? mode == SafeMigrationReportMode.Postflight
-                        ? "postcondition_failed"
-                        : analysis.ObservedState == SafeMigrationObservedState.Unsupported
-                            ? analysis.Code
-                            : decision.Code
-                    : analysis.Code;
-
-            assessments.Add(
-                new SafeMigrationAssessment(
-                    ordinal,
-                    typeof(SafeMigrationOperation).FullName!,
-                    isSafeOperation: true,
-                    safeOperation.Intent.Kind,
-                    safeOperation.Intent.ObjectName,
-                    analysis.ObservedState,
-                    decision.Action,
-                    postconditionSatisfied,
-                    assessmentCode,
-                    analysis.Code,
-                    decision.Code,
-                    analysis.OperationalImpact,
-                    analysis.Differences));
         }
 
         var status = operations.Count == 0
@@ -462,10 +469,14 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
                         ? SafeMigrationReportStatus.ReadyWithProviderOperations
                         : SafeMigrationReportStatus.Ready;
 
-        var unexpectedObjects = await _providerAnalyzer.FindUnexpectedObjectsAsync(
-            context,
-            operations,
-            cancellationToken);
+        IReadOnlyList<SafeMigrationUnexpectedObject> unexpectedObjects;
+        using (SafeMigrationTelemetry.StartAnalysisStage("unexpected-inventory", operations.Count))
+        {
+            unexpectedObjects = await _providerAnalyzer.FindUnexpectedObjectsAsync(
+                context,
+                operations,
+                cancellationToken);
+        }
 
         return new SafeMigrationRunReport(
             mode,

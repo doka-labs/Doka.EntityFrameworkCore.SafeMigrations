@@ -2,6 +2,16 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 
 internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 {
+    /// <summary>Captures scalar guards independently of the delayed relation's local parameter scope.</summary>
+    /// <param name="intent">The authored managed-data contract.</param>
+    /// <returns>The pre-binding guard and its failure classification, without accessing destination rows.</returns>
+    internal (string Guard, string Failure) BuildModelManagedDataAnalysisGuard(ModelManagedDataIntent intent)
+    {
+        var commonGuard = BuildModelManagedDataCommonGuard(intent);
+
+        return (BuildModelManagedDataTypeGuard(intent, commonGuard), ModelManagedDataGuardFailure(commonGuard));
+    }
+
     private SqlServerSafeMigrationRuntimePlan BuildEnsureModelManagedData(
         EnsureModelManagedDataIntent intent
     )
@@ -565,8 +575,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             || type.Equals("varchar", StringComparison.OrdinalIgnoreCase);
     }
 
-    private string UnicodeManagedLiteral(string value)
+    private string UnicodeManagedLiteral(string value, bool externalParameter = false)
     {
+        if (_sourceParameter is not null)
+        {
+            return _sourceParameter(value, externalParameter);
+        }
+
         var mapping = _typeMappingSource.FindMapping(typeof(string), "nvarchar(max)")
             ?? throw new InvalidOperationException("SQL Server has no Unicode literal mapping.");
 

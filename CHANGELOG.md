@@ -44,6 +44,20 @@ All notable changes are documented here. The format follows
 - Coalesce equal SQL Server baseline classifier plans within each bounded
   capture. Restore immutable evidence to original operation slots without
   caching results across captures or analysis invocations.
+- Pack unresolved MySQL/MariaDB and PostgreSQL catalog classifications across
+  already classified gaps through one bounded Core ordinal-work selector.
+  Retain strict submitted-result validation and migration-order projection;
+  capture PostgreSQL runtime plans in 512-operation windows.
+- Read SQL Server table-name occupancy once per bounded capture. Skip complete
+  structure matching only for targets proven absent; a newly occupied target
+  remains different. Parameterize managed-data classifiers with lossless source
+  mappings and separate inner/outer binding scopes, retaining conversion,
+  encoding, size and prerequisite guards. Bound transport to 2,000 parameters
+  and 4 MiB of SQL plus source payload; runtime mutation SQL is unchanged.
+- Add optional analysis-stage activities and privacy-safe SQL Server live
+  progress evidence for baseline capture, classification, ordered projection
+  and unexpected-object inventory. Disabled listeners allocate no activities;
+  phase durations and batch counts do not substitute for live qualification.
 - Store projected column definitions, absence and uncertainty by owning table
   instead of rescanning all accumulated column states during table creation,
   recreation and rename.

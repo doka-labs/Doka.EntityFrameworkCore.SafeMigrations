@@ -257,12 +257,29 @@ structure guards still apply before this proof can be accepted.
 Read-only analysis captures at most 512 plans at a time, grouping metadata-only
 and delayed-binding classifiers within that window. Each statement contains
 at most 32 operations; each native or sequential transport contains at most
-eight statements and 4 MiB of UTF-8 SQL, including dynamic quote expansion.
+eight statements, 2,000 parameters and 4 MiB of UTF-8 SQL plus source payload,
+including dynamic quote expansion.
 Results are checked against their original ordinal and plan, then projected in
 migration order. Missing, duplicate, unexpected, or out-of-order result rows
 fail the analysis without publishing a partial report. Delayed classifiers use
 an explicit ordinal parameter for reusable inner SQL; name-binding and physical
 prerequisite guards are unchanged.
+
+Table-name occupancy is read once per bounded capture. A proven missing target
+does not require full structure matching, but all schema, physical, default,
+collation and inline-FK guards remain active. A target occupied after the probe
+is different, not matching. The probe includes non-table schema objects and
+uses server-side catalog collation; it is not a persistent absence cache.
+
+Managed-data analysis retains full source values in parameters rather than
+embedding a different seed literal in each classifier. Unicode/binary sources
+remain unbounded, temporal parameters retain full source precision, and
+decimal parameters retain their authored scale. Existing target conversion,
+ANSI encoding and capacity checks remain authoritative. Outer guards and
+inner delayed classifiers have separate parameter scopes; no target-typed
+parameter may truncate or round a value before those checks. Mutation SQL is
+unchanged. See Microsoft's [parameter scope and plan reuse](https://learn.microsoft.com/en-us/sql/relational-databases/system-stored-procedures/sp-executesql-transact-sql?view=sql-server-ver17)
+and [parameter limits](https://learn.microsoft.com/en-us/sql/sql-server/maximum-capacity-specifications-for-sql-server?view=sql-server-ver17).
 
 Equal immutable classifier plans share a baseline result only within the same
 512-plan capture. Equality includes physical, prerequisite, data and diagnostic

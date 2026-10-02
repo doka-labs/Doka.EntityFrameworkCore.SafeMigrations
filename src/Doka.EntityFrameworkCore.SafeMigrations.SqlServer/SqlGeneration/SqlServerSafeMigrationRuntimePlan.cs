@@ -59,6 +59,12 @@ internal sealed record SqlServerSafeMigrationRuntimePlan(
     /// <summary>Gets the state returned when the state-evaluation guard fails.</summary>
     public string? StateEvaluationGuardFailureExpression { get; init; }
 
+    /// <summary>Gets an analysis-only guard using outer transport parameters before dynamic binding.</summary>
+    public string? AnalysisOuterStateGuardExpression { get; init; }
+
+    /// <summary>Gets the outer transport failure classifier before dynamic binding.</summary>
+    public string? AnalysisOuterStateGuardFailureExpression { get; init; }
+
     /// <summary>Gets an optional stable classification-code expression.</summary>
     public string? ClassificationCodeExpression { get; init; }
 
@@ -67,6 +73,9 @@ internal sealed record SqlServerSafeMigrationRuntimePlan(
 
     /// <summary>Gets whether rows or validated authored facets require delayed SQL Server name binding.</summary>
     public bool RequiresDelayedBinding { get; init; }
+
+    /// <summary>Gets invocation-local source bindings retained only by analysis plans.</summary>
+    public IReadOnlyList<SqlServerCatalogParameterValue> AnalysisParameters { get; init; } = [];
 
     /// <summary>Gets statement-local catalog setup executed in the same scope as state evaluation.</summary>
     public string? CatalogPreambleSql { get; init; }

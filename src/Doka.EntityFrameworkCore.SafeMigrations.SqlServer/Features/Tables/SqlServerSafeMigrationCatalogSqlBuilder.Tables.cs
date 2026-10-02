@@ -31,17 +31,21 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
     private SqlServerSafeMigrationRuntimePlan BuildEnsureTable(
         EnsureTableIntent intent,
-        SafeMigrationExpectedTableConstraints? expectedTableConstraints
+        SafeMigrationExpectedTableConstraints? expectedTableConstraints,
+        bool targetTableKnownAbsent
     )
     {
         var definition = intent.Definition;
         var table = TableExists(definition.Table, definition.Schema);
         var occupied = ObjectExists(definition.Table, definition.Schema);
-        var matching = intent.Mode == SafeMigrationTableMode.ConvergenceContainer
+        // WHY: The analysis-only occupancy probe proves absence, not a matching definition. Avoid
+        // compiling the full matcher for thousands of missing tables. A concurrent new occupant
+        // is still Different; every schema, authored-facet and inline-FK guard remains in the plan.
+        var matching = targetTableKnownAbsent ? "1 = 0" : intent.Mode == SafeMigrationTableMode.ConvergenceContainer
             ? table
             : TableMatches(definition, expectedTableConstraints);
 
-        var execution = intent.Mode == SafeMigrationTableMode.ConvergenceContainer
+        var execution = targetTableKnownAbsent ? matching : intent.Mode == SafeMigrationTableMode.ConvergenceContainer
             ? table
             : TableMatches(definition, expectedTableConstraints: null);
 

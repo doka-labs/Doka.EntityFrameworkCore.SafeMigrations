@@ -173,7 +173,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                 operations,
                 schema => MySqlTableIdentity.NormalizeDatabase(schema, _currentDatabase));
 
-            var results = new List<SafeMigrationProviderAnalysis>(operations.Count);
+            var results = new SafeMigrationProviderAnalysis[operations.Count];
             var separatorBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Separator);
             var trailerBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Trailer);
             var dataProbeCache = new Dictionary<MySqlDataProbeIdentity, MySqlDataProbeResult>();
@@ -210,47 +210,51 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                     operationOffset,
                     cancellationToken);
 
-                var ordinal = 0;
-                while (ordinal < operationWindow.Length)
+                for (var localOrdinal = 0; localOrdinal < operationWindow.Length; localOrdinal++)
+                {
+                    if (shortCircuitStates[localOrdinal] is { } shortCircuitState)
+                    {
+                        results[operationOffset + localOrdinal] = ShortCircuitAnalysis(
+                            shortCircuitState,
+                            plans[localOrdinal]);
+                    }
+                }
+
+                // WHY: Local classifications do not divide the immutable live
+                // snapshot. Pack the unresolved work while retaining the
+                // original operation identities for later ordered projection.
+                var workOrder = SafeMigrationCatalogWorkOrder.Create(
+                    operationWindow.Length,
+                    ordinal => shortCircuitStates[ordinal] is null,
+                    cancellationToken);
+
+                var workIndex = 0;
+                while (workIndex < workOrder.Length)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
 
-                    while (ordinal < operationWindow.Length
-                           && shortCircuitStates[ordinal] is { } shortCircuitState)
-                    {
-                        results.Add(ShortCircuitAnalysis(shortCircuitState, plans[ordinal]));
-                        ordinal++;
-                    }
-
-                    if (ordinal == operationWindow.Length)
-                    {
-                        break;
-                    }
-
                     await using var batch = new SafeMigrationCatalogBatch(connection, commandTimeout);
+                    var submittedOrdinals = new List<int>(
+                        SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement
+                        * SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch);
 
                     var batchParameterCount = 0;
                     var batchPayloadBytes = 0;
                     while (batch.Count < SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch
-                           && ordinal < operationWindow.Length
-                           && shortCircuitStates[ordinal] is null)
+                           && workIndex < workOrder.Length)
                     {
                         var command = batch.CreateCommand();
                         var parameterizer = new MySqlCatalogQueryParameterizer(command, _typeMappingSource);
                         var selections = new List<string>(
                             Math.Min(
                                 SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement,
-                                operationWindow.Length - ordinal));
+                                workOrder.Length - workIndex));
 
                         var sqlBytes = trailerBytes;
-                        while (ordinal < operationWindow.Length
+                        while (workIndex < workOrder.Length
                                && selections.Count < SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
                         {
-                            if (shortCircuitStates[ordinal] is not null)
-                            {
-                                break;
-                            }
-
+                            var ordinal = workOrder[workIndex];
                             var checkpoint = parameterizer.Capture();
                             var plan = plans[ordinal];
                             MySqlDataProbeResult? dataProbeResult = plan.DataProbe is null
@@ -340,8 +344,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                             }
 
                             selections.Add(selection);
+                            submittedOrdinals.Add(resultOrdinal);
                             sqlBytes += selectionBytes;
-                            ordinal++;
+                            workIndex++;
                         }
 
                         if (selections.Count == 0)
@@ -363,6 +368,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                         plans,
                         dataProbeResults,
                         operationOffset,
+                        submittedOrdinals,
                         cancellationToken);
                 }
 
@@ -381,13 +387,13 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                 operationOffset += operationWindow.Length;
             }
 
-            if (results.Count != operations.Count)
+            if (results.Any(static result => result is null))
             {
                 throw new InvalidOperationException(
                     "The MySQL SafeMigrations classifier returned an inconsistent row count.");
             }
 
-            return results.AsReadOnly();
+            return Array.AsReadOnly(results);
         }
         finally
         {
@@ -426,7 +432,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
     private async Task PopulateColumnDiagnosticsAsync(
         DbConnection connection,
         SafeMigrationOperation[] operations,
-        List<SafeMigrationProviderAnalysis> results,
+        SafeMigrationProviderAnalysis[] results,
         IModel model,
         MySqlExpectedUniqueIndexCatalog expectedUniqueIndexes,
         IReadOnlyDictionary<
@@ -540,7 +546,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
     }
 
     private static void ReplaceAnalysisWithDifferences(
-        List<SafeMigrationProviderAnalysis> results,
+        SafeMigrationProviderAnalysis[] results,
         int ordinal,
         MySqlSafeMigrationRuntimePlan plan,
         IReadOnlyList<SafeMigrationFacetDifference> differences
@@ -1295,13 +1301,15 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
 
     private static async Task ReadAnalysisAsync(
         SafeMigrationCatalogBatch batch,
-        List<SafeMigrationProviderAnalysis> results,
+        SafeMigrationProviderAnalysis[] results,
         MySqlSafeMigrationRuntimePlan[] plans,
         MySqlDataProbeResult?[] dataProbeResults,
         int operationOffset,
+        IReadOnlyList<int> submittedOrdinals,
         CancellationToken cancellationToken
     )
     {
+        var consumed = 0;
         await batch.ForEachResultSetAsync(
             async (
                 reader,
@@ -1311,10 +1319,11 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                 while (await reader.ReadAsync(token))
                 {
                     var ordinal = reader.GetInt32(0);
-                    if (ordinal != results.Count)
+                    SafeMigrationCatalogWorkOrder.ValidateResultOrdinal(ordinal, submittedOrdinals, ref consumed);
+                    if (results[ordinal] is not null)
                     {
                         throw new InvalidOperationException(
-                            "The MySQL SafeMigrations classifier returned an invalid ordinal.");
+                            "The MySQL SafeMigrations classifier returned an already resolved ordinal.");
                     }
 
                     var state = ParseState(reader.GetString(1));
@@ -1393,10 +1402,12 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                             || requiresNullabilityDataProof,
                     };
 
-                    results.Add(analysis);
+                    results[ordinal] = analysis;
                 }
             },
             cancellationToken);
+
+        SafeMigrationCatalogWorkOrder.ValidateCompletion(consumed, submittedOrdinals);
     }
 
     private static async Task ReadDatabaseQualificationBatchAsync(
