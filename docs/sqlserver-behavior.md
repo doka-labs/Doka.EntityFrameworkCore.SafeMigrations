@@ -264,12 +264,19 @@ structure guards still apply before this proof can be accepted.
 
 Read-only analysis captures at most 512 plans at a time, grouping metadata-only
 and delayed-binding classifiers within that window. Each statement contains
-at most 32 operations; each native or sequential transport contains at most
-eight statements, 2,000 parameters and 4 MiB of UTF-8 SQL plus source payload,
-including dynamic quote expansion.
+at most eight operations with native batching, and each native batch contains
+at most 32 statements. Sequential connections retain 32 operations per statement
+and eight statements per bounded group: each such statement is a separate
+execute. Both shapes retain a 256-operation group capacity, subject to 2,000
+parameters and 4 MiB of UTF-8 SQL plus source payload, including dynamic quote
+expansion. These are dispatch bounds, not measured compilation or execution-time
+improvements. Object names embedded in SQL do not by themselves prevent
+[execution-plan reuse](https://learn.microsoft.com/en-us/sql/relational-databases/query-processing-architecture-guide?view=sql-server-ver17#execution-plan-caching-and-reuse).
 Results are checked against their original ordinal and plan, then projected in
-migration order. Missing, duplicate, unexpected, or out-of-order result rows
-fail the analysis without publishing a partial report. Delayed classifiers use
+migration order. Missing, duplicate, or unexpected result rows fail the
+analysis without publishing a partial report; rows are matched by their
+ordinal column, so the engine owes no ordering guarantee and statements carry
+no sort. Delayed classifiers use
 an explicit ordinal parameter for their complete reusable guarded template.
 Each returns one nine-column result set directly, without an aggregation table
 variable or `INSERT ... EXEC`. Name-binding and physical prerequisite guards
@@ -281,6 +288,17 @@ chunks; column bindings retain complete 512-value chunks. Every result is
 validated against the submitted physical owner before the completed capture
 is published. Cancellation or a malformed later result does not publish a
 successful prefix. These dispatch bounds do not prove native engine duration.
+
+The unexpected-object inventory always reads the current environment, including
+the database principal, login SID and database collation. It may reuse a completed
+identifier verdict only inside the same active scope, context, connection and
+transaction, with the same fresh environment stamp and ordered reference set.
+Scope disposal, analysis failure, connection closure, database or transaction
+changes, unresolved execution identities and session quarantine invalidate
+that evidence. A same-session `EXECUTE AS` or collation change also requires a
+fresh identifier proof. These identity stamps stay internal and are not logged.
+Direct inventory requests outside the scope read fresh proofs; a previous invariant rejection
+does not suppress a later independent inventory failure.
 
 Table-name occupancy is read once per bounded capture. A proven missing target
 does not require full structure matching, but all schema, physical, default,

@@ -3,6 +3,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 /// <summary>
 /// Exercises SQL Server-specific model-managed data boundaries against an isolated database.
 /// </summary>
+[Collection(SqlServerSharedContainer.Name)]
 public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegrationTestBase
 {
     /// <summary>
@@ -17,7 +18,7 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
     public async Task IdentitySeed_AppliesAndReplaysWithoutLeakingIdentityInsert()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.identity_roles (Id int IDENTITY(1,1) NOT NULL "
             + "CONSTRAINT PK_identity_roles PRIMARY KEY, Caption nvarchar(80) NOT NULL); "
@@ -57,7 +58,7 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
     public async Task IdentitySeed_DmlFailureRestoresSessionState()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.identity_reject (Id int IDENTITY(1,1) NOT NULL "
             + "CONSTRAINT PK_identity_reject PRIMARY KEY, Caption nvarchar(80) NOT NULL "
@@ -96,7 +97,7 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
     public async Task CaseInsensitiveCollation_DoesNotHideDifferentStoredContent()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.collated_roles (Id int NOT NULL CONSTRAINT PK_collated_roles PRIMARY KEY, "
             + "Caption nvarchar(80) COLLATE Latin1_General_100_CI_AS NOT NULL); "
@@ -128,7 +129,7 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
     public async Task NullableUniqueKey_RejectsDuplicateNullTarget()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.unique_roles (Id int NOT NULL CONSTRAINT PK_unique_roles PRIMARY KEY, "
             + "Code nvarchar(40) NULL CONSTRAINT UQ_unique_roles_Code UNIQUE); "
@@ -159,7 +160,7 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
     public async Task CaseInsensitiveKeys_RejectSourceBatchCollision()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.collated_keys (Code nvarchar(40) "
             + "NOT NULL CONSTRAINT PK_collated_keys PRIMARY KEY);");
@@ -188,7 +189,7 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
     public async Task ExplicitKeyCollation_RejectsUnprovenSourceBatchComparison()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.explicit_collation_keys (Code nvarchar(40) "
             + "COLLATE Latin1_General_100_BIN2 NOT NULL "
@@ -220,7 +221,7 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
     public async Task ManagedUpdate_AppliesAndReplays()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.update_roles (Id int NOT NULL CONSTRAINT PK_update_roles PRIMARY KEY, "
             + "Caption nvarchar(80) NOT NULL); "
@@ -249,7 +250,7 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
     public async Task ManagedUpdate_RejectsSourceDrift()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.update_drift (Id int NOT NULL CONSTRAINT PK_update_drift PRIMARY KEY, "
             + "Caption nvarchar(80) NOT NULL); "
@@ -281,7 +282,7 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
     public async Task ManagedDelete_AppliesAndReplays()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.delete_roles (Id int NOT NULL CONSTRAINT PK_delete_roles PRIMARY KEY, "
             + "Caption nvarchar(80) NOT NULL); "
@@ -309,7 +310,7 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
     public async Task ManagedDelete_RejectsDependentRow()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.delete_principals (Id int NOT NULL "
             + "CONSTRAINT PK_delete_principals PRIMARY KEY, Caption nvarchar(80) NOT NULL); "
@@ -347,7 +348,7 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
     public async Task ManagedDelete_RejectsUnmodeledIncomingForeignKey()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.unmodeled_principals (Id int NOT NULL "
             + "CONSTRAINT PK_unmodeled_principals PRIMARY KEY); "
@@ -383,7 +384,7 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
     public async Task MismatchedPhysicalStoreType_IsDifferentBeforeRowProbe()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.typed_roles (Id int NOT NULL CONSTRAINT PK_typed_roles PRIMARY KEY, "
             + "Caption nvarchar(20) NOT NULL); "
@@ -415,7 +416,7 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
     public async Task EnabledDmlTrigger_IsUnsupportedBeforeManagedInsert()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.triggered_roles (Id int NOT NULL "
             + "CONSTRAINT PK_triggered_roles PRIMARY KEY);");
@@ -449,7 +450,7 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
     public async Task ComputedTargetColumn_IsUnsupportedBeforeManagedInsert()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.computed_roles (Id int NOT NULL "
             + "CONSTRAINT PK_computed_roles PRIMARY KEY, Code int NOT NULL, "
@@ -482,7 +483,7 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
     public async Task IdentityTargetColumn_IsUnsupportedBeforeManagedUpdate()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.identity_update (Id int IDENTITY(1,1) NOT NULL "
             + "CONSTRAINT PK_identity_update PRIMARY KEY); "

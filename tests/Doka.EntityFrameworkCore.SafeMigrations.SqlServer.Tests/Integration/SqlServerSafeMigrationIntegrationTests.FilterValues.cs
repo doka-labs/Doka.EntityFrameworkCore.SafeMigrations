@@ -18,7 +18,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             $"CREATE TABLE dbo.filter_values (Code int NOT NULL, Flag {type} NULL); "
             + $"INSERT dbo.filter_values VALUES (1, {value}), (2, {value}); "
@@ -82,7 +82,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.default_items (Id int NOT NULL); INSERT dbo.default_items VALUES (1); "
             + "CREATE TABLE dbo.default_collation_events (Id int NOT NULL);");

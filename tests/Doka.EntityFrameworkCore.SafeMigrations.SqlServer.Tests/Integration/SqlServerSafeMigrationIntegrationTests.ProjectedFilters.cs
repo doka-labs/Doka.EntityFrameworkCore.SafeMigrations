@@ -15,7 +15,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists("projected_filter_values", table => new
@@ -51,7 +51,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task ProjectedCharacterFilter_RejectsColumnSideConversion()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists("projected_filter_precedence", table => new
@@ -83,7 +83,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task ProjectedNumericFilter_ValidConstantCreatesThePhysicalIndex()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists("projected_filter_runtime", table => new

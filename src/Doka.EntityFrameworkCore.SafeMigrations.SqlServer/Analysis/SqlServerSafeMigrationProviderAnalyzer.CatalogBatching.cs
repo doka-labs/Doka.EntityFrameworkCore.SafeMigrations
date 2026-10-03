@@ -113,31 +113,42 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     )
     {
         await using var batch = new SafeMigrationCatalogBatch(connection, commandTimeout, transaction);
+        var maximumOperationsPerStatement = connection.CanCreateBatch
+            ? SqlServerCatalogQueryLimits.MaximumOperationsPerStatement
+            : SqlServerCatalogQueryLimits.MaximumSequentialOperationsPerStatement;
+
+        var maximumStatementsPerBatch = connection.CanCreateBatch
+            ? SqlServerCatalogQueryLimits.MaximumStatementsPerBatch
+            : SqlServerCatalogQueryLimits.MaximumSequentialStatementsPerBatch;
+
         var next = start;
         var payload = 0;
         var parameterCount = 0;
         var resultPlans = new List<(int Ordinal, SqlServerSafeMigrationRuntimePlan Plan)>(
-            Math.Min(count - start, SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement
-                * SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch));
+            Math.Min(count - start, SqlServerCatalogQueryLimits.MaximumOperationsPerBatch));
 
-        var resultSetSizes = new List<int>(resultPlans.Capacity);
+        var resultSetSizes = new List<int>(maximumStatementsPerBatch);
         var payloadFull = false;
         while (next < count && !payloadFull
-               && batch.Count < SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch)
+               && batch.Count < maximumStatementsPerBatch)
         {
             var delayed = RequiresDelayedCatalogBinding(plans[order[next]]!);
             const string prefix = "";
-            var trailer = delayed ? string.Empty : SafeMigrationCatalogQueryLimits.Trailer;
+
+            // WHY: Classifier rows are matched by their ordinal column, so the engine owes
+            // no ordering guarantee. Dropping the sort removes one blocking operator per
+            // statement without weakening the per-result-set completeness checks below.
+            const string trailer = "";
             var separator = delayed ? "\n" : SafeMigrationCatalogQueryLimits.Separator;
             var fixedPayload = Encoding.UTF8.GetByteCount(prefix) + Encoding.UTF8.GetByteCount(trailer);
             var statementPayload = fixedPayload;
             var separatorBytes = Encoding.UTF8.GetByteCount(separator);
-            var selections = new List<string>(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement);
+            var selections = new List<string>(maximumOperationsPerStatement);
             var statementPlans = new List<(int Ordinal, SqlServerSafeMigrationRuntimePlan Plan)>(
-                SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement);
+                maximumOperationsPerStatement);
 
             var statementParameters = 0;
-            while (next < count && selections.Count < SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
+            while (next < count && selections.Count < maximumOperationsPerStatement)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
@@ -241,8 +252,12 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         activity?.SetTag("safe_migrations.catalog.parameter_count", parameterCount);
         activity?.SetTag("safe_migrations.catalog.payload_bytes", payload);
 
-        var resultIndex = 0;
+        // WHY: Reusing one bounded flag array avoids allocating an ordinal dictionary
+        // for every result set. The linear lookup remains bounded by the transport's statement width.
+        var consumed = new bool[maximumOperationsPerStatement];
+        var resultSetStart = 0;
         var resultSetIndex = 0;
+
         await batch.ForEachResultSetAsync(async (reader, token) =>
         {
             if (resultSetIndex >= resultSetSizes.Count || reader.FieldCount != 9)
@@ -251,18 +266,27 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             }
 
             var expectedRows = resultSetSizes[resultSetIndex++];
+            Array.Clear(consumed, 0, expectedRows);
+
             var rows = 0;
             while (await reader.ReadAsync(token))
             {
-                if (++rows > expectedRows || resultIndex >= resultPlans.Count
-                    || reader.GetInt32(0) != resultPlans[resultIndex].Ordinal)
+                if (++rows > expectedRows)
+                {
+                    throw new InvalidOperationException(
+                        "The SQL Server catalog batch returned an inconsistent row count.");
+                }
+
+                var slot = MatchClassifierSlot(resultPlans, resultSetStart, expectedRows, consumed, reader.GetInt32(0));
+                if (slot < 0)
                 {
                     throw new InvalidOperationException("The SQL Server catalog batch returned an invalid ordinal.");
                 }
 
-                var expected = resultPlans[resultIndex];
+                consumed[slot] = true;
+
+                var expected = resultPlans[resultSetStart + slot];
                 results[expected.Ordinal] = ReadAnalysis(reader, expected.Plan);
-                resultIndex++;
             }
 
             // WHY: Total row counts alone could accept an empty classifier followed by one that
@@ -271,14 +295,44 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             {
                 throw new InvalidOperationException("The SQL Server catalog batch returned an inconsistent row count.");
             }
+
+            resultSetStart += expectedRows;
         }, cancellationToken);
 
-        if (resultIndex != resultPlans.Count || resultSetIndex != resultSetSizes.Count)
+        if (resultSetStart != resultPlans.Count || resultSetIndex != resultSetSizes.Count)
         {
             throw new InvalidOperationException("The SQL Server catalog batch returned an inconsistent row count.");
         }
 
         return next;
+    }
+
+    /// <summary>
+    /// Finds the unclaimed classifier slot inside one result set that owns an ordinal.
+    /// </summary>
+    /// <param name="resultPlans">The ordered classifier plans of the whole batch.</param>
+    /// <param name="resultSetStart">The first classifier index belonging to this result set.</param>
+    /// <param name="expectedRows">The classifier count owned by this result set.</param>
+    /// <param name="consumed">The per-slot flags of ordinals already read from this result set.</param>
+    /// <param name="ordinal">The ordinal reported by the current row.</param>
+    /// <returns>The zero-based slot inside the result set, or -1 for an unknown or repeated ordinal.</returns>
+    private static int MatchClassifierSlot(
+        List<(int Ordinal, SqlServerSafeMigrationRuntimePlan Plan)> resultPlans,
+        int resultSetStart,
+        int expectedRows,
+        bool[] consumed,
+        int ordinal
+    )
+    {
+        for (var slot = 0; slot < expectedRows; slot++)
+        {
+            if (!consumed[slot] && resultPlans[resultSetStart + slot].Ordinal == ordinal)
+            {
+                return slot;
+            }
+        }
+
+        return -1;
     }
 
     /// <summary>Assembles an already bounded catalog statement without changing its SQL shape.</summary>

@@ -9,7 +9,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task ExplicitSchemaRename_NonDboDefaultKeepsSchemaAndReplays()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "EXEC sys.sp_executesql N'CREATE SCHEMA application;'; "
             + "EXEC sys.sp_executesql N'CREATE SCHEMA caller_default;'; "
@@ -52,7 +52,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task ExplicitSchemaTransfer_NonDboDefaultUsesCapturedDestinationAndReplays()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "EXEC sys.sp_executesql N'CREATE SCHEMA application;'; "
             + "EXEC sys.sp_executesql N'CREATE SCHEMA destination;'; "
@@ -100,7 +100,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task IdenticalExplicitRenamePreservesPhysicalObjectKind(bool sourceIsView)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString, "CREATE SCHEMA application;");
         await ExecuteSqlAsync(connectionString, sourceIsView
             ? "CREATE VIEW application.orders AS SELECT 19 AS Id;"
@@ -138,7 +138,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task ExplicitTable_ImplicitForeignKeyPrincipalSchemaRejectsBeforeMutation()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "EXEC sys.sp_executesql N'CREATE SCHEMA application;'; "
             + "EXEC sys.sp_executesql N'CREATE SCHEMA caller_default;'; "
@@ -184,7 +184,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task MissingDestinationSchema_EnsureAndRenameRejectPrerequisiteBeforeDdl(bool rename)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.schema_source (Id int NOT NULL);");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);

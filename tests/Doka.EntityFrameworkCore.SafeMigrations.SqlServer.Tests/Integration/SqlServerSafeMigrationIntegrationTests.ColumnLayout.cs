@@ -17,7 +17,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.layout_probe (Existing char("
             + existingBytes.ToString(CultureInfo.InvariantCulture) + ") NULL);");
         await CreateColumnLayoutAuditAsync(connectionString);
@@ -67,7 +67,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         var columns = string.Join(",", Enumerable.Range(0, count)
             .Select(static ordinal => "C" + ordinal.ToString(CultureInfo.InvariantCulture) + " bit NULL"));
 
@@ -107,7 +107,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task VariablePayloadAddition_AllowsLargeStoredRowAndReplay()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.layout_probe (Existing char(6000) NOT NULL);");
         await using var context = CreateContext(connectionString);
         var operation = LayoutColumn("Added", "varchar(8000)");
@@ -139,7 +139,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task DroppedPhysicalColumn_RejectsNewAllocationButAllowsMatchingExistingColumn()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.layout_probe (Id int NOT NULL, Removed char(5000) NULL); "
             + "INSERT dbo.layout_probe(Id) VALUES(7); ALTER TABLE dbo.layout_probe DROP COLUMN Removed;");
@@ -184,7 +184,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         if (!freshTable)
         {
             await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.layout_probe (Existing char(4000) NULL);");
@@ -229,7 +229,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task RejectedColumnAddition_DoesNotAdvanceLayoutProof()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.layout_probe (Existing char(4000) NULL);");
         await using var context = CreateContext(connectionString);
         MigrationOperation[] operations = [LayoutColumn("Rejected", "char(5000)"), LayoutColumn("Valid", "char(3000)")];
@@ -254,7 +254,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task OrderedColumnDrop_DoesNotReclaimFixedWidth()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.layout_probe (Id int NOT NULL, Removed char(5000) NULL);");
         await CreateColumnLayoutAuditAsync(connectionString);
@@ -296,7 +296,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task OrderedSmallColumnDrop_InvalidatesNewAllocationButPreservesExistingMatching()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.layout_probe (Id int NOT NULL,Removed int NULL); "
             + "INSERT dbo.layout_probe VALUES(7,9);");
@@ -345,7 +345,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task OrderedTableRecreation_ResetsFixedAllocationLineage()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.layout_probe (Old char(5000) NULL);");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -384,7 +384,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         var setup = kind switch
         {
             "fixed" => "CREATE TABLE dbo.layout_probe (A char(8000) NOT NULL,B varchar(1) NOT NULL); "
@@ -437,7 +437,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task NullableVariableAddition_DoesNotRequireSpaceForAnUnmaterializedValue()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.layout_probe (A char(8000) NOT NULL,B char(53) NOT NULL); "
             + "INSERT dbo.layout_probe VALUES('a','b');");
@@ -463,7 +463,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task EmptyNearCapacityTable_AllowsDefaultedVariableAddition()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.layout_probe (A char(8000) NOT NULL,B char(53) NOT NULL);");
         await using var context = CreateContext(connectionString);
@@ -495,7 +495,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.layout_probe (A char(7500) NOT NULL,B varchar(900) NOT NULL);"
             + (populated ? "INSERT dbo.layout_probe VALUES('a',REPLICATE('b',500));" : string.Empty));
@@ -532,7 +532,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task OpaqueMutation_DoesNotAuthorizeFromStaleLayoutCapacity()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.layout_probe (Existing char(4000) NULL);");
         await using var context = CreateContext(connectionString);
         MigrationOperation[] operations =
@@ -576,7 +576,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task RowCapacityProof_WithoutSelectPermissionFailsClosedBeforeDataBinding()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.layout_probe (A char(8000) NOT NULL,B varchar(1) NOT NULL); "
             + "INSERT dbo.layout_probe VALUES('a','x'); "

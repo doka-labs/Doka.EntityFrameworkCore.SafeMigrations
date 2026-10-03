@@ -9,7 +9,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task AnalyzeAsync_PreservesCallerOwnedIdentifierTemporaryTable()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync();
         await context.Database.ExecuteSqlRawAsync(
@@ -54,7 +54,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.physical_items (Value " + physicalDefinition + ");");
         await using var context = CreateContext(connectionString);
@@ -85,7 +85,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task OmittedStoreType_InferredFacetsApplyMatchAndReplay()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(new ExpectedTableDefinition("inferred_items",
@@ -129,7 +129,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             $"CREATE TABLE dbo.[{physicalTable}] ([{physicalColumn}] int NOT NULL); "
             + $"CREATE INDEX [{physicalIndex}] ON dbo.[{physicalTable}] ([{physicalColumn}]);");
@@ -165,7 +165,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.alias_items (Id int NOT NULL);");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -197,7 +197,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task DelayedClassifiers_MoreThanOneBatchPreservesEveryOriginalOrdinal()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.delayed_items (Id int NOT NULL);");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -236,7 +236,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task PrimaryKey_NullablePhysicalColumnIsUnsupportedBeforeDdl(bool hasNonNullRow)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.nullable_key (Id int NULL); "
             + (hasNonNullRow ? "INSERT INTO dbo.nullable_key VALUES (1);" : string.Empty));
@@ -276,7 +276,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task PrimaryKey_ExistingKeyWithDifferentNameIsDifferentBeforeDdl(bool matchingName)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.existing_key (Id int NOT NULL CONSTRAINT PK_existing PRIMARY KEY);");
         await using var context = CreateContext(connectionString);

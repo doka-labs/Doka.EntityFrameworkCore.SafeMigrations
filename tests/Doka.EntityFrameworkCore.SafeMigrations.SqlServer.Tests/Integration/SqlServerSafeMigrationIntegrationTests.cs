@@ -3,6 +3,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 /// <summary>
 /// Verifies SQL Server catalog decisions against live database state.
 /// </summary>
+[Collection(SqlServerSharedContainer.Name)]
 public sealed partial class SqlServerSafeMigrationIntegrationTests : SqlServerIntegrationTestBase
 {
     /// <summary>
@@ -17,7 +18,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests : SqlServerIn
     public async Task StrictTable_AppliesReplaysAndPassesPostflight()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists(
@@ -63,7 +64,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests : SqlServerIn
     public async Task StrictTable_RejectsDifferentDefinitionWithoutMutation()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.strict_drift (Id int NOT NULL, Caption nvarchar(20) NOT NULL); ");
@@ -101,7 +102,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests : SqlServerIn
     public async Task LegacyContainer_AddsMissingColumnAndIndexWithoutChangingExistingRows()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.legacy_orders (Id int NOT NULL PRIMARY KEY); "
@@ -149,7 +150,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests : SqlServerIn
     public async Task ExplicitSchema_CreatesOnlyQualifiedTableAndReplays()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureSchemaExists("application");

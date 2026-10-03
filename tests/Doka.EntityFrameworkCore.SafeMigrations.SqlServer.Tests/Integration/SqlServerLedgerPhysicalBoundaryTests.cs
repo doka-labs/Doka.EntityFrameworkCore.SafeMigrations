@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
 /// <summary>Separates SQL Server 2019 metadata compatibility from actual SQL Server 2022+ ledger rejection.</summary>
+[Collection(SqlServerSharedContainer.Name)]
 public sealed class SqlServerLedgerPhysicalBoundaryTests : SqlServerIntegrationTestBase
 {
     private readonly Xunit.Abstractions.ITestOutputHelper _output;
@@ -21,7 +22,7 @@ public sealed class SqlServerLedgerPhysicalBoundaryTests : SqlServerIntegrationT
     public async Task OrdinaryPhysicalBoundary_ExecutesVersionCompatibleMetadataAndManagedRows()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         var major = await ScalarIntAsync(connectionString,
             "SELECT CONVERT(int, SERVERPROPERTY('ProductMajorVersion'));");
 
@@ -60,7 +61,7 @@ public sealed class SqlServerLedgerPhysicalBoundaryTests : SqlServerIntegrationT
     public async Task LedgerPhysicalBoundary_ExecutesTheExplicitEngineCapabilityBranch()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         var major = await ScalarIntAsync(connectionString,
             "SELECT CONVERT(int, SERVERPROPERTY('ProductMajorVersion'));");
 

@@ -11,7 +11,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await using var context = CreateContext(connectionString);
         var definition = new ExpectedTableDefinition("layout_items",
             [new ExpectedColumnDefinition("First", typeof(string), false, "char(8000)"),
@@ -51,7 +51,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.layout_ddl_events (Id int NOT NULL);");
         await ExecuteSqlAsync(connectionString,
             "CREATE TRIGGER layout_ddl_audit ON DATABASE FOR DDL_TABLE_EVENTS "
@@ -95,7 +95,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await using var context = CreateContext(connectionString);
         var columns = Enumerable.Range(0, count).Select(index => new ExpectedColumnDefinition(
             "C" + index.ToString(CultureInfo.InvariantCulture), type == "int" ? typeof(int) : typeof(string), false,

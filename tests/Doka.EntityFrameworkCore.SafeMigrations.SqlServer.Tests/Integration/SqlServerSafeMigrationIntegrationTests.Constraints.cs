@@ -9,7 +9,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task ProjectedForeignKey_PreventsLaterPrincipalTableDrop()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.parents (Id int NOT NULL CONSTRAINT PK_parents PRIMARY KEY); "
@@ -46,7 +46,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task DropThenEnsureIndex_DoesNotReuseStaleCatalogMatch()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.index_orders (Id int NOT NULL, Caption nvarchar(80) NULL); "
@@ -82,7 +82,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task DisabledForeignKey_IsNotAcceptedAsMatching()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.fk_parents (Id int NOT NULL CONSTRAINT PK_fk_parents PRIMARY KEY); "
@@ -117,7 +117,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task FilteredIndex_IsDifferentFromUnfilteredIndex()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.filtered_orders (Id int NOT NULL, Caption nvarchar(80) NULL); "
@@ -145,7 +145,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task AddConstraints_AppliesAndReplaysEachConstraintFamily()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.add_parents (Id int NOT NULL); "
@@ -186,7 +186,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task DropConstraints_AppliesAndReplaysEachConstraintFamily()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.drop_pk (Id int NOT NULL CONSTRAINT PK_drop_pk PRIMARY KEY); "

@@ -9,7 +9,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task ModelManagedInsert_AppliesAndReplaysExactRow()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.managed_settings (Id int NOT NULL CONSTRAINT PK_managed_settings PRIMARY KEY, "
@@ -45,7 +45,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task ModelManagedInsert_RejectsDifferentExistingRowWithoutMutation()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.managed_drift (Id int NOT NULL CONSTRAINT PK_managed_drift PRIMARY KEY, "

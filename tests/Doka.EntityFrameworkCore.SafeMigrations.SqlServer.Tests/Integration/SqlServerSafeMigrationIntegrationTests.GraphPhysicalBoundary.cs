@@ -16,7 +16,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString, GraphPhysicalBoundarySetupSql(cascade));
         await using var context = CreateContext(connectionString);
         var table = deleteEdge ? "graph_links" : "graph_sources";

@@ -17,7 +17,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         var inserts = rowCount == 0 ? string.Empty
             : "INSERT dbo.projected_null_keys (Id) VALUES "
                 + string.Join(", ", Enumerable.Range(1, rowCount).Select(static id => $"({id})")) + ";";
@@ -62,7 +62,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.projected_width (Code nvarchar(10) NOT NULL);");
         await using var context = CreateContext(connectionString);
@@ -89,7 +89,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task ProjectedNullablePrimaryKey_IsRejectedBeforeAnyMutation()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.projected_pk (Id int NOT NULL);");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -121,7 +121,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         var original = family switch
         {
             0 => "CREATE UNIQUE INDEX K_projected_replace ON dbo.projected_replace (Id);",
@@ -175,7 +175,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task NonUniqueIndexProjection_DoesNotRequestUnnecessaryRowAccess()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.metadata_only_index (Code int NOT NULL); "
             + "CREATE USER metadata_index_user WITHOUT LOGIN; "

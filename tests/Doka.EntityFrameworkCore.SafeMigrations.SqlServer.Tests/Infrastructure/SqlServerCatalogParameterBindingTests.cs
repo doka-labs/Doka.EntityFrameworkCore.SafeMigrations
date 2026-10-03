@@ -461,21 +461,37 @@ public sealed class SqlServerCatalogParameterBindingTests
         using var context = new SafeMigrationDbContext(ConnectionString);
         await using var connection = new SqlServerCatalogTestConnection(nativeBatch);
         var mappings = context.GetService<IRelationalTypeMappingSource>();
-        var plans = Enumerable.Range(0, 25).Select(ordinal => ParameterizedConstantPlan(mappings, ordinal, 100))
+
+        // WHY: Each classifier must carry enough parameters that the RPC ceiling, not the
+        // statement-width bound, decides where the capture splits. Otherwise this test would
+        // silently degrade into another width test when the shape is tuned.
+        const int parametersPerPlan = 300;
+        var plans = Enumerable.Range(0, 25)
+            .Select(ordinal => ParameterizedConstantPlan(mappings, ordinal, parametersPerPlan))
             .ToArray();
 
         var results = new SafeMigrationProviderAnalysis[plans.Length];
+        var operationsPerStatement = SqlServerCatalogParameterBindings.MaximumParameters / parametersPerPlan;
+        var expectedStatements = (plans.Length + operationsPerStatement - 1) / operationsPerStatement;
 
         // Act
         await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(connection, null, null,
             plans, 0, results, CancellationToken.None);
 
         // Assert
-        Assert.Equal(2, connection.RecordedStatements.Count);
-        Assert.Equal([1919, 606], connection.RecordedParameters.Select(parameters => parameters.Length));
-        Assert.All(connection.RecordedParameters, parameters => Assert.InRange(parameters.Length, 1, 2000));
-        Assert.Equal(nativeBatch ? 2 : 0, connection.BatchExecutions);
-        Assert.Equal(nativeBatch ? 0 : 2, connection.CommandExecutions);
+        Assert.InRange(operationsPerStatement, 1, SqlServerCatalogQueryLimits.MaximumOperationsPerStatement - 1);
+        Assert.Equal(expectedStatements, connection.RecordedStatements.Count);
+        Assert.All(
+            connection.RecordedParameters,
+            parameters => Assert.InRange(
+                parameters.Length,
+                1,
+                SqlServerCatalogParameterBindings.MaximumParameters));
+
+        // WHY: The parameter ceiling also bounds the whole batch, so a parameter-heavy
+        // capture keeps one statement per transport batch instead of packing them.
+        Assert.Equal(nativeBatch ? expectedStatements : 0, connection.BatchExecutions);
+        Assert.Equal(nativeBatch ? 0 : expectedStatements, connection.CommandExecutions);
         Assert.Equal(Enumerable.Range(0, plans.Length).Select(index => (index % 3) switch
         {
             0 => SafeMigrationObservedState.Missing,

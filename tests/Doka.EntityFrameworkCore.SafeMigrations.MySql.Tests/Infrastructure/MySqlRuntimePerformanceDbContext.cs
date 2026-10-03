@@ -22,7 +22,7 @@ public sealed class MySqlRuntimePerformanceSnapshot : ModelSnapshot
 
 /// <summary>Defines a generic initial convergence workload with columns and ordered key dependencies.</summary>
 [DbContext(typeof(MySqlRuntimePerformanceDbContext))]
-[Migration("202610010001_RuntimeConvergence")]
+[Migration("20261001000100_RuntimeConvergence")]
 public sealed class MySqlRuntimeConvergenceMigration : Migration
 {
     /// <summary>Gets the workload table count.</summary>
@@ -88,7 +88,7 @@ public sealed class MySqlRuntimeConvergenceMigration : Migration
 
 /// <summary>Adds strict operations after the legacy convergence migration in the same pending stream.</summary>
 [DbContext(typeof(MySqlRuntimePerformanceDbContext))]
-[Migration("202610010002_RuntimeStrictColumns")]
+[Migration("20261001000200_RuntimeStrictColumns")]
 public sealed class MySqlRuntimeStrictMigration : Migration
 {
     /// <inheritdoc />
@@ -135,7 +135,7 @@ public sealed class MySqlRuntimeFreshStateSnapshot : ModelSnapshot
 
 /// <summary>Commits an earlier successful migration before a later raw-DML change.</summary>
 [DbContext(typeof(MySqlRuntimeFreshStateDbContext))]
-[Migration("202610010003_RuntimeFreshStateInit")]
+[Migration("20261001000300_RuntimeFreshStateInit")]
 public sealed class MySqlRuntimeFreshStateInitialMigration : Migration
 {
     /// <inheritdoc />
@@ -163,7 +163,7 @@ public sealed class MySqlRuntimeFreshStateInitialMigration : Migration
 
 /// <summary>Introduces duplicates after earlier successful work so a later guard must read fresh data.</summary>
 [DbContext(typeof(MySqlRuntimeFreshStateDbContext))]
-[Migration("202610010004_RuntimeFreshStateUnique")]
+[Migration("20261001000400_RuntimeFreshStateUnique")]
 public sealed class MySqlRuntimeFreshStateUniqueMigration : Migration
 {
     /// <inheritdoc />
@@ -206,7 +206,7 @@ public sealed class MySqlRuntimeScopeProbeSnapshot : ModelSnapshot
 
 /// <summary>Applies one guarded table operation through EF's actual migration execution pipeline.</summary>
 [DbContext(typeof(MySqlRuntimeScopeProbeDbContext))]
-[Migration("202610010005_RuntimeScopeProbe")]
+[Migration("20261001000500_RuntimeScopeProbe")]
 public sealed class MySqlRuntimeScopeProbeMigration : Migration
 {
     /// <inheritdoc />
@@ -249,7 +249,7 @@ public sealed class MySqlRuntimeCompactedSetupProbeSnapshot : ModelSnapshot
 
 /// <summary>Applies one column operation with lazy state evaluation through real migration execution.</summary>
 [DbContext(typeof(MySqlRuntimeCompactedSetupProbeDbContext))]
-[Migration("202610010006_RuntimeCompactedSetupProbe")]
+[Migration("20261001000600_RuntimeCompactedSetupProbe")]
 public sealed class MySqlRuntimeCompactedSetupProbeMigration : Migration
 {
     /// <inheritdoc />

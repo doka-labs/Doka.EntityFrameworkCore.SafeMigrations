@@ -12,7 +12,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         if (ensureSchema)
@@ -40,7 +40,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task DroppedSchemaCannotAuthorizeFollowingTable()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString, "CREATE SCHEMA removed_application;");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -64,7 +64,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task NewlyEnsuredSchemaPermitsTableTransfer()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.transfer_items (Id int NOT NULL);");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -90,7 +90,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task SchemaDropThenEnsureUsesOrderedPresence()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString, "CREATE SCHEMA restored_application;");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -119,7 +119,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task EnsuredAndPopulatedSchemaRejectsLaterDrop()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureSchemaExists("populated_application");
@@ -145,7 +145,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task DroppingLastTableMakesSchemaEmpty()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString, "CREATE SCHEMA emptied_application;");
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE emptied_application.items (Id int NOT NULL CONSTRAINT PK_emptied_items PRIMARY KEY);");
@@ -178,7 +178,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString, "CREATE SCHEMA source_application;");
         await ExecuteSqlAsync(connectionString, "CREATE SCHEMA target_application;");
         await ExecuteSqlAsync(connectionString, "CREATE TABLE source_application.items (Id int NOT NULL);");
@@ -206,7 +206,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task RejectedSchemaTransferRetainsBothLiveSchemaOccupants(string schemaToDrop)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString, "CREATE SCHEMA source_application;");
         await ExecuteSqlAsync(connectionString, "CREATE SCHEMA target_application;");
         await ExecuteSqlAsync(connectionString,
@@ -235,7 +235,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task LastTableDropCannotRemoveOtherSchemaObjects(string createOtherObject)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString, "CREATE SCHEMA guarded_application;");
         await ExecuteSqlAsync(connectionString, "CREATE TABLE guarded_application.items (Id int NOT NULL);");
         await ExecuteSqlAsync(connectionString, createOtherObject);

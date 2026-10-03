@@ -14,7 +14,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.default_items (Id int NOT NULL); INSERT dbo.default_items VALUES (1); "
             + "CREATE TABLE dbo.default_ddl_events (Id int NOT NULL);");
@@ -81,7 +81,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.default_items (Id int NOT NULL); INSERT dbo.default_items VALUES (1);");
         await using var context = CreateContext(connectionString);
@@ -134,7 +134,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.default_items (Id int NOT NULL); INSERT dbo.default_items VALUES (1);");
         await using var context = CreateContext(connectionString);
@@ -181,7 +181,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.default_items (Id int NOT NULL); INSERT dbo.default_items VALUES (1);");
         await using var context = CreateContext(connectionString);
@@ -233,7 +233,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.default_items (Id int NOT NULL); INSERT dbo.default_items VALUES (1); "
             + "CREATE TABLE dbo.default_ddl_events (Id int NOT NULL);");
@@ -293,7 +293,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task AlterAnsiDefault_RejectsEncodedOverflowWithoutChangingRowsOrDefault()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.default_items (Id int NOT NULL, "
             + "Caption varchar(1) COLLATE Latin1_General_100_CI_AS_SC_UTF8 "
@@ -345,7 +345,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.default_items (Id int NOT NULL PRIMARY KEY); INSERT dbo.default_items VALUES (1);");
         await using var context = CreateContext(connectionString);
@@ -396,7 +396,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString, "ALTER DATABASE CURRENT COLLATE " + collation + ";");
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.default_items (Id int NOT NULL); INSERT dbo.default_items VALUES (1); "

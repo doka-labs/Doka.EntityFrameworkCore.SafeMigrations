@@ -19,7 +19,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await using var context = CreateContext(connectionString);
         var builder = AuthoredSeedKeyBuilder(context, collation, first, second);
 
@@ -50,7 +50,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task ProjectedAuthoredUniqueKey_AppliesReplaysAndVerifies()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await using var context = CreateContext(connectionString);
         var builder = AuthoredSeedKeyBuilder(context, collation: null, "alpha", "beta");
         var runner = context.GetService<ISafeMigrationRunner>();
@@ -80,7 +80,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task ProjectedAuthoredUniqueKey_TypedPrecisionCollisionIsBlocked()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists("authored_precision", table => new
@@ -110,7 +110,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task ProjectedAuthoredUniqueKey_OpaqueMutationInvalidatesTheLineage()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await using var context = CreateContext(connectionString);
         var builder = AuthoredSeedKeyBuilder(context, collation: null, "alpha", "beta");
         builder.Operations.Insert(3, new SqlOperation
@@ -132,7 +132,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task ProjectedAuthoredUniqueKey_RepeatedIdenticalEnsureRemainsSafe()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await using var context = CreateContext(connectionString);
         var builder = AuthoredSeedKeyBuilder(context, collation: null, "alpha", "beta");
         var initialOperations = builder.Operations.Take(3).ToArray();
@@ -174,7 +174,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await using var context = CreateContext(connectionString);
         var builder = AuthoredSeedKeyBuilder(context, collation: null, "alpha", "beta");
         var initialOperations = builder.Operations.Take(2).ToArray();
@@ -236,7 +236,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task ProjectedAuthoredUniqueKey_CapturedStoreTypeMismatchIsUnproven()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await using var context = CreateContext(connectionString);
         var builder = AuthoredSeedKeyBuilder(context, collation: null, "alpha", "beta");
         var seed = new MigrationBuilder(context.Database.ProviderName!);
@@ -260,7 +260,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task ProjectedAuthoredUniqueKey_AnsiRuntimeCollationBoundaryRemainsBlocked()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString, "ALTER DATABASE CURRENT COLLATE Latin1_General_100_CI_AS;");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);

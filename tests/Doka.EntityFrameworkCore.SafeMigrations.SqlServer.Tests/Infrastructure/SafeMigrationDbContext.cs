@@ -5,6 +5,9 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 /// </summary>
 public sealed class SafeMigrationDbContext : DbContext
 {
+    /// <summary>The command timeout applied to every live contract test.</summary>
+    public const int CommandTimeoutSeconds = 120;
+
     private readonly string? _connectionString;
     private readonly bool _registerSafeMigrations;
 
@@ -42,7 +45,12 @@ public sealed class SafeMigrationDbContext : DbContext
 
         optionsBuilder.UseSqlServer(
             _connectionString ?? throw new InvalidOperationException("A SQL Server connection string is required."),
-            provider => provider.MigrationsAssembly(typeof(SafeMigrationDbContext).Assembly.FullName));
+            provider => provider
+                .MigrationsAssembly(typeof(SafeMigrationDbContext).Assembly.FullName)
+
+                // WHY: Live contracts use an explicit finite wait budget rather than a driver default.
+                // This timeout is neither performance evidence nor a diagnosis of an exceeded budget.
+                .CommandTimeout(CommandTimeoutSeconds));
 
         if (_registerSafeMigrations)
         {

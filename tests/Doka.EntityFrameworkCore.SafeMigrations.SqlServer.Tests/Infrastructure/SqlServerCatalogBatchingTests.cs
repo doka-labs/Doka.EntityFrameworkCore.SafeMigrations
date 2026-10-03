@@ -3,6 +3,71 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 /// <summary>Verifies bounded catalog packing independently of SQL Server availability and network latency.</summary>
 public sealed class SqlServerCatalogBatchingTests
 {
+    /// <summary>Both transports retain their actual execution budget across statement and batch boundaries.</summary>
+    /// <param name="nativeBatch">Whether the connection supports native batching.</param>
+    /// <param name="delayed">Whether each classifier requires a private binding scope.</param>
+    /// <param name="count">The number of distinct classifiers in the capture.</param>
+    [Theory]
+    [InlineData(true, false, 256)]
+    [InlineData(false, false, 256)]
+    [InlineData(true, true, 256)]
+    [InlineData(false, true, 256)]
+    [InlineData(true, false, 257)]
+    [InlineData(false, false, 257)]
+    [InlineData(true, true, 257)]
+    [InlineData(false, true, 257)]
+    public async Task DistinctClassifiers_PreserveNativeAndSequentialExecutionBudgets(
+        bool nativeBatch,
+        bool delayed,
+        int count
+    )
+    {
+        // Arrange
+        await using var connection = new SqlServerCatalogTestConnection(nativeBatch);
+        var plans = Enumerable.Range(0, count).Select(index => DistinctPlan(Plan(delayed), index)).ToArray();
+        var results = new SafeMigrationProviderAnalysis[count];
+
+        // Act
+        await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
+            connection, null, 71, plans, 0, results, CancellationToken.None);
+
+        // Assert
+        var statements = (count + (nativeBatch ? 8 : 32) - 1) / (nativeBatch ? 8 : 32);
+
+        Assert.Equal(statements, connection.RecordedStatements.Count);
+        Assert.Equal(nativeBatch ? (count + 255) / 256 : 0, connection.BatchExecutions);
+        Assert.Equal(nativeBatch ? 0 : statements, connection.CommandExecutions);
+        Assert.Equal(Enumerable.Range(0, count).Select(State), results.Select(analysis => analysis.ObservedState));
+        Assert.All(connection.ObservedTimeouts, timeout => Assert.Equal(71, timeout));
+    }
+
+    /// <summary>Unordered rows remain owned by their statement across a complete multi-statement capture.</summary>
+    /// <param name="nativeBatch">Whether the connection supports native batching.</param>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task MultipleUnorderedStatements_RetainEveryOriginalResult(bool nativeBatch)
+    {
+        // Arrange
+        await using var connection = new SqlServerCatalogTestConnection(nativeBatch)
+        {
+            TransformOrdinals = ordinals => ordinals.Reverse().ToArray(),
+        };
+
+        const int count = 257;
+        var plans = Enumerable.Range(0, count).Select(index => DistinctPlan(Plan(false), index)).ToArray();
+        var results = new SafeMigrationProviderAnalysis[count];
+
+        // Act
+        await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
+            connection, null, null, plans, 0, results, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(Enumerable.Range(0, count).Select(State), results.Select(analysis => analysis.ObservedState));
+        Assert.Equal(nativeBatch ? 2 : 0, connection.BatchExecutions);
+        Assert.Equal(nativeBatch ? 0 : 9, connection.CommandExecutions);
+    }
+
     /// <summary>
     /// Groups alternating classifiers while retaining every original result slot and skipped classification.
     /// </summary>
@@ -30,7 +95,11 @@ public sealed class SqlServerCatalogBatchingTests
             connection, null, 71, plans, captureStart, results, CancellationToken.None);
 
         // Assert
-        Assert.InRange(connection.RecordedStatements.Count, 1, 16);
+        Assert.InRange(
+            connection.RecordedStatements.Count,
+            1,
+            plans.Length / SqlServerCatalogQueryLimits.MaximumOperationsPerStatement);
+
         Assert.Equal(nativeBatch ? 2 : 0, connection.BatchExecutions);
         Assert.Equal(nativeBatch ? 0 : connection.RecordedStatements.Count, connection.CommandExecutions);
         Assert.All(results.Take(captureStart), analysis => Assert.Equal(
@@ -76,15 +145,23 @@ public sealed class SqlServerCatalogBatchingTests
         }
 
         // Assert
-        Assert.Equal(2_931, connection.RecordedStatements.Count);
+        // WHY: Narrow statements inside wide batches are the point of the shape. Statement
+        // count may grow, but the executed batch count is what costs a round trip and must
+        // stay bounded by the same capture arithmetic as before.
+        Assert.Equal(11_329, connection.RecordedStatements.Count);
         Assert.Equal(391, connection.BatchExecutions);
-        Assert.All(connection.BatchStatementCounts, count => Assert.InRange(count, 1, 8));
+        Assert.All(
+            connection.BatchStatementCounts,
+            count => Assert.InRange(count, 1, SqlServerCatalogQueryLimits.MaximumStatementsPerBatch));
+
         Assert.All(connection.BatchPayloadBytes, bytes => Assert.InRange(bytes, 1, 4 * 1024 * 1024));
         Assert.All(connection.RecordedStatements.Zip(connection.RecordedParameters), recorded => Assert.InRange(
             recorded.First.StartsWith("EXEC sys.sp_executesql", StringComparison.Ordinal)
                 ? recorded.Second.Count(parameter => parameter.ParameterName.StartsWith(
                     "@doka_ordinal", StringComparison.Ordinal))
-                : recorded.First.Split("\nUNION ALL\n", StringSplitOptions.None).Length, 1, 32));
+                : recorded.First.Split("\nUNION ALL\n", StringSplitOptions.None).Length,
+            1,
+            SqlServerCatalogQueryLimits.MaximumOperationsPerStatement));
         for (var ordinal = 0; ordinal < results.Length; ordinal++)
         {
             Assert.Equal(ordinal % 9 == 3 ? SafeMigrationObservedState.Unsupported : State(ordinal),
@@ -205,12 +282,10 @@ public sealed class SqlServerCatalogBatchingTests
     [InlineData("missing", true)]
     [InlineData("unexpected", true)]
     [InlineData("extra", true)]
-    [InlineData("reversed", true)]
     [InlineData("duplicate", false)]
     [InlineData("missing", false)]
     [InlineData("unexpected", false)]
     [InlineData("extra", false)]
-    [InlineData("reversed", false)]
     public async Task InvalidResults_RejectAndDispose(
         string corruption,
         bool nativeBatch
@@ -225,7 +300,6 @@ public sealed class SqlServerCatalogBatchingTests
                 "missing" => [ordinals[0]],
                 "unexpected" => [99, ordinals[1]],
                 "extra" => [.. ordinals, 99],
-                "reversed" => [ordinals[1], ordinals[0]],
                 _ => throw new ArgumentOutOfRangeException(nameof(corruption)),
             },
         };
@@ -239,10 +313,42 @@ public sealed class SqlServerCatalogBatchingTests
                 0, results, CancellationToken.None));
 
         // Assert
-        Assert.Contains(corruption == "missing" ? "inconsistent row count" : "invalid ordinal",
+        Assert.Contains(corruption is "missing" or "extra" ? "inconsistent row count" : "invalid ordinal",
             failure.Message, StringComparison.Ordinal);
         Assert.Equal(nativeBatch ? 1 : 0, connection.BatchesDisposed);
         Assert.Equal(nativeBatch ? 0 : 1, connection.CommandsDisposed);
+    }
+
+    /// <summary>
+    /// Classifier rows are matched by ordinal, so an engine may return them in any order.
+    /// </summary>
+    /// <param name="nativeBatch">Whether the connection exposes native ADO.NET batching.</param>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task UnorderedResultRows_MatchTheirOwnClassifier(bool nativeBatch)
+    {
+        // Arrange
+        await using var connection = new SqlServerCatalogTestConnection(nativeBatch)
+        {
+            TransformOrdinals = ordinals => [ordinals[1], ordinals[0]],
+        };
+
+        var results = new SafeMigrationProviderAnalysis[2];
+        SqlServerSafeMigrationRuntimePlan?[] plans =
+        [
+            DistinctPlan(Plan(false), 0),
+            DistinctPlan(Plan(false), 1),
+        ];
+
+        // Act
+        await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
+            connection, null, null, plans, 0, results, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(State(0), results[0].ObservedState);
+        Assert.Equal(State(1), results[1].ObservedState);
+        Assert.DoesNotContain("ORDER BY", Assert.Single(connection.RecordedStatements), StringComparison.Ordinal);
     }
 
     /// <summary>A cancelled capture does not create or execute commands.</summary>
@@ -442,7 +548,9 @@ public sealed class SqlServerCatalogBatchingTests
         Assert.Equal(1, connection.BatchExecutions + connection.CommandExecutions);
         Assert.Equal(cancellation.Token, connection.CancellationTokenSeen);
         Assert.Equal(nativeBatch ? 1 : 0, connection.BatchesDisposed);
-        Assert.Equal(nativeBatch ? 0 : 8, connection.CommandsDisposed);
+        Assert.Equal(
+            nativeBatch ? 0 : SqlServerCatalogQueryLimits.MaximumSequentialStatementsPerBatch,
+            connection.CommandsDisposed);
     }
 
     /// <summary>A cancelled result-set transition cannot consume the next set or submit the next batch.</summary>
@@ -465,9 +573,9 @@ public sealed class SqlServerCatalogBatchingTests
                 connection, null, null, plans, 0, results, cancellation.Token));
 
         // Assert
-        Assert.Equal(32, connection.RowsRead);
-        Assert.All(results.Take(32), Assert.NotNull);
-        Assert.All(results.Skip(32), Assert.Null);
+        Assert.Equal(SqlServerCatalogQueryLimits.MaximumOperationsPerStatement, connection.RowsRead);
+        Assert.All(results.Take(SqlServerCatalogQueryLimits.MaximumOperationsPerStatement), Assert.NotNull);
+        Assert.All(results.Skip(SqlServerCatalogQueryLimits.MaximumOperationsPerStatement), Assert.Null);
         Assert.Equal(1, connection.BatchExecutions);
         Assert.Equal(cancellation.Token, connection.CancellationTokenSeen);
         Assert.Equal(1, connection.BatchesDisposed);
@@ -502,11 +610,11 @@ public sealed class SqlServerCatalogBatchingTests
                 connection, null, null, plans, 0, results, cancellation.Token));
 
         // Assert
-        Assert.Equal(32, connection.RowsRead);
-        Assert.All(results.Take(32), Assert.NotNull);
-        Assert.All(results.Skip(32), Assert.Null);
+        Assert.Equal(SqlServerCatalogQueryLimits.MaximumSequentialOperationsPerStatement, connection.RowsRead);
+        Assert.All(results.Take(SqlServerCatalogQueryLimits.MaximumSequentialOperationsPerStatement), Assert.NotNull);
+        Assert.All(results.Skip(SqlServerCatalogQueryLimits.MaximumSequentialOperationsPerStatement), Assert.Null);
         Assert.Equal(2, connection.CommandExecutions);
-        Assert.Equal(8, connection.CommandsDisposed);
+        Assert.Equal(SqlServerCatalogQueryLimits.MaximumSequentialStatementsPerBatch, connection.CommandsDisposed);
         Assert.Equal(cancellation.Token, connection.CancellationTokenSeen);
     }
 

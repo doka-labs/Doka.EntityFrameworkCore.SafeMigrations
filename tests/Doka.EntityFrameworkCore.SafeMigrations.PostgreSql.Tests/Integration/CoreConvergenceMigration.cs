@@ -4,7 +4,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 [Migration(MigrationIdentifier)]
 public sealed class CoreConvergenceMigration : Migration
 {
-    public const string MigrationIdentifier = "202608170001_CoreConvergence";
+    public const string MigrationIdentifier = "20260817000100_CoreConvergence";
 
     protected override void Up(
         MigrationBuilder migrationBuilder

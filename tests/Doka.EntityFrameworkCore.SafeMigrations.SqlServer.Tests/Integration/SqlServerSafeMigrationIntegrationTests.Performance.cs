@@ -15,7 +15,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     {
         // Arrange
         SqlServerLiveQualificationEvidence.WriteStage("mixed-100k", "fixture-setup");
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.sqlserver_stress_target (id int NOT NULL); "
             + "INSERT INTO dbo.sqlserver_stress_target VALUES (1); "
@@ -51,7 +51,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     {
         // Arrange
         SqlServerLiveQualificationEvidence.WriteStage("managed-50k", "fixture-setup");
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.large_model_managed_rows (id int NOT NULL PRIMARY KEY, "
             + "managed_value nvarchar(32) NOT NULL);");
@@ -113,7 +113,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     {
         // Arrange
         SqlServerLiveQualificationEvidence.WriteStage("catalog-p95", "fixture-setup");
-        var databaseConnectionString = await Fixture.CreateDatabaseAsync();
+        var databaseConnectionString = await CreateDatabaseAsync();
         var connectionString = new SqlConnectionStringBuilder(databaseConnectionString)
         {
             Pooling = true,

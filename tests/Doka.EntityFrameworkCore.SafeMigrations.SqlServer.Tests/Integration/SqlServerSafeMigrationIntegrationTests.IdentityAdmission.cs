@@ -7,7 +7,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task ExistingIdentityWithoutSelect_IsStructuredUnsupportedInsteadOfPermissionFailure()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.identity_admission (Id int IDENTITY(1,1) NOT NULL, Value int NOT NULL); "
             + "CREATE USER identity_metadata_reader WITHOUT LOGIN WITH DEFAULT_SCHEMA=dbo; "
@@ -54,7 +54,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.identity_admission (Value int NOT NULL);");
         await using var context = CreateContext(connectionString);
         var operation = IdentityAdmissionColumn("Id", storeType, identity);
@@ -80,7 +80,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task SecondPhysicalIdentity_IsPrerequisiteMissingWithoutMutation()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.identity_admission (First int IDENTITY(1,1) NOT NULL, Value int NOT NULL); "
             + "CREATE TABLE dbo.identity_ddl_events (Id int NOT NULL);");
@@ -120,7 +120,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.identity_admission (Id int IDENTITY(1,1) "
             + (notForReplication ? "NOT FOR REPLICATION " : string.Empty) + "NOT NULL, Value int NOT NULL); "
@@ -166,7 +166,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task WideExistingIdentitySeed_IsAStableMismatchWithoutOverflow()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.identity_admission (Id decimal(38,0) IDENTITY(100000000000000000000,1) NOT NULL, "
             + "Value int NOT NULL); CREATE TABLE dbo.identity_ddl_events (Id int NOT NULL);");
@@ -201,7 +201,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await using var context = CreateContext(connectionString);
         var first = IdentityAdmissionColumn("First", "int", "1, 1");
         var second = IdentityAdmissionColumn("Second", "int", "1, 1");
@@ -232,7 +232,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task OrderedNewOrdinaryTable_AllowsTheFirstIdentity()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await using var context = CreateContext(connectionString);
         var table = new SafeMigrationOperation(new EnsureTableIntent(new ExpectedTableDefinition(
             "identity_admission", [new ExpectedColumnDefinition("Value", typeof(int), false, "int")]),

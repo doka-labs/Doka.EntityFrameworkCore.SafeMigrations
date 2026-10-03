@@ -9,7 +9,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task ConcurrentEfMigratorsApplyHistoryAndSchemaExactlyOnce()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await using var firstContext = CreateContext(connectionString);
         await using var secondContext = CreateContext(connectionString);
 
@@ -73,7 +73,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task ConcurrentEfMigratorsRejectDriftWithoutPartialApplication()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.safe_history_probe (Id bigint NOT NULL); "

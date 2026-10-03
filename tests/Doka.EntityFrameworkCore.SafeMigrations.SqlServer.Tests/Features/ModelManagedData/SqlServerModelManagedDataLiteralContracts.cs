@@ -3,6 +3,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 /// <summary>
 /// Verifies captured SQL Server payloads remain representable before any mutation.
 /// </summary>
+[Collection(SqlServerSharedContainer.Name)]
 public sealed class SqlServerModelManagedDataLiteralContracts : SqlServerIntegrationTestBase
 {
     /// <summary>
@@ -23,7 +24,7 @@ public sealed class SqlServerModelManagedDataLiteralContracts : SqlServerIntegra
     public async Task BoundedPayload_AppliesMaximumAndRejectsOverlongWithoutMutation(string storeType)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.bounded_payloads (Id int NOT NULL CONSTRAINT PK_bounded_payloads PRIMARY KEY, "
             + "Payload " + storeType + " NOT NULL);");
@@ -78,7 +79,7 @@ public sealed class SqlServerModelManagedDataLiteralContracts : SqlServerIntegra
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         var database = new SqlConnectionStringBuilder(connectionString).InitialCatalog;
         var administrativeConnection = new SqlConnectionStringBuilder(connectionString)
         {
@@ -133,7 +134,7 @@ public sealed class SqlServerModelManagedDataLiteralContracts : SqlServerIntegra
     public async Task DecimalAndTimePrecision_AppliesCanonicalProviderContractAndReplays()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.precision_payloads (Id int NOT NULL CONSTRAINT PK_precision_payloads PRIMARY KEY, "
             + "Amount decimal(5,2) NOT NULL, RecordedAt datetime2(3) NOT NULL);");

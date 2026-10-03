@@ -9,7 +9,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task RenameTable_PreservesRowsAndReplays()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.old_orders (Id int NOT NULL); "
@@ -42,7 +42,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task RenameTable_TargetCollisionLeavesBothTablesUnchanged()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.rename_source (Id int NOT NULL); "
@@ -73,7 +73,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task DropTable_DropsOnceAndReplays()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.obsolete_orders (Id int NOT NULL);");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -98,7 +98,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task RenameColumn_PreservesValueAndReplays()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.column_orders (Id int NOT NULL, Caption nvarchar(80) NULL); "
@@ -132,7 +132,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task RenameColumn_TargetCollisionLeavesBothColumnsUnchanged()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.rename_column_collision (Id int NOT NULL, OldValue int NULL, NewValue int NULL);");
@@ -163,7 +163,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task DropColumn_PreservesRemainingRowsAndReplays()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.drop_column_orders (Id int NOT NULL, Obsolete nvarchar(80) NULL); "
@@ -196,7 +196,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task RenameIndex_PreservesPhysicalIndexAndReplays()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.rename_index_orders (Id int NOT NULL); "
@@ -231,7 +231,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task RenameIndex_TargetCollisionLeavesBothIndexesUnchanged()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.rename_index_collision (Id int NOT NULL); "
@@ -264,7 +264,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task DropIndex_DropsOnceAndReplays()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.drop_index_orders (Id int NOT NULL); "
@@ -293,7 +293,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task AlterColumn_RejectsDataLossBeforeMutation()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.alter_orders (Id int NOT NULL, Caption nvarchar(80) NOT NULL); "
@@ -335,7 +335,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task AddRequiredColumn_EmptyTableAppliesAndReplays()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.empty_add_orders (Id int NOT NULL);");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -366,7 +366,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task AddRequiredColumn_PopulatedTableIsDataBlocked()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.populated_add_orders (Id int NOT NULL); "
@@ -403,7 +403,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task DropSchema_DropsOnceAndReplays()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString, "CREATE SCHEMA obsolete;");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);

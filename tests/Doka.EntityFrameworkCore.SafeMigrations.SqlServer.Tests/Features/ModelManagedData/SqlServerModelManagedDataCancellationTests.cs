@@ -3,6 +3,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 /// <summary>
 /// Exercises deterministic SQL Server client attention and retained-session recovery.
 /// </summary>
+[Collection(SqlServerSharedContainer.Name)]
 public sealed partial class SqlServerModelManagedDataCancellationTests : SqlServerIntegrationTestBase
 {
     /// <summary>
@@ -34,7 +35,7 @@ public sealed partial class SqlServerModelManagedDataCancellationTests : SqlServ
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.identity_roles (Id int IDENTITY(1,1) NOT NULL "
             + "CONSTRAINT PK_identity_roles PRIMARY KEY, Caption nvarchar(80) NOT NULL); "

@@ -7,7 +7,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task SingleCascadeAppliesAndDeletesDependentRows()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.cascade_parent (Id int NOT NULL PRIMARY KEY); "
             + "CREATE TABLE dbo.cascade_child (Id int NOT NULL PRIMARY KEY, ParentId int NOT NULL); "
@@ -39,7 +39,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task SameStreamCascadePathsAreRejected(bool delete)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.paths_parent (Id int NOT NULL PRIMARY KEY); "
             + "CREATE TABLE dbo.paths_child (Id int NOT NULL PRIMARY KEY, "
@@ -76,7 +76,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task InlineMultipleCascadePathsAreRejectedBeforeTableDdl()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.inline_parent (Id int NOT NULL PRIMARY KEY);");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -113,7 +113,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task NewInlineForeignKeyPreventsSameStreamParentDrop()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(new ExpectedTableDefinition("new_parent",
@@ -147,7 +147,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task DroppedCascadeDoesNotBlockSameStreamReplacement()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.replace_parent (Id int NOT NULL PRIMARY KEY); "
             + "CREATE TABLE dbo.replace_child (Id int NOT NULL PRIMARY KEY, "
@@ -184,7 +184,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.trigger_parent (Id int NOT NULL PRIMARY KEY); "
             + "CREATE TABLE dbo.trigger_child (Id int NOT NULL PRIMARY KEY, ParentId int NOT NULL);");
@@ -222,7 +222,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.default_parent (Id int NOT NULL PRIMARY KEY); "
             + "CREATE TABLE dbo.default_child (Id int NOT NULL PRIMARY KEY, ParentId int "
@@ -249,7 +249,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task RowVersionCascadeRejectsBeforeProviderDdl()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.version_parent (Version rowversion NOT NULL PRIMARY KEY); "
             + "CREATE TABLE dbo.version_child (Version rowversion NOT NULL);");
@@ -277,7 +277,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task RowVersionNoActionForeignKeyRemainsSupported()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.noaction_version_parent (Version rowversion NOT NULL PRIMARY KEY); "
             + "CREATE TABLE dbo.noaction_version_child (Version rowversion NOT NULL);");
@@ -304,7 +304,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task SelfCascadeMatchesServerTopologyBoundary()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.self_cascade (Id int NOT NULL PRIMARY KEY, ParentId int NULL);");
         await using var context = CreateContext(connectionString);

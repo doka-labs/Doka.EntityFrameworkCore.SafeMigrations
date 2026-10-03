@@ -11,7 +11,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task NonDboPrincipal_UnqualifiedOperationFailsClosed()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         var login = $"sm_user_{Guid.NewGuid():N}";
         await ExecuteSqlAsync(connectionString, "CREATE SCHEMA application;");
         await ExecuteSqlAsync(
@@ -49,7 +49,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task RestrictedMetadataVisibility_DoesNotClassifyExistingTableAsMissing()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         var login = $"sm_user_{Guid.NewGuid():N}";
         await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.hidden_orders (Id int NOT NULL);");
         await ExecuteSqlAsync(
@@ -91,7 +91,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task RestrictedMetadataVisibility_DirectInventoryFailsWithoutPriorAnalysis()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         var login = $"sm_user_{Guid.NewGuid():N}";
         await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.hidden_orders (Id int NOT NULL);");
         await ExecuteSqlAsync(connectionString,
@@ -124,7 +124,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task CaseSensitiveCatalog_DoesNotDropDifferentlyCasedTable()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(
             connectionString,
             "ALTER DATABASE CURRENT COLLATE Latin1_General_100_CS_AS;");

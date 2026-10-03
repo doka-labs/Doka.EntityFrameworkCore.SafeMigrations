@@ -11,7 +11,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task CandidateKey_DuplicateRowsAreDataBlocked(bool primaryKey)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.duplicate_keys (Id int NOT NULL, Code int NOT NULL); "
@@ -57,7 +57,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(
             connectionString,
             $"CREATE TABLE dbo.wide_keys (Code nvarchar({length}) NOT NULL);");

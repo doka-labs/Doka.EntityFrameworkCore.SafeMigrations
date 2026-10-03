@@ -2,12 +2,48 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
 public sealed partial class SqlServerSafeMigrationIntegrationTests
 {
+    /// <summary>Same-session impersonation cannot retain the preceding full-visibility inventory proof.</summary>
+    [SqlServerLiveFact]
+    public async Task CatalogPreamble_ImpersonatedPrincipalRequiresFreshInventoryEvidence()
+    {
+        // Arrange
+        var connectionString = await CreateDatabaseAsync();
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.inventory_items (Id int NULL); "
+            + "CREATE USER inventory_limited WITHOUT LOGIN;");
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureTable(new ExpectedTableDefinition("inventory_items",
+            [new ExpectedColumnDefinition("Id", typeof(int), true, "int")]),
+            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+
+        var analyzer = context.GetService<ISafeMigrationProviderAnalyzer>();
+        await using var scope = await analyzer.AcquireAnalysisScopeAsync(context);
+        var analyses = await analyzer.AnalyzeAsync(context, builder.Operations.Cast<SafeMigrationOperation>().ToArray());
+
+        // Act
+        await context.Database.ExecuteSqlRawAsync("EXECUTE AS USER = N'inventory_limited';");
+        Exception? failure;
+        try
+        {
+            failure = await Record.ExceptionAsync(() => analyzer.FindUnexpectedObjectsAsync(context, builder.Operations));
+        }
+        finally
+        {
+            // WHY: Impersonation belongs to this test, not to the returned pooled session or scope cleanup.
+            await context.Database.ExecuteSqlRawAsync("REVERT;");
+        }
+
+        // Assert
+        Assert.Equal(SafeMigrationObservedState.Matching, Assert.Single(analyses).ObservedState);
+        Assert.IsType<InvalidOperationException>(failure);
+    }
+
     /// <summary>Similar parameterized templates retain distinct row classifications and evidence ownership.</summary>
     [SqlServerLiveFact]
     public async Task CatalogBindings_DistinctKeysRetainSourceTargetDifferentAndMissingEvidence()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.binding_rows (Id int NOT NULL PRIMARY KEY, "
             + "Caption nvarchar(80) NOT NULL); INSERT dbo.binding_rows VALUES "
             + "(1,N'source'),(2,N'target'),(3,N'edited');");
@@ -44,7 +80,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task CatalogBindings_OffsetOnlyTransitionRetainsSourceAndTargetRepresentations()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.binding_offsets "
             + "(Id int NOT NULL PRIMARY KEY, Zoned datetimeoffset(7) NOT NULL); "
             + "INSERT dbo.binding_offsets VALUES (1,CAST('2026-01-02T03:04:05+00:00' AS datetimeoffset(7)));");
@@ -82,7 +118,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task CatalogBindings_FullSourceValuesApplyAndVerifyWithoutRounding()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.binding_values (Id int NOT NULL PRIMARY KEY, "
             + "Caption nvarchar(80) NULL, Bytes varbinary(8) NULL, Amount decimal(38,20) NULL, "
             + "Moment datetime2(7) NULL, Zoned datetimeoffset(7) NULL, Clock time(7) NULL);");
@@ -128,7 +164,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task CatalogBindings_NarrowConversionsRemainUnsupported(string kind)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         var storeType = kind switch
         {
             "ansi" => "varchar(80)",
@@ -169,7 +205,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task AbsentTablePrepass_PreservesWrongObjectKindsAndSchemaPrerequisites()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString, "CREATE VIEW dbo.occupied_view AS SELECT 1 AS Id;");
         await ExecuteSqlAsync(connectionString, "CREATE SEQUENCE dbo.occupied_sequence AS int START WITH 1; "
             + "CREATE SYNONYM dbo.occupied_synonym FOR dbo.not_created;");
@@ -199,7 +235,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task AbsentTablePrepass_NewOccupantAfterProofRemainsDifferent(bool view)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await using var context = CreateContext(connectionString);
         await using var connection = new SqlConnection(connectionString);
         await connection.OpenAsync();
@@ -237,7 +273,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task AbsentTablePrepass_InvalidAuthoredGuardRemainsBlocked(bool collation)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await using var context = CreateContext(connectionString);
         var definition = new ExpectedTableDefinition("guarded_absent_target",
             [new ExpectedColumnDefinition("Id", typeof(int), false, "int"),

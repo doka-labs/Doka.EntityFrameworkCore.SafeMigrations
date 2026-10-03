@@ -15,7 +15,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         var defaultSql = defaultKind switch
         {
             "none" => string.Empty,
@@ -51,7 +51,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task GeneratedCheckConstraint_AppliesAndReplays()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.checked_orders (Id int NOT NULL, Amount int NOT NULL);");
@@ -83,7 +83,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task GeneratedLiteralDefault_AppliesAndReplays()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.default_orders (Id int NOT NULL); "
@@ -123,7 +123,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task UnstampedCheckConstraint_IsDifferentEvenWhenNameAndTextMatch()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.unstamped_checks (Amount int NOT NULL); "
@@ -154,7 +154,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task UnstampedDefaultConstraint_IsDifferentEvenWhenLiteralMatches()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.unstamped_defaults "

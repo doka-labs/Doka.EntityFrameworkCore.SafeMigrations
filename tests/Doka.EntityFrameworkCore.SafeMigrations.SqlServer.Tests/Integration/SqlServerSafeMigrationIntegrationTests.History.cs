@@ -9,7 +9,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task EfMigrator_RecordsHistoryOnceAndReplays()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await using var context = CreateContext(connectionString);
 
         // Act
@@ -37,7 +37,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task EfMigrator_BlockedSafeOperationRollsBackOrdinaryDdlAndHistory()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.safe_history_probe (Id bigint NOT NULL);");
         await using var context = CreateContext(connectionString);
 
@@ -67,7 +67,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task EfMigrator_FailedContractStampRollsBackDdlAndHistory()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TRIGGER reject_contract_stamp ON DATABASE FOR CREATE_EXTENDED_PROPERTY AS "

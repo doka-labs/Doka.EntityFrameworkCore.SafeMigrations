@@ -21,6 +21,25 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- Give SQL Server catalog classification its own capture shape of eight
+  operations per statement and 32 statements per native transport batch.
+  Sequential connections retain 32 operations per statement and eight
+  statements per bounded group, avoiding additional sequential executes.
+  Both shapes retain a 256-operation capacity subject to payload and parameter
+  limits; native execution-time improvements remain subject to qualification.
+  Classifier rows are matched by their ordinal column, so the statements no
+  longer carry a sort and no longer require ordered delivery. Missing,
+  duplicate and unexpected rows still fail the analysis.
+- Reuse a completed SQL Server identifier-contract verdict for the
+  unexpected-object inventory only within the same active scope, context,
+  connection and transaction, with an identical reference set and a freshly
+  matching environment, principal and collation stamp.
+  Failed analysis, scope disposal, connection closure and session changes
+  invalidate reuse; separate inventory requests obtain fresh proofs.
+- Retain SQL Server fixture database ownership until cleanup succeeds, allowing
+  retries after failed opening, dropping, cancellation or lost acknowledgement.
+  Final cleanup removes only confirmed drops. Do not change the server's model
+  database recovery configuration to tune test setup.
 - Batch independent MySQL/MariaDB and PostgreSQL diagnostic, narrowing and
   qualified row probes through the existing bounded catalog transport. Omit
   prerequisite queries only when their captured builder predicate is constant

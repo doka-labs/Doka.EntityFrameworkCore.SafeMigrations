@@ -6,7 +6,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
     ISafeMigrationProviderObjectIdentityNormalizer,
     ISafeMigrationProviderOperationProjection,
     ISafeMigrationProjectedKeyAnalyzer,
-    ISafeMigrationProjectedDependencyAnalyzer
+    ISafeMigrationProjectedDependencyAnalyzer,
+    IDisposable,
+    IAsyncDisposable
 {
     private const string ScopeSql = "EXEC @result = sys.sp_getapplock "
         + "@Resource = N'doka-sm-catalog-analysis', @LockMode = N'Exclusive', "
@@ -19,6 +21,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
     private readonly SqlServerSafeMigrationCatalogSqlBuilder _catalogSqlBuilder;
     private SqlServerProjectedDependencyGraph? _dependencyGraph;
     private DbContext? _catalogInventoryRejectedContext;
+    private SqlServerCatalogPreamble? _catalogPreamble;
+    private AnalysisScope? _analysisScope;
     private bool _connectionQuarantined;
 
     /// <summary>
@@ -146,7 +150,32 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
     }
 
     /// <summary>Permanently rejects supported migration and catalog reuse of this scoped session.</summary>
-    internal void QuarantineConnection() => _connectionQuarantined = true;
+    internal void QuarantineConnection()
+    {
+        _connectionQuarantined = true;
+        ClearCatalogPreamble();
+    }
+
+    /// <summary>Discards both successful proofs and scope-local invariant rejections.</summary>
+    private void ClearCatalogPreamble()
+    {
+        _catalogPreamble = null;
+        _catalogInventoryRejectedContext = null;
+    }
+
+    /// <summary>Requires the same still-active physical analysis session for cached evidence.</summary>
+    private bool HasCurrentAnalysisSession(
+        DbContext context,
+        DbConnection connection,
+        DbTransaction? transaction
+    )
+        => _analysisScope?.Matches(context, connection, transaction) == true;
+
+    /// <summary>Releases any outstanding scope when the scoped analyzer is disposed.</summary>
+    public ValueTask DisposeAsync() => _analysisScope?.DisposeAsync() ?? ValueTask.CompletedTask;
+
+    /// <summary>Releases an outstanding scope when EF disposes its service scope synchronously.</summary>
+    public void Dispose() => _analysisScope?.Dispose();
 
     /// <summary>Requires a replacement context after any provider session-recovery failure.</summary>
     internal void ThrowIfConnectionQuarantined()
@@ -194,6 +223,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
     {
         ValidateContext(context);
 
+        if (_analysisScope is not null)
+        {
+            throw new InvalidOperationException("The SQL Server analyzer already owns an active analysis scope.");
+        }
+
+        ClearCatalogPreamble();
+
         Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? transaction = null;
         try
         {
@@ -220,12 +256,16 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
                 throw new InvalidOperationException("SQL Server SafeMigrations could not acquire its analysis lock.");
             }
 
-            return new AnalysisScope(
+            _analysisScope = new AnalysisScope(
                 this,
+                context,
+                connection,
+                command.Transaction
+                    ?? throw new InvalidOperationException("The SQL Server analysis scope requires a transaction."),
                 transaction,
-                transaction is null ? connection : null,
-                transaction is null ? command.Transaction : null,
                 context.Database.GetCommandTimeout());
+
+            return _analysisScope;
         }
         catch
         {
@@ -246,7 +286,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
     )
     {
         _dependencyGraph = null;
-        _catalogInventoryRejectedContext = null;
+        ClearCatalogPreamble();
         _projectedKeyTables = new Dictionary<(string Schema, string Table), SqlServerProjectedKeyTable>();
         ResetProjectedSeedProofs();
         ResetProjectedIdentityProofs();
@@ -279,27 +319,26 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
 
             if (!environment.CanSeeDatabaseMetadata)
             {
-                _catalogInventoryRejectedContext = context;
+                if (HasCurrentAnalysisSession(context, connection, transaction))
+                {
+                    _catalogPreamble = new SqlServerCatalogPreamble(context, environment, [], IdentifierSafe: false);
+                    _catalogInventoryRejectedContext = context;
+                }
 
                 return Enumerable.Range(0, operations.Count)
                     .Select(static _ => Unsupported("catalog_metadata_not_visible"))
                     .ToArray();
             }
 
+            var references = SqlServerIdentifierContract.Collect(operations);
             var identifierSafe = await ReadIdentifierContractAsync(
                 connection,
                 transaction,
-                SqlServerIdentifierContract.Collect(operations),
+                references,
                 context.Database.GetCommandTimeout(),
                 cancellationToken);
 
             var collationUnsafe = !identifierSafe;
-            if (collationUnsafe || !environment.DefaultSchemaIsDbo
-                && operations.Any(static operation => RequiresDefaultSchema(operation.Intent)))
-            {
-                _catalogInventoryRejectedContext = context;
-            }
-
             if (identifierSafe)
             {
                 await ReadProjectedColumnLayoutsAsync(
@@ -434,12 +473,31 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
 
             CaptureIdentitySlotConflicts(operations, results);
 
+            // WHY: Inventory may reuse completed analysis proofs only within the same
+            // lock/transaction scope. A partial or separately invoked analysis is not a certificate.
+            if (HasCurrentAnalysisSession(context, connection, transaction))
+            {
+                _catalogPreamble = new SqlServerCatalogPreamble(context, environment, references, identifierSafe);
+                if (collationUnsafe || !environment.DefaultSchemaIsDbo
+                    && operations.Any(static operation => RequiresDefaultSchema(operation.Intent)))
+                {
+                    _catalogInventoryRejectedContext = context;
+                }
+            }
+
             return Array.AsReadOnly(results);
+        }
+        catch
+        {
+            ClearCatalogPreamble();
+
+            throw;
         }
         finally
         {
             if (openedHere && !_connectionQuarantined)
             {
+                ClearCatalogPreamble();
                 await connection.CloseAsync();
             }
         }
@@ -471,15 +529,24 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
         try
         {
             var transaction = context.Database.CurrentTransaction?.GetDbTransaction();
+            var currentSession = HasCurrentAnalysisSession(context, connection, transaction);
+            var preamble = currentSession ? _catalogPreamble : null;
+            // WHY: EXECUTE AS, permission changes and database collation changes can occur
+            // without replacing the connection or transaction. Recheck this cheap stamp before
+            // reusing either an identifier verdict or a previous invariant rejection.
             var environment = await ReadCatalogEnvironmentAsync(
-                connection,
-                transaction,
-                context.Database.GetCommandTimeout(),
-                cancellationToken);
+                connection, transaction, context.Database.GetCommandTimeout(), cancellationToken);
+
+            if (preamble is not null
+                && (!environment.HasReusableIdentity || preamble.Environment != environment))
+            {
+                ClearCatalogPreamble();
+                preamble = null;
+            }
 
             if (!environment.CanSeeDatabaseMetadata)
             {
-                if (ReferenceEquals(context, _catalogInventoryRejectedContext))
+                if (currentSession && ReferenceEquals(context, _catalogInventoryRejectedContext))
                 {
                     // WHY: Preserve the preceding invariant Unsupported report.
                     // This empty optional inventory is not evidence of absence;
@@ -492,16 +559,21 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
             }
 
             var safeOperations = operations.OfType<SafeMigrationOperation>().ToArray();
-            if ((!environment.DefaultSchemaIsDbo
-                    && safeOperations.Any(static operation => RequiresDefaultSchema(operation.Intent)))
-                || !await ReadIdentifierContractAsync(
+            var references = SqlServerIdentifierContract.Collect(safeOperations);
+            var identifierSafe = preamble is not null && preamble.Covers(context, references, environment)
+                ? preamble.IdentifierSafe
+                : await ReadIdentifierContractAsync(
                     connection,
                     transaction,
-                    SqlServerIdentifierContract.Collect(safeOperations),
+                    references,
                     context.Database.GetCommandTimeout(),
-                    cancellationToken))
+                    cancellationToken);
+
+            if ((!environment.DefaultSchemaIsDbo
+                    && safeOperations.Any(static operation => RequiresDefaultSchema(operation.Intent)))
+                || !identifierSafe)
             {
-                if (ReferenceEquals(context, _catalogInventoryRejectedContext))
+                if (currentSession && ReferenceEquals(context, _catalogInventoryRejectedContext))
                 {
                     return [];
                 }
@@ -516,10 +588,17 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
                 context.Database.GetCommandTimeout(),
                 cancellationToken);
         }
+        catch
+        {
+            ClearCatalogPreamble();
+
+            throw;
+        }
         finally
         {
             if (openedHere && !_connectionQuarantined)
             {
+                ClearCatalogPreamble();
                 await connection.CloseAsync();
             }
         }
@@ -539,7 +618,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
             "SELECT SCHEMA_NAME(), CONVERT(nvarchar(128), DATABASEPROPERTYEX(DB_NAME(), 'Collation')), "
             + "HAS_PERMS_BY_NAME(DB_NAME(), N'DATABASE', N'VIEW DEFINITION'), "
             + "CASE WHEN SCHEMA_NAME() COLLATE CATALOG_DEFAULT = N'dbo' COLLATE CATALOG_DEFAULT "
-            + "THEN 1 ELSE 0 END;";
+            + "THEN 1 ELSE 0 END, DATABASE_PRINCIPAL_ID(), CONVERT(varchar(170), SUSER_SID(), 2);";
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken)
@@ -552,7 +631,10 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
         return new SqlServerCatalogEnvironment(
             reader.GetString(0),
             !reader.IsDBNull(2) && reader.GetInt32(2) == 1,
-            !reader.IsDBNull(3) && reader.GetInt32(3) == 1);
+            !reader.IsDBNull(3) && reader.GetInt32(3) == 1,
+            reader.GetString(1),
+            reader.IsDBNull(4) ? null : reader.GetInt32(4),
+            reader.IsDBNull(5) ? null : reader.GetString(5));
     }
 
     private async Task<bool> ReadIdentifierContractAsync(
@@ -1338,34 +1420,238 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
         command.Parameters.Add(parameter);
     }
 
-    private readonly record struct SqlServerCatalogEnvironment(
+    /// <summary>Captures the database environment and current execution identity for bounded proof reuse.</summary>
+    /// <param name="DefaultSchema">The current user's default schema.</param>
+    /// <param name="CanSeeDatabaseMetadata">Whether complete database definitions are visible.</param>
+    /// <param name="DefaultSchemaIsDbo">Whether unqualified names resolve to the supported default schema.</param>
+    /// <param name="Collation">The current database collation.</param>
+    /// <param name="DatabasePrincipalId">The current database principal, or null when it cannot be resolved.</param>
+    /// <param name="LoginSid">The current login SID in hexadecimal, or null when it cannot be resolved.</param>
+    internal readonly record struct SqlServerCatalogEnvironment(
         string DefaultSchema,
         bool CanSeeDatabaseMetadata,
-        bool DefaultSchemaIsDbo
-    );
-
-    private sealed class AnalysisScope(
-        SqlServerSafeMigrationProviderAnalyzer analyzer,
-        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? transaction,
-        DbConnection? borrowedConnection,
-        DbTransaction? borrowedTransaction,
-        int? commandTimeout
-    ) : IAsyncDisposable
+        bool DefaultSchemaIsDbo,
+        string Collation,
+        int? DatabasePrincipalId,
+        string? LoginSid
+    )
     {
+        /// <summary>Requires both execution identities before another call can reuse this proof.</summary>
+        public bool HasReusableIdentity => DatabasePrincipalId.HasValue && LoginSid is not null;
+    }
+
+    /// <summary>Retains the session-scoped probes of one analysis run for its inventory pass.</summary>
+    /// <remarks>
+    /// WHY: Classification and the unexpected-object inventory are two calls of the same run
+    /// against the same session. The environment must be read afresh to detect same-session
+    /// identity changes. Its stamp gates reuse of the costlier identifier collision verdict;
+    /// only a completed analysis in the active scope can publish this preamble.
+    /// </remarks>
+    /// <param name="Context">The context that produced the probes.</param>
+    /// <param name="Environment">The observed catalog environment of that session.</param>
+    /// <param name="References">The identifier references the contract verdict was proven for.</param>
+    /// <param name="IdentifierSafe">Whether the identifier contract held for those references.</param>
+    internal sealed record SqlServerCatalogPreamble(
+        DbContext Context,
+        SqlServerCatalogEnvironment Environment,
+        IReadOnlyList<SqlServerIdentifierReference> References,
+        bool IdentifierSafe
+    )
+    {
+        /// <summary>Determines whether this preamble proves the identifier contract for another request.</summary>
+        /// <remarks>
+        /// WHY: The verdict only covers the references it was computed from. Reusing it for a
+        /// different reference set would turn a cache into a silent contract change, so the
+        /// comparison is exact in content and order.
+        /// </remarks>
+        /// <param name="context">The context of the requesting call.</param>
+        /// <param name="references">The identifier references the caller needs proven.</param>
+        /// <param name="environment">The freshly read environment and execution identity.</param>
+        /// <returns><see langword="true" /> when the retained verdict applies unchanged.</returns>
+        public bool Covers(
+            DbContext context,
+            IReadOnlyList<SqlServerIdentifierReference> references,
+            SqlServerCatalogEnvironment environment
+        )
+        {
+            ArgumentNullException.ThrowIfNull(references);
+
+            if (!ReferenceEquals(Context, context) || References.Count != references.Count
+                || !environment.HasReusableIdentity || Environment != environment)
+            {
+                return false;
+            }
+
+            for (var index = 0; index < references.Count; index++)
+            {
+                if (!References[index].Equals(references[index]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+    }
+
+    /// <summary>Owns catalog-proof lifetime and the transaction-owned analysis lock.</summary>
+    private sealed class AnalysisScope : IDisposable, IAsyncDisposable
+    {
+        private readonly SqlServerSafeMigrationProviderAnalyzer _analyzer;
+        private readonly DbContext _context;
+        private readonly DbConnection _connection;
+        private readonly DbTransaction _transaction;
+        private readonly Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? _ownedTransaction;
+        private readonly int? _commandTimeout;
+        private readonly string _database;
+        private readonly string _connectionString;
+        private bool _disposed;
+        private bool _sessionInvalidated;
+
+        /// <summary>Captures the physical session after its analysis lock has been acquired.</summary>
+        /// <param name="analyzer">The analyzer whose proofs belong to this scope.</param>
+        /// <param name="context">The exact context supplying the session.</param>
+        /// <param name="connection">The locked physical connection.</param>
+        /// <param name="transaction">The transaction owning the application lock.</param>
+        /// <param name="ownedTransaction">The EF transaction created here, or null for a borrowed transaction.</param>
+        /// <param name="commandTimeout">The timeout used to release a borrowed lock.</param>
+        public AnalysisScope(
+            SqlServerSafeMigrationProviderAnalyzer analyzer,
+            DbContext context,
+            DbConnection connection,
+            DbTransaction transaction,
+            Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? ownedTransaction,
+            int? commandTimeout
+        )
+        {
+            _analyzer = analyzer;
+            _context = context;
+            _connection = connection;
+            _transaction = transaction;
+            _ownedTransaction = ownedTransaction;
+            _commandTimeout = commandTimeout;
+            _database = connection.Database;
+            _connectionString = connection.ConnectionString;
+            connection.StateChange += OnConnectionStateChange;
+        }
+
+        /// <summary>Rejects evidence after transaction replacement or any physical session change.</summary>
+        /// <param name="context">The inventory request's context.</param>
+        /// <param name="connection">The inventory request's physical connection.</param>
+        /// <param name="transaction">The inventory request's current transaction.</param>
+        /// <returns>Whether the original consistency window is still active.</returns>
+        public bool Matches(
+            DbContext context,
+            DbConnection connection,
+            DbTransaction? transaction
+        )
+        {
+            if (_disposed || _sessionInvalidated || !ReferenceEquals(_context, context))
+            {
+                return false;
+            }
+
+            if (!ReferenceEquals(_connection, connection) || !ReferenceEquals(_transaction, transaction)
+                || !ReferenceEquals(_transaction.Connection, connection)
+                || connection.State != System.Data.ConnectionState.Open
+                || !StringComparer.Ordinal.Equals(_database, connection.Database)
+                || !StringComparer.Ordinal.Equals(_connectionString, connection.ConnectionString))
+            {
+                // WHY: Returning to the former database/transaction does not restore a
+                // lost consistency window. Invalidation is permanent for this scope.
+                _sessionInvalidated = true;
+                _analyzer.ClearCatalogPreamble();
+
+                return false;
+            }
+
+            return true;
+        }
+
+        private void OnConnectionStateChange(object? sender, System.Data.StateChangeEventArgs args)
+        {
+            if (args.CurrentState != System.Data.ConnectionState.Open)
+            {
+                _sessionInvalidated = true;
+                _analyzer.ClearCatalogPreamble();
+            }
+        }
+
+        /// <summary>Invalidates evidence before either synchronous or asynchronous transaction cleanup.</summary>
+        private bool Detach()
+        {
+            if (_disposed)
+            {
+                return false;
+            }
+
+            _disposed = true;
+            _connection.StateChange -= OnConnectionStateChange;
+            _analyzer.ClearCatalogPreamble();
+            _analyzer._analysisScope = null;
+
+            return true;
+        }
+
+        /// <inheritdoc />
+        public void Dispose()
+        {
+            if (!Detach())
+            {
+                return;
+            }
+
+            // WHY: EF can dispose its scoped services synchronously. Use synchronous ADO.NET
+            // cleanup instead of blocking an asynchronous continuation on a caller's context.
+            if (_analyzer._connectionQuarantined)
+            {
+                try
+                {
+                    _ownedTransaction?.Dispose();
+                }
+                catch (Exception)
+                {
+                    return;
+                }
+
+                return;
+            }
+
+            if (_ownedTransaction is not null)
+            {
+                _ownedTransaction.Dispose();
+
+                return;
+            }
+
+            if (!CanReleaseBorrowedLock())
+            {
+                return;
+            }
+
+            using var command = CreateReleaseCommand();
+            ValidateReleaseResult(command.ExecuteScalar());
+        }
+
         /// <inheritdoc />
         public async ValueTask DisposeAsync()
         {
-            if (analyzer._connectionQuarantined)
+            if (!Detach())
+            {
+                return;
+            }
+
+            if (_analyzer._connectionQuarantined)
             {
                 // WHY: Recovery already reported the primary failure and
                 // invalidated the connection. A release on the borrowed
                 // transaction must not replace that failure. Only an owned
                 // EF transaction may need best-effort local disposal here.
-                if (transaction is not null)
+                if (_ownedTransaction is not null)
                 {
                     try
                     {
-                        await transaction.DisposeAsync();
+                        await _ownedTransaction.DisposeAsync();
                     }
                     catch (Exception)
                     {
@@ -1376,27 +1662,50 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
                 return;
             }
 
-            if (transaction is not null)
+            if (_ownedTransaction is not null)
             {
-                await transaction.DisposeAsync();
+                await _ownedTransaction.DisposeAsync();
 
                 return;
             }
 
-            if (borrowedConnection is null || borrowedTransaction is null)
+            if (!CanReleaseBorrowedLock())
             {
-                throw new InvalidOperationException("The borrowed SQL Server analysis scope lost its transaction.");
+                return;
             }
 
             // WHY: a transaction-owned application lock would otherwise remain
             // until the caller commits its unrelated transaction. SQL Server
             // requires one release for each successful acquisition.
-            await using var command = borrowedConnection.CreateCommand();
-            command.Transaction = borrowedTransaction;
-            ApplyCommandTimeout(command, commandTimeout);
+            await using var command = CreateReleaseCommand();
+            ValidateReleaseResult(await command.ExecuteScalarAsync());
+        }
+
+        /// <summary>Skips release only after the original session or transaction has already ended.</summary>
+        private bool CanReleaseBorrowedLock()
+        {
+            // WHY: EF service disposal can tear down its relational connection before this
+            // analyzer. A transaction-owned lock ends with that transaction/session; attempting
+            // another command then would turn successful disposal into a provider exception.
+
+            return _connection.State == System.Data.ConnectionState.Open
+                && ReferenceEquals(_transaction.Connection, _connection);
+        }
+
+        /// <summary>Builds one bounded release of the caller transaction's acquired application lock.</summary>
+        private DbCommand CreateReleaseCommand()
+        {
+            var command = _connection.CreateCommand();
+            command.Transaction = _transaction;
+            ApplyCommandTimeout(command, _commandTimeout);
             command.CommandText = ReleaseScopeSql;
-            var result = Convert.ToInt32(await command.ExecuteScalarAsync(), CultureInfo.InvariantCulture);
-            if (result < 0)
+
+            return command;
+        }
+
+        private static void ValidateReleaseResult(object? result)
+        {
+            if (Convert.ToInt32(result, CultureInfo.InvariantCulture) < 0)
             {
                 throw new InvalidOperationException("SQL Server did not release the borrowed analysis lock.");
             }

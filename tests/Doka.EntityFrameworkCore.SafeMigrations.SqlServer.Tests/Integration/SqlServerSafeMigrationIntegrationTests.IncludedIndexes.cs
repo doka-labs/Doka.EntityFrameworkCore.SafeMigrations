@@ -9,7 +9,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task IncludedIndex_AppliesAndReplaysWithPhysicalIncludeFacet()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.covering_users (Id int NOT NULL, Email nvarchar(320) NOT NULL, "
@@ -52,7 +52,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task IncludedIndex_MissingIncludeFacetIsDifferent()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.covering_users (Id int NOT NULL, Email nvarchar(320) NOT NULL, "

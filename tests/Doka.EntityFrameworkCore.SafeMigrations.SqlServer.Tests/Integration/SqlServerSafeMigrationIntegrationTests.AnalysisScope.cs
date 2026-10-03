@@ -13,7 +13,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await using var context = CreateContext(connectionString);
         await using var transaction = callerOwnsTransaction
             ? await context.Database.BeginTransactionAsync()
@@ -63,7 +63,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task AnalysisScope_BindsAllCatalogCommandsToActiveTransaction(bool callerOwnsTransaction)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.scoped_items (Id int NOT NULL);");
         await using var context = CreateContext(connectionString);
         await using var transaction = callerOwnsTransaction
@@ -96,7 +96,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task CallerOwnedAnalysisScope_ReleasesLockBeforeCallerTransactionCommits()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await using var context = CreateContext(connectionString);
         await using var transaction = await context.Database.BeginTransactionAsync();
         var analyzer = context.GetService<ISafeMigrationProviderAnalyzer>();

@@ -14,7 +14,7 @@ public sealed partial class SqlServerModelManagedDataCancellationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         var resource = "doka_identity_ready_" + Guid.NewGuid().ToString("N");
         var interceptor = new SqlServerIdentityInsertPauseInterceptor(resource);
         await using var owner = new SqlConnection(connectionString);

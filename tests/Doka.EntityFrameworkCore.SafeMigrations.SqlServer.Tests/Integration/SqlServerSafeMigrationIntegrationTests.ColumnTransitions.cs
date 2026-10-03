@@ -9,7 +9,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task AlterColumn_FittingRowsPermitNarrowingAndNotNullReplay()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.fitting_text (Id int NOT NULL, Caption nvarchar(80) NULL); "
@@ -60,7 +60,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task AlterColumn_VarcharExpansionAppliesAndReplays()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.expand_text (Id int NOT NULL, Caption varchar(10) NOT NULL); "
@@ -105,7 +105,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task AlterColumn_NullRowsBlockNotNullTransition()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.null_text (Id int NOT NULL, Caption nvarchar(80) NULL); "
@@ -148,7 +148,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task AlterColumn_CallerOwnedStatisticsRemainDifferentWithoutMutation()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.statistics_text (Id int NOT NULL, Caption nvarchar(80) NULL); "
             + "INSERT dbo.statistics_text VALUES (1, N'short'); "
@@ -192,7 +192,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task AlterColumn_OversizedRowsRemainDataBlockedWithAutomaticStatistics()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.oversized_text (Id int NOT NULL, Caption nvarchar(80) NULL); "
             + "INSERT dbo.oversized_text VALUES (1, REPLICATE(N'x', 30));");

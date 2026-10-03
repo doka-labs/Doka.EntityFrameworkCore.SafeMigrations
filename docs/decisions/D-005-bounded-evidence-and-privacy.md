@@ -57,9 +57,14 @@ Chosen option: "Bounded batches with immutable reports and separate telemetry",
 because it limits each database request while preserving ordered evidence and
 a distinct privacy boundary for diagnostics.
 
-The current classification limits are 32 operations per optimizer-visible
-statement, eight statements per ADO.NET transport batch, 16,000 parameters,
-and 4 MiB of UTF-8 SQL plus parameter payload across the batch.
+The current provider-neutral classification limits are 32 operations per
+optimizer-visible statement, eight statements per ADO.NET transport batch,
+16,000 parameters, and 4 MiB of UTF-8 SQL plus parameter payload across the
+batch. SQL Server uses eight operations per statement and 32 statements per
+native batch. Sequential connections retain the shared 32-operation statement
+and eight-statement group, since each statement executes separately. Both shapes
+retain a 256-operation group capacity subject to payload and parameter bounds;
+these limits do not establish optimizer cost or native engine duration.
 MySQL/MariaDB also cap payload at half the observed `max_allowed_packet` and
 capture provider runtime plans in 512-operation windows while retaining the
 complete migration-level unique-index catalog. These are explicit repository
@@ -235,6 +240,34 @@ window. Neither a hash nor a report proves the database server is honest.
   inventory statements, retaining complete 512-value chunks and SQL Server's
   stricter parameter limit. SQLite captures its invocation-owned catalog with
   five fixed read commands instead of per-table and per-index commands.
+- 2026-10-03: Gave SQL Server its own capture shape of eight operations per
+  statement and 32 statements per native batch. Sequential connections retain
+  the shared 32-operation statement and eight-statement group. Native speedup
+  remains unmeasured; embedded names alone do not prevent plan reuse. Classifier
+  rows are matched by their ordinal column, so the statements no longer sort, and the
+  inventory pass reads a fresh environment/principal/collation stamp before
+  reusing a completed identifier verdict within the same active scope, context,
+  connection and transaction. Exact references are required. Scope disposal,
+  failure, unproven identity and environment/session changes invalidate both
+  verdict reuse and prior invariant-rejection suppression. SQL Server fixture
+  cleanup retains database ownership until confirmed absence; no model-database
+  recovery setting is changed.
+
+The dispatch choices above are repository contracts, not conclusions about
+SQL Server's cost model. Microsoft's [plan-cache documentation](https://learn.microsoft.com/en-us/sql/relational-databases/query-processing-architecture-guide?view=sql-server-ver17#execution-plan-caching-and-reuse)
+describes reuse for compatible query text and execution contexts.
+[SIMPLE recovery](https://learn.microsoft.com/en-us/sql/relational-databases/backup-restore/recovery-models-sql-server?view=sql-server-ver17)
+governs log recovery and space reclamation; it is not an exemption from
+[file initialization](https://learn.microsoft.com/en-us/sql/relational-databases/databases/database-instant-file-initialization?view=sql-server-ver17).
+An explicit [command timeout](https://learn.microsoft.com/en-us/dotnet/api/microsoft.data.sqlclient.sqlcommand.commandtimeout?view=sqlclient-dotnet-core-6.1)
+changes the wait budget, not the diagnosis of an exceeded budget or performance
+qualification. Native SQL Server 2019/2022/2025 qualification remains required.
+
+Microsoft documents that [EXECUTE AS](https://learn.microsoft.com/en-us/sql/t-sql/statements/execute-as-transact-sql?view=sql-server-ver17)
+changes the current session's permission context without replacing its connection.
+Fresh [database principal](https://learn.microsoft.com/en-us/sql/t-sql/functions/database-principal-id-transact-sql?view=sql-server-ver17)
+and [login SID](https://learn.microsoft.com/en-us/sql/t-sql/functions/suser-sid-transact-sql?view=sql-server-ver17)
+stamps therefore gate proof reuse; they are neither report fields nor log payloads.
 
 ### Implementation References
 

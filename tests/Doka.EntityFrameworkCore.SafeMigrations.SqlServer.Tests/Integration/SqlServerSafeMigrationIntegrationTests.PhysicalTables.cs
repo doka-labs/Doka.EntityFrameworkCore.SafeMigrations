@@ -9,7 +9,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task PhysicalTableEngine_AllTableIntentsAreInvariantUnsupportedWithoutMutation(string engine)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString, PhysicalTableSetupSql(engine));
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.ordinary_child (Id int NOT NULL); "
@@ -71,7 +71,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task OrdinaryAndAbsentTables_PhysicalBoundaryAllowsApplyAndReplay()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.ordinary_items (Id int NOT NULL);");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);

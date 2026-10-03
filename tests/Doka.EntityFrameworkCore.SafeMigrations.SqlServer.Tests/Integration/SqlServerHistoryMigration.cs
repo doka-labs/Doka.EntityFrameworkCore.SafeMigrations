@@ -8,7 +8,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 public sealed class SqlServerHistoryMigration : Migration
 {
     /// <summary>Gets the stable migration identifier used in history assertions.</summary>
-    public const string MigrationIdentifier = "202609300001_SqlServerHistory";
+    public const string MigrationIdentifier = "20260930000100_SqlServerHistory";
 
     /// <inheritdoc />
     protected override void Up(MigrationBuilder migrationBuilder)

@@ -9,7 +9,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task ForeignKey_ValidExistingRowsApplyAndReplay()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.valid_parent (Id int NOT NULL CONSTRAINT PK_valid_parent PRIMARY KEY); "
@@ -42,7 +42,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task ForeignKey_OrphanRowsAreDataBlocked()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.orphan_parent (Id int NOT NULL CONSTRAINT PK_orphan_parent PRIMARY KEY); "
@@ -82,7 +82,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         var parentKey = hasCandidateKey ? "CONSTRAINT PK_prereq_parent PRIMARY KEY" : string.Empty;
         await ExecuteSqlAsync(
             connectionString,

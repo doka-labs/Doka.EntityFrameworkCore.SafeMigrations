@@ -11,7 +11,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task RemovedPrincipalPrerequisiteBlocksLaterInlineForeignKey(string removal)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         var key = removal switch
         {
             "unique" => "CONSTRAINT UQ_inline_principal UNIQUE (Id)",
@@ -69,7 +69,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY);");
         await using var context = CreateContext(connectionString);
@@ -101,7 +101,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY);");
         await using var context = CreateContext(connectionString);
@@ -129,7 +129,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task RejectedPrincipalRenameDoesNotActivateInlineStorageProof()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY); "
             + "CREATE TABLE dbo.renamed_principal (Id bigint NOT NULL CONSTRAINT PK_occupied_principal PRIMARY KEY);");
@@ -156,7 +156,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task RepeatedPrincipalRenameRetainsTargetObjectKindGuard(bool targetIsView)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY);");
         await ExecuteSqlAsync(connectionString, targetIsView
@@ -183,7 +183,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task OpaqueSqlAfterRenameCannotRetainInlinePrerequisiteProof()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY);");
         await using var context = CreateContext(connectionString);
@@ -233,7 +233,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task OpaqueSqlAfterRenameRejectsRemovedInlinePrerequisiteBeforeChildCreation(bool dropTable)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY);");
         await using var context = CreateContext(connectionString);
@@ -284,7 +284,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task DroppedCandidateKeyDoesNotInvalidateSurvivingEquivalentKey()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY, "
             + "CONSTRAINT UQ_inline_principal UNIQUE (Id));");
@@ -310,7 +310,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task RemovedIncomingForeignKeyPermitsSameStreamPrincipalDrop(bool dropChild)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.drop_principal (Id int NOT NULL CONSTRAINT PK_drop_principal PRIMARY KEY); "
             + "CREATE TABLE dbo.drop_dependent (ParentId int NOT NULL, "
@@ -348,7 +348,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task RemovedIncomingForeignKeyDoesNotBypassOtherDropDependencies()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.drop_principal (Id int NOT NULL CONSTRAINT PK_drop_principal PRIMARY KEY); "
             + "CREATE TABLE dbo.drop_dependent (ParentId int NOT NULL, "
@@ -382,7 +382,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY, "
             + "OtherId int NOT NULL);");
@@ -417,7 +417,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY);");
         await using var context = CreateContext(connectionString);
@@ -450,7 +450,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     public async Task InlineForeignKeyAfterPrincipalRenameAppliesAndReplays(bool renameColumn)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY);");
         await using var context = CreateContext(connectionString);

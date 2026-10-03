@@ -12,7 +12,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         var storeType = "char(" + bytes.ToString(CultureInfo.InvariantCulture) + ")";
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.width_parent (Value " + storeType + " NOT NULL, "
@@ -74,7 +74,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         var names = ForeignKeyWidthColumnNames(count);
         var definitions = string.Join(", ", names.Select(static name => "[" + name + "] int NOT NULL"));
         var key = supported ? ", CONSTRAINT UQ_width_parent UNIQUE NONCLUSTERED ("
@@ -141,7 +141,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync();
         var storeType = "char(" + bytes.ToString(CultureInfo.InvariantCulture) + ")";
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.width_parent (Value " + storeType + " NOT NULL, "
