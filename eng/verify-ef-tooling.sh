@@ -844,7 +844,17 @@ dotnet ef migrations bundle \
 "${artifacts_dir}/efbundle" --connection "${bundle_connection}"
 
 history_table="__ApplicationDbContextMigrationsHistory"
-migration_id="202608170001_CoreConvergence"
+
+# WHY: The engine's own migration fixture declares this identifier. Reading it here
+# instead of repeating the literal keeps a fixture rename from verifying a history
+# row that the migration no longer writes, which passes the tests and fails only here.
+migration_fixture="$(dirname "${project}")/Integration/CoreConvergenceMigration.cs"
+migration_id="$(sed -n 's/.*MigrationIdentifier = "\([^"]*\)".*/\1/p' "${migration_fixture}" | head -n 1)"
+if [[ -z "${migration_id}" ]]; then
+  echo "Could not read the convergence migration identifier from ${migration_fixture}." >&2
+  exit 1
+fi
+
 postgres_history_query="SELECT COUNT(*) FROM \"${history_table}\" WHERE \"MigrationId\" = '${migration_id}';"
 mysql_history_query="SELECT COUNT(*) FROM \`${history_table}\` WHERE \`MigrationId\` = '${migration_id}';"
 
