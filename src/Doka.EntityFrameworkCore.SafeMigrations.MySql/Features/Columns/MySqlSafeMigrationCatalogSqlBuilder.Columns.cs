@@ -315,6 +315,101 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             + $"AND c.COLUMN_NAME = {Literal(definition.Name)} AND {string.Join(" AND ", conditions)})";
     }
 
+    /// <summary>Verifies every expected column of a table definition through one catalog join.</summary>
+    /// <remarks>
+    /// WHY: The per-column classifier repeats the same INFORMATION_SCHEMA.COLUMNS join once per
+    /// column, so a wide table produced one correlated lookup per column in a single statement.
+    /// The expected set is driven as a derived table and the catalog is joined once, while every
+    /// facet predicate stays verbatim and server-side.
+    ///
+    /// The derived table is built from SELECT ... UNION ALL rather than VALUES because MariaDB
+    /// and the older MySQL versions this provider qualifies do not accept a VALUES table
+    /// constructor in that position.
+    /// </remarks>
+    /// <param name="table">The table whose columns are verified.</param>
+    /// <param name="definition">The expected table definition.</param>
+    /// <param name="isMariaDb">Whether the connected engine is MariaDB.</param>
+    /// <returns>A predicate that is true when every expected column matches at its own position.</returns>
+    private string BuildAllColumnsMatch(
+        string table,
+        ExpectedTableDefinition definition,
+        bool isMariaDb
+    )
+    {
+        var rows = new List<string>(definition.Columns.Count);
+        var arms = new List<string>(definition.Columns.Count);
+        for (var index = 0; index < definition.Columns.Count; index++)
+        {
+            var column = definition.Columns[index];
+            var position = (index + 1).ToString(CultureInfo.InvariantCulture);
+
+            // WHY: Only the first SELECT of a UNION names the result columns; naming them again
+            // in later rows is invalid. The aliases are therefore emitted for the first row only.
+            var aliases = index == 0;
+            rows.Add($"SELECT {position}{(aliases ? " AS ordinal_position" : string.Empty)}, "
+                + $"{Literal(column.Name)}{(aliases ? " AS column_name" : string.Empty)}, "
+                + $"{(column.IsNullable ? "'YES'" : "'NO'")}{(aliases ? " AS is_nullable" : string.Empty)}, "
+                + $"{Literal(column.Comment ?? string.Empty)}"
+                + (aliases ? " AS column_comment" : string.Empty));
+
+            arms.Add($"WHEN {position} THEN ("
+                + string.Join(" AND ", BuildColumnStructuralConditions(table, column, isMariaDb))
+                + ")");
+        }
+
+        var valueFacets = "c.IS_NULLABLE = expected.is_nullable "
+            + "AND COALESCE(c.COLUMN_COMMENT, '') = expected.column_comment";
+
+        // WHY: A facet predicate can evaluate to NULL. The per-column form returned no row and
+        // therefore reported a mismatch, so the absent-or-unequal test must coalesce to FALSE.
+        return "NOT EXISTS (SELECT 1 FROM (" + string.Join(" UNION ALL ", rows) + ") expected "
+            + "LEFT JOIN INFORMATION_SCHEMA.COLUMNS c ON c.TABLE_SCHEMA = DATABASE() "
+            + $"AND c.TABLE_NAME = {Literal(table)} AND c.COLUMN_NAME = expected.column_name "
+            + "WHERE c.COLUMN_NAME IS NULL OR c.ORDINAL_POSITION <> expected.ordinal_position "
+            + $"OR NOT COALESCE({valueFacets}, FALSE) "
+            + $"OR NOT COALESCE(CASE expected.ordinal_position {string.Join(" ", arms)} END, FALSE))";
+    }
+
+    /// <summary>Builds the column facets whose SQL shape depends on the expected column itself.</summary>
+    /// <param name="table">The owning table.</param>
+    /// <param name="definition">The expected column.</param>
+    /// <param name="isMariaDb">Whether the connected engine is MariaDB.</param>
+    /// <returns>The structural predicates for that column.</returns>
+    private List<string> BuildColumnStructuralConditions(
+        string table,
+        ExpectedColumnDefinition definition,
+        bool isMariaDb
+    )
+    {
+        var mapping = _typeMappingSource.FindMapping(
+                definition.ClrType,
+                definition.StoreType,
+                keyOrIndex: false,
+                definition.IsUnicode,
+                definition.MaxLength,
+                definition.IsRowVersion,
+                definition.IsFixedLength,
+                definition.Precision,
+                definition.Scale)
+            ?? throw new InvalidOperationException(
+                $"No MySQL type mapping exists for '{definition.ClrType.FullName}'.");
+
+        var storeType = definition.StoreType ?? mapping.StoreType;
+        var temporalRowVersion = IsTemporalRowVersion(definition);
+        var mariaDbJsonAlias = isMariaDb
+            && StringComparer.OrdinalIgnoreCase.Equals(storeType.Trim(), "json");
+
+        return
+        [
+            BuildStoreTypeMatches(storeType, isMariaDb),
+            BuildCollationContract(table, definition.Collation, mariaDbJsonAlias).MatchExpression,
+            BuildComputedMatches(definition, isMariaDb),
+            BuildValueGenerationMatches(definition, temporalRowVersion),
+            BuildDefaultMatches(
+                "c.COLUMN_DEFAULT", definition.DefaultValue, definition.IsNullable, mapping, temporalRowVersion),
+        ];
+    }
+
     private string BuildColumnRepairInvariantMatches(
         string table,
         ExpectedColumnDefinition definition,
