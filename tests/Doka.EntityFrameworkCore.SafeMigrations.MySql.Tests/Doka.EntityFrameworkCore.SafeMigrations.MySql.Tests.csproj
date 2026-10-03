@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <Compile Include="..\Shared\CatalogStatementTestConnection.cs"
+             Link="Infrastructure\CatalogStatementTestConnection.cs" />
+    <Compile Include="..\Shared\CatalogClassificationCountingConnection.cs"
+             Link="Infrastructure\CatalogClassificationCountingConnection.cs" />
     <Compile Include="..\Shared\SafeMigrationLiteralContract.cs"
              Link="Infrastructure\SafeMigrationLiteralContract.cs" />
     <Compile Include="..\Shared\SafeMigrationStateSpaceGenerator.cs"

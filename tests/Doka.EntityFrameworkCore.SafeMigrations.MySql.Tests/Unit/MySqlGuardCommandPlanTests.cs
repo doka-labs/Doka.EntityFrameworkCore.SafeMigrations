@@ -339,9 +339,9 @@ public sealed class MySqlGuardCommandPlanTests
 
         var payloads = DecodeHexPayloads(command.CommandText);
 
-        Assert.Equal(5, Count(command.CommandText, "PREPARE doka_sm_statement FROM"));
-        Assert.Equal(4, Count(command.CommandText, "EXECUTE doka_sm_statement"));
-        Assert.Equal(4, Count(command.CommandText, "DEALLOCATE PREPARE doka_sm_statement"));
+        Assert.Equal(6, Count(command.CommandText, "PREPARE doka_sm_statement FROM"));
+        Assert.Equal(5, Count(command.CommandText, "EXECUTE doka_sm_statement"));
+        Assert.Equal(5, Count(command.CommandText, "DEALLOCATE PREPARE doka_sm_statement"));
         Assert.Contains("WHEN @doka_sm_action = 'apply'", command.CommandText, StringComparison.Ordinal);
         Assert.Contains("WHEN @doka_sm_action = 'repair'", command.CommandText, StringComparison.Ordinal);
         Assert.Contains("CASE WHEN @doka_sm_state IS NULL", command.CommandText, StringComparison.Ordinal);
@@ -385,9 +385,9 @@ public sealed class MySqlGuardCommandPlanTests
             payloads,
             payload => payload.Contains(dataProbe, StringComparison.Ordinal)
                 && payload.EndsWith("INTO @doka_sm_state", StringComparison.Ordinal));
-        Assert.Equal(4, Count(command.CommandText, "PREPARE doka_sm_statement FROM"));
-        Assert.Equal(3, Count(command.CommandText, "EXECUTE doka_sm_statement"));
-        Assert.Equal(3, Count(command.CommandText, "DEALLOCATE PREPARE doka_sm_statement"));
+        Assert.Equal(5, Count(command.CommandText, "PREPARE doka_sm_statement FROM"));
+        Assert.Equal(4, Count(command.CommandText, "EXECUTE doka_sm_statement"));
+        Assert.Equal(4, Count(command.CommandText, "DEALLOCATE PREPARE doka_sm_statement"));
     }
 
     [Fact]

@@ -162,6 +162,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
             var indexEnvironments = await ReadIndexPhysicalEnvironmentsAsync(
                 connection,
                 physicalKeyOperations,
+                maximumPayloadBytes,
                 commandTimeout,
                 cancellationToken);
 
@@ -173,7 +174,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                 operations,
                 schema => MySqlTableIdentity.NormalizeDatabase(schema, _currentDatabase));
 
-            var results = new List<SafeMigrationProviderAnalysis>(operations.Count);
+            var results = new SafeMigrationProviderAnalysis[operations.Count];
             var separatorBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Separator);
             var trailerBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Trailer);
             var dataProbeCache = new Dictionary<MySqlDataProbeIdentity, MySqlDataProbeResult>();
@@ -210,47 +211,51 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                     operationOffset,
                     cancellationToken);
 
-                var ordinal = 0;
-                while (ordinal < operationWindow.Length)
+                for (var localOrdinal = 0; localOrdinal < operationWindow.Length; localOrdinal++)
+                {
+                    if (shortCircuitStates[localOrdinal] is { } shortCircuitState)
+                    {
+                        results[operationOffset + localOrdinal] = ShortCircuitAnalysis(
+                            shortCircuitState,
+                            plans[localOrdinal]);
+                    }
+                }
+
+                // WHY: Local classifications do not divide the immutable live
+                // snapshot. Pack the unresolved work while retaining the
+                // original operation identities for later ordered projection.
+                var workOrder = SafeMigrationCatalogWorkOrder.Create(
+                    operationWindow.Length,
+                    ordinal => shortCircuitStates[ordinal] is null,
+                    cancellationToken);
+
+                var workIndex = 0;
+                while (workIndex < workOrder.Length)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
 
-                    while (ordinal < operationWindow.Length
-                           && shortCircuitStates[ordinal] is { } shortCircuitState)
-                    {
-                        results.Add(ShortCircuitAnalysis(shortCircuitState, plans[ordinal]));
-                        ordinal++;
-                    }
-
-                    if (ordinal == operationWindow.Length)
-                    {
-                        break;
-                    }
-
                     await using var batch = new SafeMigrationCatalogBatch(connection, commandTimeout);
+                    var submittedOrdinals = new List<int>(
+                        SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement
+                        * SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch);
 
                     var batchParameterCount = 0;
                     var batchPayloadBytes = 0;
                     while (batch.Count < SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch
-                           && ordinal < operationWindow.Length
-                           && shortCircuitStates[ordinal] is null)
+                           && workIndex < workOrder.Length)
                     {
                         var command = batch.CreateCommand();
                         var parameterizer = new MySqlCatalogQueryParameterizer(command, _typeMappingSource);
                         var selections = new List<string>(
                             Math.Min(
                                 SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement,
-                                operationWindow.Length - ordinal));
+                                workOrder.Length - workIndex));
 
                         var sqlBytes = trailerBytes;
-                        while (ordinal < operationWindow.Length
+                        while (workIndex < workOrder.Length
                                && selections.Count < SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
                         {
-                            if (shortCircuitStates[ordinal] is not null)
-                            {
-                                break;
-                            }
-
+                            var ordinal = workOrder[workIndex];
                             var checkpoint = parameterizer.Capture();
                             var plan = plans[ordinal];
                             MySqlDataProbeResult? dataProbeResult = plan.DataProbe is null
@@ -340,8 +345,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                             }
 
                             selections.Add(selection);
+                            submittedOrdinals.Add(resultOrdinal);
                             sqlBytes += selectionBytes;
-                            ordinal++;
+                            workIndex++;
                         }
 
                         if (selections.Count == 0)
@@ -363,6 +369,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                         plans,
                         dataProbeResults,
                         operationOffset,
+                        submittedOrdinals,
                         cancellationToken);
                 }
 
@@ -381,13 +388,13 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                 operationOffset += operationWindow.Length;
             }
 
-            if (results.Count != operations.Count)
+            if (results.Any(static result => result is null))
             {
                 throw new InvalidOperationException(
                     "The MySQL SafeMigrations classifier returned an inconsistent row count.");
             }
 
-            return results.AsReadOnly();
+            return Array.AsReadOnly(results);
         }
         finally
         {
@@ -426,7 +433,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
     private async Task PopulateColumnDiagnosticsAsync(
         DbConnection connection,
         SafeMigrationOperation[] operations,
-        List<SafeMigrationProviderAnalysis> results,
+        SafeMigrationProviderAnalysis[] results,
         IModel model,
         MySqlExpectedUniqueIndexCatalog expectedUniqueIndexes,
         IReadOnlyDictionary<
@@ -466,81 +473,68 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
             includeAnalysisEvidence: true,
             includeTransitionEvidence: false);
 
-        for (var offset = 0;
-             offset < candidates.Count;
-             offset += SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var count = Math.Min(
-                SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement,
-                candidates.Count - offset);
-
-            await using var command = connection.CreateCommand();
-            ApplyCommandTimeout(command, commandTimeout);
-            var parameterizer = new MySqlCatalogQueryParameterizer(command, _typeMappingSource);
-            var selections = new List<string>(count);
-            for (var index = 0; index < count; index++)
+        await SafeMigrationCatalogProbeBatch.ReadAsync(
+            connection,
+            candidates.Count,
+            maximumPayloadBytes,
+            commandTimeout,
+            (command, offset) =>
             {
-                var plan = plans[offset + index];
-                var evidence = plan.DiagnosticEvidenceExpression is null
-                    ? "NULL"
-                    : plan.RenderDiagnosticEvidenceExpression(parameterizer.Add);
+                var count = Math.Min(
+                    SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement, candidates.Count - offset);
 
-                selections.Add(
-                    $"SELECT {candidates[offset + index].Ordinal.ToString(CultureInfo.InvariantCulture)}, "
-                    + $"({evidence})");
-            }
-
-            command.CommandText = string.Join(SafeMigrationCatalogQueryLimits.Separator, selections)
-                + SafeMigrationCatalogQueryLimits.Trailer;
-
-            var payloadBytes = Encoding.UTF8.GetByteCount(command.CommandText) + parameterizer.Utf8PayloadBytes;
-            if (SafeMigrationCatalogQueryLimits.Exceeded(
-                    parameterizer.Count,
-                    payloadBytes,
-                    maximumPayloadBytes))
-            {
-                throw SafeMigrationCatalogQueryLimits.OversizedOperation(
-                    candidates[offset].Ordinal,
-                    parameterizer.Count,
-                    payloadBytes);
-            }
-
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-            var row = 0;
-            while (await reader.ReadAsync(cancellationToken))
-            {
-                if (row >= count
-                    || reader.GetInt32(0) != candidates[offset + row].Ordinal)
+                var parameterizer = new MySqlCatalogQueryParameterizer(command, _typeMappingSource);
+                var selections = new List<string>(count);
+                for (var index = 0; index < count; index++)
                 {
-                    throw new InvalidOperationException(
-                        "The MySQL diagnostic query returned an invalid ordinal.");
+                    var plan = plans[offset + index];
+                    var evidence = plan.DiagnosticEvidenceExpression is null
+                        ? "NULL"
+                        : plan.RenderDiagnosticEvidenceExpression(parameterizer.Add);
+
+                    selections.Add(
+                        $"SELECT {candidates[offset + index].Ordinal.ToString(CultureInfo.InvariantCulture)}, "
+                        + $"({evidence})");
                 }
 
-                var differences = reader.IsDBNull(1)
-                    ? []
-                    : SafeMigrationFacetDifferenceParser.Parse(reader.GetString(1), "MySQL");
+                command.CommandText = string.Join(SafeMigrationCatalogQueryLimits.Separator, selections)
+                    + SafeMigrationCatalogQueryLimits.Trailer;
 
-                ReplaceAnalysisWithDifferences(
-                    results,
-                    candidates[offset + row].Ordinal,
-                    plans[offset + row],
-                    differences);
-
-                row++;
-            }
-
-            if (row != count)
+                return new SafeMigrationCatalogProbeStatement(
+                    count, parameterizer.Utf8PayloadBytes, candidates[offset].Ordinal);
+            },
+            async (reader, offset, count, token) =>
             {
-                throw new InvalidOperationException(
-                    "The MySQL diagnostic query returned an inconsistent row count.");
-            }
-        }
+                var row = 0;
+                while (await reader.ReadAsync(token))
+                {
+                    if (row >= count || reader.GetInt32(0) != candidates[offset + row].Ordinal)
+                    {
+                        throw new InvalidOperationException(
+                            "The MySQL diagnostic query returned an invalid ordinal.");
+                    }
+
+                    var differences = reader.IsDBNull(1)
+                        ? []
+                        : SafeMigrationFacetDifferenceParser.Parse(reader.GetString(1), "MySQL");
+
+                    ReplaceAnalysisWithDifferences(
+                        results, candidates[offset + row].Ordinal, plans[offset + row], differences);
+
+                    row++;
+                }
+
+                if (row != count)
+                {
+                    throw new InvalidOperationException(
+                        "The MySQL diagnostic query returned an inconsistent row count.");
+                }
+            },
+            cancellationToken);
     }
 
     private static void ReplaceAnalysisWithDifferences(
-        List<SafeMigrationProviderAnalysis> results,
+        SafeMigrationProviderAnalysis[] results,
         int ordinal,
         MySqlSafeMigrationRuntimePlan plan,
         IReadOnlyList<SafeMigrationFacetDifference> differences
@@ -589,7 +583,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                 continue;
             }
 
-            candidates.TryAdd(identity, new MySqlDataProbeCandidate(identity, operations[ordinal], probe));
+            candidates.TryAdd(
+                identity,
+                new MySqlDataProbeCandidate(identity, operations[ordinal], probe, operationOffset + ordinal));
         }
 
         if (candidates.Count > 0)
@@ -608,7 +604,6 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                 transitionPlans,
                 maximumPayloadBytes,
                 commandTimeout,
-                operationOffset,
                 cancellationToken);
 
             foreach (var entry in resolved)
@@ -621,7 +616,6 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                 candidateArray.Where(candidate => cache[candidate.Identity].IsRequired),
                 cache,
                 maximumPayloadBytes,
-                operationOffset,
                 commandTimeout,
                 cancellationToken);
         }
@@ -650,92 +644,81 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         MySqlSafeMigrationRuntimePlan[] transitionPlans,
         int maximumPayloadBytes,
         int? commandTimeout,
-        int operationOffset,
         CancellationToken cancellationToken
     )
     {
         var results = new Dictionary<MySqlDataProbeIdentity, MySqlDataProbeResult>(candidates.Count);
-        for (var offset = 0;
-             offset < candidates.Count;
-             offset += SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var count = Math.Min(
-                SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement,
-                candidates.Count - offset);
-
-            await using var command = connection.CreateCommand();
-            ApplyCommandTimeout(command, commandTimeout);
-            var parameterizer = new MySqlCatalogQueryParameterizer(command, _typeMappingSource);
-            var selections = new List<string>(count);
-            for (var index = 0; index < count; index++)
+        await SafeMigrationCatalogProbeBatch.ReadAsync(
+            connection,
+            candidates.Count,
+            maximumPayloadBytes,
+            commandTimeout,
+            (command, offset) =>
             {
-                var candidate = candidates[offset + index];
-                var transitionPlan = transitionPlans[offset + index];
-                var transitionProbe = transitionPlan.DataProbe
-                    ?? throw new InvalidOperationException(
-                        "The MySQL transition capture returned no data-probe plan.");
+                var count = Math.Min(
+                    SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement, candidates.Count - offset);
 
-                var transitionExpression = MySqlCatalogSqlTemplate.Render(
-                    transitionProbe.TransitionInvariantExpression
-                        ?? throw new InvalidOperationException(
-                            "The MySQL transition capture returned no physical invariant."),
-                    transitionPlan.ParameterValues,
-                    parameterizer.Add);
-
-                var narrowingExpression = MySqlCatalogSqlTemplate.Render(
-                    transitionProbe.NarrowingExpression,
-                    transitionPlan.ParameterValues,
-                    parameterizer.Add);
-
-                selections.Add(
-                    $"SELECT {index.ToString(CultureInfo.InvariantCulture)}, "
-                    + $"COALESCE(({transitionExpression}), FALSE), "
-                    + $"COALESCE(({narrowingExpression}), FALSE)");
-            }
-
-            command.CommandText = string.Join(SafeMigrationCatalogQueryLimits.Separator, selections)
-                + SafeMigrationCatalogQueryLimits.Trailer;
-
-            var payloadBytes = Encoding.UTF8.GetByteCount(command.CommandText) + parameterizer.Utf8PayloadBytes;
-            if (SafeMigrationCatalogQueryLimits.Exceeded(parameterizer.Count, payloadBytes, maximumPayloadBytes))
-            {
-                throw SafeMigrationCatalogQueryLimits.OversizedOperation(
-                    operationOffset + offset,
-                    parameterizer.Count,
-                    payloadBytes);
-            }
-
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-            var row = 0;
-            while (await reader.ReadAsync(cancellationToken))
-            {
-                if (reader.GetInt32(0) != row)
+                var parameterizer = new MySqlCatalogQueryParameterizer(command, _typeMappingSource);
+                var selections = new List<string>(count);
+                for (var index = 0; index < count; index++)
                 {
-                    throw new InvalidOperationException(
-                        "The MySQL narrowing prerequisite query returned an invalid ordinal.");
+                    var candidate = candidates[offset + index];
+                    var transitionPlan = transitionPlans[offset + index];
+                    var transitionProbe = transitionPlan.DataProbe
+                        ?? throw new InvalidOperationException(
+                            "The MySQL transition capture returned no data-probe plan.");
+
+                    var transitionExpression = MySqlCatalogSqlTemplate.Render(
+                        transitionProbe.TransitionInvariantExpression
+                            ?? throw new InvalidOperationException(
+                                "The MySQL transition capture returned no physical invariant."),
+                        transitionPlan.ParameterValues,
+                        parameterizer.Add);
+
+                    var narrowingExpression = MySqlCatalogSqlTemplate.Render(
+                        transitionProbe.NarrowingExpression, transitionPlan.ParameterValues, parameterizer.Add);
+
+                    selections.Add(
+                        $"SELECT {candidate.Ordinal.ToString(CultureInfo.InvariantCulture)}, "
+                        + $"COALESCE(({transitionExpression}), FALSE), "
+                        + $"COALESCE(({narrowingExpression}), FALSE)");
                 }
 
-                var transitionEligible = reader.GetBoolean(1);
-                var narrowing = reader.GetBoolean(2);
+                command.CommandText = string.Join(SafeMigrationCatalogQueryLimits.Separator, selections)
+                    + SafeMigrationCatalogQueryLimits.Trailer;
 
-                results.Add(
-                    candidates[offset + row].Identity,
-                    new MySqlDataProbeResult(
-                        transitionEligible,
-                        IsRequired: transitionEligible && narrowing,
-                        IsBlocked: false));
-
-                row++;
-            }
-
-            if (row != count)
+                return new SafeMigrationCatalogProbeStatement(
+                    count, parameterizer.Utf8PayloadBytes, candidates[offset].Ordinal);
+            },
+            async (reader, offset, count, token) =>
             {
-                throw new InvalidOperationException(
-                    "The MySQL narrowing prerequisite query returned an inconsistent row count.");
-            }
-        }
+                var row = 0;
+                while (await reader.ReadAsync(token))
+                {
+                    if (row >= count || reader.GetInt32(0) != candidates[offset + row].Ordinal)
+                    {
+                        throw new InvalidOperationException(
+                            "The MySQL narrowing prerequisite query returned an invalid ordinal.");
+                    }
+
+                    var transitionEligible = reader.GetBoolean(1);
+                    var narrowing = reader.GetBoolean(2);
+
+                    results.Add(
+                        candidates[offset + row].Identity,
+                        new MySqlDataProbeResult(
+                            transitionEligible, IsRequired: transitionEligible && narrowing, IsBlocked: false));
+
+                    row++;
+                }
+
+                if (row != count)
+                {
+                    throw new InvalidOperationException(
+                        "The MySQL narrowing prerequisite query returned an inconsistent row count.");
+                }
+            },
+            cancellationToken);
 
         return results;
     }
@@ -745,87 +728,77 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         IEnumerable<MySqlDataProbeCandidate> requiredCandidates,
         Dictionary<MySqlDataProbeIdentity, MySqlDataProbeResult> cache,
         int maximumPayloadBytes,
-        int operationOffset,
         int? commandTimeout,
         CancellationToken cancellationToken
     )
     {
-        foreach (var tableGroup in requiredCandidates.GroupBy(
-                     static candidate => candidate.Probe.DelimitedTable,
-                     StringComparer.Ordinal))
-        {
-            var candidates = tableGroup.ToArray();
-            for (var offset = 0;
-                 offset < candidates.Length;
-                 offset += SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
+        var statements = requiredCandidates
+            .GroupBy(static candidate => candidate.Probe.DelimitedTable, StringComparer.Ordinal)
+            .SelectMany(static group => group.Chunk(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement))
+            .ToArray();
+
+        // WHY: Eligibility has already been evaluated for every candidate.
+        // Independent table reads may now share transport, but must never be
+        // prepared in the earlier catalog phase that proves their relations exist.
+        await SafeMigrationCatalogProbeBatch.ReadAsync(
+            connection,
+            statements.Length,
+            maximumPayloadBytes,
+            commandTimeout,
+            (command, offset) =>
             {
-                cancellationToken.ThrowIfCancellationRequested();
+                var candidates = statements[offset];
+                var table = candidates[0].Probe.DelimitedTable;
 
-                var count = Math.Min(
-                    SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement,
-                    candidates.Length - offset);
-
-                string commandText;
-                if (count == 1)
+                if (candidates.Length == 1)
                 {
-                    var probe = candidates[offset].Probe;
-                    commandText = "SELECT EXISTS(SELECT 1 FROM "
-                        + $"{tableGroup.Key} WHERE {probe.DelimitedColumn} IS NOT NULL "
+                    var probe = candidates[0].Probe;
+                    command.CommandText = "SELECT EXISTS(SELECT 1 FROM "
+                        + $"{table} WHERE {probe.DelimitedColumn} IS NOT NULL "
                         + $"AND CHAR_LENGTH({probe.DelimitedColumn}) "
                         + $"> {probe.TargetLength.ToString(CultureInfo.InvariantCulture)} LIMIT 1);";
                 }
                 else
                 {
-                    var selections = new List<string>(count);
-                    for (var index = 0; index < count; index++)
+                    var selections = new List<string>(candidates.Length);
+                    foreach (var candidate in candidates)
                     {
-                        var probe = candidates[offset + index].Probe;
+                        var probe = candidate.Probe;
                         selections.Add(
                             "COALESCE(MAX(CASE WHEN "
                             + $"{probe.DelimitedColumn} IS NOT NULL AND CHAR_LENGTH({probe.DelimitedColumn}) "
                             + $"> {probe.TargetLength.ToString(CultureInfo.InvariantCulture)} THEN 1 ELSE 0 END), 0)");
                     }
 
-                    commandText = $"SELECT {string.Join(", ", selections)} FROM {tableGroup.Key};";
+                    command.CommandText = $"SELECT {string.Join(", ", selections)} FROM {table};";
                 }
 
-                var payloadBytes = Encoding.UTF8.GetByteCount(commandText);
-                if (SafeMigrationCatalogQueryLimits.Exceeded(
-                        parameters: 0,
-                        payloadBytes,
-                        maximumPayloadBytes))
+                return new SafeMigrationCatalogProbeStatement(1, ParameterPayloadBytes: 0, candidates[0].Ordinal);
+            },
+            async (reader, offset, _, token) =>
+            {
+                var candidates = statements[offset];
+
+                if (reader.FieldCount != candidates.Length || !await reader.ReadAsync(token))
                 {
-                    throw SafeMigrationCatalogQueryLimits.OversizedOperation(
-                        operationOffset + offset,
-                        parameters: 0,
-                        payloadBytes);
+                    throw new InvalidOperationException("The MySQL narrowing data query returned an invalid result.");
                 }
 
-                await using var command = connection.CreateCommand();
-                ApplyCommandTimeout(command, commandTimeout);
-                command.CommandText = commandText;
-
-                await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-                if (!await reader.ReadAsync(cancellationToken))
-                {
-                    throw new InvalidOperationException("The MySQL narrowing data query returned no result.");
-                }
-
-                for (var index = 0; index < count; index++)
+                for (var index = 0; index < candidates.Length; index++)
                 {
                     var blocked = Convert.ToBoolean(reader.GetValue(index), CultureInfo.InvariantCulture);
 
-                    var identity = candidates[offset + index].Identity;
+                    var identity = candidates[index].Identity;
                     cache[identity] = cache[identity] with { IsBlocked = blocked };
                 }
 
-                if (await reader.ReadAsync(cancellationToken))
+                if (await reader.ReadAsync(token))
                 {
                     throw new InvalidOperationException(
                         "The MySQL narrowing data query returned more than one result row.");
                 }
-            }
-        }
+            },
+            cancellationToken);
     }
 
     private async Task<MySqlShortCircuitState?[]> FindShortCircuitStatesAsync(
@@ -1010,7 +983,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            while (ordinal < plans.Length && states[ordinal] is not null)
+            while (ordinal < plans.Length
+                   && (states[ordinal] is not null
+                       || StringComparer.Ordinal.Equals(plans[ordinal].PrerequisiteExpression, "TRUE")))
             {
                 ordinal++;
             }
@@ -1042,7 +1017,11 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                 while (ordinal < plans.Length
                        && selections.Count < SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
                 {
-                    if (states[ordinal] is not null)
+                    // WHY: Only the builder's exact constant is proof that
+                    // this catalog-only phase has nothing to evaluate. SQL
+                    // equivalence, parameter values, and prior results are not.
+                    if (states[ordinal] is not null
+                        || StringComparer.Ordinal.Equals(plans[ordinal].PrerequisiteExpression, "TRUE"))
                     {
                         ordinal++;
 
@@ -1295,13 +1274,15 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
 
     private static async Task ReadAnalysisAsync(
         SafeMigrationCatalogBatch batch,
-        List<SafeMigrationProviderAnalysis> results,
+        SafeMigrationProviderAnalysis[] results,
         MySqlSafeMigrationRuntimePlan[] plans,
         MySqlDataProbeResult?[] dataProbeResults,
         int operationOffset,
+        IReadOnlyList<int> submittedOrdinals,
         CancellationToken cancellationToken
     )
     {
+        var consumed = 0;
         await batch.ForEachResultSetAsync(
             async (
                 reader,
@@ -1311,10 +1292,11 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                 while (await reader.ReadAsync(token))
                 {
                     var ordinal = reader.GetInt32(0);
-                    if (ordinal != results.Count)
+                    SafeMigrationCatalogWorkOrder.ValidateResultOrdinal(ordinal, submittedOrdinals, ref consumed);
+                    if (results[ordinal] is not null)
                     {
                         throw new InvalidOperationException(
-                            "The MySQL SafeMigrations classifier returned an invalid ordinal.");
+                            "The MySQL SafeMigrations classifier returned an already resolved ordinal.");
                     }
 
                     var state = ParseState(reader.GetString(1));
@@ -1393,10 +1375,12 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                             || requiresNullabilityDataProof,
                     };
 
-                    results.Add(analysis);
+                    results[ordinal] = analysis;
                 }
             },
             cancellationToken);
+
+        SafeMigrationCatalogWorkOrder.ValidateCompletion(consumed, submittedOrdinals);
     }
 
     private static async Task ReadDatabaseQualificationBatchAsync(
@@ -1591,31 +1575,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                 connection,
                 MySqlServerVersionCompatibilityMode.AllowUnsupported);
 
-            var findings = new List<SafeMigrationUnexpectedObject>();
-            var seen = new HashSet<(SafeMigrationDatabaseObjectKind Kind, string Table, string Name)>();
-
-            await using (var tableCommand = connection.CreateCommand())
-            {
-                ApplyCommandTimeout(tableCommand, commandTimeout);
-
-                tableCommand.CommandText = BuildUnexpectedTableSql();
-                await ReadUnexpectedAsync(tableCommand, expected, findings, seen, cancellationToken);
-            }
-
-            foreach (var tableBatch in expected
-                         .Keys
-                         .Order(StringComparer.Ordinal)
-                         .Chunk(SafeMigrationCatalogQueryLimits.MaximumInventoryValues))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                await using var command = connection.CreateCommand();
-                ApplyCommandTimeout(command, commandTimeout);
-                var parameters = new MySqlCatalogQueryParameterizer(command, _typeMappingSource);
-                var tableScope = string.Join(", ", tableBatch.Select(parameters.AddString));
-                command.CommandText = BuildUnexpectedChildObjectSql(tableScope, serverVersion.IsMariaDb);
-                await ReadUnexpectedAsync(command, expected, findings, seen, cancellationToken);
-            }
+            var maximumPayloadBytes = await GetMaximumPayloadBytesAsync(connection, commandTimeout, cancellationToken);
+            var findings = await ReadUnexpectedInventoryAsync(
+                connection, expected, serverVersion.IsMariaDb, maximumPayloadBytes, commandTimeout, cancellationToken);
 
             return await RemoveSemanticAliasesAsync(context, operations, findings, cancellationToken);
         }
@@ -1626,6 +1588,57 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                 await connection.CloseAsync();
             }
         }
+    }
+
+    /// <summary>Reads immutable inventory scopes as complete 512-table statement slots.</summary>
+    /// <param name="connection">The open analysis connection.</param>
+    /// <param name="expected">The invocation's expected table inventory.</param>
+    /// <param name="isMariaDb">Whether implicit JSON checks require MariaDB catalog qualification.</param>
+    /// <param name="maximumPayloadBytes">The qualified packet and shared payload bound.</param>
+    /// <param name="commandTimeout">The caller's command timeout.</param>
+    /// <param name="cancellationToken">The token that cancels construction and reading.</param>
+    /// <returns>The complete invocation-local inventory evidence.</returns>
+    internal static async Task<List<SafeMigrationUnexpectedObject>> ReadUnexpectedInventoryAsync(
+        DbConnection connection,
+        Dictionary<string, SafeMigrationExpectedTableInventory> expected,
+        bool isMariaDb,
+        int maximumPayloadBytes,
+        int? commandTimeout,
+        CancellationToken cancellationToken
+    )
+    {
+        var findings = new List<SafeMigrationUnexpectedObject>();
+        var seen = new HashSet<(SafeMigrationDatabaseObjectKind Kind, string Table, string Name)>();
+        var tables = expected.Keys.Order(StringComparer.Ordinal).ToArray();
+        await SafeMigrationCatalogProbeBatch.ReadAsync(
+            connection, 1 + (tables.Length + SafeMigrationCatalogQueryLimits.MaximumInventoryValues - 1)
+                / SafeMigrationCatalogQueryLimits.MaximumInventoryValues,
+            maximumPayloadBytes, commandTimeout,
+            (command, slot) =>
+            {
+                if (slot == 0)
+                {
+                    command.CommandText = BuildUnexpectedTableSql();
+
+                    return new SafeMigrationCatalogProbeStatement(1, 0, slot);
+                }
+
+                var parameters = new MySqlCatalogQueryParameterizer(command);
+                var tableScope = string.Join(", ", tables
+                    .Skip((slot - 1) * SafeMigrationCatalogQueryLimits.MaximumInventoryValues)
+                    .Take(SafeMigrationCatalogQueryLimits.MaximumInventoryValues).Select(parameters.AddString));
+
+                command.CommandText = BuildUnexpectedChildObjectSql(tableScope, isMariaDb);
+
+                return new SafeMigrationCatalogProbeStatement(1, parameters.Utf8PayloadBytes, slot);
+            },
+            (reader, slot, _, token) => ReadUnexpectedAsync(reader, expected, findings, seen,
+                slot == 0 ? null : tables.Skip((slot - 1) * SafeMigrationCatalogQueryLimits.MaximumInventoryValues)
+                    .Take(SafeMigrationCatalogQueryLimits.MaximumInventoryValues).ToHashSet(StringComparer.Ordinal),
+                token),
+            cancellationToken);
+
+        return findings;
     }
 
     private async Task<IReadOnlyList<SafeMigrationUnexpectedObject>> RemoveSemanticAliasesAsync(
@@ -1679,15 +1692,14 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
     }
 
     private static async Task ReadUnexpectedAsync(
-        DbCommand command,
+        DbDataReader reader,
         Dictionary<string, SafeMigrationExpectedTableInventory> expected,
         List<SafeMigrationUnexpectedObject> findings,
         HashSet<(SafeMigrationDatabaseObjectKind Kind, string Table, string Name)> seen,
+        HashSet<string>? permittedTables,
         CancellationToken cancellationToken
     )
     {
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-
         // Unexpected objects are evidence only. They are never folded into
         // the expected catalog and never authorize destructive cleanup.
         while (await reader.ReadAsync(cancellationToken))
@@ -1696,6 +1708,13 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
             var tableName = reader.GetString(1);
             var objectName = reader.GetString(2);
             var providerGeneratedJsonCheck = reader.GetBoolean(3);
+            if (permittedTables is null
+                ? kind != SafeMigrationDatabaseObjectKind.Table
+                : kind == SafeMigrationDatabaseObjectKind.Table || !permittedTables.Contains(tableName))
+            {
+                throw new InvalidOperationException("MySQL returned an unowned inventory object.");
+            }
+
             if (!seen.Add((kind, tableName, objectName)))
             {
                 continue;
@@ -1889,7 +1908,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
     private sealed record MySqlDataProbeCandidate(
         MySqlDataProbeIdentity Identity,
         SafeMigrationOperation Operation,
-        MySqlSafeMigrationDataProbe Probe
+        MySqlSafeMigrationDataProbe Probe,
+        int Ordinal
     );
 
     private readonly record struct MySqlDiagnosticCandidate(

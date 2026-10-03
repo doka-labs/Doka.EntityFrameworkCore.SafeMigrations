@@ -11,6 +11,7 @@ with roll-forward disabled. SafeMigrations supports EF Core 10 only.
 | MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` `[10.4.2,10.5.0)` |
 | PostgreSQL | `Npgsql.EntityFrameworkCore.PostgreSQL` `[10.0.3,11.0.0)` |
 | SQLite | EF Core SQLite Core `[10.0.12,10.1.0)`; application-owned native bundle |
+| SQL Server (unreleased) | `Microsoft.EntityFrameworkCore.SqlServer` `[10.0.12,10.1.0)` |
 
 The MySQL/MariaDB package requires Doka 10.4.2 or a compatible later 10.4 patch
 release and rejects the next minor line. This boundary avoids an exact
@@ -25,14 +26,15 @@ evidence.
 
 The remaining declared dependency graph and .NET 10 release metadata were
 rechecked on 2026-09-21. Bounded package ranges describe compatibility. The
-four package-project lockfiles identify the exact dependency graph used to
+four 10.4.5 package-project lockfiles identify the exact dependency graph used to
 compile and qualify the package artifacts in a particular revision; they do
 not constrain a consumer's NuGet resolution or lock the engineering projects.
+The SQL Server project adds a fifth lockfile for its future first release;
+it does not retroactively add a fifth artifact to the published 10.4.5 set.
 
-At preparation time, 10.4.4 is the latest stable tag. This source prepares
-10.4.5; its declared support contract does not establish publication. The
-blocking release workflow and exact public readback of all four package IDs
-remain the release evidence.
+The 10.4.5 release contains four packages. SQL Server is an unreleased fifth
+provider in this source tree; its first release still requires the blocking
+workflow and exact public readback of all five package IDs.
 
 ## Engine matrix
 
@@ -61,6 +63,9 @@ images:
 | PostgreSQL 17 | `postgres:17.11@sha256:e38411452a464af89e5adadb8d223bf53b898d47d6ef918b2d58c08707350449` |
 | PostgreSQL 18 | `postgres:18.6@sha256:06cad38a5d9f5d24b4d83d86def30795d5e4b757fedbf5281172b576dedcd941` |
 | SQLite | 3.46.1 or later; application-owned native bundle |
+| SQL Server 2019 | `mcr.microsoft.com/mssql/server:2019-latest@sha256:ef0b8db33970ecd01bed49c3a84a1d083c435a9891718df619298b67b352e74a` |
+| SQL Server 2022 | `mcr.microsoft.com/mssql/server:2022-latest@sha256:4402d880dd4c34bfa7d8705e56a86cd6c88da80a1f6bbbe741f999e76264a090` |
+| SQL Server 2025 | `mcr.microsoft.com/mssql/server:2025-latest@sha256:2b5b581621126574f3d1f75e78d3eebe8d05aedb59ad0cfdf9aa42cb0634d726` |
 
 MySQL/MariaDB support follows Doka's canonical feature profiles. PostgreSQL
 support spans major versions 14 through 18; every supported major is an
@@ -81,10 +86,16 @@ matrix instead of inheriting this dated support conclusion.
 The table records the matrix configured in source. Only a successful workflow
 run for the exact commit/package version establishes executed qualification;
 the presence of a tag or image digest in this document does not.
+SQL Server's three independent cells use the Developer edition for tests,
+not a hosted service. Microsoft supports its Linux containers only on x86-64;
+Apple Silicon emulation is not a valid qualification substitute. The matrix
+does not claim Azure SQL Database, Managed Instance, or Synapse compatibility.
+See [Microsoft's container guide](https://learn.microsoft.com/en-us/sql/linux/install-upgrade/quickstart-install-docker?view=sql-server-ver17)
+and [SQL Server behavior](sqlserver-behavior.md).
 
 ## Dependency qualification
 
-Central package declarations define bounded compatible ranges. Only the four
+Central package declarations define bounded compatible ranges. Only the five
 publishable package projects commit lockfiles. Those files preserve the exact
 compile-time graph and package content hashes used for the released artifacts;
 they do not prescribe a consumer's resolved graph. Test, benchmark, sample,
@@ -121,13 +132,14 @@ central declarations tested by CI.
 
 ## Behavioral evidence
 
-The executable test inventory consists of four independent xUnit assemblies
+The executable test inventory consists of five independent xUnit assemblies
 and focused engineering checks:
 
 - [provider-neutral Core tests](../tests/Doka.EntityFrameworkCore.SafeMigrations.Tests);
 - [MySQL/MariaDB tests](../tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests);
 - [PostgreSQL tests](../tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests);
 - [SQLite tests](../tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests);
+- [SQL Server tests](../tests/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests);
 - FsCheck properties across the Core and server-provider assemblies for generated Core-contract,
   identifier-rendering, catalog-normalization, and provider-boundary inputs;
 - [coverage verifier tests](../eng/tests/test_verify_coverage.py);
@@ -339,9 +351,9 @@ capability.
 
 ## Coverage gate
 
-The release workflow runs all four test assemblies. Server adapters use pinned
-MariaDB 11.8 and PostgreSQL 18 images; SQLite uses its locked in-process runtime
-with Microsoft's built-in code-coverage
+The release workflow runs all five test assemblies. Server adapters use pinned
+MariaDB 11.8, PostgreSQL 18, and SQL Server 2022 images; SQLite uses its locked
+in-process runtime with Microsoft's built-in code-coverage
 collector. `eng/verify-coverage.py` conservatively merges Cobertura line and
 branch evidence by product source line and excludes test and third-party
 assemblies by exact package name.
@@ -354,6 +366,7 @@ assemblies by exact package name.
 | MySQL/MariaDB adapter | 92% | 75% |
 | PostgreSQL adapter | 94% | 84% |
 | SQLite adapter | 90% | 75% |
+| SQL Server adapter | 90% | 75% |
 
 The behavioral and engine matrices remain mandatory even when the numeric
 floor passes. A threshold reduction requires reviewed evidence and must not be
@@ -362,15 +375,71 @@ used to hide an uncovered regression.
 ## Performance and memory
 
 `eng/performance-budgets.json` defines explicit Core, MySQL/MariaDB,
-PostgreSQL, and SQLite benchmark sets with duration baselines, coarse hosted-
-runner ceilings, and strict allocation ceilings at 1, 100, and 1000 operations.
-Four independently restored and executed benchmark projects enforce the Core
-and provider dependency boundaries for:
+PostgreSQL, SQLite, and SQL Server benchmark sets with duration baselines,
+coarse duration comparison limits, and allocation comparison limits at 1, 100, and
+1000 operations.
+
+All five benchmark sets run in `--report-only` mode in CI and release
+qualification. Duration and allocation overruns remain visible in console output
+as `EXCEEDED (informational)` and in JSON as `passed: false`, but do not reject
+qualification on shared hardware. The complete measurements and unchanged limits
+remain in `artifacts/performance`. Invalid configuration, missing/duplicate/unknown
+workloads, execution exceptions and report-write failures still fail the run.
+Build, tests, coverage, live-engine, tooling, package and SBOM gates remain blocking.
+Omit `--report-only` for a deliberately strict manual budget comparison.
+
+Prepared-input CPU regressions separately bound shared seed and diagnostic
+evidence parsing, accepted-column projection, MySQL/MariaDB runtime generation
+and SQL Server catalog-string assembly allocations. Runtime-generation SQL
+fingerprints retain exact MySQL/MariaDB guards, statement order and cleanup;
+PostgreSQL text and SQLite catalog regressions cover whitespace, comments,
+quoted tokens and ordered keys. They exclude input construction and asynchronous
+database latency. Parsed evidence owns its final arrays and field strings;
+caller-owned evidence still receives defensive snapshots. These checks do not
+measure disk flush latency, establish an end-to-end migration latency claim,
+or replace live migration, recovery and native SQL Server qualification.
+
+The SQL Server set declares eleven generation, analyzer-plan, model-managed
+data, repair, and canonical-model cases. Its initial duration values are the
+exact medians from the five-sample macOS ARM64 developer capture at
+`2026-09-30T18:07:25.269536+00:00`, running .NET `10.0.12` on `Unix 26.5.2`.
+The evidence file is `artifacts/performance/sqlserver-baseline-macos.json`,
+SHA-256 `6803e8aa94a3b512b80f2f66d6de700f813a08d2467db0732dadcf7ff5c1ddde`.
+Each duration retains the existing 200% regression tolerance. Allocation caps
+are the captured median plus 25%, rounded upward to the next 65,536-byte block;
+the block minimum gives very small cases more than 25% headroom.
+
+This capture is explicitly measurement-only and is not GitHub-hosted x64
+qualification. The quality workflow can retain a separate x64 capture in
+`sqlserver-baseline.json`; its ordinary benchmark report is also retained.
+Until the complete pinned x64 workflow passes, SQL Server qualification
+remains unestablished. SQL Server live workloads append timestamped stage markers
+under `artifacts/performance/live/sqlserver-*-progress.log` before potentially
+long-running phases. The existing always-upload artifact preserves these markers
+even when a job does not produce its final TRX. They contain fixed workload/stage
+identifiers, not SQL, database names or connection strings; they are diagnostics,
+not successful qualification evidence.
+
+The existing diagnostics ActivitySource optionally emits
+`safe_migrations.analysis.stage` activities for provider baseline capture,
+classification, bounded catalog batches, ordered projection and unexpected
+inventory. Only fixed stage labels, operation counts, batch/parameter counts
+and payload sizes are tagged, never SQL, object names or values. With no
+listeners no stage activity is allocated. SQL Server stress workloads retain
+start/completion markers and elapsed milliseconds for each stage; independent
+workloads are isolated by trace identity. Missing completion evidence still
+means the phase did not finish, not that qualification passed. Actual SQL
+Server 2019/2022/2025 x86-64 durations must be established by the pinned live
+cells; local ARM source tests cannot establish timeout closure.
+
+The five independently restored benchmark projects
+enforce the Core and provider dependency boundaries for:
 
 - intent construction;
 - decision planning;
 - MySQL handler/generator output;
 - PostgreSQL adapter output;
+- SQL Server adapter output;
 - canonical snapshot initialization, relational model differ, and fingerprint;
 - report JSON serialization;
 - blocker-view serialization across 50,000 assessments with a small selected
@@ -380,12 +449,47 @@ and provider dependency boundaries for:
 - provider model-managed command generation and analyzer-plan construction at
   384 row transitions.
 
-Allocation ceilings are deterministic blocking gates. Wall-clock measurements
-on shared GitHub-hosted runners are not deterministic, so their three-times-
-baseline ceilings only catch gross regressions and are not throughput claims.
+The SQL Server repair cases generate and build analyzer plans for 1,000 actual
+`RepairIfSafe` alterations from nullable `nvarchar(64)`/maximum length 64 to
+nullable `nvarchar(128)`/maximum length 128. Source and target definitions have
+no defaults, comments, or provider annotations. This supported text-widening
+workload does not substitute ordinary generation or an unsupported-operation
+classification for the repair path; startup rejects a plan that is unsupported
+or lacks safe repair capability.
+
+Benchmark duration and allocation ceilings are informational comparison limits,
+not blocking CI gates. Wall-clock measurements on shared GitHub-hosted runners
+are not deterministic; their three-times-baseline comparisons are regression
+evidence, not throughput claims. Budget evaluation remains unchanged in the
+reports rather than redefining an overrun as a passed measurement.
 Changes to a baseline or ceiling require captured before/after evidence on the
 same pinned `ubuntu-24.04` runner label and a review of asymptotic behavior; a
 budget must not be raised merely to make CI green.
+
+The generation and analyzer-plan capture does not open a server connection,
+so it can also run locally on ARM64 for diagnostic evidence. That output
+records its architecture and is not x64 Linux qualification evidence. Run:
+
+```sh
+dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks.csproj --configuration Release -- --capture-baseline --output artifacts/performance/sqlserver-baseline.json
+```
+
+The command records medians without a pass/fail verdict. Its output must not
+be copied into `eng/performance-budgets.json` mechanically: review the
+operation counts, allocation scaling, server-independent workload shape, and
+runner identity first. The ordinary invocation without `--capture-baseline`
+remains fail-closed while any declared budget is absent.
+
+These initial budgets retain their macOS ARM64 developer-measurement
+provenance. They do not establish a measured `ubuntu-24.04` x64 baseline or a
+same-hardware hosted comparison; those remain separate performance evidence.
+
+For capture on the pinned x64 Linux runner, dispatch the existing CI workflow
+with `capture-sqlserver-baseline` enabled. The optional capture retains a
+measurement-only `sqlserver-baseline.json` artifact. All blocking qualification
+gates and the informational SQL Server budget report still run. The diagnostic
+capture precedes budget reporting; neither a duration nor allocation overrun
+in that report rejects the run.
 
 The MySQL/MariaDB benchmark has no Npgsql or SQLite dependency, the PostgreSQL
 benchmark has no Doka MySQL or SQLite dependency, and the SQLite benchmark has
@@ -431,13 +535,13 @@ formatter for layout rules that Roslyn cannot represent.
 `eng/qualify-packages.sh`:
 
 1. packs the same Release build twice;
-2. compares all four `.nupkg` and four `.snupkg` files byte-for-byte;
+2. compares all five `.nupkg` and five `.snupkg` files byte-for-byte;
 3. verifies the exact file set, metadata, dependency shape, assemblies, XML,
    symbols, README, license, and report schemas;
 4. builds and runs an isolated consumer using packages only;
 5. emits sorted SHA-256 checksums.
 
-The three provider package-consumer fixtures, plus the split MySQL package
+The four provider package-consumer fixtures, plus the split MySQL package
 topology, are normal Solution projects in local `Source` mode so Rider loads
 their complete C# and MSBuild models. That mode
 uses the matching provider `ProjectReference` and participates in locked
@@ -450,7 +554,7 @@ evidence.
 
 The Microsoft SBOM Tool binary is downloaded at version 4.1.5 and verified
 against the platform-specific release digest before execution. The generated
-SPDX 2.2 manifest must validate all eight packages plus the checksum file and
+SPDX 2.2 manifest must validate all ten packages plus the checksum file and
 contain the required resolved package graph.
 
 Every future release adds GitHub/Sigstore build provenance and SBOM
@@ -460,7 +564,7 @@ that differs from the qualified package only by NuGet's `.signature.p7s`
 entry. Publication validates the exact SLSA subject inventory and verifies the
 portable bundle against the release workflow and qualified commit before the
 protected environment obtains a short-lived NuGet credential. The final
-eleven-asset immutable GitHub Release is then covered by GitHub's native Release
+thirteen-asset immutable GitHub Release is then covered by GitHub's native Release
 and release-asset verification.
 
 ## Primary references

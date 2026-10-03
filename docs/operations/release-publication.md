@@ -111,16 +111,16 @@ environment `nuget`. The job then:
    authorized SSH signature;
 2. verifies the downloaded package checksums and package contract again;
 3. validates the portable Sigstore envelope, SLSA v1 predicate, and exact
-   ten-subject inventory, then cryptographically verifies every subject
+   twelve-subject inventory, then cryptographically verifies every subject
    against the release workflow and qualified commit;
 4. creates or resumes a metadata-matching GitHub Release draft, uploads the
-   exact eleven release assets, and verifies every asset name and SHA-256
+   exact thirteen release assets, and verifies every asset name and SHA-256
    digest;
-5. checks the public state of all four primary packages with bounded retries,
+5. checks the public state of all five primary packages with bounded retries,
    then obtains a short-lived NuGet key through Trusted Publishing only after
    the complete draft has been read back;
 6. publishes missing primary packages in dependency order (Core, MySQL,
-   PostgreSQL, SQLite), then publishes all four symbol packages with duplicate
+   PostgreSQL, SQLite, SQL Server), then publishes all five symbol packages with duplicate
    tolerance;
 7. reads all primary packages back from NuGet.org, verifies their repository
    signatures, and compares their content with the qualified packages; and
@@ -145,8 +145,8 @@ gh release view "${release_tag}" \
 The release must be published and immutable, target the exact tag, have the
 correct prerelease state, and contain exactly:
 
-- four `.nupkg` files;
-- four `.snupkg` files;
+- five `.nupkg` files;
+- five `.snupkg` files;
 - `SHA256SUMS`; and
 - `manifest.spdx.json`; and
 - `release-provenance.intoto.jsonl`.
@@ -157,7 +157,7 @@ signer-digest, source-ref, source-digest, and hosted-runner restrictions in
 [Release verification](../security/release-verification.md). A matching
 filename without successful cryptographic verification is not evidence.
 
-Confirm all four package pages and symbol validation status on NuGet.org.
+Confirm all five package pages and symbol validation status on NuGet.org.
 Indexing can lag after the upload; a pending package is not a failed upload,
 but the workflow's bounded signed-package readback must already have passed.
 

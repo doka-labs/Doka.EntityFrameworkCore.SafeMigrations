@@ -16,6 +16,9 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
 {
     internal const string DataProbePlaceholder = "__DOKA_SM_DATA_PROBE__";
     internal const string TransitionInvariantPlaceholder = "__DOKA_SM_TRANSITION_INVARIANT__";
+    internal const string NullabilityDataProbePlaceholder = "__DOKA_SM_NULLABILITY_DATA_PROBE__";
+    internal const string ColumnRepairInvariantPlaceholder = "__DOKA_SM_COLUMN_REPAIR_INVARIANT__";
+    private static readonly SearchValues<char> s_proofTokenStarts = SearchValues.Create("_'\"`");
 
     /// <summary>Gets the captured parameter values in placeholder order.</summary>
     public MySqlCatalogParameterValue[] ParameterValues { get; init; } = [];
@@ -52,6 +55,9 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
 
     /// <summary>Gets the optional bounded live-data probe required by classification.</summary>
     public MySqlSafeMigrationDataProbe? DataProbe { get; init; }
+
+    /// <summary>Gets the operation-local proof shared by nullability classification and repair.</summary>
+    public MySqlSafeMigrationNullabilityDataProbe? NullabilityDataProbe { get; init; }
 
     /// <summary>Gets whether classification reads live table data.</summary>
     public bool RequiresDataProbe => DataProbe is not null;
@@ -398,6 +404,39 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         return rendered.Replace(DataProbePlaceholder, replacement, StringComparison.Ordinal);
     }
 
+    /// <summary>Renders the catalog predicate that distinguishes physically nullable columns.</summary>
+    /// <param name="renderedValues">The rendered literal values in placeholder order.</param>
+    /// <returns>The catalog-only physical-nullability predicate.</returns>
+    public string RenderPreparedNullabilityColumnExpression(
+        IReadOnlyList<string> renderedValues
+    ) => MySqlCatalogSqlTemplate.RenderPrepared(
+        NullabilityDataProbe?.NullableColumnExpression
+            ?? throw new InvalidOperationException("The runtime plan has no nullability data probe."),
+        renderedValues);
+
+    /// <summary>Renders NULL-proof eligibility against the existing physical repair invariant.</summary>
+    /// <param name="renderedValues">The rendered literal values in placeholder order.</param>
+    /// <returns>The repair invariant using previously materialized transition evidence.</returns>
+    public string RenderPreparedNullabilityRepairInvariantExpression(
+        IReadOnlyList<string> renderedValues
+    ) => RenderPreparedTransitionExpressions(
+        NullabilityDataProbe?.RepairInvariantExpression
+            ?? throw new InvalidOperationException("The runtime plan has no nullability data probe."),
+        renderedValues,
+        "@doka_sm_data_blocked",
+        "@doka_sm_transition_eligible");
+
+    /// <summary>Renders the row proof evaluated only after catalog and identifier qualification.</summary>
+    /// <param name="renderedValues">The rendered literal values in placeholder order.</param>
+    /// <returns>The Boolean expression that detects a NULL value.</returns>
+    public string RenderPreparedNullabilityDataProbeBlockedExpression(
+        IReadOnlyList<string> renderedValues
+    ) => MySqlCatalogSqlTemplate.RenderPrepared(
+        NullabilityDataProbe?.BlockedExpression
+            ?? throw new InvalidOperationException("The runtime plan has no nullability data probe."),
+        renderedValues);
+
+    /// <summary>Expands analysis proofs inline without relying on runtime session variables.</summary>
     private string RenderTransitionExpressions(
         string expression,
         Func<MySqlCatalogParameterValue, string> renderValue,
@@ -406,18 +445,18 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     )
     {
         var rendered = MySqlCatalogSqlTemplate.Render(expression, ParameterValues, renderValue);
-        if (DataProbe is null)
+        if (DataProbe is null && NullabilityDataProbe is null)
         {
             return rendered;
         }
 
-        var dataReplacement = dataBlocked is null
+        var dataReplacement = DataProbe is null ? "FALSE" : dataBlocked is null
             ? MySqlCatalogSqlTemplate.Render(DataProbe.BuildBlockedExpression(), ParameterValues, renderValue)
             : dataBlocked.Value
                 ? "TRUE"
                 : "FALSE";
 
-        var transitionReplacement = transitionEligible is null
+        var transitionReplacement = DataProbe is null ? "FALSE" : transitionEligible is null
             ? MySqlCatalogSqlTemplate.Render(
                 DataProbe.TransitionInvariantExpression
                     ?? throw new InvalidOperationException("The runtime plan has no transition evidence."),
@@ -427,9 +466,31 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
                 ? "TRUE"
                 : "FALSE";
 
-        return ReplaceTransitionPlaceholders(rendered, dataReplacement, transitionReplacement);
+        var repairInvariantReplacement = NullabilityDataProbe is null
+            ? "FALSE"
+            : ReplaceTransitionPlaceholders(
+                MySqlCatalogSqlTemplate.Render(
+                    NullabilityDataProbe.RepairInvariantExpression, ParameterValues, renderValue),
+                dataReplacement, transitionReplacement, "FALSE", "FALSE");
+
+        // WHY: A required target does not imply the live column is nullable.
+        // Keep the row-reading branch behind the same physical catalog gate
+        // as prepared execution, including repair-invariant qualification.
+        var nullabilityReplacement = NullabilityDataProbe is null
+            ? "FALSE"
+            : "CASE WHEN ("
+                + MySqlCatalogSqlTemplate.Render(
+                    NullabilityDataProbe.NullableColumnExpression, ParameterValues, renderValue)
+                + $") AND ({repairInvariantReplacement}) THEN ("
+                + MySqlCatalogSqlTemplate.Render(
+                    NullabilityDataProbe.BlockedExpression, ParameterValues, renderValue)
+                + ") ELSE FALSE END";
+
+        return ReplaceTransitionPlaceholders(
+            rendered, dataReplacement, transitionReplacement, nullabilityReplacement, repairInvariantReplacement);
     }
 
+    /// <summary>Expands runtime expressions against independently materialized operation-local proofs.</summary>
     private string RenderPreparedTransitionExpressions(
         string expression,
         IReadOnlyList<string> renderedValues,
@@ -438,48 +499,72 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     )
     {
         var rendered = MySqlCatalogSqlTemplate.RenderPrepared(expression, renderedValues);
-        if (DataProbe is null)
+        if (DataProbe is null && NullabilityDataProbe is null)
         {
             return rendered;
         }
 
-        var dataReplacement = dataBlockedExpression
+        var dataReplacement = DataProbe is null ? "FALSE" : dataBlockedExpression
             ?? MySqlCatalogSqlTemplate.RenderPrepared(DataProbe.BuildBlockedExpression(), renderedValues);
 
-        var transitionReplacement = transitionEligibleExpression
+        var transitionReplacement = DataProbe is null ? "FALSE" : transitionEligibleExpression
             ?? MySqlCatalogSqlTemplate.RenderPrepared(
                 DataProbe.TransitionInvariantExpression
                     ?? throw new InvalidOperationException("The runtime plan has no transition evidence."),
                 renderedValues);
 
-        return ReplaceTransitionPlaceholders(rendered, dataReplacement, transitionReplacement);
+        return ReplaceTransitionPlaceholders(
+            rendered,
+            dataReplacement,
+            transitionReplacement,
+            "@doka_sm_nullability_blocked",
+            "@doka_sm_column_repair_eligible");
     }
 
+    /// <summary>Replaces all proof markers in one exact-size allocation without intermediate SQL copies.</summary>
     private static string ReplaceTransitionPlaceholders(
         string expression,
         string dataReplacement,
-        string transitionReplacement
+        string transitionReplacement,
+        string nullabilityReplacement,
+        string repairInvariantReplacement
     )
     {
-        var dataCount = CountOccurrences(expression, DataProbePlaceholder);
-        var transitionCount = CountOccurrences(expression, TransitionInvariantPlaceholder);
-        if (dataCount == 0
-            && transitionCount == 0)
+        if (!expression.Contains("__DOKA_SM_", StringComparison.Ordinal))
         {
             return expression;
         }
 
-        var resultLength = checked(
-            expression.Length
-            + (dataCount * (dataReplacement.Length - DataProbePlaceholder.Length))
-            + (transitionCount * (transitionReplacement.Length - TransitionInvariantPlaceholder.Length)));
+        var resultLength = expression.Length;
+        var position = 0;
+        var hasMarkers = false;
+        while (FindNextProofMarker(expression.AsSpan(), position) is var marker && marker.Index >= 0)
+        {
+            hasMarkers = true;
+            var replacement = marker.Kind switch
+            {
+                0 => dataReplacement,
+                1 => transitionReplacement,
+                2 => nullabilityReplacement,
+                _ => repairInvariantReplacement,
+            };
+
+            resultLength = checked(resultLength + replacement.Length - marker.Length);
+            position = marker.Index + marker.Length;
+        }
+
+        if (!hasMarkers)
+        {
+            return expression;
+        }
 
         // WHY: Sequential string.Replace calls materialize the complete state
-        // expression twice. A single exact-size pass keeps generated SQL byte-
-        // equivalent while bounding allocation growth for large repair batches.
+        // expression repeatedly. A single exact-size pass bounds allocation
+        // growth even when length and nullability proofs occur together.
         return string.Create(
             resultLength,
-            (Expression: expression, Data: dataReplacement, Transition: transitionReplacement),
+            (Expression: expression, Data: dataReplacement, Transition: transitionReplacement,
+                Nullability: nullabilityReplacement, RepairInvariant: repairInvariantReplacement),
             static (destination, state) =>
             {
                 var source = state.Expression.AsSpan();
@@ -487,55 +572,124 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
                 var destinationOffset = 0;
                 while (sourceOffset < source.Length)
                 {
-                    var remaining = source[sourceOffset..];
-                    var dataIndex = remaining.IndexOf(DataProbePlaceholder, StringComparison.Ordinal);
-                    var transitionIndex = remaining.IndexOf(
-                        TransitionInvariantPlaceholder,
-                        StringComparison.Ordinal);
-
-                    var replaceData = dataIndex >= 0
-                        && (transitionIndex < 0 || dataIndex < transitionIndex);
-
-                    var nextIndex = replaceData ? dataIndex : transitionIndex;
-                    if (nextIndex < 0)
+                    var marker = FindNextProofMarker(source, sourceOffset);
+                    if (marker.Index < 0)
                     {
-                        remaining.CopyTo(destination[destinationOffset..]);
+                        source[sourceOffset..].CopyTo(destination[destinationOffset..]);
 
                         break;
                     }
 
-                    remaining[..nextIndex].CopyTo(destination[destinationOffset..]);
-                    destinationOffset += nextIndex;
+                    var before = source.Slice(sourceOffset, marker.Index - sourceOffset);
+                    before.CopyTo(destination[destinationOffset..]);
+                    destinationOffset += before.Length;
 
-                    var replacement = replaceData ? state.Data : state.Transition;
+                    var replacement = marker.Kind switch
+                    {
+                        0 => state.Data,
+                        1 => state.Transition,
+                        2 => state.Nullability,
+                        _ => state.RepairInvariant,
+                    };
+
                     replacement.AsSpan().CopyTo(destination[destinationOffset..]);
                     destinationOffset += replacement.Length;
-                    sourceOffset += nextIndex
-                        + (replaceData ? DataProbePlaceholder.Length : TransitionInvariantPlaceholder.Length);
+                    sourceOffset = marker.Index + marker.Length;
                 }
             });
     }
 
-    private static int CountOccurrences(
-        string value,
-        string marker
+    /// <summary>Locates structural proof tokens without interpreting quoted identifiers or SQL literals.</summary>
+    private static (int Index, int Kind, int Length) FindNextProofMarker(
+        ReadOnlySpan<char> sql,
+        int start
     )
     {
-        var count = 0;
-        var remaining = value.AsSpan();
-        while (true)
+        for (var index = start; index < sql.Length; index++)
         {
-            var index = remaining.IndexOf(marker, StringComparison.Ordinal);
-            if (index < 0)
+            var next = sql[index..].IndexOfAny(s_proofTokenStarts);
+            if (next < 0)
             {
-                return count;
+                break;
             }
 
-            count++;
-            remaining = remaining[(index + marker.Length)..];
+            index += next;
+            var character = sql[index];
+            if (character is '\'' or '"' or '`')
+            {
+                // WHY: Valid names and values may equal an internal proof token.
+                // Doka renders mode-independent literals (quote doubling or hex),
+                // and identifiers escape quotes by doubling, never by backslash.
+                var quote = character;
+                var closed = false;
+                while (++index < sql.Length)
+                {
+                    if (sql[index] != quote)
+                    {
+                        continue;
+                    }
+
+                    if (index + 1 < sql.Length && sql[index + 1] == quote)
+                    {
+                        index++;
+
+                        continue;
+                    }
+
+                    closed = true;
+
+                    break;
+                }
+
+                if (!closed)
+                {
+                    throw new InvalidOperationException(
+                        "The MySQL proof template contains an unterminated quoted token.");
+                }
+
+                continue;
+            }
+
+            if (character != '_')
+            {
+                continue;
+            }
+
+            var remaining = sql[index..];
+            if (remaining.StartsWith(DataProbePlaceholder, StringComparison.Ordinal))
+            {
+                return (index, 0, DataProbePlaceholder.Length);
+            }
+
+            if (remaining.StartsWith(TransitionInvariantPlaceholder, StringComparison.Ordinal))
+            {
+                return (index, 1, TransitionInvariantPlaceholder.Length);
+            }
+
+            if (remaining.StartsWith(NullabilityDataProbePlaceholder, StringComparison.Ordinal))
+            {
+                return (index, 2, NullabilityDataProbePlaceholder.Length);
+            }
+
+            if (remaining.StartsWith(ColumnRepairInvariantPlaceholder, StringComparison.Ordinal))
+            {
+                return (index, 3, ColumnRepairInvariantPlaceholder.Length);
+            }
         }
+
+        return (-1, 0, 0);
     }
 }
+
+/// <summary>Describes a shared, operation-local nullable-to-required row proof.</summary>
+/// <param name="NullableColumnExpression">The physical nullable-column predicate.</param>
+/// <param name="RepairInvariantExpression">The existing physical repair invariant, retained without copying.</param>
+/// <param name="BlockedExpression">The bounded row query that detects a NULL value.</param>
+internal sealed record MySqlSafeMigrationNullabilityDataProbe(
+    string NullableColumnExpression,
+    string RepairInvariantExpression,
+    string BlockedExpression
+);
 
 /// <summary>Describes one deduplicatable MySQL/MariaDB narrowing proof.</summary>
 /// <param name="Table">The validated relational table name.</param>

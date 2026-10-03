@@ -144,6 +144,24 @@ internal sealed class SqliteSafeMigrationProviderAnalyzer : ISafeMigrationProvid
         var connection = context.Database.GetDbConnection();
         var transaction = context.Database.CurrentTransaction?.GetDbTransaction();
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction);
+
+        return Task.FromResult<IReadOnlyList<SafeMigrationProviderAnalysis>>(
+            Analyze(context, operations, targetModels, snapshot, cancellationToken));
+    }
+
+    /// <summary>Analyzes one bounded operation window against its caller-owned immutable catalog capture.</summary>
+    private ReadOnlyCollection<SafeMigrationProviderAnalysis> Analyze(
+        DbContext context,
+        IReadOnlyList<MigrationOperation> operations,
+        IReadOnlyList<IModel?>? targetModels,
+        SqliteCatalogSnapshot snapshot,
+        CancellationToken cancellationToken
+    )
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var connection = context.Database.GetDbConnection();
+        var transaction = context.Database.CurrentTransaction?.GetDbTransaction();
         var fallbackModel = context.GetService<IDesignTimeModel>().Model;
         var runtimeInitializer = context.GetService<IModelRuntimeInitializer>();
         var initializedModels = new Dictionary<IModel, IModel>(ReferenceEqualityComparer.Instance);
@@ -209,7 +227,7 @@ internal sealed class SqliteSafeMigrationProviderAnalyzer : ISafeMigrationProvid
             }
         }
 
-        return Task.FromResult<IReadOnlyList<SafeMigrationProviderAnalysis>>(results.AsReadOnly());
+        return results.AsReadOnly();
 
         IModel GetTargetModel(
             int index
@@ -316,13 +334,15 @@ internal sealed class SqliteSafeMigrationProviderAnalyzer : ISafeMigrationProvid
             }
         }
 
-        return RemoveSemanticAliasesAsync(context, operations, result, cancellationToken);
+        return Task.FromResult(RemoveSemanticAliases(context, operations, result, snapshot, cancellationToken));
     }
 
-    private async Task<IReadOnlyList<SafeMigrationUnexpectedObject>> RemoveSemanticAliasesAsync(
+    /// <summary>Removes only aliases proven against the same snapshot used to construct this inventory.</summary>
+    private IReadOnlyList<SafeMigrationUnexpectedObject> RemoveSemanticAliases(
         DbContext context,
         IReadOnlyList<MigrationOperation> operations,
         List<SafeMigrationUnexpectedObject> findings,
+        SqliteCatalogSnapshot snapshot,
         CancellationToken cancellationToken
     )
     {
@@ -336,11 +356,17 @@ internal sealed class SqliteSafeMigrationProviderAnalyzer : ISafeMigrationProvid
                      .Create(operations, findings, projectUniqueIndexesAsUniqueConstraints: true)
                      .Chunk(SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture))
         {
-            var analyses = await AnalyzeAsync(
+            // WHY: These windows belong to one read-only inventory invocation.
+            // Re-reading the full catalog for every 512 candidates repeats all
+            // schema and per-object queries without adding fresher evidence.
+            // The snapshot is never retained across invocations or row proofs.
+            var analyses = Analyze(
                 context,
                 candidates
-                    .Select(static candidate => candidate.Operation)
+                    .Select(static candidate => (MigrationOperation)candidate.Operation)
                     .ToArray(),
+                targetModels: null,
+                snapshot,
                 cancellationToken);
 
             for (var index = 0; index < candidates.Length; index++)

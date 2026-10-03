@@ -93,6 +93,15 @@ analyzed completely and then handed to that generator as one atomic batch.
 Runtime migration and Migration Bundles are supported. SQL scripts containing
 safe operations reject because SQLite cannot encode their live catalog branch.
 
+For SQL Server, the adapter composes the official EF Core
+`IMigrationsSqlGenerator`, intercepts safe envelopes, and preserves each
+uninterrupted sequence of ordinary EF operations as a provider-owned batch.
+Runtime migration, normal and idempotent SQL scripts, and Migration Bundles
+share the guarded T-SQL path. Transaction-suppressed baseline commands are
+rejected because the target DDL and guard cannot otherwise remain atomic.
+Its first release requires independent x64 Linux qualification on all three
+declared SQL Server majors; local ARM64 test skips are not qualification.
+
 The current MySQL/MariaDB adapter consumes Doka through the bounded
 `[10.4.2,10.5.0)` NuGet dependency range. Doka 10.3.0 introduced typed
 read-only migration metadata for Guid storage, value generation, and index
@@ -233,6 +242,9 @@ being accepted through broad string normalization.
   Supported structural operations render to safe source, and unsupported new
   source rejects before publication. Existing ordinary EF migration operations
   remain provider-owned during analysis and execution.
+- 2026-09-30: Added official-provider SQL Server composition, preserving
+  ordinary operation batches and rejecting transaction-suppressed guarded
+  baselines. Live qualification remains required before the first release.
 
 ### 2026-09-22 Compatibility Amendment
 
@@ -257,8 +269,11 @@ where it is created instead of rejecting published migrations later.
 - [SQLite composed generator](../../src/Doka.EntityFrameworkCore.SafeMigrations.Sqlite/SqlGeneration/SqliteSafeMigrationsSqlGenerator.cs)
 - [SQLite registration](../../src/Doka.EntityFrameworkCore.SafeMigrations.Sqlite/Extensions/SqliteServiceCollectionExtensions.cs)
 - [SQLite composition tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests/Infrastructure/SqliteServiceCompositionTests.cs)
+- [SQL Server composed generator](../../src/Doka.EntityFrameworkCore.SafeMigrations.SqlServer/SqlGeneration/SqlServerSafeMigrationsSqlGenerator.cs)
+- [SQL Server composition tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests/Infrastructure/SqlServerServiceCompositionTests.cs)
 - [EF tooling gate](../../eng/verify-ef-tooling.sh)
 - [SQLite EF tooling gate](../../eng/verify-sqlite-ef-tooling.sh)
+- [SQL Server EF tooling gate](../../eng/verify-sqlserver-ef-tooling.sh)
 - [Dependency upgrade contract](../efcore-provider-upgrade-risk.md)
 - [Support and qualification](../support-and-qualification.md)
 

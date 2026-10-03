@@ -64,24 +64,39 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             ? $"EXISTS (SELECT 1 FROM {Qualified(intent.Table, intent.Schema)} LIMIT 1)"
             : "FALSE";
 
-        var hasNull = repairCapability == SafeMigrationRepairCapability.Safe
+        var nullabilityDataProbe = repairCapability == SafeMigrationRepairCapability.Safe
             && !intent.Definition.IsNullable
-                ? $"EXISTS (SELECT 1 FROM {Qualified(intent.Table, intent.Schema)} WHERE "
-                + $"{_sqlGenerationHelper.DelimitIdentifier(intent.Definition.Name)} IS NULL LIMIT 1)"
-                : "FALSE";
+                ? new PostgreSqlSafeMigrationNullabilityDataProbe(
+                    ColumnNotNullProof(intent.Table, intent.Schema, intent.Definition.Name),
+                    repairInvariant,
+                    $"EXISTS (SELECT 1 FROM {Qualified(intent.Table, intent.Schema)} WHERE "
+                        + $"{_sqlGenerationHelper.DelimitIdentifier(intent.Definition.Name)} IS NULL LIMIT 1)",
+                    Qualified(intent.Table, intent.Schema))
+                : null;
+
+        var hasNull = nullabilityDataProbe is null
+            ? "FALSE"
+            : PostgreSqlSafeMigrationRuntimePlan.NullabilityDataProbePlaceholder;
+
+        // WHY: Runtime state, repair, and NULL gates share one fresh physical
+        // predicate per evaluation instead of copying its catalog SQL.
+        var repairInvariantExpression = nullabilityDataProbe is null
+            ? repairInvariant
+            : PostgreSqlSafeMigrationRuntimePlan.NullabilityRepairInvariantPlaceholder;
 
         var dataTransitionBlocked = transition.DataBlockedExpression;
         var repairDataBlocked = $"({hasNull}) OR ({dataTransitionBlocked})";
 
         var repairPrecondition = repairCapability == SafeMigrationRepairCapability.Safe
-            ? $"({repairInvariant}) AND NOT ({repairDataBlocked})"
+            ? $"({repairInvariantExpression}) AND NOT ({repairDataBlocked})"
             : "FALSE";
 
         var plan = Plan(
             $"CASE WHEN NOT {table} THEN 'prerequisite_missing' "
             + $"WHEN NOT {exists} AND {dataBlocked} THEN 'data_blocked' "
-            + $"WHEN NOT {exists} THEN 'missing' WHEN {matching} THEN 'matching' "
-            + $"WHEN ({repairInvariant}) AND ({repairDataBlocked}) THEN 'data_blocked' ELSE 'different' END",
+            + $"WHEN NOT {exists} THEN 'missing' "
+            + $"WHEN ({repairInvariantExpression}) AND ({repairDataBlocked}) THEN 'data_blocked' "
+            + $"WHEN {matching} THEN 'matching' ELSE 'different' END",
             matching,
             repairCapability,
             repairPrecondition) with
@@ -91,6 +106,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 : null,
             RepairOperationalImpact = transition.OperationalImpact,
             DataProbe = transition.DataProbe,
+            NullabilityDataProbe = nullabilityDataProbe,
             MayRequireNullabilityDataProof = repairCapability == SafeMigrationRepairCapability.Safe
                 && !intent.Definition.IsNullable,
             DiagnosticEvidenceExpression = includeAnalysisEvidence
@@ -159,21 +175,36 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             ? ColumnMatches(intent.Table, intent.Schema, intent.OldDefinition!)
             : "FALSE";
 
-        var nullBlocked =
+        var nullabilityDataProbe =
             repair == SafeMigrationRepairCapability.Safe
             && intent.OldDefinition!.IsNullable
             && !intent.Definition.IsNullable
-                ? $"({repairPrecondition}) AND EXISTS (SELECT 1 FROM {Qualified(intent.Table, intent.Schema)} WHERE "
-                + $"{_sqlGenerationHelper.DelimitIdentifier(intent.Definition.Name)} IS NULL LIMIT 1)"
-                : "FALSE";
+                ? new PostgreSqlSafeMigrationNullabilityDataProbe(
+                    ColumnNotNullProof(intent.Table, intent.Schema, intent.Definition.Name),
+                    repairPrecondition,
+                    $"EXISTS (SELECT 1 FROM {Qualified(intent.Table, intent.Schema)} WHERE "
+                        + $"{_sqlGenerationHelper.DelimitIdentifier(intent.Definition.Name)} IS NULL LIMIT 1)",
+                    Qualified(intent.Table, intent.Schema))
+                : null;
+
+        var nullBlocked = nullabilityDataProbe is null
+            ? "FALSE"
+            : PostgreSqlSafeMigrationRuntimePlan.NullabilityDataProbePlaceholder;
+
+        var repairInvariantExpression = nullabilityDataProbe is null
+            ? repairPrecondition
+            : PostgreSqlSafeMigrationRuntimePlan.NullabilityRepairInvariantPlaceholder;
 
         return Plan(
-            $"CASE WHEN NOT {exists} THEN 'different' WHEN {matching} THEN 'matching' "
-            + $"WHEN {nullBlocked} THEN 'data_blocked' ELSE 'different' END",
+            $"CASE WHEN NOT {exists} THEN 'different' WHEN {nullBlocked} THEN 'data_blocked' "
+            + $"WHEN {matching} THEN 'matching' ELSE 'different' END",
             matching,
             repair,
-            repairPrecondition) with
+            $"({repairInvariantExpression}) AND NOT ({nullBlocked})") with
         {
+            NullabilityDataProbe = nullabilityDataProbe,
+            StateEvaluationGuardExpression = exists,
+            StateEvaluationGuardFailureExpression = "'different'",
             MayRequireNullabilityDataProof = repair == SafeMigrationRepairCapability.Safe
                 && intent.OldDefinition!.IsNullable
                 && !intent.Definition.IsNullable,
@@ -210,7 +241,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
         if (includeRepairableFacets)
         {
-            conditions.Add($"a.attnotnull = {(!definition.IsNullable).ToString().ToUpperInvariant()}");
+            conditions.Add(ColumnNullabilityMatches(definition));
             conditions.Add(
                 $"pg_catalog.col_description(c.oid, a.attnum) IS NOT DISTINCT FROM "
                 + (definition.Comment is null ? "NULL" : Literal(definition.Comment)));
@@ -241,6 +272,33 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         string? schema,
         ExpectedColumnDefinition definition
     ) => ColumnMatches(table, schema, definition, includeRepairableFacets: false);
+
+    /// <summary>Builds a fresh catalog proof that covers the complete row-query relation.</summary>
+    private string ColumnNotNullProof(
+        string table,
+        string? schema,
+        string column
+    ) => "EXISTS (SELECT 1 FROM pg_catalog.pg_attribute a "
+        + "JOIN pg_catalog.pg_class c ON c.oid = a.attrelid "
+        + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
+        + $"WHERE n.nspname = {SchemaExpression(schema)} AND c.relname = {Literal(table)} "
+        + $"AND a.attname = {Literal(column)} AND a.attnum > 0 AND NOT a.attisdropped "
+        + $"AND NOT c.relhassubclass AND ({ValidatedNotNullContract()}))";
+
+    /// <summary>Checks the declared nullability without treating an unvalidated constraint as matching.</summary>
+    private static string ColumnNullabilityMatches(
+        ExpectedColumnDefinition definition
+    ) => definition.IsNullable ? "NOT a.attnotnull" : ValidatedNotNullContract();
+
+    // WHY: PostgreSQL 18 allows attnotnull with an unvalidated constraint.
+    // JSON field access keeps conenforced safe to parse on PostgreSQL 14-17.
+    /// <summary>Checks the enforced and validated local NOT NULL contract on every supported catalog version.</summary>
+    private static string ValidatedNotNullContract() => "a.attnotnull AND ("
+        + "pg_catalog.current_setting('server_version_num')::integer < 180000 "
+        + "OR EXISTS (SELECT 1 FROM pg_catalog.pg_constraint not_null_constraint "
+        + "WHERE not_null_constraint.conrelid = c.oid AND not_null_constraint.contype = 'n' "
+        + "AND not_null_constraint.conkey = ARRAY[a.attnum] AND not_null_constraint.convalidated "
+        + "AND COALESCE((pg_catalog.to_jsonb(not_null_constraint)->>'conenforced')::boolean, FALSE)))";
 
     private string BuildColumnDiagnosticEvidence(
         string table,
@@ -273,10 +331,11 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 Literal(storeType),
                 "LEFT(pg_catalog.format_type(a.atttypid, a.atttypmod), 256)"),
             DiagnosticRecord(
-                $"a.attnotnull <> {(!definition.IsNullable).ToString().ToUpperInvariant()}",
+                $"NOT ({ColumnNullabilityMatches(definition)})",
                 "column_nullability",
                 definition.IsNullable ? "'nullable'" : "'not_nullable'",
-                "CASE WHEN a.attnotnull THEN 'not_nullable' ELSE 'nullable' END"),
+                $"CASE WHEN {ValidatedNotNullContract()} THEN 'not_nullable' "
+                    + "WHEN a.attnotnull THEN 'not_nullable_unvalidated_or_unenforced' ELSE 'nullable' END"),
             DiagnosticRecord(
                 $"NOT ({CollationMatches(definition)})",
                 "column_collation",

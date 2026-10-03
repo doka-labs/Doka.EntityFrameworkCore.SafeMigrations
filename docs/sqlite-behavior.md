@@ -14,14 +14,25 @@ attached databases and cross-database operations fail closed with
 SQLite stores schema definitions as SQL text and supports only a limited set of
 direct `ALTER TABLE` operations. SafeMigrations therefore uses the official EF
 Core SQLite generator for ordinary provider operations and for model-owned table
-rebuilds. Catalog classification reads `sqlite_schema`, `PRAGMA table_xinfo`,
-`index_list`, `index_xinfo`, and `foreign_key_list` through parameterized
-commands. Identifier, column order, collation, key direction, filter, generated
+rebuilds. Catalog capture uses five fixed read commands: settings, main schema
+objects, columns, index headers/keys, and foreign keys. Set-based table-valued
+`table_xinfo`, `index_list`, `index_xinfo`, and `foreign_key_list` PRAGMAs retain
+an explicit `main` scope and stream into the invocation-owned snapshot instead
+of issuing commands per table or index. See SQLite's
+[table-valued PRAGMA contract](https://www.sqlite.org/pragma.html#pragfunc).
+Identifier, column order, collation, key direction, filter, generated
 column, default, referential action, and constraint-expression facets remain
 part of the comparison contract. A rebuild also preserves physical constraint
 names. Per-constraint conflict clauses, deferred foreign keys, and explicit
 foreign-key `MATCH` options are not represented by the EF relational target
 model and therefore reject before DDL instead of being normalized.
+
+Unexpected-object inventory reuses its captured immutable catalog snapshot for
+semantic-alias checks in each bounded window. This avoids repeated full schema
+reads within that inventory call; it is not a cache across analysis/inventory
+invocations, connections, transactions or runtime structural changes. SQLite
+catalog calls are local embedded operations, not network roundtrips. Data
+proofs and post-mutation snapshots remain fresh.
 
 ## Transactional execution
 

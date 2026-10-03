@@ -94,7 +94,7 @@ internal static class SqlitePendingTargetModel
 [Migration(MigrationIdentifier)]
 internal sealed class SqliteFirstTargetModelMigration : Migration
 {
-    public const string MigrationIdentifier = "202609180010_FirstTargetModel";
+    public const string MigrationIdentifier = "20260918001000_FirstTargetModel";
 
     protected override void Up(
         MigrationBuilder migrationBuilder
@@ -118,7 +118,7 @@ internal sealed class SqliteFirstTargetModelMigration : Migration
 [Migration(MigrationIdentifier)]
 internal sealed class SqliteSecondTargetModelMigration : Migration
 {
-    public const string MigrationIdentifier = "202609180020_SecondTargetModel";
+    public const string MigrationIdentifier = "20260918002000_SecondTargetModel";
 
     protected override void Up(
         MigrationBuilder migrationBuilder

@@ -20,6 +20,11 @@ on:
         required: false
         default: 14
         type: number
+      capture-sqlserver-baseline:
+        description: Capture diagnostic medians in addition to informational benchmark reports.
+        required: false
+        default: false
+        type: boolean
 permissions:
   contents: read
 
@@ -56,12 +61,14 @@ jobs:
             bash -n "$script"
           done < <(find eng -type f -name '*.sh' -print0)
           bash eng/tests/test-dependency-snapshot-headers.sh
+          python3 -m unittest eng/tests/test_dependency_license_exceptions.py -v
           bash eng/tests/test-dependency-maintenance.sh
           bash eng/tests/test-github-release-reconciliation.sh
           bash eng/tests/test-pre-tag-check.sh
           bash eng/tests/test-release-provenance.sh
           bash eng/tests/test-release-version.sh
           python3 -m unittest eng/tests/test_verify_coverage.py -v
+          python3 -m unittest eng/tests/test_verify_sqlserver_trx.py -v
 
       - name: Restore repository dependency graph
         run: >-
@@ -93,33 +100,59 @@ jobs:
           --configuration Release --no-build --no-restore --disable-build-servers
           --logger "trx;LogFileName=core-tests.trx" -m:1 /nodeReuse:false
 
-      - name: Core performance and allocation budgets
+      - name: Capture SQL Server performance baseline evidence
+        if: ${{ inputs.capture-sqlserver-baseline }}
+        run: >-
+          dotnet run
+          --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks.csproj
+          --configuration Release --no-build --no-restore --
+          --capture-baseline --output artifacts/performance/sqlserver-baseline.json
+
+      - name: Upload SQL Server baseline evidence
+        if: ${{ always() && inputs.capture-sqlserver-baseline }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sqlserver-baseline-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/performance/sqlserver-baseline.json
+          if-no-files-found: warn
+          retention-days: ${{ inputs.artifact-retention-days }}
+
+      # Budget overruns are evidence, not CI failures on shared runner hardware.
+      # Report-only preserves fatal configuration, execution and output errors.
+      - name: Core performance and allocation report
         run: >-
           dotnet run
           --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks.csproj
           --configuration Release --no-build --no-restore --
-          --output artifacts/performance/core-results.json
+          --report-only --output artifacts/performance/core-results.json
 
-      - name: MySQL and MariaDB performance and allocation budgets
+      - name: MySQL and MariaDB performance and allocation report
         run: >-
           dotnet run
           --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks.csproj
           --configuration Release --no-build --no-restore --
-          --output artifacts/performance/mysql-results.json
+          --report-only --output artifacts/performance/mysql-results.json
 
-      - name: PostgreSQL performance and allocation budgets
+      - name: PostgreSQL performance and allocation report
         run: >-
           dotnet run
           --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks.csproj
           --configuration Release --no-build --no-restore --
-          --output artifacts/performance/postgresql-results.json
+          --report-only --output artifacts/performance/postgresql-results.json
 
-      - name: SQLite performance and allocation budgets
+      - name: SQLite performance and allocation report
         run: >-
           dotnet run
           --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks.csproj
           --configuration Release --no-build --no-restore --
-          --output artifacts/performance/sqlite-results.json
+          --report-only --output artifacts/performance/sqlite-results.json
+
+      - name: SQL Server performance and allocation report
+        run: >-
+          dotnet run
+          --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks.csproj
+          --configuration Release --no-build --no-restore --
+          --report-only --output artifacts/performance/sqlserver-results.json
 
       - name: Qualify reproducible packages
         env:
@@ -178,7 +211,12 @@ jobs:
       SAFE_MIGRATIONS_MYSQL_IMAGE: mariadb:11.8.8@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17481111890c4
       SAFE_MIGRATIONS_POSTGRES_VERSION: 18.6
       SAFE_MIGRATIONS_POSTGRES_IMAGE: postgres:18.6@sha256:06cad38a5d9f5d24b4d83d86def30795d5e4b757fedbf5281172b576dedcd941
+      SAFE_MIGRATIONS_SQLSERVER_VERSION: '2022'
+      SAFE_MIGRATIONS_SQLSERVER_IMAGE: mcr.microsoft.com/mssql/server:2022-latest@sha256:4402d880dd4c34bfa7d8705e56a86cd6c88da80a1f6bbbe741f999e76264a090
     steps:
+      - name: Require supported x86-64 host
+        run: test "$(uname -m)" = x86_64
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -210,7 +248,7 @@ jobs:
           --results-directory artifacts/coverage/core -m:1 /nodeReuse:false
 
       # Every live engine matrix cell below runs LargeScale. Coverage excludes
-      # the same test to avoid duplicating eleven expensive live executions.
+      # the same test to avoid duplicating live executions in the provider cells.
       - name: Collect MySQL and MariaDB adapter coverage
         run: >-
           dotnet test
@@ -237,6 +275,15 @@ jobs:
           --collect "Code Coverage;Format=cobertura"
           --filter "Category!=LargeScale"
           --results-directory artifacts/coverage/sqlite -m:1 /nodeReuse:false
+
+      - name: Collect SQL Server adapter coverage
+        run: >-
+          dotnet test
+          tests/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests.csproj
+          --configuration Release --no-build --no-restore --disable-build-servers
+          --collect "Code Coverage;Format=cobertura"
+          --filter "Category!=LargeScale"
+          --results-directory artifacts/coverage/sqlserver -m:1 /nodeReuse:false
 
       - name: Enforce merged product coverage
         run: >-
@@ -463,6 +510,82 @@ jobs:
           compression-level: 0
           retention-days: ${{ inputs.artifact-retention-days }}
 
+  sqlserver-engine:
+    name: SQL Server ${{ matrix.version }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - version: '2019'
+            image: mcr.microsoft.com/mssql/server:2019-latest@sha256:ef0b8db33970ecd01bed49c3a84a1d083c435a9891718df619298b67b352e74a
+          - version: '2022'
+            image: mcr.microsoft.com/mssql/server:2022-latest@sha256:4402d880dd4c34bfa7d8705e56a86cd6c88da80a1f6bbbe741f999e76264a090
+          - version: '2025'
+            image: mcr.microsoft.com/mssql/server:2025-latest@sha256:2b5b581621126574f3d1f75e78d3eebe8d05aedb59ad0cfdf9aa42cb0634d726
+    env:
+      SAFE_MIGRATIONS_SQLSERVER_IMAGE: ${{ matrix.image }}
+      SAFE_MIGRATIONS_SQLSERVER_VERSION: ${{ matrix.version }}
+    steps:
+      - name: Require supported x86-64 host
+        run: test "$(uname -m)" = x86_64
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - name: Restore repository dependency graph
+        run: >-
+          dotnet restore
+          tests/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests.csproj
+          --disable-parallel --disable-build-servers -m:1
+          /nodeReuse:false
+
+      - name: Release build
+        run: >-
+          dotnet build
+          tests/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests.csproj
+          --configuration Release --no-restore --disable-build-servers -m:1
+          /nodeReuse:false -p:ContinuousIntegrationBuild=true
+
+      - name: Integration tests
+        run: |
+          dotnet test \
+            tests/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests.csproj \
+            --configuration Release --no-build --no-restore --disable-build-servers \
+            --logger "trx;LogFileName=sqlserver-$SAFE_MIGRATIONS_SQLSERVER_VERSION.trx" \
+            -m:1 /nodeReuse:false
+          trx="$(find tests/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests/TestResults \
+            -type f -name "sqlserver-$SAFE_MIGRATIONS_SQLSERVER_VERSION.trx" -print -quit)"
+          test -n "$trx"
+          python3 eng/verify-sqlserver-trx.py "$trx"
+
+      - name: EF CLI, scripts, and bundle
+        run: >-
+          eng/verify-sqlserver-ef-tooling.sh
+          "$SAFE_MIGRATIONS_SQLSERVER_IMAGE"
+          "$SAFE_MIGRATIONS_SQLSERVER_VERSION"
+
+      - name: Upload test and tooling evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sqlserver-${{ matrix.version }}-evidence-${{ github.run_attempt }}
+          path: |
+            **/TestResults/*.trx
+            artifacts/ef-tooling/sqlserver
+            artifacts/performance/live
+          if-no-files-found: warn
+          compression-level: 0
+          retention-days: ${{ inputs.artifact-retention-days }}
+
   # A failed dependency would skip this job without always(), leaving branch
   # protection without the single fail-closed result it is intended to trust.
   required:
@@ -474,6 +597,7 @@ jobs:
       - mysql-engine
       - postgresql-engine
       - sqlite-engine
+      - sqlserver-engine
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions: {}
@@ -485,18 +609,21 @@ jobs:
           MYSQL_ENGINE_RESULT: ${{ needs.mysql-engine.result }}
           POSTGRESQL_ENGINE_RESULT: ${{ needs.postgresql-engine.result }}
           SQLITE_ENGINE_RESULT: ${{ needs.sqlite-engine.result }}
+          SQLSERVER_ENGINE_RESULT: ${{ needs.sqlserver-engine.result }}
         run: |
           printf 'package-and-core=%s\n' "$PACKAGE_AND_CORE_RESULT"
           printf 'coverage=%s\n' "$COVERAGE_RESULT"
           printf 'mysql-engine=%s\n' "$MYSQL_ENGINE_RESULT"
           printf 'postgresql-engine=%s\n' "$POSTGRESQL_ENGINE_RESULT"
           printf 'sqlite-engine=%s\n' "$SQLITE_ENGINE_RESULT"
+          printf 'sqlserver-engine=%s\n' "$SQLSERVER_ENGINE_RESULT"
 
           if [[ "$PACKAGE_AND_CORE_RESULT" != 'success' ||
                 "$COVERAGE_RESULT" != 'success' ||
                 "$MYSQL_ENGINE_RESULT" != 'success' ||
                 "$POSTGRESQL_ENGINE_RESULT" != 'success' ||
-                "$SQLITE_ENGINE_RESULT" != 'success' ]]; then
+                "$SQLITE_ENGINE_RESULT" != 'success' ||
+                "$SQLSERVER_ENGINE_RESULT" != 'success' ]]; then
             printf 'One or more required qualification jobs did not succeed.\n' >&2
             exit 1
           fi

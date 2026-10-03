@@ -37,7 +37,7 @@ engineering, package, and SBOM checks. Record the SDK and enabled rules with
 analysis evidence; a build command name alone does not establish which analysis
 ran.
 
-The four committed package-project lockfiles define the exact graph used to
+The five committed package-project lockfiles define the exact graph used to
 compile and qualify package artifacts. Engineering projects resolve the central
 declarations during CI. Dependabot proposes declaration and package-lockfile
 updates through ordinary pull requests, where the complete quality workflow
@@ -45,7 +45,8 @@ tests every resolved graph. GitHub Automatic Dependency Submission supplies
 resolved base and head snapshots to the hosted
 Dependency Graph. The separate Dependency Review workflow compares the
 pull-request delta with the official action, rejects new high-or-critical
-vulnerabilities and dependencies outside the approved SPDX license set, and
+vulnerabilities and dependencies outside the approved SPDX license set or the
+two exact [package exceptions](#sql-server-dependency-license-exceptions), and
 runs its bounded snapshot retry. The pinned action proceeds after its timeout
 even if a warning remains, so the workflow then checks the same GitHub compare
 endpoint and requires the snapshot-warning header to be present and empty.
@@ -70,6 +71,48 @@ Do not add a library, GitHub Action, scanner, or documentation tool merely to
 improve a badge signal. New dependencies require review of purpose, authority,
 license, maintenance, supply-chain exposure, and versioned verification. Use
 the [upgrade contract](../efcore-provider-upgrade-risk.md).
+
+### SQL Server dependency-license exceptions
+
+Only the following versions have a repository-specific license exception:
+
+| NuGet package | Approved version | Reviewed vendor terms |
+| --- | --- | --- |
+| Microsoft.Data.SqlClient.SNI.runtime | 6.0.2 | [Package license](https://www.nuget.org/packages/Microsoft.Data.SqlClient.SNI.runtime/6.0.2/License) |
+| Microsoft.Identity.Client.NativeInterop | 0.20.6 | [Package license](https://www.nuget.org/packages/Microsoft.Identity.Client.NativeInterop/0.20.6/License) |
+
+These transitive dependencies belong to the EF Core SQL Server / SqlClient
+stack, not Core or the other providers. Their vendor terms allow the
+repository's development and testing use. SafeMigrations publishes its own
+MIT-licensed code and dependency references; its SQL Server package does not
+bundle either vendor's managed or native binaries. This approval is for that
+use and package shape, not a grant of consumer binary-redistribution rights.
+Consumers remain subject to the terms of the SQL Server stack they choose.
+No vendor license text or binaries are added to the SafeMigrations package.
+
+The pinned Dependency Review action compares exception package names while
+ignoring PURL versions. Therefore the required job additionally runs
+`eng/verify-dependency-license-exceptions.py` over every page of the hosted
+dependency comparison. Added packages must match the approved name, ecosystem,
+version, and decoded PURL; other versions or inconsistent metadata block the
+job. The guard recognizes the action's permissively parsed names before
+enforcing consistent metadata; percent-encoded or malformed PURLs cannot
+bypass the version check.
+Removing an older version does not require a new exception. Product lockfiles
+and positive/negative regression cases are checked by the engineering gate.
+A version change requires a new review of the exact package's terms and an
+explicit policy update; it is not automatically approved by this exception.
+
+The global SPDX allowlist, high/critical vulnerability rejection, visible
+Scorecard warnings, complete-snapshot requirement, and all other quality gates
+remain unchanged. `LicenseRef-scancode-unknown` is not globally approved. A
+local test pass is not a hosted Dependency Review verdict.
+
+Primary implementation evidence, retrieved 2026-10-01:
+
+- [Pinned action's version-independent PURL matcher](https://github.com/actions/dependency-review-action/blob/a1d282b36b6f3519aa1f3fc636f609c47dddb294/src/purl.ts).
+- [GitHub dependency comparison response](https://docs.github.com/en/rest/dependency-graph/dependency-review#get-a-diff-of-the-dependencies-between-commits).
+- [GitHub CLI pagination and slurp contract](https://cli.github.com/manual/gh_api).
 
 ## Dynamic and coverage evidence
 

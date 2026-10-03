@@ -57,7 +57,8 @@ for package_id in \
     Doka.EntityFrameworkCore.SafeMigrations \
     Doka.EntityFrameworkCore.SafeMigrations.MySql \
     Doka.EntityFrameworkCore.SafeMigrations.PostgreSql \
-    Doka.EntityFrameworkCore.SafeMigrations.Sqlite; do
+    Doka.EntityFrameworkCore.SafeMigrations.Sqlite \
+    Doka.EntityFrameworkCore.SafeMigrations.SqlServer; do
     test -f "$package_dir/$package_id.$package_version.nupkg"
     test -f "$package_dir/$package_id.$package_version.snupkg"
 done
@@ -89,6 +90,9 @@ package_consumer_project_name() {
             ;;
         Sqlite)
             printf '%s\n' "Doka.EntityFrameworkCore.SafeMigrations.Sqlite.PackageConsumer.csproj"
+            ;;
+        SqlServer)
+            printf '%s\n' "Doka.EntityFrameworkCore.SafeMigrations.SqlServer.PackageConsumer.csproj"
             ;;
         *)
             echo "Unknown package consumer: $consumer_name" >&2
@@ -134,7 +138,7 @@ assert_safe_scaffolding_source() {
                 exit 1
             fi
             ;;
-        PostgreSql | Sqlite)
+        PostgreSql | Sqlite | SqlServer)
             if ! grep -Fq 'migrationBuilder.CreateTableIfNotExists(' "$migration_file"; then
                 echo "$consumer_name incremental migration did not use CreateTableIfNotExists." >&2
                 sed -n '1,220p' "$migration_file" >&2
@@ -277,8 +281,10 @@ verify_consumer() {
                 || grep -Fq 'Npgsql.EntityFrameworkCore.PostgreSQL/' "$assets_file" \
                 || grep -Fq 'Doka.EntityFrameworkCore.SafeMigrations.Sqlite/' "$assets_file" \
                 || grep -Fq 'Microsoft.EntityFrameworkCore.Sqlite/' "$assets_file" \
-                || grep -Fq 'Microsoft.EntityFrameworkCore.Sqlite.Core/' "$assets_file"; then
-                echo "MySQL/MariaDB consumer resolved PostgreSQL or SQLite assets." >&2
+                || grep -Fq 'Microsoft.EntityFrameworkCore.Sqlite.Core/' "$assets_file" \
+                || grep -Fq 'Doka.EntityFrameworkCore.SafeMigrations.SqlServer/' "$assets_file" \
+                || grep -Fq 'Microsoft.EntityFrameworkCore.SqlServer/' "$assets_file"; then
+                echo "MySQL/MariaDB consumer resolved another provider's assets." >&2
                 exit 1
             fi
             ;;
@@ -290,8 +296,10 @@ verify_consumer() {
                 || grep -Fq 'Doka.EntityFrameworkCore.MySql/' "$assets_file" \
                 || grep -Fq 'Doka.EntityFrameworkCore.SafeMigrations.Sqlite/' "$assets_file" \
                 || grep -Fq 'Microsoft.EntityFrameworkCore.Sqlite/' "$assets_file" \
-                || grep -Fq 'Microsoft.EntityFrameworkCore.Sqlite.Core/' "$assets_file"; then
-                echo "PostgreSQL consumer resolved MySQL/MariaDB or SQLite assets." >&2
+                || grep -Fq 'Microsoft.EntityFrameworkCore.Sqlite.Core/' "$assets_file" \
+                || grep -Fq 'Doka.EntityFrameworkCore.SafeMigrations.SqlServer/' "$assets_file" \
+                || grep -Fq 'Microsoft.EntityFrameworkCore.SqlServer/' "$assets_file"; then
+                echo "PostgreSQL consumer resolved another provider's assets." >&2
                 exit 1
             fi
             ;;
@@ -303,8 +311,25 @@ verify_consumer() {
             if grep -Fq 'Doka.EntityFrameworkCore.SafeMigrations.MySql/' "$assets_file" \
                 || grep -Fq 'Doka.EntityFrameworkCore.MySql/' "$assets_file" \
                 || grep -Fq 'Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/' "$assets_file" \
-                || grep -Fq 'Npgsql.EntityFrameworkCore.PostgreSQL/' "$assets_file"; then
-                echo "SQLite consumer resolved MySQL/MariaDB or PostgreSQL assets." >&2
+                || grep -Fq 'Npgsql.EntityFrameworkCore.PostgreSQL/' "$assets_file" \
+                || grep -Fq 'Doka.EntityFrameworkCore.SafeMigrations.SqlServer/' "$assets_file" \
+                || grep -Fq 'Microsoft.EntityFrameworkCore.SqlServer/' "$assets_file"; then
+                echo "SQLite consumer resolved another provider's assets." >&2
+                exit 1
+            fi
+            ;;
+        SqlServer)
+            grep -Fq 'Doka.EntityFrameworkCore.SafeMigrations.SqlServer/' "$assets_file"
+            grep -Fq 'Microsoft.EntityFrameworkCore.SqlServer/' "$assets_file"
+
+            if grep -Fq 'Doka.EntityFrameworkCore.SafeMigrations.MySql/' "$assets_file" \
+                || grep -Fq 'Doka.EntityFrameworkCore.MySql/' "$assets_file" \
+                || grep -Fq 'Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/' "$assets_file" \
+                || grep -Fq 'Npgsql.EntityFrameworkCore.PostgreSQL/' "$assets_file" \
+                || grep -Fq 'Doka.EntityFrameworkCore.SafeMigrations.Sqlite/' "$assets_file" \
+                || grep -Fq 'Microsoft.EntityFrameworkCore.Sqlite/' "$assets_file" \
+                || grep -Fq 'Microsoft.EntityFrameworkCore.Sqlite.Core/' "$assets_file"; then
+                echo "SQL Server consumer resolved another provider's assets." >&2
                 exit 1
             fi
             ;;
@@ -319,6 +344,27 @@ verify_consumer() {
         --no-restore \
         --disable-build-servers \
         "${msbuild_properties[@]}"
+
+    if [[ "$consumer_name" == SqlServer ]]; then
+        local generated_assembly_info
+        local expected_reference_count=0
+
+        generated_assembly_info="$(
+            dotnet msbuild "$consumer_project" \
+                -p:Configuration=Release \
+                -getProperty:GeneratedAssemblyInfoFile \
+                "${msbuild_properties[@]}"
+        )"
+
+        if [[ "$expects_design_reference" == true ]]; then
+            expected_reference_count=1
+        fi
+
+        assert_design_reference_count "$generated_assembly_info" "$expected_reference_count"
+        # WHY: MSBuild can split long C# attribute strings into concatenated
+        # literals. The compiled consumer below verifies the exact type and
+        # provider arguments; source substring matching cannot prove them.
+    fi
 
     if [[ "$expects_design_reference" == true ]]; then
         dotnet run \
@@ -336,6 +382,43 @@ verify_consumer() {
             --no-build \
             --no-restore \
             "${msbuild_properties[@]}"
+    fi
+
+    if [[ "$consumer_name" == SqlServer ]]; then
+        local -a negative_reference_arguments=(--)
+        local expected_reference_error
+        local reference_failure_output
+        local reference_failure_exit
+
+        if [[ "$expects_design_reference" == true ]]; then
+            expected_reference_error="The runtime-only SQL Server package consumer contains an unexpected design-time service reference."
+        else
+            negative_reference_arguments=(-- --expect-design-reference)
+            expected_reference_error="The SQL Server package consumer is missing the expected design-time service reference."
+        fi
+
+        if reference_failure_output="$(
+            dotnet run \
+                --project "$consumer_project" \
+                --configuration Release \
+                --no-build \
+                --no-restore \
+                "${msbuild_properties[@]}" \
+                "${negative_reference_arguments[@]}" 2>&1
+        )"; then
+            echo "SQL Server $tooling_reference consumer accepted the opposite design-reference expectation." >&2
+            exit 1
+        else
+            reference_failure_exit=$?
+        fi
+
+        printf '%s\n' "$reference_failure_output"
+        if [[ "$reference_failure_exit" != 2 ]]; then
+            echo "SQL Server design-reference rejection returned unexpected exit code $reference_failure_exit." >&2
+            exit 1
+        fi
+
+        grep -Fxq "$expected_reference_error" <<<"$reference_failure_output"
     fi
 
     local migration_name="Package${tooling_reference}ScaffoldingProbe"
@@ -479,7 +562,7 @@ verify_consumer() {
                 exit 1
             fi
             ;;
-        PostgreSql)
+        PostgreSql | SqlServer)
             grep -Fq 'migrationBuilder.CreateTableIfNotExists(' "$migration_file"
             grep -Fq 'migrationBuilder.DropTableIfExists(' "$migration_file"
             ;;
@@ -695,7 +778,7 @@ verify_split_mysql_consumer() {
         "${msbuild_properties[@]}"
 }
 
-for consumer_name in MySql PostgreSql Sqlite; do
+for consumer_name in MySql PostgreSql Sqlite SqlServer; do
     verify_consumer "$consumer_name" Design
     verify_consumer "$consumer_name" Tools
     verify_consumer "$consumer_name" DesignWithoutSafeBuildAssets

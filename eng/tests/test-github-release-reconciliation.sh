@@ -208,7 +208,8 @@ create_case() {
         Doka.EntityFrameworkCore.SafeMigrations \
         Doka.EntityFrameworkCore.SafeMigrations.MySql \
         Doka.EntityFrameworkCore.SafeMigrations.PostgreSql \
-        Doka.EntityFrameworkCore.SafeMigrations.Sqlite; do
+        Doka.EntityFrameworkCore.SafeMigrations.Sqlite \
+        Doka.EntityFrameworkCore.SafeMigrations.SqlServer; do
         printf '%s primary\n' "$package_id" \
             >"$case_root/artifacts/packages/$package_id.$fixture_version.nupkg"
         printf '%s symbols\n' "$package_id" \
@@ -338,11 +339,11 @@ jq -e \
     '.isDraft == true
       and .isImmutable == false
       and .isPrerelease == true
-      and (.assets | length) == 11' \
+      and (.assets | length) == 13' \
     "$fresh_case/state/release.json" >/dev/null
 grep -Fxq "GitHub Release draft is complete and verified." "$fresh_case/stage.stdout"
 assert_empty "$fresh_case/stage.stderr"
-test "$(grep -c '^release upload ' "$fresh_case/state/commands.log")" -eq 11
+test "$(grep -c '^release upload ' "$fresh_case/state/commands.log")" -eq 13
 test "$(grep -c '^release edit ' "$fresh_case/state/commands.log" || true)" -eq 0
 test "$(grep -c '^api --paginate ' "$fresh_case/state/commands.log")" -ge 2
 grep -Fq "$release_inventory_command" "$fresh_case/state/commands.log"
@@ -355,7 +356,7 @@ jq -e \
     '.isDraft == false
       and .isImmutable == true
       and .isPrerelease == true
-      and (.assets | length) == 11' \
+      and (.assets | length) == 13' \
     "$fresh_case/state/release.json" >/dev/null
 grep -Fxq "3" "$fresh_case/state/release-verify-count"
 grep -Fq "Waiting for GitHub Release and asset attestations (1/3)..." \
@@ -392,7 +393,7 @@ jq -e \
     '.isDraft == true
       and .isImmutable == false
       and .isPrerelease == false
-      and (.assets | length) == 11' \
+      and (.assets | length) == 13' \
     "$stable_case/state/release.json" >/dev/null
 if grep -Fq -- "--prerelease" "$stable_case/state/commands.log"; then
     echo "Stable draft was incorrectly classified as a prerelease." >&2
@@ -418,7 +419,7 @@ create_remote_draft "$partial_case"
 run_reconciler "$partial_case" stage \
     >"$partial_case/stage.stdout" \
     2>"$partial_case/stage.stderr"
-test "$(grep -c '^release upload ' "$partial_case/state/commands.log")" -eq 10
+test "$(grep -c '^release upload ' "$partial_case/state/commands.log")" -eq 12
 test "$(grep -c '^release create ' "$partial_case/state/commands.log" || true)" -eq 0
 assert_empty "$partial_case/stage.stderr"
 
@@ -430,7 +431,7 @@ run_reconciler \
     2>"$asset_visibility_case/publish.stderr"
 grep -Fxq "3" "$asset_visibility_case/state/release-verify-count"
 test "$(grep -c '^release verify-asset ' \
-    "$asset_visibility_case/state/commands.log")" -eq 13
+    "$asset_visibility_case/state/commands.log")" -eq 15
 grep -Fq "Waiting for GitHub Release and asset attestations (2/3)..." \
     "$asset_visibility_case/publish.stderr"
 grep -Fxq "Immutable GitHub Release and every asset attestation are verified." \
@@ -482,9 +483,23 @@ if run_reconciler "$package_shape_case" stage \
     echo "Invalid primary and symbol package distribution unexpectedly passed." >&2
     exit 1
 fi
-grep -Fxq "Expected exactly four primary packages and four symbol packages." \
+grep -Fxq "Expected exactly five primary packages and five symbol packages." \
     "$package_shape_case/stage.stderr"
 test ! -f "$package_shape_case/state/commands.log"
+
+package_identity_case="$(create_case package-identity)"
+mv \
+    "$package_identity_case/artifacts/packages/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.$package_version.nupkg" \
+    "$package_identity_case/artifacts/packages/Unexpected.$package_version.nupkg"
+if run_reconciler "$package_identity_case" stage \
+    >"$package_identity_case/stage.stdout" \
+    2>"$package_identity_case/stage.stderr"; then
+    echo "An unexpected package identity with the correct package count unexpectedly passed." >&2
+    exit 1
+fi
+grep -Fxq "Package identities differ from the exact five-package release contract." \
+    "$package_identity_case/stage.stderr"
+test ! -f "$package_identity_case/state/commands.log"
 
 missing_provenance_case="$(create_case missing-provenance)"
 rm "$missing_provenance_case/artifacts/release-provenance/release-provenance.intoto.jsonl"
@@ -649,6 +664,10 @@ assert_command_order \
 assert_command_order \
     "$workflow" \
     "- name: Publish SQLite package" \
+    "- name: Publish SQL Server package"
+assert_command_order \
+    "$workflow" \
+    "- name: Publish SQL Server package" \
     "- name: Publish Core symbols"
 assert_command_order \
     "$workflow" \
@@ -665,6 +684,10 @@ assert_command_order \
 assert_command_order \
     "$workflow" \
     "- name: Publish SQLite symbols" \
+    "- name: Publish SQL Server symbols"
+assert_command_order \
+    "$workflow" \
+    "- name: Publish SQL Server symbols" \
     "- name: Verify public NuGet packages"
 assert_command_order \
     "$workflow" \
@@ -678,17 +701,19 @@ grep -Fq "if: steps.nuget-preflight.outputs.mysql_published != 'true'" \
     "$workflow"
 grep -Fq "if: steps.nuget-preflight.outputs.postgresql_published != 'true'" \
     "$workflow"
+grep -Fq "if: steps.nuget-preflight.outputs.sqlserver_published != 'true'" \
+    "$workflow"
 grep -Fq -- '--head --location' "$workflow"
 grep -Fq '408 | 429 | 5??' "$workflow"
-grep -Fq 'transport-error (curl exit $curl_exit_code)' "$workflow"
+grep -Fq "transport-error (curl exit \$curl_exit_code)" "$workflow"
 if [[ "$(grep -Fc -- '--no-symbols --skip-duplicate --timeout 300' \
-    "$workflow")" -ne 4 ]]; then
+    "$workflow")" -ne 5 ]]; then
     echo "Every primary package must use the explicit primary push contract." >&2
     exit 1
 fi
 if [[ "$(grep -Ec \
-    '^[[:space:]]+- name: Publish (Core|MySQL|PostgreSQL|SQLite) symbols$' \
-    "$workflow")" -ne 4 ]]; then
+    '^[[:space:]]+- name: Publish (Core|MySQL|PostgreSQL|SQLite|SQL Server) symbols$' \
+    "$workflow")" -ne 5 ]]; then
     echo "Every symbol package must have an explicit publication step." >&2
     exit 1
 fi

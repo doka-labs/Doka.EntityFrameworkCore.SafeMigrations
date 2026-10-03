@@ -66,7 +66,8 @@ jobs:
             doka.entityframeworkcore.safemigrations \
             doka.entityframeworkcore.safemigrations.mysql \
             doka.entityframeworkcore.safemigrations.postgresql \
-            doka.entityframeworkcore.safemigrations.sqlite; do
+            doka.entityframeworkcore.safemigrations.sqlite \
+            doka.entityframeworkcore.safemigrations.sqlserver; do
             package_url="https://api.nuget.org/v3-flatcontainer/$package_id"
             package_url+="/$PACKAGE_VERSION/$package_id.$PACKAGE_VERSION.nupkg"
             http_code="$(curl --silent --show-error --location \
@@ -297,6 +298,7 @@ jobs:
             "mysql|doka.entityframeworkcore.safemigrations.mysql"
             "postgresql|doka.entityframeworkcore.safemigrations.postgresql"
             "sqlite|doka.entityframeworkcore.safemigrations.sqlite"
+            "sqlserver|doka.entityframeworkcore.safemigrations.sqlserver"
           )
 
           for descriptor in "${packages[@]}"; do
@@ -392,6 +394,17 @@ jobs:
           --source https://api.nuget.org/v3/index.json
           --no-symbols --skip-duplicate --timeout 300
 
+      - name: Publish SQL Server package
+        if: steps.nuget-preflight.outputs.sqlserver_published != 'true'
+        env:
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+          PACKAGE: >-
+            artifacts/packages/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.${{ env.PACKAGE_VERSION }}.nupkg
+        run: >-
+          dotnet nuget push "$PACKAGE"
+          --source https://api.nuget.org/v3/index.json
+          --no-symbols --skip-duplicate --timeout 300
+
       - name: Publish Core symbols
         env:
           NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
@@ -424,6 +437,16 @@ jobs:
         env:
           NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
           PACKAGE: artifacts/packages/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.${{ env.PACKAGE_VERSION }}.snupkg
+        run: >-
+          dotnet nuget push "$PACKAGE"
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate --timeout 300
+
+      - name: Publish SQL Server symbols
+        env:
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+          PACKAGE: >-
+            artifacts/packages/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.${{ env.PACKAGE_VERSION }}.snupkg
         run: >-
           dotnet nuget push "$PACKAGE"
           --source https://api.nuget.org/v3/index.json

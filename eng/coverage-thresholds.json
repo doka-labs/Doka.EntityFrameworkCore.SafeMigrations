@@ -20,6 +20,11 @@
       "name": "Doka.EntityFrameworkCore.SafeMigrations.Sqlite",
       "minimumLineRate": 0.90,
       "minimumBranchRate": 0.75
+    },
+    {
+      "name": "Doka.EntityFrameworkCore.SafeMigrations.SqlServer",
+      "minimumLineRate": 0.90,
+      "minimumBranchRate": 0.75
     }
   ]
 }

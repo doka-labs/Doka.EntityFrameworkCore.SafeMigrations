@@ -4,7 +4,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 [Migration(MigrationIdentifier)]
 public sealed class SqliteCoreConvergenceMigration : Migration
 {
-    public const string MigrationIdentifier = "202609180001_SqliteCoreConvergence";
+    public const string MigrationIdentifier = "20260918000100_SqliteCoreConvergence";
 
     protected override void Up(
         MigrationBuilder migrationBuilder

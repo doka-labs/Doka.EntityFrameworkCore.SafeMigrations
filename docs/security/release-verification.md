@@ -4,6 +4,11 @@ Use this procedure after a release is public. It performs read-only downloads
 and verification; it does not dispatch workflows, create tags, request OIDC
 credentials, or publish packages.
 
+The five-package inventory below applies beginning with SQL Server's first
+release. Releases through 10.4.5 contain four packages and no SQL Server
+artifact. Verify a historical release with its matching reviewed source and
+inventory rather than this branch's future five-package readback script.
+
 ## Verify the signed source identity
 
 Start from an independently approved version, commit, and copy of the
@@ -44,7 +49,7 @@ publication workflow uses a bounded retry. An independent verifier may repeat
 the same command for the same immutable tag; never treat a missing attestation
 as success or disable verification.
 
-Require exactly four `.nupkg`, four `.snupkg`, `SHA256SUMS`,
+Require exactly five `.nupkg`, five `.snupkg`, `SHA256SUMS`,
 `manifest.spdx.json`, and `release-provenance.intoto.jsonl`. Then verify each
 downloaded asset against the immutable Release:
 
@@ -65,7 +70,7 @@ On macOS, use `shasum -a 256 --check SHA256SUMS` instead.
 
 ## Verify portable build provenance
 
-The portable bundle must bind the eight packages, `SHA256SUMS`, and the SPDX
+The portable bundle must bind the ten packages, `SHA256SUMS`, and the SPDX
 manifest. Verify each subject while pinning the repository, signer workflow,
 workflow commit, source ref, source commit, and hosted-runner requirement:
 
@@ -142,7 +147,7 @@ bash eng/readback-nuget.sh \
 It requires valid NuGet repository signatures and compares every public
 package entry with the qualified Release asset after excluding only
 `.signature.p7s`. NuGet.org separately validates and indexes the submitted
-`.snupkg` files; confirm the public symbol status for all four package IDs.
+`.snupkg` files; confirm the public symbol status for all five package IDs.
 
 Stop on an unknown signer, source mismatch, missing or unexpected asset,
 invalid attestation, invalid NuGet signature, content difference, or failed

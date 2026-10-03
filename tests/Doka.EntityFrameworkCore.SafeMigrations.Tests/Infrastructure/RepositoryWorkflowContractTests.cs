@@ -1,7 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 /// <summary>
-/// Pins security-relevant workflow structure without adding a YAML parser to
+/// Pins required workflow structure without adding a YAML parser to
 /// the product or engineering dependency graph.
 /// </summary>
 public sealed class RepositoryWorkflowContractTests
@@ -9,12 +9,45 @@ public sealed class RepositoryWorkflowContractTests
     private const string DependencyReviewAction =
         "actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0";
 
+    /// <summary>
+    /// Keeps every benchmark budget informational without suppressing execution or qualification failures.
+    /// </summary>
+    [Fact]
+    public void QualityWorkflow_ReportsAllBenchmarkBudgetsWithoutIgnoringFailures()
+    {
+        var workflowPath = Path.Combine(RepositoryRoot(), ".github", "workflows", "quality-gates.yml");
+        var providers = new[] { "core", "mysql", "postgresql", "sqlite", "sqlserver" };
+
+        var workflow = File.ReadAllText(workflowPath);
+
+        Assert.Equal(providers.Length, Regex.Count(workflow, "--report-only"));
+
+        foreach (var provider in providers)
+        {
+            Assert.Contains($"--report-only --output artifacts/performance/{provider}-results.json",
+                workflow, StringComparison.Ordinal);
+        }
+
+        Assert.DoesNotContain("continue-on-error:", workflow, StringComparison.Ordinal);
+        Assert.Contains("- name: Core tests", workflow, StringComparison.Ordinal);
+        Assert.Contains("- name: Qualify reproducible packages", workflow, StringComparison.Ordinal);
+        Assert.Contains("- name: Generate and validate SPDX SBOM", workflow, StringComparison.Ordinal);
+        Assert.Contains("artifacts/performance", workflow, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Keeps dependency review read-only and requires the complete snapshot and license-exception guards.
+    /// </summary>
     [Fact]
     public void DependencyReview_IsReadOnlyPinnedAndFailClosed()
     {
-        var workflow = File.ReadAllText(
-            Path.Combine(RepositoryRoot(), ".github", "workflows", "dependency-review.yml"));
+        // Arrange
+        var workflowPath = Path.Combine(RepositoryRoot(), ".github", "workflows", "dependency-review.yml");
 
+        // Act
+        var workflow = File.ReadAllText(workflowPath);
+
+        // Assert
         Assert.Contains("name: dependency-review", workflow, StringComparison.Ordinal);
         Assert.Contains("pull_request:", workflow, StringComparison.Ordinal);
         Assert.Contains("branches:\n      - main", workflow, StringComparison.Ordinal);
@@ -25,9 +58,15 @@ public sealed class RepositoryWorkflowContractTests
         Assert.Contains("show-openssf-scorecard: true", workflow, StringComparison.Ordinal);
         Assert.Contains("retry-on-snapshot-warnings: true", workflow, StringComparison.Ordinal);
         Assert.Contains("retry-on-snapshot-warnings-timeout: 180", workflow, StringComparison.Ordinal);
-        Assert.Contains("Require complete dependency snapshots", workflow, StringComparison.Ordinal);
+        Assert.Contains("- name: Require complete snapshots and exact license-exception versions", workflow,
+            StringComparison.Ordinal);
         Assert.Contains("dependency-graph/compare/${BASE_SHA}...${HEAD_SHA}", workflow, StringComparison.Ordinal);
         Assert.Contains("verify-dependency-snapshot-headers.sh", workflow, StringComparison.Ordinal);
+        Assert.Contains("pkg:nuget/Microsoft.Data.SqlClient.SNI.runtime@6.0.2", workflow, StringComparison.Ordinal);
+        Assert.Contains("pkg:nuget/Microsoft.Identity.Client.NativeInterop@0.20.6", workflow, StringComparison.Ordinal);
+        Assert.Contains("gh api --paginate --slurp", workflow, StringComparison.Ordinal);
+        Assert.Contains("python3 eng/verify-dependency-license-exceptions.py \"$response_body\"", workflow,
+            StringComparison.Ordinal);
         Assert.Contains("persist-credentials: false", workflow, StringComparison.Ordinal);
 
         Assert.DoesNotContain("pull_request_target", workflow, StringComparison.Ordinal);

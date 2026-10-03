@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Doka.EntityFrameworkCore.SafeMigrations.SqlServer</AssemblyName>
+    <RootNamespace>Doka.EntityFrameworkCore.SafeMigrations.SqlServer</RootNamespace>
+
+    <!-- NuGet packaging -->
+    <IsPackable>true</IsPackable>
+    <PackageId>Doka.EntityFrameworkCore.SafeMigrations.SqlServer</PackageId>
+    <Description>
+      SQL Server provider for Doka.EntityFrameworkCore.SafeMigrations - safe,
+      idempotent, provider-aware EF Core migration operations.
+    </Description>
+    <PackageTags>efcore;entityframeworkcore;migrations;safe-migrations;idempotent;sqlserver</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+    <None Include="buildTransitive\Doka.EntityFrameworkCore.SafeMigrations.SqlServer.props"
+          Pack="true"
+          PackagePath="buildTransitive\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design"
+                      PrivateAssets="all"
+                      IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive; compile" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <ProjectReference Include="..\Doka.EntityFrameworkCore.SafeMigrations\Doka.EntityFrameworkCore.SafeMigrations.csproj" />
+  </ItemGroup>
+</Project>

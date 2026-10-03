@@ -39,7 +39,13 @@ internal sealed partial class SafeMigrationPreflightProjection
                 var droppedAnalysis = removedDefinitionMatches
                     || liveAnalysis.ObservedState == SafeMigrationObservedState.Matching
                         ? Analysis(SafeMigrationObservedState.Missing)
-                        : StructureStateUnknown();
+                        : _projectedKeyAnalyzer is null
+                            ? StructureStateUnknown()
+                            : new SafeMigrationProviderAnalysis(
+                                SafeMigrationObservedState.PrerequisiteMissing,
+                                SafeMigrationRepairCapability.None,
+                                postconditionSatisfied: false,
+                                "projected_primary_key_replacement_unproven");
 
                 if (droppedAnalysis.ObservedState == SafeMigrationObservedState.Missing
                     && !TryGetConstraintPrerequisites(
@@ -61,7 +67,10 @@ internal sealed partial class SafeMigrationPreflightProjection
                     intent.Definition.Schema,
                     droppedAnalysis);
 
-                return ValidateProjectedPrimaryKey(intent, liveAnalysis, droppedResult);
+                // WHY: A provider may hold an exact live row/column proof for
+                // a different replacement key even when Core never accepted
+                // the removed definition. Unknown structure is not weakened.
+                return ValidateProjectedPrimaryKey(intent, liveAnalysis, droppedResult, validateReplacement: true);
             }
 
             var projectedAnalysis = CanProjectMissingPrimaryKey(intent, liveAnalysis)
@@ -150,11 +159,13 @@ internal sealed partial class SafeMigrationPreflightProjection
     private SafeMigrationProviderAnalysis ValidateProjectedPrimaryKey(
         EnsurePrimaryKeyIntent intent,
         SafeMigrationProviderAnalysis liveAnalysis,
-        SafeMigrationProviderAnalysis projectedAnalysis
+        SafeMigrationProviderAnalysis projectedAnalysis,
+        bool validateReplacement = false
     )
     {
         if (_projectedKeyAnalyzer is null
-            || (projectedAnalysis.ObservedState != SafeMigrationObservedState.Missing
+            || (!validateReplacement
+                && projectedAnalysis.ObservedState != SafeMigrationObservedState.Missing
                 && !HasProjectedKeyColumnChange(
                     intent.Definition.Table,
                     intent.Definition.Schema,

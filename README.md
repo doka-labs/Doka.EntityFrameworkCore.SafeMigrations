@@ -13,6 +13,8 @@ SafeMigrations is a fail-closed EF Core 10 migration library for databases whose
 starting schema may differ between application instances. It supports one
 canonical migration sequence across MySQL, MariaDB, PostgreSQL, and SQLite without
 assuming a common legacy migration history or deleting unknown objects.
+This development branch adds SQL Server as a separately packaged provider;
+it is not part of the published 10.4.5 package set.
 
 The library classifies each operation against the live catalog as `missing`,
 `matching`, `transition_ready`, `different`, `unsupported`, `data_blocked`, or
@@ -33,6 +35,8 @@ equivalent.
   Npgsql 10
 - `Doka.EntityFrameworkCore.SafeMigrations.Sqlite`: SQLite adapter on the
   bundle-neutral official EF Core SQLite 10 provider core
+- `Doka.EntityFrameworkCore.SafeMigrations.SqlServer`: SQL Server adapter on
+  the official EF Core SQL Server 10 provider (unreleased)
 
 The declared release-qualification matrix is:
 
@@ -41,15 +45,18 @@ The declared release-qualification matrix is:
 | `.MySql` | MySQL 8.4 and 9.7; MariaDB 10.11, 11.4, 11.8, and 12.3 |
 | `.PostgreSql` | PostgreSQL 14 through 18, with one release-gate cell per supported major |
 | `.Sqlite` | SQLite 3.46.1 or later through locked `Microsoft.EntityFrameworkCore.Sqlite.Core`; applications select and reference their native SQLite bundle, while qualification covers the default bundle in-memory and against asserted file databases |
+| `.SqlServer` | SQL Server 2019, 2022, and 2025; three separately pinned Linux/x86-64 container cells in CI |
 
 The CI and release workflows pin the exact patch tags and image digests used
 when that matrix executes. The exact successful run, not this table, is release
 evidence. See [Support and qualification](docs/support-and-qualification.md).
 
-The initial complete stable delivery is 10.0.0. The latest stable tag is
-10.4.4. This source prepares stable 10.4.5; only the blocking release workflow
-and readback of all four public packages establish its availability. See the
-[changelog](CHANGELOG.md).
+The initial complete stable delivery is 10.0.0. The versioned installation
+examples below target the four-package 10.4.5 release. Verify the exact
+package's public availability before installation; source and changelog entries
+alone are not publication evidence. See the [changelog](CHANGELOG.md).
+The SQL Server package requires a later, separately qualified release; do not
+select it using the 10.4.5 version.
 
 The 10.4.5 patch bounds MySQL/MariaDB composite-index catalog analysis by
 grouping candidate index rows instead of repeating a catalog query for every
@@ -99,6 +106,10 @@ application's selected SQLitePCLRaw provider and bundle for a custom native
 SQLite or SQLCipher deployment. The connected engine must report SQLite
 3.46.1 or later.
 
+After the SQL Server package has been published and verified, install
+`Doka.EntityFrameworkCore.SafeMigrations.SqlServer` at that release's exact
+version. It is not available in the 10.4.5 package set.
+
 The [.NET package command](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-package-add)
 documents exact-version selection. Verify release identity and content using
 [Release verification](docs/security/release-verification.md).
@@ -132,6 +143,25 @@ services.AddDbContext<AppDbContext>(options =>
     options.UseSqliteSafeMigrations();
 });
 ```
+
+SQL Server registration is additive to `UseSqlServer`:
+
+```csharp
+using Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
+
+services.AddDbContext<ApplicationDbContext>(options =>
+{
+    options.UseSqlServer(connectionString);
+    options.UseSqlServerSafeMigrations<ApplicationDbContext>();
+});
+```
+
+See [SQL Server behavior](docs/sqlserver-behavior.md) for catalog permissions,
+provider-specific rejection boundaries, and supported engines.
+The EF migrator recovers session-scoped `IDENTITY_INSERT` after command failure
+or cancellation. A SQL-script client must recover the same session or discard
+it after an attention or timeout; SQL Server `TRY/CATCH` does not catch those
+client interruptions.
 
 `UseMySqlSafeMigrations()` declares its user-variable requirement through the
 Doka 10.4 line. For a provider-owned connection string, Doka supplies
@@ -799,6 +829,10 @@ Provider-specific features such as PostgreSQL filtered, included,
 operator-class, collation, descending, and null-distinctness index facets are
 explicit rather than silently degraded. An omitted column collation means the
 exact provider-inferred effective default, never an ignored comparison facet.
+SQL Server scaffolding preserves included non-key index columns through the
+public `CreateIndexWithIncludesIfNotExistsFromModel` and
+`CreateCompositeIndexWithIncludesIfNotExistsFromModel` operations; filtered and
+descending index facets remain part of the reviewed index definition.
 Index key direction and null order distinguish provider default from explicit
 `ASC`, `DESC`, `NULLS FIRST`, and `NULLS LAST`.
 
@@ -909,15 +943,23 @@ dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Doka.EntityFrame
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests.csproj --configuration Release
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.csproj --configuration Release
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests.csproj --configuration Release
+dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests.csproj --configuration Release
 ```
 
-Docker is required for provider tests. CI additionally executes every supported
+Docker is required for server-provider tests. SQL Server live tests additionally
+require a supported x64 host; ARM64 runs skip them and cannot establish live
+qualification. CI additionally executes every supported
 engine profile, EF CLI/script/bundle paths, merged coverage thresholds,
-performance/allocation budgets, deterministic double-pack, isolated
+informational performance/allocation reports, deterministic double-pack, isolated
 package-only consumers, and SPDX SBOM validation. FsCheck exercises generated
 Core and provider invariants with shrunk counterexamples, while the separate
 Dependency Review gate rejects newly introduced high-severity vulnerabilities
 and dependencies outside the approved license policy before merge.
+
+Benchmark budget overruns do not block CI or release qualification on shared
+hardware. All five sets retain measured durations, allocations, comparison
+limits, and verdicts; invalid configuration or failed benchmark execution still
+blocks. See [Support and qualification](docs/support-and-qualification.md).
 
 Each provider matrix cell also persists a live full-runner latency artifact.
 It measures 20 full-runner invocations after a warmup against 100 expected
@@ -933,9 +975,11 @@ signed annotated tag on that qualified commit and approve publication. The
 write-capable job validates and cryptographically verifies the portable SLSA
 bundle before using NuGet Trusted Publishing, verifies public repository
 signatures and package content, and creates or verifies an immutable GitHub
-Release with the exact eight package files, checksums, SPDX manifest, and
+Release with the exact ten package files, checksums, SPDX manifest, and
 `release-provenance.intoto.jsonl`. Candidates are marked prerelease and never
 replace the latest stable release.
+The five-package release contract begins with SQL Server's first release;
+the historical 10.4.5 release remains the four-package set.
 See [Publication operations](docs/operations/release-publication.md) for the
 step-by-step maintainer guide and current readiness, and
 [Release process](docs/release-process.md) for the qualification contract.

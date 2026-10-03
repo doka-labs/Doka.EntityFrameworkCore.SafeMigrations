@@ -53,6 +53,19 @@
       "sqlite_model_data_analysis_384_tables_200",
       "sqlite_model_data_analysis_384_tables_1000_relational",
       "sqlite_canonical_model_validation"
+    ],
+    "sqlserver": [
+      "sqlserver_generation_1",
+      "sqlserver_generation_100",
+      "sqlserver_generation_1000",
+      "sqlserver_analyzer_build_1",
+      "sqlserver_analyzer_build_512",
+      "sqlserver_analyzer_build_1000",
+      "sqlserver_repair_generation_1000",
+      "sqlserver_repair_analyzer_build_1000",
+      "sqlserver_model_data_generation_384",
+      "sqlserver_model_data_analyzer_build_384",
+      "sqlserver_canonical_model_validation"
     ]
   },
   "budgets": {
@@ -117,6 +130,61 @@
     "sqlite_model_data_analysis_384_tables_200": { "baselineDurationMilliseconds": 30, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 12000000 },
     "sqlite_model_data_analysis_384_tables_1000_relational": { "baselineDurationMilliseconds": 160, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 52000000 },
     "sqlite_canonical_model_validation": { "baselineDurationMilliseconds": 2, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 200000 },
+    "sqlserver_generation_1": {
+      "baselineDurationMilliseconds": 0.3295,
+      "regressionTolerancePercent": 200,
+      "maximumAllocatedBytes": 196608
+    },
+    "sqlserver_generation_100": {
+      "baselineDurationMilliseconds": 5.8681,
+      "regressionTolerancePercent": 200,
+      "maximumAllocatedBytes": 12976128
+    },
+    "sqlserver_generation_1000": {
+      "baselineDurationMilliseconds": 79.2182,
+      "regressionTolerancePercent": 200,
+      "maximumAllocatedBytes": 128516096
+    },
+    "sqlserver_analyzer_build_1": {
+      "baselineDurationMilliseconds": 0.0697,
+      "regressionTolerancePercent": 200,
+      "maximumAllocatedBytes": 65536
+    },
+    "sqlserver_analyzer_build_512": {
+      "baselineDurationMilliseconds": 2.8682,
+      "regressionTolerancePercent": 200,
+      "maximumAllocatedBytes": 10354688
+    },
+    "sqlserver_analyzer_build_1000": {
+      "baselineDurationMilliseconds": 6.8085,
+      "regressionTolerancePercent": 200,
+      "maximumAllocatedBytes": 20185088
+    },
+    "sqlserver_repair_generation_1000": {
+      "baselineDurationMilliseconds": 125.691,
+      "regressionTolerancePercent": 200,
+      "maximumAllocatedBytes": 352976896
+    },
+    "sqlserver_repair_analyzer_build_1000": {
+      "baselineDurationMilliseconds": 7.9422,
+      "regressionTolerancePercent": 200,
+      "maximumAllocatedBytes": 68354048
+    },
+    "sqlserver_model_data_generation_384": {
+      "baselineDurationMilliseconds": 6.7098,
+      "regressionTolerancePercent": 200,
+      "maximumAllocatedBytes": 7864320
+    },
+    "sqlserver_model_data_analyzer_build_384": {
+      "baselineDurationMilliseconds": 1.2219,
+      "regressionTolerancePercent": 200,
+      "maximumAllocatedBytes": 2490368
+    },
+    "sqlserver_canonical_model_validation": {
+      "baselineDurationMilliseconds": 0.283,
+      "regressionTolerancePercent": 200,
+      "maximumAllocatedBytes": 65536
+    },
     "report_json_1": { "baselineDurationMilliseconds": 0.2, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 16384 },
     "report_json_100": { "baselineDurationMilliseconds": 1, "regressionTolerancePercent": 200, "maximumAllocatedBytes": 160000 },
     "report_json_1000": {

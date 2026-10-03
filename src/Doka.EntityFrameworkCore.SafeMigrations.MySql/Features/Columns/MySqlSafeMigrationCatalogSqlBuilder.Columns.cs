@@ -109,17 +109,31 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var dataBlocked = unsafeAdd
             ? $"EXISTS (SELECT 1 FROM {Delimited(intent.Table, intent.Schema)} LIMIT 1)"
             : "FALSE";
-        var hasNull = repairCapability == SafeMigrationRepairCapability.Safe
+        // WHY: Classification and repair need the same NULL proof. Runtime
+        // materializes it once after physical eligibility is established;
+        // columns that are already NOT NULL never need a row scan.
+        var nullabilityProbe = repairCapability == SafeMigrationRepairCapability.Safe
             && !intent.Definition.IsNullable
-                ? $"EXISTS (SELECT 1 FROM {Delimited(intent.Table, intent.Schema)} WHERE "
-                + $"{Delimited(intent.Definition.Name)} IS NULL LIMIT 1)"
-                : "FALSE";
+                ? new MySqlSafeMigrationNullabilityDataProbe(
+                    ColumnWithInvariantExists(intent.Table, intent.Definition.Name, "c.IS_NULLABLE = 'YES'"),
+                    repairInvariant,
+                    $"EXISTS (SELECT 1 FROM {Delimited(intent.Table, intent.Schema)} WHERE "
+                    + $"{Delimited(intent.Definition.Name)} IS NULL LIMIT 1)")
+                : null;
+
+        var hasNull = nullabilityProbe is not null
+            ? MySqlSafeMigrationRuntimePlan.NullabilityDataProbePlaceholder
+            : "FALSE";
+
+        var classificationRepairInvariant = nullabilityProbe is not null
+            ? MySqlSafeMigrationRuntimePlan.ColumnRepairInvariantPlaceholder
+            : repairInvariant;
 
         var dataTransitionBlocked = transition.DataBlockedExpression;
         var repairDataBlocked = $"({hasNull}) OR ({dataTransitionBlocked})";
 
         var repairPrecondition = repairCapability == SafeMigrationRepairCapability.Safe
-            ? $"({repairInvariant}) AND NOT ({repairDataBlocked}) "
+            ? $"({classificationRepairInvariant}) AND NOT ({repairDataBlocked}) "
                 + $"AND ({transition.ExecutionInvariantExpression})"
             : "FALSE";
 
@@ -128,7 +142,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             + $"WHEN NOT {columnExists} AND {dataBlocked} THEN 'data_blocked' "
             + $"WHEN NOT {columnExists} THEN 'missing' "
             + $"WHEN {matching} THEN 'matching' "
-            + $"WHEN ({repairInvariant}) AND ({repairDataBlocked}) THEN 'data_blocked' ELSE 'different' END",
+            + $"WHEN ({classificationRepairInvariant}) AND ({repairDataBlocked}) THEN 'data_blocked' ELSE 'different' END",
             matching,
             repairCapability,
             repairPrecondition) with
@@ -138,6 +152,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 : null,
             RepairOperationalImpact = transition.OperationalImpact,
             DataProbe = transition.DataProbe,
+            NullabilityDataProbe = nullabilityProbe,
             MayRequireNullabilityDataProof = repairCapability == SafeMigrationRepairCapability.Safe
                 && !intent.Definition.IsNullable,
             DiagnosticEvidenceExpression = includeAnalysisEvidence
@@ -1125,15 +1140,36 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             .Trim()
             .ToLowerInvariant();
 
-        var parts = normalized.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        var integerType = parts[0] is "tinyint" or "smallint" or "mediumint" or "int" or "integer" or "bigint";
-        if (!integerType)
+        var type = normalized.AsSpan();
+        var separator = type.IndexOf(' ');
+        var name = separator < 0 ? type : type[..separator];
+        var canonicalType = name switch
+        {
+            "tinyint" => "tinyint",
+            "smallint" => "smallint",
+            "mediumint" => "mediumint",
+            "int" or "integer" => "int",
+            "bigint" => "bigint",
+            _ => null,
+        };
+
+        if (canonicalType is null)
         {
             return $"LOWER(c.COLUMN_TYPE) = {Literal(normalized)}";
         }
 
-        var canonicalType = parts[0] == "integer" ? "int" : parts[0];
-        var expectedUnsigned = parts.Contains("unsigned", StringComparer.Ordinal);
+        // WHY: MariaDB display widths are ignored for integer families, but the
+        // literal-space modifier grammar and unsigned semantics must remain exact.
+        var expectedUnsigned = false;
+        foreach (var range in type.Split(' '))
+        {
+            if (type[range].SequenceEqual("unsigned"))
+            {
+                expectedUnsigned = true;
+                break;
+            }
+        }
+
         var expected = expectedUnsigned ? $"{canonicalType} unsigned" : canonicalType;
 
         return $"CONCAT(LOWER(c.DATA_TYPE), "

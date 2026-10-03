@@ -106,6 +106,46 @@ public static partial class SafeMigrationBuilderExtensions
         prefixLengths: null);
 
     /// <summary>
+    /// Captures a single-column EF Core index with provider-projected included columns.
+    /// </summary>
+    /// <param name="migrationBuilder">The EF Core migration builder that receives the operation.</param>
+    /// <param name="name">The database object name.</param>
+    /// <param name="table">The table name.</param>
+    /// <param name="column">The index key column.</param>
+    /// <param name="includedColumns">The ordered non-key columns stored in the index.</param>
+    /// <param name="schema">The schema name, or null for the provider default.</param>
+    /// <param name="unique">Whether the index enforces uniqueness.</param>
+    /// <param name="descending">The key direction, or null for the provider default.</param>
+    /// <param name="filter">The index predicate, or null for an unfiltered index.</param>
+    /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
+    public static OperationBuilder<SafeMigrationOperation> CreateIndexWithIncludesIfNotExistsFromModel(
+        this MigrationBuilder migrationBuilder,
+        string name,
+        string table,
+        string column,
+        string[] includedColumns,
+        string? schema = null,
+        bool unique = false,
+        bool[]? descending = null,
+        string? filter = null
+    )
+    {
+        ArgumentNullException.ThrowIfNull(includedColumns);
+
+        return CaptureIndex(
+            migrationBuilder,
+            name,
+            table,
+            [column],
+            schema,
+            unique,
+            descending,
+            filter,
+            prefixLengths: null,
+            includedColumns);
+    }
+
+    /// <summary>
     /// Captures a single-column EF Core index and its provider-projected prefix
     /// metadata as an immutable SafeMigrations operation.
     /// </summary>
@@ -196,6 +236,47 @@ public static partial class SafeMigrationBuilderExtensions
         prefixLengths: null);
 
     /// <summary>
+    /// Captures a multi-column EF Core index with provider-projected included columns.
+    /// </summary>
+    /// <param name="migrationBuilder">The EF Core migration builder that receives the operation.</param>
+    /// <param name="name">The database object name.</param>
+    /// <param name="table">The table name.</param>
+    /// <param name="columns">The ordered index key columns.</param>
+    /// <param name="includedColumns">The ordered non-key columns stored in the index.</param>
+    /// <param name="schema">The schema name, or null for the provider default.</param>
+    /// <param name="unique">Whether the index enforces uniqueness.</param>
+    /// <param name="descending">The ordered key directions, or null for provider defaults.</param>
+    /// <param name="filter">The index predicate, or null for an unfiltered index.</param>
+    /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
+    public static OperationBuilder<SafeMigrationOperation> CreateCompositeIndexWithIncludesIfNotExistsFromModel(
+        this MigrationBuilder migrationBuilder,
+        string name,
+        string table,
+        string[] columns,
+        string[] includedColumns,
+        string? schema = null,
+        bool unique = false,
+        bool[]? descending = null,
+        string? filter = null
+    )
+    {
+        ArgumentNullException.ThrowIfNull(columns);
+        ArgumentNullException.ThrowIfNull(includedColumns);
+
+        return CaptureIndex(
+            migrationBuilder,
+            name,
+            table,
+            columns,
+            schema,
+            unique,
+            descending,
+            filter,
+            prefixLengths: null,
+            includedColumns);
+    }
+
+    /// <summary>
     /// Captures a multi-column EF Core index and its provider-projected prefix
     /// metadata as an immutable SafeMigrations operation.
     /// </summary>
@@ -256,7 +337,8 @@ public static partial class SafeMigrationBuilderExtensions
         bool unique,
         bool[]? descending,
         string? filter,
-        int[]? prefixLengths
+        int[]? prefixLengths,
+        string[]? includedColumns = null
     )
     {
         ArgumentNullException.ThrowIfNull(migrationBuilder);
@@ -306,7 +388,8 @@ public static partial class SafeMigrationBuilderExtensions
             keys,
             operation.Schema,
             operation.IsUnique,
-            operation.Filter);
+            operation.Filter,
+            includedColumns: includedColumns);
 
         return migrationBuilder.EnsureIndex(definition, SafeMigrationPolicy.ThrowIfDifferent);
     }

@@ -9,24 +9,33 @@ internal sealed class SafeMigrationCatalogBatch : IAsyncDisposable
     private readonly DbBatch? _providerBatch;
     private readonly List<DbCommand>? _sequentialCommands;
     private readonly DbConnection _connection;
+    private readonly DbTransaction? _transaction;
     private readonly int? _commandTimeout;
     private bool _disposed;
 
     /// <summary>Creates one bounded catalog transport for the supplied connection.</summary>
     /// <param name="connection">The open provider or compatible wrapper connection.</param>
     /// <param name="commandTimeout">The optional timeout applied to every catalog statement.</param>
+    /// <param name="transaction">The active provider transaction, when the connection has one.</param>
     public SafeMigrationCatalogBatch(
         DbConnection connection,
-        int? commandTimeout
+        int? commandTimeout,
+        DbTransaction? transaction = null
     )
     {
         ArgumentNullException.ThrowIfNull(connection);
 
         _connection = connection;
+        _transaction = transaction;
         _commandTimeout = commandTimeout;
         if (connection.CanCreateBatch)
         {
             _providerBatch = connection.CreateBatch();
+            if (transaction is not null)
+            {
+                _providerBatch.Transaction = transaction;
+            }
+
             if (commandTimeout is not null)
             {
                 _providerBatch.Timeout = commandTimeout.Value;
@@ -60,6 +69,11 @@ internal sealed class SafeMigrationCatalogBatch : IAsyncDisposable
         }
 
         var sequentialCommand = _connection.CreateCommand();
+        if (_transaction is not null)
+        {
+            sequentialCommand.Transaction = _transaction;
+        }
+
         if (_commandTimeout is not null)
         {
             sequentialCommand.CommandTimeout = _commandTimeout.Value;

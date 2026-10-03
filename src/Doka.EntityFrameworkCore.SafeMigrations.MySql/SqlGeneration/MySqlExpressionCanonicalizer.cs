@@ -61,40 +61,30 @@ internal static class MySqlExpressionCanonicalizer
                     unwrapped.Append(' ');
                 }
 
+                // WHY: Both display forms use the same immutable term; render and trim it once.
+                var trimmedTerm = term.ToString().Trim();
+                var booleanOperator = token.Text.Trim();
                 unwrapped
-                    .Append(
-                        RemoveBalancedOuterParentheses(
-                            term
-                                .ToString()
-                                .Trim()))
+                    .Append(RemoveBalancedOuterParentheses(trimmedTerm))
                     .Append(' ')
-                    .Append(token.Text.Trim());
+                    .Append(booleanOperator);
 
                 builder
-                    .Append(
-                        term
-                            .ToString()
-                            .Trim())
+                    .Append(trimmedTerm)
                     .Append(") ")
-                    .Append(token.Text.Trim())
+                    .Append(booleanOperator)
                     .Append(" (");
 
                 term.Clear();
             }
 
+            var finalTerm = term.ToString().Trim();
             unwrapped
                 .Append(' ')
-                .Append(
-                    RemoveBalancedOuterParentheses(
-                        term
-                            .ToString()
-                            .Trim()));
+                .Append(RemoveBalancedOuterParentheses(finalTerm));
 
             builder
-                .Append(
-                    term
-                        .ToString()
-                        .Trim())
+                .Append(finalTerm)
                 .Append("))");
 
             candidates.Add(unwrapped.ToString());
