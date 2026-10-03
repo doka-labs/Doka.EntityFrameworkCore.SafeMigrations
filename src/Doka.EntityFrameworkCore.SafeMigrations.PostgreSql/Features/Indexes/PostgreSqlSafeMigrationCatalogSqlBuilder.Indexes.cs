@@ -208,12 +208,26 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         var nullsNotDistinct = "POSITION('NULLS NOT DISTINCT' IN pg_catalog.pg_get_indexdef(i.indexrelid)) > 0";
         conditions.Add(definition.NullsDistinct == false ? nullsNotDistinct : $"NOT ({nullsNotDistinct})");
 
+        var plainKeys = new List<(int Position, ExpectedIndexKeyDefinition Key)>(definition.Keys.Count);
         for (var index = 0; index < definition.Keys.Count; index++)
         {
             var position = index + 1;
             var optionIndex = index.ToString(CultureInfo.InvariantCulture);
             var propertyPosition = position.ToString(CultureInfo.InvariantCulture);
             var key = definition.Keys[index];
+
+            // WHY: A key that names a column and leaves collation and operator class to the
+            // provider needs only value comparisons, so it joins the correlated set instead of
+            // opening its own catalog lookups.
+            if (key.Column is not null
+                && key.Collation is null
+                && key.OperatorClass is null)
+            {
+                plainKeys.Add((position, key));
+
+                continue;
+            }
+
             if (key.Column is not null)
             {
                 conditions.Add($"i.indkey[{optionIndex}] > 0");
@@ -263,6 +277,11 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                         key.OperatorClass!));
         }
 
+        if (plainKeys.Count > 0)
+        {
+            conditions.Add(PlainIndexKeysMatch(plainKeys));
+        }
+
         for (var index = 0; index < definition.IncludedColumns.Count; index++)
         {
             var position = definition.Keys.Count + index + 1;
@@ -289,15 +308,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     )
     {
         var orderable = $"pg_catalog.pg_index_column_has_property(i.indexrelid, {position}, 'orderable')";
-        var property = key.SortOrder switch
-        {
-            SafeMigrationIndexSortOrder.ProviderDefault => "asc",
-            SafeMigrationIndexSortOrder.Ascending => "asc",
-            SafeMigrationIndexSortOrder.Descending => "desc",
-            _ => throw new ArgumentOutOfRangeException(nameof(key)),
-        };
-
-        var matches = $"pg_catalog.pg_index_column_has_property(i.indexrelid, {position}, '{property}') IS TRUE";
+        var matches = "pg_catalog.pg_index_column_has_property(i.indexrelid, "
+            + $"{position}, '{IndexSortProperty(key)}') IS TRUE";
 
         return key.SortOrder == SafeMigrationIndexSortOrder.ProviderDefault
             ? $"({orderable} IS NOT TRUE OR {matches})"
@@ -310,21 +322,89 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     )
     {
         var orderable = $"pg_catalog.pg_index_column_has_property(i.indexrelid, {position}, 'orderable')";
-        var property = key.NullOrder switch
-        {
-            SafeMigrationIndexNullOrder.ProviderDefault when key.SortOrder == SafeMigrationIndexSortOrder.Descending =>
-                "nulls_first",
-            SafeMigrationIndexNullOrder.ProviderDefault => "nulls_last",
-            SafeMigrationIndexNullOrder.First => "nulls_first",
-            SafeMigrationIndexNullOrder.Last => "nulls_last",
-            _ => throw new ArgumentOutOfRangeException(nameof(key)),
-        };
-
-        var matches = $"pg_catalog.pg_index_column_has_property(i.indexrelid, {position}, '{property}') IS TRUE";
+        var matches = "pg_catalog.pg_index_column_has_property(i.indexrelid, "
+            + $"{position}, '{IndexNullOrderProperty(key)}') IS TRUE";
 
         return key.NullOrder == SafeMigrationIndexNullOrder.ProviderDefault
             ? $"({orderable} IS NOT TRUE OR {matches})"
             : $"({orderable} IS TRUE AND {matches})";
+    }
+
+    /// <summary>Resolves the catalog sort property one expected index key requires.</summary>
+    /// <param name="key">The expected index key.</param>
+    /// <returns>The index-column property name the catalog must report as true.</returns>
+    private static string IndexSortProperty(
+        ExpectedIndexKeyDefinition key
+    ) => key.SortOrder switch
+    {
+        SafeMigrationIndexSortOrder.ProviderDefault => "asc",
+        SafeMigrationIndexSortOrder.Ascending => "asc",
+        SafeMigrationIndexSortOrder.Descending => "desc",
+        _ => throw new ArgumentOutOfRangeException(nameof(key)),
+    };
+
+    /// <summary>Resolves the catalog null-order property one expected index key requires.</summary>
+    /// <param name="key">The expected index key.</param>
+    /// <returns>The index-column property name the catalog must report as true.</returns>
+    private static string IndexNullOrderProperty(
+        ExpectedIndexKeyDefinition key
+    ) => key.NullOrder switch
+    {
+        SafeMigrationIndexNullOrder.ProviderDefault when key.SortOrder == SafeMigrationIndexSortOrder.Descending =>
+            "nulls_first",
+        SafeMigrationIndexNullOrder.ProviderDefault => "nulls_last",
+        SafeMigrationIndexNullOrder.First => "nulls_first",
+        SafeMigrationIndexNullOrder.Last => "nulls_last",
+        _ => throw new ArgumentOutOfRangeException(nameof(key)),
+    };
+
+    /// <summary>Verifies every plain index key through one correlated set instead of one scan each.</summary>
+    /// <remarks>
+    /// WHY: A plain key -- a column without an explicit collation or operator class -- needs only
+    /// value comparisons, so the whole set can be driven from a VALUES list while the catalog
+    /// lookups appear once. Keys carrying an expression, a collation or an operator class render
+    /// per key and keep their own conditions.
+    ///
+    /// The catalog's indkey and indclass vectors are zero-based while
+    /// pg_index_column_has_property and pg_get_indexdef take one-based positions, so the row
+    /// carries the one-based position and the vector lookups subtract one.
+    /// </remarks>
+    /// <param name="keys">The plain keys with their one-based positions.</param>
+    /// <returns>A predicate that is true when every plain key matches at its own position.</returns>
+    private string PlainIndexKeysMatch(
+        IReadOnlyList<(int Position, ExpectedIndexKeyDefinition Key)> keys
+    )
+    {
+        var rows = keys
+            .Select(entry => $"({entry.Position.ToString(CultureInfo.InvariantCulture)}, "
+                + $"CAST({Literal(entry.Key.Column!)} AS pg_catalog.name), "
+                + $"{Literal(IndexSortProperty(entry.Key))}, "
+                + $"{(entry.Key.SortOrder == SafeMigrationIndexSortOrder.ProviderDefault ? "TRUE" : "FALSE")}, "
+                + $"{Literal(IndexNullOrderProperty(entry.Key))}, "
+                + $"{(entry.Key.NullOrder == SafeMigrationIndexNullOrder.ProviderDefault ? "TRUE" : "FALSE")})")
+            .ToArray();
+
+        const string orderable = "pg_catalog.pg_index_column_has_property(i.indexrelid, key.pos, 'orderable')";
+        var sortMatches = "pg_catalog.pg_index_column_has_property(i.indexrelid, key.pos, key.sort_property) IS TRUE";
+        var nullMatches = "pg_catalog.pg_index_column_has_property(i.indexrelid, key.pos, key.null_property) IS TRUE";
+        var facets = "i.indkey[key.pos - 1] > 0 "
+            + "AND EXISTS (SELECT 1 FROM pg_catalog.pg_attribute key_attribute "
+            + "WHERE key_attribute.attrelid = i.indrelid "
+            + "AND key_attribute.attnum = i.indkey[key.pos - 1] "
+            + "AND key_attribute.attname = key.attname) "
+            + $"AND CASE WHEN key.sort_default THEN ({orderable} IS NOT TRUE OR {sortMatches}) "
+            + $"ELSE ({orderable} IS TRUE AND {sortMatches}) END "
+            + $"AND CASE WHEN key.null_default THEN ({orderable} IS NOT TRUE OR {nullMatches}) "
+            + $"ELSE ({orderable} IS TRUE AND {nullMatches}) END "
+            + "AND POSITION(' COLLATE ' IN pg_catalog.pg_get_indexdef(i.indexrelid, key.pos, TRUE)) = 0 "
+            + "AND EXISTS (SELECT 1 FROM pg_catalog.pg_opclass opc "
+            + "WHERE opc.oid = i.indclass[key.pos - 1] AND opc.opcdefault)";
+
+        // WHY: A facet can evaluate to NULL. The per-key form required every condition to be true,
+        // so the absent test coalesces to FALSE and keeps that verdict.
+        return $"NOT EXISTS (SELECT 1 FROM (VALUES {string.Join(", ", rows)}) "
+            + "AS key(pos, attname, sort_property, sort_default, null_property, null_default) "
+            + $"WHERE NOT COALESCE({facets}, FALSE))";
     }
 
     private string UniqueIndexDataBlocked(

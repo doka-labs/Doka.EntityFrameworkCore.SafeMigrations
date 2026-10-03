@@ -132,6 +132,48 @@ public sealed class PostgreSqlTableDefinitionCatalogSqlTests
         Assert.Contains("co.conname <> required.conname", state, StringComparison.Ordinal);
     }
 
+    /// <summary>Value-driven column facets are compared once rather than once per column.</summary>
+    /// <remarks>
+    /// WHY: Store type, comment and nullability are plain values, so they belong in the expected
+    /// row. Repeating them per column is what made a wide table's branch grow.
+    /// </remarks>
+    [Fact]
+    public void ColumnVerification_ComparesValueDrivenFacetsOnceForEveryColumn()
+    {
+        // Arrange
+        using var context = CreateContext();
+        var narrow = BuildStateExpression(context, ColumnCount(2), []);
+        var wide = BuildStateExpression(context, ColumnCount(6), []);
+
+        // Act
+        var narrowComparisons = Occurrences(narrow, "pg_catalog.format_type");
+        var wideComparisons = Occurrences(wide, "pg_catalog.format_type");
+
+        // Assert
+        Assert.Equal(narrowComparisons, wideComparisons);
+    }
+
+    /// <summary>The validated NOT NULL contract is emitted once rather than once per column.</summary>
+    /// <remarks>
+    /// WHY: The contract depends only on the catalog row, never on the expected column, so one
+    /// occurrence covers every column and the nullable case stays a branch on the expected row.
+    /// </remarks>
+    [Fact]
+    public void ColumnVerification_EmitsTheValidatedNotNullContractOnce()
+    {
+        // Arrange
+        using var context = CreateContext();
+        var narrow = BuildStateExpression(context, ColumnCount(2), []);
+        var wide = BuildStateExpression(context, ColumnCount(6), []);
+
+        // Act
+        var narrowContracts = Occurrences(narrow, "not_null_constraint.conkey");
+        var wideContracts = Occurrences(wide, "not_null_constraint.conkey");
+
+        // Assert
+        Assert.Equal(narrowContracts, wideContracts);
+    }
+
     /// <summary>Required check constraints keep their catalog scans constant as the count grows.</summary>
     [Fact]
     public void RequiredCheckConstraints_DoNotGrowCatalogScansWithConstraintCount()
