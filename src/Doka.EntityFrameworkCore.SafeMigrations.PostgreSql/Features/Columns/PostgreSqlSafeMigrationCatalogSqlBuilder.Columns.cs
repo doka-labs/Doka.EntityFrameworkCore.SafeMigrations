@@ -249,9 +249,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         bool includeRepairableFacets
     )
     {
+        var mapping = ColumnMapping(definition);
         var conditions = new List<string>
         {
-            $"pg_catalog.format_type(a.atttypid, a.atttypmod) = {Literal(ColumnStoreType(definition))}",
+            $"pg_catalog.format_type(a.atttypid, a.atttypmod) = {Literal(ColumnStoreType(definition, mapping))}",
         };
 
         if (includeRepairableFacets)
@@ -262,17 +263,19 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 + (definition.Comment is null ? "NULL" : Literal(definition.Comment)));
         }
 
-        conditions.AddRange(ColumnStructuralFacetConditions(definition, includeRepairableFacets));
+        conditions.AddRange(ColumnStructuralFacetConditions(definition, mapping, includeRepairableFacets));
 
         return conditions;
     }
 
     /// <summary>Resolves the store type one expected column requires of the catalog row.</summary>
     /// <param name="definition">The expected column.</param>
+    /// <param name="mapping">The already resolved type mapping for that column.</param>
     /// <returns>The expected store type as the catalog renders it.</returns>
-    private string ColumnStoreType(
-        ExpectedColumnDefinition definition
-    ) => definition.StoreType ?? ColumnMapping(definition).StoreType;
+    private static string ColumnStoreType(
+        ExpectedColumnDefinition definition,
+        RelationalTypeMapping mapping
+    ) => definition.StoreType ?? mapping.StoreType;
 
     private RelationalTypeMapping ColumnMapping(
         ExpectedColumnDefinition definition
@@ -296,16 +299,18 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     /// facets are plain values and are compared against the expected row instead.
     /// </remarks>
     /// <param name="definition">The expected column.</param>
+    /// <param name="mapping">The already resolved type mapping for that column.</param>
     /// <param name="includeRepairableFacets">Whether the default and generation facet applies.</param>
     /// <returns>The structural predicates for that column.</returns>
     private List<string> ColumnStructuralFacetConditions(
         ExpectedColumnDefinition definition,
+        RelationalTypeMapping mapping,
         bool includeRepairableFacets
     ) =>
     [
         CollationMatches(definition),
         includeRepairableFacets
-            ? DefaultAndGenerationMatches(definition, ColumnMapping(definition))
+            ? DefaultAndGenerationMatches(definition, mapping)
             : GenerationMatches(definition),
     ];
 
@@ -323,47 +328,74 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         ExpectedTableDefinition definition
     )
     {
-        var rows = new List<string>(definition.Columns.Count);
-        var arms = new List<string>(definition.Columns.Count);
+        // WHY: Composing every row and arm as its own string and joining them copied the same
+        // bytes repeatedly. Appending into one pre-sized buffer keeps those fragments off the heap.
+        // WHY: StringBuilder grows by linking chunks instead of copying, so a modest estimate
+        // costs nothing when it is exceeded while an inflated one allocates the slack up front.
+        var sql = new StringBuilder(512 + (definition.Columns.Count * 256));
+        sql.Append("NOT EXISTS (SELECT 1 FROM pg_catalog.pg_class c ")
+            .Append("JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace ")
+            .Append("CROSS JOIN (VALUES ");
+
         for (var index = 0; index < definition.Columns.Count; index++)
         {
             var column = definition.Columns[index];
-            var attnum = (index + 1).ToString(CultureInfo.InvariantCulture);
+            if (index != 0)
+            {
+                sql.Append(", ");
+            }
 
             // WHY: The expected name is cast to the catalog's own name type so the comparison
             // resolves exactly as the single-column classifier's unknown-typed literal does.
             // Store type, comment and nullability are plain values and travel with the row, so
             // their predicates appear once instead of once per column.
-            rows.Add($"({attnum}, CAST({Literal(column.Name)} AS pg_catalog.name), "
-                + $"CAST({Literal(ColumnStoreType(column))} AS text), "
-                + $"CAST({(column.Comment is null ? "NULL" : Literal(column.Comment))} AS text), "
-                + $"CAST({(column.IsNullable ? "TRUE" : "FALSE")} AS boolean))");
-
-            arms.Add($"WHEN {attnum} THEN ("
-                + string.Join(" AND ", ColumnStructuralFacetConditions(column, true))
-                + ")");
+            sql.Append('(').Append(index + 1)
+                .Append(", CAST(").Append(Literal(column.Name)).Append(" AS pg_catalog.name), CAST(")
+                .Append(Literal(ColumnStoreType(column, ColumnMapping(column)))).Append(" AS text), CAST(")
+                .Append(column.Comment is null ? "NULL" : Literal(column.Comment)).Append(" AS text), CAST(")
+                .Append(column.IsNullable ? "TRUE" : "FALSE").Append(" AS boolean))");
         }
 
-        var valueFacets = "pg_catalog.format_type(a.atttypid, a.atttypmod) = expected.store_type "
-            + "AND pg_catalog.col_description(c.oid, a.attnum) IS NOT DISTINCT FROM expected.comment "
-            + $"AND CASE WHEN expected.is_nullable THEN NOT a.attnotnull ELSE {ValidatedNotNullContract()} END";
+        sql.Append(") AS expected(attnum, attname, store_type, comment, is_nullable) ")
+            .Append("LEFT JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid ")
+            .Append("AND a.attname = expected.attname AND a.attnum > 0 AND NOT a.attisdropped ")
+            .Append("LEFT JOIN pg_catalog.pg_type t ON t.oid = a.atttypid ")
+            .Append("LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = c.oid AND d.adnum = a.attnum ")
+            .Append("WHERE n.nspname = ").Append(SchemaExpression(definition.Schema))
+            .Append(" AND c.relname = ").Append(Literal(definition.Table))
+            .Append(" AND (a.attnum IS NULL OR a.attnum <> expected.attnum")
 
-        // WHY: A facet predicate can evaluate to NULL. The per-column form returned no row and
-        // therefore reported a mismatch, so the absent-or-unequal test must coalesce to FALSE to
-        // keep that verdict instead of silently accepting the column.
-        return "NOT EXISTS (SELECT 1 FROM pg_catalog.pg_class c "
-            + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
-            + $"CROSS JOIN (VALUES {string.Join(", ", rows)}) "
-            + "AS expected(attnum, attname, store_type, comment, is_nullable) "
-            + "LEFT JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid "
-            + "AND a.attname = expected.attname AND a.attnum > 0 AND NOT a.attisdropped "
-            + "LEFT JOIN pg_catalog.pg_type t ON t.oid = a.atttypid "
-            + "LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = c.oid AND d.adnum = a.attnum "
-            + $"WHERE n.nspname = {SchemaExpression(definition.Schema)} "
-            + $"AND c.relname = {Literal(definition.Table)} "
-            + "AND (a.attnum IS NULL OR a.attnum <> expected.attnum "
-            + $"OR NOT COALESCE({valueFacets}, FALSE) "
-            + $"OR NOT COALESCE(CASE expected.attnum {string.Join(" ", arms)} END, FALSE)))";
+            // WHY: A facet predicate can evaluate to NULL. The per-column form returned no row and
+            // therefore reported a mismatch, so the absent-or-unequal test must coalesce to FALSE
+            // to keep that verdict instead of silently accepting the column.
+            .Append(" OR NOT COALESCE(pg_catalog.format_type(a.atttypid, a.atttypmod) = expected.store_type")
+            .Append(" AND pg_catalog.col_description(c.oid, a.attnum) IS NOT DISTINCT FROM expected.comment")
+            .Append(" AND CASE WHEN expected.is_nullable THEN NOT a.attnotnull ELSE ")
+            .Append(ValidatedNotNullContract())
+            .Append(" END, FALSE)")
+            .Append(" OR NOT COALESCE(CASE expected.attnum");
+
+        for (var index = 0; index < definition.Columns.Count; index++)
+        {
+            var column = definition.Columns[index];
+            var structural = ColumnStructuralFacetConditions(column, ColumnMapping(column), true);
+            sql.Append(" WHEN ").Append(index + 1).Append(" THEN (");
+            for (var facet = 0; facet < structural.Count; facet++)
+            {
+                if (facet != 0)
+                {
+                    sql.Append(" AND ");
+                }
+
+                sql.Append(structural[facet]);
+            }
+
+            sql.Append(')');
+        }
+
+        sql.Append(" END, FALSE)))");
+
+        return sql.ToString();
     }
 
     private string ColumnRepairInvariantMatches(

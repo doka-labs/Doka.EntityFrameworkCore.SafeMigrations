@@ -14,9 +14,14 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             ? table
             : TableMatches(definition, expectedTableConstraints);
 
+        // WHY: Without expected table constraints the postcondition asks TableMatches the same
+        // question with the same arguments, so composing it a second time produced an identical
+        // string. Reusing the first result keeps one composition per build.
         var executionPostcondition = intent.Mode == SafeMigrationTableMode.ConvergenceContainer
             ? table
-            : TableMatches(definition, expectedTableConstraints: null);
+            : expectedTableConstraints is null
+                ? matching
+                : TableMatches(definition, expectedTableConstraints: null);
 
         return Plan(
             $"CASE WHEN NOT {exists} THEN 'missing' WHEN NOT {table} THEN 'unsupported' "
