@@ -219,6 +219,36 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         bool includeRepairableFacets = true
     )
     {
+        var conditions = ColumnFacetConditions(definition, includeRepairableFacets);
+        if (ordinal is not null)
+        {
+            conditions.Add($"a.attnum = {ordinal.Value.ToString(CultureInfo.InvariantCulture)}");
+        }
+
+        return "EXISTS (SELECT 1 FROM pg_catalog.pg_attribute a "
+            + "JOIN pg_catalog.pg_class c ON c.oid = a.attrelid "
+            + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
+            + "JOIN pg_catalog.pg_type t ON t.oid = a.atttypid "
+            + "LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = c.oid AND d.adnum = a.attnum "
+            + $"WHERE n.nspname = {SchemaExpression(schema)} AND c.relname = {Literal(table)} "
+            + $"AND a.attname = {Literal(definition.Name)} AND a.attnum > 0 AND NOT a.attisdropped "
+            + $"AND {string.Join(" AND ", conditions)})";
+    }
+
+    /// <summary>Builds the facet predicates one expected column requires of the catalog row.</summary>
+    /// <remarks>
+    /// The predicates reference the outer aliases <c>a</c>, <c>c</c>, <c>t</c> and <c>d</c>, so the
+    /// caller owns the catalog join. Both the single-column classifier and the set-oriented
+    /// table-definition classifier consume this list, which keeps one definition of column equality.
+    /// </remarks>
+    /// <param name="definition">The expected column.</param>
+    /// <param name="includeRepairableFacets">Whether nullability, comment and default facets apply.</param>
+    /// <returns>The predicates, combined by the caller with <c>AND</c>.</returns>
+    private List<string> ColumnFacetConditions(
+        ExpectedColumnDefinition definition,
+        bool includeRepairableFacets
+    )
+    {
         var mapping = _typeMappingSource.FindMapping(
                 definition.ClrType,
                 definition.StoreType,
@@ -252,19 +282,51 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             conditions.Add(GenerationMatches(definition));
         }
 
-        if (ordinal is not null)
+        return conditions;
+    }
+
+    /// <summary>Verifies every expected column of a table definition through one catalog join.</summary>
+    /// <remarks>
+    /// WHY: The per-column classifier repeats the same five-way catalog join once per column, so a
+    /// wide table produced dozens of identical joins in one statement and the optimizer planned all
+    /// of them. Driving the expected columns as a VALUES list joins the catalog once and keeps every
+    /// facet predicate server-side and unchanged, which preserves the collation authority the
+    /// catalog comparison relies on.
+    /// </remarks>
+    /// <param name="definition">The expected table definition whose columns are verified.</param>
+    /// <returns>A predicate that is true when every expected column matches at its own position.</returns>
+    private string AllColumnsMatch(
+        ExpectedTableDefinition definition
+    )
+    {
+        var rows = new List<string>(definition.Columns.Count);
+        var arms = new List<string>(definition.Columns.Count);
+        for (var index = 0; index < definition.Columns.Count; index++)
         {
-            conditions.Add($"a.attnum = {ordinal.Value.ToString(CultureInfo.InvariantCulture)}");
+            var attnum = (index + 1).ToString(CultureInfo.InvariantCulture);
+
+            // WHY: The expected name is cast to the catalog's own name type so the comparison
+            // resolves exactly as the single-column classifier's unknown-typed literal does.
+            rows.Add($"({attnum}, CAST({Literal(definition.Columns[index].Name)} AS pg_catalog.name))");
+            arms.Add($"WHEN {attnum} THEN ("
+                + string.Join(" AND ", ColumnFacetConditions(definition.Columns[index], true))
+                + ")");
         }
 
-        return "EXISTS (SELECT 1 FROM pg_catalog.pg_attribute a "
-            + "JOIN pg_catalog.pg_class c ON c.oid = a.attrelid "
+        // WHY: A facet predicate can evaluate to NULL. The per-column form returned no row and
+        // therefore reported a mismatch, so the absent-or-unequal test must coalesce to FALSE to
+        // keep that verdict instead of silently accepting the column.
+        return "NOT EXISTS (SELECT 1 FROM pg_catalog.pg_class c "
             + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
-            + "JOIN pg_catalog.pg_type t ON t.oid = a.atttypid "
+            + $"CROSS JOIN (VALUES {string.Join(", ", rows)}) AS expected(attnum, attname) "
+            + "LEFT JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid "
+            + "AND a.attname = expected.attname AND a.attnum > 0 AND NOT a.attisdropped "
+            + "LEFT JOIN pg_catalog.pg_type t ON t.oid = a.atttypid "
             + "LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = c.oid AND d.adnum = a.attnum "
-            + $"WHERE n.nspname = {SchemaExpression(schema)} AND c.relname = {Literal(table)} "
-            + $"AND a.attname = {Literal(definition.Name)} AND a.attnum > 0 AND NOT a.attisdropped "
-            + $"AND {string.Join(" AND ", conditions)})";
+            + $"WHERE n.nspname = {SchemaExpression(definition.Schema)} "
+            + $"AND c.relname = {Literal(definition.Table)} "
+            + "AND (a.attnum IS NULL OR a.attnum <> expected.attnum "
+            + $"OR NOT COALESCE(CASE expected.attnum {string.Join(" ", arms)} END, FALSE)))";
     }
 
     private string ColumnRepairInvariantMatches(

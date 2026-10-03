@@ -95,24 +95,35 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             TableCommentMatches(definition),
         };
 
-        for (var ordinal = 0; ordinal < definition.Columns.Count; ordinal++)
+        if (definition.Columns.Count > 0)
         {
-            conditions.Add(
-                ColumnMatches(definition.Table, definition.Schema, definition.Columns[ordinal], ordinal + 1));
+            conditions.Add(AllColumnsMatch(definition));
         }
 
         conditions.Add(BuildPrimaryKeyTransitionMatches(definition, expectedTableConstraints));
 
-        conditions.AddRange(
-            requiredUniqueConstraints.Select(value => ConstraintColumnsSatisfied(
-                value.Table,
-                value.Schema,
-                value.Name,
-                'u',
-                value.Columns)));
+        // WHY: Each required constraint carries its own table and schema, so the set-oriented
+        // check is emitted per owning relation rather than assuming the definition's own table.
+        conditions.AddRange(requiredUniqueConstraints
+            .GroupBy(static value => (value.Table, value.Schema))
+            .Select(group => AllRequiredUniqueConstraintsSatisfied(
+                group.Key.Table,
+                group.Key.Schema,
+                group.ToArray())));
 
-        conditions.AddRange(requiredCheckConstraints.Select(CheckSatisfied));
-        conditions.AddRange(requiredForeignKeys.Select(ForeignKeySatisfied));
+        conditions.AddRange(requiredCheckConstraints
+            .GroupBy(static value => (value.Table, value.Schema))
+            .Select(group => AllRequiredCheckConstraintsSatisfied(
+                group.Key.Table,
+                group.Key.Schema,
+                group.ToArray())));
+
+        conditions.AddRange(requiredForeignKeys
+            .GroupBy(static value => (value.Table, value.Schema))
+            .Select(group => AllRequiredForeignKeysSatisfied(
+                group.Key.Table,
+                group.Key.Schema,
+                group.ToArray())));
 
         return $"({string.Join(" AND ", conditions)})";
     }
@@ -161,50 +172,146 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 + $"OR {string.Join(" OR ", allowed)})";
     }
 
+    /// <summary>Checks that every actual unique constraint is modeled by an allowed one.</summary>
+    /// <remarks>
+    /// WHY: The matcher is identical for every allowed constraint apart from its column list, so
+    /// correlating one lookup against a VALUES list of those lists keeps the catalog scans constant
+    /// instead of repeating the lookup per allowed constraint. The matcher text itself is unchanged.
+    /// </remarks>
+    /// <param name="table">The owning table.</param>
+    /// <param name="schema">The owning schema, or null for the current schema.</param>
+    /// <param name="uniqueConstraints">The allowed unique constraints.</param>
+    /// <returns>A predicate that is true when no unmodeled unique constraint exists.</returns>
     private string AllUniqueConstraintsModeled(
         string table,
         string? schema,
         IReadOnlyList<ExpectedUniqueConstraintDefinition> uniqueConstraints
-    ) => AllConstraintsModeled(
-        table,
-        schema,
-        'u',
-        uniqueConstraints
-            .Select(uniqueConstraint => ConstraintColumnsMatch(
-                uniqueConstraint.Table,
-                uniqueConstraint.Schema,
-                'u',
-                uniqueConstraint.Columns,
-                "co.conname = candidate_co.conname"))
-            .ToArray());
+    )
+    {
+        if (uniqueConstraints.Count == 0)
+        {
+            return AllConstraintsModeled(table, schema, 'u', []);
+        }
 
+        // WHY: Each allowed constraint carries its own owning relation, so one correlated matcher
+        // is emitted per owner rather than assuming they all belong to the same table.
+        var matchers = uniqueConstraints
+            .GroupBy(static value => (value.Table, value.Schema))
+            .Select(group =>
+            {
+                var rows = group.Select(value => $"({NameArray(value.Columns)})").ToArray();
+                var matcher = ConstraintColumnsMatchQuery(
+                    group.Key.Table,
+                    group.Key.Schema,
+                    'u',
+                    "allowed.columns",
+                    "co.conname = candidate_co.conname");
+
+                return $"EXISTS (SELECT 1 FROM (VALUES {string.Join(", ", rows)}) AS allowed(columns) "
+                    + $"WHERE EXISTS ({matcher}))";
+            })
+            .ToArray();
+
+        return AllConstraintsModeled(table, schema, 'u', matchers);
+    }
+
+    /// <summary>Checks that every actual check constraint is modeled by an allowed one.</summary>
+    /// <remarks>
+    /// WHY: Only the expression comparison differs per allowed constraint, so one correlated
+    /// matcher with a CASE arm per allowed expression keeps the catalog scans constant instead of
+    /// opening one scan per allowed constraint.
+    /// </remarks>
+    /// <param name="table">The owning table.</param>
+    /// <param name="schema">The owning schema, or null for the current schema.</param>
+    /// <param name="checkConstraints">The allowed check constraints.</param>
+    /// <returns>A predicate that is true when no unmodeled check constraint exists.</returns>
     private string AllCheckConstraintsModeled(
         string table,
         string? schema,
         IReadOnlyList<ExpectedCheckConstraintDefinition> checkConstraints
-    ) => AllConstraintsModeled(
-        table,
-        schema,
-        'c',
-        checkConstraints
-            .Select(checkConstraint => CheckMatches(
-                checkConstraint,
-                "co.conname = candidate_co.conname"))
-            .ToArray());
+    )
+    {
+        if (checkConstraints.Count == 0)
+        {
+            return AllConstraintsModeled(table, schema, 'c', []);
+        }
 
+        var matchers = checkConstraints
+            .GroupBy(static value => (value.Table, value.Schema))
+            .Select(group =>
+            {
+                var items = group.ToArray();
+                var rows = new List<string>(items.Length);
+                var arms = new List<string>(items.Length);
+                for (var index = 0; index < items.Length; index++)
+                {
+                    var ordinal = (index + 1).ToString(CultureInfo.InvariantCulture);
+                    rows.Add($"({ordinal})");
+                    arms.Add($"WHEN {ordinal} THEN {ExpectedCheckExpressionMatches(items[index])}");
+                }
+
+                var matcher = ConstraintRowsWithoutName(group.Key.Table, group.Key.Schema, 'c')
+                    + " AND co.conname = candidate_co.conname"
+                    + CheckFacets($"CASE allowed.ordinal {string.Join(" ", arms)} END");
+
+                return $"EXISTS (SELECT 1 FROM (VALUES {string.Join(", ", rows)}) AS allowed(ordinal) "
+                    + $"WHERE EXISTS ({matcher}))";
+            })
+            .ToArray();
+
+        return AllConstraintsModeled(table, schema, 'c', matchers);
+    }
+
+    /// <summary>Checks that every actual foreign key is modeled by an allowed one.</summary>
+    /// <remarks>
+    /// WHY: Every expected part of a foreign-key match is a value, so one correlated matcher over
+    /// a VALUES list of the allowed shapes keeps the catalog scans constant instead of opening one
+    /// scan per allowed key.
+    /// </remarks>
+    /// <param name="table">The owning table.</param>
+    /// <param name="schema">The owning schema, or null for the current schema.</param>
+    /// <param name="foreignKeys">The allowed foreign keys.</param>
+    /// <returns>A predicate that is true when no unmodeled foreign key exists.</returns>
     private string AllForeignKeysModeled(
         string table,
         string? schema,
         IReadOnlyList<ExpectedForeignKeyDefinition> foreignKeys
-    ) => AllConstraintsModeled(
-        table,
-        schema,
-        'f',
-        foreignKeys
-            .Select(foreignKey => ForeignKeyMatches(
-                foreignKey,
-                "co.conname = candidate_co.conname"))
-            .ToArray());
+    )
+    {
+        if (foreignKeys.Count == 0)
+        {
+            return AllConstraintsModeled(table, schema, 'f', []);
+        }
+
+        var matchers = foreignKeys
+            .GroupBy(static value => (value.Table, value.Schema))
+            .Select(group =>
+            {
+                var rows = group
+                    .Select(value => $"({NameArray(value.Columns)}, "
+                        + $"{Literal(Qualified(value.PrincipalTable, value.PrincipalSchema))}, "
+                        + $"{NameArray(value.PrincipalColumns)}, "
+                        + $"CAST({Literal(ReferentialCode(value.OnUpdate))} AS pg_catalog.\"char\"), "
+                        + $"CAST({Literal(ReferentialCode(value.OnDelete))} AS pg_catalog.\"char\"))")
+                    .ToArray();
+
+                var matcher = ConstraintRowsWithoutName(group.Key.Table, group.Key.Schema, 'f')
+                    + " AND co.conname = candidate_co.conname"
+                    + ForeignKeyFacets(
+                        "allowed.columns",
+                        "pg_catalog.to_regclass(allowed.principal)",
+                        "allowed.principal_columns",
+                        "allowed.confupdtype",
+                        "allowed.confdeltype");
+
+                return $"EXISTS (SELECT 1 FROM (VALUES {string.Join(", ", rows)}) AS allowed(columns, "
+                    + "principal, principal_columns, confupdtype, confdeltype) "
+                    + $"WHERE EXISTS ({matcher}))";
+            })
+            .ToArray();
+
+        return AllConstraintsModeled(table, schema, 'f', matchers);
+    }
 
     private string TableCommentMatches(
         ExpectedTableDefinition definition

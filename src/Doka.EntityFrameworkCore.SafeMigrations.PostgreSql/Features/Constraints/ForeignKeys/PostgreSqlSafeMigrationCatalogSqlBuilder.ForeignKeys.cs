@@ -66,16 +66,44 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         bool requireLocalIdentity = true
     ) => ConstraintRowsWithoutName(definition.Table, definition.Schema, 'f')
         + $" AND {namePredicate}"
-        + StandardConstraintSemantics(requireLocalIdentity)
-        + $" AND ARRAY(SELECT a.attname FROM unnest(co.conkey) WITH ORDINALITY AS key(attnum, ord) "
+        + ForeignKeyFacets(
+            NameArray(definition.Columns),
+            QualifiedRegclass(definition.PrincipalTable, definition.PrincipalSchema),
+            NameArray(definition.PrincipalColumns),
+            $"{Literal(ReferentialCode(definition.OnUpdate))}::\"char\"",
+            $"{Literal(ReferentialCode(definition.OnDelete))}::\"char\"",
+            requireLocalIdentity);
+
+    /// <summary>Builds the foreign-key facet predicates against expected-value expressions.</summary>
+    /// <remarks>
+    /// Every expected part is a value, so the same predicates serve a single key and a whole
+    /// correlated set. Keeping one definition here prevents the set forms from drifting away
+    /// from the per-key form.
+    /// </remarks>
+    /// <param name="columns">SQL yielding the expected ordered local column names.</param>
+    /// <param name="principal">SQL yielding the expected referenced relation.</param>
+    /// <param name="principalColumns">SQL yielding the expected ordered referenced column names.</param>
+    /// <param name="onUpdate">SQL yielding the expected update action code.</param>
+    /// <param name="onDelete">SQL yielding the expected delete action code.</param>
+    /// <param name="requireLocalIdentity">Whether local ownership is part of the identity.</param>
+    /// <returns>The facet predicates, each prefixed with AND.</returns>
+    private static string ForeignKeyFacets(
+        string columns,
+        string principal,
+        string principalColumns,
+        string onUpdate,
+        string onDelete,
+        bool requireLocalIdentity = true
+    ) => StandardConstraintSemantics(requireLocalIdentity)
+        + " AND ARRAY(SELECT a.attname FROM unnest(co.conkey) WITH ORDINALITY AS key(attnum, ord) "
         + "JOIN pg_catalog.pg_attribute a ON a.attrelid = co.conrelid AND a.attnum = key.attnum "
-        + $"ORDER BY key.ord) = {NameArray(definition.Columns)} "
-        + $"AND co.confrelid = {QualifiedRegclass(definition.PrincipalTable, definition.PrincipalSchema)} "
-        + $"AND ARRAY(SELECT a.attname FROM unnest(co.confkey) WITH ORDINALITY AS key(attnum, ord) "
+        + $"ORDER BY key.ord) = {columns} "
+        + $"AND co.confrelid = {principal} "
+        + "AND ARRAY(SELECT a.attname FROM unnest(co.confkey) WITH ORDINALITY AS key(attnum, ord) "
         + "JOIN pg_catalog.pg_attribute a ON a.attrelid = co.confrelid AND a.attnum = key.attnum "
-        + $"ORDER BY key.ord) = {NameArray(definition.PrincipalColumns)} "
-        + $"AND co.confupdtype = {Literal(ReferentialCode(definition.OnUpdate))}::\"char\" "
-        + $"AND co.confdeltype = {Literal(ReferentialCode(definition.OnDelete))}::\"char\" "
+        + $"ORDER BY key.ord) = {principalColumns} "
+        + $"AND co.confupdtype = {onUpdate} "
+        + $"AND co.confdeltype = {onDelete} "
         + "AND co.confmatchtype = 's'::\"char\" "
         // A column-list SET NULL/DEFAULT action changes which dependent
         // columns are updated and is not expressible by the EF operation.
@@ -168,6 +196,48 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     ) => $"CASE {expression} WHEN 'a'::\"char\" THEN 'no_action' WHEN 'r'::\"char\" THEN 'restrict' "
         + "WHEN 'c'::\"char\" THEN 'cascade' WHEN 'n'::\"char\" THEN 'set_null' "
         + "WHEN 'd'::\"char\" THEN 'set_default' ELSE 'unknown' END";
+
+    /// <summary>Verifies every required foreign key of one table through three catalog scans.</summary>
+    /// <remarks>
+    /// WHY: Every expected part of a foreign-key match is a value, so the whole set can be driven
+    /// from a VALUES list and the three correlated catalog scans are emitted once instead of once
+    /// per required key. A predicate can evaluate to NULL, so the absent test coalesces to FALSE
+    /// to keep the mismatch verdict the per-key form produced.
+    /// </remarks>
+    /// <param name="table">The table owning the required foreign keys.</param>
+    /// <param name="schema">The owning schema, or null for the current schema.</param>
+    /// <param name="required">The required foreign keys, all owned by that table.</param>
+    /// <returns>A predicate that is true when every required foreign key is satisfied.</returns>
+    private string AllRequiredForeignKeysSatisfied(
+        string table,
+        string? schema,
+        IReadOnlyList<ExpectedForeignKeyDefinition> required
+    )
+    {
+        var rows = required
+            .Select(value => $"(CAST({Literal(value.Name)} AS pg_catalog.name), {NameArray(value.Columns)}, "
+                + $"{Literal(Qualified(value.PrincipalTable, value.PrincipalSchema))}, "
+                + $"{NameArray(value.PrincipalColumns)}, "
+                + $"CAST({Literal(ReferentialCode(value.OnUpdate))} AS pg_catalog.\"char\"), "
+                + $"CAST({Literal(ReferentialCode(value.OnDelete))} AS pg_catalog.\"char\"))")
+            .ToArray();
+
+        var facets = ForeignKeyFacets(
+            "required.columns",
+            "pg_catalog.to_regclass(required.principal)",
+            "required.principal_columns",
+            "required.confupdtype",
+            "required.confdeltype");
+
+        var rowSource = ConstraintRowsWithoutName(table, schema, 'f');
+        var exact = $"EXISTS ({rowSource} AND co.conname = required.conname{facets})";
+        var exists = $"EXISTS ({rowSource} AND co.conname = required.conname)";
+        var alias = $"EXISTS ({rowSource} AND co.conname <> required.conname{facets})";
+
+        return $"NOT EXISTS (SELECT 1 FROM (VALUES {string.Join(", ", rows)}) AS required(conname, columns, "
+            + "principal, principal_columns, confupdtype, confdeltype) WHERE NOT COALESCE("
+            + $"({exact}) OR (NOT ({exists}) AND ({alias})), FALSE))";
+    }
 
     private string ForeignKeySatisfied(
         ExpectedForeignKeyDefinition definition
