@@ -263,14 +263,23 @@ structure guards still apply before this proof can be accepted.
 ## Catalog transport and opaque SQL
 
 Read-only analysis captures at most 512 plans at a time, grouping metadata-only
-and delayed-binding classifiers within that window. Each statement contains
-at most eight operations with native batching, and each native batch contains
-at most 32 statements. Sequential connections retain 32 operations per statement
-and eight statements per bounded group: each such statement is a separate
-execute. Both shapes retain a 256-operation group capacity, subject to 2,000
-parameters and 4 MiB of UTF-8 SQL plus source payload, including dynamic quote
-expansion. These are dispatch bounds, not measured compilation or execution-time
-improvements. Object names embedded in SQL do not by themselves prevent
+and delayed-binding classifiers within that window. Each statement contains at
+most 32 operations and each bounded group at most eight statements: with native
+batching one group is one round trip, while a sequential connection executes
+each statement separately. Both shapes retain a 256-operation group capacity,
+subject to 2,000 parameters and 4 MiB of UTF-8 SQL plus source payload,
+including dynamic quote expansion. These are dispatch bounds, not measured
+compilation or execution-time improvements.
+
+A qualification run over the hundred-thousand-operation contract attributes
+almost all analysis time to this classifier capture: 195 bounded groups
+accounted for 3,025 s of the 3,030 s spent in the `catalog-batch` stage, around
+15.5 s per group. The remaining 196 `catalog-batch` entries in that evidence
+belong to the table-presence probe, which is a different and far cheaper query
+and always reports a single statement; the two are separate populations and a
+cost comparison between them is not meaningful. Where the classifier capture's
+own cost arises is not established, so no shape here is justified by it. Object
+names embedded in SQL do not by themselves prevent
 [execution-plan reuse](https://learn.microsoft.com/en-us/sql/relational-databases/query-processing-architecture-guide?view=sql-server-ver17#execution-plan-caching-and-reuse).
 Results are checked against their original ordinal and plan, then projected in
 migration order. Missing, duplicate, or unexpected result rows fail the

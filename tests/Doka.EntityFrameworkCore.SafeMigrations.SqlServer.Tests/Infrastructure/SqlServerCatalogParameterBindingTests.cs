@@ -479,7 +479,7 @@ public sealed class SqlServerCatalogParameterBindingTests
             plans, 0, results, CancellationToken.None);
 
         // Assert
-        Assert.InRange(operationsPerStatement, 1, SqlServerCatalogQueryLimits.MaximumOperationsPerStatement - 1);
+        Assert.InRange(operationsPerStatement, 1, SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement - 1);
         Assert.Equal(expectedStatements, connection.RecordedStatements.Count);
         Assert.All(
             connection.RecordedParameters,

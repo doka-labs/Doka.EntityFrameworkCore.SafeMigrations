@@ -27,15 +27,20 @@ public sealed class SqlServerCatalogBatchingTests
         var plans = Enumerable.Range(0, count).Select(index => DistinctPlan(Plan(delayed), index)).ToArray();
         var results = new SafeMigrationProviderAnalysis[count];
 
+        // WHY: Native batching packs whole statements, so a round trip covers the statement
+        // width times the batch bound. A sequential connection executes each statement itself.
+        const int width = SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement;
+        const int perBatch = SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch;
+        var statements = (count + width - 1) / width;
+        var batches = (statements + perBatch - 1) / perBatch;
+
         // Act
         await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
             connection, null, 71, plans, 0, results, CancellationToken.None);
 
         // Assert
-        var statements = (count + (nativeBatch ? 8 : 32) - 1) / (nativeBatch ? 8 : 32);
-
         Assert.Equal(statements, connection.RecordedStatements.Count);
-        Assert.Equal(nativeBatch ? (count + 255) / 256 : 0, connection.BatchExecutions);
+        Assert.Equal(nativeBatch ? batches : 0, connection.BatchExecutions);
         Assert.Equal(nativeBatch ? 0 : statements, connection.CommandExecutions);
         Assert.Equal(Enumerable.Range(0, count).Select(State), results.Select(analysis => analysis.ObservedState));
         Assert.All(connection.ObservedTimeouts, timeout => Assert.Equal(71, timeout));
@@ -55,8 +60,12 @@ public sealed class SqlServerCatalogBatchingTests
         };
 
         const int count = 257;
+        const int width = SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement;
+        const int perBatch = SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch;
         var plans = Enumerable.Range(0, count).Select(index => DistinctPlan(Plan(false), index)).ToArray();
         var results = new SafeMigrationProviderAnalysis[count];
+        var statements = (count + width - 1) / width;
+        var batches = (statements + perBatch - 1) / perBatch;
 
         // Act
         await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
@@ -64,8 +73,9 @@ public sealed class SqlServerCatalogBatchingTests
 
         // Assert
         Assert.Equal(Enumerable.Range(0, count).Select(State), results.Select(analysis => analysis.ObservedState));
-        Assert.Equal(nativeBatch ? 2 : 0, connection.BatchExecutions);
-        Assert.Equal(nativeBatch ? 0 : 9, connection.CommandExecutions);
+        Assert.Equal(statements, connection.RecordedStatements.Count);
+        Assert.Equal(nativeBatch ? batches : 0, connection.BatchExecutions);
+        Assert.Equal(nativeBatch ? 0 : statements, connection.CommandExecutions);
     }
 
     /// <summary>
@@ -98,9 +108,13 @@ public sealed class SqlServerCatalogBatchingTests
         Assert.InRange(
             connection.RecordedStatements.Count,
             1,
-            plans.Length / SqlServerCatalogQueryLimits.MaximumOperationsPerStatement);
+            plans.Length / SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement);
 
-        Assert.Equal(nativeBatch ? 2 : 0, connection.BatchExecutions);
+        var expectedBatches = (connection.RecordedStatements.Count
+            + SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch - 1)
+            / SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch;
+
+        Assert.Equal(nativeBatch ? expectedBatches : 0, connection.BatchExecutions);
         Assert.Equal(nativeBatch ? 0 : connection.RecordedStatements.Count, connection.CommandExecutions);
         Assert.All(results.Take(captureStart), analysis => Assert.Equal(
             SafeMigrationObservedState.Unsupported, analysis.ObservedState));
@@ -114,7 +128,7 @@ public sealed class SqlServerCatalogBatchingTests
             }
         }
 
-        Assert.Equal(nativeBatch ? 2 : 0, connection.BatchesDisposed);
+        Assert.Equal(nativeBatch ? expectedBatches : 0, connection.BatchesDisposed);
         Assert.Equal(nativeBatch ? 0 : connection.RecordedStatements.Count, connection.CommandsDisposed);
     }
 
@@ -145,14 +159,25 @@ public sealed class SqlServerCatalogBatchingTests
         }
 
         // Assert
-        // WHY: Narrow statements inside wide batches are the point of the shape. Statement
-        // count may grow, but the executed batch count is what costs a round trip and must
-        // stay bounded by the same capture arithmetic as before.
-        Assert.Equal(11_329, connection.RecordedStatements.Count);
-        Assert.Equal(391, connection.BatchExecutions);
-        Assert.All(
-            connection.BatchStatementCounts,
-            count => Assert.InRange(count, 1, SqlServerCatalogQueryLimits.MaximumStatementsPerBatch));
+        // WHY: Both budgets are derived rather than pinned so a shape change fails loudly
+        // instead of silently. The statement bound allows one extra statement per binding
+        // mode in each bounded capture; the round-trip bound allows a few batches per
+        // capture. A regression to narrower statements or to one statement per batch
+        // exceeds them by an order of magnitude.
+        const int perCapture = SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture;
+        const int width = SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement;
+        const int perBatch = SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch;
+        var captures = (results.Length + perCapture - 1) / perCapture;
+
+        Assert.InRange(connection.RecordedStatements.Count,
+            results.Length / width / 2,
+            captures * ((perCapture / width) + 2));
+
+        Assert.InRange(connection.BatchExecutions,
+            connection.RecordedStatements.Count / perBatch,
+            captures * 3);
+
+        Assert.All(connection.BatchStatementCounts, count => Assert.InRange(count, 1, perBatch));
 
         Assert.All(connection.BatchPayloadBytes, bytes => Assert.InRange(bytes, 1, 4 * 1024 * 1024));
         Assert.All(connection.RecordedStatements.Zip(connection.RecordedParameters), recorded => Assert.InRange(
@@ -161,7 +186,7 @@ public sealed class SqlServerCatalogBatchingTests
                     "@doka_ordinal", StringComparison.Ordinal))
                 : recorded.First.Split("\nUNION ALL\n", StringSplitOptions.None).Length,
             1,
-            SqlServerCatalogQueryLimits.MaximumOperationsPerStatement));
+            SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement));
         for (var ordinal = 0; ordinal < results.Length; ordinal++)
         {
             Assert.Equal(ordinal % 9 == 3 ? SafeMigrationObservedState.Unsupported : State(ordinal),
@@ -549,7 +574,7 @@ public sealed class SqlServerCatalogBatchingTests
         Assert.Equal(cancellation.Token, connection.CancellationTokenSeen);
         Assert.Equal(nativeBatch ? 1 : 0, connection.BatchesDisposed);
         Assert.Equal(
-            nativeBatch ? 0 : SqlServerCatalogQueryLimits.MaximumSequentialStatementsPerBatch,
+            nativeBatch ? 0 : SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch,
             connection.CommandsDisposed);
     }
 
@@ -564,6 +589,7 @@ public sealed class SqlServerCatalogBatchingTests
             AfterNextResult = () => cancellation.Cancel(),
         };
 
+        const int width = SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement;
         var plans = Enumerable.Range(0, 257).Select(index => DistinctPlan(Plan(false), index)).ToArray();
         var results = new SafeMigrationProviderAnalysis[plans.Length];
 
@@ -573,9 +599,9 @@ public sealed class SqlServerCatalogBatchingTests
                 connection, null, null, plans, 0, results, cancellation.Token));
 
         // Assert
-        Assert.Equal(SqlServerCatalogQueryLimits.MaximumOperationsPerStatement, connection.RowsRead);
-        Assert.All(results.Take(SqlServerCatalogQueryLimits.MaximumOperationsPerStatement), Assert.NotNull);
-        Assert.All(results.Skip(SqlServerCatalogQueryLimits.MaximumOperationsPerStatement), Assert.Null);
+        Assert.Equal(width, connection.RowsRead);
+        Assert.All(results.Take(width), Assert.NotNull);
+        Assert.All(results.Skip(width), Assert.Null);
         Assert.Equal(1, connection.BatchExecutions);
         Assert.Equal(cancellation.Token, connection.CancellationTokenSeen);
         Assert.Equal(1, connection.BatchesDisposed);
@@ -610,11 +636,11 @@ public sealed class SqlServerCatalogBatchingTests
                 connection, null, null, plans, 0, results, cancellation.Token));
 
         // Assert
-        Assert.Equal(SqlServerCatalogQueryLimits.MaximumSequentialOperationsPerStatement, connection.RowsRead);
-        Assert.All(results.Take(SqlServerCatalogQueryLimits.MaximumSequentialOperationsPerStatement), Assert.NotNull);
-        Assert.All(results.Skip(SqlServerCatalogQueryLimits.MaximumSequentialOperationsPerStatement), Assert.Null);
+        Assert.Equal(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement, connection.RowsRead);
+        Assert.All(results.Take(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement), Assert.NotNull);
+        Assert.All(results.Skip(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement), Assert.Null);
         Assert.Equal(2, connection.CommandExecutions);
-        Assert.Equal(SqlServerCatalogQueryLimits.MaximumSequentialStatementsPerBatch, connection.CommandsDisposed);
+        Assert.Equal(SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch, connection.CommandsDisposed);
         Assert.Equal(cancellation.Token, connection.CancellationTokenSeen);
     }
 

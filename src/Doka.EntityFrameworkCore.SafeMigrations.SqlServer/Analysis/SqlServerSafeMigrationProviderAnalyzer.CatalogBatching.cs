@@ -113,19 +113,14 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     )
     {
         await using var batch = new SafeMigrationCatalogBatch(connection, commandTimeout, transaction);
-        var maximumOperationsPerStatement = connection.CanCreateBatch
-            ? SqlServerCatalogQueryLimits.MaximumOperationsPerStatement
-            : SqlServerCatalogQueryLimits.MaximumSequentialOperationsPerStatement;
-
-        var maximumStatementsPerBatch = connection.CanCreateBatch
-            ? SqlServerCatalogQueryLimits.MaximumStatementsPerBatch
-            : SqlServerCatalogQueryLimits.MaximumSequentialStatementsPerBatch;
+        const int maximumOperationsPerStatement = SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement;
+        const int maximumStatementsPerBatch = SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch;
 
         var next = start;
         var payload = 0;
         var parameterCount = 0;
         var resultPlans = new List<(int Ordinal, SqlServerSafeMigrationRuntimePlan Plan)>(
-            Math.Min(count - start, SqlServerCatalogQueryLimits.MaximumOperationsPerBatch));
+            Math.Min(count - start, maximumOperationsPerStatement * maximumStatementsPerBatch));
 
         var resultSetSizes = new List<int>(maximumStatementsPerBatch);
         var payloadFull = false;

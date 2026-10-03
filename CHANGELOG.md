@@ -21,14 +21,8 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
-- Give SQL Server catalog classification its own capture shape of eight
-  operations per statement and 32 statements per native transport batch.
-  Sequential connections retain 32 operations per statement and eight
-  statements per bounded group, avoiding additional sequential executes.
-  Both shapes retain a 256-operation capacity subject to payload and parameter
-  limits; native execution-time improvements remain subject to qualification.
-  Classifier rows are matched by their ordinal column, so the statements no
-  longer carry a sort and no longer require ordered delivery. Missing,
+- Match SQL Server classifier rows by their ordinal column instead of relying on
+  ordered delivery, so the catalog statements no longer carry a sort. Missing,
   duplicate and unexpected rows still fail the analysis.
 - Reuse a completed SQL Server identifier-contract verdict for the
   unexpected-object inventory only within the same active scope, context,
