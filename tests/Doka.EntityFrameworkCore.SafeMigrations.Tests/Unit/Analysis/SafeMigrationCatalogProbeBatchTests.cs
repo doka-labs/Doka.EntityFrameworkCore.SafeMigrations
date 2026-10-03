@@ -131,6 +131,74 @@ public sealed class SafeMigrationCatalogProbeBatchTests
         }
     }
 
+    /// <summary>A provider cap splits immutable chunks without changing statement slots or the shared cap.</summary>
+    /// <param name="native">Whether the test connection exposes native batching.</param>
+    /// <param name="parameters">The number of parameters in each complete chunk.</param>
+    [Theory]
+    [InlineData(true, 512)]
+    [InlineData(false, 512)]
+    [InlineData(true, 2000)]
+    [InlineData(false, 2000)]
+    [InlineData(true, 2001)]
+    [InlineData(false, 2001)]
+    public async Task ProviderParameterCap_PreservesWholeChunksAndRejectsOversize(
+        bool native,
+        int parameters
+    )
+    {
+        // Arrange
+        await using var connection = new CatalogProbeTestConnection(native);
+        var values = new List<int>();
+
+        // Act
+        var failure = await Record.ExceptionAsync(() => SafeMigrationCatalogProbeBatch.ReadAsync(
+            connection, 9, 4 * 1024 * 1024, null,
+            (command, offset) =>
+            {
+                command.Parameters.AddRange(new object[parameters]);
+
+                return BuildStatement(command, offset, count: 1, parameterPayload: 0);
+            },
+            (reader, offset, count, token) => ReadStatementAsync(reader, offset, count, values, token),
+            CancellationToken.None, maximumParameters: 2000));
+
+        // Assert
+        if (parameters > 2000)
+        {
+            Assert.IsType<InvalidOperationException>(failure);
+            Assert.Equal(0, connection.StatementCount);
+        }
+        else
+        {
+            Assert.Null(failure);
+            Assert.Equal(Enumerable.Range(0, 9).Select(index => (index * 2) + 501), values);
+            Assert.Equal(native ? parameters == 512 ? 3 : 9 : 0, connection.BatchExecutions);
+            Assert.Equal(native ? 0 : 9, connection.CommandExecutions);
+            Assert.All(connection.BatchCounts, count => Assert.InRange(count * parameters, 1, 2000));
+        }
+    }
+
+    /// <summary>A provider-specific cap can tighten but never expand the shared parameter budget.</summary>
+    /// <param name="cap">The invalid caller-supplied parameter bound.</param>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(16001)]
+    public async Task InvalidProviderParameterCap_RejectsBeforeTransportCreation(int cap)
+    {
+        // Arrange
+        await using var connection = new CatalogProbeTestConnection(native: true);
+
+        // Act
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => SafeMigrationCatalogProbeBatch.ReadAsync(
+            connection, 1, 1024, null, BuildStatement,
+            static (_, _, _, _) => Task.CompletedTask, CancellationToken.None, maximumParameters: cap));
+
+        // Assert
+        Assert.Equal(0, connection.Disposals);
+        Assert.Equal(0, connection.StatementCount);
+    }
+
     /// <summary>Callers cannot expand the shared hard payload bound.</summary>
     [Fact]
     public async Task ExcessivePayloadBound_RejectsBeforeTransportCreation()

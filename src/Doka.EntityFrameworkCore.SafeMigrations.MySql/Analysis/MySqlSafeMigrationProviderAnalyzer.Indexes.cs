@@ -199,10 +199,18 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         }
     }
 
-    private static async Task<IReadOnlyDictionary<string, SafeMigrationIndexPhysicalEnvironment>>
+    /// <summary>Captures requested physical-key environments under packet-qualified transport bounds.</summary>
+    /// <param name="connection">The open analysis connection.</param>
+    /// <param name="operations">The immutable current-database operation stream.</param>
+    /// <param name="maximumPayloadBytes">The qualified packet and shared payload bound.</param>
+    /// <param name="commandTimeout">The caller's command timeout.</param>
+    /// <param name="cancellationToken">The token that cancels construction and reading.</param>
+    /// <returns>The fully captured requested environments.</returns>
+    internal static async Task<IReadOnlyDictionary<string, SafeMigrationIndexPhysicalEnvironment>>
         ReadIndexPhysicalEnvironmentsAsync(
             DbConnection connection,
             IReadOnlyList<SafeMigrationOperation> operations,
+            int maximumPayloadBytes,
             int? commandTimeout,
             CancellationToken cancellationToken
         )
@@ -254,65 +262,81 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
         var observedTables = new HashSet<string>(StringComparer.Ordinal);
 
-        for (var offset = 0; offset < tables.Length; offset += SafeMigrationCatalogQueryLimits.MaximumInventoryValues)
-        {
-            var count = Math.Min(
-                SafeMigrationCatalogQueryLimits.MaximumInventoryValues,
-                tables.Length - offset);
-
-            await using var command = connection.CreateCommand();
-            ApplyCommandTimeout(command, commandTimeout);
-
-            var parameterNames = new string[count];
-            for (var index = 0; index < count; index++)
+        await SafeMigrationCatalogProbeBatch.ReadAsync(
+            connection, (tables.Length + SafeMigrationCatalogQueryLimits.MaximumInventoryValues - 1)
+                / SafeMigrationCatalogQueryLimits.MaximumInventoryValues,
+            maximumPayloadBytes, commandTimeout,
+            (command, slot) =>
             {
-                var parameter = command.CreateParameter();
-                parameter.ParameterName = $"@table_{index.ToString(CultureInfo.InvariantCulture)}";
-                parameter.Value = tables[offset + index];
-                _ = command.Parameters.Add(parameter);
-                parameterNames[index] = parameter.ParameterName;
-            }
-
-            command.CommandText = "SELECT t.TABLE_NAME, t.ENGINE, t.ROW_FORMAT, "
-                + "c.COLUMN_NAME, c.DATA_TYPE, c.CHARACTER_MAXIMUM_LENGTH, "
-                + "c.CHARACTER_OCTET_LENGTH, c.NUMERIC_PRECISION, "
-                + "c.NUMERIC_SCALE, c.DATETIME_PRECISION "
-                + "FROM INFORMATION_SCHEMA.TABLES t "
-                + "JOIN INFORMATION_SCHEMA.COLUMNS c "
-                + "ON c.TABLE_SCHEMA = t.TABLE_SCHEMA AND c.TABLE_NAME = t.TABLE_NAME "
-                + "WHERE t.TABLE_SCHEMA = DATABASE() "
-                + $"AND t.TABLE_NAME IN ({string.Join(", ", parameterNames)});";
-
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-            while (await reader.ReadAsync(cancellationToken))
-            {
-                var table = reader.GetString(0);
-                var engine = reader.IsDBNull(1) ? null : reader.GetString(1);
-                var rowFormat = reader.IsDBNull(2) ? null : reader.GetString(2);
-
-                if (observedTables.Add(table))
+                var offset = slot * SafeMigrationCatalogQueryLimits.MaximumInventoryValues;
+                var count = Math.Min(SafeMigrationCatalogQueryLimits.MaximumInventoryValues, tables.Length - offset);
+                var parameterNames = new string[count];
+                var valueBytes = 0;
+                for (var index = 0; index < count; index++)
                 {
-                    result[table] = CreateIndexPhysicalEnvironment(
-                        engine,
-                        rowFormat,
-                        environmentDefaults.DynamicMaximumKeyBytes);
+                    var parameter = command.CreateParameter();
+                    parameter.ParameterName = $"@table_{index.ToString(CultureInfo.InvariantCulture)}";
+                    parameter.Value = tables[offset + index];
+                    _ = command.Parameters.Add(parameter);
+                    parameterNames[index] = parameter.ParameterName;
+                    valueBytes += Encoding.UTF8.GetByteCount(tables[offset + index]) + 32;
                 }
 
-                var column = reader.GetString(3);
-                if (!requestedColumns[table].Contains(column))
-                {
-                    continue;
-                }
+                command.CommandText = "SELECT t.TABLE_NAME, t.ENGINE, t.ROW_FORMAT, "
+                    + "c.COLUMN_NAME, c.DATA_TYPE, c.CHARACTER_MAXIMUM_LENGTH, "
+                    + "c.CHARACTER_OCTET_LENGTH, c.NUMERIC_PRECISION, "
+                    + "c.NUMERIC_SCALE, c.DATETIME_PRECISION "
+                    + "FROM INFORMATION_SCHEMA.TABLES t "
+                    + "JOIN INFORMATION_SCHEMA.COLUMNS c "
+                    + "ON c.TABLE_SCHEMA = t.TABLE_SCHEMA AND c.TABLE_NAME = t.TABLE_NAME "
+                    + "WHERE t.TABLE_SCHEMA = DATABASE() "
+                    + $"AND t.TABLE_NAME IN ({string.Join(", ", parameterNames)});";
 
-                columnShapes[table][column] = MySqlProjectedIndexPhysicalShape.CreateCatalogColumnShape(
-                    reader.GetString(4),
-                    ReadNullableInt64(reader, 5),
-                    ReadNullableInt64(reader, 6),
-                    ReadNullableInt32(reader, 7),
-                    ReadNullableInt32(reader, 8),
-                    ReadNullableInt32(reader, 9));
-            }
-        }
+                return new SafeMigrationCatalogProbeStatement(1, valueBytes, offset);
+            },
+            async (reader, slot, _, token) =>
+            {
+                var permitted = tables.Skip(slot * SafeMigrationCatalogQueryLimits.MaximumInventoryValues)
+                    .Take(SafeMigrationCatalogQueryLimits.MaximumInventoryValues).ToHashSet(StringComparer.Ordinal);
+
+                while (await reader.ReadAsync(token))
+                {
+                    var table = reader.GetString(0);
+                    if (!permitted.Contains(table))
+                    {
+                        throw new InvalidOperationException("MySQL returned an unowned physical key table.");
+                    }
+
+                    var engine = reader.IsDBNull(1) ? null : reader.GetString(1);
+                    var rowFormat = reader.IsDBNull(2) ? null : reader.GetString(2);
+
+                    if (observedTables.Add(table))
+                    {
+                        result[table] = CreateIndexPhysicalEnvironment(
+                            engine,
+                            rowFormat,
+                            environmentDefaults.DynamicMaximumKeyBytes);
+                    }
+
+                    var column = reader.GetString(3);
+                    if (!requestedColumns[table].Contains(column))
+                    {
+                        continue;
+                    }
+
+                    if (!columnShapes[table].TryAdd(column, MySqlProjectedIndexPhysicalShape.CreateCatalogColumnShape(
+                        reader.GetString(4),
+                        ReadNullableInt64(reader, 5),
+                        ReadNullableInt64(reader, 6),
+                        ReadNullableInt32(reader, 7),
+                        ReadNullableInt32(reader, 8),
+                        ReadNullableInt32(reader, 9))))
+                    {
+                        throw new InvalidOperationException("MySQL returned a duplicate physical key column.");
+                    }
+                }
+            },
+            cancellationToken);
 
         foreach (var table in tables)
         {

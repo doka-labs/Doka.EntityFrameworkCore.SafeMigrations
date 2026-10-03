@@ -16,6 +16,8 @@ internal sealed record PostgreSqlSafeMigrationRuntimePlan(
 {
     internal const string DataProbePlaceholder = "__DOKA_SM_DATA_PROBE__";
     internal const string TransitionInvariantPlaceholder = "__DOKA_SM_TRANSITION_INVARIANT__";
+    internal const string NullabilityDataProbePlaceholder = "__DOKA_SM_NULLABILITY_DATA_PROBE__";
+    internal const string NullabilityRepairInvariantPlaceholder = "__DOKA_SM_NULLABILITY_REPAIR_INVARIANT__";
 
     /// <summary>Gets the catalog-only prerequisite expression.</summary>
     public string PrerequisiteExpression { get; init; } = "TRUE";
@@ -56,6 +58,9 @@ internal sealed record PostgreSqlSafeMigrationRuntimePlan(
 
     /// <summary>Gets the optional bounded live-data probe required by classification.</summary>
     public PostgreSqlSafeMigrationDataProbe? DataProbe { get; init; }
+
+    /// <summary>Gets the optional fresh, operation-local NULL proof shared by classification and repair.</summary>
+    public PostgreSqlSafeMigrationNullabilityDataProbe? NullabilityDataProbe { get; init; }
 
     /// <summary>Gets whether a nullable-to-required repair can require live row evidence.</summary>
     public bool MayRequireNullabilityDataProof { get; init; }
@@ -152,6 +157,57 @@ internal sealed record PostgreSqlSafeMigrationRuntimePlan(
         dataBlockedExpression,
         transitionEligibleExpression);
 
+    /// <summary>Renders fresh NULL-proof eligibility against the current operation's transition evidence.</summary>
+    /// <returns>The physical repair invariant without a row-reading NULL query.</returns>
+    public string RenderNullabilityRepairInvariantExpression() => ReplaceTransitionPlaceholders(
+        NullabilityDataProbe?.RepairInvariantExpression
+            ?? throw new InvalidOperationException("The runtime plan has no nullability data probe."),
+        "doka_data_blocked",
+        "doka_transition_eligible",
+        "FALSE",
+        "FALSE");
+
+    /// <summary>Appends fresh physical repair eligibility without an intermediate predicate string.</summary>
+    /// <param name="builder">The destination SQL builder.</param>
+    public void AppendNullabilityRepairInvariantExpression(
+        StringBuilder builder
+    )
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        AppendTransitionPlaceholders(
+            builder,
+            NullabilityDataProbe?.RepairInvariantExpression
+                ?? throw new InvalidOperationException("The runtime plan has no nullability data probe."),
+            "doka_data_blocked",
+            "doka_transition_eligible",
+            "FALSE",
+            "FALSE");
+    }
+
+    /// <summary>Renders the fresh catalog eligibility that makes a NULL proof stale after projected DML.</summary>
+    /// <param name="transitionEligible">The grouped physical-transition result, when already evaluated.</param>
+    /// <returns>A catalog-only Boolean expression indicating that NULL row evidence is required.</returns>
+    public string RenderNullabilityDataProbeRequiredExpression(
+        bool? transitionEligible = null
+    )
+    {
+        if (NullabilityDataProbe is null)
+        {
+            return "FALSE";
+        }
+
+        var transitionReplacement = DataProbe is null ? "FALSE" : transitionEligible is null
+            ? DataProbe.TransitionInvariantExpression
+                ?? throw new InvalidOperationException("The runtime plan has no transition evidence.")
+            : transitionEligible.Value ? "TRUE" : "FALSE";
+
+        var invariant = ReplaceTransitionPlaceholders(
+            NullabilityDataProbe.RepairInvariantExpression, "FALSE", transitionReplacement, "FALSE", "FALSE");
+
+        return $"({invariant}) AND NOT ({NullabilityDataProbe.NotNullContractExpression})";
+    }
+
     /// <summary>Renders the optional classification-code expression for runtime execution.</summary>
     /// <returns>The rendered expression, or null when no specialized classification exists.</returns>
     public string? RenderClassificationCodeExpression() => ClassificationCodeExpression is null
@@ -204,25 +260,43 @@ internal sealed record PostgreSqlSafeMigrationRuntimePlan(
         bool? transitionEligible
     )
     {
-        if (DataProbe is null)
+        if (DataProbe is null && NullabilityDataProbe is null)
         {
             return expression;
         }
 
-        var dataReplacement = dataBlocked is null
+        var dataReplacement = DataProbe is null ? "FALSE" : dataBlocked is null
             ? DataProbe.BuildBlockedExpression()
             : dataBlocked.Value
                 ? "TRUE"
                 : "FALSE";
 
-        var transitionReplacement = transitionEligible is null
+        var transitionReplacement = DataProbe is null ? "FALSE" : transitionEligible is null
             ? DataProbe.TransitionInvariantExpression
                 ?? throw new InvalidOperationException("The runtime plan has no transition evidence.")
             : transitionEligible.Value
                 ? "TRUE"
                 : "FALSE";
 
-        return ReplaceTransitionPlaceholders(expression, dataReplacement, transitionReplacement);
+        var repairInvariantReplacement = NullabilityDataProbe is null
+            ? "FALSE"
+            : ReplaceTransitionPlaceholders(
+                NullabilityDataProbe.RepairInvariantExpression,
+                dataReplacement,
+                transitionReplacement,
+                "FALSE",
+                "FALSE");
+
+        var nullabilityReplacement = NullabilityDataProbe is null
+            ? "FALSE"
+            : "CASE WHEN ("
+                + repairInvariantReplacement
+                + $") AND NOT ({NullabilityDataProbe.NotNullContractExpression}) THEN ("
+                + NullabilityDataProbe.BlockedExpression
+                + ") ELSE FALSE END";
+
+        return ReplaceTransitionPlaceholders(
+            expression, dataReplacement, transitionReplacement, nullabilityReplacement, repairInvariantReplacement);
     }
 
     private string RenderTransitionExpressions(
@@ -231,12 +305,14 @@ internal sealed record PostgreSqlSafeMigrationRuntimePlan(
         string transitionEligibleExpression
     )
     {
-        return DataProbe is null
+        return DataProbe is null && NullabilityDataProbe is null
             ? expression
             : ReplaceTransitionPlaceholders(
                 expression,
                 dataBlockedExpression,
-                transitionEligibleExpression);
+                transitionEligibleExpression,
+                "doka_nullability_blocked",
+                "doka_nullability_repair_eligible");
     }
 
     private void AppendTransitionExpressions(
@@ -250,7 +326,7 @@ internal sealed record PostgreSqlSafeMigrationRuntimePlan(
         ArgumentException.ThrowIfNullOrWhiteSpace(dataBlockedExpression);
         ArgumentException.ThrowIfNullOrWhiteSpace(transitionEligibleExpression);
 
-        if (DataProbe is null)
+        if (DataProbe is null && NullabilityDataProbe is null)
         {
             builder.Append(expression);
 
@@ -261,88 +337,113 @@ internal sealed record PostgreSqlSafeMigrationRuntimePlan(
             builder,
             expression,
             dataBlockedExpression,
-            transitionEligibleExpression);
+            transitionEligibleExpression,
+            "doka_nullability_blocked",
+            "doka_nullability_repair_eligible");
     }
 
     private static string ReplaceTransitionPlaceholders(
         string expression,
         string dataReplacement,
-        string transitionReplacement
+        string transitionReplacement,
+        string nullabilityReplacement,
+        string repairInvariantReplacement
     )
     {
-        var dataCount = CountOccurrences(expression, DataProbePlaceholder);
-        var transitionCount = CountOccurrences(expression, TransitionInvariantPlaceholder);
-        if (dataCount == 0
-            && transitionCount == 0)
+        var resultLength = expression.Length;
+        var sourceOffset = 0;
+        var hasMarkers = false;
+        while (FindNextPlaceholder(expression.AsSpan(), sourceOffset) is var marker && marker.Index >= 0)
+        {
+            hasMarkers = true;
+            var replacement = ProofReplacement(
+                marker.Kind,
+                dataReplacement,
+                transitionReplacement,
+                nullabilityReplacement,
+                repairInvariantReplacement);
+
+            resultLength = checked(resultLength + replacement.Length - marker.Length);
+            sourceOffset = marker.Index + marker.Length;
+        }
+
+        if (!hasMarkers)
         {
             return expression;
         }
-
-        var resultLength = CalculateResultLength(
-            expression,
-            dataReplacement,
-            transitionReplacement,
-            dataCount,
-            transitionCount);
 
         // WHY: Sequential string.Replace calls materialize the complete state
         // expression twice. A single exact-size pass bounds allocation growth
         // for large repair batches without weakening either runtime predicate.
         return string.Create(
             resultLength,
-            (Expression: expression, Data: dataReplacement, Transition: transitionReplacement),
+            (Expression: expression, Data: dataReplacement, Transition: transitionReplacement,
+                Nullability: nullabilityReplacement, RepairInvariant: repairInvariantReplacement),
             static (destination, state) => CopyTransitionPlaceholders(
                 destination,
                 state.Expression,
                 state.Data,
-                state.Transition));
+                state.Transition,
+                state.Nullability,
+                state.RepairInvariant));
     }
 
     private static void AppendTransitionPlaceholders(
         StringBuilder builder,
         string expression,
         string dataReplacement,
-        string transitionReplacement
+        string transitionReplacement,
+        string nullabilityReplacement,
+        string repairInvariantReplacement
     )
     {
         var source = expression.AsSpan();
         var sourceOffset = 0;
         while (sourceOffset < source.Length)
         {
-            var remaining = source[sourceOffset..];
-            var nextIndex = FindNextPlaceholder(remaining, out var replaceData);
-            if (nextIndex < 0)
+            var marker = FindNextPlaceholder(source, sourceOffset);
+            if (marker.Index < 0)
             {
-                builder.Append(remaining);
+                builder.Append(source[sourceOffset..]);
 
                 return;
             }
 
-            builder.Append(remaining[..nextIndex]);
+            builder.Append(source.Slice(sourceOffset, marker.Index - sourceOffset));
 
-            var replacement = replaceData ? dataReplacement : transitionReplacement;
+            var replacement = ProofReplacement(
+                marker.Kind,
+                dataReplacement,
+                transitionReplacement,
+                nullabilityReplacement,
+                repairInvariantReplacement);
+
             builder.Append(replacement);
-            sourceOffset += nextIndex
-                + (replaceData ? DataProbePlaceholder.Length : TransitionInvariantPlaceholder.Length);
+            sourceOffset = marker.Index + marker.Length;
         }
     }
 
-    private static int CalculateResultLength(
-        string expression,
+    private static string ProofReplacement(
+        int kind,
         string dataReplacement,
         string transitionReplacement,
-        int dataCount,
-        int transitionCount
-    ) => checked(
-        expression.Length
-        + (dataCount * (dataReplacement.Length - DataProbePlaceholder.Length))
-        + (transitionCount * (transitionReplacement.Length - TransitionInvariantPlaceholder.Length)));
+        string nullabilityReplacement,
+        string repairInvariantReplacement
+    ) => kind switch
+    {
+        0 => dataReplacement,
+        1 => transitionReplacement,
+        2 => nullabilityReplacement,
+        _ => repairInvariantReplacement,
+    };
 
     private static void CopyTransitionPlaceholders(
         Span<char> destination,
         string expression,
         string dataReplacement,
-        string transitionReplacement
+        string transitionReplacement,
+        string nullabilityReplacement,
+        string repairInvariantReplacement
     )
     {
         var source = expression.AsSpan();
@@ -350,62 +451,115 @@ internal sealed record PostgreSqlSafeMigrationRuntimePlan(
         var destinationOffset = 0;
         while (sourceOffset < source.Length)
         {
-            var remaining = source[sourceOffset..];
-            var nextIndex = FindNextPlaceholder(remaining, out var replaceData);
-            if (nextIndex < 0)
+            var marker = FindNextPlaceholder(source, sourceOffset);
+            if (marker.Index < 0)
             {
-                remaining.CopyTo(destination[destinationOffset..]);
+                source[sourceOffset..].CopyTo(destination[destinationOffset..]);
 
                 return;
             }
 
-            remaining[..nextIndex].CopyTo(destination[destinationOffset..]);
-            destinationOffset += nextIndex;
+            var before = source.Slice(sourceOffset, marker.Index - sourceOffset);
+            before.CopyTo(destination[destinationOffset..]);
+            destinationOffset += before.Length;
 
-            var replacement = replaceData ? dataReplacement : transitionReplacement;
+            var replacement = ProofReplacement(
+                marker.Kind,
+                dataReplacement,
+                transitionReplacement,
+                nullabilityReplacement,
+                repairInvariantReplacement);
+
             replacement.AsSpan().CopyTo(destination[destinationOffset..]);
             destinationOffset += replacement.Length;
-            sourceOffset += nextIndex
-                + (replaceData ? DataProbePlaceholder.Length : TransitionInvariantPlaceholder.Length);
+            sourceOffset = marker.Index + marker.Length;
         }
     }
 
-    private static int FindNextPlaceholder(
+    /// <summary>Locates structural markers without interpreting proof-token text in quoted names or values.</summary>
+    private static (int Index, int Kind, int Length) FindNextPlaceholder(
         ReadOnlySpan<char> source,
-        out bool replaceData
+        int start
     )
     {
-        var dataIndex = source.IndexOf(DataProbePlaceholder, StringComparison.Ordinal);
-        var transitionIndex = source.IndexOf(
-            TransitionInvariantPlaceholder,
-            StringComparison.Ordinal);
-
-        replaceData = dataIndex >= 0
-            && (transitionIndex < 0 || dataIndex < transitionIndex);
-
-        return replaceData ? dataIndex : transitionIndex;
-    }
-
-    private static int CountOccurrences(
-        string value,
-        string marker
-    )
-    {
-        var count = 0;
-        var remaining = value.AsSpan();
-        while (true)
+        for (var index = start; index < source.Length; index++)
         {
-            var index = remaining.IndexOf(marker, StringComparison.Ordinal);
-            if (index < 0)
+            if (source[index] is '\'' or '"')
             {
-                return count;
+                // WHY: Provider-rendered identifiers and literals double their
+                // delimiter. A caller can legitimately use a proof-token name.
+                var quote = source[index];
+                var closed = false;
+                while (++index < source.Length)
+                {
+                    if (source[index] != quote)
+                    {
+                        continue;
+                    }
+
+                    if (index + 1 < source.Length && source[index + 1] == quote)
+                    {
+                        index++;
+
+                        continue;
+                    }
+
+                    closed = true;
+
+                    break;
+                }
+
+                if (!closed)
+                {
+                    throw new InvalidOperationException(
+                        "The PostgreSQL proof template contains an unterminated quoted token.");
+                }
+
+                continue;
             }
 
-            count++;
-            remaining = remaining[(index + marker.Length)..];
+            if (source[index] != '_')
+            {
+                continue;
+            }
+
+            var remaining = source[index..];
+            if (remaining.StartsWith(DataProbePlaceholder, StringComparison.Ordinal))
+            {
+                return (index, 0, DataProbePlaceholder.Length);
+            }
+
+            if (remaining.StartsWith(TransitionInvariantPlaceholder, StringComparison.Ordinal))
+            {
+                return (index, 1, TransitionInvariantPlaceholder.Length);
+            }
+
+            if (remaining.StartsWith(NullabilityDataProbePlaceholder, StringComparison.Ordinal))
+            {
+                return (index, 2, NullabilityDataProbePlaceholder.Length);
+            }
+
+            if (remaining.StartsWith(NullabilityRepairInvariantPlaceholder, StringComparison.Ordinal))
+            {
+                return (index, 3, NullabilityRepairInvariantPlaceholder.Length);
+            }
         }
+
+        return (-1, 0, 0);
     }
 }
+
+/// <summary>Describes a fresh NULL row proof shared by one operation's state and repair decision.</summary>
+/// <param name="NotNullContractExpression">The validated and enforced catalog proof covering the row relation.</param>
+/// <param name="RepairInvariantExpression">The physical repair-eligibility predicate.</param>
+/// <param name="BlockedExpression">The provider-delimited bounded NULL row query.</param>
+/// <param name="QualifiedTable">The provider-delimited table identity used for the runtime lock.</param>
+internal sealed record PostgreSqlSafeMigrationNullabilityDataProbe(
+    string NotNullContractExpression,
+    string RepairInvariantExpression,
+    string BlockedExpression,
+    string QualifiedTable
+);
 
 /// <summary>Describes one deduplicatable PostgreSQL narrowing proof.</summary>
 /// <param name="Table">The validated relational table name.</param>

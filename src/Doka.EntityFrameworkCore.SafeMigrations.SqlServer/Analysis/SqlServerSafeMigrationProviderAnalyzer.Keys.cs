@@ -60,7 +60,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     /// <param name="commandTimeout">The active context command timeout.</param>
     /// <param name="cancellationToken">The analysis cancellation token.</param>
     /// <returns>A task completing after every bounded result has been captured.</returns>
-    private async Task ReadProjectedKeySnapshotAsync(
+    internal async Task ReadProjectedKeySnapshotAsync(
         DbConnection connection,
         DbTransaction? transaction,
         IReadOnlyList<SafeMigrationOperation> operations,
@@ -139,66 +139,109 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
         var result = new Dictionary<(string Schema, string Table), SqlServerProjectedKeyTable>(requested.Count);
         var tables = requested.Keys.ToArray();
-        for (var offset = 0; offset < tables.Length; offset += 32)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
+        var columnShapes = new Dictionary<string, SqlServerProjectedKeyColumn>?[tables.Length];
 
-            var count = Math.Min(32, tables.Length - offset);
-            await using var command = connection.CreateCommand();
-            command.Transaction = transaction;
-            ApplyCommandTimeout(command, commandTimeout);
-            command.CommandText = BuildProjectedKeySnapshotSql(tables, rowsRequired, offset, count);
-
-            var columnShapes = new Dictionary<string, SqlServerProjectedKeyColumn>?[count];
-            await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+        await SafeMigrationCatalogProbeBatch.ReadAsync(
+            connection, (tables.Length + SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement - 1)
+                / SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement,
+            SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes, commandTimeout,
+            (command, slot) =>
             {
-                while (await reader.ReadAsync(cancellationToken))
+                var offset = slot * SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement;
+                command.CommandText = BuildProjectedKeySnapshotSql(tables, rowsRequired, offset,
+                    Math.Min(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement, tables.Length - offset));
+
+                return new SafeMigrationCatalogProbeStatement(1, 0, offset);
+            },
+            async (reader, slot, _, token) =>
+            {
+                var offset = slot * SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement;
+                var count = Math.Min(
+                    SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement, tables.Length - offset);
+                var received = 0;
+                while (await reader.ReadAsync(token))
                 {
                     var ordinal = reader.GetInt32(0);
-                    if ((uint)ordinal >= (uint)count || columnShapes[ordinal] is not null)
+                    if ((uint)ordinal >= (uint)count || columnShapes[offset + ordinal] is not null
+                        || !StringComparer.Ordinal.Equals(reader.GetString(5), tables[offset + ordinal].Schema)
+                        || !StringComparer.Ordinal.Equals(reader.GetString(6), tables[offset + ordinal].Table))
                     {
                         throw new InvalidOperationException(
                             "SQL Server returned an invalid projected key table ordinal.");
                     }
 
                     var shapes = new Dictionary<string, SqlServerProjectedKeyColumn>(StringComparer.Ordinal);
-                    columnShapes[ordinal] = shapes;
+                    columnShapes[offset + ordinal] = shapes;
                     result.Add(tables[offset + ordinal], new SqlServerProjectedKeyTable(
                         reader.GetInt32(1) == 1, reader.GetInt32(2),
                         reader.IsDBNull(3) ? null : reader.GetString(3), shapes,
                         reader.GetInt32(4) == 1));
+                    received++;
                 }
-            }
 
-            if (columnShapes.Any(static shapes => shapes is null))
-            {
-                throw new InvalidOperationException("SQL Server omitted a projected key catalog result.");
-            }
-
-            var requestedColumns = new List<string>(SafeMigrationCatalogQueryLimits.MaximumInventoryValues);
-            for (var ordinal = 0; ordinal < count; ordinal++)
-            {
-                var table = tables[offset + ordinal];
-                var qualified = _sqlGenerationHelper.DelimitIdentifier(table.Table, table.Schema);
-                var tableId = $"OBJECT_ID({KeyLiteral(qualified)}, N'U')";
-                foreach (var column in requested[table])
+                if (received != count)
                 {
-                    requestedColumns.Add($"({ordinal}, {tableId}, {KeyLiteral(column)})");
-                    if (requestedColumns.Count == SafeMigrationCatalogQueryLimits.MaximumInventoryValues)
-                    {
-                        await ReadProjectedKeyColumnsAsync(
-                            connection, transaction, commandTimeout, requestedColumns, columnShapes, cancellationToken);
-                        requestedColumns.Clear();
-                    }
+                    throw new InvalidOperationException("SQL Server omitted a projected key catalog result.");
                 }
-            }
+            },
+            cancellationToken, transaction, SqlServerCatalogParameterBindings.MaximumParameters);
 
-            if (requestedColumns.Count != 0)
+        // WHY: Every table header is captured before column facets. Chunk slots
+        // transport whole 512-value statements, not individual column operations.
+        var bindings = tables.SelectMany((table, ordinal) => requested[table].Select(name => (ordinal, name)));
+        using var chunks = bindings.Chunk(SafeMigrationCatalogQueryLimits.MaximumInventoryValues).GetEnumerator();
+        var pending = new Dictionary<int, (int Ordinal, string Name)[]>();
+        await SafeMigrationCatalogProbeBatch.ReadAsync(
+            connection,
+            (requested.Values.Sum(static names => names.Count)
+                + SafeMigrationCatalogQueryLimits.MaximumInventoryValues - 1)
+                / SafeMigrationCatalogQueryLimits.MaximumInventoryValues,
+            SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes, commandTimeout,
+            (command, slot) =>
             {
-                await ReadProjectedKeyColumnsAsync(
-                    connection, transaction, commandTimeout, requestedColumns, columnShapes, cancellationToken);
-            }
-        }
+                if (!pending.TryGetValue(slot, out var chunk))
+                {
+                    if (!chunks.MoveNext())
+                    {
+                        throw new InvalidOperationException("SQL Server projected key column inventory is incomplete.");
+                    }
+
+                    chunk = chunks.Current;
+                    pending.Add(slot, chunk);
+                }
+
+                command.CommandText = BuildProjectedKeyColumnsSql(chunk.Select(binding =>
+                {
+                    var table = tables[binding.Ordinal];
+                    var qualified = _sqlGenerationHelper.DelimitIdentifier(table.Table, table.Schema);
+
+                    return $"({binding.Ordinal}, OBJECT_ID({KeyLiteral(qualified)}, N'U'), {KeyLiteral(binding.Name)})";
+                }));
+
+                return new SafeMigrationCatalogProbeStatement(1, 0, slot);
+            },
+            async (reader, slot, _, token) =>
+            {
+                var permitted = pending[slot].ToHashSet();
+                pending.Remove(slot);
+
+                while (await reader.ReadAsync(token))
+                {
+                    var ordinal = reader.GetInt32(0);
+                    var name = reader.GetString(1);
+                    if (!permitted.Remove((ordinal, name)) || columnShapes[ordinal] is not { } shapes)
+                    {
+                        throw new InvalidOperationException(
+                            "SQL Server returned an invalid projected key column ordinal.");
+                    }
+
+                    shapes.Add(name, new SqlServerProjectedKeyColumn(
+                        reader.GetString(2), reader.GetInt32(3), reader.GetBoolean(4),
+                        reader.GetInt32(5) == 1, reader.GetInt32(6) == 1,
+                        reader.IsDBNull(7) ? null : reader.GetString(7), reader.GetInt32(8) == 1));
+                }
+            },
+            cancellationToken, transaction, SqlServerCatalogParameterBindings.MaximumParameters);
 
         // WHY: DbContext analysis is scoped and cannot run concurrently on one
         // context. Replacing the completed snapshot prevents partially captured
@@ -218,7 +261,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     {
         var sql = new StringBuilder("DECLARE @doka_key_tables TABLE (ordinal int NOT NULL, "
             + "object_id int NULL, row_count int NOT NULL, primary_key_name nvarchar(128) NULL, "
-            + "physical_supported int NOT NULL); "
+            + "physical_supported int NOT NULL, schema_name nvarchar(128) NOT NULL, "
+            + "table_name nvarchar(128) NOT NULL); "
             + "DECLARE @doka_key_rows int;\n");
 
         for (var ordinal = 0; ordinal < count; ordinal++)
@@ -250,12 +294,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             sql.Append("INSERT @doka_key_tables VALUES (").Append(ordinal).Append(", ")
                 .Append(tableId).Append(", @doka_key_rows, ")
                 .Append("(SELECT name FROM sys.key_constraints WHERE parent_object_id = ")
-                .Append(tableId).Append(" AND type = 'PK'), ").Append(physical).Append(");\n");
+                .Append(tableId).Append(" AND type = 'PK'), ").Append(physical).Append(", ")
+                .Append(KeyLiteral(table.Schema)).Append(", ").Append(KeyLiteral(table.Table)).Append(");\n");
 
         }
 
         sql.Append("SELECT ordinal, CASE WHEN object_id IS NULL THEN 0 ELSE 1 END, ")
-            .Append("row_count, primary_key_name, physical_supported ")
+            .Append("row_count, primary_key_name, physical_supported, schema_name, table_name ")
             .Append("FROM @doka_key_tables ORDER BY ordinal;");
 
         var text = sql.ToString();
@@ -267,19 +312,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         return text;
     }
 
-    private static async Task ReadProjectedKeyColumnsAsync(
-        DbConnection connection,
-        DbTransaction? transaction,
-        int? commandTimeout,
-        List<string> requested,
-        Dictionary<string, SqlServerProjectedKeyColumn>?[] columns,
-        CancellationToken cancellationToken
-    )
-    {
-        await using var command = connection.CreateCommand();
-        command.Transaction = transaction;
-        ApplyCommandTimeout(command, commandTimeout);
-        command.CommandText = "SELECT requested.ordinal, requested.name, ty.name, "
+    private static string BuildProjectedKeyColumnsSql(
+        IEnumerable<string> requested
+    ) => "SELECT requested.ordinal, requested.name, ty.name, "
             + "CONVERT(int, c.max_length), c.is_nullable, "
             + "CASE WHEN c.is_computed = 0 AND c.max_length > 0 AND ty.is_user_defined = 0 "
             + "AND ty.name NOT IN (N'xml', N'text', N'ntext', N'image', "
@@ -291,22 +326,6 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             + ") requested(ordinal, object_id, name) JOIN sys.columns c ON c.object_id = requested.object_id "
             + "AND c.name COLLATE CATALOG_DEFAULT = requested.name COLLATE CATALOG_DEFAULT "
             + "JOIN sys.types ty ON ty.user_type_id = c.user_type_id;";
-
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
-        {
-            var ordinal = reader.GetInt32(0);
-            if ((uint)ordinal >= (uint)columns.Length || columns[ordinal] is not { } shapes)
-            {
-                throw new InvalidOperationException("SQL Server returned an invalid projected key column ordinal.");
-            }
-
-            shapes.Add(reader.GetString(1), new SqlServerProjectedKeyColumn(
-                reader.GetString(2), reader.GetInt32(3), reader.GetBoolean(4),
-                reader.GetInt32(5) == 1, reader.GetInt32(6) == 1,
-                reader.IsDBNull(7) ? null : reader.GetString(7), reader.GetInt32(8) == 1));
-        }
-    }
 
     private static string KeyLiteral(string value) => "N'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
 }

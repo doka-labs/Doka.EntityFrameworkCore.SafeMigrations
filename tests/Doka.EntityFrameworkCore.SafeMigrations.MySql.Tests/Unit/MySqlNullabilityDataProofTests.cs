@@ -89,7 +89,7 @@ public sealed class MySqlNullabilityDataProofTests
                 plan.DataProbe.BuildBlockedExpression(), StringComparison.Ordinal)
             .Replace(MySqlSafeMigrationRuntimePlan.TransitionInvariantPlaceholder, "eligible", StringComparison.Ordinal)
             .Replace(MySqlSafeMigrationRuntimePlan.NullabilityDataProbePlaceholder,
-                "null_probe", StringComparison.Ordinal)
+                "CASE WHEN (nullable) AND (eligible) THEN (null_probe) ELSE FALSE END", StringComparison.Ordinal)
             .Replace(MySqlSafeMigrationRuntimePlan.ColumnRepairInvariantPlaceholder,
                 "eligible", StringComparison.Ordinal);
 
@@ -120,7 +120,7 @@ public sealed class MySqlNullabilityDataProofTests
         var analysis = plan.RenderStateExpression(static _ => throw new InvalidOperationException());
         var runtime = plan.RenderPreparedRepairPrecondition([]);
 
-        Assert.Equal("null_probe", analysis);
+        Assert.Equal("CASE WHEN (nullable) AND (eligible) THEN (null_probe) ELSE FALSE END", analysis);
         Assert.Equal("@doka_sm_nullability_blocked", runtime);
         Assert.Equal("nullable", plan.RenderPreparedNullabilityColumnExpression([]));
         Assert.Equal("eligible", plan.RenderPreparedNullabilityRepairInvariantExpression([]));

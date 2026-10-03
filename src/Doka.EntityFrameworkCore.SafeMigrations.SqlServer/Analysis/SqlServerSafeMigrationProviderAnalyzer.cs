@@ -1037,7 +1037,14 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
         }
     }
 
-    private async Task<IReadOnlyList<SafeMigrationUnexpectedObject>> ReadUnexpectedObjectsAsync(
+    /// <summary>Loads an invocation-owned inventory scope before batching its final immutable reads.</summary>
+    /// <param name="connection">The borrowed open analysis connection.</param>
+    /// <param name="transaction">The active caller transaction.</param>
+    /// <param name="expected">The invocation's expected table inventory.</param>
+    /// <param name="commandTimeout">The caller's command timeout.</param>
+    /// <param name="cancellationToken">The token that cancels scope loading and reading.</param>
+    /// <returns>The complete unexpected-object evidence after owned scope cleanup.</returns>
+    internal async Task<IReadOnlyList<SafeMigrationUnexpectedObject>> ReadUnexpectedObjectsAsync(
         DbConnection connection,
         DbTransaction? transaction,
         IReadOnlyList<SafeMigrationExpectedTableInventory> expected,
@@ -1107,26 +1114,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
             }
 
             command.Parameters.Clear();
-            command.CommandText = "SELECT s.name, t.name FROM sys.tables t "
+            var tableInventorySql = "SELECT 0, s.name, t.name FROM sys.tables t "
                 + "JOIN sys.schemas s ON s.schema_id = t.schema_id "
                 + $"WHERE EXISTS (SELECT 1 FROM {temporaryTable} e WHERE e.schema_name = s.name) "
                 + $"AND NOT EXISTS (SELECT 1 FROM {temporaryTable} e WHERE e.kind = 0 "
                 + "AND e.schema_name = s.name AND e.table_name = t.name) ORDER BY s.name, t.name;";
 
-            await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
-            {
-                while (await reader.ReadAsync(cancellationToken))
-                {
-                    findings.Add(new SafeMigrationUnexpectedObject(
-                        SafeMigrationDatabaseObjectKind.Table,
-                        reader.GetString(0),
-                        table: null,
-                        reader.GetString(1),
-                        "unexpected_table"));
-                }
-            }
-
-            command.CommandText = "WITH expected(schema_name, table_name) AS ("
+            var childInventorySql = "WITH expected(schema_name, table_name) AS ("
                 + $"SELECT schema_name, table_name FROM {temporaryTable} WHERE kind = 0), "
                 + "physical(kind, schema_name, table_name, name) AS ("
                 + "SELECT 1, s.name, t.name, c.name FROM expected e "
@@ -1150,33 +1144,63 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
                 + "JOIN sys.schemas s ON s.name = e.schema_name "
                 + "JOIN sys.tables t ON t.schema_id = s.schema_id AND t.name = e.table_name "
                 + "JOIN sys.foreign_keys fk ON fk.parent_object_id = t.object_id) "
-                + "SELECT p.kind, p.schema_name, p.table_name, p.name FROM physical p "
+                + "SELECT 1, p.kind, p.schema_name, p.table_name, p.name FROM physical p "
                 + $"WHERE NOT EXISTS (SELECT 1 FROM {temporaryTable} e WHERE e.kind = p.kind "
                 + "AND e.schema_name = p.schema_name AND e.table_name = p.table_name AND e.name = p.name) "
                 + "ORDER BY p.kind, p.schema_name, p.table_name, p.name;";
 
-            await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
-            {
-                while (await reader.ReadAsync(cancellationToken))
+            // WHY: Loading the owned scope is a prerequisite. Only its two
+            // immutable final reads share a transport, before owned cleanup.
+            await SafeMigrationCatalogProbeBatch.ReadAsync(
+                connection, 2, SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes, commandTimeout,
+                (statement, slot) =>
                 {
-                    var kind = (SafeMigrationDatabaseObjectKind)reader.GetInt32(0);
-                    findings.Add(new SafeMigrationUnexpectedObject(
-                        kind,
-                        reader.GetString(1),
-                        reader.GetString(2),
-                        reader.GetString(3),
-                        kind switch
+                    statement.CommandText = slot == 0 ? tableInventorySql : childInventorySql;
+
+                    return new SafeMigrationCatalogProbeStatement(1, 0, slot);
+                },
+                async (reader, slot, _, token) =>
+                {
+                    if (reader.FieldCount != (slot == 0 ? 3 : 5))
+                    {
+                        throw new InvalidOperationException("SQL Server returned an unowned inventory result set.");
+                    }
+
+                    while (await reader.ReadAsync(token))
+                    {
+                        if (reader.GetInt32(0) != slot)
                         {
-                            SafeMigrationDatabaseObjectKind.Column => "unexpected_column",
-                            SafeMigrationDatabaseObjectKind.Index => "unexpected_index",
-                            SafeMigrationDatabaseObjectKind.PrimaryKey => "unexpected_primary_key",
-                            SafeMigrationDatabaseObjectKind.UniqueConstraint => "unexpected_unique_constraint",
-                            SafeMigrationDatabaseObjectKind.CheckConstraint => "unexpected_check_constraint",
-                            SafeMigrationDatabaseObjectKind.ForeignKey => "unexpected_foreign_key",
-                            _ => throw new UnreachableException(),
-                        }));
-                }
-            }
+                            throw new InvalidOperationException("SQL Server returned an unowned inventory object.");
+                        }
+
+                        if (slot == 0)
+                        {
+                            findings.Add(new SafeMigrationUnexpectedObject(
+                                SafeMigrationDatabaseObjectKind.Table, reader.GetString(1),
+                                table: null, reader.GetString(2), "unexpected_table"));
+
+                            continue;
+                        }
+
+                        var kind = (SafeMigrationDatabaseObjectKind)reader.GetInt32(1);
+                        findings.Add(new SafeMigrationUnexpectedObject(
+                            kind,
+                            reader.GetString(2),
+                            reader.GetString(3),
+                            reader.GetString(4),
+                            kind switch
+                            {
+                                SafeMigrationDatabaseObjectKind.Column => "unexpected_column",
+                                SafeMigrationDatabaseObjectKind.Index => "unexpected_index",
+                                SafeMigrationDatabaseObjectKind.PrimaryKey => "unexpected_primary_key",
+                                SafeMigrationDatabaseObjectKind.UniqueConstraint => "unexpected_unique_constraint",
+                                SafeMigrationDatabaseObjectKind.CheckConstraint => "unexpected_check_constraint",
+                                SafeMigrationDatabaseObjectKind.ForeignKey => "unexpected_foreign_key",
+                                _ => throw new UnreachableException(),
+                            }));
+                    }
+                },
+                cancellationToken, transaction, SqlServerCatalogParameterBindings.MaximumParameters);
 
             return findings.AsReadOnly();
         }

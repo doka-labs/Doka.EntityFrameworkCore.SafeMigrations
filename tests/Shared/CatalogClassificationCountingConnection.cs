@@ -266,9 +266,10 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
             CountClassifier(reader);
             if (ShouldInjectFault(reader))
             {
+                var fieldCount = reader.FieldCount;
                 reader.Dispose();
 
-                return CreateFaultReader();
+                return CreateFaultReader(fieldCount);
             }
 
             return reader;
@@ -284,9 +285,10 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
             CountClassifier(reader);
             if (ShouldInjectFault(reader))
             {
+                var fieldCount = reader.FieldCount;
                 await reader.DisposeAsync();
 
-                return CreateFaultReader();
+                return CreateFaultReader(fieldCount);
             }
 
             return reader;
@@ -296,7 +298,7 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
         private bool ShouldInjectFault(
             DbDataReader reader
         ) => !_owner.FaultWasInjected
-            && ((reader.FieldCount == 9
+            && ((reader.FieldCount is 9 or 10
                     && _owner._fault is CatalogClassificationResultFault.UnsubmittedOrdinal
                         or CatalogClassificationResultFault.MissingRows)
                 || (IsPrerequisite(reader)
@@ -304,15 +306,15 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
                         or CatalogClassificationResultFault.MissingPrerequisiteRows));
 
         /// <summary>Creates only synthetic ordinal evidence; real provider rows are never copied.</summary>
-        private DataTableReader CreateFaultReader()
+        private DataTableReader CreateFaultReader(
+            int fieldCount
+        )
         {
             _owner.FaultWasInjected = true;
             var table = new DataTable();
             table.Columns.Add("ordinal", typeof(int));
-            var prerequisites = _owner._fault is CatalogClassificationResultFault.UnsubmittedPrerequisiteOrdinal
-                or CatalogClassificationResultFault.MissingPrerequisiteRows;
 
-            for (var column = 1; column < (prerequisites ? 2 : 9); column++)
+            for (var column = 1; column < fieldCount; column++)
             {
                 table.Columns.Add($"facet_{column}", typeof(object));
             }
@@ -323,8 +325,17 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
             }
             else if (_owner._fault == CatalogClassificationResultFault.UnsubmittedOrdinal)
             {
-                table.Rows.Add(-1, "matching", true, false, DBNull.Value, DBNull.Value,
-                    DBNull.Value, DBNull.Value, DBNull.Value);
+                var row = table.NewRow();
+                row[0] = -1;
+                row[1] = "matching";
+                row[2] = true;
+                row[3] = false;
+                if (fieldCount == 10)
+                {
+                    row[9] = false;
+                }
+
+                table.Rows.Add(row);
             }
 
             return table.CreateDataReader();
@@ -336,8 +347,9 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
         )
         {
             // WHY: Prerequisite, probe, and diagnostic statements have other
-            // shapes. Only the complete nine-facet classifier is counted.
-            if (reader.FieldCount == 9)
+            // shapes. PostgreSQL appends NULL-proof eligibility to the nine
+            // existing classifier facets; both complete shapes are counted.
+            if (reader.FieldCount is 9 or 10)
             {
                 _owner.ClassificationStatementCount++;
             }

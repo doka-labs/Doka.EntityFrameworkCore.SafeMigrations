@@ -1,5 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <Compile Include="..\Shared\CatalogStatementTestConnection.cs"
+             Link="Infrastructure\CatalogStatementTestConnection.cs" />
     <Compile Include="..\Shared\LivePerformanceEvidence.cs"
              Link="Infrastructure\LivePerformanceEvidence.cs" />
     <Compile Include="..\Shared\LargeMigrationStressContract.cs"

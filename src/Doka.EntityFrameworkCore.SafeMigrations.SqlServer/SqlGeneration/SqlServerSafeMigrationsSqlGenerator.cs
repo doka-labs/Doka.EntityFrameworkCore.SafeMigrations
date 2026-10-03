@@ -79,6 +79,7 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
             static schema => schema ?? "dbo");
 
         var plans = new SqlServerSafeMigrationRuntimePlan?[operations.Count];
+        var safeOperationCount = 0;
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             if (operations[ordinal] is not SafeMigrationOperation safeOperation)
@@ -104,9 +105,10 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
             }
 
             plans[ordinal] = plan;
+            safeOperationCount++;
         }
 
-        var safeOperations = operations.OfType<SafeMigrationOperation>().ToArray();
+        var safeOperations = ExtractSafeOperations(operations, safeOperationCount);
         var metadataCommand = _dependencies.CommandBuilderFactory.Create().Build();
 
         var commands = new List<MigrationCommand>(operations.Count);
@@ -146,8 +148,7 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
 
                 // WHY: Commands may be cached before another migration
                 // quarantines this context, even in an ordinary-only stream.
-                commands.AddRange(ordinaryCommands.Select(command =>
-                    new SqlServerSafeMigrationGuardedCommand(command, _dependencies, analyzer, metadataCommand)));
+                AppendGuardedCommands(commands, ordinaryCommands, _dependencies, analyzer, metadataCommand);
                 ordinal--;
 
                 continue;
@@ -181,8 +182,8 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
                     "A repairable SQL Server SafeMigrations operation has no repair command.");
             }
 
-            if (baseline.Any(static command => command.TransactionSuppressed)
-                || effectiveRepairBaseline.Any(static command => command.TransactionSuppressed))
+            if (HasTransactionSuppressedCommand(baseline)
+                || HasTransactionSuppressedCommand(effectiveRepairBaseline))
             {
                 throw new NotSupportedException(
                     "A transaction-suppressed SQL Server baseline cannot be guarded atomically.");
@@ -206,18 +207,19 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
                     + "WHERE object_id = OBJECT_ID(" + tableLiteral + ") AND name IN (" + columns + ")) "
                     + "SET IDENTITY_INSERT " + table + " OFF;";
 
-                commands.AddRange(guardedCommands.Select(command =>
-                    new SqlServerSafeMigrationIdentityInsertCommand(
-                        command,
+                for (var index = 0; index < guardedCommands.Count; index++)
+                {
+                    commands.Add(new SqlServerSafeMigrationIdentityInsertCommand(
+                        guardedCommands[index],
                         cleanupSql,
                         _dependencies,
                         analyzer,
-                        metadataCommand)));
+                        metadataCommand));
+                }
             }
             else
             {
-                commands.AddRange(guardedCommands.Select(command =>
-                    new SqlServerSafeMigrationGuardedCommand(command, _dependencies, analyzer, metadataCommand)));
+                AppendGuardedCommands(commands, guardedCommands, _dependencies, analyzer, metadataCommand);
             }
         }
 
@@ -226,24 +228,68 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
             // WHY: The analyzer and script path must use one CATALOG_DEFAULT
             // identity contract. Keep its bounded VALUES fragments in one
             // dynamic scope so attention cannot leave temporary caller state.
-            var guardSql = string.Join("\n", SqlServerIdentifierContract.BuildCollisionGuardCommands(
+            var identifierStatements = SqlServerIdentifierContract.BuildCollisionGuardCommands(
                 SqlServerIdentifierContract.Collect(safeOperations),
-                throwOnCollision: true));
+                throwOnCollision: true);
 
-            var guardBuilder = new StringBuilder();
-            AppendDynamicSql(guardBuilder, guardSql, string.Empty);
             var identifierGuard = new SqlOperation
             {
-                Sql = guardBuilder.ToString(),
+                Sql = BuildIsolatedIdentifierGuardSql(identifierStatements),
             };
 
             var identifierCommands = _baselineGenerator.Generate([identifierGuard], model, options);
             ValidateGuardCommands(identifierCommands);
-            commands.InsertRange(0, identifierCommands.Select(command =>
-                new SqlServerSafeMigrationGuardedCommand(command, _dependencies, analyzer, metadataCommand)));
+            PrependGuardedCommands(commands, identifierCommands, _dependencies, analyzer, metadataCommand);
         }
 
         return commands.AsReadOnly();
+    }
+
+    /// <summary>Extracts the already-counted safe operation references in their original stream order.</summary>
+    /// <param name="operations">The preflighted operation stream, which must not be concurrently modified.</param>
+    /// <param name="safeOperationCount">The exact count established by the completed preflight.</param>
+    /// <returns>One exact-sized array containing the original safe operation references.</returns>
+    /// <exception cref="ArgumentNullException">The operation stream is null.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The count is negative or exceeds the stream length.</exception>
+    /// <exception cref="InvalidOperationException">The supplied count does not match the operation stream.</exception>
+    internal static SafeMigrationOperation[] ExtractSafeOperations(
+        IReadOnlyList<MigrationOperation> operations,
+        int safeOperationCount
+    )
+    {
+        ArgumentNullException.ThrowIfNull(operations);
+        ArgumentOutOfRangeException.ThrowIfNegative(safeOperationCount);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(safeOperationCount, operations.Count);
+
+        // WHY: Preflight already visits every safe operation. Its exact count
+        // avoids the filtering iterator and temporary growth buffers needed by
+        // OfType/ToArray while retaining the original objects and their order.
+        var safeOperations = safeOperationCount == 0
+            ? Array.Empty<SafeMigrationOperation>()
+            : new SafeMigrationOperation[safeOperationCount];
+
+        var offset = 0;
+        for (var ordinal = 0; ordinal < operations.Count; ordinal++)
+        {
+            if (operations[ordinal] is not SafeMigrationOperation safeOperation)
+            {
+                continue;
+            }
+
+            if (offset == safeOperationCount)
+            {
+                throw new InvalidOperationException("The safe operation preflight count no longer matches the stream.");
+            }
+
+            safeOperations[offset++] = safeOperation;
+        }
+
+        if (offset != safeOperationCount)
+        {
+            throw new InvalidOperationException("The safe operation preflight count no longer matches the stream.");
+        }
+
+        return safeOperations;
     }
 
     private static void ValidateGuardCommands(IReadOnlyList<MigrationCommand> commands)
@@ -253,10 +299,79 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
             throw new InvalidOperationException("A SQL Server SafeMigrations guard has no generated command.");
         }
 
-        if (commands.Any(static command => command.TransactionSuppressed))
+        if (HasTransactionSuppressedCommand(commands))
         {
             throw new NotSupportedException("A SQL Server SafeMigrations guard cannot suppress its transaction.");
         }
+    }
+
+    /// <summary>Appends quarantine wrappers in provider order without selector or enumerator allocations.</summary>
+    /// <param name="destination">The operation stream receiving the wrapped commands.</param>
+    /// <param name="source">The completed provider command batch.</param>
+    /// <param name="dependencies">The command-building and current-context services.</param>
+    /// <param name="analyzer">The existing scoped provider quarantine owner.</param>
+    /// <param name="metadataCommand">The shared empty metadata command, not a copy of any command SQL.</param>
+    internal static void AppendGuardedCommands(
+        List<MigrationCommand> destination,
+        IReadOnlyList<MigrationCommand> source,
+        MigrationsSqlGeneratorDependencies dependencies,
+        SqlServerSafeMigrationProviderAnalyzer analyzer,
+        IRelationalCommand metadataCommand
+    )
+    {
+        // WHY: Each safe operation normally contributes a small provider list.
+        // Index that existing list directly instead of allocating a captured
+        // selector and iterator for every operation's wrapping step.
+        for (var index = 0; index < source.Count; index++)
+        {
+            destination.Add(new SqlServerSafeMigrationGuardedCommand(
+                source[index], dependencies, analyzer, metadataCommand));
+        }
+    }
+
+    /// <summary>
+    /// Prepends identifier wrappers in provider order without temporary lists or repeated front shifts.
+    /// </summary>
+    /// <param name="destination">The operation stream receiving the wrapped identifier prefix.</param>
+    /// <param name="source">The completed provider identifier command batch.</param>
+    /// <param name="dependencies">The command-building and current-context services.</param>
+    /// <param name="analyzer">The existing scoped provider quarantine owner.</param>
+    /// <param name="metadataCommand">The shared empty metadata command, not a copy of any command SQL.</param>
+    internal static void PrependGuardedCommands(
+        List<MigrationCommand> destination,
+        IReadOnlyList<MigrationCommand> source,
+        MigrationsSqlGeneratorDependencies dependencies,
+        SqlServerSafeMigrationProviderAnalyzer analyzer,
+        IRelationalCommand metadataCommand
+    )
+    {
+        var previousCount = destination.Count;
+        AppendGuardedCommands(destination, source, dependencies, analyzer, metadataCommand);
+
+        // WHY: Append and rotate the two ordered regions in place. This keeps
+        // identifier guards before every ordinary command without a selector,
+        // intermediate wrapper list, or one whole-stream shift per prefix row.
+        destination.Reverse(0, previousCount);
+        destination.Reverse(previousCount, destination.Count - previousCount);
+        destination.Reverse();
+    }
+
+    /// <summary>Checks the unchanged transaction boundary directly on a completed provider command list.</summary>
+    /// <param name="commands">The provider batch whose suppression flags are inspected.</param>
+    /// <returns>Whether any command suppresses its transaction.</returns>
+    private static bool HasTransactionSuppressedCommand(
+        IReadOnlyList<MigrationCommand> commands
+    )
+    {
+        for (var index = 0; index < commands.Count; index++)
+        {
+            if (commands[index].TransactionSuppressed)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private IReadOnlyList<MigrationCommand> RenderBaseline(
@@ -339,14 +454,19 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
         return _baselineGenerator.Generate([repairOperation], model, options);
     }
 
-    private static string BuildGuardedSql(
+    /// <summary>Renders one prepared operation inside its private dynamic scope.</summary>
+    /// <param name="operation">The safe intent and policy whose action is guarded.</param>
+    /// <param name="plan">The prepared catalog and execution expressions.</param>
+    /// <param name="baseline">The provider commands for an accepted apply action.</param>
+    /// <param name="repairBaseline">The provider commands for an accepted repair action.</param>
+    /// <returns>The complete isolated guard with deferred scalar and DDL scopes intact.</returns>
+    internal static string BuildGuardedSql(
         SafeMigrationOperation operation,
         SqlServerSafeMigrationRuntimePlan plan,
         IReadOnlyList<MigrationCommand> baseline,
         IReadOnlyList<MigrationCommand> repairBaseline
     )
     {
-        var actionCase = BuildActionCase(operation, plan.RepairCapability);
         var builder = new StringBuilder(1024);
 
         if (operation.Intent is EnsureModelManagedDataIntent)
@@ -448,10 +568,11 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
 
             AppendDelayedScalar(
                 builder,
-                $"COALESCE(({plan.RepairPrecondition}), 0)",
+                plan.RepairPrecondition ?? string.Empty,
                 "int",
                 "@doka_repair_ok",
-                "    ");
+                "    ",
+                coalesce: true);
         }
         else
         {
@@ -460,9 +581,10 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
                 .Append(plan.RepairPrecondition).Append("), 0);\n");
         }
 
-        builder.Append("END;\n")
-            .Append("SET @doka_action = ").Append(actionCase).Append(";\n")
-            .Append("IF @doka_action = N'reject_different'\nBEGIN\n")
+        builder.Append("END;\nSET @doka_action = ");
+        AppendActionCase(builder, operation, plan.RepairCapability);
+
+        builder.Append(";\nIF @doka_action = N'reject_different'\nBEGIN\n")
             .Append("    THROW 51001, N'doka_sm_different', 1;\nEND;\n")
             .Append("IF @doka_action = N'reject_unsupported'\nBEGIN\n")
             .Append("    THROW 51002, N'doka_sm_unsupported', 1;\nEND;\n")
@@ -494,10 +616,11 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
 
             AppendDelayedScalar(
                 builder,
-                $"COALESCE(({plan.ExecutionPostcondition ?? plan.Postcondition}), 0)",
+                plan.ExecutionPostcondition ?? plan.Postcondition ?? string.Empty,
                 "int",
                 "@doka_postcondition",
-                "    ");
+                "    ",
+                coalesce: true);
 
             builder.Append("    IF @doka_postcondition <> 1\n");
         }
@@ -565,6 +688,59 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
         });
     }
 
+    /// <summary>Copies completed identifier statements directly into one exact-sized private SQL scope.</summary>
+    /// <param name="statements">The ordered provider-owned statements, which must not be concurrently modified.</param>
+    /// <returns>The newline-joined statements with the original literal quoting and outer dynamic scope.</returns>
+    /// <exception cref="ArgumentNullException">The statement collection is null.</exception>
+    /// <exception cref="OverflowException">The isolated batch length exceeds the string length domain.</exception>
+    internal static string BuildIsolatedIdentifierGuardSql(
+        IReadOnlyList<string> statements
+    )
+    {
+        ArgumentNullException.ThrowIfNull(statements);
+
+        var length = checked(GuardScopePrefix.Length + GuardScopeSuffix.Length + Math.Max(0, statements.Count - 1));
+        for (var index = 0; index < statements.Count; index++)
+        {
+            var statement = statements[index].AsSpan();
+            length = checked(length + statement.Length + statement.Count('\''));
+        }
+
+        // WHY: The catalog builder already owns complete immutable statements.
+        // Joining and then copying them through a growing literal buffer retains
+        // two unnecessary full-size intermediates before the final SQL string.
+        return string.Create(length, statements, static (destination, source) =>
+        {
+            GuardScopePrefix.AsSpan().CopyTo(destination);
+            var offset = GuardScopePrefix.Length;
+            for (var index = 0; index < source.Count; index++)
+            {
+                if (index > 0)
+                {
+                    destination[offset++] = '\n';
+                }
+
+                // WHY: string.Join treats null statement entries as empty.
+                // Preserve that boundary as well as every other UTF-16 code unit.
+                var statement = source[index].AsSpan();
+                int apostropheOffset;
+                while ((apostropheOffset = statement.IndexOf('\'')) >= 0)
+                {
+                    statement.Slice(0, apostropheOffset).CopyTo(destination.Slice(offset));
+                    offset += apostropheOffset;
+                    destination[offset++] = '\'';
+                    destination[offset++] = '\'';
+                    statement = statement.Slice(apostropheOffset + 1);
+                }
+
+                statement.CopyTo(destination.Slice(offset));
+                offset += statement.Length;
+            }
+
+            GuardScopeSuffix.AsSpan().CopyTo(destination.Slice(offset));
+        });
+    }
+
     /// <summary>Appends a nested scalar scope without binding row expressions before their runtime gates.</summary>
     /// <param name="builder">The operation-owned guard buffer.</param>
     /// <param name="expression">The required scalar SQL expression to evaluate.</param>
@@ -572,6 +748,7 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
     /// <param name="targetVariable">The caller variable receiving the scalar result.</param>
     /// <param name="indentation">The indentation before the nested scope.</param>
     /// <param name="preambleSql">Optional catalog setup retained in the same scalar scope.</param>
+    /// <param name="coalesce">Wraps a repair or postcondition predicate in the existing null-to-zero template.</param>
     /// <exception cref="ArgumentNullException">The required scalar expression is null.</exception>
     private static void AppendDelayedScalar(
         StringBuilder builder,
@@ -579,7 +756,8 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
         string type,
         string targetVariable,
         string indentation,
-        string? preambleSql = null
+        string? preambleSql = null,
+        bool coalesce = false
     )
     {
         // WHY: Only the optional preamble treats null as empty. A malformed
@@ -589,7 +767,20 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
         builder.Append(indentation).Append(GuardScopePrefix);
         AppendEscapedSqlLiteral(builder, preambleSql.AsSpan());
         builder.Append("\nSET @doka_value = (");
+        if (coalesce)
+        {
+            // WHY: Repair and postcondition expressions can fill a whole guard.
+            // Append their fixed wrapper instead of allocating another complete
+            // expression; callers retain interpolation's null-as-empty behavior.
+            builder.Append("COALESCE((");
+        }
+
         AppendEscapedSqlLiteral(builder, expression.AsSpan());
+        if (coalesce)
+        {
+            builder.Append("), 0)");
+        }
+
         builder.Append(");', N'@doka_value ")
             .Append(type)
             .Append(" OUTPUT', @doka_value = ")
@@ -609,12 +800,12 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
             return;
         }
 
-        foreach (var command in commands)
+        for (var index = 0; index < commands.Count; index++)
         {
             // WHY: Compile each DDL statement only after runtime catalog
             // classification. Otherwise SQL Server can bind absent objects in
             // an IF branch that would never execute.
-            AppendDynamicSql(builder, command.CommandText, "    ");
+            AppendDynamicSql(builder, commands[index].CommandText, "    ");
         }
     }
 
@@ -663,33 +854,40 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
         builder.Append(sql);
     }
 
-    private static string BuildActionCase(
+    /// <summary>Appends policy decisions without an intermediate action-case buffer or string.</summary>
+    /// <param name="builder">The operation-owned guard buffer.</param>
+    /// <param name="operation">The intent and policy evaluated for every observed state.</param>
+    /// <param name="repairCapability">The provider-proven repair boundary.</param>
+    private static void AppendActionCase(
+        StringBuilder builder,
         SafeMigrationOperation operation,
         SafeMigrationRepairCapability repairCapability
     )
     {
-        var builder = new StringBuilder("CASE @doka_state ");
+        // WHY: The case has exactly one consumer: this guard. Writing directly
+        // avoids retaining a second chunk chain and then copying its final string.
+        builder.Append("CASE @doka_state ");
         foreach (var state in s_observedStates)
         {
-            var decision = SafeMigrationDecisionPlanner.Plan(
+            var action = SafeMigrationDecisionPlanner.PlanAction(
                 operation.Intent.Kind,
                 state,
                 operation.Policy,
                 repairCapability);
 
             builder.Append("WHEN N'").Append(StateCode(state)).Append("' THEN ");
-            if (decision.Action == SafeMigrationAction.Repair)
+            if (action == SafeMigrationAction.Repair)
             {
                 builder.Append("CASE WHEN @doka_repair_ok = 1 THEN N'repair' ")
                     .Append("ELSE N'reject_different' END ");
             }
             else
             {
-                builder.Append("N'").Append(ActionCode(decision.Action)).Append("' ");
+                builder.Append("N'").Append(ActionCode(action)).Append("' ");
             }
         }
 
-        return builder.Append("ELSE N'reject_unsupported' END").ToString();
+        builder.Append("ELSE N'reject_unsupported' END");
     }
 
     private static string StateCode(

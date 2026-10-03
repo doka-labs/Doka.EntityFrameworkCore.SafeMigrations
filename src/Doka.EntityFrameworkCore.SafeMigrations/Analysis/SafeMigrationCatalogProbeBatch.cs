@@ -12,6 +12,7 @@ internal static class SafeMigrationCatalogProbeBatch
     /// <param name="readStatement">Validates and consumes that statement's exact candidate/result contract.</param>
     /// <param name="cancellationToken">The token that cancels construction, execution, and reading.</param>
     /// <param name="transaction">The caller-owned transaction to forward without changing its lifetime.</param>
+    /// <param name="maximumParameters">The provider's stricter aggregate parameter bound, when required.</param>
     /// <returns>A task completed after every statement and result set has been verified.</returns>
     public static async Task ReadAsync(
         DbConnection connection,
@@ -21,7 +22,8 @@ internal static class SafeMigrationCatalogProbeBatch
         Func<SafeMigrationCatalogCommand, int, SafeMigrationCatalogProbeStatement> buildStatement,
         Func<DbDataReader, int, int, CancellationToken, Task> readStatement,
         CancellationToken cancellationToken,
-        DbTransaction? transaction = null
+        DbTransaction? transaction = null,
+        int maximumParameters = SafeMigrationCatalogQueryLimits.MaximumParameters
     )
     {
         ArgumentNullException.ThrowIfNull(connection);
@@ -31,6 +33,9 @@ internal static class SafeMigrationCatalogProbeBatch
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumPayloadBytes);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(
             maximumPayloadBytes, SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumParameters);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            maximumParameters, SafeMigrationCatalogQueryLimits.MaximumParameters);
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -65,14 +70,16 @@ internal static class SafeMigrationCatalogProbeBatch
                 var statementPayloadBytes = checked(
                     Encoding.UTF8.GetByteCount(command.CommandText) + statement.ParameterPayloadBytes);
 
-                if (SafeMigrationCatalogQueryLimits.Exceeded(
+                if (command.Parameters.Count > maximumParameters
+                    || SafeMigrationCatalogQueryLimits.Exceeded(
                         command.Parameters.Count, statementPayloadBytes, maximumPayloadBytes))
                 {
                     throw SafeMigrationCatalogQueryLimits.OversizedOperation(
                         statement.FirstOrdinal, command.Parameters.Count, statementPayloadBytes);
                 }
 
-                if (SafeMigrationCatalogQueryLimits.Exceeded(
+                if (parameters + command.Parameters.Count > maximumParameters
+                    || SafeMigrationCatalogQueryLimits.Exceeded(
                         parameters + command.Parameters.Count,
                         checked(payloadBytes + statementPayloadBytes),
                         maximumPayloadBytes))

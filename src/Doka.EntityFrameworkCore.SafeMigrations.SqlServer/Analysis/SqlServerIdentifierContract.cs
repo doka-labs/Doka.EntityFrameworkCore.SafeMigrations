@@ -166,9 +166,7 @@ internal static class SqlServerIdentifierContract
         // WHY: Collect also emits every parent schema and table in their own
         // physical scope. An alias hidden in a qualifier therefore appears
         // in one exact-scope group before this SQL-free fast path is taken.
-        var possibleCollision = references.GroupBy(static reference =>
-                (reference.Scope, reference.Schema, reference.Table))
-            .Any(static group => group.Skip(1).Any());
+        var possibleCollision = HasRepeatedPhysicalScope(references);
 
         if (!possibleCollision)
         {
@@ -241,6 +239,40 @@ internal static class SqlServerIdentifierContract
             + EndGuard(throwOnCollision, safe: null));
 
         return commands;
+    }
+
+    /// <summary>
+    /// Detects a second reference in the same exact physical scope without materializing full groups.
+    /// </summary>
+    /// <param name="references">
+    /// The completed identifier references, inspected without mutation or deduplication.
+    /// </param>
+    /// <returns>Whether two references share the same scope and ordinal schema/table identity.</returns>
+    /// <exception cref="ArgumentNullException">The reference collection is null.</exception>
+    internal static bool HasRepeatedPhysicalScope(
+        IReadOnlyList<SqlServerIdentifierReference> references
+    )
+    {
+        ArgumentNullException.ThrowIfNull(references);
+        if (references.Count < 2)
+        {
+            return false;
+        }
+
+        // WHY: The caller only needs to know whether a scope repeats, not its
+        // grouped names. Stop at the first repeat while leaving every original
+        // reference available to the unchanged catalog guard after validation.
+        var scopes = new HashSet<(SqlServerIdentifierScope Scope, string Schema, string? Table)>();
+        for (var index = 0; index < references.Count; index++)
+        {
+            var reference = references[index];
+            if (!scopes.Add((reference.Scope, reference.Schema, reference.Table)))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static string EndGuard(

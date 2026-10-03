@@ -466,16 +466,25 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
                 ? "TRUE"
                 : "FALSE";
 
-        var nullabilityReplacement = NullabilityDataProbe is null
-            ? "FALSE"
-            : MySqlCatalogSqlTemplate.Render(NullabilityDataProbe.BlockedExpression, ParameterValues, renderValue);
-
         var repairInvariantReplacement = NullabilityDataProbe is null
             ? "FALSE"
             : ReplaceTransitionPlaceholders(
                 MySqlCatalogSqlTemplate.Render(
                     NullabilityDataProbe.RepairInvariantExpression, ParameterValues, renderValue),
-                dataReplacement, transitionReplacement, nullabilityReplacement, "FALSE");
+                dataReplacement, transitionReplacement, "FALSE", "FALSE");
+
+        // WHY: A required target does not imply the live column is nullable.
+        // Keep the row-reading branch behind the same physical catalog gate
+        // as prepared execution, including repair-invariant qualification.
+        var nullabilityReplacement = NullabilityDataProbe is null
+            ? "FALSE"
+            : "CASE WHEN ("
+                + MySqlCatalogSqlTemplate.Render(
+                    NullabilityDataProbe.NullableColumnExpression, ParameterValues, renderValue)
+                + $") AND ({repairInvariantReplacement}) THEN ("
+                + MySqlCatalogSqlTemplate.Render(
+                    NullabilityDataProbe.BlockedExpression, ParameterValues, renderValue)
+                + ") ELSE FALSE END";
 
         return ReplaceTransitionPlaceholders(
             rendered, dataReplacement, transitionReplacement, nullabilityReplacement, repairInvariantReplacement);

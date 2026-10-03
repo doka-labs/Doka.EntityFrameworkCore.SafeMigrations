@@ -162,6 +162,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
             var indexEnvironments = await ReadIndexPhysicalEnvironmentsAsync(
                 connection,
                 physicalKeyOperations,
+                maximumPayloadBytes,
                 commandTimeout,
                 cancellationToken);
 
@@ -1574,31 +1575,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                 connection,
                 MySqlServerVersionCompatibilityMode.AllowUnsupported);
 
-            var findings = new List<SafeMigrationUnexpectedObject>();
-            var seen = new HashSet<(SafeMigrationDatabaseObjectKind Kind, string Table, string Name)>();
-
-            await using (var tableCommand = connection.CreateCommand())
-            {
-                ApplyCommandTimeout(tableCommand, commandTimeout);
-
-                tableCommand.CommandText = BuildUnexpectedTableSql();
-                await ReadUnexpectedAsync(tableCommand, expected, findings, seen, cancellationToken);
-            }
-
-            foreach (var tableBatch in expected
-                         .Keys
-                         .Order(StringComparer.Ordinal)
-                         .Chunk(SafeMigrationCatalogQueryLimits.MaximumInventoryValues))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                await using var command = connection.CreateCommand();
-                ApplyCommandTimeout(command, commandTimeout);
-                var parameters = new MySqlCatalogQueryParameterizer(command, _typeMappingSource);
-                var tableScope = string.Join(", ", tableBatch.Select(parameters.AddString));
-                command.CommandText = BuildUnexpectedChildObjectSql(tableScope, serverVersion.IsMariaDb);
-                await ReadUnexpectedAsync(command, expected, findings, seen, cancellationToken);
-            }
+            var maximumPayloadBytes = await GetMaximumPayloadBytesAsync(connection, commandTimeout, cancellationToken);
+            var findings = await ReadUnexpectedInventoryAsync(
+                connection, expected, serverVersion.IsMariaDb, maximumPayloadBytes, commandTimeout, cancellationToken);
 
             return await RemoveSemanticAliasesAsync(context, operations, findings, cancellationToken);
         }
@@ -1609,6 +1588,57 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                 await connection.CloseAsync();
             }
         }
+    }
+
+    /// <summary>Reads immutable inventory scopes as complete 512-table statement slots.</summary>
+    /// <param name="connection">The open analysis connection.</param>
+    /// <param name="expected">The invocation's expected table inventory.</param>
+    /// <param name="isMariaDb">Whether implicit JSON checks require MariaDB catalog qualification.</param>
+    /// <param name="maximumPayloadBytes">The qualified packet and shared payload bound.</param>
+    /// <param name="commandTimeout">The caller's command timeout.</param>
+    /// <param name="cancellationToken">The token that cancels construction and reading.</param>
+    /// <returns>The complete invocation-local inventory evidence.</returns>
+    internal static async Task<List<SafeMigrationUnexpectedObject>> ReadUnexpectedInventoryAsync(
+        DbConnection connection,
+        Dictionary<string, SafeMigrationExpectedTableInventory> expected,
+        bool isMariaDb,
+        int maximumPayloadBytes,
+        int? commandTimeout,
+        CancellationToken cancellationToken
+    )
+    {
+        var findings = new List<SafeMigrationUnexpectedObject>();
+        var seen = new HashSet<(SafeMigrationDatabaseObjectKind Kind, string Table, string Name)>();
+        var tables = expected.Keys.Order(StringComparer.Ordinal).ToArray();
+        await SafeMigrationCatalogProbeBatch.ReadAsync(
+            connection, 1 + (tables.Length + SafeMigrationCatalogQueryLimits.MaximumInventoryValues - 1)
+                / SafeMigrationCatalogQueryLimits.MaximumInventoryValues,
+            maximumPayloadBytes, commandTimeout,
+            (command, slot) =>
+            {
+                if (slot == 0)
+                {
+                    command.CommandText = BuildUnexpectedTableSql();
+
+                    return new SafeMigrationCatalogProbeStatement(1, 0, slot);
+                }
+
+                var parameters = new MySqlCatalogQueryParameterizer(command);
+                var tableScope = string.Join(", ", tables
+                    .Skip((slot - 1) * SafeMigrationCatalogQueryLimits.MaximumInventoryValues)
+                    .Take(SafeMigrationCatalogQueryLimits.MaximumInventoryValues).Select(parameters.AddString));
+
+                command.CommandText = BuildUnexpectedChildObjectSql(tableScope, isMariaDb);
+
+                return new SafeMigrationCatalogProbeStatement(1, parameters.Utf8PayloadBytes, slot);
+            },
+            (reader, slot, _, token) => ReadUnexpectedAsync(reader, expected, findings, seen,
+                slot == 0 ? null : tables.Skip((slot - 1) * SafeMigrationCatalogQueryLimits.MaximumInventoryValues)
+                    .Take(SafeMigrationCatalogQueryLimits.MaximumInventoryValues).ToHashSet(StringComparer.Ordinal),
+                token),
+            cancellationToken);
+
+        return findings;
     }
 
     private async Task<IReadOnlyList<SafeMigrationUnexpectedObject>> RemoveSemanticAliasesAsync(
@@ -1662,15 +1692,14 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
     }
 
     private static async Task ReadUnexpectedAsync(
-        DbCommand command,
+        DbDataReader reader,
         Dictionary<string, SafeMigrationExpectedTableInventory> expected,
         List<SafeMigrationUnexpectedObject> findings,
         HashSet<(SafeMigrationDatabaseObjectKind Kind, string Table, string Name)> seen,
+        HashSet<string>? permittedTables,
         CancellationToken cancellationToken
     )
     {
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-
         // Unexpected objects are evidence only. They are never folded into
         // the expected catalog and never authorize destructive cleanup.
         while (await reader.ReadAsync(cancellationToken))
@@ -1679,6 +1708,13 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
             var tableName = reader.GetString(1);
             var objectName = reader.GetString(2);
             var providerGeneratedJsonCheck = reader.GetBoolean(3);
+            if (permittedTables is null
+                ? kind != SafeMigrationDatabaseObjectKind.Table
+                : kind == SafeMigrationDatabaseObjectKind.Table || !permittedTables.Contains(tableName))
+            {
+                throw new InvalidOperationException("MySQL returned an unowned inventory object.");
+            }
+
             if (!seen.Add((kind, tableName, objectName)))
             {
                 continue;

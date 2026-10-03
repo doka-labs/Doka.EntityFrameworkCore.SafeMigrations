@@ -198,6 +198,13 @@ No runtime proof is reused across operations. This reduces network roundtrips
 on MariaDB; MySqlConnector does not guarantee the same wire benefit on MySQL.
 See [MySqlConnector batching](https://mysqlconnector.net/api/mysqlconnector/mysqlbatchtype/).
 
+Physical key-environment and unexpected-object reads also use this transport.
+Their complete 512-table or 512-value statements remain intact; batching does
+not reduce those metadata chunks to 32 values. Each transport retains the
+eight-statement, aggregate parameter and 4 MiB bounds, further limited to half
+the live `max_allowed_packet`. Every result belongs to its submitted statement;
+incomplete or misbound metadata fails rather than publishing a partial inventory.
+
 ## Model-managed data
 
 Newly scaffolded model-managed data uses typed parameters. Keys and ordinary
@@ -293,8 +300,9 @@ A physically `NOT NULL` column, a missing column or an ineligible physical
 shape needs no NULL scan. The result is initialized for every operation and
 discarded by independent cleanup, including rejection, provider failure,
 timeout and cancellation. It is never reused after another operation or across
-analysis and runtime. Live analysis keeps its inline proof and does not trust
-session variables. Length and NULL blockers remain independent.
+analysis and runtime. Live analysis uses an inline conditional with the same
+physical-nullability and repair-invariant eligibility, without trusting session
+variables. Length and NULL blockers remain independent.
 The cache is not a schema lock; the deployment must still exclude out-of-band
 DDL while migration operations execute.
 

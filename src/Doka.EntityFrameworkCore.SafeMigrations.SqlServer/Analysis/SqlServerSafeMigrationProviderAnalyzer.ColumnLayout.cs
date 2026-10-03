@@ -18,7 +18,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     /// <param name="commandTimeout">The active context timeout.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A task completing after the immutable baseline has been captured.</returns>
-    private async Task ReadProjectedColumnLayoutsAsync(
+    internal async Task ReadProjectedColumnLayoutsAsync(
         DbConnection connection,
         DbTransaction? transaction,
         IReadOnlyList<SafeMigrationOperation> operations,
@@ -74,79 +74,139 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             }
         }
 
-        foreach (var key in requested.Keys)
-        {
-            _projectedColumnLayouts[key] = null;
-        }
+        var captured = requested.Keys.ToDictionary(static key => key, static _ => (ColumnLayoutState?)null);
+        var tables = requested.Keys.ToArray();
 
         // WHY: Aggregates stay server-side; even a 1,024-column table allocates
         // only one layout record plus bindings for names used by this stream.
-        foreach (var chunk in requested.Keys.Chunk(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement))
-        {
-            await using var command = connection.CreateCommand();
-            command.Transaction = transaction;
-            ApplyCommandTimeout(command, commandTimeout);
-            command.CommandText = "SELECT requested.[schema],requested.[table],"
-                + "CONVERT(int,layout.column_count),CONVERT(int,layout.fixed_bytes),layout.bit_columns,"
-                + "layout.variable_columns,CONVERT(int,layout.clustered_variable_extra),"
-                + "CONVERT(bit,CASE WHEN layout.unknown_columns=0 "
-                + "AND t.max_column_id_used=layout.column_count THEN 1 ELSE 0 END) FROM (VALUES "
-                + string.Join(",", chunk.Select(static key => "(" + KeyLiteral(key.Schema) + ","
-                    + KeyLiteral(key.Table) + ")")) + ") AS requested([schema],[table]) "
-                + "JOIN sys.schemas AS s ON s.name=requested.[schema] COLLATE CATALOG_DEFAULT "
-                + "JOIN sys.tables AS t ON t.schema_id=s.schema_id "
-                + "AND t.name=requested.[table] COLLATE CATALOG_DEFAULT "
-                + "CROSS APPLY (" + SqlServerSafeMigrationCatalogSqlBuilder.BuildColumnLayoutCatalogQuery(
-                    "t.object_id") + ") AS layout;";
-
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-            while (await reader.ReadAsync(cancellationToken))
+        await SafeMigrationCatalogProbeBatch.ReadAsync(
+            connection,
+            (tables.Length + SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement - 1)
+                / SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement,
+            SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes,
+            commandTimeout,
+            (command, offset) =>
             {
-                CaptureProjectedColumnLayout(reader);
-            }
-        }
+                var chunk = tables.Skip(offset * SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
+                    .Take(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement);
+
+                command.CommandText = "SELECT requested.[schema],requested.[table],"
+                    + "CONVERT(int,layout.column_count),CONVERT(int,layout.fixed_bytes),layout.bit_columns,"
+                    + "layout.variable_columns,CONVERT(int,layout.clustered_variable_extra),"
+                    + "CONVERT(bit,CASE WHEN layout.unknown_columns=0 "
+                    + "AND t.max_column_id_used=layout.column_count THEN 1 ELSE 0 END) FROM (VALUES "
+                    + string.Join(",", chunk.Select(static key => "(" + KeyLiteral(key.Schema) + ","
+                        + KeyLiteral(key.Table) + ")")) + ") AS requested([schema],[table]) "
+                    + "JOIN sys.schemas AS s ON s.name=requested.[schema] COLLATE CATALOG_DEFAULT "
+                    + "JOIN sys.tables AS t ON t.schema_id=s.schema_id "
+                    + "AND t.name=requested.[table] COLLATE CATALOG_DEFAULT "
+                    + "CROSS APPLY (" + SqlServerSafeMigrationCatalogSqlBuilder.BuildColumnLayoutCatalogQuery(
+                        "t.object_id") + ") AS layout;";
+
+                return new SafeMigrationCatalogProbeStatement(1, 0, offset);
+            },
+            async (reader, offset, _, token) =>
+            {
+                var permitted = tables.Skip(offset * SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
+                    .Take(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement).ToHashSet();
+
+                while (await reader.ReadAsync(token))
+                {
+                    var key = (reader.GetString(0), reader.GetString(1));
+                    if (!permitted.Remove(key))
+                    {
+                        throw new InvalidOperationException("SQL Server returned an unowned column layout row.");
+                    }
+
+                    CaptureProjectedColumnLayout(reader, captured);
+                }
+            },
+            cancellationToken, transaction, SqlServerCatalogParameterBindings.MaximumParameters);
 
         // WHY: The requested inventory is frozen here. Stream it into bounded chunks
         // instead of retaining a second complete tuple array alongside the catalog maps.
         var bindings = requested.SelectMany(static pair => pair.Value.Select(name =>
             (pair.Key.Schema, pair.Key.Table, Name: name)));
+        using var chunks = bindings.Chunk(SafeMigrationCatalogQueryLimits.MaximumInventoryValues).GetEnumerator();
+        var pending = new Dictionary<int, (string Schema, string Table, string Name)[]>();
 
-        foreach (var chunk in bindings.Chunk(SafeMigrationCatalogQueryLimits.MaximumInventoryValues))
-        {
-            await using var command = connection.CreateCommand();
-            command.Transaction = transaction;
-            ApplyCommandTimeout(command, commandTimeout);
-            command.CommandText = "SELECT requested.[schema],requested.[table],requested.[name],c.column_id,"
-                + "CASE WHEN ty.name IN(N'varchar',N'nvarchar',N'varbinary') THEN CONVERT(int,c.max_length) "
-                + "ELSE 0 END,CONVERT(bit,CASE WHEN EXISTS(SELECT 1 FROM sys.index_columns ic JOIN sys.indexes i "
-                + "ON i.object_id=ic.object_id AND i.index_id=ic.index_id WHERE i.type=1 AND ic.key_ordinal>0 "
-                + "AND ic.object_id=c.object_id AND ic.column_id=c.column_id) THEN 1 ELSE 0 END) "
-                + "FROM (VALUES " + string.Join(",", chunk.Select(static item =>
-                    "(" + KeyLiteral(item.Schema) + "," + KeyLiteral(item.Table) + "," + KeyLiteral(item.Name) + ")"))
-                + ") AS requested([schema],[table],[name]) JOIN sys.schemas AS s "
-                + "ON s.name=requested.[schema] COLLATE CATALOG_DEFAULT JOIN sys.tables AS t "
-                + "ON t.schema_id=s.schema_id AND t.name=requested.[table] COLLATE CATALOG_DEFAULT "
-                + "JOIN sys.columns AS c ON c.object_id=t.object_id "
-                + "AND c.name=requested.[name] COLLATE CATALOG_DEFAULT "
-                + "JOIN sys.types ty ON ty.user_type_id=c.user_type_id;";
-
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-            while (await reader.ReadAsync(cancellationToken))
+        await SafeMigrationCatalogProbeBatch.ReadAsync(
+            connection,
+            (requested.Values.Sum(static names => names.Count)
+                + SafeMigrationCatalogQueryLimits.MaximumInventoryValues - 1)
+                / SafeMigrationCatalogQueryLimits.MaximumInventoryValues,
+            SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes,
+            commandTimeout,
+            (command, offset) =>
             {
-                CaptureProjectedColumnLayoutBinding(reader);
-            }
-        }
+                if (!pending.TryGetValue(offset, out var chunk))
+                {
+                    if (!chunks.MoveNext())
+                    {
+                        throw new InvalidOperationException("SQL Server column binding inventory is incomplete.");
+                    }
 
-        await ReadColumnLayoutRowPresenceAsync(connection, transaction, operations, commandTimeout, cancellationToken);
+                    chunk = chunks.Current;
+                    pending.Add(offset, chunk);
+                }
+
+                command.CommandText = "SELECT requested.[schema],requested.[table],requested.[name],c.column_id,"
+                    + "CASE WHEN ty.name IN(N'varchar',N'nvarchar',N'varbinary') THEN CONVERT(int,c.max_length) "
+                    + "ELSE 0 END,CONVERT(bit,CASE WHEN EXISTS(SELECT 1 FROM sys.index_columns ic JOIN sys.indexes i "
+                    + "ON i.object_id=ic.object_id AND i.index_id=ic.index_id WHERE i.type=1 AND ic.key_ordinal>0 "
+                    + "AND ic.object_id=c.object_id AND ic.column_id=c.column_id) THEN 1 ELSE 0 END) "
+                    + "FROM (VALUES " + string.Join(",", chunk.Select(static item =>
+                        "(" + KeyLiteral(item.Schema) + "," + KeyLiteral(item.Table)
+                            + "," + KeyLiteral(item.Name) + ")"))
+                    + ") AS requested([schema],[table],[name]) JOIN sys.schemas AS s "
+                    + "ON s.name=requested.[schema] COLLATE CATALOG_DEFAULT JOIN sys.tables AS t "
+                    + "ON t.schema_id=s.schema_id AND t.name=requested.[table] COLLATE CATALOG_DEFAULT "
+                    + "JOIN sys.columns AS c ON c.object_id=t.object_id "
+                    + "AND c.name=requested.[name] COLLATE CATALOG_DEFAULT "
+                    + "JOIN sys.types ty ON ty.user_type_id=c.user_type_id;";
+
+                return new SafeMigrationCatalogProbeStatement(1, 0, offset);
+            },
+            async (reader, offset, _, token) =>
+            {
+                var permitted = pending[offset].ToHashSet();
+                pending.Remove(offset);
+
+                while (await reader.ReadAsync(token))
+                {
+                    if (!permitted.Remove((reader.GetString(0), reader.GetString(1), reader.GetString(2))))
+                    {
+                        throw new InvalidOperationException("SQL Server returned an unowned column layout binding.");
+                    }
+
+                    CaptureProjectedColumnLayoutBinding(reader, captured);
+                }
+            },
+            cancellationToken, transaction, SqlServerCatalogParameterBindings.MaximumParameters);
+
+        await ReadColumnLayoutRowPresenceAsync(
+            connection, transaction, operations, captured, commandTimeout, cancellationToken);
+
+        // WHY: A cancelled or malformed capture must not publish partial allocation proof.
+        _projectedColumnLayouts.Clear();
+        foreach (var pair in captured)
+        {
+            _projectedColumnLayouts.Add(pair.Key, pair.Value);
+        }
     }
 
     /// <summary>Captures the current compact catalog layout row for ordered allocation validation.</summary>
     /// <param name="reader">The reader positioned at the captured layout row.</param>
     internal void CaptureProjectedColumnLayout(
         DbDataReader reader
+    ) => CaptureProjectedColumnLayout(reader, _projectedColumnLayouts);
+
+    private static void CaptureProjectedColumnLayout(
+        DbDataReader reader,
+        Dictionary<(string Schema, string Table), ColumnLayoutState?> captured
     )
     {
-        _projectedColumnLayouts[(reader.GetString(0), reader.GetString(1))] = new ColumnLayoutState(
+        captured[(reader.GetString(0), reader.GetString(1))] = new ColumnLayoutState(
             reader.GetInt32(2), reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5),
             reader.GetBoolean(7), reader.GetInt32(6));
     }
@@ -155,9 +215,14 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     /// <param name="reader">The reader positioned at the captured binding row.</param>
     internal void CaptureProjectedColumnLayoutBinding(
         DbDataReader reader
+    ) => CaptureProjectedColumnLayoutBinding(reader, _projectedColumnLayouts);
+
+    private static void CaptureProjectedColumnLayoutBinding(
+        DbDataReader reader,
+        Dictionary<(string Schema, string Table), ColumnLayoutState?> captured
     )
     {
-        if (_projectedColumnLayouts.TryGetValue((reader.GetString(0), reader.GetString(1)), out var layout)
+        if (captured.TryGetValue((reader.GetString(0), reader.GetString(1)), out var layout)
             && layout is not null)
         {
             layout.Bindings[reader.GetString(2)] = reader.GetInt32(3);
@@ -176,6 +241,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         DbConnection connection,
         DbTransaction? transaction,
         IReadOnlyList<SafeMigrationOperation> operations,
+        Dictionary<(string Schema, string Table), ColumnLayoutState?> captured,
         int? commandTimeout,
         CancellationToken cancellationToken
     )
@@ -198,7 +264,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         {
             var key = (column.Schema ?? "dbo", column.Table);
             key = renamedSources.GetValueOrDefault(key, key);
-            if (!_projectedColumnLayouts.TryGetValue(key, out var live) || live is null || !live.IsKnown
+            if (!captured.TryGetValue(key, out var live) || live is null || !live.IsKnown
                 || live.Bindings.ContainsKey(column.Definition.Name)
                 || !_catalogSqlBuilder.TryGetColumnStorageLayout(column.Definition, out var storage))
             {
@@ -252,7 +318,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             {
                 while (await reader.ReadAsync(cancellationToken))
                 {
-                    if (_projectedColumnLayouts[(reader.GetString(0), reader.GetString(1))] is { } layout)
+                    if (captured[(reader.GetString(0), reader.GetString(1))] is { } layout)
                     {
                         layout.HasRows = reader.IsDBNull(2) ? null : reader.GetBoolean(2);
                     }

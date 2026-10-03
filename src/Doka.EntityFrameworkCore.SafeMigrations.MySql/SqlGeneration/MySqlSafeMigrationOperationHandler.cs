@@ -1053,7 +1053,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         // coupled to the provider-neutral decision table.
         foreach (var state in states)
         {
-            var decision = SafeMigrationDecisionPlanner.Plan(
+            var action = SafeMigrationDecisionPlanner.PlanAction(
                 kind,
                 state,
                 policy,
@@ -1064,7 +1064,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
                 .Append(StateCode(state))
                 .Append("' THEN ");
 
-            if (decision.Action == SafeMigrationAction.Repair)
+            if (action == SafeMigrationAction.Repair)
             {
                 builder
                     .Append("CASE WHEN COALESCE(@doka_sm_repair_ok, FALSE) ")
@@ -1074,7 +1074,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             {
                 builder
                     .Append('\'')
-                    .Append(ActionCode(decision.Action))
+                    .Append(ActionCode(action))
                     .Append("' ");
             }
         }

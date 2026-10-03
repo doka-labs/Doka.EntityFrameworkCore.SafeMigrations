@@ -40,8 +40,35 @@ All notable changes are documented here. The format follows
   Skip the scan for physically non-nullable, missing or ineligible columns;
   retain fresh evidence after every intervening operation and independent
   cleanup on success, rejection, cancellation, timeout and provider failure.
-  Keep inline live analysis, identifier/literal text and all safety contracts
-  unchanged. Avoid copied eligibility SQL during analysis and generation.
+  Apply the same physical-nullability gate to inline live analysis. Avoid
+  copied eligibility SQL during analysis and generation.
+- Skip PostgreSQL NULL row proofs only when the fresh physical catalog proves
+  an enforced and validated NOT NULL contract for the complete queried
+  relation. Do not trust PostgreSQL 18's possibly-invalid `attnotnull` flag
+  alone or use a parent-only proof for inherited rows. Preserve fresh NULL
+  rejection, operation-local proof reuse and locked repair rechecks.
+  Share one fresh physical repair-eligibility value within each evaluation and
+  append guard components directly without intermediate SQL copies; preserve
+  collision-free dollar tags, canonical commands and independent postconditions.
+- Batch independent table-layout, key and unexpected-object metadata reads
+  through the existing bounded Core transport. Preserve complete statement
+  ownership, 512-value inventory chunks, provider parameter and packet limits,
+  sequential fallback and all-or-failure publication.
+- Capture SQLite main-schema metadata with five fixed read commands using
+  set-based table-valued PRAGMAs. Stream columns, index keys and foreign keys
+  into the invocation-owned snapshot; preserve effective collations, generated
+  columns, expressions, implicit primary-key references and artifact guards.
+- Append SQL Server action cases and delayed scalar wrappers directly into
+  their operation-owned guard buffer instead of copying intermediate strings.
+  Compose identifier guards directly from their complete statements and index
+  existing command lists without temporary selectors. Preserve complete private
+  scopes, SQL bytes and unchanged allocation budgets.
+  Detect repeated identifier scopes without allocating full grouping objects,
+  retaining complete identifier validation and rendered references.
+- Let MySQL/MariaDB, PostgreSQL and SQL Server action rendering consume the
+  same canonical Core decision table without constructing discarded public
+  decision results. Public planner results, codes and validation stay unchanged;
+  no decision or database evidence is cached.
 - Report Core and all provider benchmark budget overruns as informational CI
   and release evidence instead of blocking qualification on shared hardware.
   Preserve measured durations, allocations, comparison limits and JSON verdicts.

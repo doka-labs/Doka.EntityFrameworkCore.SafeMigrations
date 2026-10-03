@@ -275,6 +275,13 @@ Each returns one nine-column result set directly, without an aggregation table
 variable or `INSERT ... EXEC`. Name-binding and physical prerequisite guards
 are unchanged. Template reuse never means reusing row or catalog results.
 
+Independent layout, key-header, key-column and final inventory statements use
+the same bounded transport. Layout and key-header statements retain 32-table
+chunks; column bindings retain complete 512-value chunks. Every result is
+validated against the submitted physical owner before the completed capture
+is published. Cancellation or a malformed later result does not publish a
+successful prefix. These dispatch bounds do not prove native engine duration.
+
 Table-name occupancy is read once per bounded capture. A proven missing target
 does not require full structure matching, but all schema, physical, default,
 collation and inline-FK guards remain active. A target occupied after the probe
@@ -302,6 +309,16 @@ UTF-8 payload bound has been checked. Scalar type and identity arguments are
 parsed through synchronous span slices; column-binding inventory is streamed
 into bounded chunks rather than duplicated in one complete tuple array.
 These allocation changes do not retain pooled buffers or live evidence.
+
+SQL generation appends action branches and deferred scalar wrappers directly
+into the final command builder. Identifier scopes copy immutable statement
+slices into an exact-sized result, and command wrappers use indexed traversal.
+Repeated physical-scope detection retains only invocation-local scope keys
+instead of allocating complete grouping objects. Full identifier validation
+and every rendered reference remain unchanged.
+The Core planner exposes an internal action-only path over the same validated
+decision rules, avoiding a discarded decision object for each rendered branch.
+The public planner still returns a fresh decision with the same action and code.
 
 An exact live column match may survive an accepted drop of an unrelated column,
 even when aggregate allocation becomes unknown. This requires the unchanged

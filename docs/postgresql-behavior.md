@@ -88,6 +88,36 @@ transport is grouped. Timeout, cancellation, original ordinals, exact result
 counts and aggregate payload/parameter bounds remain enforced.
 Discarding an oversized candidate preserves the exact retained parameter
 objects and their named bindings, types, ordering and payload accounting.
+Independent schema and child-object inventory reads use the same transport,
+retaining complete 512-value metadata statements and eight-statement batches.
+Each result is validated against its owning statement before a complete
+inventory is returned.
+
+A NULL row proof is skipped only when fresh metadata proves the complete
+queried relation is physically NOT NULL. PostgreSQL 18's `attnotnull` flag can
+describe an invalid constraint, so the adapter also checks the matching
+constraint's validation and enforcement. PostgreSQL 14-17 retain their catalog
+contract without referencing a field absent from those versions. A parent-only
+proof does not suppress scans of inherited rows. See the PostgreSQL 18
+[attribute catalog](https://www.postgresql.org/docs/18/catalog-pg-attribute.html)
+and [constraint catalog](https://www.postgresql.org/docs/18/catalog-pg-constraint.html).
+
+Eligible nullable or unvalidated columns retain a fresh NULL scan. Runtime
+classification and repair consume one operation-local result per evaluation;
+an accepted repair locks the relation and repeats the evidence before mutation.
+The physical repair-eligibility predicate is likewise materialized once in
+each evaluation and shared by the state, NULL gate and repair decision. It is
+recomputed during the locked second evaluation, not cached across operations.
+Matching columns do not acquire that repair lock. A dirty unvalidated constraint
+is `DataBlocked`, not `Matching`; a clean one can be validated by the provider's
+`SET NOT NULL` repair. These are structural eligibility checks, not retained
+row proofs or a bound on rows examined.
+
+Guard rendering appends action cases, state-guard branches and canonical
+baseline commands directly into the final operation-owned buffer. Original
+command text still determines a collision-free dollar tag. This removes
+intermediate SQL copies without changing decision order, terminators,
+indentation, locking or the independent execution postcondition.
 
 When no transaction is supplied, analysis creates a read-only
 `RepeatableRead` transaction and holds a transaction-scoped advisory analysis

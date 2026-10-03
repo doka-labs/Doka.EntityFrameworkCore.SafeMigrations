@@ -267,6 +267,11 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
                                     dataProbeResult!.Value.IsBlocked,
                                     dataProbeResult.Value.IsTransitionEligible);
 
+                            var nullabilityProofRequired = plan.DataProbe is null
+                                ? plan.RenderNullabilityDataProbeRequiredExpression()
+                                : plan.RenderNullabilityDataProbeRequiredExpression(
+                                    dataProbeResult!.Value.IsTransitionEligible);
+
                             var classificationCode = plan.DataProbe is null
                                 ? plan.RenderClassificationCodeExpression() ?? "NULL"
                                 : plan.RenderClassificationCodeExpression(dataProbeResult!.Value.IsBlocked) ?? "NULL";
@@ -283,7 +288,8 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
                                 + $"({rowEvidence}), "
                                 + $"({dependencyCounts}), "
                                 + $"({diagnosticEvidence}), "
-                                + $"({matchedObjectName})";
+                                + $"({matchedObjectName}), "
+                                + $"COALESCE(({nullabilityProofRequired}), FALSE)";
 
                             var selectionBytes = Encoding.UTF8.GetByteCount(selection)
                                 + (selections.Count == 0 ? 0 : separatorBytes);
@@ -1005,6 +1011,12 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
         await batch.ForEachResultSetAsync(
             async (reader, token) =>
             {
+                if (reader.FieldCount != 10)
+                {
+                    throw new InvalidOperationException(
+                        "The PostgreSQL SafeMigrations classifier returned an unexpected result shape.");
+                }
+
                 while (await reader.ReadAsync(token))
                 {
                     var ordinal = reader.GetInt32(0);
@@ -1065,9 +1077,10 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
                             ? plan.RepairOperationalImpact
                             : SafeMigrationOperationalImpact.NotApplicable;
 
-                    var requiresNullabilityDataProof = plan.MayRequireNullabilityDataProof
-                        && differences.Any(static difference =>
-                            StringComparer.Ordinal.Equals(difference.Facet, "column_nullability"));
+                    // WHY: A validated NO INHERIT parent can match even though
+                    // its descendants need a fresh row proof. Diagnostics and
+                    // attnotnull alone cannot convey that eligibility.
+                    var requiresNullabilityDataProof = reader.GetBoolean(9);
 
                     var analysis = new SafeMigrationProviderAnalysis(
                         state,
@@ -1205,35 +1218,7 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
         try
         {
             var commandTimeout = context.Database.GetCommandTimeout();
-            var findings = new List<SafeMigrationUnexpectedObject>();
-            var lookup = new ExpectedTableLookup(expected);
-            var seen = new HashSet<(SafeMigrationDatabaseObjectKind Kind, string Schema, string Table, string Name)>();
-
-            var schemaScopes = BuildSchemaScopeBatches(expected);
-            foreach (var schemaBatch in schemaScopes)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                await using var command = connection.CreateCommand();
-                ApplyCommandTimeout(command, commandTimeout);
-                var parameters = new PostgreSqlCatalogQueryParameters(command);
-                var schemaScope = BuildSchemaScope(schemaBatch, parameters);
-                command.CommandText = BuildUnexpectedTableSql(schemaScope);
-                await ReadUnexpectedAsync(command, lookup, findings, seen, cancellationToken);
-            }
-
-            foreach (var tableBatch in expected.Chunk(SafeMigrationCatalogQueryLimits.MaximumInventoryValues))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                await using var command = connection.CreateCommand();
-                ApplyCommandTimeout(command, commandTimeout);
-                var parameters = new PostgreSqlCatalogQueryParameters(command);
-                var childScope = BuildExpectedTableScope(tableBatch, parameters, "n.nspname", "c.relname");
-                var indexScope = BuildExpectedTableScope(tableBatch, parameters, "n.nspname", "tbl.relname");
-                command.CommandText = BuildUnexpectedChildObjectSql(childScope, indexScope);
-                await ReadUnexpectedAsync(command, lookup, findings, seen, cancellationToken);
-            }
+            var findings = await ReadUnexpectedInventoryAsync(connection, expected, commandTimeout, cancellationToken);
 
             return await RemoveSemanticAliasesAsync(context, operations, findings, cancellationToken);
         }
@@ -1244,6 +1229,70 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
                 await connection.CloseAsync();
             }
         }
+    }
+
+    /// <summary>Reads complete immutable schema and child inventory chunks through the bounded transport.</summary>
+    /// <param name="connection">The open analysis connection.</param>
+    /// <param name="expected">The invocation's expected table inventory.</param>
+    /// <param name="commandTimeout">The caller's command timeout.</param>
+    /// <param name="cancellationToken">The token that cancels construction and reading.</param>
+    /// <returns>The complete invocation-local inventory evidence.</returns>
+    internal static async Task<List<SafeMigrationUnexpectedObject>> ReadUnexpectedInventoryAsync(
+        DbConnection connection,
+        IReadOnlyList<SafeMigrationExpectedTableInventory> expected,
+        int? commandTimeout,
+        CancellationToken cancellationToken
+    )
+    {
+        var findings = new List<SafeMigrationUnexpectedObject>();
+        var lookup = new ExpectedTableLookup(expected);
+        var seen = new HashSet<(SafeMigrationDatabaseObjectKind Kind, string Schema, string Table, string Name)>();
+        var schemaScopes = BuildSchemaScopeBatches(expected);
+        using var chunks = expected.Chunk(SafeMigrationCatalogQueryLimits.MaximumInventoryValues).GetEnumerator();
+        var pending = new Dictionary<int, SafeMigrationExpectedTableInventory[]>();
+
+        await SafeMigrationCatalogProbeBatch.ReadAsync(
+            connection,
+            schemaScopes.Length + (expected.Count + SafeMigrationCatalogQueryLimits.MaximumInventoryValues - 1)
+                / SafeMigrationCatalogQueryLimits.MaximumInventoryValues,
+            SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes, commandTimeout,
+            (command, slot) =>
+            {
+                var parameters = new PostgreSqlCatalogQueryParameters(command);
+                if (slot < schemaScopes.Length)
+                {
+                    command.CommandText = BuildUnexpectedTableSql(BuildSchemaScope(schemaScopes[slot], parameters));
+                }
+                else
+                {
+                    if (!pending.TryGetValue(slot, out var chunk))
+                    {
+                        if (!chunks.MoveNext())
+                        {
+                            throw new InvalidOperationException("PostgreSQL table inventory is incomplete.");
+                        }
+
+                        chunk = chunks.Current;
+                        pending.Add(slot, chunk);
+                    }
+
+                    var childScope = BuildExpectedTableScope(chunk, parameters, "n.nspname", "c.relname");
+                    var indexScope = BuildExpectedTableScope(chunk, parameters, "n.nspname", "tbl.relname");
+                    command.CommandText = BuildUnexpectedChildObjectSql(childScope, indexScope);
+                }
+
+                return new SafeMigrationCatalogProbeStatement(1, parameters.Utf8PayloadBytes, slot);
+            },
+            async (reader, slot, _, token) =>
+            {
+                var tablesOnly = slot < schemaScopes.Length;
+                var scope = tablesOnly ? schemaScopes[slot] : pending[slot];
+                pending.Remove(slot);
+                await ReadUnexpectedAsync(reader, lookup, findings, seen, scope, tablesOnly, token);
+            },
+            cancellationToken);
+
+        return findings;
     }
 
     private async Task<IReadOnlyList<SafeMigrationUnexpectedObject>> RemoveSemanticAliasesAsync(
@@ -1313,14 +1362,17 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
     }
 
     private static async Task ReadUnexpectedAsync(
-        DbCommand command,
+        DbDataReader reader,
         ExpectedTableLookup lookup,
         List<SafeMigrationUnexpectedObject> findings,
         HashSet<(SafeMigrationDatabaseObjectKind Kind, string Schema, string Table, string Name)> seen,
+        IReadOnlyList<SafeMigrationExpectedTableInventory> scope,
+        bool tablesOnly,
         CancellationToken cancellationToken
     )
     {
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var permittedSchemas = scope.Select(static table => table.Schema).ToHashSet(StringComparer.Ordinal);
+        var permittedTables = scope.Select(static table => (table.Schema, table.Table)).ToHashSet();
 
         // Unexpected objects are evidence only. They are never folded into
         // the expected catalog and never authorize destructive cleanup.
@@ -1330,12 +1382,23 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
             var schema = reader.GetString(1);
             var tableName = reader.GetString(2);
             var objectName = reader.GetString(3);
+            var currentSchema = reader.GetString(4);
+            if ((kind == SafeMigrationDatabaseObjectKind.Table) != tablesOnly
+                || (tablesOnly
+                    ? !permittedSchemas.Contains(schema)
+                        && !(StringComparer.Ordinal.Equals(schema, currentSchema) && permittedSchemas.Contains(null))
+                    : !permittedTables.Contains((schema, tableName))
+                        && !(StringComparer.Ordinal.Equals(schema, currentSchema)
+                            && permittedTables.Contains((null, tableName)))))
+            {
+                throw new InvalidOperationException("PostgreSQL returned an unowned inventory object.");
+            }
+
             if (!seen.Add((kind, schema, tableName, objectName)))
             {
                 continue;
             }
 
-            var currentSchema = reader.GetString(4);
             var table = lookup.Find(schema, tableName, currentSchema);
             if (table is null)
             {

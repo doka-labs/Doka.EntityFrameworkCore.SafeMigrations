@@ -77,6 +77,22 @@ same bounded statements execute sequentially through ordinary `DbCommand`
 instances, preserving compatibility without parsing or concatenating provider
 SQL.
 
+Independent metadata statements use the same transport after their prerequisite
+phase. Complete 512-value inventory and physical-environment chunks count as
+one submitted statement; they are not reduced to 32-value chunks. SQL Server
+applies its stricter 2,000-parameter aggregate limit, while the shared maximum
+remains 16,000. Result ownership and complete-capture publication remain
+mandatory even when statements are transported together. SQLite streams its
+main-schema metadata through five fixed set-based read commands; its embedded
+reads are not network roundtrips, and snapshot memory still scales with objects.
+
+Provider SQL action rendering consumes an internal action-only Core planner
+path. This shares the public planner's validated decision rules without
+allocating a discarded result object for each branch. Public decision objects,
+validation order and codes are unchanged. SQL Server command assembly writes
+branches and wrappers directly and traverses immutable inputs by index; these
+changes do not cache live evidence or retain pooled buffers.
+
 Definitions snapshot enumerable inputs into owned read-only collections.
 Model fingerprints stream length-prefixed canonical relational metadata into
 a provider-bound, versioned SHA-256 representation. Operation-contract
@@ -215,11 +231,17 @@ window. Neither a hash nor a report proves the database server is honest.
 - 2026-09-18: D-013 extended the bounded evidence contract to the independent
   SQLite runtime-catalog benchmark, coverage, large-operation, and package
   qualification gates.
+- 2026-10-02: Extended bounded auxiliary transport to independent metadata and
+  inventory statements, retaining complete 512-value chunks and SQL Server's
+  stricter parameter limit. SQLite captures its invocation-owned catalog with
+  five fixed read commands instead of per-table and per-index commands.
 
 ### Implementation References
 
 - [Catalog query limits](../../src/Doka.EntityFrameworkCore.SafeMigrations/Analysis/SafeMigrationCatalogQueryLimits.cs)
 - [Catalog batch adapter](../../src/Doka.EntityFrameworkCore.SafeMigrations/Analysis/SafeMigrationCatalogBatch.cs)
+- [Qualified probe transport](../../src/Doka.EntityFrameworkCore.SafeMigrations/Analysis/SafeMigrationCatalogProbeBatch.cs)
+- [SQLite set-based capture](../../src/Doka.EntityFrameworkCore.SafeMigrations.Sqlite/Analysis/SqliteSafeMigrationCatalog.Streaming.cs)
 - [Sequential fallback integration tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Integration/SafeMigrationCatalogBatchIntegrationTests.cs)
 - [Catalog-limit tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Unit/Analysis/SafeMigrationCatalogQueryLimitsTests.cs)
 - [Definition ownership and validation tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Unit/Features/Lifecycle/SafeMigrationDefinitionTests.Lifecycle.cs)
@@ -247,3 +269,4 @@ window. Neither a hash nor a report proves the database server is honest.
 - [Npgsql batching](https://www.npgsql.org/doc/basic-usage.html#batching) (parameterized multi-command batching and result-set behavior; retrieved 2026-09-02)
 - [MySqlConnector `MySqlBatch`](https://mysqlconnector.net/api/mysqlconnector/mysqlbatchtype/) (MariaDB batching behavior, timeout, and multi-result reader contract; retrieved 2026-09-02)
 - [EF Core 10 `GetCommandTimeout`](https://learn.microsoft.com/en-us/dotnet/api/microsoft.entityframeworkcore.relationaldatabasefacadeextensions.getcommandtimeout?view=efcore-10.0) (configured context command-timeout contract; retrieved 2026-09-02)
+- SQLite table-valued PRAGMAs (`https://www.sqlite.org/pragma.html#pragfunc`; primary source; retrieved 2026-10-02)
