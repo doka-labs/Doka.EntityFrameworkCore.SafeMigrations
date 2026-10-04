@@ -343,13 +343,21 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             var column = definition.Columns[index];
             var position = (index + 1).ToString(CultureInfo.InvariantCulture);
 
-            // WHY: Only the first SELECT of a UNION names the result columns; naming them again
-            // in later rows is invalid. The aliases are therefore emitted for the first row only.
+            // WHY: A UNION takes its result column names from the first SELECT and ignores
+            // aliases in later arms, so they are emitted once rather than repeated.
             var aliases = index == 0;
+
+            // WHY: The provider renders a value containing a backslash as an introducer literal
+            // such as _utf8mb4 X'..', which carries the character set's default collation while a
+            // plain literal carries the connection collation. Uniting both forms raises error 1271
+            // whenever the connection uses another utf8mb4 collation, for example
+            // utf8mb4_unicode_ci. Converting every arm pins one collation for the result column.
+            // See https://dev.mysql.com/doc/refman/8.4/en/charset-introducer.html
             rows.Add($"SELECT {position}{(aliases ? " AS ordinal_position" : string.Empty)}, "
-                + $"{Literal(column.Name)}{(aliases ? " AS column_name" : string.Empty)}, "
+                + $"CONVERT({Literal(column.Name)} USING utf8mb4)"
+                + (aliases ? " AS column_name" : string.Empty) + ", "
                 + $"{(column.IsNullable ? "'YES'" : "'NO'")}{(aliases ? " AS is_nullable" : string.Empty)}, "
-                + $"{Literal(column.Comment ?? string.Empty)}"
+                + $"CONVERT({Literal(column.Comment ?? string.Empty)} USING utf8mb4)"
                 + (aliases ? " AS column_comment" : string.Empty));
 
             arms.Add($"WHEN {position} THEN ("
