@@ -46,6 +46,59 @@ source/target table-ownership contract as the MySQL/MariaDB adapter. It does not
 remove inherited entities from the runtime model or reinterpret existing
 migration source. See [model-managed-data ownership](model-managed-data-ownership.md).
 
+## Canonical null-test index filters
+
+PostgreSQL index definitions captured from EF retain their authored raw
+`Filter` and contract fingerprint. The adapter recognizes only an exact
+provider-delimited, single physical column followed by ` IS NULL` or
+` IS NOT NULL`, with optional outer PostgreSQL ASCII SQL whitespace. Quoted
+case-sensitive names, escaped quotes, and names containing spaces preserve
+their physical identity. PostgreSQL's
+[identifier rules](https://www.postgresql.org/docs/18/sql-syntax-lexical.html)
+remain the boundary; unquoted mixed-case names are not reinterpreted.
+
+This bounded recognition supplies structured catalog comparison and the exact
+predicate-column prerequisite to both ordered preflight projection and runtime
+validation. An earlier accepted table or column operation may supply that
+column. A missing predicate column remains
+`PrerequisiteMissing / RejectPrerequisiteMissing`, including after an accepted
+table operation. Execution rejects `P1004 / doka_sm_prerequisite_missing`
+before attempting the index DDL. Structured filters retain their existing
+dependency and comparison path.
+
+Other raw expressions remain `Unsupported / opaque_sql_expression`: qualified
+identifiers, alternate quoting, comments, functions, arithmetic, additional
+statements, noncanonical parentheses or keyword spelling are not admitted.
+Unicode whitespace is not accepted as PostgreSQL SQL whitespace. Recognition
+does not rewrite existing migration source or turn opaque SQL into a general
+expression contract.
+
+Canonical predicates participate in ordinary partial-index matching,
+semantic-alias resolution, reruns and postflight verification. Partial unique
+index data checks consider only rows selected by the authored predicate;
+duplicates outside it are not conflicts. PostgreSQL documents that a
+[partial-index predicate](https://www.postgresql.org/docs/18/indexes-partial.html)
+can use table columns other than its index keys, so those predicate columns
+are independent prerequisites rather than implied by the key definition.
+
+Index keys with explicit collations retain their catalog name and schema
+checks independently of bundled plain-key comparisons. A column key without
+an explicit collation must use that physical column's default collation,
+including keys with an explicit operator class. Matching compares
+[`pg_index.indcollation`](https://www.postgresql.org/docs/18/catalog-pg-index.html)
+with [`pg_attribute.attcollation`](https://www.postgresql.org/docs/18/catalog-pg-attribute.html),
+not the absence of `COLLATE` in deparsed column SQL. Exact-name drift remains
+`Different`; a differently collated index is not a matching semantic alias.
+Expression keys compare the expression independently of key-level collation
+and operator-class decorations. Without an explicit key collation, PostgreSQL
+derives the expected collation through a scalar `LIMIT 0` subquery and
+[`COLLATION FOR`](https://www.postgresql.org/docs/18/functions-info.html).
+This reads no table rows and performs no row-wise expression evaluation;
+PostgreSQL's ordinary planner constant-folding rules still apply.
+Noncollatable expression keys retain the catalog's zero-collation identity.
+Top-level structured `COLLATE` nodes follow PostgreSQL's stored operand shape;
+nested collations remain part of the expression and use server-resolved names.
+
 ## Automatic lossless column repair
 
 With explicit `RepairIfSafe`, the PostgreSQL adapter independently qualifies

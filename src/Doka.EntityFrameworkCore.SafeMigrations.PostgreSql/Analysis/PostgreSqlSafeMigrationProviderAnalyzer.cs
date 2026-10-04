@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 
-internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationProviderAnalyzer
+internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationProviderAnalyzer,
+    ISafeMigrationIndexPrerequisiteSource
 {
     // PostgreSQL advisory locks are already local to the current database. A
     // fixed signed bigint therefore avoids coercing the database's unsigned OID
@@ -25,6 +26,13 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
     }
 
     public string ProviderId => "npgsql_postgresql";
+
+    /// <summary>Shares provider-certified index dependencies with ordered Core state projection.</summary>
+    /// <param name="intent">The immutable authored index operation.</param>
+    /// <returns>The same exact physical prerequisite columns used by runtime catalog validation.</returns>
+    public IReadOnlyList<string> GetIndexPrerequisiteColumns(
+        EnsureIndexIntent intent
+    ) => _catalogSqlBuilder.IndexPrerequisiteColumns(intent);
 
     public void ValidateContext(
         DbContext context

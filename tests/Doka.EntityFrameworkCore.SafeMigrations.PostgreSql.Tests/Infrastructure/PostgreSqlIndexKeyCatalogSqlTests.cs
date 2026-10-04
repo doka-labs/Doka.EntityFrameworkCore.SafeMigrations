@@ -63,6 +63,7 @@ public sealed class PostgreSqlIndexKeyCatalogSqlTests
         // Assert
         Assert.Contains("i.indkey[key.pos - 1]", state, StringComparison.Ordinal);
         Assert.Contains("i.indclass[key.pos - 1]", state, StringComparison.Ordinal);
+        Assert.Contains("i.indcollation[key.pos - 1] = key_attribute.attcollation", state, StringComparison.Ordinal);
     }
 
     /// <summary>A key carrying an operator class keeps its own per-key catalog lookup.</summary>
@@ -83,6 +84,49 @@ public sealed class PostgreSqlIndexKeyCatalogSqlTests
         // Assert
         Assert.Contains("i.indclass[1]", state, StringComparison.Ordinal);
         Assert.Contains("i.indclass[key.pos - 1]", state, StringComparison.Ordinal);
+        Assert.Contains("i.indcollation[1] = key_attribute.attcollation", state, StringComparison.Ordinal);
+    }
+
+    /// <summary>A namespaced explicit collation keeps its physical lookup between collapsed key positions.</summary>
+    [Fact]
+    public void IndexKeyWithExplicitCollation_StaysOutOfTheCorrelatedSet()
+    {
+        // Arrange
+        using var context = CreateContext();
+        ExpectedIndexKeyDefinition[] keys =
+        [
+            new("column_0"),
+            new("column_1", collation: new SafeMigrationCollationIdentifier("C", "pg_catalog")),
+            new("column_2"),
+        ];
+
+        // Act
+        var state = BuildStateExpression(context, keys);
+
+        // Assert
+        Assert.Contains("coll.oid = i.indcollation[1]", state, StringComparison.Ordinal);
+        Assert.Contains("coll.collname = 'C'", state, StringComparison.Ordinal);
+        Assert.Contains("'pg_catalog'", state, StringComparison.Ordinal);
+        Assert.DoesNotContain("i.indcollation[1] = key_attribute.attcollation", state, StringComparison.Ordinal);
+        Assert.Contains("i.indcollation[key.pos - 1] = key_attribute.attcollation", state, StringComparison.Ordinal);
+    }
+
+    /// <summary>Expression-default collation uses an empty typed subquery rather than a data scan.</summary>
+    [Fact]
+    public void ExpressionKeyDefaultCollation_UsesMetadataOnlyScalarSubquery()
+    {
+        // Arrange
+        using var context = CreateContext();
+        ExpectedIndexKeyDefinition[] keys =
+        [new(structuredExpression: SafeMigrationSql.Function("lower", SafeMigrationSql.Identifier("column_0")))];
+
+        // Act
+        var state = BuildStateExpression(context, keys);
+
+        // Assert
+        Assert.Contains("CASE WHEN i.indcollation[0] = 0 THEN TRUE ELSE", state, StringComparison.Ordinal);
+        Assert.Contains("pg_catalog.pg_collation_for((SELECT lower(column_0)", state, StringComparison.Ordinal);
+        Assert.Contains("FROM shape_table LIMIT 0)))::oid", state, StringComparison.Ordinal);
     }
 
     private static SafeMigrationDbContext CreateContext() =>

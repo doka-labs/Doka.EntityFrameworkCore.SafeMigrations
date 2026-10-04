@@ -126,7 +126,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             EnsureIndexIntent value => TableAndColumnsExist(
                 value.Definition.Table,
                 value.Definition.Schema,
-                SafeMigrationPrerequisiteColumns.Local(value)),
+                IndexPrerequisiteColumns(value)),
             EnsurePrimaryKeyIntent value => TableAndColumnsExist(
                 value.Definition.Table,
                 value.Definition.Schema,
@@ -241,13 +241,13 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         }
     }
 
-    private static IEnumerable<SafeMigrationSqlExpression> IndexExpressions(
+    private IEnumerable<SafeMigrationSqlExpression> IndexExpressions(
         ExpectedIndexDefinition definition
     )
     {
         if (definition.Filter is not null)
         {
-            yield return SafeMigrationSql.Opaque(definition.Filter);
+            yield return GetStructuredIndexFilter(definition) ?? SafeMigrationSql.Opaque(definition.Filter);
         }
         else if (definition.StructuredFilter is not null)
         {

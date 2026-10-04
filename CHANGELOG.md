@@ -18,6 +18,11 @@ All notable changes are documented here. The format follows
 - Extend the report engine-family schema with `sqlserver`. Report schema
   versions and existing migration histories remain unchanged; consumers with
   exhaustive engine-family handling must recognize the new value.
+- Recognize canonical provider-delimited single-column `IS NULL` and
+  `IS NOT NULL` PostgreSQL raw index filters captured from EF. Preserve raw
+  filter bytes, immutable definitions and fingerprints; share predicate-column
+  prerequisites between ordered preflight projection and runtime validation.
+  Other opaque or noncanonical raw predicates remain unsupported.
 
 ### Changed
 
@@ -142,6 +147,15 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- Compare PostgreSQL column-key index collations by catalog identity instead
+  of per-column deparsed SQL. Explicit index collations cannot satisfy a
+  different column-default contract, including mixed plain/explicit keys,
+  operator classes and semantic aliases. Expression-key comparisons keep
+  key-level decorations separate and prove derived collations without row scans.
+- Keep index prerequisites intact when an earlier accepted table operation
+  supplies a complete or compact projected definition. Missing key, include,
+  structured-expression and provider-certified filter columns cannot become
+  applicable merely because the index itself is absent.
 - Isolate each complete SQL Server operation guard in its own dynamic SQL
   variable scope so multiple guarded commands can share normal or idempotent
   EF migration script batches without duplicate variable declarations. Preserve

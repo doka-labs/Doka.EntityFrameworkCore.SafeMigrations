@@ -93,7 +93,7 @@ internal sealed class PostgreSqlSafeMigrationSqlExpressionRenderer
         ArgumentNullException.ThrowIfNull(expression);
         ArgumentNullException.ThrowIfNull(literal);
 
-        var writer = new CatalogExpressionTextWriter(literal);
+        var writer = new CatalogExpressionTextWriter(literal, parenthesizeCollations: false);
         AppendDeparsed(writer, expression);
 
         return writer.BuildSqlExpression();
@@ -267,17 +267,19 @@ internal sealed class PostgreSqlSafeMigrationSqlExpressionRenderer
 
                 break;
             case SafeMigrationSqlCollateExpression value:
-                writer.Append('(');
-                Append(writer, value.Operand, catalogShape);
-                writer.Append(" COLLATE ");
-                if (value.Schema is not null)
+                if (writer.ParenthesizeCollations)
                 {
-                    writer.AppendIdentifier(value.Schema);
-                    writer.Append('.');
+                    writer.Append('(');
                 }
 
-                writer.AppendIdentifier(value.Name);
-                writer.Append(')');
+                Append(writer, value.Operand, catalogShape);
+                writer.Append(" COLLATE ");
+                writer.AppendCollation(value.Name, value.Schema);
+                if (writer.ParenthesizeCollations)
+                {
+                    writer.Append(')');
+                }
+
                 break;
             case SafeMigrationSqlCurrentValueExpression value:
                 writer.Append(CurrentValue(value.Value));
@@ -618,6 +620,9 @@ internal sealed class PostgreSqlSafeMigrationSqlExpressionRenderer
 
     private interface IExpressionTextWriter
     {
+        /// <summary>Whether collation nodes keep authored parentheses rather than PostgreSQL's pretty form.</summary>
+        bool ParenthesizeCollations { get; }
+
         void Append(
             char value
         );
@@ -629,12 +634,23 @@ internal sealed class PostgreSqlSafeMigrationSqlExpressionRenderer
         void AppendIdentifier(
             string identifier
         );
+
+        /// <summary>Appends a collation using the identity representation of this output surface.</summary>
+        /// <param name="name">The exact collation name.</param>
+        /// <param name="schema">The exact namespace, or null for PostgreSQL's search path.</param>
+        void AppendCollation(
+            string name,
+            string? schema
+        );
     }
 
     private sealed class DelimitedExpressionTextWriter : IExpressionTextWriter
     {
         private readonly StringBuilder _builder = new();
         private readonly ISqlGenerationHelper _sqlGenerationHelper;
+
+        /// <inheritdoc />
+        public bool ParenthesizeCollations => true;
 
         public DelimitedExpressionTextWriter(
             ISqlGenerationHelper sqlGenerationHelper
@@ -655,6 +671,12 @@ internal sealed class PostgreSqlSafeMigrationSqlExpressionRenderer
             string identifier
         ) => _builder.Append(_sqlGenerationHelper.DelimitIdentifier(identifier));
 
+        /// <inheritdoc />
+        public void AppendCollation(
+            string name,
+            string? schema
+        ) => _builder.Append(_sqlGenerationHelper.DelimitIdentifier(name, schema));
+
         public override string ToString() => _builder.ToString();
     }
 
@@ -664,11 +686,18 @@ internal sealed class PostgreSqlSafeMigrationSqlExpressionRenderer
         private readonly Func<string, string> _literal;
         private readonly StringBuilder _text = new();
 
+        /// <inheritdoc />
+        public bool ParenthesizeCollations { get; }
+
         public CatalogExpressionTextWriter(
-            Func<string, string> literal
+            Func<string, string> literal,
+            bool parenthesizeCollations = true
         )
         {
             _literal = literal;
+            // WHY: The pretty deparser drops parentheses around COLLATE inside function arguments.
+            // Keep both bounded catalog candidates; execution always retains authored parentheses.
+            ParenthesizeCollations = parenthesizeCollations;
         }
 
         public void Append(
@@ -685,6 +714,23 @@ internal sealed class PostgreSqlSafeMigrationSqlExpressionRenderer
         {
             FlushText();
             _parts.Add($"pg_catalog.quote_ident({_literal(identifier)})");
+        }
+
+        /// <inheritdoc />
+        public void AppendCollation(
+            string name,
+            string? schema
+        )
+        {
+            // WHY: PostgreSQL deparses a visible collation without its schema even when the
+            // authored name was qualified. Resolve the exact identifier first, then use the
+            // server's regcollation spelling; dropping a namespace in client text is ambiguous.
+            FlushText();
+            var identifier = schema is null
+                ? $"pg_catalog.quote_ident({_literal(name)})"
+                : $"pg_catalog.quote_ident({_literal(schema)}) || '.' || pg_catalog.quote_ident({_literal(name)})";
+
+            _parts.Add($"(pg_catalog.to_regcollation({identifier})::text)");
         }
 
         public string BuildSqlExpression()

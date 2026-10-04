@@ -198,11 +198,12 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 + "AND co.contype IN ('p'::\"char\", 'u'::\"char\", 'x'::\"char\"))");
         }
 
+        var structuredFilter = GetStructuredIndexFilter(definition);
         conditions.Add(
             definition.Filter is null && definition.StructuredFilter is null
                 ? "i.indpred IS NULL"
-                : definition.StructuredFilter is not null
-                    ? ExpressionMatches("pg_catalog.pg_get_expr(i.indpred, i.indrelid)", definition.StructuredFilter)
+                : structuredFilter is not null
+                    ? ExpressionMatches("pg_catalog.pg_get_expr(i.indpred, i.indrelid)", structuredFilter)
                     : ExpressionMatches("pg_catalog.pg_get_expr(i.indpred, i.indrelid)", definition.Filter!));
 
         var nullsNotDistinct = "POSITION('NULLS NOT DISTINCT' IN pg_catalog.pg_get_indexdef(i.indexrelid)) > 0";
@@ -228,14 +229,25 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 continue;
             }
 
-            if (key.Column is not null)
+            var storedExpression = IndexStoredExpression(key);
+            var storedColumn = key.Column
+                ?? (storedExpression is SafeMigrationSqlIdentifierExpression { Parts.Count: 1 } identifier
+                    ? identifier.Parts[0]
+                    : null);
+
+            if (storedColumn is not null)
             {
+                // WHY: Per-column deparsing omits COLLATE decorations; only the physical
+                // catalog identity proves that a key uses its column's default collation.
                 conditions.Add($"i.indkey[{optionIndex}] > 0");
                 conditions.Add(
                     "EXISTS (SELECT 1 FROM pg_catalog.pg_attribute key_attribute "
                     + "WHERE key_attribute.attrelid = i.indrelid "
                     + $"AND key_attribute.attnum = i.indkey[{optionIndex}] "
-                    + $"AND key_attribute.attname = {Literal(key.Column)})");
+                    + $"AND key_attribute.attname = {Literal(storedColumn)}"
+                    + (key.Collation is null && key.Column is not null
+                        ? $" AND i.indcollation[{optionIndex}] = key_attribute.attcollation)"
+                        : ")"));
             }
             else
             {
@@ -250,19 +262,23 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             conditions.Add(IndexSortMatches(propertyPosition, key));
             conditions.Add(IndexNullOrderMatches(propertyPosition, key));
 
-            var keySql =
-                $"pg_catalog.pg_get_indexdef(i.indexrelid, {position.ToString(CultureInfo.InvariantCulture)}, TRUE)";
-
-            conditions.Add(
-                key.Collation is null
-                    ? $"POSITION(' COLLATE ' IN {keySql}) = 0"
-                    : CatalogIdentifierMatches(
+            if (key.Collation is not null)
+            {
+                conditions.Add(
+                    CatalogIdentifierMatches(
                         $"i.indcollation[{optionIndex}]",
                         "pg_catalog.pg_collation",
                         "coll",
                         "collnamespace",
                         "collname",
                         key.Collation!));
+            }
+            else if (key.Column is null)
+            {
+                conditions.Add(
+                    ExpressionIndexDefaultCollationMatches(definition, key, optionIndex));
+            }
+
 
             conditions.Add(
                 key.OperatorClass is null
@@ -391,16 +407,19 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             + "AND EXISTS (SELECT 1 FROM pg_catalog.pg_attribute key_attribute "
             + "WHERE key_attribute.attrelid = i.indrelid "
             + "AND key_attribute.attnum = i.indkey[key.pos - 1] "
-            + "AND key_attribute.attname = key.attname) "
+            + "AND key_attribute.attname = key.attname "
+            + "AND i.indcollation[key.pos - 1] = key_attribute.attcollation) "
             + $"AND CASE WHEN key.sort_default THEN ({orderable} IS NOT TRUE OR {sortMatches}) "
             + $"ELSE ({orderable} IS TRUE AND {sortMatches}) END "
             + $"AND CASE WHEN key.null_default THEN ({orderable} IS NOT TRUE OR {nullMatches}) "
             + $"ELSE ({orderable} IS TRUE AND {nullMatches}) END "
-            + "AND POSITION(' COLLATE ' IN pg_catalog.pg_get_indexdef(i.indexrelid, key.pos, TRUE)) = 0 "
             + "AND EXISTS (SELECT 1 FROM pg_catalog.pg_opclass opc "
             + "WHERE opc.oid = i.indclass[key.pos - 1] AND opc.opcdefault)";
 
-        // WHY: A facet can evaluate to NULL. The per-key form required every condition to be true,
+        // WHY: Per-column pg_get_indexdef omits collation decorations. Compare physical OIDs
+        // with the column default instead, including zero for noncollatable keys, so an explicit
+        // index collation cannot silently satisfy a different default-collation contract.
+        // A facet can evaluate to NULL. The per-key form required every condition to be true,
         // so the absent test coalesces to FALSE and keeps that verdict.
         return $"NOT EXISTS (SELECT 1 FROM (VALUES {string.Join(", ", rows)}) "
             + "AS key(pos, attname, sort_property, sort_default, null_property, null_default) "
@@ -441,22 +460,46 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         ? Delimited(key.Column)
         : key.Expression ?? _expressionRenderer.Render(key.StructuredExpression!);
 
+    /// <summary>Proves an expression key's derived default collation without reading or evaluating table rows.</summary>
+    /// <param name="definition">The index's qualified table contract.</param>
+    /// <param name="key">The expression key without an explicit key-level collation.</param>
+    /// <param name="optionIndex">The key's zero-based catalog vector position.</param>
+    /// <returns>A comparison against the expression's PostgreSQL-derived collation identity.</returns>
+    private string ExpressionIndexDefaultCollationMatches(
+        ExpectedIndexDefinition definition,
+        ExpectedIndexKeyDefinition key,
+        string optionIndex
+    )
+    {
+        // WHY: Per-column deparsing omits key-level COLLATE. PostgreSQL derives the scalar
+        // subquery's type and collation even with LIMIT 0; pg_collation_for reads that metadata,
+        // not its NULL value. This avoids tuple reads and row-wise evaluation, not general
+        // planner constant folding. The noncollatable branch avoids integer/boolean type errors.
+        var expression = IndexDataExpression(key);
+        var table = Qualified(definition.Table, definition.Schema);
+
+        return $"CASE WHEN i.indcollation[{optionIndex}] = 0 THEN TRUE ELSE "
+            + $"i.indcollation[{optionIndex}] = pg_catalog.to_regcollation("
+            + $"pg_catalog.pg_collation_for((SELECT {expression} FROM {table} LIMIT 0)))::oid END";
+    }
+
     private List<string> IndexExpressionSql(
         ExpectedIndexKeyDefinition key
     )
     {
-        var expression = key.Expression ?? _expressionRenderer.Render(key.StructuredExpression!);
+        var storedExpression = IndexStoredExpression(key);
+        var expression = key.Expression ?? _expressionRenderer.Render(storedExpression!);
         var roots = new List<(string Sql, bool IsValueExpression)>
         {
             (expression, false),
             ($"({expression})", false),
         };
 
-        if (key.StructuredExpression is not null)
+        if (storedExpression is not null)
         {
-            var catalogCandidate = _expressionRenderer.RenderCatalogCandidateSql(key.StructuredExpression, Literal);
+            var catalogCandidate = _expressionRenderer.RenderCatalogCandidateSql(storedExpression, Literal);
             var deparsedCandidate = _expressionRenderer.RenderCatalogDeparsedCandidateSql(
-                key.StructuredExpression,
+                storedExpression,
                 Literal);
 
             roots.Add((catalogCandidate, true));
@@ -465,33 +508,31 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             roots.Add(($"({Literal("(")} || {deparsedCandidate} || {Literal(")")})", true));
         }
 
-        var results = new List<string>();
-        foreach (var root in roots)
-        {
-            var suffix = new StringBuilder();
-            if (key.Collation is not null)
-            {
-                suffix
-                    .Append(" COLLATE ")
-                    .Append(Delimited(key.Collation));
-            }
-
-            if (key.OperatorClass is not null)
-            {
-                suffix
-                    .Append(' ')
-                    .Append(DelimitedPath(key.OperatorClass));
-            }
-
-            results.Add(
-                root.IsValueExpression
-                    ? suffix.Length == 0 ? root.Sql : $"({root.Sql} || {Literal(suffix.ToString())})"
-                    : Literal(root.Sql + suffix));
-        }
-
-        return results
+        // WHY: pg_get_indexdef with a column position returns only the expression. Collation
+        // and operator-class decorations are matched separately by physical catalog identity.
+        return roots
+            .Select(root => root.IsValueExpression ? root.Sql : Literal(root.Sql))
             .Distinct(StringComparer.Ordinal)
             .ToList();
+    }
+
+    /// <summary>Resolves the expression shape PostgreSQL stores after removing top-level collation nodes.</summary>
+    /// <param name="key">The immutable authored index key.</param>
+    /// <returns>The stored structured operand; raw expressions and column keys return null.</returns>
+    private static SafeMigrationSqlExpression? IndexStoredExpression(
+        ExpectedIndexKeyDefinition key
+    )
+    {
+        // WHY: ComputeIndexAttrs captures exprCollation before stripping top-level CollateExpr.
+        // Nested collations remain part of the expression. Keep the authored tree intact for the
+        // derived-collation proof, prerequisites, execution and contract fingerprint.
+        var expression = key.StructuredExpression;
+        while (expression is SafeMigrationSqlCollateExpression collate)
+        {
+            expression = collate.Operand;
+        }
+
+        return expression;
     }
 
     private string CatalogPathMatches(

@@ -7,6 +7,7 @@ internal sealed partial class SafeMigrationPreflightProjection :
     private readonly ISafeMigrationProviderOperationProjection? _providerOperationProjection;
     private readonly ISafeMigrationProjectedKeyAnalyzer? _projectedKeyAnalyzer;
     private readonly ISafeMigrationProjectedDependencyAnalyzer? _projectedDependencyAnalyzer;
+    private readonly ISafeMigrationIndexPrerequisiteSource? _indexPrerequisiteSource;
     private readonly ISafeMigrationProviderObjectIdentityNormalizer? _objectIdentityNormalizer;
     private readonly Dictionary<TableKey, ProjectedTable> _tables;
 
@@ -37,13 +38,15 @@ internal sealed partial class SafeMigrationPreflightProjection :
         ISafeMigrationProviderOperationProjection? providerOperationProjection = null,
         ISafeMigrationProjectedKeyAnalyzer? projectedKeyAnalyzer = null,
         ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer = null,
-        ISafeMigrationProjectedDependencyAnalyzer? projectedDependencyAnalyzer = null
+        ISafeMigrationProjectedDependencyAnalyzer? projectedDependencyAnalyzer = null,
+        ISafeMigrationIndexPrerequisiteSource? indexPrerequisiteSource = null
     )
     {
         _providerOperationProjection = providerOperationProjection;
         _projectedKeyAnalyzer = projectedKeyAnalyzer;
         _objectIdentityNormalizer = objectIdentityNormalizer;
         _projectedDependencyAnalyzer = projectedDependencyAnalyzer;
+        _indexPrerequisiteSource = indexPrerequisiteSource;
 
         var tableComparer = new TableKeyComparer(objectIdentityNormalizer);
         var indexComparer = new IndexKeyComparer(objectIdentityNormalizer);

@@ -12,10 +12,16 @@ internal sealed partial class SafeMigrationPreflightProjection
             intent.Definition.Schema,
             intent.Definition.Name);
 
+        // WHY: Provider-specific recognition must supply the same dependencies
+        // to ordered projection and runtime guards, without rewriting the raw
+        // definition or teaching Core a provider's SQL identifier grammar.
+        var requiredColumns = _indexPrerequisiteSource?.GetIndexPrerequisiteColumns(intent)
+            ?? SafeMigrationPrerequisiteColumns.Local(intent);
+
         if (!HasProjectedIndexDefinition(intent.Definition)
             && IsProjectedIndexReplacement(indexKey, intent.Definition, liveAnalysis, out var earlyReplacement))
         {
-            return ValidateProjectedIndex(intent, liveAnalysis, earlyReplacement);
+            return ValidateProjectedIndex(intent, liveAnalysis, earlyReplacement, requiredColumns);
         }
 
         if (IsProjectedTableStructureUnknown(intent.Definition.Table, intent.Definition.Schema))
@@ -44,18 +50,18 @@ internal sealed partial class SafeMigrationPreflightProjection
             if (analysis.ObservedState == SafeMigrationObservedState.Missing
                 && IsProjectedIndexReplacement(indexKey, intent.Definition, liveAnalysis, out var replacement))
             {
-                return ValidateProjectedIndex(intent, liveAnalysis, replacement);
+                return ValidateProjectedIndex(intent, liveAnalysis, replacement, requiredColumns);
             }
 
             var tableAnalysis = intent.Definition.Unique
                 ? InvalidateDataDependentMissing(table.Table, table.Schema, analysis)
                 : analysis;
 
-            var tableProjectedAnalysis = CanProjectMissingIndex(intent, tableAnalysis)
+            var tableProjectedAnalysis = CanProjectMissingIndex(intent, tableAnalysis, requiredColumns)
                 ? Analysis(SafeMigrationObservedState.Missing)
                 : tableAnalysis;
 
-            return ValidateProjectedIndex(intent, liveAnalysis, tableProjectedAnalysis);
+            return ValidateProjectedIndex(intent, liveAnalysis, tableProjectedAnalysis, requiredColumns);
         }
 
         if (_prerequisites.TryGetValue(
@@ -74,12 +80,12 @@ internal sealed partial class SafeMigrationPreflightProjection
                     && !TryGetConstraintPrerequisites(
                         intent.Definition.Table,
                         intent.Definition.Schema,
-                        SafeMigrationPrerequisiteColumns.Local(intent),
+                        requiredColumns,
                         out _)
                     && !CanReuseMatchingLiveColumnPrerequisites(
                         intent.Definition.Table,
                         intent.Definition.Schema,
-                        SafeMigrationPrerequisiteColumns.Local(intent),
+                        requiredColumns,
                         liveAnalysis))
                 {
                     return StructureStateUnknown();
@@ -98,13 +104,13 @@ internal sealed partial class SafeMigrationPreflightProjection
                         accepted)
                     : accepted;
 
-                return ValidateProjectedIndex(intent, liveAnalysis, projectedAccepted);
+                return ValidateProjectedIndex(intent, liveAnalysis, projectedAccepted, requiredColumns);
             }
         }
 
         if (IsProjectedIndexReplacement(indexKey, intent.Definition, liveAnalysis, out var projectedReplacement))
         {
-            return ValidateProjectedIndex(intent, liveAnalysis, projectedReplacement);
+            return ValidateProjectedIndex(intent, liveAnalysis, projectedReplacement, requiredColumns);
         }
 
         var projectedAnalysis = intent.Definition.Unique
@@ -114,11 +120,11 @@ internal sealed partial class SafeMigrationPreflightProjection
                 liveAnalysis)
             : liveAnalysis;
 
-        var result = CanProjectMissingIndex(intent, projectedAnalysis)
+        var result = CanProjectMissingIndex(intent, projectedAnalysis, requiredColumns)
             ? Analysis(SafeMigrationObservedState.Missing)
             : projectedAnalysis;
 
-        return ValidateProjectedIndex(intent, liveAnalysis, result);
+        return ValidateProjectedIndex(intent, liveAnalysis, result, requiredColumns);
     }
 
     private SafeMigrationProviderAnalysis Project(
@@ -283,19 +289,16 @@ internal sealed partial class SafeMigrationPreflightProjection
 
     private bool CanProjectMissingIndex(
         EnsureIndexIntent intent,
-        SafeMigrationProviderAnalysis liveAnalysis
+        SafeMigrationProviderAnalysis liveAnalysis,
+        IReadOnlyList<string> requiredColumns
     )
     {
         if (liveAnalysis.ObservedState != SafeMigrationObservedState.PrerequisiteMissing
-            || !_prerequisites.TryGetValue(
-                new TableKey(intent.Definition.Table, intent.Definition.Schema),
+            || !TryGetConstraintPrerequisites(
+                intent.Definition.Table,
+                intent.Definition.Schema,
+                requiredColumns,
                 out var prerequisites))
-        {
-            return false;
-        }
-
-        var requiredColumns = SafeMigrationPrerequisiteColumns.Local(intent);
-        if (requiredColumns.Any(column => !prerequisites.Columns.ContainsKey(column)))
         {
             return false;
         }
@@ -373,9 +376,24 @@ internal sealed partial class SafeMigrationPreflightProjection
     private SafeMigrationProviderAnalysis ValidateProjectedIndex(
         EnsureIndexIntent intent,
         SafeMigrationProviderAnalysis liveAnalysis,
-        SafeMigrationProviderAnalysis projectedAnalysis
+        SafeMigrationProviderAnalysis projectedAnalysis,
+        IReadOnlyList<string> requiredColumns
     )
     {
+        if (projectedAnalysis.ObservedState == SafeMigrationObservedState.Missing
+            && TryGet(intent.Definition.Table, intent.Definition.Schema, out _)
+            && !TryGetConstraintPrerequisites(
+                intent.Definition.Table,
+                intent.Definition.Schema,
+                requiredColumns,
+                out _))
+        {
+            // WHY: An empty projected index catalog proves absence, not that
+            // its keys, includes and predicate columns exist. A complete table
+            // must prove every dependency before Missing can authorize DDL.
+            return StructureStateUnknown();
+        }
+
         if (_projectedKeyAnalyzer is null
             || (projectedAnalysis.ObservedState != SafeMigrationObservedState.Missing
                 && !HasProjectedIndexColumnChange(intent.Definition)))
