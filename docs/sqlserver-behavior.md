@@ -272,12 +272,12 @@ including dynamic quote expansion. These are dispatch bounds, not measured
 compilation or execution-time improvements.
 
 A qualification run over the hundred-thousand-operation contract attributes
-almost all analysis time to this classifier capture: 195 bounded groups
-accounted for 3,025 s of the 3,030 s spent in the `catalog-batch` stage, around
-15.5 s per group. The remaining 196 `catalog-batch` entries in that evidence
-belong to the table-presence probe, which is a different and far cheaper query
-and always reports a single statement; the two are separate populations and a
-cost comparison between them is not meaningful. Where the classifier capture's
+almost all analysis time to this classifier capture: of its 392 `catalog-batch`
+entries, 195 four-statement groups accounted for 3,025 s of the 3,030 s spent in
+that stage, around 15.5 s per group, and one two-statement group for a further
+5.0 s. The remaining 196 entries belong to the table-presence probe, which is a
+different and far cheaper query and always reports a single statement; the two
+are separate populations and a cost comparison between them is not meaningful. Where the classifier capture's
 own cost arises is not established, so no shape here is justified by it. Object
 names embedded in SQL do not by themselves prevent
 [execution-plan reuse](https://learn.microsoft.com/en-us/sql/relational-databases/query-processing-architecture-guide?view=sql-server-ver17#execution-plan-caching-and-reuse).
