@@ -150,6 +150,64 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         }
     }
 
+    /// <summary>Checks a column collation of its own is still verified beside inherited ones.</summary>
+    /// <param name="liveCollation">The collation the independently created pinned column carries.</param>
+    /// <param name="matching">Whether that collation is the expected one.</param>
+    /// <remarks>
+    /// WHY: The inherited-table-default comparison is carried once per table rather than once per
+    /// column, which is only sound while every column inherits. A table that mixes an explicit
+    /// expectation with inherited ones must keep the per-column comparison, so this case fails if
+    /// the shared clause is ever applied to a column that expects its own collation.
+    /// </remarks>
+    [Theory]
+    [InlineData("utf8mb4_bin", true)]
+    [InlineData("utf8mb4_general_ci", false)]
+    public async Task StrictTableDefinition_VerifiesPinnedCollationBesideInheritedColumns(
+        string liveCollation,
+        bool matching
+    )
+    {
+        // Arrange
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `mixed_collation` ("
+            + $"`pinned` varchar(32) CHARACTER SET utf8mb4 COLLATE {liveCollation} NOT NULL, "
+            + "`inherited` varchar(32) NOT NULL) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;");
+
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureTable(
+            new ExpectedTableDefinition(
+                "mixed_collation",
+                [
+                    new ExpectedColumnDefinition("pinned", typeof(string), isNullable: false,
+                        storeType: "varchar(32)", collation: new SafeMigrationCollationIdentifier("utf8mb4_bin")),
+                    new ExpectedColumnDefinition("inherited", typeof(string), isNullable: false,
+                        storeType: "varchar(32)"),
+                ]),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var definitionBefore = await ReadStrictColumnTableDefinitionAsync(connectionString, "mixed_collation");
+        var runner = context.GetService<ISafeMigrationRunner>();
+
+        // Act
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("mixed-collation-preflight"));
+
+        var definitionAfter = await ReadStrictColumnTableDefinitionAsync(connectionString, "mixed_collation");
+
+        // Assert
+        var assessment = Assert.Single(preflight.Assessments);
+        Assert.Equal(
+            matching ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Different,
+            assessment.ObservedState);
+        Assert.Equal(definitionBefore, definitionAfter);
+    }
+
     /// <summary>Reads the complete server-side DDL for the independently created column fixture.</summary>
     private static async Task<string> ReadStrictColumnTableDefinitionAsync(
         string connectionString,

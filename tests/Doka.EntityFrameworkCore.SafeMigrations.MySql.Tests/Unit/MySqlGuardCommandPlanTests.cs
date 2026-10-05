@@ -26,6 +26,11 @@ public sealed class MySqlGuardCommandPlanTests
     }
 
     /// <summary>Checks catalog scan count stays bounded as a table definition gains columns.</summary>
+    /// <remarks>
+    /// WHY: Counting one view is not enough. An earlier version of this guard counted only
+    /// INFORMATION_SCHEMA.COLUMNS and stayed green while the collation contract issued one
+    /// INFORMATION_SCHEMA.TABLES subquery per column, which is the same fan-out in another view.
+    /// </remarks>
     [Fact]
     public void WideTableDoesNotAddCatalogScansPerColumn()
     {
@@ -53,8 +58,8 @@ public sealed class MySqlGuardCommandPlanTests
         // Act
         var oneColumnSql = Assert.Single(generator.Generate(oneColumn.Operations, context.Model)).CommandText;
         var eightColumnSql = Assert.Single(generator.Generate(eightColumns.Operations, context.Model)).CommandText;
-        var oneColumnScans = Count(oneColumnSql, "INFORMATION_SCHEMA.COLUMNS");
-        var eightColumnScans = Count(eightColumnSql, "INFORMATION_SCHEMA.COLUMNS");
+        var oneColumnScans = Count(oneColumnSql, "FROM INFORMATION_SCHEMA.");
+        var eightColumnScans = Count(eightColumnSql, "FROM INFORMATION_SCHEMA.");
 
         // Assert
         Assert.True(oneColumnScans > 0);
@@ -93,6 +98,9 @@ public sealed class MySqlGuardCommandPlanTests
         Assert.Contains(
             "(SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS c WHERE c.TABLE_SCHEMA = DATABASE() "
             + "AND c.TABLE_NAME = 'items' AND c.ORDINAL_POSITION <= 3 "
+            + "AND (c.COLLATION_NAME IS NULL OR c.COLLATION_NAME <=> "
+            + "(SELECT t.TABLE_COLLATION FROM INFORMATION_SCHEMA.TABLES t "
+            + "WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_NAME = 'items')) "
             + "AND (CASE c.ORDINAL_POSITION WHEN 1 THEN",
             sql,
             StringComparison.Ordinal);
@@ -137,9 +145,13 @@ public sealed class MySqlGuardCommandPlanTests
         Assert.Contains(
             "(SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS c WHERE c.TABLE_SCHEMA = DATABASE() "
             + $"AND c.TABLE_NAME = {tableParameter.ParameterName} AND c.ORDINAL_POSITION <= 3 "
+            + "AND (c.COLLATION_NAME IS NULL OR c.COLLATION_NAME <=> "
+            + "(SELECT t.TABLE_COLLATION FROM INFORMATION_SCHEMA.TABLES t "
+            + $"WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_NAME = {tableParameter.ParameterName})) "
             + "AND (CASE c.ORDINAL_POSITION WHEN 1 THEN",
             sql,
             StringComparison.Ordinal);
+        Assert.Equal(1, Count(sql, "TABLE_COLLATION FROM INFORMATION_SCHEMA.TABLES"));
         Assert.DoesNotContain("LEFT JOIN INFORMATION_SCHEMA.COLUMNS", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("JOIN INFORMATION_SCHEMA.COLUMNS c ON", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("'items'", sql, StringComparison.Ordinal);
