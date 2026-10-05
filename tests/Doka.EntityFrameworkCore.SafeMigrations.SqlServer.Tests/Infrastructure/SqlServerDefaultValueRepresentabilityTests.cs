@@ -447,10 +447,14 @@ public sealed class SqlServerDefaultValueRepresentabilityTests
         Assert.True(plan.DefaultValueSupportRequiresDelayedBinding);
         Assert.Contains("sys.fn_helpcollations()", installed, StringComparison.Ordinal);
         Assert.Contains("column_collation_unproven", selection, StringComparison.Ordinal);
-        Assert.True(selection.IndexOf(installed, StringComparison.Ordinal)
-            < selection.IndexOf("DECLARE @doka_default", StringComparison.Ordinal));
-        Assert.True(runtime.IndexOf(installed, StringComparison.Ordinal)
-            < runtime.IndexOf("DECLARE @doka_default_supported", StringComparison.Ordinal));
+        var selectionProof = selection.IndexOf(installed.Replace("'", "''", StringComparison.Ordinal),
+            StringComparison.Ordinal);
+
+        var selectionDefault = selection.IndexOf("DECLARE @doka_default", StringComparison.Ordinal);
+        var runtimeProof = runtime.IndexOf(installed, StringComparison.Ordinal);
+        var runtimeDefault = runtime.IndexOf("DECLARE @doka_default_supported", StringComparison.Ordinal);
+        Assert.True(selectionProof >= 0 && selectionDefault > selectionProof);
+        Assert.True(runtimeProof >= 0 && runtimeDefault > runtimeProof);
     }
 
     /// <summary>Retains large same-family LOB defaults without the TRY_CAST large-input limitation.</summary>

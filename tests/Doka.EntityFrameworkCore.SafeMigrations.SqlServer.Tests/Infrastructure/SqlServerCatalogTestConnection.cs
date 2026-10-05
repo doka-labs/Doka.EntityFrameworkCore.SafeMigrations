@@ -172,7 +172,8 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
                     continue;
                 }
 
-                var delayed = statement.StartsWith("EXEC sys.sp_executesql", StringComparison.Ordinal);
+                var delayed = statement.StartsWith("EXEC sys.sp_executesql", StringComparison.Ordinal)
+                    || statement.StartsWith("DECLARE @doka_template", StringComparison.Ordinal);
                 var parameters = RecordedParameters[RecordedParameters.Count - statements.Length + statementIndex];
                 // WHY: Delayed ordinals normally come from RPC values; a full source-parameter
                 // budget uses a trusted dispatcher literal. Metadata UNIONs own one multi-row set.

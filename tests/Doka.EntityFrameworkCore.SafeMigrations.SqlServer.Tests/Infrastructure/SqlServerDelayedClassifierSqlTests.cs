@@ -34,7 +34,7 @@ public sealed class SqlServerDelayedClassifierSqlTests
             sql, StringComparison.Ordinal);
         Assert.Contains("N'@doka_ordinal int', @doka_ordinal = " + ordinal.ToString(CultureInfo.InvariantCulture),
             sql, StringComparison.Ordinal);
-        Assert.Contains("ELSE SELECT @doka_ordinal, N''prerequisite_missing''",
+        Assert.Contains("ELSE EXEC sys.sp_executesql N''SELECT @doka_ordinal, N''''prerequisite_missing''''",
             sql, StringComparison.Ordinal);
         Assert.Contains("N''''matching''''", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("INSERT INTO", sql, StringComparison.Ordinal);

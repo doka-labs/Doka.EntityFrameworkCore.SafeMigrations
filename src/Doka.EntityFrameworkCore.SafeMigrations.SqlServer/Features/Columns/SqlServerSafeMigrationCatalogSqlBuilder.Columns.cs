@@ -481,46 +481,6 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             _ => throw new InvalidOperationException("No default expression exists."),
         };
 
-    private string ColumnStoreTypeMatches(
-        string table,
-        string? schema,
-        string column,
-        string storeType
-    )
-    {
-        if (!TryParseStoreType(storeType, out var type))
-        {
-            return "1 = 0";
-        }
-
-        var conditions = new List<string>
-        {
-            $"ty.name = {Literal(type.Name)}",
-            "ty.is_user_defined = 0",
-            "ty.is_assembly_type = 0",
-        };
-
-        if (type.Length is { } length)
-        {
-            conditions.Add($"c.max_length = {length.ToString(CultureInfo.InvariantCulture)}");
-        }
-
-        if (type.Precision is { } precision)
-        {
-            conditions.Add($"c.precision = {precision.ToString(CultureInfo.InvariantCulture)}");
-        }
-
-        if (type.Scale is { } scale)
-        {
-            conditions.Add($"c.scale = {scale.ToString(CultureInfo.InvariantCulture)}");
-        }
-
-        return "EXISTS (SELECT 1 FROM sys.columns c "
-            + "JOIN sys.types ty ON ty.user_type_id = c.user_type_id "
-            + $"WHERE c.object_id = {TableId(table, schema)} "
-            + $"AND c.name = {Literal(column)} AND {string.Join(" AND ", conditions)})";
-    }
-
     private string ColumnHasDependencies(
         string table,
         string? schema,

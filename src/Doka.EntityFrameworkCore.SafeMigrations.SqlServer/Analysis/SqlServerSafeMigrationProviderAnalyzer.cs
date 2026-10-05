@@ -873,6 +873,29 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
     {
         var definitions = BuildDelayedParameterDefinitions(plan);
         var template = BuildDelayedCatalogTemplate(plan, definitions);
+        var selection = BuildDelayedCatalogInvocation(ordinal, plan, dispatchSlot,
+            "N'" + template.Replace("'", "''", StringComparison.Ordinal) + "'", definitions);
+
+        var bytes = Encoding.UTF8.GetByteCount(selection);
+        if (bytes > SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes)
+        {
+            throw SafeMigrationCatalogQueryLimits.OversizedOperation(
+                ordinal, plan.AnalysisParameters.Count + (dispatchSlot is not null
+                    && UsesDelayedOrdinalParameter(plan) ? 1 : 0), bytes);
+        }
+
+        return selection;
+    }
+
+    /// <summary>Invokes a complete classifier using either a Unicode literal or a statement-local template.</summary>
+    private static string BuildDelayedCatalogInvocation(
+        int ordinal,
+        SqlServerSafeMigrationRuntimePlan plan,
+        int? dispatchSlot,
+        string statement,
+        string definitions
+    )
+    {
         var arguments = new StringBuilder("@doka_ordinal = ");
         var bindOrdinal = dispatchSlot is not null && UsesDelayedOrdinalParameter(plan);
         arguments.Append(bindOrdinal && dispatchSlot is { } slot
@@ -890,18 +913,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
 
         // WHY: The heavyweight guarded body is compiled independently of neighboring classifiers.
         // Original ordinals and source values are inputs, never template identities or cached results.
-        var selection = "EXEC sys.sp_executesql N'"
-            + template.Replace("'", "''", StringComparison.Ordinal)
-            + "', N'" + definitions + "', " + arguments + ";";
-
-        var bytes = Encoding.UTF8.GetByteCount(selection);
-        if (bytes > SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes)
-        {
-            throw SafeMigrationCatalogQueryLimits.OversizedOperation(
-                ordinal, plan.AnalysisParameters.Count + (bindOrdinal ? 1 : 0), bytes);
-        }
-
-        return selection;
+        return "EXEC sys.sp_executesql " + statement
+            + ", N'" + definitions + "', " + arguments + ";";
     }
 
     /// <summary>Builds an ordinal-independent classifier with private proof and preamble variables.</summary>
@@ -929,78 +942,97 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
             ?? plan.StateEvaluationGuardFailureExpression;
 
         var physicalGate = plan.PhysicalTableSupportExpression is null ? string.Empty
-            : $"IF COALESCE(({plan.PhysicalTableSupportExpression}), 0) <> 1 "
+            : BuildDelayedScalarProof(plan.PhysicalTableSupportExpression, "@doka_physical", "int",
+                definitions, parameterArguments)
+                + "IF COALESCE(@doka_physical, 0) <> 1 "
                 + "SELECT @doka_ordinal, "
                 + $"N'unsupported', 0, 0, N'{SqlServerSafeMigrationRuntimePlan.PhysicalTableUnsupportedCode}', "
                 + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(max), NULL), "
-                + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(128), NULL); ELSE ";
+                + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(128), NULL); ELSE BEGIN ";
 
         var collationGate = plan.ColumnCollationSupportExpression is null ? string.Empty
-            : $"IF COALESCE(({plan.ColumnCollationSupportExpression}), 0) <> 1 "
+            : BuildDelayedScalarProof(plan.ColumnCollationSupportExpression, "@doka_collation", "int",
+                definitions, parameterArguments)
+                + "IF COALESCE(@doka_collation, 0) <> 1 "
                 + "SELECT @doka_ordinal, "
                 + $"N'unsupported', 0, 0, N'{SqlServerSafeMigrationRuntimePlan.ColumnCollationUnsupportedCode}', "
                 + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(max), NULL), "
-                + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(128), NULL); ELSE ";
+                + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(128), NULL); ELSE BEGIN ";
 
         const string layoutVariable = "@doka_layout";
         var layoutSetup = plan.ColumnLayoutFailureExpression is null ? string.Empty
-            : $"DECLARE {layoutVariable} nvarchar(128) = ({plan.ColumnLayoutFailureExpression}); ";
+            : BuildDelayedScalarProof(plan.ColumnLayoutFailureExpression, layoutVariable, "nvarchar(128)",
+                definitions, parameterArguments);
 
         var layoutGate = plan.ColumnLayoutFailureExpression is null ? string.Empty
             : $"IF {layoutVariable} IS NOT NULL "
                 + $"SELECT @doka_ordinal, N'unsupported', 0, 0, {layoutVariable}, "
                 + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(max), NULL), "
-                + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(128), NULL); ELSE ";
+                + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(128), NULL); ELSE BEGIN ";
 
-        var defaultValue = plan.DefaultValueSupportExpression;
-        var defaultSetup = string.Empty;
-        if (plan.DefaultValueSupportRequiresDelayedBinding && defaultValue is not null)
-        {
-            const string variable = "@doka_default";
-            var scalar = ("SELECT @value = COALESCE((" + defaultValue + "), 0)")
-                .Replace("'", "''", StringComparison.Ordinal);
-
-            defaultSetup = $"DECLARE {variable} int; EXEC sys.sp_executesql N'{scalar}', "
-                + $"N'@value int OUTPUT', @value = {variable} OUTPUT; ";
-            defaultValue = variable;
-        }
-
-        var defaultGate = defaultValue is null ? string.Empty
-            : $"IF COALESCE(({defaultValue}), 0) <> 1 "
+        var defaultGate = plan.DefaultValueSupportExpression is null ? string.Empty
+            : BuildDelayedScalarProof(plan.DefaultValueSupportExpression, "@doka_default", "int",
+                definitions, parameterArguments)
+                + "IF COALESCE(@doka_default, 0) <> 1 "
                 + "SELECT @doka_ordinal, "
                 + $"N'unsupported', 0, 0, N'{SqlServerSafeMigrationRuntimePlan.DefaultValueUnsupportedCode}', "
                 + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(max), NULL), "
-                + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(128), NULL); ELSE ";
+                + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(128), NULL); ELSE BEGIN ";
 
         var indexFilterGate = plan.IndexFilterSupportExpression is null ? string.Empty
-            : $"IF COALESCE(({plan.IndexFilterSupportExpression}), 0) <> 1 "
+            : BuildDelayedScalarProof(plan.IndexFilterSupportExpression, "@doka_filter", "int",
+                definitions, parameterArguments)
+                + "IF COALESCE(@doka_filter, 0) <> 1 "
                 + "SELECT @doka_ordinal, "
                 + $"N'unsupported', 0, 0, N'{SqlServerSafeMigrationRuntimePlan.IndexFilterUnsupportedCode}', "
                 + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(max), NULL), "
-                + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(128), NULL); ELSE ";
+                + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(128), NULL); ELSE BEGIN ";
 
-        var selection = physicalGate + "BEGIN " + layoutSetup + layoutGate + collationGate
-            + "BEGIN " + defaultSetup + defaultGate + indexFilterGate
-            + $"IF COALESCE(({plan.PrerequisiteExpression}), 0) = 1 "
+        var prerequisite = $"CASE WHEN COALESCE(({plan.PrerequisiteExpression}), 0) = 1 "
             + (outerStateFailure is null
                 ? string.Empty
                 : $"AND COALESCE(({outerStateGuard}), 0) = 1 ")
+            + "THEN 1 ELSE 0 END";
+
+        var fallback = "SELECT @doka_ordinal, "
+            + (outerStateFailure is null
+                ? "N'prerequisite_missing'"
+                : $"CASE WHEN COALESCE(({plan.PrerequisiteExpression}), 0) = 1 "
+                    + $"THEN ({outerStateFailure}) ELSE N'prerequisite_missing' END")
+            + ", 0, 0, " + (plan.PrerequisiteFailureCodeExpression ?? "CONVERT(nvarchar(128), NULL)")
+            + ", CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(max), NULL), "
+            + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(128), NULL);";
+
+        var selection = physicalGate + layoutSetup + layoutGate + collationGate
+            + defaultGate + indexFilterGate
+            + BuildDelayedScalarProof(prerequisite, "@doka_prerequisite", "int", definitions, parameterArguments)
+            + "IF @doka_prerequisite = 1 "
             // WHY: Returning the nested SELECT directly avoids INSERT EXEC and a statement-sized
             // table variable. Transport validates one result set per classifier before accepting evidence.
             + $"EXEC sys.sp_executesql N'{escaped}', "
             + $"N'{definitions}', @doka_ordinal = @doka_ordinal"
             + parameterArguments + " "
-            + "ELSE SELECT @doka_ordinal, "
-            + (outerStateFailure is null
-                ? "N'prerequisite_missing'"
-                : $"CASE WHEN COALESCE(({plan.PrerequisiteExpression}), 0) = 1 "
-                    + $"THEN ({outerStateFailure}) ELSE N'prerequisite_missing' END")
-            + ", "
-            + "0, 0, " + (plan.PrerequisiteFailureCodeExpression ?? "CONVERT(nvarchar(128), NULL)")
-            + ", CONVERT(nvarchar(max), NULL), "
-            + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(128), NULL); END; END;";
+            + "ELSE EXEC sys.sp_executesql N'" + fallback.Replace("'", "''", StringComparison.Ordinal)
+            + $"', N'{definitions}', @doka_ordinal = @doka_ordinal" + parameterArguments + ";";
 
-        return selection;
+        // WHY: An ELSE protects only one T-SQL statement. Every admitted support gate must enclose
+        // all subsequent declarations, scalar EXEC calls and the final classifier, not just a DECLARE.
+        var gateCount = (physicalGate.Length > 0 ? 1 : 0) + (layoutGate.Length > 0 ? 1 : 0)
+            + (collationGate.Length > 0 ? 1 : 0) + (defaultGate.Length > 0 ? 1 : 0)
+            + (indexFilterGate.Length > 0 ? 1 : 0);
+
+        var closures = gateCount switch
+        {
+            0 => string.Empty,
+            1 => " END;",
+            2 => " END; END;",
+            3 => " END; END; END;",
+            4 => " END; END; END; END;",
+            5 => " END; END; END; END; END;",
+            _ => throw new UnreachableException(),
+        };
+
+        return selection + closures;
     }
 
     /// <summary>Retains stable local source mappings in both levels of delayed name binding.</summary>

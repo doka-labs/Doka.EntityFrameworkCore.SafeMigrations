@@ -135,7 +135,7 @@ public sealed class SqlServerContainerFixture : IAsyncLifetime, IDisposable
 
             _databases.Add(database);
 
-            return TestConnectionString(database);
+            return BuildTestConnectionString(_container.GetConnectionString(), database);
         }
         finally
         {
@@ -144,12 +144,12 @@ public sealed class SqlServerContainerFixture : IAsyncLifetime, IDisposable
     }
 
     /// <summary>
-    /// Drops one test database immediately and releases its connection pool.
+    /// Drops one test database immediately.
     /// </summary>
     /// <remarks>
     /// WHY: Eager cleanup bounds the number of isolated databases retained during the
-    /// session and releases each database's connection pool. Failed or cancelled drops
-    /// remain owned for a later retry or final fixture cleanup.
+    /// session. Failed or cancelled drops remain owned for a later retry or final
+    /// fixture cleanup.
     /// </remarks>
     /// <param name="connectionString">A connection string returned by <see cref="CreateDatabaseAsync" />.</param>
     /// <param name="cancellationToken">The token cancelling the drop.</param>
@@ -166,13 +166,6 @@ public sealed class SqlServerContainerFixture : IAsyncLifetime, IDisposable
         }
 
         var database = new SqlConnectionStringBuilder(connectionString).InitialCatalog;
-
-        // WHY: Idle pooled sessions can outlive the test and keep its database in use.
-        // Clearing the pool prevents those sessions from being reused after cleanup.
-        using (var pooled = new SqlConnection(connectionString))
-        {
-            SqlConnection.ClearPool(pooled);
-        }
 
         await _databaseLifecycleLock.WaitAsync(cancellationToken);
 
@@ -193,21 +186,23 @@ public sealed class SqlServerContainerFixture : IAsyncLifetime, IDisposable
     }
 
     /// <summary>
-    /// Builds a pooled connection string scoped to one test database.
+    /// Builds an unpooled connection string scoped to one test database.
     /// </summary>
     /// <remarks>
-    /// WHY: The root string disables pooling so master sessions never linger. Inheriting
-    /// that setting would prevent reuse of database-scoped analysis connections. Pooling
-    /// is enabled only for test databases and each pool is cleared when its database is released.
+    /// WHY: Some tests change the database collation after login. A later logical open of that
+    /// pooled session can fail its reset against the initial login state before test work starts.
+    /// Unpooled connections establish a fresh login baseline for each open.
     /// </remarks>
+    /// <param name="rootConnectionString">The container connection string before target database settings.</param>
     /// <param name="database">The isolated database name.</param>
-    /// <returns>The pooled connection string for that database.</returns>
-    private string TestConnectionString(
+    /// <returns>The unpooled connection string for that database.</returns>
+    internal static string BuildTestConnectionString(
+        string rootConnectionString,
         string database
-    ) => new SqlConnectionStringBuilder(_container.GetConnectionString())
+    ) => new SqlConnectionStringBuilder(rootConnectionString)
     {
         InitialCatalog = database,
-        Pooling = true,
+        Pooling = false,
         TrustServerCertificate = true,
     }.ConnectionString;
 

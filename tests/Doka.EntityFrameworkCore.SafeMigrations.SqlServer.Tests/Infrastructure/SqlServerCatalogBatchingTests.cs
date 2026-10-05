@@ -181,7 +181,7 @@ public sealed class SqlServerCatalogBatchingTests
 
         Assert.All(connection.BatchPayloadBytes, bytes => Assert.InRange(bytes, 1, 4 * 1024 * 1024));
         Assert.All(connection.RecordedStatements.Zip(connection.RecordedParameters), recorded => Assert.InRange(
-            recorded.First.StartsWith("EXEC sys.sp_executesql", StringComparison.Ordinal)
+            recorded.First.StartsWith("DECLARE @doka_template", StringComparison.Ordinal)
                 ? recorded.Second.Count(parameter => parameter.ParameterName.StartsWith(
                     "@doka_ordinal", StringComparison.Ordinal))
                 : recorded.First.Split("\nUNION ALL\n", StringSplitOptions.None).Length,
@@ -233,7 +233,7 @@ public sealed class SqlServerCatalogBatchingTests
 
         // Assert
         var statement = Assert.Single(connection.RecordedStatements);
-        Assert.StartsWith("EXEC sys.sp_executesql N'", statement, StringComparison.Ordinal);
+        Assert.StartsWith("DECLARE @doka_template", statement, StringComparison.Ordinal);
         Assert.DoesNotContain("@doka_analysis", statement, StringComparison.Ordinal);
         Assert.Contains("N''DECLARE @probe int = 1;\nSELECT @doka_ordinal", statement, StringComparison.Ordinal);
         Assert.Equal(SafeMigrationObservedState.Missing, results[0].ObservedState);
@@ -259,11 +259,17 @@ public sealed class SqlServerCatalogBatchingTests
             StateExpression = "N'missing' /*" + new string('\'', delayed ? 550_000 : 1_100_000) + "*/",
         };
 
+        var plans = Enumerable.Range(0, 4).Select(index => DistinctPlan(plan, index) with
+        {
+            StateExpression = plan.StateExpression + " /* classifier "
+                + index.ToString(CultureInfo.InvariantCulture) + " */",
+        }).ToArray();
+
         var results = new SafeMigrationProviderAnalysis[4];
 
         // Act
         await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-            connection, null, null, Enumerable.Range(0, 4).Select(index => DistinctPlan(plan, index)).ToArray(),
+            connection, null, null, plans,
             0, results, CancellationToken.None);
 
         // Assert

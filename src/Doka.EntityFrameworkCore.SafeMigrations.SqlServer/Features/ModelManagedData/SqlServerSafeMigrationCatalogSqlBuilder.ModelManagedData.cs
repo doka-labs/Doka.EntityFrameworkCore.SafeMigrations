@@ -226,20 +226,27 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         return string.Join(" AND ", predicates.Select(static predicate => $"({predicate})"));
     }
 
+    /// <summary>Groups complete column type proofs by physical table without merging distinct contracts.</summary>
     private string BuildModelManagedDataTypeGuard(
         ModelManagedDataIntent intent,
         string commonGuard
     )
     {
-        var predicates = new List<string>(intent.KeyColumns.Count + intent.Columns.Count);
+        var columns = new List<(string Column, string StoreType)>(intent.KeyColumns.Count + intent.Columns.Count);
+        var tables = new Dictionary<(string Table, string Schema), List<(string Column, string StoreType)>>
+        {
+            [(intent.Table, EffectiveSchema(intent.Schema))] = columns,
+        };
+
+        // WHY: Core validates shared key/value types. Preserve the original
+        // key-first ordinal de-duplication without applying it to FK contracts.
         var seen = new HashSet<string>(StringComparer.Ordinal);
 
         for (var index = 0; index < intent.KeyColumns.Count; index++)
         {
             if (seen.Add(intent.KeyColumns[index]))
             {
-                predicates.Add(ColumnStoreTypeMatches(intent.Table, intent.Schema,
-                    intent.KeyColumns[index], intent.KeyColumnTypes[index]));
+                columns.Add((intent.KeyColumns[index], intent.KeyColumnTypes[index]));
             }
         }
 
@@ -247,8 +254,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         {
             if (seen.Add(intent.Columns[index]))
             {
-                predicates.Add(ColumnStoreTypeMatches(intent.Table, intent.Schema,
-                    intent.Columns[index], intent.ColumnTypes[index]));
+                columns.Add((intent.Columns[index], intent.ColumnTypes[index]));
             }
         }
 
@@ -256,12 +262,21 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         {
             foreach (var foreignKey in deletion.ForeignKeys)
             {
+                var table = (foreignKey.Table, EffectiveSchema(foreignKey.Schema));
+                if (!tables.TryGetValue(table, out var dependentColumns))
+                {
+                    dependentColumns = new List<(string Column, string StoreType)>(foreignKey.Columns.Count);
+                    tables.Add(table, dependentColumns);
+                }
+
                 for (var index = 0; index < foreignKey.Columns.Count; index++)
                 {
                     var principalOrdinal = ColumnOrdinal(intent.Columns, foreignKey.PrincipalColumns[index]);
 
-                    predicates.Add(ColumnStoreTypeMatches(foreignKey.Table, foreignKey.Schema,
-                        foreignKey.Columns[index], intent.ColumnTypes[principalOrdinal]));
+                    // WHY: The same dependent column may occur in several
+                    // captured foreign keys. Keep each required type rather
+                    // than allowing a later conflicting contract to overwrite it.
+                    dependentColumns.Add((foreignKey.Columns[index], intent.ColumnTypes[principalOrdinal]));
                 }
             }
         }
@@ -269,8 +284,15 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // WHY: Physical type mismatches remain Different, while unsupported
         // values, triggers, and server semantics share the same rejection proof.
 
-        return Bit($"({commonGuard}) AND "
-            + string.Join(" AND ", predicates.Select(static predicate => $"({predicate})")));
+        var guard = new StringBuilder(commonGuard.Length + 1024).Append('(').Append(commonGuard).Append(')');
+        foreach (var table in tables)
+        {
+            guard.Append(" AND (")
+                .Append(ModelManagedTableStoreTypesMatch(table.Key.Table, table.Key.Schema, table.Value))
+                .Append(')');
+        }
+
+        return Bit(guard.ToString());
     }
 
     /// <summary>Builds shared semantic proofs once for both classification branches.</summary>
@@ -314,22 +336,16 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         }
 
         var columns = string.Join(", ", intent.Columns.Select(Literal));
-        var generated = "NOT EXISTS (SELECT 1 FROM sys.columns c "
-            + $"WHERE c.object_id = {TableId(intent.Table, intent.Schema)} "
-            + $"AND c.name IN ({columns}) "
-            + "AND (c.is_computed = 1 OR c.generated_always_type <> 0))";
-
-        if (intent is not UpdateModelManagedDataIntent)
-        {
-            return generated;
-        }
-
         // WHY: Explicit identity values are permitted for INSERT with
         // IDENTITY_INSERT, but SQL Server never permits updating that column.
+        // sys.columns already exposes is_identity, so UPDATE needs no second
+        // lookup of the same columns through sys.identity_columns.
+        var identity = intent is UpdateModelManagedDataIntent ? " OR c.is_identity = 1" : string.Empty;
 
-        return generated + " AND NOT EXISTS (SELECT 1 FROM sys.identity_columns ic "
-            + $"WHERE ic.object_id = {TableId(intent.Table, intent.Schema)} "
-            + $"AND ic.name IN ({columns}))";
+        return "NOT EXISTS (SELECT 1 FROM sys.columns c "
+            + $"WHERE c.object_id = {TableId(intent.Table, intent.Schema)} "
+            + $"AND c.name IN ({columns}) "
+            + $"AND (c.is_computed = 1 OR c.generated_always_type <> 0{identity}))";
     }
 
     private string BuildSourceCollisionCollationGuard(ModelManagedDataIntent intent)

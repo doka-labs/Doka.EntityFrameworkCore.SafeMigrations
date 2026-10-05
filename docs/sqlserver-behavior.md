@@ -271,15 +271,15 @@ subject to 2,000 parameters and 4 MiB of UTF-8 SQL plus source payload,
 including dynamic quote expansion. These are dispatch bounds, not measured
 compilation or execution-time improvements.
 
-A qualification run over the hundred-thousand-operation contract attributes
+A baseline qualification run over the hundred-thousand-operation contract attributes
 almost all analysis time to this classifier capture: of its 392 `catalog-batch`
 entries, 195 four-statement groups accounted for 3,025 s of the 3,030 s spent in
 that stage, around 15.5 s per group, and one two-statement group for a further
 5.0 s. The remaining 196 entries belong to the table-presence probe, which is a
 different and far cheaper query and always reports a single statement; the two
-are separate populations and a cost comparison between them is not meaningful. Where the classifier capture's
-own cost arises is not established, so no shape here is justified by it. Object
-names embedded in SQL do not by themselves prevent
+are separate populations and a cost comparison between them is not meaningful.
+Those durations alone do not establish the cause. Object names embedded in SQL
+do not by themselves prevent
 [execution-plan reuse](https://learn.microsoft.com/en-us/sql/relational-databases/query-processing-architecture-guide?view=sql-server-ver17#execution-plan-caching-and-reuse).
 Results are checked against their original ordinal and plan, then projected in
 migration order. Missing, duplicate, or unexpected result rows fail the
@@ -290,6 +290,48 @@ an explicit ordinal parameter for their complete reusable guarded template.
 Each returns one nine-column result set directly, without an aggregation table
 variable or `INSERT ... EXEC`. Name-binding and physical prerequisite guards
 are unchanged. Template reuse never means reusing row or catalog results.
+
+Inside each statement, identical complete delayed SQL bodies and parameter
+definitions share one `nvarchar(max)` declaration. Every invocation still owns
+its original ordinal and lossless source parameters. The admission check retains
+the standalone operation bound, includes declaration overhead and counts the
+actual combined SQL and source payload; sharing cannot hide an oversized input.
+
+Delayed physical, layout, collation, default, filter and prerequisite proofs use
+separate parameterized scalar statements in that order. Each writes a fresh
+private output before its gate, without returning another result set. Reusing
+their SQL plans never caches the proof values. The full classifier, its local
+preamble and its proof rechecks remain behind those gates; a refused prerequisite
+evaluates the original nine-column fallback in its own parameter scope.
+This preserves missing-object binding protection and validates collations before
+binding collation-sensitive defaults. Managed type guards compare one expected
+column set per physical table, including builtin type provenance and every
+required facet; missing metadata and SQL `UNKNOWN` remain refusals.
+
+A local SQL Server 2022 experiment replayed the first complete 512-plan capture
+of the mixed stress contract against fresh synthetic databases on an emulated
+ARM64 development host. It retained four statements, 120 classifier rows and
+all nine result columns. Before scalar-proof separation, the shared shape's
+two warm captures took 14.13 s and 13.37 s; afterward they took 0.20 s and
+0.19 s. Native `SqlBatch` replay took 13.76 s before and 0.19 s afterward.
+All result columns matched the baseline exactly. These are bounded local
+relative measurements, not a native x86-64 qualification or a duration promise
+for the complete 100,000-operation contract. The required 2019/2022/2025 CI
+matrix remains blocking.
+
+The offline `SqlServerFullCatalogCaptureTests` can additionally replay on an
+explicit disposable development server. Set
+`SAFE_MIGRATIONS_SQLSERVER_DIAGNOSTIC_CONNECTION` to that server's connection
+string and optionally `SAFE_MIGRATIONS_SQLSERVER_DIAGNOSTIC_OUTPUT` to an
+evidence directory, then run the focused test. This opt-in requires permission
+to create and drop its uniquely named synthetic databases; it never changes
+server settings or clears another database's plan cache. Ordinary test runs
+remain offline. The helper records complete SQL, synthetic nine-column results,
+raw engine statistics and cold/warm/native timings without logging credentials.
+
+```sh
+dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests.csproj -c Release --filter FullyQualifiedName~SqlServerFullCatalogCaptureTests
+```
 
 Independent layout, key-header, key-column and final inventory statements use
 the same bounded transport. Layout and key-header statements retain 32-table

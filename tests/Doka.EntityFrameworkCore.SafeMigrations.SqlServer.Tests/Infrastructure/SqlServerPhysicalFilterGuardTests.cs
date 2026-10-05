@@ -62,7 +62,8 @@ public sealed class SqlServerPhysicalFilterGuardTests
         Assert.Contains("ty.is_assembly_type = 0", support, StringComparison.Ordinal);
         Assert.Contains("TRY_CAST", support, StringComparison.Ordinal);
         Assert.Contains("NOT EXISTS", support, StringComparison.Ordinal);
-        Assert.Contains(support, selection, StringComparison.Ordinal);
+        Assert.Contains(unique ? support.Replace("'", "''", StringComparison.Ordinal) : support,
+            selection, StringComparison.Ordinal);
         Assert.Contains("index_filter_unproven", selection, StringComparison.Ordinal);
         Assert.Contains("N'Flag'", plan.PrerequisiteExpression, StringComparison.Ordinal);
         var supportOffset = runtime.IndexOf(support, StringComparison.Ordinal);
@@ -70,8 +71,12 @@ public sealed class SqlServerPhysicalFilterGuardTests
         Assert.True(supportOffset >= 0 && stateOffset > supportOffset);
         if (unique)
         {
-            Assert.True(selection.IndexOf(support, StringComparison.Ordinal)
-                < selection.IndexOf("EXEC sys.sp_executesql", StringComparison.Ordinal));
+            var supportGate = selection.IndexOf("IF COALESCE(@doka_filter, 0) <> 1", StringComparison.Ordinal);
+            var rowBinding = selection.IndexOf("IF @doka_prerequisite = 1 EXEC sys.sp_executesql",
+                StringComparison.Ordinal);
+
+            Assert.True(supportGate >= 0);
+            Assert.True(rowBinding > supportGate);
         }
         else
         {

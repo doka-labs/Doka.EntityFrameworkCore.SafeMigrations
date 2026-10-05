@@ -27,10 +27,13 @@ public sealed class SqlServerForeignKeyWidthSqlTests
             StringSplitOptions.None).Length);
         Assert.Contains("N'[dbo].[width_child]'", plan.PrerequisiteExpression, StringComparison.Ordinal);
         Assert.Contains("N'[dbo].[width_parent]'", plan.PrerequisiteExpression, StringComparison.Ordinal);
-        var prerequisite = delayed.IndexOf(plan.PrerequisiteExpression, StringComparison.Ordinal);
-        var rowBinding = delayed.IndexOf("EXEC sys.sp_executesql", StringComparison.Ordinal);
+        var prerequisite = delayed.IndexOf(plan.PrerequisiteExpression.Replace("'", "''", StringComparison.Ordinal),
+            StringComparison.Ordinal);
+        var prerequisiteGate = delayed.IndexOf("IF @doka_prerequisite = 1", StringComparison.Ordinal);
+        var rowBinding = delayed.IndexOf("IF @doka_prerequisite = 1 EXEC sys.sp_executesql", StringComparison.Ordinal);
         Assert.True(prerequisite >= 0);
-        Assert.True(rowBinding > prerequisite);
+        Assert.True(prerequisiteGate > prerequisite);
+        Assert.Equal(prerequisiteGate, rowBinding);
     }
 
     /// <summary>Rejects an immutable over-arity standalone contract before rendering any baseline.</summary>

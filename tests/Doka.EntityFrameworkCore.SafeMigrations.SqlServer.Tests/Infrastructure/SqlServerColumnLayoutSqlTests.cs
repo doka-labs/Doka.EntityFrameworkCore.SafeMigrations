@@ -75,8 +75,8 @@ public sealed class SqlServerColumnLayoutSqlTests
         // Act
         var plan = catalog.Build(operation);
         var selection = SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogTemplate(plan);
-        var layoutGuard = selection.IndexOf("column_fixed_row_limit", StringComparison.Ordinal);
-        var rowBinding = selection.IndexOf("EXEC sys.sp_executesql",
+        var layoutGuard = selection.IndexOf("IF @doka_layout IS NOT NULL", StringComparison.Ordinal);
+        var rowBinding = selection.IndexOf("IF @doka_prerequisite = 1 EXEC sys.sp_executesql",
             StringComparison.Ordinal);
 
         // Assert
@@ -86,6 +86,8 @@ public sealed class SqlServerColumnLayoutSqlTests
         Assert.Contains("column_count >= 1024", plan.ColumnLayoutFailureExpression, StringComparison.Ordinal);
         Assert.Contains("THEN CONVERT(nvarchar(128), NULL) ELSE", plan.ColumnLayoutFailureExpression,
             StringComparison.Ordinal);
+        Assert.Contains(plan.ColumnLayoutFailureExpression.Replace("'", "''", StringComparison.Ordinal),
+            selection, StringComparison.Ordinal);
         Assert.True(layoutGuard >= 0);
         Assert.True(rowBinding > layoutGuard);
     }

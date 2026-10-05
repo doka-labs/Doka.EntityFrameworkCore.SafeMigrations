@@ -139,6 +139,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             var statementPayload = fixedPayload;
             var separatorBytes = Encoding.UTF8.GetByteCount(separator);
             var selections = new List<string>(maximumOperationsPerStatement);
+            var templates = delayed ? new DelayedCatalogTemplates() : null;
             var statementPlans = new List<(int Ordinal, SqlServerSafeMigrationRuntimePlan Plan)>(
                 maximumOperationsPerStatement);
 
@@ -154,11 +155,14 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 }
 
                 var ordinal = captureStart + order[next];
-                var selection = delayed
-                    ? BuildDelayedCatalogSelection(ordinal, plan, selections.Count)
+                var prepared = templates?.Prepare(ordinal, plan, selections.Count);
+                var selection = prepared is { } invocation
+                    ? (invocation.Declaration ?? string.Empty) + invocation.Invocation
                     : BuildCatalogSelection(ordinal, plan);
 
                 var bytes = Encoding.UTF8.GetByteCount(selection);
+                var standaloneBytes = prepared?.StandaloneBytes ?? bytes;
+                var individualBytes = Math.Max(bytes, standaloneBytes);
                 // WHY: Ordinal RPC metadata contributes to both bounds, including zero-source classifiers.
                 // The full source-budget boundary uses a trusted integer dispatcher literal instead.
                 var bindOrdinal = delayed && UsesDelayedOrdinalParameter(plan);
@@ -166,11 +170,11 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 var valueBytes = plan.AnalysisParameters.Sum(static value => value.PayloadBytes)
                     + (bindOrdinal ? 128 : 0);
                 if (planParameters > SqlServerCatalogParameterBindings.MaximumParameters
-                    || (long)fixedPayload + bytes + valueBytes
+                    || (long)fixedPayload + individualBytes + valueBytes
                     > SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes)
                 {
                     throw SafeMigrationCatalogQueryLimits.OversizedOperation(
-                        ordinal, planParameters, checked(fixedPayload + bytes + valueBytes));
+                        ordinal, planParameters, checked(fixedPayload + individualBytes + valueBytes));
                 }
 
                 var addition = bytes + valueBytes + (selections.Count == 0 ? 0 : separatorBytes);
@@ -185,6 +189,11 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 }
 
                 selections.Add(selection);
+                if (prepared is { } accepted)
+                {
+                    templates!.Accept(accepted);
+                }
+
                 statementPlans.Add((ordinal, plan));
                 statementParameters += planParameters;
                 resultPlans.Add((ordinal, plan));

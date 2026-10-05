@@ -51,7 +51,10 @@ public sealed class SqlServerPhysicalTableSqlTests
         Assert.Contains("is_filetable = 1", gate, StringComparison.Ordinal);
         Assert.Contains("temporal_type <> 0", gate, StringComparison.Ordinal);
         Assert.Contains("N'[dbo].[physical_items]'", gate, StringComparison.Ordinal);
-        Assert.StartsWith("IF COALESCE((" + gate + "), 0) <> 1 ", classifier, StringComparison.Ordinal);
+        Assert.StartsWith("DECLARE @doka_physical int; EXEC sys.sp_executesql N'SELECT @doka_proof = ("
+            + gate.Replace("'", "''", StringComparison.Ordinal) + ");'", classifier, StringComparison.Ordinal);
+        Assert.Contains("@doka_proof = @doka_physical OUTPUT; IF COALESCE(@doka_physical, 0) <> 1 ",
+            classifier, StringComparison.Ordinal);
         Assert.Contains("@doka_ordinal, N'unsupported', 0, 0, N'physical_table_unproven'",
             classifier, StringComparison.Ordinal);
         var guard = "IF COALESCE((" + gate + "), 0) <> 1\nBEGIN\n    THROW 51002";

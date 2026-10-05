@@ -199,7 +199,8 @@ public sealed class SqlServerIdentityDefinitionTests
         Assert.Contains("identity_column.is_not_for_replication = 0", sql, StringComparison.Ordinal);
         Assert.Contains("sys.identity_columns identity_slot", sql, StringComparison.Ordinal);
         Assert.Contains("identity_slot_occupied", classifier, StringComparison.Ordinal);
-        Assert.Contains(plan.PrerequisiteFailureCodeExpression!, classifier, StringComparison.Ordinal);
+        Assert.Contains(plan.PrerequisiteFailureCodeExpression!.Replace("'", "''", StringComparison.Ordinal),
+            classifier, StringComparison.Ordinal);
         Assert.Contains("HAS_PERMS_BY_NAME", plan.StateEvaluationGuardExpression, StringComparison.Ordinal);
         Assert.DoesNotContain("c.name", plan.StateEvaluationGuardExpression, StringComparison.Ordinal);
     }

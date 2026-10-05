@@ -26,6 +26,15 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- Share exact SQL Server delayed classifier templates within bounded statements
+  and evaluate outer catalog proofs through reusable parameterized scalar SQL.
+  Keep proof values fresh, gate order, lossless source mappings, nine-column
+  result ownership and complete payload/parameter limits unchanged. Group
+  managed-data type checks by physical table without weakening required facets.
+- Open SQL Server fixture connections without pooling so tests that change their
+  database collation do not reuse an incompatible login-reset baseline. Add
+  isolated reset controls and an opt-in complete local classifier replay;
+  native engine qualification and production connection settings are unchanged.
 - Match SQL Server classifier rows by their ordinal column instead of relying on
   ordered delivery, so the catalog statements no longer carry a sort. Missing,
   duplicate and unexpected rows still fail the analysis.

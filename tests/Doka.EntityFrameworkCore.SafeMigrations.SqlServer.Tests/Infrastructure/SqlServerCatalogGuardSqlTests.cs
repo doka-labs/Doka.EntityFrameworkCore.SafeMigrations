@@ -28,8 +28,8 @@ public sealed class SqlServerCatalogGuardSqlTests
 
         // Act
         var sql = SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogTemplate(plan);
-        var dynamicStart = sql.IndexOf(dynamicPrefix, StringComparison.Ordinal);
-        var fallbackStart = sql.IndexOf("', N'@doka_ordinal int'", StringComparison.Ordinal);
+        var dynamicStart = sql.IndexOf(dynamicPrefix + "DECLARE @proof", StringComparison.Ordinal);
+        var fallbackStart = sql.IndexOf("', N'@doka_ordinal int'", dynamicStart, StringComparison.Ordinal);
 
         // Assert
         Assert.True(dynamicStart >= 0);
@@ -125,12 +125,17 @@ public sealed class SqlServerCatalogGuardSqlTests
         Assert.True(plan.RequiresDelayedBinding);
         Assert.Contains("JOIN sys.types ty ON ty.user_type_id = c.user_type_id",
             plan.StateEvaluationGuardExpression, StringComparison.Ordinal);
-        Assert.Equal(2,
+        Assert.Equal(1,
             plan.StateEvaluationGuardExpression.Split("ty.is_user_defined = 0", StringSplitOptions.None).Length - 1);
-        Assert.Equal(2,
+        Assert.Equal(1,
             plan.StateEvaluationGuardExpression.Split("ty.is_assembly_type = 0", StringSplitOptions.None).Length - 1);
-        Assert.Contains("c.name = N'Id'", plan.StateEvaluationGuardExpression, StringComparison.Ordinal);
-        Assert.Contains("c.name = N'Value'", plan.StateEvaluationGuardExpression, StringComparison.Ordinal);
+        Assert.Contains("(N'Id', N'int', CAST(NULL AS int), CAST(NULL AS int), CAST(NULL AS int))",
+            plan.StateEvaluationGuardExpression, StringComparison.Ordinal);
+        Assert.Contains("(N'Value', N'nvarchar', 160, CAST(NULL AS int), CAST(NULL AS int))",
+            plan.StateEvaluationGuardExpression, StringComparison.Ordinal);
+        Assert.Contains("c.name = expected.name", plan.StateEvaluationGuardExpression, StringComparison.Ordinal);
+        Assert.Contains("WHERE CASE WHEN c.column_id IS NOT NULL", plan.StateEvaluationGuardExpression,
+            StringComparison.Ordinal);
     }
 
     private static SqlServerSafeMigrationCatalogSqlBuilder CreateCatalog(
