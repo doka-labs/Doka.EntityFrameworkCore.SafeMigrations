@@ -583,6 +583,15 @@ connection only when it owns that open; it does not assume ownership of a
 caller transaction. PostgreSQL caller transactions must be read-only and use
 `RepeatableRead` or `Serializable`. Analysis never calls `Migrate` for you.
 
+Large MariaDB analyses may create uniquely named session temporary tables that
+copy catalog metadata. This does not modify application tables or migration
+history. Missing temporary-table privileges, a read-only transaction, or a pool
+with `ConnectionReset=false` retain the live-catalog path without changing
+classification semantics. Snapshot cleanup preserves the original analysis
+failure; failed cleanup closes the connection, with pooled sessions reset before
+reuse. See
+[catalog transport](mysql-mariadb-ddl-behavior.md#read-only-catalog-transport).
+
 ## Provider analyzer SPI
 
 Provider packages implement `ISafeMigrationProviderAnalyzer`. Before any

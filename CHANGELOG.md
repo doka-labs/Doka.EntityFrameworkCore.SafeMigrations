@@ -6,6 +6,16 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
+### Changed
+
+- Materialize MariaDB catalog metadata once per sufficiently large analysis
+  window to reduce repeated INFORMATION_SCHEMA work. Preserve live-catalog
+  fallback when temporary-table DDL is not permitted, cross-database incoming
+  foreign-key detection, quoted SQL values, and caller-owned session state.
+  MySQL and generated runtime migration commands continue to read the live
+  catalog. Classification semantics, policies, public APIs, and report schemas
+  remain unchanged; performance timings are informational rather than CI gates.
+
 ## [10.4.6] - 2026-10-05
 
 Prepare stable 10.4.6 for all five packages. The existing providers receive

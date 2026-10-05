@@ -205,6 +205,43 @@ eight-statement, aggregate parameter and 4 MiB bounds, further limited to half
 the live `max_allowed_packet`. Every result belongs to its submitted statement;
 incomplete or misbound metadata fails rather than publishing a partial inventory.
 
+On MariaDB, an operation window with at least 32 unresolved, unqualified
+operations may copy the catalog views into uniquely named InnoDB session
+temporary tables. The explicit engine keeps TEXT-capable catalog copies
+independent of `default_tmp_storage_engine`, including a MEMORY default.
+Reusing those rows avoids repeated INFORMATION_SCHEMA materialization;
+it does not cache application data or skip any facet predicate. The foreign-key
+copy includes constraints owned by the current database and incoming references
+from other databases. Explicitly qualified operations keep live catalog reads,
+including within a mixed window. MySQL and generated migration commands always
+keep their live catalog reads.
+
+The copies do not form an atomic database snapshot: catalog views are captured
+successively, and later concurrent DDL is not refreshed inside the operation
+window. Runtime execution still performs fresh guards. Redirection recognizes
+catalog relation tokens, not arbitrary text, so SQL literals, quoted identifiers
+and comments are preserved.
+
+Temporary-table DDL requires `CREATE TEMPORARY TABLES` and is not allowed inside
+a MariaDB read-only transaction. When that optional optimization is prohibited,
+analysis uses the live catalog; an unavailable InnoDB engine also retains that
+path. Analysis does not require a privilege grant or a new
+configuration switch. Pooled connections with `ConnectionReset=false` also keep
+the live path before any temporary DDL; nonpooled connections remain eligible.
+Other errors and cancellation are not treated as fallback
+success. Successful creates establish per-table ownership, and cleanup only
+drops owned copies. Partial initialization and failed classification also clean
+up; cleanup errors never replace an existing analysis exception. If cleanup
+cannot safely complete, the affected connection is closed. A nonpooled close
+destroys its session; an eligible pooled session resets before reuse. Healthy
+caller-open connections remain open.
+
+See [D-014](decisions/D-014-mariadb-catalog-snapshot-for-batched-classification.md),
+[MariaDB temporary tables](https://mariadb.com/docs/server/server-usage/tables/create-table)
+[MariaDB transaction modes](https://mariadb.com/docs/server/reference/sql-statements/transactions/start-transaction)
+and [MySqlConnector connection options](https://mysqlconnector.net/connection-options/).
+Timing improvements are measurements, not correctness or merge thresholds.
+
 ## Model-managed data
 
 Newly scaffolded model-managed data uses typed parameters. Keys and ordinary

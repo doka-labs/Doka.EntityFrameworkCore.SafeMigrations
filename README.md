@@ -545,6 +545,11 @@ EF CLI contract.
 Preflight is not a migration policy. It is a separate read-only runner outside
 `IMigrator` and EF migration history.
 
+MariaDB can use session-local temporary catalog copies for large analyses;
+application tables and migration history remain untouched. Analysis retains the
+live-catalog path when temporary-table DDL is not permitted. Generated migration
+commands always read the live catalog. See [catalog transport](docs/mysql-mariadb-ddl-behavior.md#read-only-catalog-transport).
+
 | Policy | Existing matching object | Existing different object |
 | --- | --- | --- |
 | `ExistenceOnly` | No-op | No-op only where existence semantics are explicit |

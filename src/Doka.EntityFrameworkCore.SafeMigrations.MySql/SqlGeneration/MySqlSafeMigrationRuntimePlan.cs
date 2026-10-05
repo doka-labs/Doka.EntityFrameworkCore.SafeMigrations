@@ -23,6 +23,14 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     /// <summary>Gets the captured parameter values in placeholder order.</summary>
     public MySqlCatalogParameterValue[] ParameterValues { get; init; } = [];
 
+    /// <summary>Gets the catalog relation binding, or null to read the live INFORMATION_SCHEMA.</summary>
+    /// <remarks>
+    /// WHY: Batched classification may read a snapshot of the scoped catalog rather than the live
+    /// views. The binding travels with the plan so every render path resolves identically without
+    /// threading a resolver through each call site. See D-014.
+    /// </remarks>
+    public Func<string, string>? CatalogRelations { get; init; }
+
     /// <summary>Gets the catalog-only prerequisite expression.</summary>
     public string PrerequisiteExpression { get; init; } = "TRUE";
 
@@ -107,14 +115,14 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     /// <returns>The rendered expression.</returns>
     public string RenderPrerequisiteExpression(
         Func<MySqlCatalogParameterValue, string> renderValue
-    ) => MySqlCatalogSqlTemplate.Render(PrerequisiteExpression, ParameterValues, renderValue);
+    ) => RenderTemplate(PrerequisiteExpression, ParameterValues, renderValue);
 
     /// <summary>Renders the selected-database identity guard with provider literals.</summary>
     /// <param name="renderValue">The provider literal renderer.</param>
     /// <returns>The rendered expression.</returns>
     public string RenderCurrentDatabaseQualificationExpression(
         Func<MySqlCatalogParameterValue, string> renderValue
-    ) => MySqlCatalogSqlTemplate.Render(
+    ) => RenderTemplate(
         CurrentDatabaseQualificationExpression
             ?? throw new InvalidOperationException("The runtime plan has no database qualification expression."),
         ParameterValues,
@@ -143,14 +151,14 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     /// <returns>The rendered expression.</returns>
     public string RenderStateEvaluationGuardExpression(
         Func<MySqlCatalogParameterValue, string> renderValue
-    ) => MySqlCatalogSqlTemplate.Render(StateEvaluationGuardExpression, ParameterValues, renderValue);
+    ) => RenderTemplate(StateEvaluationGuardExpression, ParameterValues, renderValue);
 
     /// <summary>Renders the guard-failure state expression with provider literals.</summary>
     /// <param name="renderValue">The provider literal renderer.</param>
     /// <returns>The rendered expression.</returns>
     public string RenderStateEvaluationGuardFailureExpression(
         Func<MySqlCatalogParameterValue, string> renderValue
-    ) => MySqlCatalogSqlTemplate.Render(
+    ) => RenderTemplate(
         StateEvaluationGuardFailureExpression
             ?? throw new InvalidOperationException("The state-evaluation guard has no failure expression."),
         ParameterValues,
@@ -185,7 +193,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     /// <returns>The rendered expression.</returns>
     public string RenderDiagnosticEvidenceExpression(
         Func<MySqlCatalogParameterValue, string> renderValue
-    ) => MySqlCatalogSqlTemplate.Render(
+    ) => RenderTemplate(
         DiagnosticEvidenceExpression
             ?? throw new InvalidOperationException("The runtime plan has no diagnostic evidence expression."),
         ParameterValues,
@@ -196,7 +204,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     /// <returns>The rendered expression.</returns>
     public string RenderMatchedObjectNameExpression(
         Func<MySqlCatalogParameterValue, string> renderValue
-    ) => MySqlCatalogSqlTemplate.Render(
+    ) => RenderTemplate(
         MatchedObjectNameExpression
             ?? throw new InvalidOperationException("The runtime plan has no matched-object expression."),
         ParameterValues,
@@ -207,7 +215,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     /// <returns>The rendered expression.</returns>
     public string RenderModelManagedRowEvidenceExpression(
         Func<MySqlCatalogParameterValue, string> renderValue
-    ) => MySqlCatalogSqlTemplate.Render(
+    ) => RenderTemplate(
         ModelManagedRowEvidenceExpression
             ?? throw new InvalidOperationException("The runtime plan has no model-managed row evidence."),
         ParameterValues,
@@ -218,7 +226,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     /// <returns>The rendered expression.</returns>
     public string RenderModelManagedDependencyCountsExpression(
         Func<MySqlCatalogParameterValue, string> renderValue
-    ) => MySqlCatalogSqlTemplate.Render(
+    ) => RenderTemplate(
         ModelManagedDependencyCountsExpression
             ?? throw new InvalidOperationException("The runtime plan has no model-managed dependency evidence."),
         ParameterValues,
@@ -229,7 +237,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     /// <returns>The rendered expression.</returns>
     public string RenderPostcondition(
         Func<MySqlCatalogParameterValue, string> renderValue
-    ) => MySqlCatalogSqlTemplate.Render(Postcondition, ParameterValues, renderValue);
+    ) => RenderTemplate(Postcondition, ParameterValues, renderValue);
 
     /// <summary>Renders the repair precondition with provider literals.</summary>
     /// <param name="renderValue">The provider literal renderer.</param>
@@ -254,14 +262,14 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     /// <returns>The rendered expression.</returns>
     public string RenderPreparedPrerequisiteExpression(
         IReadOnlyList<string> renderedValues
-    ) => MySqlCatalogSqlTemplate.RenderPrepared(PrerequisiteExpression, renderedValues);
+    ) => RenderPreparedTemplate(PrerequisiteExpression, renderedValues);
 
     /// <summary>Renders the selected-database identity guard with prepared literal values.</summary>
     /// <param name="renderedValues">The rendered literal values in placeholder order.</param>
     /// <returns>The rendered expression.</returns>
     public string RenderPreparedCurrentDatabaseQualificationExpression(
         IReadOnlyList<string> renderedValues
-    ) => MySqlCatalogSqlTemplate.RenderPrepared(
+    ) => RenderPreparedTemplate(
         CurrentDatabaseQualificationExpression
             ?? throw new InvalidOperationException("The runtime plan has no database qualification expression."),
         renderedValues);
@@ -293,14 +301,14 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     /// <returns>The rendered expression.</returns>
     public string RenderPreparedStateEvaluationGuardExpression(
         IReadOnlyList<string> renderedValues
-    ) => MySqlCatalogSqlTemplate.RenderPrepared(StateEvaluationGuardExpression, renderedValues);
+    ) => RenderPreparedTemplate(StateEvaluationGuardExpression, renderedValues);
 
     /// <summary>Renders the guard-failure state expression with prepared literal values.</summary>
     /// <param name="renderedValues">The rendered literal values in placeholder order.</param>
     /// <returns>The rendered expression.</returns>
     public string RenderPreparedStateEvaluationGuardFailureExpression(
         IReadOnlyList<string> renderedValues
-    ) => MySqlCatalogSqlTemplate.RenderPrepared(
+    ) => RenderPreparedTemplate(
         StateEvaluationGuardFailureExpression
             ?? throw new InvalidOperationException("The state-evaluation guard has no failure expression."),
         renderedValues);
@@ -310,14 +318,14 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     /// <returns>The rendered expression.</returns>
     public string RenderPreparedPostcondition(
         IReadOnlyList<string> renderedValues
-    ) => MySqlCatalogSqlTemplate.RenderPrepared(Postcondition, renderedValues);
+    ) => RenderPreparedTemplate(Postcondition, renderedValues);
 
     /// <summary>Renders the immediate execution postcondition with prepared literal values.</summary>
     /// <param name="renderedValues">The rendered literal values in placeholder order.</param>
     /// <returns>The rendered expression.</returns>
     public string RenderPreparedExecutionPostcondition(
         IReadOnlyList<string> renderedValues
-    ) => MySqlCatalogSqlTemplate.RenderPrepared(
+    ) => RenderPreparedTemplate(
         ExecutionPostcondition ?? Postcondition,
         renderedValues);
 
@@ -348,7 +356,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     /// <returns>The rendered predicate.</returns>
     public string RenderPreparedTransitionInvariantExpression(
         IReadOnlyList<string> renderedValues
-    ) => MySqlCatalogSqlTemplate.RenderPrepared(
+    ) => RenderPreparedTemplate(
         DataProbe?.TransitionInvariantExpression
             ?? throw new InvalidOperationException("The runtime plan has no data probe."),
         renderedValues);
@@ -358,7 +366,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     /// <returns>The rendered predicate.</returns>
     public string RenderPreparedDataProbeRequiredExpression(
         IReadOnlyList<string> renderedValues
-    ) => MySqlCatalogSqlTemplate.RenderPrepared(
+    ) => RenderPreparedTemplate(
         DataProbe?.NarrowingExpression
             ?? throw new InvalidOperationException("The runtime plan has no data probe."),
         renderedValues);
@@ -368,7 +376,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     /// <returns>The rendered predicate.</returns>
     public string RenderPreparedDataProbeBlockedExpression(
         IReadOnlyList<string> renderedValues
-    ) => MySqlCatalogSqlTemplate.RenderPrepared(
+    ) => RenderPreparedTemplate(
         DataProbe?.BuildBlockedExpression()
             ?? throw new InvalidOperationException("The runtime plan has no data probe."),
         renderedValues);
@@ -378,7 +386,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     /// <returns>The rendered mutation SQL.</returns>
     public string RenderPreparedMutationSql(
         IReadOnlyList<string> renderedValues
-    ) => MySqlCatalogSqlTemplate.RenderPrepared(
+    ) => RenderPreparedTemplate(
         MutationSql
             ?? throw new InvalidOperationException("The runtime plan has no model-managed data mutation."),
         renderedValues);
@@ -389,14 +397,14 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         bool? dataBlocked
     )
     {
-        var rendered = MySqlCatalogSqlTemplate.Render(expression, ParameterValues, renderValue);
+        var rendered = RenderTemplate(expression, ParameterValues, renderValue);
         if (DataProbe is null)
         {
             return rendered;
         }
 
         var replacement = dataBlocked is null
-            ? MySqlCatalogSqlTemplate.Render(DataProbe.BuildBlockedExpression(), ParameterValues, renderValue)
+            ? RenderTemplate(DataProbe.BuildBlockedExpression(), ParameterValues, renderValue)
             : dataBlocked.Value
                 ? "TRUE"
                 : "FALSE";
@@ -409,7 +417,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     /// <returns>The catalog-only physical-nullability predicate.</returns>
     public string RenderPreparedNullabilityColumnExpression(
         IReadOnlyList<string> renderedValues
-    ) => MySqlCatalogSqlTemplate.RenderPrepared(
+    ) => RenderPreparedTemplate(
         NullabilityDataProbe?.NullableColumnExpression
             ?? throw new InvalidOperationException("The runtime plan has no nullability data probe."),
         renderedValues);
@@ -431,7 +439,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     /// <returns>The Boolean expression that detects a NULL value.</returns>
     public string RenderPreparedNullabilityDataProbeBlockedExpression(
         IReadOnlyList<string> renderedValues
-    ) => MySqlCatalogSqlTemplate.RenderPrepared(
+    ) => RenderPreparedTemplate(
         NullabilityDataProbe?.BlockedExpression
             ?? throw new InvalidOperationException("The runtime plan has no nullability data probe."),
         renderedValues);
@@ -444,20 +452,20 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         bool? transitionEligible
     )
     {
-        var rendered = MySqlCatalogSqlTemplate.Render(expression, ParameterValues, renderValue);
+        var rendered = RenderTemplate(expression, ParameterValues, renderValue);
         if (DataProbe is null && NullabilityDataProbe is null)
         {
             return rendered;
         }
 
         var dataReplacement = DataProbe is null ? "FALSE" : dataBlocked is null
-            ? MySqlCatalogSqlTemplate.Render(DataProbe.BuildBlockedExpression(), ParameterValues, renderValue)
+            ? RenderTemplate(DataProbe.BuildBlockedExpression(), ParameterValues, renderValue)
             : dataBlocked.Value
                 ? "TRUE"
                 : "FALSE";
 
         var transitionReplacement = DataProbe is null ? "FALSE" : transitionEligible is null
-            ? MySqlCatalogSqlTemplate.Render(
+            ? RenderTemplate(
                 DataProbe.TransitionInvariantExpression
                     ?? throw new InvalidOperationException("The runtime plan has no transition evidence."),
                 ParameterValues,
@@ -469,7 +477,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         var repairInvariantReplacement = NullabilityDataProbe is null
             ? "FALSE"
             : ReplaceTransitionPlaceholders(
-                MySqlCatalogSqlTemplate.Render(
+                RenderTemplate(
                     NullabilityDataProbe.RepairInvariantExpression, ParameterValues, renderValue),
                 dataReplacement, transitionReplacement, "FALSE", "FALSE");
 
@@ -479,10 +487,10 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         var nullabilityReplacement = NullabilityDataProbe is null
             ? "FALSE"
             : "CASE WHEN ("
-                + MySqlCatalogSqlTemplate.Render(
+                + RenderTemplate(
                     NullabilityDataProbe.NullableColumnExpression, ParameterValues, renderValue)
                 + $") AND ({repairInvariantReplacement}) THEN ("
-                + MySqlCatalogSqlTemplate.Render(
+                + RenderTemplate(
                     NullabilityDataProbe.BlockedExpression, ParameterValues, renderValue)
                 + ") ELSE FALSE END";
 
@@ -498,17 +506,17 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         string? transitionEligibleExpression = null
     )
     {
-        var rendered = MySqlCatalogSqlTemplate.RenderPrepared(expression, renderedValues);
+        var rendered = RenderPreparedTemplate(expression, renderedValues);
         if (DataProbe is null && NullabilityDataProbe is null)
         {
             return rendered;
         }
 
         var dataReplacement = DataProbe is null ? "FALSE" : dataBlockedExpression
-            ?? MySqlCatalogSqlTemplate.RenderPrepared(DataProbe.BuildBlockedExpression(), renderedValues);
+            ?? RenderPreparedTemplate(DataProbe.BuildBlockedExpression(), renderedValues);
 
         var transitionReplacement = DataProbe is null ? "FALSE" : transitionEligibleExpression
-            ?? MySqlCatalogSqlTemplate.RenderPrepared(
+            ?? RenderPreparedTemplate(
                 DataProbe.TransitionInvariantExpression
                     ?? throw new InvalidOperationException("The runtime plan has no transition evidence."),
                 renderedValues);
@@ -679,6 +687,17 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
 
         return (-1, 0, 0);
     }
+
+    private string RenderTemplate(
+        string template,
+        IReadOnlyList<MySqlCatalogParameterValue> values,
+        Func<MySqlCatalogParameterValue, string> renderValue
+    ) => MySqlCatalogSqlTemplate.Render(template, values, renderValue, CatalogRelations);
+
+    private string RenderPreparedTemplate(
+        string template,
+        IReadOnlyList<string> renderedValues
+    ) => MySqlCatalogSqlTemplate.RenderPrepared(template, renderedValues, CatalogRelations);
 }
 
 /// <summary>Describes a shared, operation-local nullable-to-required row proof.</summary>
