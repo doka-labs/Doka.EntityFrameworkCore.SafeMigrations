@@ -15,6 +15,13 @@ SafeMigrations publishes these package IDs at one version:
 - `Doka.EntityFrameworkCore.SafeMigrations.Sqlite`; and
 - `Doka.EntityFrameworkCore.SafeMigrations.SqlServer`.
 
+The prepared 10.4.6 release begins this five-package inventory; releases 10.4.2
+through 10.4.5 retain their historical four-package set. The shared .NET/EF Core 10
+release line keeps the existing providers' compatible maintenance changes and
+the first optional SQL Server package at 10.4.6. Its additive APIs and report
+engine-family value are explicitly documented in the changelog. Selecting
+another provider does not introduce SQL Server runtime dependencies.
+
 The workflow accepts a canonical lowercase NuGet version without a leading
 `v`. The version must belong to the source `VersionPrefix`, have exactly one
 dated changelog entry, be absent from all five NuGet package IDs, and be

@@ -241,6 +241,12 @@ owns independent consumer readback.
   explicit report-only mode changes only the exit policy of a complete report;
   configuration, execution and report-write failures remain fatal. Strict manual
   comparison and all product-correctness qualification gates remain unchanged.
+- 2026-10-05: Prepare the shared stable 10.4.6 identity for compatible maintenance
+  of the existing providers and the first optional SQL Server package. Promote
+  the additive Core and SQL Server API inventories without rewriting earlier
+  signatures or migration history. Require the complete five-package matrix,
+  provenance, SBOM, primary/symbol publication, and public readback before a
+  publication claim. Releases 10.4.2 through 10.4.5 remain four-package sets.
 
 ### Implementation References
 

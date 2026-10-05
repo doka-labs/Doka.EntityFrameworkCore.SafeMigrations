@@ -155,8 +155,10 @@ Before accepting an extended migration, verify all of the following:
 The repository's full shared/extended ownership tooling implements these checks
 for MySQL, MariaDB, and PostgreSQL. SQLite qualification independently verifies
 strict and legacy source generation, history, schema, model-managed data,
-integrity, replay, and Migration Bundle application on file databases. Core unit
-tests retain provider-neutral coverage of the eight ownership rules. Provider
+integrity, replay, and Migration Bundle application on file databases. SQL Server
+qualification independently exercises strict/legacy tooling, model-managed rows,
+history, replay, and bundles in each native x86-64 engine cell. Core unit tests
+retain provider-neutral coverage of the eight ownership rules. Provider
 qualification still has to pass on the supported engine matrix before release.
 
 ## Primary sources

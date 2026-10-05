@@ -119,8 +119,9 @@ qualified with realistic file-system capacity and lock behavior.
 
 ## SQL Server boundary
 
-The unreleased `.SqlServer` package composes EF Core's SQL Server migrations
-generator and analyzes guarded operations against `sys.*` catalog metadata.
+The `.SqlServer` package prepared for its first release in 10.4.6 composes
+EF Core's SQL Server migrations generator and analyzes guarded operations
+against `sys.*` catalog metadata.
 Ordinary EF operations remain provider-owned. Metadata visibility, database
 collation, default-schema resolution, backing-index identity, and default
 constraint ownership are part of its behavioral boundary. An EF Core SQL
@@ -234,7 +235,7 @@ Every EF, Doka, Npgsql, or supported database update requires:
 2. review of the proposed declarations, package lockfile resolutions, and
    resolved engineering graphs;
 3. core planner, fingerprint, definition, report, and model-guard tests;
-4. all supported MySQL/MariaDB and PostgreSQL engine endpoints plus SQLite;
+4. all supported MySQL/MariaDB, PostgreSQL, and SQL Server engine endpoints plus SQLite;
 5. missing, matching, different, unsupported, and data-blocked states;
 6. `Database.MigrateAsync`, `IMigrator`, history, missing/conflicting adapter,
    parallel migrator, least-privilege, and recovery tests;

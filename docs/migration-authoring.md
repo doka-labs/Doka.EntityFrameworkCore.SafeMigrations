@@ -126,8 +126,8 @@ allowed; only continuously present definitions are required; any unrelated
 physical shape remains drift. The immediate create-table postcondition remains
 limited to constraints emitted with `CreateTable`, so a dependency-ordered
 foreign key is not required before its own operation runs.
-MySQL/MariaDB, PostgreSQL, and SQLite runtime generation validate the same known index
-and constraint transitions as preflight. The MySQL/MariaDB adapter carries the
+MySQL/MariaDB, PostgreSQL, SQLite, and SQL Server runtime generation validate
+the same known index and constraint transitions as preflight. The MySQL/MariaDB adapter carries the
 complete ordered catalog even though Doka invokes extension handlers one
 operation at a time. Preflight, generated runtime SQL, replay, and postflight
 therefore enforce the same dependency order.

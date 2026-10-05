@@ -11,7 +11,7 @@ with roll-forward disabled. SafeMigrations supports EF Core 10 only.
 | MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` `[10.4.2,10.5.0)` |
 | PostgreSQL | `Npgsql.EntityFrameworkCore.PostgreSQL` `[10.0.3,11.0.0)` |
 | SQLite | EF Core SQLite Core `[10.0.12,10.1.0)`; application-owned native bundle |
-| SQL Server (unreleased) | `Microsoft.EntityFrameworkCore.SqlServer` `[10.0.12,10.1.0)` |
+| SQL Server (first release prepared as 10.4.6) | `Microsoft.EntityFrameworkCore.SqlServer` `[10.0.12,10.1.0)` |
 
 The MySQL/MariaDB package requires Doka 10.4.2 or a compatible later 10.4 patch
 release and rejects the next minor line. This boundary avoids an exact
@@ -26,15 +26,16 @@ evidence.
 
 The remaining declared dependency graph and .NET 10 release metadata were
 rechecked on 2026-09-21. Bounded package ranges describe compatibility. The
-four 10.4.5 package-project lockfiles identify the exact dependency graph used to
+five 10.4.6 package-project lockfiles identify the exact dependency graph used to
 compile and qualify the package artifacts in a particular revision; they do
 not constrain a consumer's NuGet resolution or lock the engineering projects.
-The SQL Server project adds a fifth lockfile for its future first release;
-it does not retroactively add a fifth artifact to the published 10.4.5 set.
+The SQL Server project supplies the fifth lockfile. Releases 10.4.2 through
+10.4.5 contain four package artifacts; their inventory remains unchanged.
 
-The 10.4.5 release contains four packages. SQL Server is an unreleased fifth
-provider in this source tree; its first release still requires the blocking
-workflow and exact public readback of all five package IDs.
+The prepared 10.4.6 release is the first five-package set, including the optional
+SQL Server provider. Publication still requires the blocking workflow, including
+all three native x86-64 SQL Server cells, and exact public readback of all five
+package IDs. Source preparation alone does not establish availability.
 
 ## Engine matrix
 

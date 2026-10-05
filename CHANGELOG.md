@@ -1,10 +1,23 @@
 # Changelog
 
 All notable changes are documented here. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
-[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Package versions follow
+the shared release identity described in [Release process](docs/release-process.md).
 
 ## [Unreleased]
+
+## [10.4.6] - 2026-10-05
+
+Prepare stable 10.4.6 for all five packages. The existing providers receive
+compatible correctness and performance fixes; SQL Server is a new, optional
+provider package. Core adds two included-index helpers and the `sqlserver`
+engine-family value. Existing signatures, migration source, policies, report
+schema versions, and migration history remain compatible.
+
+This entry records source preparation, not publication. Completion requires
+the full qualification matrix, signed `v10.4.6` source identity, all five exact
+NuGet primary and symbol packages, and verified GitHub Release, SBOM,
+provenance, attestation, and public package readback evidence.
 
 ### Added
 
@@ -26,6 +39,15 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- Keep MySQL/MariaDB strict table-column matching in one ordinal-count catalog
+  probe with constant database and table lookup values. Avoid derived joins
+  that open unrelated schema metadata on MariaDB. Preserve exact column count,
+  names, order, facets, and NULL rejection, with positive and negative provider
+  regressions; no row scan or timing-based CI gate is added.
+- Share one table-default collation lookup across MySQL/MariaDB table-column
+  predicates when every expected column inherits that default. Preserve
+  per-column comparisons for explicit collations and MariaDB JSON. Reduce
+  repeated catalog subqueries without changing matching or rejection semantics.
 - Share exact SQL Server delayed classifier templates within bounded statements
   and evaluate outer catalog proofs through reusable parameterized scalar SQL.
   Keep proof values fresh, gate order, lossless source mappings, nine-column
@@ -1390,7 +1412,8 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.5...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.6...HEAD
+[10.4.6]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.5...v10.4.6
 [10.4.5]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.4...v10.4.5
 [10.4.4]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.3...v10.4.4
 [10.4.3]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.2...v10.4.3

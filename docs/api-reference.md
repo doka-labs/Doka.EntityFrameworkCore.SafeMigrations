@@ -9,7 +9,7 @@ completion/Quick Documentation for the selected package version. The
 [MySQL/MariaDB](../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/PublicAPI.Shipped.txt),
 [PostgreSQL](../src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/PublicAPI.Shipped.txt),
 [SQLite](../src/Doka.EntityFrameworkCore.SafeMigrations.Sqlite/PublicAPI.Shipped.txt),
-and [SQL Server](../src/Doka.EntityFrameworkCore.SafeMigrations.SqlServer/PublicAPI.Unshipped.txt)
+and [SQL Server](../src/Doka.EntityFrameworkCore.SafeMigrations.SqlServer/PublicAPI.Shipped.txt)
 API baselines are review inventories, not substitutes for this guide or XML.
 The initial public surface shipped with `10.0.0-rc.1`; `10.0.0-rc.2` added
 source-frozen legacy-convergence policy selection and provider-context
@@ -50,14 +50,20 @@ scaffolding remains the default. Stable 10.4.4 adds
 to schema v3 and filtered views to v2. Consumers must update exhaustive enum
 handling and schema validation, and rebuild references to the compiled
 `CurrentSchemaVersion` constant. Existing migration source, runtime guards,
-and history remain unchanged. The prepared 10.4.5 patch preserves that public
+and history remain unchanged. The 10.4.5 patch preserves that public
 API, generated migration source, report schemas, and history. It changes only
-the MySQL/MariaDB index-catalog comparison query shape. A successful release
-run and exact-version public package readback remain the authority for a
-published API.
-The unreleased SQL Server package adds provider-specific registration and
-generator composition; Core report schemas add `sqlserver` as an engine-family
-value without changing existing report schema versions or histories.
+the MySQL/MariaDB index-catalog comparison query shape.
+
+The prepared 10.4.6 release adds the optional SQL Server package with
+provider-specific registration and generator composition. Core adds
+`CreateIndexWithIncludesIfNotExistsFromModel` and
+`CreateCompositeIndexWithIncludesIfNotExistsFromModel`; existing signatures
+remain compatible. Reports accept `sqlserver` as an engine-family value
+without changing canonical schema v3, filtered-view schema v2, or histories.
+Consumers with exhaustive engine-family handling must recognize the new value.
+A successful release run and exact-version public package readback remain the
+authority for a published API; shipped baseline files record its prepared
+contract, not proof of publication.
 
 ## Packages and registration
 

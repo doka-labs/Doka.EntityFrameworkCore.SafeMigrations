@@ -194,7 +194,7 @@ non-identity columns must classify `Different`; unknown operation annotations
 must classify `Unsupported`; neither negative case may execute target DDL.
 Repair qualification must additionally prove mutable drift, matching rerun,
 null-data blocking, and invariant type-drift rejection on every supported
-MySQL, MariaDB, and PostgreSQL server cell plus SQLite.
+MySQL, MariaDB, PostgreSQL, and SQL Server cell plus SQLite.
 
 Pack all five packages and run package-only consumers. Each provider package
 must contain its `buildTransitive` asset, inject the correct EF design-service
