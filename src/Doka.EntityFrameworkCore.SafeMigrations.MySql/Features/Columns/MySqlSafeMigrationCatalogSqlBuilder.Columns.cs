@@ -315,16 +315,25 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             + $"AND c.COLUMN_NAME = {Literal(definition.Name)} AND {string.Join(" AND ", conditions)})";
     }
 
-    /// <summary>Verifies every expected column of a table definition through one catalog join.</summary>
+    /// <summary>Verifies every expected column of a table definition through one catalog probe.</summary>
     /// <remarks>
-    /// WHY: The per-column classifier repeats the same INFORMATION_SCHEMA.COLUMNS join once per
+    /// WHY: The per-column classifier repeated the same INFORMATION_SCHEMA.COLUMNS lookup once per
     /// column, so a wide table produced one correlated lookup per column in a single statement.
-    /// The expected set is driven as a derived table and the catalog is joined once, while every
-    /// facet predicate stays verbatim and server-side.
+    /// This form reads the catalog once per table and counts how many columns at the expected
+    /// positions match, while every facet predicate stays verbatim and server-side.
     ///
-    /// The derived table is built from SELECT ... UNION ALL rather than VALUES because MariaDB
-    /// and the older MySQL versions this provider qualifies do not accept a VALUES table
-    /// constructor in that position.
+    /// The expected set deliberately does not become a derived table joined against the catalog.
+    /// MariaDB cannot use the table name as an information_schema lookup value once it sits in a
+    /// join condition, so it opens every table definition in the schema for each such join. In a
+    /// paired run on MariaDB 11.8, analyzing 100 expected tables took 2,218 ms in that form against
+    /// 167 ms in this one, and 3,611 ms against 132 ms with 1,000 further tables in the schema,
+    /// while MySQL 8.4 stayed within one percent of itself either way. Counting matches keeps the
+    /// name a plain lookup value.
+    ///
+    /// Counting is equivalent to testing each expected column separately: ORDINAL_POSITION is
+    /// unique per table, so at most one row can satisfy each arm. A missing column, a mismatching
+    /// facet and a facet predicate that evaluates to NULL all leave the count short, the last one
+    /// because a WHERE clause keeps only rows whose predicate is true.
     /// </remarks>
     /// <param name="table">The table whose columns are verified.</param>
     /// <param name="definition">The expected table definition.</param>
@@ -336,46 +345,30 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         bool isMariaDb
     )
     {
-        var rows = new List<string>(definition.Columns.Count);
-        var arms = new List<string>(definition.Columns.Count);
+        var arms = new StringBuilder(definition.Columns.Count * 256);
         for (var index = 0; index < definition.Columns.Count; index++)
         {
             var column = definition.Columns[index];
-            var position = (index + 1).ToString(CultureInfo.InvariantCulture);
+            var conditions = new List<string>
+            {
+                $"c.COLUMN_NAME = {Literal(column.Name)}",
+                $"c.IS_NULLABLE = {(column.IsNullable ? "'YES'" : "'NO'")}",
+                $"COALESCE(c.COLUMN_COMMENT, '') = {Literal(column.Comment ?? string.Empty)}",
+            };
 
-            // WHY: A UNION takes its result column names from the first SELECT and ignores
-            // aliases in later arms, so they are emitted once rather than repeated.
-            var aliases = index == 0;
+            conditions.AddRange(BuildColumnStructuralConditions(table, column, isMariaDb));
 
-            // WHY: The provider renders a value containing a backslash as an introducer literal
-            // such as _utf8mb4 X'..', which carries the character set's default collation while a
-            // plain literal carries the connection collation. Uniting both forms raises error 1271
-            // whenever the connection uses another utf8mb4 collation, for example
-            // utf8mb4_unicode_ci. Converting every arm pins one collation for the result column.
-            // See https://dev.mysql.com/doc/refman/8.4/en/charset-introducer.html
-            rows.Add($"SELECT {position}{(aliases ? " AS ordinal_position" : string.Empty)}, "
-                + $"CONVERT({Literal(column.Name)} USING utf8mb4)"
-                + (aliases ? " AS column_name" : string.Empty) + ", "
-                + $"{(column.IsNullable ? "'YES'" : "'NO'")}{(aliases ? " AS is_nullable" : string.Empty)}, "
-                + $"CONVERT({Literal(column.Comment ?? string.Empty)} USING utf8mb4)"
-                + (aliases ? " AS column_comment" : string.Empty));
-
-            arms.Add($"WHEN {position} THEN ("
-                + string.Join(" AND ", BuildColumnStructuralConditions(table, column, isMariaDb))
-                + ")");
+            arms.Append(" WHEN ").Append((index + 1).ToString(CultureInfo.InvariantCulture))
+                .Append(" THEN (").AppendJoin(" AND ", conditions).Append(')');
         }
 
-        var valueFacets = "c.IS_NULLABLE = expected.is_nullable "
-            + "AND COALESCE(c.COLUMN_COMMENT, '') = expected.column_comment";
+        var columnCount = definition.Columns.Count.ToString(CultureInfo.InvariantCulture);
 
-        // WHY: A facet predicate can evaluate to NULL. The per-column form returned no row and
-        // therefore reported a mismatch, so the absent-or-unequal test must coalesce to FALSE.
-        return "NOT EXISTS (SELECT 1 FROM (" + string.Join(" UNION ALL ", rows) + ") expected "
-            + "LEFT JOIN INFORMATION_SCHEMA.COLUMNS c ON c.TABLE_SCHEMA = DATABASE() "
-            + $"AND c.TABLE_NAME = {Literal(table)} AND c.COLUMN_NAME = expected.column_name "
-            + "WHERE c.COLUMN_NAME IS NULL OR c.ORDINAL_POSITION <> expected.ordinal_position "
-            + $"OR NOT COALESCE({valueFacets}, FALSE) "
-            + $"OR NOT COALESCE(CASE expected.ordinal_position {string.Join(" ", arms)} END, FALSE))";
+        // WHY: The ordinal bound is implied by the arms, which yield NULL beyond the expected
+        // count, but it lets the engine drop surplus columns before evaluating any facet.
+        return "(SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS c WHERE c.TABLE_SCHEMA = DATABASE() "
+            + $"AND c.TABLE_NAME = {Literal(table)} AND c.ORDINAL_POSITION <= {columnCount} "
+            + $"AND (CASE c.ORDINAL_POSITION{arms} END)) = {columnCount}";
     }
 
     /// <summary>Builds the column facets whose SQL shape depends on the expected column itself.</summary>

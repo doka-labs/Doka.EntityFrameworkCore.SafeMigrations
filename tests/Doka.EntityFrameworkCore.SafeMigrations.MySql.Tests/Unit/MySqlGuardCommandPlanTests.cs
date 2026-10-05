@@ -25,6 +25,126 @@ public sealed class MySqlGuardCommandPlanTests
         Assert.Equal(oneKeyScans, sixKeyScans);
     }
 
+    /// <summary>Checks catalog scan count stays bounded as a table definition gains columns.</summary>
+    [Fact]
+    public void WideTableDoesNotAddCatalogScansPerColumn()
+    {
+        // Arrange
+        using var context = CreateContext();
+        var oneColumn = new MigrationBuilder(context.Database.ProviderName!);
+        oneColumn.EnsureTable(
+            new ExpectedTableDefinition("items", [Column("a0")]),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var eightColumns = new MigrationBuilder(context.Database.ProviderName!);
+        eightColumns.EnsureTable(
+            new ExpectedTableDefinition(
+                "items",
+                [
+                    Column("a0"), Column("a1"), Column("a2"), Column("a3"),
+                    Column("a4"), Column("a5"), Column("a6"), Column("a7"),
+                ]),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+
+        // Act
+        var oneColumnSql = Assert.Single(generator.Generate(oneColumn.Operations, context.Model)).CommandText;
+        var eightColumnSql = Assert.Single(generator.Generate(eightColumns.Operations, context.Model)).CommandText;
+        var oneColumnScans = Count(oneColumnSql, "INFORMATION_SCHEMA.COLUMNS");
+        var eightColumnScans = Count(eightColumnSql, "INFORMATION_SCHEMA.COLUMNS");
+
+        // Assert
+        Assert.True(oneColumnScans > 0);
+        Assert.Equal(oneColumnScans, eightColumnScans);
+    }
+
+    /// <summary>Checks column verification keeps the table name a catalog lookup value.</summary>
+    /// <remarks>
+    /// WHY: MariaDB fills INFORMATION_SCHEMA by opening table definitions and only restricts that
+    /// work to one table when the name is a constant in the WHERE clause. Moving the name into a
+    /// join condition against a derived expected set makes it open every table in the schema per
+    /// join: in a paired run on MariaDB 11.8, analyzing 100 expected tables took 2,218 ms in that
+    /// form against 167 ms in the counting form, and 3,611 ms against 132 ms with 1,000 further
+    /// tables in the schema. MySQL 8.4 stayed within one percent either way, so the regression is
+    /// invisible there.
+    /// </remarks>
+    [Fact]
+    public void ColumnVerificationKeepsTheTableNameAsCatalogLookupValue()
+    {
+        // Arrange
+        using var context = CreateContext();
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureTable(
+            new ExpectedTableDefinition("items", [Column("a0"), Column("a1"), Column("a2")]),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+
+        // Act
+        var sql = Assert.Single(generator.Generate(builder.Operations, context.Model)).CommandText;
+
+        // Assert
+        Assert.DoesNotContain("LEFT JOIN INFORMATION_SCHEMA.COLUMNS", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("JOIN INFORMATION_SCHEMA.COLUMNS c ON", sql, StringComparison.Ordinal);
+        Assert.Contains(
+            "(SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS c WHERE c.TABLE_SCHEMA = DATABASE() "
+            + "AND c.TABLE_NAME = 'items' AND c.ORDINAL_POSITION <= 3 "
+            + "AND (CASE c.ORDINAL_POSITION WHEN 1 THEN",
+            sql,
+            StringComparison.Ordinal);
+        Assert.Contains(") = 3", sql, StringComparison.Ordinal);
+    }
+
+    /// <summary>Checks analysis and verification preserve the parameterized constant catalog lookup.</summary>
+    /// <param name="postflight">Whether the postcondition or classification expression is rendered.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ParameterizedColumnVerificationKeepsTheTableNameAsCatalogLookupValue(
+        bool postflight
+    )
+    {
+        // Arrange
+        using var context = CreateContext();
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureTable(
+            new ExpectedTableDefinition("items", [Column("a0"), Column("a1"), Column("a2")]),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+        var capture = context.GetService<MySqlSafeMigrationPlanCapture>();
+        using var lease = capture.Begin(builder.Operations.Cast<SafeMigrationOperation>().ToArray());
+        using var command = new MySqlCommand();
+        var parameterizer = new MySqlCatalogQueryParameterizer(
+            command,
+            context.GetService<IRelationalTypeMappingSource>());
+
+        // Act
+        _ = generator.Generate(builder.Operations, context.Model);
+        var plan = lease.Complete().Single();
+        var sql = postflight
+            ? plan.RenderPostcondition(parameterizer.Add)
+            : plan.RenderStateExpression(parameterizer.Add);
+
+        var tableParameter = command.Parameters.Cast<DbParameter>().Single(parameter => Equals(parameter.Value, "items"));
+
+        // Assert
+        Assert.Contains(
+            "(SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS c WHERE c.TABLE_SCHEMA = DATABASE() "
+            + $"AND c.TABLE_NAME = {tableParameter.ParameterName} AND c.ORDINAL_POSITION <= 3 "
+            + "AND (CASE c.ORDINAL_POSITION WHEN 1 THEN",
+            sql,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("LEFT JOIN INFORMATION_SCHEMA.COLUMNS", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("JOIN INFORMATION_SCHEMA.COLUMNS c ON", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'items'", sql, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void RuntimeSqlGenerator_RejectsKnownIndexBeforeColumnDropWithoutEnsureTable()
     {
@@ -482,6 +602,10 @@ public sealed class MySqlGuardCommandPlanTests
 
         return count;
     }
+
+    private static ExpectedColumnDefinition Column(
+        string name
+    ) => new(name, typeof(int), isNullable: false, storeType: "int");
 
     private static DbContext CreateContext()
     {
