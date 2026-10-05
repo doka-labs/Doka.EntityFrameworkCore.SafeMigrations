@@ -1,5 +1,6 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 
+/// <summary>Interns bounded catalog parameters and restores provider bindings across statement rollback.</summary>
 internal sealed class PostgreSqlCatalogQueryParameters
 {
     private readonly Func<DbParameter> _createParameter;
@@ -11,6 +12,9 @@ internal sealed class PostgreSqlCatalogQueryParameters
     private readonly List<string> _values = [];
     private int _utf8PayloadBytes;
 
+    /// <summary>Creates parameter accounting for a caller-owned sequential catalog command.</summary>
+    /// <param name="command">The command supplying provider parameters and their physical collection.</param>
+    /// <param name="typeMappingSource">The optional mapping source required for typed values.</param>
     public PostgreSqlCatalogQueryParameters(
         DbCommand command,
         IRelationalTypeMappingSource? typeMappingSource = null
@@ -23,6 +27,9 @@ internal sealed class PostgreSqlCatalogQueryParameters
         _typeMappingSource = typeMappingSource;
     }
 
+    /// <summary>Creates parameter accounting for a native or fallback catalog transport statement.</summary>
+    /// <param name="command">The statement supplying provider parameters and their physical collection.</param>
+    /// <param name="typeMappingSource">The optional mapping source required for typed values.</param>
     public PostgreSqlCatalogQueryParameters(
         SafeMigrationCatalogCommand command,
         IRelationalTypeMappingSource? typeMappingSource = null
@@ -35,38 +42,59 @@ internal sealed class PostgreSqlCatalogQueryParameters
         _typeMappingSource = typeMappingSource;
     }
 
+    /// <summary>Gets the number of physical parameters retained by this statement.</summary>
     public int Count => _values.Count;
 
+    /// <summary>Gets the estimated UTF-8 parameter payload including per-binding metadata.</summary>
     public int Utf8PayloadBytes => _utf8PayloadBytes;
 
+    /// <summary>Captures the parameter count and payload before one candidate statement is built.</summary>
+    /// <returns>The exact prefix retained if the candidate exceeds a query bound.</returns>
     public Checkpoint Capture() => new(_values.Count, _utf8PayloadBytes);
 
+    /// <summary>Restores the captured prefix without changing retained parameter identities or mappings.</summary>
+    /// <param name="checkpoint">The earlier parameter count and payload to restore.</param>
     public void Rollback(
         Checkpoint checkpoint
     )
     {
-        if ((uint)checkpoint.Count > (uint)_values.Count)
+        if ((uint)checkpoint.Count > (uint)_values.Count
+            || (uint)checkpoint.Utf8PayloadBytes > (uint)_utf8PayloadBytes
+            || (checkpoint.Count == _values.Count && checkpoint.Utf8PayloadBytes != _utf8PayloadBytes))
         {
             throw new ArgumentOutOfRangeException(nameof(checkpoint));
         }
 
-        while (_values.Count > checkpoint.Count)
+        if (checkpoint.Count == _values.Count)
         {
-            var last = _values.Count - 1;
-            _parameters.Remove(_values[last]);
-            _values.RemoveAt(last);
-            _parametersCollection.RemoveAt(last);
+            return;
         }
 
-        // The retained parameters remain valid. Rebuilding lookup state on
-        // demand is cheaper and less error-prone than retaining stale marker
-        // entries after an oversized statement is rolled back.
+        var retained = new DbParameter[checkpoint.Count];
+        for (var index = 0; index < retained.Length; index++)
+        {
+            retained[index] = _parametersCollection[index];
+        }
+
+        // WHY: Shrinking and then growing an Npgsql parameter collection can
+        // lose named lookup entries for surviving parameters. Re-register the
+        // exact bounded prefix so provider lookups and enumeration agree,
+        // without recreating parameter objects or their type mappings.
+        _parametersCollection.Clear();
+        foreach (var parameter in retained)
+        {
+            _parametersCollection.Add(parameter);
+        }
+
+        _values.RemoveRange(checkpoint.Count, _values.Count - checkpoint.Count);
         _parameters.Clear();
         _typedParameters.Clear();
-
         _utf8PayloadBytes = checkpoint.Utf8PayloadBytes;
     }
 
+    /// <summary>Interns a catalog string and returns its provider parameter marker.</summary>
+    /// <param name="value">The catalog identity or other string value to bind.</param>
+    /// <returns>The retained marker for an identical string, or a newly registered marker.</returns>
     public string AddString(
         string value
     )
@@ -88,6 +116,10 @@ internal sealed class PostgreSqlCatalogQueryParameters
         return name;
     }
 
+    /// <summary>Interns a typed value using the provider mapping and its value converter.</summary>
+    /// <param name="value">The model-side value, including a typed null.</param>
+    /// <param name="storeType">The requested provider store type used for mapping and identity.</param>
+    /// <returns>The retained or newly registered parameter marker.</returns>
     public string Add(
         object? value,
         string storeType
@@ -140,6 +172,9 @@ internal sealed class PostgreSqlCatalogQueryParameters
         _ => 32,
     };
 
+    /// <summary>Identifies the exact parameter prefix retained before a candidate was constructed.</summary>
+    /// <param name="Count">The physical parameter count at capture time.</param>
+    /// <param name="Utf8PayloadBytes">The corresponding estimated UTF-8 parameter payload.</param>
     public readonly record struct Checkpoint(
         int Count,
         int Utf8PayloadBytes

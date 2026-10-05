@@ -1,9 +1,9 @@
 # Documentation
 
-This is the task-oriented entry point for SafeMigrations documentation. At
-preparation time, 10.4.4 is the latest stable tag. This source prepares
-10.4.5; package availability and OpenSSF status are established by
-their linked external registries, not by source documentation alone.
+This is the task-oriented entry point for SafeMigrations documentation. This
+source prepares stable 10.4.6, including the first optional SQL Server package.
+Package availability and OpenSSF status are established by their linked
+external registries, not by source documentation alone.
 
 ## Use and deploy
 
@@ -17,6 +17,7 @@ their linked external registries, not by source documentation alone.
 | Understand MySQL/MariaDB session guards and implicit commits | [MySQL and MariaDB DDL](mysql-mariadb-ddl-behavior.md) |
 | Understand PostgreSQL analysis, model-managed data, and transaction behavior | [PostgreSQL behavior](postgresql-behavior.md) |
 | Understand SQLite rebuilds, tooling, and script boundaries | [SQLite behavior](sqlite-behavior.md) |
+| Understand SQL Server catalog checks, guards, and engine qualification | [SQL Server behavior](sqlserver-behavior.md) |
 | Deploy independently to heterogeneous instances and recover safely | [Deployment and recovery](runbooks/deployment-and-recovery.md) |
 | Interpret a blocked report or stable error | [Failure codes](runbooks/failure-codes.md) |
 | Collect metrics without exposing protected reports | [Observability](runbooks/observability.md) |

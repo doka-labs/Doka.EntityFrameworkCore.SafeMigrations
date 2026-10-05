@@ -143,6 +143,53 @@ public sealed class PostgreSqlSafeMigrationSqlExpressionRendererTests
             deparsedCandidate);
     }
 
+    /// <summary>Catalog collation names resolve exact namespaces before using PostgreSQL's deparsed spelling.</summary>
+    /// <param name="schema">The authored namespace, or null for the search path.</param>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("pg_catalog")]
+    [InlineData("custom's schema")]
+    public void RenderCatalogCandidateSql_ResolvesPhysicalCollationSpelling(
+        string? schema
+    )
+    {
+        // Arrange
+        using var context = CreateContext();
+        var renderer = CreateRenderer(context);
+        var expression = SafeMigrationSql.Collate(SafeMigrationSql.Identifier("value"), "C", schema);
+
+        // Act
+        var candidate = renderer.RenderCatalogCandidateSql(expression, Literal);
+
+        // Assert
+        var identifier = schema is null
+            ? "pg_catalog.quote_ident('C')"
+            : $"pg_catalog.quote_ident({Literal(schema)}) || '.' || pg_catalog.quote_ident('C')";
+
+        Assert.Contains($"pg_catalog.to_regcollation({identifier})::text", candidate, StringComparison.Ordinal);
+        Assert.Contains("pg_catalog.quote_ident('value')", candidate, StringComparison.Ordinal);
+    }
+
+    /// <summary>The pretty catalog candidate keeps nested collation without extra function-argument parentheses.</summary>
+    [Fact]
+    public void RenderCatalogDeparsedCandidateSql_PreservesNestedCollationWithoutExtraParentheses()
+    {
+        // Arrange
+        using var context = CreateContext();
+        var renderer = CreateRenderer(context);
+        var expression = SafeMigrationSql.Function(
+            "lower",
+            SafeMigrationSql.Collate(SafeMigrationSql.Identifier("value"), "C", "pg_catalog"));
+
+        // Act
+        var candidate = renderer.RenderCatalogDeparsedCandidateSql(expression, Literal);
+
+        // Assert
+        Assert.Contains("'lower(' || pg_catalog.quote_ident('value') || ' COLLATE '", candidate, StringComparison.Ordinal);
+        Assert.DoesNotContain("'lower(('", candidate, StringComparison.Ordinal);
+        Assert.Contains("pg_catalog.to_regcollation(", candidate, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Render_ProducesEveryBinaryOperatorAndRejectsUnsupportedValues()
     {

@@ -47,6 +47,11 @@ jobs:
             MIT,
             MIT-0,
             Unlicense
+          # v5.0.0 ignores PURL versions. The mandatory version guard below
+          # binds these exceptions to the exact reviewed package versions.
+          allow-dependencies-licenses: >-
+            pkg:nuget/Microsoft.Data.SqlClient.SNI.runtime@6.0.2,
+            pkg:nuget/Microsoft.Identity.Client.NativeInterop@0.20.6
           comment-summary-in-pr: never
           show-openssf-scorecard: true
           # Snapshot warnings remain fail-closed after the action's bounded
@@ -61,14 +66,15 @@ jobs:
       # report success. GitHub's public REST reference did not specify this
       # header on 2026-08-28; the pinned action source consumes it directly.
       # A vendor-side removal therefore remains an explicit fail-closed event.
-      - name: Require complete dependency snapshots
+      - name: Require complete snapshots and exact license-exception versions
         env:
           GH_TOKEN: ${{ github.token }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           response_headers="$(mktemp)"
-          trap 'rm -f "$response_headers"' EXIT
+          response_body="$(mktemp)"
+          trap 'rm -f "$response_headers" "$response_body"' EXIT
 
           gh api --include \
             -H 'Accept: application/vnd.github+json' \
@@ -76,3 +82,12 @@ jobs:
             --jq empty >"$response_headers"
 
           bash eng/verify-dependency-snapshot-headers.sh "$response_headers"
+
+          # Read every page rather than allowing an unreviewed version hidden
+          # after the first 100 changes. This is not another retry loop.
+          gh api --paginate --slurp \
+            -H 'Accept: application/vnd.github+json' \
+            "repos/${GITHUB_REPOSITORY}/dependency-graph/compare/${BASE_SHA}...${HEAD_SHA}?per_page=100" \
+            >"$response_body"
+
+          python3 eng/verify-dependency-license-exceptions.py "$response_body"

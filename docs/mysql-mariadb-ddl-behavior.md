@@ -144,9 +144,66 @@ path. A multi-command provider transition, such as a non-null backfill followed
 by column DDL, stays behind one decision and receives one final postcondition.
 The internal design-time-services guard instead returns Doka's explicit
 commandless consumed result. A data-reading classifier adds setup fragments for
-lazy state evaluation without adding EF command boundaries. This shape reduces
-executor dispatch while retaining independent SQL commands inside the
-provider-owned scope.
+lazy state evaluation without adding EF command boundaries.
+
+At runtime, owned prepared-SQL assignments include their immediately following
+`PREPARE`/`EXECUTE`/`DEALLOCATE` controls in the same final string allocation.
+The baseline assignment includes only `PREPARE`; its execution and postcondition
+remain in the separate guarded body. Semicolons and exact statement order are
+preserved, including dependent user-variable assignments. No completed large
+assignment string is copied to append controls.
+
+Adjacent short SafeMigrations-owned setup fragments are also grouped in
+their original order to reduce database transport exchanges. Each copied group is
+limited to 256 UTF-8 bytes and the largest previous individual setup/body
+payload, whichever is smaller. Large SQL fragments retain their original string
+references instead of being copied into a group. The original
+128-fragment and 1,048,576-character scope limits are checked before grouping;
+controls fused directly into assignments still count as original fragments.
+Grouping cannot admit a scope that the provider would otherwise reject. The
+concatenated script text is unchanged. Opaque provider setup remains an
+independent boundary, as do the guarded body and every cleanup command. Keeping
+cleanup independent lets later cleanup run even if an earlier cleanup fails.
+
+Grouping does not combine operations or cache live state. Every operation still
+evaluates its own identity, prerequisites, data safety, decision, and
+postcondition immediately around its body. Caller cancellation is forwarded,
+and cleanup retains its independent cancellation token. The configured command
+timeout applies to each fused or grouped setup command instead of each former fragment;
+it is not a separate timeout per SQL statement. Fusing controls can increase the
+largest individual assignment dispatch by its fixed ASCII control suffix, while
+the total SQL payload and original full-scope text limit remain unchanged. See
+[MySqlConnector command cancellation](https://mysqlconnector.net/overview/command-cancellation/).
+No server durability, storage-engine, or transaction setting is changed. Actual
+DDL can still incur the documented implicit commits.
+
+The scoped handler also retains at most one immutable decision-SQL assignment,
+keyed only by operation kind, conflict policy, and structural repair capability.
+Replacing that entry does not retain an operation, model, or catalog evidence.
+All identity, prerequisite, row-safety, repair-precondition, and postcondition
+queries remain freshly evaluated. Invalid planner inputs fail without replacing
+the last valid entry. The key and SQL are published together through
+[.NET volatile reference access](https://learn.microsoft.com/en-us/dotnet/api/system.threading.volatile?view=net-10.0);
+this does not enable concurrent use of a DbContext or migration generator.
+
+## Read-only catalog transport
+
+Read-only catalog analysis omits prerequisite transport only for the exact
+builder-certified constant `TRUE`. Nonconstant predicates, including database
+qualification, remain barriers before row-dependent queries. Independent
+diagnostic, narrowing-eligibility and already-qualified row-probe statements
+share bounded native batch transport; compatible wrappers retain sequential
+execution, timeout, cancellation, parameters and exact result validation.
+No runtime proof is reused across operations. This reduces network roundtrips
+on MariaDB; MySqlConnector does not guarantee the same wire benefit on MySQL.
+See [MySqlConnector batching](https://mysqlconnector.net/api/mysqlconnector/mysqlbatchtype/).
+
+Physical key-environment and unexpected-object reads also use this transport.
+Their complete 512-table or 512-value statements remain intact; batching does
+not reduce those metadata chunks to 32 values. Each transport retains the
+eight-statement, aggregate parameter and 4 MiB bounds, further limited to half
+the live `max_allowed_packet`. Every result belongs to its submitted statement;
+incomplete or misbound metadata fails rather than publishing a partial inventory.
 
 ## Model-managed data
 
@@ -234,6 +291,27 @@ into one bounded character-length scan. It uses `CHAR_LENGTH`, not byte
 `LENGTH`, returns only whether a violating row exists, and never returns a value
 or key. The successful proof can require a complete table scan. A normal B-tree
 index does not make that predicate a seek automatically.
+
+For an `EnsureColumn` nullable-to-required repair, runtime evaluates the NULL
+proof once after database, table, column and physical repair qualification.
+Classification and repair eligibility consume that same operation-local result
+and the same materialized physical repair invariant.
+A physically `NOT NULL` column, a missing column or an ineligible physical
+shape needs no NULL scan. The result is initialized for every operation and
+discarded by independent cleanup, including rejection, provider failure,
+timeout and cancellation. It is never reused after another operation or across
+analysis and runtime. Live analysis uses an inline conditional with the same
+physical-nullability and repair-invariant eligibility, without trusting session
+variables. Length and NULL blockers remain independent.
+The cache is not a schema lock; the deployment must still exclude out-of-band
+DDL while migration operations execute.
+
+A no-NULL result can still require a full scan of the eligible column. This
+optimization removes duplicate proof work; it does not cap examined rows,
+change durability settings or eliminate the storage engine's own DDL work.
+Generated proof tokens are expanded only outside quoted names and literals.
+Eligibility SQL retains shared source fragments until the final runtime
+assignment, avoiding an unused combined copy in analysis captures.
 
 The narrowing proof is repeated immediately before mutation. Strict conversion
 behavior plus the complete target postcondition remains authoritative if a

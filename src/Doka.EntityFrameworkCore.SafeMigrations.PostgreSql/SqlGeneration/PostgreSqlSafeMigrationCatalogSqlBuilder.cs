@@ -83,7 +83,23 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 "Unknown SafeMigrations intent type."),
         };
 
-        return plan with { PrerequisiteExpression = BuildPrerequisiteExpression(operation.Intent) };
+        return plan with { PrerequisiteExpression = BuildPrerequisiteExpression(operation) };
+    }
+
+    /// <summary>Builds only the operation's catalog prerequisite, preserving static unsupported precedence.</summary>
+    /// <param name="operation">The operation whose prerequisites are required.</param>
+    /// <returns>The prerequisite expression, or the certified TRUE constant when no catalog proof is needed.</returns>
+    public string BuildPrerequisiteExpression(
+        SafeMigrationOperation operation
+    )
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+
+        // WHY: An annotation-rejected operation must not acquire live catalog
+        // dependencies merely because only its prerequisite is being rendered.
+        return operation.GetAnnotations().Any()
+            ? "TRUE"
+            : BuildPrerequisiteExpression(operation.Intent);
     }
 
     public string BuildPrerequisiteExpression(
@@ -110,7 +126,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             EnsureIndexIntent value => TableAndColumnsExist(
                 value.Definition.Table,
                 value.Definition.Schema,
-                SafeMigrationPrerequisiteColumns.Local(value)),
+                IndexPrerequisiteColumns(value)),
             EnsurePrimaryKeyIntent value => TableAndColumnsExist(
                 value.Definition.Table,
                 value.Definition.Schema,
@@ -225,13 +241,13 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         }
     }
 
-    private static IEnumerable<SafeMigrationSqlExpression> IndexExpressions(
+    private IEnumerable<SafeMigrationSqlExpression> IndexExpressions(
         ExpectedIndexDefinition definition
     )
     {
         if (definition.Filter is not null)
         {
-            yield return SafeMigrationSql.Opaque(definition.Filter);
+            yield return GetStructuredIndexFilter(definition) ?? SafeMigrationSql.Opaque(definition.Filter);
         }
         else if (definition.StructuredFilter is not null)
         {

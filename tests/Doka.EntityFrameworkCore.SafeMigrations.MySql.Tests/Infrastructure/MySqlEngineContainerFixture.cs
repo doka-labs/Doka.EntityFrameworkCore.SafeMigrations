@@ -176,6 +176,19 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
         }
     }
 
+    /// <summary>
+    /// Builds a connection string for one database and login.
+    /// </summary>
+    /// <remarks>
+    /// WHY: Pooling stays off although every analysis opens its own connection. Each test
+    /// owns a distinct database, so the connector would keep one pool per test instead of
+    /// reusing sessions, and the retained pools exhaust the server's connection limit long
+    /// before the suite ends. A MySQL login is cheap enough to pay per open.
+    /// </remarks>
+    /// <param name="database">The target database.</param>
+    /// <param name="user">The login used by the caller.</param>
+    /// <param name="password">The login password.</param>
+    /// <returns>The composed connection string.</returns>
     private string BuildConnectionString(
         string database,
         string user,

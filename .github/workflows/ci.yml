@@ -5,6 +5,12 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      capture-sqlserver-baseline:
+        description: Retain measurement-only SQL Server baseline evidence on the qualification runner.
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -23,3 +29,4 @@ jobs:
       package-version: 0.0.0-ci.${{ github.run_id }}.${{ github.run_attempt }}
       artifact-name: safe-migrations-ci-${{ github.run_id }}-${{ github.run_attempt }}
       artifact-retention-days: 14
+      capture-sqlserver-baseline: ${{ github.event_name == 'workflow_dispatch' && inputs.capture-sqlserver-baseline }}

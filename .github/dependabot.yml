@@ -1,6 +1,6 @@
 version: 2
 updates:
-  # Central Package Management defines the shipped dependency ranges. The four
+  # Central Package Management defines the shipped dependency ranges. The five
   # publishable package lock files preserve their qualified compile graphs.
   # Test, benchmark, sample, and engineering projects intentionally restore from
   # the same central declarations without maintaining per-project lock files.

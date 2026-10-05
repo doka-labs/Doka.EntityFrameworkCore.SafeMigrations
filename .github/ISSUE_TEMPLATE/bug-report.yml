@@ -1,5 +1,5 @@
 name: Bug report
-description: Report reproducible SafeMigrations behavior on MySQL, MariaDB, PostgreSQL, or Core.
+description: Report reproducible SafeMigrations behavior on a supported provider or Core.
 title: "bug: "
 labels: [bug]
 body:
@@ -28,8 +28,8 @@ body:
     attributes:
       label: Exact package and runtime versions
       description: >-
-        List each SafeMigrations package, EF Core, Doka MySQL or Npgsql provider,
-        MySqlConnector or Npgsql driver, .NET SDK/runtime, OS, and architecture.
+        List each SafeMigrations package, EF Core, selected provider and driver,
+        native SQLite bundle when applicable, .NET SDK/runtime, OS, and architecture.
         For unpublished code, include the commit SHA. Remove private feed URLs.
       placeholder: Include resolved versions, not only version ranges from project files.
       render: text
@@ -44,6 +44,8 @@ body:
         - MySQL
         - MariaDB
         - PostgreSQL
+        - SQLite
+        - SQL Server
         - Provider-neutral Core (no database)
         - Not yet determined
     validations:

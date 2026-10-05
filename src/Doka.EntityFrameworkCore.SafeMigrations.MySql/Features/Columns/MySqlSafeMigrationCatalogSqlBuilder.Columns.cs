@@ -109,17 +109,31 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var dataBlocked = unsafeAdd
             ? $"EXISTS (SELECT 1 FROM {Delimited(intent.Table, intent.Schema)} LIMIT 1)"
             : "FALSE";
-        var hasNull = repairCapability == SafeMigrationRepairCapability.Safe
+        // WHY: Classification and repair need the same NULL proof. Runtime
+        // materializes it once after physical eligibility is established;
+        // columns that are already NOT NULL never need a row scan.
+        var nullabilityProbe = repairCapability == SafeMigrationRepairCapability.Safe
             && !intent.Definition.IsNullable
-                ? $"EXISTS (SELECT 1 FROM {Delimited(intent.Table, intent.Schema)} WHERE "
-                + $"{Delimited(intent.Definition.Name)} IS NULL LIMIT 1)"
-                : "FALSE";
+                ? new MySqlSafeMigrationNullabilityDataProbe(
+                    ColumnWithInvariantExists(intent.Table, intent.Definition.Name, "c.IS_NULLABLE = 'YES'"),
+                    repairInvariant,
+                    $"EXISTS (SELECT 1 FROM {Delimited(intent.Table, intent.Schema)} WHERE "
+                    + $"{Delimited(intent.Definition.Name)} IS NULL LIMIT 1)")
+                : null;
+
+        var hasNull = nullabilityProbe is not null
+            ? MySqlSafeMigrationRuntimePlan.NullabilityDataProbePlaceholder
+            : "FALSE";
+
+        var classificationRepairInvariant = nullabilityProbe is not null
+            ? MySqlSafeMigrationRuntimePlan.ColumnRepairInvariantPlaceholder
+            : repairInvariant;
 
         var dataTransitionBlocked = transition.DataBlockedExpression;
         var repairDataBlocked = $"({hasNull}) OR ({dataTransitionBlocked})";
 
         var repairPrecondition = repairCapability == SafeMigrationRepairCapability.Safe
-            ? $"({repairInvariant}) AND NOT ({repairDataBlocked}) "
+            ? $"({classificationRepairInvariant}) AND NOT ({repairDataBlocked}) "
                 + $"AND ({transition.ExecutionInvariantExpression})"
             : "FALSE";
 
@@ -128,7 +142,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             + $"WHEN NOT {columnExists} AND {dataBlocked} THEN 'data_blocked' "
             + $"WHEN NOT {columnExists} THEN 'missing' "
             + $"WHEN {matching} THEN 'matching' "
-            + $"WHEN ({repairInvariant}) AND ({repairDataBlocked}) THEN 'data_blocked' ELSE 'different' END",
+            + $"WHEN ({classificationRepairInvariant}) AND ({repairDataBlocked}) THEN 'data_blocked' ELSE 'different' END",
             matching,
             repairCapability,
             repairPrecondition) with
@@ -138,6 +152,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 : null,
             RepairOperationalImpact = transition.OperationalImpact,
             DataProbe = transition.DataProbe,
+            NullabilityDataProbe = nullabilityProbe,
             MayRequireNullabilityDataProof = repairCapability == SafeMigrationRepairCapability.Safe
                 && !intent.Definition.IsNullable,
             DiagnosticEvidenceExpression = includeAnalysisEvidence
@@ -298,6 +313,129 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         return $"EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS c "
             + $"WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = {Literal(table)} "
             + $"AND c.COLUMN_NAME = {Literal(definition.Name)} AND {string.Join(" AND ", conditions)})";
+    }
+
+    /// <summary>Verifies every expected column of a table definition through one catalog probe.</summary>
+    /// <remarks>
+    /// WHY: The per-column classifier repeated the same INFORMATION_SCHEMA.COLUMNS lookup once per
+    /// column, so a wide table produced one correlated lookup per column in a single statement.
+    /// This form reads the catalog once per table and counts how many columns at the expected
+    /// positions match, while every facet predicate stays verbatim and server-side.
+    ///
+    /// The expected set deliberately does not become a derived table joined against the catalog.
+    /// MariaDB cannot use the table name as an information_schema lookup value once it sits in a
+    /// join condition, so it opens every table definition in the schema for each such join. In a
+    /// paired run on MariaDB 11.8, analyzing 100 expected tables took 2,218 ms in that form against
+    /// 167 ms in this one, and 3,611 ms against 132 ms with 1,000 further tables in the schema,
+    /// while MySQL 8.4 stayed within one percent of itself either way. Counting matches keeps the
+    /// name a plain lookup value.
+    ///
+    /// Counting is equivalent to testing each expected column separately: ORDINAL_POSITION is
+    /// unique per table, so at most one row can satisfy each arm. A missing column, a mismatching
+    /// facet and a facet predicate that evaluates to NULL all leave the count short, the last one
+    /// because a WHERE clause keeps only rows whose predicate is true.
+    /// </remarks>
+    /// <param name="table">The table whose columns are verified.</param>
+    /// <param name="definition">The expected table definition.</param>
+    /// <param name="isMariaDb">Whether the connected engine is MariaDB.</param>
+    /// <returns>A predicate that is true when every expected column matches at its own position.</returns>
+    private string BuildAllColumnsMatch(
+        string table,
+        ExpectedTableDefinition definition,
+        bool isMariaDb
+    )
+    {
+        var facets = new List<(List<string> Conditions, CollationContract Collation)>(definition.Columns.Count);
+        foreach (var column in definition.Columns)
+        {
+            var conditions = new List<string>
+            {
+                $"c.COLUMN_NAME = {Literal(column.Name)}",
+                $"c.IS_NULLABLE = {(column.IsNullable ? "'YES'" : "'NO'")}",
+                $"COALESCE(c.COLUMN_COMMENT, '') = {Literal(column.Comment ?? string.Empty)}",
+            };
+
+            conditions.AddRange(BuildColumnStructuralConditions(table, column, isMariaDb, out var collation));
+            facets.Add((conditions, collation));
+        }
+
+        // WHY: A column that inherits the table default compares against an uncorrelated subquery
+        // over INFORMATION_SCHEMA.TABLES which is the same for every column, so repeating it per
+        // column made the catalog work grow with the column count. Carrying it once per table
+        // instead measured 353 ms against 906 ms on MySQL 8.4 and 131 ms against 172 ms on MariaDB
+        // 11.8, over 50 tables of 16 columns, as the best of three samples per arm. It may only
+        // leave the arms when no column expects a collation of its own, because the shared clause
+        // applies to every row the count sees.
+        var sharedCollation = facets.Count > 0
+            && facets.TrueForAll(static facet =>
+                facet.Collation.ExpectationKind == CollationExpectationKind.InheritedTableDefault)
+            ? facets[0].Collation.MatchExpression
+            : null;
+
+        var arms = new StringBuilder(definition.Columns.Count * 256);
+        for (var index = 0; index < facets.Count; index++)
+        {
+            var (conditions, collation) = facets[index];
+            if (sharedCollation is null)
+            {
+                conditions.Add(collation.MatchExpression);
+            }
+
+            arms.Append(" WHEN ").Append((index + 1).ToString(CultureInfo.InvariantCulture))
+                .Append(" THEN (").AppendJoin(" AND ", conditions).Append(')');
+        }
+
+        var columnCount = definition.Columns.Count.ToString(CultureInfo.InvariantCulture);
+
+        // WHY: The ordinal bound is implied by the arms, which yield NULL beyond the expected
+        // count, but it lets the engine drop surplus columns before evaluating any facet.
+        return "(SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS c WHERE c.TABLE_SCHEMA = DATABASE() "
+            + $"AND c.TABLE_NAME = {Literal(table)} AND c.ORDINAL_POSITION <= {columnCount} "
+            + (sharedCollation is null ? string.Empty : $"AND {sharedCollation} ")
+            + $"AND (CASE c.ORDINAL_POSITION{arms} END)) = {columnCount}";
+    }
+
+    /// <summary>Builds the column facets whose SQL shape depends on the expected column itself.</summary>
+    /// <param name="table">The owning table.</param>
+    /// <param name="definition">The expected column.</param>
+    /// <param name="isMariaDb">Whether the connected engine is MariaDB.</param>
+    /// <param name="collation">The collation contract, returned apart so the caller can share it.</param>
+    /// <returns>The structural predicates for that column, without the collation contract.</returns>
+    private List<string> BuildColumnStructuralConditions(
+        string table,
+        ExpectedColumnDefinition definition,
+        bool isMariaDb,
+        out CollationContract collation
+    )
+    {
+        var mapping = _typeMappingSource.FindMapping(
+                definition.ClrType,
+                definition.StoreType,
+                keyOrIndex: false,
+                definition.IsUnicode,
+                definition.MaxLength,
+                definition.IsRowVersion,
+                definition.IsFixedLength,
+                definition.Precision,
+                definition.Scale)
+            ?? throw new InvalidOperationException(
+                $"No MySQL type mapping exists for '{definition.ClrType.FullName}'.");
+
+        var storeType = definition.StoreType ?? mapping.StoreType;
+        var temporalRowVersion = IsTemporalRowVersion(definition);
+        var mariaDbJsonAlias = isMariaDb
+            && StringComparer.OrdinalIgnoreCase.Equals(storeType.Trim(), "json");
+
+        collation = BuildCollationContract(table, definition.Collation, mariaDbJsonAlias);
+
+        return
+        [
+            BuildStoreTypeMatches(storeType, isMariaDb),
+            BuildComputedMatches(definition, isMariaDb),
+            BuildValueGenerationMatches(definition, temporalRowVersion),
+            BuildDefaultMatches(
+                "c.COLUMN_DEFAULT", definition.DefaultValue, definition.IsNullable, mapping, temporalRowVersion),
+        ];
     }
 
     private string BuildColumnRepairInvariantMatches(
@@ -1125,15 +1263,36 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             .Trim()
             .ToLowerInvariant();
 
-        var parts = normalized.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        var integerType = parts[0] is "tinyint" or "smallint" or "mediumint" or "int" or "integer" or "bigint";
-        if (!integerType)
+        var type = normalized.AsSpan();
+        var separator = type.IndexOf(' ');
+        var name = separator < 0 ? type : type[..separator];
+        var canonicalType = name switch
+        {
+            "tinyint" => "tinyint",
+            "smallint" => "smallint",
+            "mediumint" => "mediumint",
+            "int" or "integer" => "int",
+            "bigint" => "bigint",
+            _ => null,
+        };
+
+        if (canonicalType is null)
         {
             return $"LOWER(c.COLUMN_TYPE) = {Literal(normalized)}";
         }
 
-        var canonicalType = parts[0] == "integer" ? "int" : parts[0];
-        var expectedUnsigned = parts.Contains("unsigned", StringComparer.Ordinal);
+        // WHY: MariaDB display widths are ignored for integer families, but the
+        // literal-space modifier grammar and unsigned semantics must remain exact.
+        var expectedUnsigned = false;
+        foreach (var range in type.Split(' '))
+        {
+            if (type[range].SequenceEqual("unsigned"))
+            {
+                expectedUnsigned = true;
+                break;
+            }
+        }
+
         var expected = expectedUnsigned ? $"{canonicalType} unsigned" : canonicalType;
 
         return $"CONCAT(LOWER(c.DATA_TYPE), "

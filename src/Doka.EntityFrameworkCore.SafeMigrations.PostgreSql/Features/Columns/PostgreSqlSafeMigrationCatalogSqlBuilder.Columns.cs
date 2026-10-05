@@ -64,24 +64,39 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             ? $"EXISTS (SELECT 1 FROM {Qualified(intent.Table, intent.Schema)} LIMIT 1)"
             : "FALSE";
 
-        var hasNull = repairCapability == SafeMigrationRepairCapability.Safe
+        var nullabilityDataProbe = repairCapability == SafeMigrationRepairCapability.Safe
             && !intent.Definition.IsNullable
-                ? $"EXISTS (SELECT 1 FROM {Qualified(intent.Table, intent.Schema)} WHERE "
-                + $"{_sqlGenerationHelper.DelimitIdentifier(intent.Definition.Name)} IS NULL LIMIT 1)"
-                : "FALSE";
+                ? new PostgreSqlSafeMigrationNullabilityDataProbe(
+                    ColumnNotNullProof(intent.Table, intent.Schema, intent.Definition.Name),
+                    repairInvariant,
+                    $"EXISTS (SELECT 1 FROM {Qualified(intent.Table, intent.Schema)} WHERE "
+                        + $"{_sqlGenerationHelper.DelimitIdentifier(intent.Definition.Name)} IS NULL LIMIT 1)",
+                    Qualified(intent.Table, intent.Schema))
+                : null;
+
+        var hasNull = nullabilityDataProbe is null
+            ? "FALSE"
+            : PostgreSqlSafeMigrationRuntimePlan.NullabilityDataProbePlaceholder;
+
+        // WHY: Runtime state, repair, and NULL gates share one fresh physical
+        // predicate per evaluation instead of copying its catalog SQL.
+        var repairInvariantExpression = nullabilityDataProbe is null
+            ? repairInvariant
+            : PostgreSqlSafeMigrationRuntimePlan.NullabilityRepairInvariantPlaceholder;
 
         var dataTransitionBlocked = transition.DataBlockedExpression;
         var repairDataBlocked = $"({hasNull}) OR ({dataTransitionBlocked})";
 
         var repairPrecondition = repairCapability == SafeMigrationRepairCapability.Safe
-            ? $"({repairInvariant}) AND NOT ({repairDataBlocked})"
+            ? $"({repairInvariantExpression}) AND NOT ({repairDataBlocked})"
             : "FALSE";
 
         var plan = Plan(
             $"CASE WHEN NOT {table} THEN 'prerequisite_missing' "
             + $"WHEN NOT {exists} AND {dataBlocked} THEN 'data_blocked' "
-            + $"WHEN NOT {exists} THEN 'missing' WHEN {matching} THEN 'matching' "
-            + $"WHEN ({repairInvariant}) AND ({repairDataBlocked}) THEN 'data_blocked' ELSE 'different' END",
+            + $"WHEN NOT {exists} THEN 'missing' "
+            + $"WHEN ({repairInvariantExpression}) AND ({repairDataBlocked}) THEN 'data_blocked' "
+            + $"WHEN {matching} THEN 'matching' ELSE 'different' END",
             matching,
             repairCapability,
             repairPrecondition) with
@@ -91,6 +106,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 : null,
             RepairOperationalImpact = transition.OperationalImpact,
             DataProbe = transition.DataProbe,
+            NullabilityDataProbe = nullabilityDataProbe,
             MayRequireNullabilityDataProof = repairCapability == SafeMigrationRepairCapability.Safe
                 && !intent.Definition.IsNullable,
             DiagnosticEvidenceExpression = includeAnalysisEvidence
@@ -159,21 +175,36 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             ? ColumnMatches(intent.Table, intent.Schema, intent.OldDefinition!)
             : "FALSE";
 
-        var nullBlocked =
+        var nullabilityDataProbe =
             repair == SafeMigrationRepairCapability.Safe
             && intent.OldDefinition!.IsNullable
             && !intent.Definition.IsNullable
-                ? $"({repairPrecondition}) AND EXISTS (SELECT 1 FROM {Qualified(intent.Table, intent.Schema)} WHERE "
-                + $"{_sqlGenerationHelper.DelimitIdentifier(intent.Definition.Name)} IS NULL LIMIT 1)"
-                : "FALSE";
+                ? new PostgreSqlSafeMigrationNullabilityDataProbe(
+                    ColumnNotNullProof(intent.Table, intent.Schema, intent.Definition.Name),
+                    repairPrecondition,
+                    $"EXISTS (SELECT 1 FROM {Qualified(intent.Table, intent.Schema)} WHERE "
+                        + $"{_sqlGenerationHelper.DelimitIdentifier(intent.Definition.Name)} IS NULL LIMIT 1)",
+                    Qualified(intent.Table, intent.Schema))
+                : null;
+
+        var nullBlocked = nullabilityDataProbe is null
+            ? "FALSE"
+            : PostgreSqlSafeMigrationRuntimePlan.NullabilityDataProbePlaceholder;
+
+        var repairInvariantExpression = nullabilityDataProbe is null
+            ? repairPrecondition
+            : PostgreSqlSafeMigrationRuntimePlan.NullabilityRepairInvariantPlaceholder;
 
         return Plan(
-            $"CASE WHEN NOT {exists} THEN 'different' WHEN {matching} THEN 'matching' "
-            + $"WHEN {nullBlocked} THEN 'data_blocked' ELSE 'different' END",
+            $"CASE WHEN NOT {exists} THEN 'different' WHEN {nullBlocked} THEN 'data_blocked' "
+            + $"WHEN {matching} THEN 'matching' ELSE 'different' END",
             matching,
             repair,
-            repairPrecondition) with
+            $"({repairInvariantExpression}) AND NOT ({nullBlocked})") with
         {
+            NullabilityDataProbe = nullabilityDataProbe,
+            StateEvaluationGuardExpression = exists,
+            StateEvaluationGuardFailureExpression = "'different'",
             MayRequireNullabilityDataProof = repair == SafeMigrationRepairCapability.Safe
                 && intent.OldDefinition!.IsNullable
                 && !intent.Definition.IsNullable,
@@ -188,39 +219,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         bool includeRepairableFacets = true
     )
     {
-        var mapping = _typeMappingSource.FindMapping(
-                definition.ClrType,
-                definition.StoreType,
-                keyOrIndex: false,
-                unicode: definition.IsUnicode,
-                size: definition.MaxLength,
-                rowVersion: definition.IsRowVersion,
-                fixedLength: definition.IsFixedLength,
-                precision: definition.Precision,
-                scale: definition.Scale)
-            ?? throw new InvalidOperationException(
-                $"No PostgreSQL type mapping exists for '{definition.ClrType.FullName}'.");
-
-        var storeType = definition.StoreType ?? mapping.StoreType;
-        var conditions = new List<string>
-        {
-            $"pg_catalog.format_type(a.atttypid, a.atttypmod) = {Literal(storeType)}",
-            CollationMatches(definition),
-        };
-
-        if (includeRepairableFacets)
-        {
-            conditions.Add($"a.attnotnull = {(!definition.IsNullable).ToString().ToUpperInvariant()}");
-            conditions.Add(
-                $"pg_catalog.col_description(c.oid, a.attnum) IS NOT DISTINCT FROM "
-                + (definition.Comment is null ? "NULL" : Literal(definition.Comment)));
-            conditions.Add(DefaultAndGenerationMatches(definition, mapping));
-        }
-        else
-        {
-            conditions.Add(GenerationMatches(definition));
-        }
-
+        var conditions = ColumnFacetConditions(definition, includeRepairableFacets);
         if (ordinal is not null)
         {
             conditions.Add($"a.attnum = {ordinal.Value.ToString(CultureInfo.InvariantCulture)}");
@@ -236,11 +235,201 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             + $"AND {string.Join(" AND ", conditions)})";
     }
 
+    /// <summary>Builds the facet predicates one expected column requires of the catalog row.</summary>
+    /// <remarks>
+    /// The predicates reference the outer aliases <c>a</c>, <c>c</c>, <c>t</c> and <c>d</c>, so the
+    /// caller owns the catalog join. Both the single-column classifier and the set-oriented
+    /// table-definition classifier consume this list, which keeps one definition of column equality.
+    /// </remarks>
+    /// <param name="definition">The expected column.</param>
+    /// <param name="includeRepairableFacets">Whether nullability, comment and default facets apply.</param>
+    /// <returns>The predicates, combined by the caller with <c>AND</c>.</returns>
+    private List<string> ColumnFacetConditions(
+        ExpectedColumnDefinition definition,
+        bool includeRepairableFacets
+    )
+    {
+        var mapping = ColumnMapping(definition);
+        var conditions = new List<string>
+        {
+            $"pg_catalog.format_type(a.atttypid, a.atttypmod) = {Literal(ColumnStoreType(definition, mapping))}",
+        };
+
+        if (includeRepairableFacets)
+        {
+            conditions.Add(ColumnNullabilityMatches(definition));
+            conditions.Add(
+                $"pg_catalog.col_description(c.oid, a.attnum) IS NOT DISTINCT FROM "
+                + (definition.Comment is null ? "NULL" : Literal(definition.Comment)));
+        }
+
+        conditions.AddRange(ColumnStructuralFacetConditions(definition, mapping, includeRepairableFacets));
+
+        return conditions;
+    }
+
+    /// <summary>Resolves the store type one expected column requires of the catalog row.</summary>
+    /// <param name="definition">The expected column.</param>
+    /// <param name="mapping">The already resolved type mapping for that column.</param>
+    /// <returns>The expected store type as the catalog renders it.</returns>
+    private static string ColumnStoreType(
+        ExpectedColumnDefinition definition,
+        RelationalTypeMapping mapping
+    ) => definition.StoreType ?? mapping.StoreType;
+
+    private RelationalTypeMapping ColumnMapping(
+        ExpectedColumnDefinition definition
+    ) => _typeMappingSource.FindMapping(
+            definition.ClrType,
+            definition.StoreType,
+            keyOrIndex: false,
+            unicode: definition.IsUnicode,
+            size: definition.MaxLength,
+            rowVersion: definition.IsRowVersion,
+            fixedLength: definition.IsFixedLength,
+            precision: definition.Precision,
+            scale: definition.Scale)
+        ?? throw new InvalidOperationException(
+            $"No PostgreSQL type mapping exists for '{definition.ClrType.FullName}'.");
+
+    /// <summary>Builds the column facets whose SQL shape depends on the expected column itself.</summary>
+    /// <remarks>
+    /// Collation and default or generation comparisons render differently per column, so they
+    /// cannot be carried as values and stay per-column in the set-oriented form. The remaining
+    /// facets are plain values and are compared against the expected row instead.
+    /// </remarks>
+    /// <param name="definition">The expected column.</param>
+    /// <param name="mapping">The already resolved type mapping for that column.</param>
+    /// <param name="includeRepairableFacets">Whether the default and generation facet applies.</param>
+    /// <returns>The structural predicates for that column.</returns>
+    private List<string> ColumnStructuralFacetConditions(
+        ExpectedColumnDefinition definition,
+        RelationalTypeMapping mapping,
+        bool includeRepairableFacets
+    ) =>
+    [
+        CollationMatches(definition),
+        includeRepairableFacets
+            ? DefaultAndGenerationMatches(definition, mapping)
+            : GenerationMatches(definition),
+    ];
+
+    /// <summary>Verifies every expected column of a table definition through one catalog join.</summary>
+    /// <remarks>
+    /// WHY: The per-column classifier repeats the same five-way catalog join once per column, so a
+    /// wide table produced dozens of identical joins in one statement and the optimizer planned all
+    /// of them. Driving the expected columns as a VALUES list joins the catalog once and keeps every
+    /// facet predicate server-side and unchanged, which preserves the collation authority the
+    /// catalog comparison relies on.
+    /// </remarks>
+    /// <param name="definition">The expected table definition whose columns are verified.</param>
+    /// <returns>A predicate that is true when every expected column matches at its own position.</returns>
+    private string AllColumnsMatch(
+        ExpectedTableDefinition definition
+    )
+    {
+        // WHY: Composing every row and arm as its own string and joining them copied the same
+        // bytes repeatedly. Appending into one pre-sized buffer keeps those fragments off the heap.
+        // WHY: StringBuilder grows by linking chunks instead of copying, so a modest estimate
+        // costs nothing when it is exceeded while an inflated one allocates the slack up front.
+        var sql = new StringBuilder(512 + (definition.Columns.Count * 256));
+        sql.Append("NOT EXISTS (SELECT 1 FROM pg_catalog.pg_class c ")
+            .Append("JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace ")
+            .Append("CROSS JOIN (VALUES ");
+
+        for (var index = 0; index < definition.Columns.Count; index++)
+        {
+            var column = definition.Columns[index];
+            if (index != 0)
+            {
+                sql.Append(", ");
+            }
+
+            // WHY: The expected name is cast to the catalog's own name type so the comparison
+            // resolves exactly as the single-column classifier's unknown-typed literal does.
+            // Store type, comment and nullability are plain values and travel with the row, so
+            // their predicates appear once instead of once per column.
+            sql.Append('(').Append(index + 1)
+                .Append(", CAST(").Append(Literal(column.Name)).Append(" AS pg_catalog.name), CAST(")
+                .Append(Literal(ColumnStoreType(column, ColumnMapping(column)))).Append(" AS text), CAST(")
+                .Append(column.Comment is null ? "NULL" : Literal(column.Comment)).Append(" AS text), CAST(")
+                .Append(column.IsNullable ? "TRUE" : "FALSE").Append(" AS boolean))");
+        }
+
+        sql.Append(") AS expected(attnum, attname, store_type, comment, is_nullable) ")
+            .Append("LEFT JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid ")
+            .Append("AND a.attname = expected.attname AND a.attnum > 0 AND NOT a.attisdropped ")
+            .Append("LEFT JOIN pg_catalog.pg_type t ON t.oid = a.atttypid ")
+            .Append("LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = c.oid AND d.adnum = a.attnum ")
+            .Append("WHERE n.nspname = ").Append(SchemaExpression(definition.Schema))
+            .Append(" AND c.relname = ").Append(Literal(definition.Table))
+            .Append(" AND (a.attnum IS NULL OR a.attnum <> expected.attnum")
+
+            // WHY: A facet predicate can evaluate to NULL. The per-column form returned no row and
+            // therefore reported a mismatch, so the absent-or-unequal test must coalesce to FALSE
+            // to keep that verdict instead of silently accepting the column.
+            .Append(" OR NOT COALESCE(pg_catalog.format_type(a.atttypid, a.atttypmod) = expected.store_type")
+            .Append(" AND pg_catalog.col_description(c.oid, a.attnum) IS NOT DISTINCT FROM expected.comment")
+            .Append(" AND CASE WHEN expected.is_nullable THEN NOT a.attnotnull ELSE ")
+            .Append(ValidatedNotNullContract())
+            .Append(" END, FALSE)")
+            .Append(" OR NOT COALESCE(CASE expected.attnum");
+
+        for (var index = 0; index < definition.Columns.Count; index++)
+        {
+            var column = definition.Columns[index];
+            var structural = ColumnStructuralFacetConditions(column, ColumnMapping(column), true);
+            sql.Append(" WHEN ").Append(index + 1).Append(" THEN (");
+            for (var facet = 0; facet < structural.Count; facet++)
+            {
+                if (facet != 0)
+                {
+                    sql.Append(" AND ");
+                }
+
+                sql.Append(structural[facet]);
+            }
+
+            sql.Append(')');
+        }
+
+        sql.Append(" END, FALSE)))");
+
+        return sql.ToString();
+    }
+
     private string ColumnRepairInvariantMatches(
         string table,
         string? schema,
         ExpectedColumnDefinition definition
     ) => ColumnMatches(table, schema, definition, includeRepairableFacets: false);
+
+    /// <summary>Builds a fresh catalog proof that covers the complete row-query relation.</summary>
+    private string ColumnNotNullProof(
+        string table,
+        string? schema,
+        string column
+    ) => "EXISTS (SELECT 1 FROM pg_catalog.pg_attribute a "
+        + "JOIN pg_catalog.pg_class c ON c.oid = a.attrelid "
+        + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
+        + $"WHERE n.nspname = {SchemaExpression(schema)} AND c.relname = {Literal(table)} "
+        + $"AND a.attname = {Literal(column)} AND a.attnum > 0 AND NOT a.attisdropped "
+        + $"AND NOT c.relhassubclass AND ({ValidatedNotNullContract()}))";
+
+    /// <summary>Checks the declared nullability without treating an unvalidated constraint as matching.</summary>
+    private static string ColumnNullabilityMatches(
+        ExpectedColumnDefinition definition
+    ) => definition.IsNullable ? "NOT a.attnotnull" : ValidatedNotNullContract();
+
+    // WHY: PostgreSQL 18 allows attnotnull with an unvalidated constraint.
+    // JSON field access keeps conenforced safe to parse on PostgreSQL 14-17.
+    /// <summary>Checks the enforced and validated local NOT NULL contract on every supported catalog version.</summary>
+    private static string ValidatedNotNullContract() => "a.attnotnull AND ("
+        + "pg_catalog.current_setting('server_version_num')::integer < 180000 "
+        + "OR EXISTS (SELECT 1 FROM pg_catalog.pg_constraint not_null_constraint "
+        + "WHERE not_null_constraint.conrelid = c.oid AND not_null_constraint.contype = 'n' "
+        + "AND not_null_constraint.conkey = ARRAY[a.attnum] AND not_null_constraint.convalidated "
+        + "AND COALESCE((pg_catalog.to_jsonb(not_null_constraint)->>'conenforced')::boolean, FALSE)))";
 
     private string BuildColumnDiagnosticEvidence(
         string table,
@@ -273,10 +462,11 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 Literal(storeType),
                 "LEFT(pg_catalog.format_type(a.atttypid, a.atttypmod), 256)"),
             DiagnosticRecord(
-                $"a.attnotnull <> {(!definition.IsNullable).ToString().ToUpperInvariant()}",
+                $"NOT ({ColumnNullabilityMatches(definition)})",
                 "column_nullability",
                 definition.IsNullable ? "'nullable'" : "'not_nullable'",
-                "CASE WHEN a.attnotnull THEN 'not_nullable' ELSE 'nullable' END"),
+                $"CASE WHEN {ValidatedNotNullContract()} THEN 'not_nullable' "
+                    + "WHEN a.attnotnull THEN 'not_nullable_unvalidated_or_unenforced' ELSE 'nullable' END"),
             DiagnosticRecord(
                 $"NOT ({CollationMatches(definition)})",
                 "column_collation",

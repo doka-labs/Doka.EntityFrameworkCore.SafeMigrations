@@ -116,9 +116,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             + $"= {Literal(definition.Comment ?? string.Empty)}",
         };
 
-        for (var ordinal = 0; ordinal < definition.Columns.Count; ordinal++)
+        if (definition.Columns.Count > 0)
         {
-            conditions.Add(BuildColumnMatches(definition.Table, definition.Columns[ordinal], isMariaDb, ordinal + 1));
+            conditions.Add(BuildAllColumnsMatch(definition.Table, definition, isMariaDb));
         }
 
         conditions.Add(BuildPrimaryKeyTransitionMatches(definition, expectedTableConstraints));

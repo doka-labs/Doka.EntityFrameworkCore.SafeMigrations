@@ -79,7 +79,8 @@ creating an intermediate array, DTO graph, or mutable report copy.
 - Reject zero, undefined selections, and inconsistent blocked reports before
   writing output.
 - Validate serialized views against the packaged closed JSON Schema.
-- Gate 50,000-assessment blocker selection with duration and allocation budgets.
+- Record 50,000-assessment blocker selection against informational duration
+  and allocation budgets; retain complete measurements and comparison verdicts.
 - Run public API, package-content, documentation, and existing report-v2 tests.
 
 ## Pros and Cons of the Options

@@ -1236,17 +1236,34 @@ internal sealed class SafeMigrationCSharpMigrationOperationGenerator : CSharpMig
             source = AppendIndexPrefixLengths(source, projection.PrefixLengths);
         }
 
+        if (projection.IncludedColumns is not null)
+        {
+            if (projection.PrefixLengths is not null)
+            {
+                throw new InvalidOperationException(
+                    "A provider cannot project both index prefixes and included columns into one generated operation.");
+            }
+
+            source = AppendIndexIncludedColumns(source, projection.IncludedColumns);
+        }
+
+        var replacement = operation.Columns.Length == 1
+            ? projection.IncludedColumns is not null
+                ? ".CreateIndexWithIncludesIfNotExistsFromModel("
+                : projection.PrefixLengths is null
+                    ? ".CreateIndexIfNotExistsFromModel("
+                    : ".CreateIndexWithPrefixesIfNotExistsFromModel("
+            : projection.IncludedColumns is not null
+                ? ".CreateCompositeIndexWithIncludesIfNotExistsFromModel("
+                : projection.PrefixLengths is null
+                    ? ".CreateCompositeIndexIfNotExistsFromModel("
+                    : ".CreateCompositeIndexWithPrefixesIfNotExistsFromModel(";
+
         AppendReplaced(
             builder,
             source,
             ".CreateIndex(",
-            operation.Columns.Length == 1
-                ? projection.PrefixLengths is null
-                    ? ".CreateIndexIfNotExistsFromModel("
-                    : ".CreateIndexWithPrefixesIfNotExistsFromModel("
-                : projection.PrefixLengths is null
-                    ? ".CreateCompositeIndexIfNotExistsFromModel("
-                    : ".CreateCompositeIndexWithPrefixesIfNotExistsFromModel(");
+            replacement);
     }
 
     private static string AppendIndexPrefixLengths(
@@ -1276,6 +1293,35 @@ internal sealed class SafeMigrationCSharpMigrationOperationGenerator : CSharpMig
         return source.Insert(
             closeParenthesis,
             string.Concat(",", newline, argumentIndent, "prefixLengths: [", prefixValues, "]"));
+    }
+
+    private string AppendIndexIncludedColumns(
+        string source,
+        IReadOnlyList<string> includedColumns
+    )
+    {
+        const string method = ".CreateIndex(";
+
+        var methodIndex = source.IndexOf(method, StringComparison.Ordinal);
+        if (methodIndex < 0
+            || source.IndexOf(method, methodIndex + method.Length, StringComparison.Ordinal) >= 0)
+        {
+            throw new InvalidOperationException(
+                "The EF Core C# operation generator emitted an unexpected CreateIndex shape. "
+                + "SafeMigrations stopped instead of projecting ambiguous index metadata.");
+        }
+
+        var openParenthesis = methodIndex + method.Length - 1;
+        var closeParenthesis = FindMatchingParenthesis(source, openParenthesis);
+        var argumentIndent = FindArgumentIndent(source, openParenthesis, closeParenthesis);
+        var newline = SafeMigrationGeneratedSource.GetConsistentNewLine(source);
+        var columns = string.Join(
+            ", ",
+            includedColumns.Select(column => Dependencies.CSharpHelper.Literal(column)));
+
+        return source.Insert(
+            closeParenthesis,
+            string.Concat(",", newline, argumentIndent, "includedColumns: [", columns, "]"));
     }
 
     private void GenerateCapturedColumnOperation(

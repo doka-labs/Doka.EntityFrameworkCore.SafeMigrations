@@ -19,6 +19,34 @@ public static class SafeMigrationDecisionPlanner
         SafeMigrationRepairCapability repairCapability = SafeMigrationRepairCapability.None
     )
     {
+        var decision = PlanValue(operationKind, observedState, policy, repairCapability);
+
+        return new SafeMigrationDecision(decision.Action, decision.Code);
+    }
+
+    /// <summary>Selects the canonical action without allocating an unused public decision result.</summary>
+    /// <param name="operationKind">The SafeMigrations operation family.</param>
+    /// <param name="observedState">The provider-classified live state.</param>
+    /// <param name="policy">The conflict policy for the operation.</param>
+    /// <param name="repairCapability">The provider-proven repair capability.</param>
+    /// <returns>The same action and validation contract as <see cref="Plan"/>.</returns>
+    internal static SafeMigrationAction PlanAction(
+        SafeMigrationOperationKind operationKind,
+        SafeMigrationObservedState observedState,
+        SafeMigrationPolicy policy,
+        SafeMigrationRepairCapability repairCapability = SafeMigrationRepairCapability.None
+    ) => PlanValue(operationKind, observedState, policy, repairCapability).Action;
+
+    // WHY: SQL renderers consume only the action. Both entry points share one
+    // value table, so avoiding their short-lived result objects cannot diverge
+    // from public decision codes or retain any operation or live evidence.
+    private static (SafeMigrationAction Action, string Code) PlanValue(
+        SafeMigrationOperationKind operationKind,
+        SafeMigrationObservedState observedState,
+        SafeMigrationPolicy policy,
+        SafeMigrationRepairCapability repairCapability
+    )
+    {
         var operationFamily = ClassifyOperation(operationKind);
 
         Validate(operationKind, observedState, policy, repairCapability);
@@ -38,7 +66,7 @@ public static class SafeMigrationDecisionPlanner
         };
     }
 
-    private static SafeMigrationDecision PlanMissing(
+    private static (SafeMigrationAction Action, string Code) PlanMissing(
         OperationFamily operationFamily
     ) => operationFamily switch
     {
@@ -54,7 +82,7 @@ public static class SafeMigrationDecisionPlanner
         _ => throw new UnreachableException(),
     };
 
-    private static SafeMigrationDecision PlanMatching(
+    private static (SafeMigrationAction Action, string Code) PlanMatching(
         OperationFamily operationFamily
     ) => operationFamily switch
     {
@@ -68,7 +96,7 @@ public static class SafeMigrationDecisionPlanner
         _ => throw new UnreachableException(),
     };
 
-    private static SafeMigrationDecision PlanDifferent(
+    private static (SafeMigrationAction Action, string Code) PlanDifferent(
         OperationFamily operationFamily,
         SafeMigrationPolicy policy,
         SafeMigrationRepairCapability repairCapability
@@ -90,7 +118,7 @@ public static class SafeMigrationDecisionPlanner
         _ => throw new UnreachableException(),
     };
 
-    private static SafeMigrationDecision PlanDifferentEnsure(
+    private static (SafeMigrationAction Action, string Code) PlanDifferentEnsure(
         SafeMigrationPolicy policy,
         SafeMigrationRepairCapability repairCapability
     ) => policy switch
@@ -104,7 +132,7 @@ public static class SafeMigrationDecisionPlanner
         _ => throw new UnreachableException(),
     };
 
-    private static SafeMigrationDecision PlanTransitionReady(
+    private static (SafeMigrationAction Action, string Code) PlanTransitionReady(
         OperationFamily operationFamily
     ) => operationFamily is OperationFamily.ModelManagedUpdate or OperationFamily.ModelManagedDelete
         ? Decision(SafeMigrationAction.Apply, "transition_ready_apply")
@@ -140,10 +168,10 @@ public static class SafeMigrationDecisionPlanner
         _ => throw new ArgumentOutOfRangeException(nameof(operationKind)),
     };
 
-    private static SafeMigrationDecision Decision(
+    private static (SafeMigrationAction Action, string Code) Decision(
         SafeMigrationAction action,
         string code
-    ) => new(action, code);
+    ) => (action, code);
 
     private static void Validate(
         SafeMigrationOperationKind operationKind,

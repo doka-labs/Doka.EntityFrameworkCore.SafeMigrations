@@ -1,5 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Benchmarks;
 
+/// <summary>
+/// Captures complete benchmark evidence with an optional informational budget verdict.
+/// </summary>
 internal sealed class BenchmarkRunner
 {
     private const int SampleCount = 5;
@@ -9,15 +12,28 @@ internal sealed class BenchmarkRunner
     private readonly string _outputPath;
     private readonly List<BenchmarkResult> _results = [];
 
-    private BenchmarkRunner(
+    /// <summary>
+    /// Gets whether completed budget overruns are informational instead of process failures.
+    /// </summary>
+    internal bool ReportOnly { get; }
+
+    /// <summary>
+    /// Creates a runner over known budgets and an owned output path.
+    /// </summary>
+    internal BenchmarkRunner(
         IReadOnlyDictionary<string, BenchmarkBudget> budgets,
-        string outputPath
+        string outputPath,
+        bool reportOnly
     )
     {
         _budgets = budgets;
         _outputPath = outputPath;
+        ReportOnly = reportOnly;
     }
 
+    /// <summary>
+    /// Reads the selected budget set and accepts an optional output path and report-only mode.
+    /// </summary>
     public static BenchmarkRunner Create(
         string[] arguments,
         string defaultOutputFileName,
@@ -26,11 +42,14 @@ internal sealed class BenchmarkRunner
     {
         var repositoryRoot = FindRepositoryRoot(AppContext.BaseDirectory);
         var budgetPath = Path.Combine(repositoryRoot, "eng", "performance-budgets.json");
-        var outputPath = ReadOutputPath(arguments, repositoryRoot, defaultOutputFileName);
+        var (outputPath, reportOnly) = ReadOptions(arguments, repositoryRoot, defaultOutputFileName);
 
-        return new BenchmarkRunner(ReadBudgets(budgetPath, benchmarkSet), outputPath);
+        return new BenchmarkRunner(ReadBudgets(budgetPath, benchmarkSet), outputPath, reportOnly);
     }
 
+    /// <summary>
+    /// Measures one known workload without suppressing configuration or execution errors.
+    /// </summary>
     public void Measure(
         string name,
         Func<int> action
@@ -82,6 +101,9 @@ internal sealed class BenchmarkRunner
                 duration <= maximumDuration && allocated <= budget.MaximumAllocatedBytes));
     }
 
+    /// <summary>
+    /// Writes all measurements and returns a budget failure only when strict evaluation was requested.
+    /// </summary>
     public int Complete()
     {
         var unmeasuredBudgets = _budgets.Keys
@@ -98,17 +120,26 @@ internal sealed class BenchmarkRunner
 
         foreach (var result in _results)
         {
+            var verdict = result.Passed
+                ? "PASS"
+                : ReportOnly ? "EXCEEDED (informational)" : "FAIL";
+
             Console.WriteLine(
                 string.Create(
                     CultureInfo.InvariantCulture,
                     $"{result.Name}: {result.DurationMilliseconds:F3} ms, "
-                    + $"{result.AllocatedBytes} bytes, {(result.Passed ? "PASS" : "FAIL")}"));
+                    + $"{result.AllocatedBytes} bytes, {verdict}"));
         }
 
-        return _results.All(static result => result.Passed) ? 0 : 1;
+        // Shared CI hardware cannot provide a stable budget verdict. Only a complete,
+        // successfully written report is informational; execution errors still propagate.
+        return ReportOnly || _results.All(static result => result.Passed) ? 0 : 1;
     }
 
-    private static Dictionary<string, BenchmarkBudget> ReadBudgets(
+    /// <summary>
+    /// Validates the complete budget document before selecting a benchmark set.
+    /// </summary>
+    internal static Dictionary<string, BenchmarkBudget> ReadBudgets(
         string path,
         string benchmarkSet
     )
@@ -127,19 +158,23 @@ internal sealed class BenchmarkRunner
                      .EnumerateObject())
         {
             var value = property.Value;
+            var baselineDuration = value.GetProperty("baselineDurationMilliseconds").GetDouble();
+            var tolerance = value.GetProperty("regressionTolerancePercent").GetDouble();
+            var allocationLimit = value.GetProperty("maximumAllocatedBytes").GetInt64();
+
+            // Report-only must not reinterpret a malformed limit as an ordinary overrun.
+            if (!double.IsFinite(baselineDuration) || baselineDuration < 0
+                || !double.IsFinite(tolerance) || tolerance < 0
+                || allocationLimit < 0
+                || !double.IsFinite(baselineDuration * (1d + (tolerance / 100d))))
+            {
+                throw new InvalidOperationException(
+                    $"Performance budget '{property.Name}' requires finite, nonnegative comparison limits.");
+            }
 
             allBudgets.Add(
                 property.Name,
-                new BenchmarkBudget(
-                    value
-                        .GetProperty("baselineDurationMilliseconds")
-                        .GetDouble(),
-                    value
-                        .GetProperty("regressionTolerancePercent")
-                        .GetDouble(),
-                    value
-                        .GetProperty("maximumAllocatedBytes")
-                        .GetInt64()));
+                new BenchmarkBudget(baselineDuration, tolerance, allocationLimit));
         }
 
         var assignedNames = new HashSet<string>(StringComparer.Ordinal);
@@ -233,20 +268,33 @@ internal sealed class BenchmarkRunner
         File.WriteAllBytes(path, buffer.WrittenSpan.ToArray());
     }
 
-    private static string ReadOutputPath(
+    private static (string OutputPath, bool ReportOnly) ReadOptions(
         string[] arguments,
         string repositoryRoot,
         string defaultOutputFileName
     )
     {
-        if (arguments.Length == 0)
+        var options = arguments switch
         {
-            return Path.Combine(repositoryRoot, "artifacts", "performance", defaultOutputFileName);
+            [] => (OutputPath: (string?)null, ReportOnly: false),
+            ["--report-only"] => (OutputPath: (string?)null, ReportOnly: true),
+            ["--output", var path] => (OutputPath: (string?)path, ReportOnly: false),
+            ["--report-only", "--output", var path] => (OutputPath: (string?)path, ReportOnly: true),
+            ["--output", var path, "--report-only"] => (OutputPath: (string?)path, ReportOnly: true),
+            _ => throw new ArgumentException("Usage: benchmark [--report-only] [--output <path>]"),
+        };
+
+        if (options.OutputPath is { } outputPath
+            && (string.IsNullOrWhiteSpace(outputPath) || outputPath.StartsWith("--", StringComparison.Ordinal)))
+        {
+            throw new ArgumentException("The benchmark output path must be a nonempty file path.");
         }
 
-        return arguments is ["--output", _]
-            ? Path.GetFullPath(arguments[1], repositoryRoot)
-            : throw new ArgumentException("Usage: benchmark [--output <path>]");
+        return (
+            options.OutputPath is null
+                ? Path.Combine(repositoryRoot, "artifacts", "performance", defaultOutputFileName)
+                : Path.GetFullPath(options.OutputPath, repositoryRoot),
+            options.ReportOnly);
     }
 
     private static string FindRepositoryRoot(
@@ -264,7 +312,10 @@ internal sealed class BenchmarkRunner
         throw new InvalidOperationException("The repository root could not be located.");
     }
 
-    private sealed record BenchmarkBudget(
+    /// <summary>
+    /// Defines a workload's duration comparison and allocation limit.
+    /// </summary>
+    internal sealed record BenchmarkBudget(
         double BaselineDurationMilliseconds,
         double RegressionTolerancePercent,
         long MaximumAllocatedBytes

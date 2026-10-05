@@ -11,12 +11,20 @@ SafeMigrations publishes these package IDs at one version:
 
 - `Doka.EntityFrameworkCore.SafeMigrations`;
 - `Doka.EntityFrameworkCore.SafeMigrations.MySql`;
-- `Doka.EntityFrameworkCore.SafeMigrations.PostgreSql`; and
-- `Doka.EntityFrameworkCore.SafeMigrations.Sqlite`.
+- `Doka.EntityFrameworkCore.SafeMigrations.PostgreSql`;
+- `Doka.EntityFrameworkCore.SafeMigrations.Sqlite`; and
+- `Doka.EntityFrameworkCore.SafeMigrations.SqlServer`.
+
+The prepared 10.4.6 release begins this five-package inventory; releases 10.4.2
+through 10.4.5 retain their historical four-package set. The shared .NET/EF Core 10
+release line keeps the existing providers' compatible maintenance changes and
+the first optional SQL Server package at 10.4.6. Its additive APIs and report
+engine-family value are explicitly documented in the changelog. Selecting
+another provider does not introduce SQL Server runtime dependencies.
 
 The workflow accepts a canonical lowercase NuGet version without a leading
 `v`. The version must belong to the source `VersionPrefix`, have exactly one
-dated changelog entry, be absent from all four NuGet package IDs, and be
+dated changelog entry, be absent from all five NuGet package IDs, and be
 dispatched from the exact current `main` SHA before any release tag exists.
 
 ## Reversible qualification
@@ -26,24 +34,30 @@ CI and release call the same reusable quality workflow. It enforces:
 - locked restore, formatting, warning-free Release build, Core tests, and
   Public API analyzers;
 - merged line and branch coverage thresholds;
-- Core, MySQL/MariaDB, PostgreSQL, and SQLite performance/allocation budgets;
-- all supported MySQL, MariaDB, and PostgreSQL integration cells plus the
-  locked in-process SQLite runtime;
+- all supported MySQL, MariaDB, PostgreSQL, and SQL Server integration cells
+  plus the locked in-process SQLite runtime;
 - EF CLI migrations, supported scripts, and Migration Bundles in every engine
   cell, including explicit rejection of SQLite safe-operation scripts;
 - deterministic double-pack, exact package contents, provider separation, and
   isolated package-only consumers; and
 - SPDX 2.2 SBOM generation and validation.
 
+It also runs Core, MySQL/MariaDB, PostgreSQL, SQLite, and SQL Server benchmarks
+in `--report-only` mode. Budget overruns remain visible in the retained evidence
+but do not block qualification on shared hardware. Invalid benchmark
+configuration, execution failures, incomplete measurements and report-write
+failures remain blocking. Build, tests, coverage, tooling, package and SBOM gates
+are unchanged.
+
 The PostgreSQL EF tooling probe waits for the final TCP listener, never the
 image's temporary socket-only initialization server. Large live performance
 fixtures receive a fixture-only command timeout; production SafeMigrations
 continues to use its normal configured timeout.
 
-The qualified workflow artifact contains the eight package archives,
+The qualified workflow artifact contains the ten package archives,
 `SHA256SUMS`, performance evidence, and the SPDX manifest. GitHub creates build
 provenance and SBOM attestations for those exact bytes. The attestation job
-validates the build-provenance Sigstore bundle against all eight packages,
+validates the build-provenance Sigstore bundle against all ten packages,
 `SHA256SUMS`, and `manifest.spdx.json`, materializes exactly one canonical
 `release-provenance.intoto.jsonl` record, and uploads it under a run- and
 attempt-qualified artifact name before publication can reach the protected
@@ -77,19 +91,19 @@ boundary. An API-hosted attestation without the downloaded bundle cannot satisfy
 this gate.
 
 Before the NuGet credential is requested, the GitHub Release starts as a draft
-with the expected title, Changelog-derived notes, classification, exact eight
+with the expected title, Changelog-derived notes, classification, exact ten
 qualified package files, `SHA256SUMS`, `manifest.spdx.json`, and
 `release-provenance.intoto.jsonl`. On a same-run retry, matching uploaded assets
 are retained and missing assets are added; any metadata, unexpected name, or
 SHA-256 digest conflict fails closed. Draft discovery uses the authenticated,
 paginated Release inventory because GitHub's tag endpoint returns published
-Releases only. The complete eleven-asset draft is read back before the first
+Releases only. The complete thirteen-asset draft is read back before the first
 NuGet push.
 
 Immediately before requesting the NuGet credential, the workflow checks the
 public state of every primary package with bounded retries. Missing primary
 packages are published in dependency order: Core first, followed by MySQL,
-PostgreSQL, and SQLite. A same-run retry skips primary packages that NuGet.org
+PostgreSQL, SQLite, and SQL Server. A same-run retry skips primary packages that NuGet.org
 already exposes through the Flat Container and retries every primary or symbol
 package with duplicate tolerance when visibility still lags. The final
 signed-content readback remains the acceptance gate.
@@ -103,7 +117,7 @@ already exists.
 
 ## Recovery semantics
 
-NuGet cannot publish four package IDs atomically. A network failure can occur
+NuGet cannot publish five package IDs atomically. A network failure can occur
 after one or more uploads are accepted. The supported recovery is rerunning the
 failed `publish` job in the original run. Its publication preflight skips
 primary packages already visible through the Flat Container, and

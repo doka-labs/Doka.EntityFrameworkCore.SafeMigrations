@@ -8,7 +8,8 @@ unredacted migration reports in issues, pull requests, or test fixtures.
 ## Prerequisites
 
 - .NET SDK 10.0.401, selected by `global.json`
-- Docker for MySQL, MariaDB, and PostgreSQL tests; SQLite tests run in-process
+- Docker for MySQL, MariaDB, PostgreSQL, and SQL Server tests; SQLite tests run
+  in-process
 - Bash, `jq`, `curl`, `unzip`, and `rsync` for engineering gates
 - Python 3 for the merged coverage threshold check
 - the exact `Doka.EntityFrameworkCore.MySql` package selected by the committed
@@ -31,11 +32,18 @@ dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Doka.EntityFrame
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests.csproj --configuration Release
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.csproj --configuration Release
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests.csproj --configuration Release
+dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests.csproj --configuration Release
 ```
 
 The provider fixtures use Testcontainers with dynamically assigned host ports,
 readiness checks, and automatic resource-reaper cleanup. Each test receives a
-fresh database. The default local engines are MariaDB 11.8.8 and PostgreSQL
+fresh database. SQL Server uses the free Developer container without a separate
+account. Its live tests require a supported Linux x86-64 container host; Apple
+Silicon skips are not runtime qualification. The three required x86-64 CI cells
+must pass without skipped tests. See the [SQL Server guide](docs/sqlserver-behavior.md)
+for the platform boundary and declared engine matrix.
+
+The default local engines are MariaDB 11.8.8 and PostgreSQL
 18.6. Select another qualified image with:
 
 ```bash
@@ -64,10 +72,12 @@ dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Doka.EntityFrame
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests.csproj --configuration Release --no-build --no-restore
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.csproj --configuration Release --no-build --no-restore
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests.csproj --configuration Release --no-build --no-restore
-dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks.csproj --configuration Release --no-build --no-restore
-dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks.csproj --configuration Release --no-build --no-restore
-dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks.csproj --configuration Release --no-build --no-restore
-dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks.csproj --configuration Release --no-build --no-restore
+dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests.csproj --configuration Release --no-build --no-restore
+dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks.csproj --configuration Release --no-build --no-restore -- --report-only
+dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks.csproj --configuration Release --no-build --no-restore -- --report-only
+dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks.csproj --configuration Release --no-build --no-restore -- --report-only
+dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks.csproj --configuration Release --no-build --no-restore -- --report-only
+dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks.csproj --configuration Release --no-build --no-restore -- --report-only
 python3 -m unittest eng/tests/test_verify_coverage.py -v
 bash eng/tests/test-release-version.sh
 bash -e -c 'while IFS= read -r -d "" script; do bash -n "$script"; done < <(find eng -type f -name "*.sh" -print0)'
@@ -75,8 +85,15 @@ dotnet format Doka.EntityFrameworkCore.SafeMigrations.slnx style --severity warn
 dotnet format Doka.EntityFrameworkCore.SafeMigrations.slnx style --diagnostics IDE0005 --severity hidden --verify-no-changes --no-restore
 ```
 
+All five benchmark sets run as informational evidence in CI and release
+qualification. `--report-only` retains measurements, unchanged comparison limits,
+and failed budget verdicts in JSON and console output without rejecting the run.
+Invalid configuration, incomplete measurements, execution exceptions, and output
+failures still fail. Omit `--report-only` for an explicitly strict local budget
+comparison; benchmark limits must not be raised merely to make a run pass.
+
 The reusable quality workflow additionally collects Microsoft Cobertura output
-from all four test assemblies, merges product lines conservatively, and runs:
+from all five test assemblies, merges product lines conservatively, and runs:
 
 ```bash
 python3 eng/verify-coverage.py \
@@ -120,7 +137,7 @@ Every operation or facet change requires:
 - constructor/definition and planner tests;
 - live missing, matching, different, unsupported, and data-blocked coverage as
   applicable;
-- MySQL/MariaDB, PostgreSQL, and SQLite parity or an explicit provider
+- MySQL/MariaDB, PostgreSQL, SQLite, and SQL Server parity or an explicit provider
   capability rejection;
 - true EF migration/history behavior;
 - preflight and postflight behavior;

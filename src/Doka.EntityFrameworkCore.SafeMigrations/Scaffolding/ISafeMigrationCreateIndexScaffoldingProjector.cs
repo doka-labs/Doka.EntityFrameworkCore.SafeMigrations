@@ -17,7 +17,9 @@ internal interface ISafeMigrationCreateIndexScaffoldingProjector
 /// <param name="PrefixLengths">
 /// Ordered key prefix lengths, where zero means the complete key, or null when absent.
 /// </param>
+/// <param name="IncludedColumns">Provider-projected non-key columns, or null when absent.</param>
 internal sealed record SafeMigrationCreateIndexScaffoldingProjection(
     CreateIndexOperation Operation,
-    IReadOnlyList<int>? PrefixLengths
+    IReadOnlyList<int>? PrefixLengths,
+    IReadOnlyList<string>? IncludedColumns = null
 );

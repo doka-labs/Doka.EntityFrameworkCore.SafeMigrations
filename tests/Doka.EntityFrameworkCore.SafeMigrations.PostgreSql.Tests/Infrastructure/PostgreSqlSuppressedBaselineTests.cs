@@ -5,6 +5,52 @@ public sealed class PostgreSqlSuppressedBaselineTests
     private const string AddColumnSql = "ALTER TABLE \"items\" ADD COLUMN \"value\" integer;";
     private const string CommentColumnSql = "COMMENT ON COLUMN \"items\".\"value\" IS 'baseline marker';";
 
+    /// <summary>Baseline termination trims only trailing whitespace and keeps command order unchanged.</summary>
+    [Theory]
+    [InlineData("SELECT 1", "SELECT 1;")]
+    [InlineData("SELECT 1;", "SELECT 1;")]
+    [InlineData("SELECT 1;  \r\n", "SELECT 1;")]
+    [InlineData("  SELECT 1\r\n", "  SELECT 1;")]
+    [InlineData("", ";")]
+    [InlineData(" \t\r\n", ";")]
+    public void BaselineTerminationPreservesExactText(string sql, string expected)
+    {
+        // Arrange
+        using var context = CreateContext();
+        var baseline = context.GetService<RecordingBaselineGenerator>();
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+        var migrationBuilder = CreateColumnMigration(context);
+        baseline.ColumnBaselineCommands = [baseline.CreateCommand(sql, false)];
+
+        // Act
+        _ = generator.Generate(migrationBuilder.Operations, context.Model);
+        var guard = Assert.IsType<SqlOperation>(Assert.Single(baseline.Calls[1].Operations)).Sql;
+
+        // Assert
+        Assert.Contains("\n            " + expected + "\n", guard, StringComparison.Ordinal);
+    }
+
+    /// <summary>Direct span appends do not hide dollar-tag collisions inside a baseline command.</summary>
+    [Fact]
+    public void BaselineTerminationRetainsDollarTagCollisionChecks()
+    {
+        // Arrange
+        const string sql = "SELECT '$doka_safe_migration$'; \r\n";
+        using var context = CreateContext();
+        var baseline = context.GetService<RecordingBaselineGenerator>();
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+        var migrationBuilder = CreateColumnMigration(context);
+        baseline.ColumnBaselineCommands = [baseline.CreateCommand(sql, false)];
+
+        // Act
+        _ = generator.Generate(migrationBuilder.Operations, context.Model);
+        var guard = Assert.IsType<SqlOperation>(Assert.Single(baseline.Calls[1].Operations)).Sql;
+
+        // Assert
+        Assert.StartsWith("DO $doka_safe_migration_1$", guard, StringComparison.Ordinal);
+        Assert.Contains("SELECT '$doka_safe_migration$';", guard, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData(false, MigrationsSqlGenerationOptions.Default)]
     [InlineData(true, MigrationsSqlGenerationOptions.Default)]

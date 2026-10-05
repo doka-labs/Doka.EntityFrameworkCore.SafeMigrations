@@ -67,13 +67,13 @@ it does not prove that every earlier migration command completed.
 
 Runtime guards preserve the same categories at the database boundary:
 
-| MySQL/MariaDB constraint identity | PostgreSQL SQLSTATE/message | Meaning |
-| --- | --- | --- |
-| `doka_sm_different` | `P1001` / `doka_sm_different` | Definition mismatch or unapproved repair. |
-| `doka_sm_unsupported` | `P1002` / `doka_sm_unsupported` | Active engine capability rejects the operation. |
-| `doka_sm_data_blocked` | `P1003` / `doka_sm_data_blocked` | Existing data violates a precondition. |
-| `doka_sm_prerequisite_missing` | `P1004` / `doka_sm_prerequisite_missing` | A required table or referenced column is absent; dependent expressions were not evaluated. |
-| `doka_sm_postcondition` | `P1005` / `doka_sm_postcondition` | Target DDL ran but final catalog condition is false. |
+| MySQL/MariaDB constraint identity | PostgreSQL SQLSTATE/message | SQL Server error number/message | Meaning |
+| --- | --- | --- | --- |
+| `doka_sm_different` | `P1001` / `doka_sm_different` | `51001` / `doka_sm_different` | Definition mismatch or unapproved repair. |
+| `doka_sm_unsupported` | `P1002` / `doka_sm_unsupported` | `51002` / `doka_sm_unsupported` | Active engine capability rejects the operation. |
+| `doka_sm_data_blocked` | `P1003` / `doka_sm_data_blocked` | `51003` / `doka_sm_data_blocked` | Existing data violates a precondition. |
+| `doka_sm_prerequisite_missing` | `P1004` / `doka_sm_prerequisite_missing` | `51004` / `doka_sm_prerequisite_missing` | A required table or referenced column is absent; dependent expressions were not evaluated. |
+| `doka_sm_postcondition` | `P1005` / `doka_sm_postcondition` | `51005` / `doka_sm_postcondition` | Target DDL ran but final catalog condition is false. |
 
 MySQL/MariaDB uses unique constraints on a session-local temporary assertion
 table because `SIGNAL` cannot be used in its prepared-statement path.
@@ -83,6 +83,14 @@ key error 1062 for these assertions; that number alone does not identify a
 SafeMigrations rejection. Match the invariant `doka_sm_*` constraint token for
 the guarded command, not localized sentence fragments. Do not export the full
 provider error message into public telemetry.
+SQL Server raises the bounded category through `THROW` with the corresponding
+51001-51005 error number. Do not interpret unrelated SQL Server errors as
+SafeMigrations assertions merely because they occur during a migration.
+For a check or default constraint created by a directly executed script, an
+interruption between DDL and its physical provenance stamp leaves an
+unverified object. A later `doka_sm_different` is intentional: inspect and
+recover the partial migration rather than accepting a matching name or SQL
+text as ownership proof.
 
 SQLite guarded commands raise an `InvalidOperationException` containing the
 bounded analysis and decision codes before target DDL. A structural batch runs
@@ -287,6 +295,16 @@ code, not a claim that the feature is absent from every version of that engine.
 | `index_key_collation` | MySQL/MariaDB | An explicit per-key index collation is not supported by the adapter. |
 | `operator_class` | MySQL/MariaDB | PostgreSQL-style index operator classes are not supported. |
 | `virtual_generated_column` | PostgreSQL | The adapter rejects an explicitly virtual computed column. |
+| `catalog_metadata_not_visible` | SQL Server | Catalog visibility cannot prove the target state under the current principal. |
+| `default_schema_mismatch` | SQL Server | An unqualified safe operation is ambiguous because the caller's default schema is not `dbo`; specify a schema. |
+| `identifier_collation_unproven` | SQL Server | Catalog identifier equality cannot be established under the active collation contract. |
+| `table_unproven_facet` | SQL Server | A table facet has no bounded catalog-equivalence proof. |
+| `provider_column_annotation` | SQL Server | An unrecognized provider column annotation cannot be preserved safely. |
+| `column_unproven_facet` | SQL Server | A column facet cannot be represented in the bounded catalog comparison. |
+| `default_expression_unproven` | SQL Server | A SQL default expression lacks a bounded equivalence proof. |
+| `index_unproven_facet` | SQL Server | An index facet cannot be represented in the bounded catalog comparison. |
+| `model_managed_store_type` | SQL Server | A model-managed column store type is not supported by the typed data contract. |
+| `model_managed_value_mapping` | SQL Server | A model-managed value cannot be mapped to a typed SQL literal. |
 | `stored_generated_column_add` | SQLite | SQLite cannot add a STORED generated column through `ALTER TABLE ADD COLUMN`. |
 | `sqlite_version` | SQLite | The connected engine is older than the EF Core SQLite provider support floor. |
 | `operation_kind` | SQLite | The adapter has no qualified contract for the requested operation kind. |
@@ -335,7 +353,8 @@ produces `classified_unsupported` rather than a new static reason above.
 The provider catalog builders and their feature slices own the reasons:
 [MySQL/MariaDB](../../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/SqlGeneration/MySqlSafeMigrationCatalogSqlBuilder.cs)
 [PostgreSQL](../../src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/SqlGeneration/PostgreSqlSafeMigrationCatalogSqlBuilder.cs),
-and [SQLite](../../src/Doka.EntityFrameworkCore.SafeMigrations.Sqlite/Analysis/SqliteSafeMigrationProviderAnalyzer.cs).
+[SQLite](../../src/Doka.EntityFrameworkCore.SafeMigrations.Sqlite/Analysis/SqliteSafeMigrationProviderAnalyzer.cs),
+and [SQL Server](../../src/Doka.EntityFrameworkCore.SafeMigrations.SqlServer/SqlGeneration/SqlServerSafeMigrationCatalogSqlBuilder.cs).
 For an unknown reason, stop automated rollout, record the actual package/engine
 versions, and investigate a documentation gap, version mismatch, or defect.
 Do not assume that an undocumented string alone proves a new runtime contract.

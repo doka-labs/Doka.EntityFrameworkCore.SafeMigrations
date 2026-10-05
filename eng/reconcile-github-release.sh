@@ -43,8 +43,27 @@ primary_packages=(artifacts/packages/*.nupkg)
 symbol_packages=(artifacts/packages/*.snupkg)
 shopt -u nullglob
 
-if ((${#primary_packages[@]} != 4 || ${#symbol_packages[@]} != 4)); then
-    echo "Expected exactly four primary packages and four symbol packages." >&2
+if ((${#primary_packages[@]} != 5 || ${#symbol_packages[@]} != 5)); then
+    echo "Expected exactly five primary packages and five symbol packages." >&2
+    exit 1
+fi
+
+expected_packages=()
+for package_id in \
+    Doka.EntityFrameworkCore.SafeMigrations \
+    Doka.EntityFrameworkCore.SafeMigrations.MySql \
+    Doka.EntityFrameworkCore.SafeMigrations.PostgreSql \
+    Doka.EntityFrameworkCore.SafeMigrations.Sqlite \
+    Doka.EntityFrameworkCore.SafeMigrations.SqlServer; do
+    expected_packages+=(
+        "artifacts/packages/$package_id.$package_version.nupkg"
+        "artifacts/packages/$package_id.$package_version.snupkg"
+    )
+done
+
+if [[ "$(printf '%s\n' "${primary_packages[@]}" "${symbol_packages[@]}" | LC_ALL=C sort)" \
+    != "$(printf '%s\n' "${expected_packages[@]}" | LC_ALL=C sort)" ]]; then
+    echo "Package identities differ from the exact five-package release contract." >&2
     exit 1
 fi
 

@@ -99,13 +99,35 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         IReadOnlyList<string> columns,
         string namePredicate,
         bool requireLocalIdentity = true
+    ) => ConstraintColumnsMatchQuery(table, schema, type, NameArray(columns), namePredicate, requireLocalIdentity);
+
+    /// <summary>Builds the constraint-column match against a column-array expression.</summary>
+    /// <remarks>
+    /// The expression form lets one query serve a whole set of expected column lists, so the
+    /// modeled-constraint check can correlate against a VALUES list instead of repeating this
+    /// lookup once per expected constraint.
+    /// </remarks>
+    /// <param name="table">The owning table.</param>
+    /// <param name="schema">The owning schema, or null for the current schema.</param>
+    /// <param name="type">The catalog constraint type.</param>
+    /// <param name="columnsExpression">SQL yielding the expected ordered column names.</param>
+    /// <param name="namePredicate">The name predicate applied to the candidate row.</param>
+    /// <param name="requireLocalIdentity">Whether local ownership is part of the identity.</param>
+    /// <returns>The query text without its enclosing EXISTS.</returns>
+    private string ConstraintColumnsMatchQuery(
+        string table,
+        string? schema,
+        char type,
+        string columnsExpression,
+        string namePredicate,
+        bool requireLocalIdentity = true
     ) => ConstraintRowsWithoutName(table, schema, type)
         + $" AND {namePredicate}"
         + StandardConstraintSemantics(requireLocalIdentity)
         + (type == 'u' ? UniqueNullSemanticsMatch() : string.Empty)
         + $" AND ARRAY(SELECT a.attname FROM unnest(co.conkey) WITH ORDINALITY AS key(attnum, ord) "
         + "JOIN pg_catalog.pg_attribute a ON a.attrelid = co.conrelid AND a.attnum = key.attnum "
-        + $"ORDER BY key.ord) = {NameArray(columns)}";
+        + $"ORDER BY key.ord) = {columnsExpression}";
 
     private static string StandardConstraintSemantics(
         bool requireLocalIdentity = true
@@ -216,6 +238,44 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             requireExpectedName: false);
 
         return $"({exact}) OR (NOT ({exists}) AND ({semanticAlias}))";
+    }
+
+    /// <summary>Verifies every required unique constraint of one table through three catalog scans.</summary>
+    /// <remarks>
+    /// WHY: The per-constraint form opens three correlated catalog scans for each required
+    /// constraint, so a table with several unique constraints planned three times as many joins
+    /// as it has constraints. The expected names and column lists are plain values, so they can
+    /// be driven from a VALUES list while the catalog predicates stay verbatim and server-side.
+    /// A predicate can evaluate to NULL, so the absent test coalesces to FALSE to keep the
+    /// mismatch verdict the per-constraint form produced.
+    /// </remarks>
+    /// <param name="table">The table owning the required constraints.</param>
+    /// <param name="schema">The owning schema, or null for the current schema.</param>
+    /// <param name="required">The required unique constraints, all owned by that table.</param>
+    /// <returns>A predicate that is true when every required unique constraint is satisfied.</returns>
+    private string AllRequiredUniqueConstraintsSatisfied(
+        string table,
+        string? schema,
+        IReadOnlyList<ExpectedUniqueConstraintDefinition> required
+    )
+    {
+        var rows = required
+            .Select(value => $"(CAST({Literal(value.Name)} AS pg_catalog.name), {NameArray(value.Columns)})")
+            .ToArray();
+
+        var rowSource = ConstraintRowsWithoutName(table, schema, 'u');
+        var columnsMatch = " AND ARRAY(SELECT a.attname FROM unnest(co.conkey) WITH ORDINALITY AS key(attnum, ord) "
+            + "JOIN pg_catalog.pg_attribute a ON a.attrelid = co.conrelid AND a.attnum = key.attnum "
+            + "ORDER BY key.ord) = required.columns";
+
+        var semantics = StandardConstraintSemantics() + UniqueNullSemanticsMatch();
+        var exact = $"EXISTS ({rowSource} AND co.conname = required.conname{semantics}{columnsMatch})";
+        var exists = $"EXISTS ({rowSource} AND co.conname = required.conname)";
+        var alias = $"EXISTS ({rowSource} AND co.conname <> required.conname{semantics}{columnsMatch})";
+
+        return $"NOT EXISTS (SELECT 1 FROM (VALUES {string.Join(", ", rows)}) "
+            + "AS required(conname, columns) WHERE NOT COALESCE("
+            + $"({exact}) OR (NOT ({exists}) AND ({alias})), FALSE))";
     }
 
     private string AllConstraintsModeled(

@@ -2,6 +2,45 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
 public sealed partial class SqliteSafeMigrationCatalogIntegrationTests : SqliteIntegrationTestBase
 {
+    /// <summary>Comment-free and trivia-bearing definitions retain trimmed expressions and ordered keys.</summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("/* comment */")]
+    [InlineData("-- comment\r\n")]
+    public async Task Catalog_PreservesExpressionWhitespaceAndQuotedCommentMarkers(string trivia)
+    {
+        // Arrange
+        await using var connection = await OpenConnectionAsync();
+        await ExecuteSqlAsync(
+            connection,
+            $"CREATE TABLE parsed_items (Id INTEGER NOT NULL, {trivia} Code TEXT DEFAULT '--literal/*literal*/', "
+            + "Generated TEXT GENERATED ALWAYS AS (  Code || '/*literal*/'  ) VIRTUAL, "
+            + "CONSTRAINT pk_parsed_items PRIMARY KEY (  Id  ), "
+            + "CONSTRAINT uq_parsed_items UNIQUE (  Code, Id  )); "
+            + "CREATE INDEX ix_parsed_items ON parsed_items (  Code, Id DESC  ) WHERE   Code IS NOT NULL  ;");
+
+        // Act
+        var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);
+
+        // Assert
+        var table = snapshot.Tables["parsed_items"];
+        var index = Assert.Single(table.Indexes, value => value.Origin == "c");
+
+        Assert.Equal("pk_parsed_items", table.PrimaryKeyName);
+        Assert.Equal("'--literal/*literal*/'", table.Columns["Code"].DefaultSql);
+        Assert.Equal("Code || '/*literal*/'", table.Columns["Generated"].GeneratedSql);
+        Assert.Collection(
+            Assert.Single(table.UniqueConstraints).Columns,
+            column => Assert.Equal("Code", column),
+            column => Assert.Equal("Id", column));
+        Assert.Equal("Code IS NOT NULL", index.Filter);
+        Assert.Collection(
+            index.Keys.Where(key => key.IsKey),
+            key => Assert.Equal("Code", key.Column),
+            key => Assert.Equal("Id", key.Column));
+        Assert.True(index.Keys[1].Descending);
+    }
+
     [Fact]
     public async Task Catalog_RecoversNamedConstraintsGeneratedColumnsAndIndexFacets()
     {
@@ -70,9 +109,11 @@ public sealed partial class SqliteSafeMigrationCatalogIntegrationTests : SqliteI
             value => Assert.Equal("ck_status", value.Name));
     }
 
+    /// <summary>Supported semantic aliases retain genuine drift while sharing the inventory capture.</summary>
     [Fact]
     public async Task UnexpectedObjectInventory_RemovesSemanticAliasesAndRetainsOnlyPhysicalDrift()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync();
         await ExecuteSqlAsync(
             connection,
@@ -119,12 +160,16 @@ public sealed partial class SqliteSafeMigrationCatalogIntegrationTests : SqliteI
             "inventory_items",
             ["ParentId"]);
         var analyzer = context.GetService<ISafeMigrationProviderAnalyzer>();
+        var counter = new CatalogReadCounter(connection);
 
+        // Act
         var inventory = await analyzer.FindUnexpectedObjectsAsync(
             context,
             builder.Operations,
             CancellationToken.None);
 
+        // Assert
+        Assert.Equal(1, counter.Count);
         Assert.Collection(
             inventory.OrderBy(value => value.ObjectKind).ThenBy(value => value.Name, StringComparer.Ordinal),
             value =>

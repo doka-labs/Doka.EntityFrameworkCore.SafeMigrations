@@ -6,7 +6,7 @@ SafeMigrations turns an ordered EF Core migration into a deterministic
 convergence contract. Provider-neutral code owns intent, policy, expected
 definitions, planning, fingerprints, and reports. Provider packages own live
 catalog interpretation and SQL generation. The database remains authoritative
-for observed state; neither provider tries to reconstruct history from names or
+for observed state; no provider tries to reconstruct history from names or
 SQL text.
 
 ```text
@@ -22,7 +22,7 @@ MigrationBuilder extension
 ```
 
 Core has no compile-time dependency on MySQL, MariaDB, PostgreSQL, SQLite,
-Doka's provider, Npgsql, or Microsoft.Data.Sqlite.
+SQL Server, Doka's provider, Npgsql, or a provider-specific EF package.
 
 Source ownership follows the hybrid vertical-slice contract in
 [Vertical-slice architecture](vertical-slice-architecture.md). Public
@@ -122,6 +122,25 @@ engine has no procedural branch that can evaluate their catalog-dependent
 decision. Script generation therefore rejects before returning partial output.
 Runtime migration and Migration Bundles execute the guarded command objects.
 
+### SQL Server
+
+`Doka.EntityFrameworkCore.SafeMigrations.SqlServer` composes the official EF
+Core SQL Server migrations generator. Ordinary EF operations remain provider
+owned; only the exact SafeMigrations envelope is classified and guarded.
+The adapter reads bounded `sys.*` catalog evidence and emits T-SQL checks
+immediately around its target operation. SQL Server's metadata-visibility
+rules make absent rows ambiguous without adequate catalog permissions, so
+unprovable visibility fails closed. Primary and unique constraints share
+backing-index identity, whereas defaults are separate schema objects.
+
+Unqualified safe-operation names require the caller's default schema to be
+`dbo`; callers with another default schema must qualify the schema explicitly.
+This prevents a catalog/EF-baseline identity split. The first SQL Server
+release requires independent Linux/x86-64 qualification of 2019, 2022, and
+2025. Azure SQL services and
+Synapse are outside this first release's declared support matrix. See
+[SQL Server behavior](sqlserver-behavior.md).
+
 ## Fail-closed ownership
 
 A safe operation is never encoded as an annotation on an ordinary EF
@@ -132,6 +151,8 @@ the operation as normal DDL:
 - Npgsql rejects the unknown safe envelope when its adapter is absent;
   incompatible SafeMigrations generator registration also fails closed;
 - SQLite rejects the unknown safe envelope when its adapter is absent;
+  incompatible generator registration also fails closed;
+- SQL Server rejects the unknown safe envelope when its adapter is absent;
   incompatible generator registration also fails closed;
 - multiple owners for the same exact operation type are rejected;
 - scaffolding stops before publishing source for an operation SafeMigrations
@@ -643,8 +664,8 @@ provider analysis, but it cannot approve such an operation.
 Each optimizer-visible statement contains at most 32 operations. At most eight
 statements travel in one ADO.NET batch, bounded by 16,000 parameters and 4 MiB
 of UTF-8 SQL plus parameter payload across the batch. MySQL/MariaDB also use
-half the live `max_allowed_packet` as an upper bound and capture Doka runtime
-plans in 512-operation windows. The complete migration-level unique-index
+half the live `max_allowed_packet` as an upper bound. MySQL/MariaDB and
+PostgreSQL capture runtime plans in 512-operation windows. The complete migration-level unique-index
 catalog is retained across those windows. Repeated typed values are interned
 within a statement, global ordinals span every statement, batch, and capture
 window, and results are published only after all work succeeds. Every raw
@@ -654,6 +675,78 @@ compatible wrapper that does not forward provider batching executes the same
 bounded statements through sequential `DbCommand` instances. The fallback
 does not concatenate provider SQL and preserves statement order, parameters,
 timeouts, cancellation, and all-or-nothing report publication.
+
+The shared bounded work selector submits unresolved original ordinals even
+when locally classified operations lie between them. MySQL/MariaDB and
+PostgreSQL retain those completed slots instead of fragmenting each classifier
+statement at the gap. Readers require exactly the submitted ordinal sequence;
+omitted, duplicate or unsubmitted rows fail before report publication. This
+does not coalesce templates or change migration-order projection. SQLite keeps
+its existing snapshot/rebuild transport because it has no equivalent remote
+classifier stream.
+
+MySQL/MariaDB and PostgreSQL omit prerequisite transport only for the exact
+builder-certified constant `TRUE`; every nonconstant predicate still executes
+before dependent data binding. Independent diagnostic, narrowing-eligibility
+and already-qualified row-probe statements use the same bounded Core transport.
+Each statement owns one result set with exact ordinal and completion checks;
+aggregate parameter and UTF-8 bounds include all statements. Phase barriers
+are not merged. Npgsql batches reduce network roundtrips; MySqlConnector
+documents that benefit for MariaDB, but not necessarily for MySQL. See
+[Npgsql batching](https://www.npgsql.org/doc/basic-usage.html#batching) and
+[MySqlConnector batching](https://mysqlconnector.net/api/mysqlconnector/mysqlbatchtype/).
+
+PostgreSQL constructs operation-aware prerequisites directly without building
+and discarding a complete classifier. A payload spill restores the exact
+retained parameter objects, names, ordering and type mappings in the provider
+collection before the next statement is built; named lookup and enumeration
+must describe the same retained prefix.
+
+SQLite inventory passes its existing immutable catalog snapshot to semantic
+alias analysis within that invocation. Alias windows no longer recapture the
+complete schema. Separate analysis/inventory invocations and runtime structural
+mutations still obtain fresh snapshots; row proofs are not cached by this path.
+
+SQL Server captures at most 512 plans and groups metadata-only classifiers
+separately from delayed-binding classifiers inside each capture. These are
+read-only queries, with preambles confined to their own dynamic invocation;
+they do not depend on another classifier's execution. Grouping prevents a
+binding-mode change from fragmenting every statement. Each result retains its
+original ordinal and captured plan; projection still runs in migration order.
+Delayed classifiers bind that ordinal as an explicit `int` parameter to a
+complete isolated `sp_executesql` classifier. Rejection and successful branches
+return one nine-column result set directly instead of inserting into a shared
+table variable with `INSERT ... EXEC`. Stable local source markers keep the
+heavy template independent of source values and original ordinals. Physical,
+layout, collation, default, filter, and prerequisite guards remain before
+nested delayed row binding. See Microsoft's
+[dynamic batch scope and plan reuse](https://learn.microsoft.com/en-us/sql/relational-databases/system-stored-procedures/sp-executesql-transact-sql?view=sql-server-ver17).
+
+SQL Server captures table-name occupancy through a bounded parameterized
+`sys.schemas`/`sys.objects` query before building full table classifiers.
+Only proven absence omits the complete structure matcher; schema, physical,
+default, collation and inline-FK support checks remain. An object appearing
+after the probe is classified as different rather than accepted by name.
+There is no cross-capture or cross-analysis absence cache.
+
+Managed-data analysis binds source values independently of destination types:
+Unicode and binary sources use maximum-width parameters, temporal sources
+retain seven fractional digits, and decimal sources retain their actual scale.
+Target `TRY_CAST`, ANSI roundtrip and capacity guards still run before typed
+row relations bind. Stable local parameters live inside `sp_executesql`;
+transport parameters feed the whole guard and its nested classifier explicitly.
+The SQL Server transport limit is 2,000 parameters, below the documented
+[2,100-parameter limit](https://learn.microsoft.com/en-us/sql/sql-server/maximum-capacity-specifications-for-sql-server?view=sql-server-ver17),
+with source payload included in the existing 4 MiB bound. At exactly 2,000
+source parameters, the dispatcher passes its generated integer ordinal as a
+literal instead of adding another transport parameter. The inner classifier
+still receives a typed ordinal parameter; existing source capacity is retained.
+Runtime mutation generation retains its literal contract.
+
+This transport optimization does not establish a database-wide immutable
+snapshot or an external-write fence. SQL Server's analysis scope and deployment
+exclusion requirements remain unchanged; live runtime guards stay authoritative.
+
 PostgreSQL holds one read-only `RepeatableRead`
 snapshot and transaction-scoped analysis advisory lock across analysis. This
 analysis lock is not an application write fence. A caller-owned
@@ -799,6 +892,17 @@ The runtime path has:
 
 - one exact Doka registry lookup/dispatch and one guarded command scope per
   MySQL/MariaDB safe operation, reusing the scoped handler instance;
+- stable grouping of short owned same-operation setup SQL, bounded by 256
+  UTF-8 bytes and the largest previous single setup/body payload, retaining
+  large strings by reference and preserving original scope limits, opaque
+  provider setup, body and independent cleanup boundaries;
+- direct final-buffer emission of owned prepared assignments with their
+  immediate control suffixes, avoiding both separate transport and large
+  completed-string copies; fused controls retain their original logical
+  fragment count and do not include opaque provider setup, body or cleanup;
+- at most one immutable decision-SQL cache entry per scoped MySQL/MariaDB
+  handler, keyed only by operation kind, policy and structural repair
+  capability; no operation, model, live state or row-safety evidence is cached;
 - no reflection, JSON intent serialization, type-name deserialization, or
   service-provider lookup per operation;
 - input/model-, command-, assessment-, and catalog-inventory-dependent
@@ -810,14 +914,28 @@ The runtime path has:
 - allocation-bounded report-view selection without filtered collections;
 - bounded telemetry tags without object names or connection data.
 
-The repository gates construction, planning, all provider generators, and
+MySQL/MariaDB setup grouping reduces command exchanges without combining
+operations, reusing catalog evidence, or changing script text. Command timeout
+granularity follows the grouped setup invocation; caller cancellation and
+independent cleanup remain authoritative. Runtime regression workloads exercise
+actual `Database.MigrateAsync` without explicit preflight against empty,
+matching, partial and safely widened catalogs, then verify schema, rows,
+migration history and history-only replay. They persist aggregate command,
+payload, duration and generation-allocation evidence without SQL text or
+connection information. Local workload timings are not production speedup
+claims. See [MySQL/MariaDB runtime boundaries](mysql-mariadb-ddl-behavior.md#session-local-guard-shape).
+
+The repository measures construction, planning, all provider generators, and
 report serialization at 1, 100, and 1000 operations, plus blocker-view
-selection across 50,000 assessments, against strict allocation ceilings and
+selection across 50,000 assessments, against allocation comparison limits and
 coarse wall-clock ceilings in schema-versioned Core,
-MySQL/MariaDB, and PostgreSQL sets in `eng/performance-budgets.json`; missing,
+MySQL/MariaDB, PostgreSQL, SQLite, and SQL Server sets in `eng/performance-budgets.json`; missing,
 duplicate, unknown, and orphaned measurements fail the run. The broad duration
-ceilings account for shared hosted-runner CPU variance and only detect gross
-regressions. It separately gates
+ceilings provide regression evidence rather than a cross-machine pass guarantee.
+All five CI benchmark sets use `--report-only`: numeric overruns retain false
+JSON verdicts without blocking qualification. Configuration, execution and
+output failures remain fatal; strict manual comparison remains available by
+omitting that flag. The repository separately measures
 the canonical snapshot initialization, `IMigrationsModelDiffer` comparison,
 and model fingerprint path used by the runner.
 
@@ -828,7 +946,7 @@ assessment counts, and unexpected-object counts; noisy p95 must remain within
 `2 * clean p95 + 250 ms`, and foreign child objects must not escape the
 server-side expected-table scope.
 
-The construction budgets are deterministic regression and allocation gates;
+The construction budgets are informational regression and allocation evidence;
 the live measurements are same-runner relative SLO evidence rather than an
 absolute cross-machine throughput claim.
 

@@ -57,9 +57,14 @@ Chosen option: "Bounded batches with immutable reports and separate telemetry",
 because it limits each database request while preserving ordered evidence and
 a distinct privacy boundary for diagnostics.
 
-The current classification limits are 32 operations per optimizer-visible
-statement, eight statements per ADO.NET transport batch, 16,000 parameters,
-and 4 MiB of UTF-8 SQL plus parameter payload across the batch.
+The current provider-neutral classification limits are 32 operations per
+optimizer-visible statement, eight statements per ADO.NET transport batch,
+16,000 parameters, and 4 MiB of UTF-8 SQL plus parameter payload across the
+batch. SQL Server uses eight operations per statement and 32 statements per
+native batch. Sequential connections retain the shared 32-operation statement
+and eight-statement group, since each statement executes separately. Both shapes
+retain a 256-operation group capacity subject to payload and parameter bounds;
+these limits do not establish optimizer cost or native engine duration.
 MySQL/MariaDB also cap payload at half the observed `max_allowed_packet` and
 capture provider runtime plans in 512-operation windows while retaining the
 complete migration-level unique-index catalog. These are explicit repository
@@ -76,6 +81,22 @@ is selected only when `DbConnection.CanCreateBatch` is true. Otherwise the
 same bounded statements execute sequentially through ordinary `DbCommand`
 instances, preserving compatibility without parsing or concatenating provider
 SQL.
+
+Independent metadata statements use the same transport after their prerequisite
+phase. Complete 512-value inventory and physical-environment chunks count as
+one submitted statement; they are not reduced to 32-value chunks. SQL Server
+applies its stricter 2,000-parameter aggregate limit, while the shared maximum
+remains 16,000. Result ownership and complete-capture publication remain
+mandatory even when statements are transported together. SQLite streams its
+main-schema metadata through five fixed set-based read commands; its embedded
+reads are not network roundtrips, and snapshot memory still scales with objects.
+
+Provider SQL action rendering consumes an internal action-only Core planner
+path. This shares the public planner's validated decision rules without
+allocating a discarded result object for each branch. Public decision objects,
+validation order and codes are unchanged. SQL Server command assembly writes
+branches and wrappers directly and traverses immutable inputs by index; these
+changes do not cache live evidence or retain pooled buffers.
 
 Definitions snapshot enumerable inputs into owned read-only collections.
 Model fingerprints stream length-prefixed canonical relational metadata into
@@ -138,9 +159,11 @@ Run every provider fingerprint suite and PostgreSQL facet-isolation cases
 under the qualified dependency profiles. A stable digest in one provider or
 runtime process does not prove all relational facets are represented.
 
-Run all four benchmark projects using the commands in CONTRIBUTING and
-the versioned performance budgets. Require complete, non-duplicate, known
-measurements for construction, planning, SQL generation, model comparison,
+Run all five benchmark projects using the report-only commands in CONTRIBUTING
+and the versioned performance comparisons. Budget overruns are informational;
+configuration, execution and report-write failures remain blocking.
+Require complete, non-duplicate, known measurements for construction,
+planning, SQL generation, model comparison,
 fingerprinting, and serialization as applicable.
 
 The live provider suites also verify multi-chunk ordering and noisy catalog
@@ -213,11 +236,45 @@ window. Neither a hash nor a report proves the database server is honest.
 - 2026-09-18: D-013 extended the bounded evidence contract to the independent
   SQLite runtime-catalog benchmark, coverage, large-operation, and package
   qualification gates.
+- 2026-10-02: Extended bounded auxiliary transport to independent metadata and
+  inventory statements, retaining complete 512-value chunks and SQL Server's
+  stricter parameter limit. SQLite captures its invocation-owned catalog with
+  five fixed read commands instead of per-table and per-index commands.
+- 2026-10-03: Gave SQL Server its own capture shape of eight operations per
+  statement and 32 statements per native batch. Sequential connections retain
+  the shared 32-operation statement and eight-statement group. Native speedup
+  remains unmeasured; embedded names alone do not prevent plan reuse. Classifier
+  rows are matched by their ordinal column, so the statements no longer sort, and the
+  inventory pass reads a fresh environment/principal/collation stamp before
+  reusing a completed identifier verdict within the same active scope, context,
+  connection and transaction. Exact references are required. Scope disposal,
+  failure, unproven identity and environment/session changes invalidate both
+  verdict reuse and prior invariant-rejection suppression. SQL Server fixture
+  cleanup retains database ownership until confirmed absence; no model-database
+  recovery setting is changed.
+
+The dispatch choices above are repository contracts, not conclusions about
+SQL Server's cost model. Microsoft's [plan-cache documentation](https://learn.microsoft.com/en-us/sql/relational-databases/query-processing-architecture-guide?view=sql-server-ver17#execution-plan-caching-and-reuse)
+describes reuse for compatible query text and execution contexts.
+[SIMPLE recovery](https://learn.microsoft.com/en-us/sql/relational-databases/backup-restore/recovery-models-sql-server?view=sql-server-ver17)
+governs log recovery and space reclamation; it is not an exemption from
+[file initialization](https://learn.microsoft.com/en-us/sql/relational-databases/databases/database-instant-file-initialization?view=sql-server-ver17).
+An explicit [command timeout](https://learn.microsoft.com/en-us/dotnet/api/microsoft.data.sqlclient.sqlcommand.commandtimeout?view=sqlclient-dotnet-core-6.1)
+changes the wait budget, not the diagnosis of an exceeded budget or performance
+qualification. Native SQL Server 2019/2022/2025 qualification remains required.
+
+Microsoft documents that [EXECUTE AS](https://learn.microsoft.com/en-us/sql/t-sql/statements/execute-as-transact-sql?view=sql-server-ver17)
+changes the current session's permission context without replacing its connection.
+Fresh [database principal](https://learn.microsoft.com/en-us/sql/t-sql/functions/database-principal-id-transact-sql?view=sql-server-ver17)
+and [login SID](https://learn.microsoft.com/en-us/sql/t-sql/functions/suser-sid-transact-sql?view=sql-server-ver17)
+stamps therefore gate proof reuse; they are neither report fields nor log payloads.
 
 ### Implementation References
 
 - [Catalog query limits](../../src/Doka.EntityFrameworkCore.SafeMigrations/Analysis/SafeMigrationCatalogQueryLimits.cs)
 - [Catalog batch adapter](../../src/Doka.EntityFrameworkCore.SafeMigrations/Analysis/SafeMigrationCatalogBatch.cs)
+- [Qualified probe transport](../../src/Doka.EntityFrameworkCore.SafeMigrations/Analysis/SafeMigrationCatalogProbeBatch.cs)
+- [SQLite set-based capture](../../src/Doka.EntityFrameworkCore.SafeMigrations.Sqlite/Analysis/SqliteSafeMigrationCatalog.Streaming.cs)
 - [Sequential fallback integration tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Integration/SafeMigrationCatalogBatchIntegrationTests.cs)
 - [Catalog-limit tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Unit/Analysis/SafeMigrationCatalogQueryLimitsTests.cs)
 - [Definition ownership and validation tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Unit/Features/Lifecycle/SafeMigrationDefinitionTests.Lifecycle.cs)
@@ -245,3 +302,4 @@ window. Neither a hash nor a report proves the database server is honest.
 - [Npgsql batching](https://www.npgsql.org/doc/basic-usage.html#batching) (parameterized multi-command batching and result-set behavior; retrieved 2026-09-02)
 - [MySqlConnector `MySqlBatch`](https://mysqlconnector.net/api/mysqlconnector/mysqlbatchtype/) (MariaDB batching behavior, timeout, and multi-result reader contract; retrieved 2026-09-02)
 - [EF Core 10 `GetCommandTimeout`](https://learn.microsoft.com/en-us/dotnet/api/microsoft.entityframeworkcore.relationaldatabasefacadeextensions.getcommandtimeout?view=efcore-10.0) (configured context command-timeout contract; retrieved 2026-09-02)
+- SQLite table-valued PRAGMAs (`https://www.sqlite.org/pragma.html#pragfunc`; primary source; retrieved 2026-10-02)

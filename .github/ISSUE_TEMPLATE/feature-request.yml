@@ -48,6 +48,8 @@ body:
         - MySQL
         - MariaDB
         - PostgreSQL
+        - SQLite
+        - SQL Server
         - Not yet determined
     validations:
       required: true

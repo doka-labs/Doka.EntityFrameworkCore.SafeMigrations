@@ -50,6 +50,26 @@ public sealed class PostgreSqlContainerFixture : IAsyncLifetime, IDisposable
         }
     }
 
+    /// <summary>
+    /// Builds a connection string scoped to one test database.
+    /// </summary>
+    /// <remarks>
+    /// WHY: Pooling stays off although every analysis opens its own connection. Each test
+    /// owns a distinct database, so Npgsql would keep one pool per test instead of reusing
+    /// sessions, and the retained backends exhaust the server's connection limit long
+    /// before the suite ends. A local PostgreSQL login is cheap enough to pay per open.
+    /// </remarks>
+    /// <param name="database">The isolated database name.</param>
+    /// <returns>The connection string for that database.</returns>
+    private string TestConnectionString(
+        string database
+    ) => new NpgsqlConnectionStringBuilder(_container.GetConnectionString())
+    {
+        IncludeErrorDetail = true,
+        Pooling = false,
+        Database = database,
+    }.ConnectionString;
+
     public async Task InitializeAsync()
     {
         using var startupCancellation = new CancellationTokenSource(s_startupTimeout);
@@ -128,10 +148,7 @@ public sealed class PostgreSqlContainerFixture : IAsyncLifetime, IDisposable
 
             _createdDatabases.Add(database);
 
-            return new NpgsqlConnectionStringBuilder(RootConnectionString)
-            {
-                Database = database,
-            }.ConnectionString;
+            return TestConnectionString(database);
         }
         finally
         {

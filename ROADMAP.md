@@ -13,7 +13,7 @@ functionality into a later version.
 
 - Prepare the repository for public contribution and auditable maintenance.
 - Qualify all published packages together: Core, MySQL/MariaDB, PostgreSQL,
-  and, beginning with its first release, SQLite.
+  SQLite, and, beginning with the prepared 10.4.6 release, SQL Server.
 - Exercise the real candidate workflow before stable publication, including
   protected approval, signed identity, exact-byte publication, and readback.
 - Validate heterogeneous legacy convergence, runtime/history semantics,
@@ -63,11 +63,14 @@ and closes verified convergence and incremental design-time registration
 defects. Published stable 10.4.3 completes safe structural-operation scaffolding
 and corrects ordered provider transitions. Stable 10.4.4 corrects opaque-SQL
 mixed-stream preflight without rewriting migration source or runtime guards,
-and versions the corresponding report contract. The prepared 10.4.5 patch
+and versions the corresponding report contract. The 10.4.5 patch
 bounds MySQL/MariaDB composite-index catalog analysis and includes dependency-
-workflow maintenance. Publication still requires the full release gate. These
-releases follow changed dependency conditions and confirmed correctness
-requirements; they are not deferred initial scope.
+workflow maintenance. The prepared 10.4.6 release adds the optional SQL Server
+package and compatible catalog, allocation, roundtrip, and correctness fixes
+for the existing providers. Publication still requires the full five-package
+release gate and independent engine evidence. These releases follow changed
+dependency conditions and confirmed correctness requirements; they are not
+deferred initial scope.
 
 Requalify affected behavior before adopting a provider, EF Core, database,
 SDK, action, or tooling update. Preserve public API, report, migration, data

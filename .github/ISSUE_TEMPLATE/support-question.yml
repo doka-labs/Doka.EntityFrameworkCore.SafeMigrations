@@ -31,6 +31,8 @@ body:
         - MySQL
         - MariaDB
         - PostgreSQL
+        - SQLite
+        - SQL Server
         - Provider-neutral Core (no database)
         - Not yet determined
     validations:

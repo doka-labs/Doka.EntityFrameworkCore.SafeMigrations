@@ -2,6 +2,9 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 internal static class SafeMigrationTelemetry
 {
+    /// <summary>Identifies optional scopes for fixed analysis stages.</summary>
+    internal const string AnalysisStageActivityName = "safe_migrations.analysis.stage";
+
     public static readonly ActivitySource ActivitySource = new(SafeMigrationDiagnostics.ActivitySourceName);
 
     private static readonly Meter s_meter = new(SafeMigrationDiagnostics.MeterName);
@@ -19,6 +22,44 @@ internal static class SafeMigrationTelemetry
 
     private static readonly Counter<long> s_failureCount = s_meter.CreateCounter<long>(
         SafeMigrationDiagnostics.RunFailureCountMetricName);
+
+    /// <summary>Starts an optional, privacy-safe scope for one fixed analysis phase.</summary>
+    /// <param name="stage">A fixed provider-neutral phase or catalog-batch identifier.</param>
+    /// <param name="operationCount">The number of operations considered by this scope.</param>
+    /// <returns>The sampled activity, or null when no listener requests the scope.</returns>
+    /// <exception cref="ArgumentException">The stage is not a recognized, fixed identifier.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The operation count is negative.</exception>
+    internal static Activity? StartAnalysisStage(
+        string stage,
+        int operationCount
+    )
+    {
+        // WHY: A fixed vocabulary keeps tracing low-cardinality and prevents
+        // callers from accidentally emitting object names, SQL, or data values.
+        if (stage is not ("provider-classification" or "ordered-projection" or "unexpected-inventory"
+            or "provider-baseline" or "catalog-classification" or "catalog-batch"))
+        {
+            throw new ArgumentException("The analysis stage is not a recognized fixed identifier.", nameof(stage));
+        }
+
+        ArgumentOutOfRangeException.ThrowIfNegative(operationCount);
+
+        if (!ActivitySource.HasListeners())
+        {
+            return null;
+        }
+
+        var tags = new TagList
+        {
+            { "safe_migrations.analysis.stage", stage },
+            { "safe_migrations.operation_count", operationCount },
+        };
+
+        // WHY: Start callbacks run before StartActivity returns. Supplying tags
+        // during creation makes a stalled phase identifiable before it completes.
+        return ActivitySource.StartActivity(AnalysisStageActivityName, ActivityKind.Internal,
+            parentContext: default, tags: tags);
+    }
 
     public static void Record(
         SafeMigrationReportMode mode,

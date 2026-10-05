@@ -1,10 +1,230 @@
 # Changelog
 
 All notable changes are documented here. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
-[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Package versions follow
+the shared release identity described in [Release process](docs/release-process.md).
 
 ## [Unreleased]
+
+## [10.4.6] - 2026-10-05
+
+Prepare stable 10.4.6 for all five packages. The existing providers receive
+compatible correctness and performance fixes; SQL Server is a new, optional
+provider package. Core adds two included-index helpers and the `sqlserver`
+engine-family value. Existing signatures, migration source, policies, report
+schema versions, and migration history remain compatible.
+
+This entry records source preparation, not publication. Completion requires
+the full qualification matrix, signed `v10.4.6` source identity, all five exact
+NuGet primary and symbol packages, and verified GitHub Release, SBOM,
+provenance, attestation, and public package readback evidence.
+
+### Added
+
+- Add a separate SQL Server provider package for EF Core 10 and SQL Server
+  2019, 2022, and 2025. Provider catalog analysis, guarded execution,
+  design-time registration, package qualification, benchmarks, and x86-64
+  live-engine checks are independent of the existing adapters.
+- Add `CreateIndexWithIncludesIfNotExistsFromModel` and
+  `CreateCompositeIndexWithIncludesIfNotExistsFromModel` to preserve SQL Server
+  included columns in scaffolded safe indexes.
+- Extend the report engine-family schema with `sqlserver`. Report schema
+  versions and existing migration histories remain unchanged; consumers with
+  exhaustive engine-family handling must recognize the new value.
+- Recognize canonical provider-delimited single-column `IS NULL` and
+  `IS NOT NULL` PostgreSQL raw index filters captured from EF. Preserve raw
+  filter bytes, immutable definitions and fingerprints; share predicate-column
+  prerequisites between ordered preflight projection and runtime validation.
+  Other opaque or noncanonical raw predicates remain unsupported.
+
+### Changed
+
+- Keep MySQL/MariaDB strict table-column matching in one ordinal-count catalog
+  probe with constant database and table lookup values. Avoid derived joins
+  that open unrelated schema metadata on MariaDB. Preserve exact column count,
+  names, order, facets, and NULL rejection, with positive and negative provider
+  regressions; no row scan or timing-based CI gate is added.
+- Share one table-default collation lookup across MySQL/MariaDB table-column
+  predicates when every expected column inherits that default. Preserve
+  per-column comparisons for explicit collations and MariaDB JSON. Reduce
+  repeated catalog subqueries without changing matching or rejection semantics.
+- Share exact SQL Server delayed classifier templates within bounded statements
+  and evaluate outer catalog proofs through reusable parameterized scalar SQL.
+  Keep proof values fresh, gate order, lossless source mappings, nine-column
+  result ownership and complete payload/parameter limits unchanged. Group
+  managed-data type checks by physical table without weakening required facets.
+- Open SQL Server fixture connections without pooling so tests that change their
+  database collation do not reuse an incompatible login-reset baseline. Add
+  isolated reset controls and an opt-in complete local classifier replay;
+  native engine qualification and production connection settings are unchanged.
+- Match SQL Server classifier rows by their ordinal column instead of relying on
+  ordered delivery, so the catalog statements no longer carry a sort. Missing,
+  duplicate and unexpected rows still fail the analysis.
+- Reuse a completed SQL Server identifier-contract verdict for the
+  unexpected-object inventory only within the same active scope, context,
+  connection and transaction, with an identical reference set and a freshly
+  matching environment, principal and collation stamp.
+  Failed analysis, scope disposal, connection closure and session changes
+  invalidate reuse; separate inventory requests obtain fresh proofs.
+- Retain SQL Server fixture database ownership until cleanup succeeds, allowing
+  retries after failed opening, dropping, cancellation or lost acknowledgement.
+  Final cleanup removes only confirmed drops. Do not change the server's model
+  database recovery configuration to tune test setup.
+- Batch independent MySQL/MariaDB and PostgreSQL diagnostic, narrowing and
+  qualified row probes through the existing bounded catalog transport. Omit
+  prerequisite queries only when their captured builder predicate is constant
+  `TRUE`. Preserve prerequisite barriers, evidence, original ordinals, command
+  timeouts, cancellation, transaction ownership and sequential wrapper fallback.
+- Reuse SQLite's immutable unexpected-object inventory snapshot for its bounded
+  semantic-alias windows without retaining catalog or row proofs between
+  invocations, connections, transactions or runtime mutations.
+- Stream SQL Server delayed classifier results from isolated parameterized
+  dynamic scopes instead of aggregating through `INSERT ... EXEC` and a result
+  table variable. Keep the complete classifier template independent of original
+  ordinals and source values, with unchanged physical and name-binding guards,
+  typed source mappings, result validation and transport limits.
+- Evaluate the MySQL/MariaDB nullable-to-required row proof once per guarded
+  column operation and share it and the physical repair invariant between
+  classification and repair eligibility.
+  Skip the scan for physically non-nullable, missing or ineligible columns;
+  retain fresh evidence after every intervening operation and independent
+  cleanup on success, rejection, cancellation, timeout and provider failure.
+  Apply the same physical-nullability gate to inline live analysis. Avoid
+  copied eligibility SQL during analysis and generation.
+- Skip PostgreSQL NULL row proofs only when the fresh physical catalog proves
+  an enforced and validated NOT NULL contract for the complete queried
+  relation. Do not trust PostgreSQL 18's possibly-invalid `attnotnull` flag
+  alone or use a parent-only proof for inherited rows. Preserve fresh NULL
+  rejection, operation-local proof reuse and locked repair rechecks.
+  Share one fresh physical repair-eligibility value within each evaluation and
+  append guard components directly without intermediate SQL copies; preserve
+  collision-free dollar tags, canonical commands and independent postconditions.
+- Batch independent table-layout, key and unexpected-object metadata reads
+  through the existing bounded Core transport. Preserve complete statement
+  ownership, 512-value inventory chunks, provider parameter and packet limits,
+  sequential fallback and all-or-failure publication.
+- Capture SQLite main-schema metadata with five fixed read commands using
+  set-based table-valued PRAGMAs. Stream columns, index keys and foreign keys
+  into the invocation-owned snapshot; preserve effective collations, generated
+  columns, expressions, implicit primary-key references and artifact guards.
+- Append SQL Server action cases and delayed scalar wrappers directly into
+  their operation-owned guard buffer instead of copying intermediate strings.
+  Compose identifier guards directly from their complete statements and index
+  existing command lists without temporary selectors. Preserve complete private
+  scopes, SQL bytes and unchanged allocation budgets.
+  Detect repeated identifier scopes without allocating full grouping objects,
+  retaining complete identifier validation and rendered references.
+- Let MySQL/MariaDB, PostgreSQL and SQL Server action rendering consume the
+  same canonical Core decision table without constructing discarded public
+  decision results. Public planner results, codes and validation stay unchanged;
+  no decision or database evidence is cached.
+- Report Core and all provider benchmark budget overruns as informational CI
+  and release evidence instead of blocking qualification on shared hardware.
+  Preserve measured durations, allocations, comparison limits and JSON verdicts.
+  Keep malformed configuration, incomplete workloads, execution exceptions and
+  output failures blocking; retain strict manual budget evaluation.
+- Reduce MySQL/MariaDB migration transport exchanges by grouping owned setup
+  fragments and directly emitting prepared assignments with their immediate
+  controls within each guarded operation, without copying completed large SQL
+  strings. Preserve exact SQL text and order,
+  original scope bounds, opaque provider setup, the guarded body, and
+  independently attempted cleanup. Keep fresh per-operation checks and existing
+  transaction, history, and server durability contracts.
+- Reuse one immutable MySQL/MariaDB decision-SQL assignment per scoped handler
+  for identical operation-kind, policy, and structural repair-capability inputs.
+  Bound retained cache memory to one entry without caching live state or proofs.
+- Pack SQL Server's read-only catalog classifiers by binding mode within
+  bounded captures, retaining original operation ordinals and unchanged
+  ordered projection. Parameterize delayed classifier ordinals so identical
+  inner SQL can reuse its compilation plan. Payload and transport limits,
+  runtime operation order, and public contracts remain unchanged.
+- Coalesce equal SQL Server baseline classifier plans within each bounded
+  capture. Restore immutable evidence to original operation slots without
+  caching results across captures or analysis invocations.
+- Pack unresolved MySQL/MariaDB and PostgreSQL catalog classifications across
+  already classified gaps through one bounded Core ordinal-work selector.
+  Retain strict submitted-result validation and migration-order projection;
+  capture PostgreSQL runtime plans in 512-operation windows.
+- Read SQL Server table-name occupancy once per bounded capture. Skip complete
+  structure matching only for targets proven absent; a newly occupied target
+  remains different. Parameterize managed-data classifiers with lossless source
+  mappings and separate inner/outer binding scopes, retaining conversion,
+  encoding, size and prerequisite guards. Bound transport to 2,000 parameters
+  and 4 MiB of SQL plus source payload; runtime mutation SQL is unchanged.
+- Add optional analysis-stage activities and privacy-safe SQL Server live
+  progress evidence for baseline capture, classification, ordered projection
+  and unexpected-object inventory. Disabled listeners allocate no activities;
+  phase durations and batch counts do not substitute for live qualification.
+- Store projected column definitions, absence and uncertainty by owning table
+  instead of rescanning all accumulated column states during table creation,
+  recreation and rename.
+- Reduce temporary allocations in shared seed and diagnostic evidence parsing
+  and ordered column projection. Use spans for numeric evidence, MariaDB integer
+  modifiers, SQL Server scalar facets and SQLite catalog slices. Reuse Boolean
+  terms and empty fragment lists during MySQL/MariaDB runtime generation; append
+  PostgreSQL baselines without intermediate SQL copies. Assemble bounded SQL
+  Server catalog commands directly into their final strings and stream column
+  bindings in bounded chunks. Preserve ownership, validation, SQL text,
+  diagnostic codes, query limits and execution contracts.
+- Approve exact CI dependency-license exceptions for SQL Server's transitive
+  Microsoft.Data.SqlClient.SNI.runtime 6.0.2 and
+  Microsoft.Identity.Client.NativeInterop 0.20.6. Validate every hosted
+  dependency-diff page against these versions; preserve the global SPDX,
+  vulnerability, Scorecard, and complete-snapshot gates. Published packages
+  contain no Microsoft dependency binaries.
+- Update the private development analyzer to Microsoft.CodeAnalysis.Analyzers
+  5.9.0 from the maintained Roslyn repository. Package-content verification
+  rejects development analyzer dependencies in published package manifests.
+
+### Fixed
+
+- Compare PostgreSQL column-key index collations by catalog identity instead
+  of per-column deparsed SQL. Explicit index collations cannot satisfy a
+  different column-default contract, including mixed plain/explicit keys,
+  operator classes and semantic aliases. Expression-key comparisons keep
+  key-level decorations separate and prove derived collations without row scans.
+- Keep index prerequisites intact when an earlier accepted table operation
+  supplies a complete or compact projected definition. Missing key, include,
+  structured-expression and provider-certified filter columns cannot become
+  applicable merely because the index itself is absent.
+- Isolate each complete SQL Server operation guard in its own dynamic SQL
+  variable scope so multiple guarded commands can share normal or idempotent
+  EF migration script batches without duplicate variable declarations. Preserve
+  late name binding, transactional failure, postconditions and identity-insert
+  recovery; do not add client batch separators or additional client roundtrips.
+- Preserve an unchanged SQL Server column's exact match after an unrelated
+  accepted column drop. Invalidate that certificate after changes to the
+  matched column, table replacement, renames and opaque provider operations.
+- Honor accepted missing-table ownership before historical matching evidence
+  across column, index, constraint and model-managed operations. Recreated
+  tables restore ownership; opaque SQL still requires fresh runtime validation.
+- Distinguish SQL Server dynamic-batch cancellation from inherited session
+  `IDENTITY_INSERT` state in live recovery tests. Persist bounded live-workload
+  stage markers before awaited phases so a job timeout retains diagnostic
+  evidence without database identifiers, SQL or connection strings.
+- Preserve the captured SQL Server column-allocation rejection after an
+  accepted column drop instead of masking it as an unknown prerequisite.
+  Keep opaque-SQL follow-ups deferred to runtime validation and cover both
+  successful revalidation and rejected missing foreign-key prerequisites.
+- Align the complete-snapshot workflow regression with its exact-version
+  license guard and give SQL Server cancellation readiness an explicit
+  integer scalar contract with fail-closed result validation.
+- Correct SQL Server column-layout catalog syntax and single-dependency
+  diagnostics for model-managed deletes. Match table columns through one
+  bounded catalog join, including identity and default fingerprints, instead
+  of compiling a separate correlated query for each column.
+- Preserve explicit-schema rename execution and ordered table, column, and
+  schema-transfer prerequisites only when the provider proves their physical
+  identity. Unrelated or opaque mutations still invalidate unproven state.
+- Preserve temporal literal source types before target conversion and permit
+  SQL Server's automatic-statistics handling during approved column changes
+  without relaxing user-created statistics or other dependency guards.
+- Preserve invariant metadata-visibility and identity rejections in blocked
+  reports when the optional unexpected-object inventory cannot be obtained.
+  An empty inventory in such a report is not proof of object absence.
+- Synchronize SQL Server identity-insert cancellation tests through an
+  observable session-owned application lock. Correct managed-key stress and
+  ordered seed fixtures without weakening validation or performance budgets.
 
 ## [10.4.5] - 2026-09-30
 
@@ -1192,7 +1412,8 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.5...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.6...HEAD
+[10.4.6]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.5...v10.4.6
 [10.4.5]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.4...v10.4.5
 [10.4.4]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.3...v10.4.4
 [10.4.3]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.2...v10.4.3

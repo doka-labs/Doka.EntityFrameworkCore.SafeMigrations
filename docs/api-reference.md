@@ -8,7 +8,8 @@ completion/Quick Documentation for the selected package version. The
 [Core](../src/Doka.EntityFrameworkCore.SafeMigrations/PublicAPI.Shipped.txt),
 [MySQL/MariaDB](../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/PublicAPI.Shipped.txt),
 [PostgreSQL](../src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/PublicAPI.Shipped.txt),
-and [SQLite](../src/Doka.EntityFrameworkCore.SafeMigrations.Sqlite/PublicAPI.Shipped.txt)
+[SQLite](../src/Doka.EntityFrameworkCore.SafeMigrations.Sqlite/PublicAPI.Shipped.txt),
+and [SQL Server](../src/Doka.EntityFrameworkCore.SafeMigrations.SqlServer/PublicAPI.Shipped.txt)
 API baselines are review inventories, not substitutes for this guide or XML.
 The initial public surface shipped with `10.0.0-rc.1`; `10.0.0-rc.2` added
 source-frozen legacy-convergence policy selection and provider-context
@@ -49,33 +50,47 @@ scaffolding remains the default. Stable 10.4.4 adds
 to schema v3 and filtered views to v2. Consumers must update exhaustive enum
 handling and schema validation, and rebuild references to the compiled
 `CurrentSchemaVersion` constant. Existing migration source, runtime guards,
-and history remain unchanged. The prepared 10.4.5 patch preserves that public
+and history remain unchanged. The 10.4.5 patch preserves that public
 API, generated migration source, report schemas, and history. It changes only
-the MySQL/MariaDB index-catalog comparison query shape. A successful release
-run and exact-version public package readback remain the authority for a
-published API.
+the MySQL/MariaDB index-catalog comparison query shape.
+
+The prepared 10.4.6 release adds the optional SQL Server package with
+provider-specific registration and generator composition. Core adds
+`CreateIndexWithIncludesIfNotExistsFromModel` and
+`CreateCompositeIndexWithIncludesIfNotExistsFromModel`; existing signatures
+remain compatible. Reports accept `sqlserver` as an engine-family value
+without changing canonical schema v3, filtered-view schema v2, or histories.
+Consumers with exhaustive engine-family handling must recognize the new value.
+A successful release run and exact-version public package readback remain the
+authority for a published API; shipped baseline files record its prepared
+contract, not proof of publication.
 
 ## Packages and registration
 
 Core types use `Doka.EntityFrameworkCore.SafeMigrations`. The provider-specific
-registration namespaces append `.MySql`, `.PostgreSql`, or `.Sqlite`.
+registration namespaces append `.MySql`, `.PostgreSql`, `.Sqlite`, or `.SqlServer`.
 
 | Entry point | Inputs and result | Boundary |
 | --- | --- | --- |
 | `UseMySqlSafeMigrations()` | Configured EF options builder; returns the builder | Supports both call orders with Doka `UseMySql`; declares the required user-variable capability for MySQL and MariaDB |
 | `UsePostgreSqlSafeMigrations()` | Configured EF options builder; returns the builder | Add after `UseNpgsql` |
 | `UseSqliteSafeMigrations()` | Configured EF options builder; returns the builder | Add after `UseSqlite`; supports the primary `main` database |
+| `UseSqlServerSafeMigrations()` | Configured EF options builder; returns the builder | Add after `UseSqlServer`; unqualified safe operations require a `dbo` default schema |
 | `UseMySqlSafeMigrations(configure)` | Safe scaffolding mode plus normal MySQL/MariaDB registration | `Strict` is the builder default; selection is written into new migration source |
 | `UsePostgreSqlSafeMigrations(configure)` | Safe scaffolding mode plus normal PostgreSQL registration | Same source-frozen design-time contract |
 | `UseSqliteSafeMigrations(configure)` | Safe scaffolding mode plus normal SQLite registration | Same source-frozen design-time contract |
+| `UseSqlServerSafeMigrations(configure)` | Safe scaffolding mode plus normal SQL Server registration | Same source-frozen design-time contract |
 | `UseMySqlSafeMigrations<TCanonicalMigrationContext>()` | Canonical context type on the non-generic options builder | Derived runtime type must be assignable and preserve the canonical model |
 | `UsePostgreSqlSafeMigrations<TCanonicalMigrationContext>()` | Canonical context type | Same model/assembly/history boundary |
 | `UseSqliteSafeMigrations<TCanonicalMigrationContext>()` | Canonical context type | Same model/assembly/history boundary |
+| `UseSqlServerSafeMigrations<TCanonicalMigrationContext>()` | Canonical context type | Same model/assembly/history boundary |
 | `UsePostgreSqlSafeMigrations<TBaselineGenerator, TCanonicalMigrationContext>()` | Selected Npgsql-compatible generator and canonical context | Composes ordinary and safe baseline generation explicitly |
 | `UseSqliteSafeMigrations<TBaselineGenerator, TCanonicalMigrationContext>()` | Selected SQLite-compatible generator and canonical context | Composes ordinary and safe baseline generation explicitly |
+| `UseSqlServerSafeMigrations<TBaselineGenerator, TCanonicalMigrationContext>()` | Selected SQL Server-compatible generator and canonical context | Composes ordinary and safe baseline generation explicitly |
 | `AddEntityFrameworkDokaMySqlSafeMigrations()` | Application-owned EF internal service collection | Also register Doka's base provider services |
 | `AddPostgreSqlSafeMigrations()` | Application-owned EF internal service collection | Also register Npgsql's base provider services |
 | `AddSqliteSafeMigrations()` | Application-owned EF internal service collection | Also register EF Core SQLite's base provider services |
+| `AddSqlServerSafeMigrations()` | Application-owned EF internal service collection | Also register EF Core SQL Server's base provider services |
 
 Typed options-builder overloads retain the `TContext` return type. Their type
 parameter lists differ from the non-generic builder overloads; use IDE
@@ -212,8 +227,8 @@ mapping is:
 | `AddColumn` | `AddColumnIfNotExistsFromModel` | Same |
 | `AlterColumn` | `AlterColumnIfDifferentFromModel` with `RepairIfSafe` | Same |
 | `DropColumn`, `RenameColumn` | `DropColumnIfExists`, `RenameColumnIfExists` | Same |
-| Single-column `CreateIndex` | `CreateIndexIfNotExistsFromModel`, or the prefix-aware counterpart on MySQL/MariaDB | Same |
-| Multi-column `CreateIndex` | `CreateCompositeIndexIfNotExistsFromModel`, or the prefix-aware counterpart on MySQL/MariaDB | Same |
+| Single-column `CreateIndex` | `CreateIndexIfNotExistsFromModel`, the prefix-aware counterpart on MySQL/MariaDB, or the INCLUDE-aware counterpart on SQL Server | Same |
+| Multi-column `CreateIndex` | `CreateCompositeIndexIfNotExistsFromModel`, the prefix-aware counterpart on MySQL/MariaDB, or the INCLUDE-aware counterpart on SQL Server | Same |
 | `DropIndex`, `RenameIndex` | `DropIndexIfExists`, `RenameIndexIfExists` | Same |
 | Standalone `AddPrimaryKey`, `AddUniqueConstraint`, `AddCheckConstraint`, `AddForeignKey` | Corresponding `*IfNotExists` method with `ThrowIfDifferent` | Same |
 | Standalone primary-key, unique, check, or foreign-key drop | Corresponding `*IfExists` method | Same |
@@ -326,7 +341,7 @@ operations and returns the original `MigrationBuilder`.
 | Schema | `EnsureSchemaExists` | `DropSchemaIfExists` |
 | Table | `EnsureTable`, `ConvergeTable` | `CreateTableIfNotExists<TColumns>`, `ConvergeTableFromModel<TColumns>`, `DropTableIfExists`, `RenameTableIfExists` |
 | Column | `EnsureColumn`, `AlterColumnIfDifferent` | `AddColumnIfNotExists<T>`, `AddColumnIfNotExistsFromModel`, `AlterColumnIfDifferentFromModel`, `DropColumnIfExists`, `RenameColumnIfExists` |
-| Index | `EnsureIndex` | `CreateIndexIfNotExists`, `CreateIndexIfNotExistsFromModel`, `CreateCompositeIndexIfNotExistsFromModel`, `CreateIndexWithPrefixesIfNotExistsFromModel`, `CreateCompositeIndexWithPrefixesIfNotExistsFromModel`, `DropIndexIfExists`, `RenameIndexIfExists` |
+| Index | `EnsureIndex` | `CreateIndexIfNotExists`, `CreateIndexIfNotExistsFromModel`, `CreateCompositeIndexIfNotExistsFromModel`, `CreateIndexWithPrefixesIfNotExistsFromModel`, `CreateCompositeIndexWithPrefixesIfNotExistsFromModel`, `CreateIndexWithIncludesIfNotExistsFromModel`, `CreateCompositeIndexWithIncludesIfNotExistsFromModel`, `DropIndexIfExists`, `RenameIndexIfExists` |
 | Primary key | `EnsurePrimaryKey` | `AddPrimaryKeyIfNotExists`, `DropPrimaryKeyIfExists` |
 | Unique constraint | `EnsureUniqueConstraint` | `AddUniqueConstraintIfNotExists`, `DropUniqueConstraintIfExists` |
 | Check constraint | `EnsureCheckConstraint` | `AddCheckConstraintIfNotExists`, `DropCheckConstraintIfExists` |
@@ -383,6 +398,10 @@ The two prefix-aware methods accept exactly one non-negative entry per key.
 Zero captures a complete key and a positive value becomes the key's explicit
 prefix length. They exist so provider-projected migration source does not leak
 Doka annotations onto a custom outer operation.
+The two INCLUDE-aware methods capture SQL Server's ordered non-key columns in
+the immutable index definition. They are scaffolded when EF supplies included
+columns; they do not infer or discard provider annotations. Hand-written
+migrations can express the same contract through `EnsureIndex`.
 
 `Drop*IfExists` operations are explicitly destructive when the target exists;
 the name means idempotent absence, not recovery or undo. Rename methods require

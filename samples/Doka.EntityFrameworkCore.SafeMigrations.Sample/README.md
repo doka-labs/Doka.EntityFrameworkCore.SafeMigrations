@@ -10,7 +10,7 @@ This compilable sample demonstrates the current .NET 10 API:
 - PostgreSQL schema and rename operations;
 - an allowlisted `RepairIfSafe` column metadata transition whose structural
   type facets exactly match the declared old definition;
-- MySQL/MariaDB, PostgreSQL, and SQLite adapter registration touchpoints.
+- MySQL/MariaDB, PostgreSQL, SQLite, and SQL Server adapter registration touchpoints.
 
 The normal authoring path is `dotnet ef migrations add` with
 `LegacyConvergence` selected in provider registration; the design-time
@@ -30,6 +30,7 @@ using Doka.EntityFrameworkCore.SafeMigrations;
 using Doka.EntityFrameworkCore.SafeMigrations.MySql;
 using Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 using Doka.EntityFrameworkCore.SafeMigrations.Sqlite;
+using Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 
 options.UseMySqlSafeMigrations(configuration =>
 {
@@ -48,13 +49,19 @@ options.UseSqliteSafeMigrations(configuration =>
     configuration.UseScaffoldingMode(
         SafeMigrationScaffoldingMode.LegacyConvergence);
 });
+
+options.UseSqlServerSafeMigrations(configuration =>
+{
+    configuration.UseScaffoldingMode(
+        SafeMigrationScaffoldingMode.LegacyConvergence);
+});
 ```
 
 `SafeMigrationScaffoldingMode.Strict` is the no-argument default. The enum is
 read only while EF scaffolds a new C# migration; changing it does not modify or
 reinterpret migrations that already exist.
 
-For the complete generated `Up` and fail-closed `Down` shape, compare all three
+For the complete generated `Up` and fail-closed `Down` shape, compare all four
 [migration authoring paths](../../docs/migration-authoring.md).
 
 Key files:
@@ -68,7 +75,7 @@ Key files:
   operation sequences without connecting to a database.
 
 The consuming application configures Doka `UseMySql(...)`, Npgsql
-`UseNpgsql(...)`, or Microsoft `UseSqlite(...)` plus the matching
+`UseNpgsql(...)`, Microsoft `UseSqlite(...)`, or Microsoft `UseSqlServer(...)` plus the matching
 SafeMigrations registration. `SampleDbContext` intentionally contains no
 connection string or implicit provider choice.
 

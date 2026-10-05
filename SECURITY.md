@@ -7,8 +7,8 @@ Do not report an exploitable vulnerability in a public issue, pull request, or d
 ## System and scope
 
 This policy covers the SafeMigrations repository, its Core, MySQL/MariaDB,
-PostgreSQL, and SQLite packages, and its build and release tooling. SafeMigrations is
-an in-process EF Core library, not an authentication service or database
+PostgreSQL, SQLite, and SQL Server packages, and its build and release tooling.
+SafeMigrations is an in-process EF Core library, not an authentication service or database
 server. The consuming application selects the database endpoint, credentials,
 migration assembly, configuration, and execution authority.
 
@@ -92,15 +92,15 @@ changes.
 
 ## Supported Versions
 
-This policy covers all four SafeMigrations packages. Stable 10.4.x is the
-currently supported line; a dated changelog entry is not proof that a
-particular version has been published. The latest stable tag is 10.4.4. This
-source prepares 10.4.5, which becomes a supported release only after verified
+This policy covers every SafeMigrations package and provider project in this
+source tree. Stable 10.4.x is the currently supported line; a dated changelog
+entry is not proof of publication. This source prepares 10.4.6, including the
+first optional SQL Server package, which becomes supported only after verified
 publication and package readback.
 
 | Release state | Security support |
 | --- | --- |
-| Prepared 10.4.5 source | Not a published support claim until release and package readback succeed |
+| Prepared 10.4.6 source | Not a published support claim until release and package readback succeed |
 | Stable 10.4.x | Supported release line; fixes may require updating to its latest published patch |
 | Stable 10.3.x | Superseded by the stable 10.4.x line |
 | Stable 10.2.x | Superseded by the stable 10.3.x line |
@@ -126,7 +126,8 @@ first agree on a secure transfer channel; no public PGP key is advertised here.
 
 Include as much of the following as possible:
 
-- The affected package versions and exact MySQL, MariaDB, PostgreSQL, or SQLite version.
+- The affected package versions and exact MySQL, MariaDB, PostgreSQL, SQLite,
+  or SQL Server version.
 - A minimal synthetic reproducer, starting schema/data shape, migration path,
   and the expected versus observed security boundary.
 - Required privileges, configuration, attacker control, and potential impact.

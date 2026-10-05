@@ -1,9 +1,13 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
-internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationProjectedColumnSource
+internal sealed partial class SafeMigrationPreflightProjection :
+    ISafeMigrationProjectedColumnSource,
+    ISafeMigrationProjectedTableSource
 {
     private readonly ISafeMigrationProviderOperationProjection? _providerOperationProjection;
     private readonly ISafeMigrationProjectedKeyAnalyzer? _projectedKeyAnalyzer;
+    private readonly ISafeMigrationProjectedDependencyAnalyzer? _projectedDependencyAnalyzer;
+    private readonly ISafeMigrationIndexPrerequisiteSource? _indexPrerequisiteSource;
     private readonly ISafeMigrationProviderObjectIdentityNormalizer? _objectIdentityNormalizer;
     private readonly Dictionary<TableKey, ProjectedTable> _tables;
 
@@ -14,10 +18,12 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
     private readonly HashSet<IndexKey> _droppedPhysicalKeys;
     private readonly HashSet<TableKey> _projectedDataMutationTables;
     private readonly Dictionary<TableKey, HashSet<string>> _projectedModelManagedUniqueKeys;
-    private readonly Dictionary<ColumnKey, ExpectedColumnDefinition> _projectedColumnDefinitions;
+
+    // WHY: Table-owned column states make cleanup and rename independent of
+    // columns accumulated for unrelated tables in a large operation stream.
+
+    private readonly Dictionary<TableKey, Dictionary<string, ProjectedColumnState>> _projectedColumnStates;
     private readonly HashSet<TableKey> _projectedCandidateKeyMutationTables;
-    private readonly HashSet<ColumnKey> _projectedMissingColumns;
-    private readonly HashSet<ColumnKey> _projectedUnknownColumns;
     private readonly HashSet<TableKey> _projectedMissingTables;
     private readonly HashSet<TableKey> _projectedUnknownTableStructures;
     private readonly HashSet<TableKey> _projectedStructurallyModifiedTables;
@@ -31,26 +37,27 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
     public SafeMigrationPreflightProjection(
         ISafeMigrationProviderOperationProjection? providerOperationProjection = null,
         ISafeMigrationProjectedKeyAnalyzer? projectedKeyAnalyzer = null,
-        ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer = null
+        ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer = null,
+        ISafeMigrationProjectedDependencyAnalyzer? projectedDependencyAnalyzer = null,
+        ISafeMigrationIndexPrerequisiteSource? indexPrerequisiteSource = null
     )
     {
         _providerOperationProjection = providerOperationProjection;
         _projectedKeyAnalyzer = projectedKeyAnalyzer;
         _objectIdentityNormalizer = objectIdentityNormalizer;
+        _projectedDependencyAnalyzer = projectedDependencyAnalyzer;
+        _indexPrerequisiteSource = indexPrerequisiteSource;
 
         var tableComparer = new TableKeyComparer(objectIdentityNormalizer);
         var indexComparer = new IndexKeyComparer(objectIdentityNormalizer);
-        var columnComparer = new ColumnKeyComparer(objectIdentityNormalizer);
 
         _tables = new Dictionary<TableKey, ProjectedTable>(tableComparer);
         _prerequisites = new Dictionary<TableKey, ProjectedPrerequisites>(tableComparer);
         _droppedPhysicalKeys = new HashSet<IndexKey>(indexComparer);
         _projectedDataMutationTables = new HashSet<TableKey>(tableComparer);
         _projectedModelManagedUniqueKeys = new Dictionary<TableKey, HashSet<string>>(tableComparer);
-        _projectedColumnDefinitions = new Dictionary<ColumnKey, ExpectedColumnDefinition>(columnComparer);
+        _projectedColumnStates = new Dictionary<TableKey, Dictionary<string, ProjectedColumnState>>(tableComparer);
         _projectedCandidateKeyMutationTables = new HashSet<TableKey>(tableComparer);
-        _projectedMissingColumns = new HashSet<ColumnKey>(columnComparer);
-        _projectedUnknownColumns = new HashSet<ColumnKey>(columnComparer);
         _projectedMissingTables = new HashSet<TableKey>(tableComparer);
         _projectedUnknownTableStructures = new HashSet<TableKey>(tableComparer);
         _projectedStructurallyModifiedTables = new HashSet<TableKey>(tableComparer);
@@ -91,6 +98,14 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
             return StructureStateUnknown();
         }
 
+        // WHY: Accepted table removal invalidates every owned object, including
+        // provider analyses that still describe the immutable pre-batch catalog.
+
+        if (ProjectMissingTableOwnership(operation.Intent) is { } missingOwnerAnalysis)
+        {
+            return missingOwnerAnalysis;
+        }
+
         if (_providerOperationProjection?.IsSequenceAwareAnalysis(operation, liveAnalysis) == true)
         {
             // WHY: A provider result that accounts for the ordered safe stream
@@ -100,10 +115,15 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
 
         if (_hasOpaqueProviderPostcondition)
         {
-            return StructureStateUnknown();
+            // WHY: A provider can retain physical identities across a safe
+            // rename even when neutral projection cannot. Only an explicit
+            // ordered proof may discharge this uncertainty; opaque SQL and
+            // invariant rejections have already taken precedence above.
+            return _projectedDependencyAnalyzer?.ValidateOpaqueProviderPostcondition(operation, liveAnalysis, this)
+                ?? StructureStateUnknown();
         }
 
-        return operation.Intent switch
+        var projectedAnalysis = operation.Intent switch
         {
             EnsureSchemaIntent value => Project(value, liveAnalysis),
             DropSchemaIntent value => Project(value, liveAnalysis),
@@ -128,6 +148,60 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
             ModelManagedDataIntent value => Project(value, liveAnalysis),
             _ => liveAnalysis,
         };
+
+        // WHY: Provider-neutral shape projection cannot prove provider-specific
+        // dependency graphs. Recheck those rules after the accepted earlier
+        // operations have changed the projected physical state.
+        return _projectedDependencyAnalyzer?.ValidateProjectedOperation(operation, projectedAnalysis, this)
+            ?? projectedAnalysis;
+    }
+
+    private SafeMigrationProviderAnalysis? ProjectMissingTableOwnership(
+        SafeMigrationIntent intent
+    )
+    {
+        if (_projectedMissingTables.Count == 0)
+        {
+            return null;
+        }
+
+        (TableKey Key, bool RequiresPresence)? owner = intent switch
+        {
+            EnsureColumnIntent value => (new TableKey(value.Table, value.Schema), true),
+            AlterColumnIntent value => (new TableKey(value.Table, value.Schema), true),
+            DropColumnIntent value => (new TableKey(value.Table, value.Schema), false),
+            RenameColumnIntent value => (new TableKey(value.Table, value.Schema), false),
+            EnsureIndexIntent value => (new TableKey(value.Definition.Table, value.Definition.Schema), true),
+            DropIndexIntent value => (new TableKey(value.Table, value.Schema), false),
+            RenameIndexIntent value => (new TableKey(value.Table, value.Schema), false),
+            EnsurePrimaryKeyIntent value => (new TableKey(value.Definition.Table, value.Definition.Schema), true),
+            DropPrimaryKeyIntent value => (new TableKey(value.Table, value.Schema), false),
+            EnsureUniqueConstraintIntent value => (new TableKey(value.Definition.Table, value.Definition.Schema), true),
+            DropUniqueConstraintIntent value => (new TableKey(value.Table, value.Schema), false),
+            EnsureCheckConstraintIntent value => (new TableKey(value.Definition.Table, value.Definition.Schema), true),
+            DropCheckConstraintIntent value => (new TableKey(value.Table, value.Schema), false),
+            EnsureForeignKeyIntent value => (new TableKey(value.Definition.Table, value.Definition.Schema), true),
+            DropForeignKeyIntent value => (new TableKey(value.Table, value.Schema), false),
+            ModelManagedDataIntent value => (new TableKey(value.Table, value.Schema),
+                value is not DeleteModelManagedDataIntent),
+            DropTableIntent value => (new TableKey(value.Table, value.Schema), false),
+            RenameTableIntent value => (new TableKey(value.Name, value.Schema), false),
+            _ => null,
+        };
+
+        if (owner is { } ownedTable && _projectedMissingTables.Contains(ownedTable.Key))
+        {
+            return ownedTable.RequiresPresence
+                ? TablePrerequisiteMissing()
+                : Analysis(SafeMigrationObservedState.Missing);
+        }
+
+        return intent is EnsureForeignKeyIntent foreignKey
+            && _projectedMissingTables.Contains(new TableKey(
+                foreignKey.Definition.PrincipalTable,
+                foreignKey.Definition.PrincipalSchema))
+                ? TablePrerequisiteMissing()
+                : null;
     }
 
     public void Observe(
@@ -146,6 +220,8 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
         {
             return;
         }
+
+        _projectedDependencyAnalyzer?.ObserveAcceptedOperation(operation, liveAnalysis, analysis, decision);
 
         // WHY: Preflight never mutates the database. Accepted operations instead
         // update this in-memory catalog so later operations observe prior ones.
@@ -236,6 +312,8 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
     {
         ArgumentNullException.ThrowIfNull(operation);
 
+        _projectedDependencyAnalyzer?.ObserveProviderOperation(operation);
+
         if (_providerOperationProjection?.PreservesExistingTableState(operation) == true)
         {
             // WHY: The provider owns whether this ordinary operation preserves
@@ -309,9 +387,46 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
         string? schema,
         string column,
         [NotNullWhen(true)] out ExpectedColumnDefinition? definition
-    ) => _projectedColumnDefinitions.TryGetValue(
-        new ColumnKey(table, schema, column),
-        out definition);
+    )
+    {
+        definition = TryGetProjectedColumnState(table, schema, column, out var state)
+            ? state.Definition
+            : null;
+
+        return definition is not null;
+    }
+
+    private bool TryGetProjectedColumnState(
+        string table,
+        string? schema,
+        string column,
+        out ProjectedColumnState state
+    )
+    {
+        if (_projectedColumnStates.TryGetValue(new TableKey(table, schema), out var columns))
+        {
+            return columns.TryGetValue(column, out state);
+        }
+
+        state = default;
+
+        return false;
+    }
+
+    private Dictionary<string, ProjectedColumnState> GetOrCreateProjectedColumnStates(
+        string table,
+        string? schema
+    )
+    {
+        var key = new TableKey(table, schema);
+        if (!_projectedColumnStates.TryGetValue(key, out var columns))
+        {
+            columns = new Dictionary<string, ProjectedColumnState>(new IdentifierComparer(_objectIdentityNormalizer));
+            _projectedColumnStates.Add(key, columns);
+        }
+
+        return columns;
+    }
 
     bool ISafeMigrationProjectedColumnSource.TryGetProjectedColumn(
         string table,
@@ -320,56 +435,68 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
         [NotNullWhen(true)] out ExpectedColumnDefinition? definition
     ) => TryGetProjectedColumnDefinition(table, schema, column, out definition);
 
+    bool ISafeMigrationProjectedTableSource.TryGetProjectedTableState(
+        string table,
+        string? schema,
+        out SafeMigrationProjectedTableState state
+    )
+    {
+        var key = new TableKey(table, schema);
+        var hasPrerequisites = _prerequisites.TryGetValue(key, out var prerequisites);
+
+        if (!hasPrerequisites && !_tables.ContainsKey(key))
+        {
+            state = default;
+
+            return false;
+        }
+
+        // WHY: A created table is empty only until an accepted data mutation.
+        // Providers must consume both facts rather than infer row safety from
+        // the creation marker alone.
+        state = new SafeMigrationProjectedTableState(
+            prerequisites?.NewlyCreated == true,
+            HasUnanalyzedDataChanges(table, schema),
+            prerequisites?.PrimaryKeyWasDropped == true,
+            IsProjectedTableStructureUnknown(table, schema));
+
+        return true;
+    }
+
     private void SetProjectedColumnDefinition(
         string table,
         string? schema,
         ExpectedColumnDefinition definition
-    )
-    {
-        var key = new ColumnKey(table, schema, definition.Name);
-
-        _projectedColumnDefinitions[key] = definition;
-        _projectedMissingColumns.Remove(key);
-        _projectedUnknownColumns.Remove(key);
-    }
+    ) => GetOrCreateProjectedColumnStates(table, schema)[definition.Name] =
+        new ProjectedColumnState(definition, IsMissing: false);
 
     private void SetProjectedColumnMissing(
         string table,
         string? schema,
         string column
-    )
-    {
-        var key = new ColumnKey(table, schema, column);
-
-        _projectedColumnDefinitions.Remove(key);
-        _projectedUnknownColumns.Remove(key);
-        _projectedMissingColumns.Add(key);
-    }
+    ) => GetOrCreateProjectedColumnStates(table, schema)[column] =
+        new ProjectedColumnState(Definition: null, IsMissing: true);
 
     private void SetProjectedColumnUnknown(
         string table,
         string? schema,
         string column
-    )
-    {
-        var key = new ColumnKey(table, schema, column);
-
-        _projectedColumnDefinitions.Remove(key);
-        _projectedMissingColumns.Remove(key);
-        _projectedUnknownColumns.Add(key);
-    }
+    ) => GetOrCreateProjectedColumnStates(table, schema)[column] =
+        new ProjectedColumnState(Definition: null, IsMissing: false);
 
     private bool IsProjectedColumnMissing(
         string table,
         string? schema,
         string column
-    ) => _projectedMissingColumns.Contains(new ColumnKey(table, schema, column));
+    ) => TryGetProjectedColumnState(table, schema, column, out var state) && state.IsMissing;
 
     private bool IsProjectedColumnUnknown(
         string table,
         string? schema,
         string column
-    ) => _projectedUnknownColumns.Contains(new ColumnKey(table, schema, column));
+    ) => TryGetProjectedColumnState(table, schema, column, out var state)
+        && state.Definition is null
+        && !state.IsMissing;
 
     private bool IsProjectedTableStructureUnknown(
         string table,
@@ -541,30 +668,21 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
         string column
     )
     {
-        var key = new ColumnKey(table, schema, column);
-
-        _projectedColumnDefinitions.Remove(key);
-        _projectedMissingColumns.Remove(key);
-        _projectedUnknownColumns.Remove(key);
+        var key = new TableKey(table, schema);
+        if (_projectedColumnStates.TryGetValue(key, out var columns))
+        {
+            columns.Remove(column);
+            if (columns.Count == 0)
+            {
+                _projectedColumnStates.Remove(key);
+            }
+        }
     }
 
     private void RemoveProjectedColumnDefinitions(
         string table,
         string? schema
-    )
-    {
-        var keys = _projectedColumnDefinitions.Keys
-            .Where(key => SameTable(key, table, schema))
-            .ToArray();
-
-        foreach (var key in keys)
-        {
-            _projectedColumnDefinitions.Remove(key);
-        }
-
-        _projectedMissingColumns.RemoveWhere(key => SameTable(key, table, schema));
-        _projectedUnknownColumns.RemoveWhere(key => SameTable(key, table, schema));
-    }
+    ) => _projectedColumnStates.Remove(new TableKey(table, schema));
 
     private void RenameProjectedColumnDefinition(
         string table,
@@ -573,9 +691,8 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
         string target
     )
     {
-        var sourceKey = new ColumnKey(table, schema, source);
-        _projectedColumnDefinitions.Remove(sourceKey, out var definition);
-
+        TryGetProjectedColumnDefinition(table, schema, source, out var definition);
+        RemoveProjectedColumnDefinition(table, schema, source);
         RemoveProjectedColumnDefinition(table, schema, target);
 
         if (definition is not null)
@@ -597,52 +714,16 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
         string? targetSchema
     )
     {
-        var states = _projectedColumnDefinitions
-            .Where(pair => SameTable(pair.Key, table, schema))
-            .Select(static pair => new ProjectedColumnState(
-                pair.Key.Name,
-                pair.Value,
-                IsMissing: false,
-                IsUnknown: false))
-            .Concat(
-                _projectedMissingColumns
-                    .Where(key => SameTable(key, table, schema))
-                    .Select(static key => new ProjectedColumnState(key.Name, null, IsMissing: true, IsUnknown: false)))
-            .Concat(
-                _projectedUnknownColumns
-                    .Where(key => SameTable(key, table, schema))
-                    .Select(static key => new ProjectedColumnState(key.Name, null, IsMissing: false, IsUnknown: true)))
-            .ToArray();
+        _projectedColumnStates.Remove(new TableKey(table, schema), out var states);
 
-        RemoveProjectedColumnDefinitions(table, schema);
-        RemoveProjectedColumnDefinitions(targetTable, targetSchema);
+        var target = new TableKey(targetTable, targetSchema);
 
-        foreach (var state in states)
+        _projectedColumnStates.Remove(target);
+        if (states is not null)
         {
-            if (state.Definition is not null)
-            {
-                SetProjectedColumnDefinition(targetTable, targetSchema, state.Definition);
-            }
-            else if (state.IsMissing)
-            {
-                SetProjectedColumnMissing(targetTable, targetSchema, state.Name);
-            }
-            else if (state.IsUnknown)
-            {
-                SetProjectedColumnUnknown(targetTable, targetSchema, state.Name);
-            }
-            else
-            {
-                throw new InvalidOperationException("A projected column state has no representation.");
-            }
+            _projectedColumnStates[target] = states;
         }
     }
-
-    private bool SameTable(
-        ColumnKey key,
-        string table,
-        string? schema
-    ) => IdentifierEquals(_objectIdentityNormalizer, key.Table, table) && SameSchema(key.Schema, schema);
 
     private bool SameSchema(
         string? left,
@@ -773,6 +854,12 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
         ? DataStateUnknown()
         : analysis;
 
+    private static SafeMigrationProviderAnalysis TablePrerequisiteMissing() => new(
+        SafeMigrationObservedState.PrerequisiteMissing,
+        SafeMigrationRepairCapability.None,
+        postconditionSatisfied: false,
+        "projected_prerequisite_missing");
+
     private static SafeMigrationProviderAnalysis DataStateUnknown() => new(
         SafeMigrationObservedState.PrerequisiteMissing,
         SafeMigrationRepairCapability.None,
@@ -827,15 +914,15 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
     private static SafeMigrationProviderAnalysis Analysis(
         SafeMigrationObservedState state,
         SafeMigrationRepairCapability repairCapability = SafeMigrationRepairCapability.None
-    ) => new(state, repairCapability, state == SafeMigrationObservedState.Matching, $"projected_{StateCode(state)}");
+    ) => new(state, repairCapability, state == SafeMigrationObservedState.Matching, StateCode(state));
 
     private static string StateCode(
         SafeMigrationObservedState state
     ) => state switch
     {
-        SafeMigrationObservedState.Missing => "missing",
-        SafeMigrationObservedState.Matching => "matching",
-        SafeMigrationObservedState.Different => "different",
+        SafeMigrationObservedState.Missing => "projected_missing",
+        SafeMigrationObservedState.Matching => "projected_matching",
+        SafeMigrationObservedState.Different => "projected_different",
         _ => throw new ArgumentOutOfRangeException(nameof(state)),
     };
 
@@ -845,12 +932,6 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
     );
 
     private readonly record struct IndexKey(
-        string Table,
-        string? Schema,
-        string Name
-    );
-
-    private readonly record struct ColumnKey(
         string Table,
         string? Schema,
         string Name
@@ -898,27 +979,6 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
             IdentifierHashCode(normalizer, value.Name));
     }
 
-    private sealed class ColumnKeyComparer(
-        ISafeMigrationProviderObjectIdentityNormalizer? normalizer
-    ) : IEqualityComparer<ColumnKey>
-    {
-        private readonly TableKeyComparer _tableComparer = new(normalizer);
-
-        public bool Equals(
-            ColumnKey left,
-            ColumnKey right
-        ) => _tableComparer.Equals(
-                new TableKey(left.Table, left.Schema),
-                new TableKey(right.Table, right.Schema))
-            && IdentifierEquals(normalizer, left.Name, right.Name);
-
-        public int GetHashCode(
-            ColumnKey value
-        ) => HashCode.Combine(
-            _tableComparer.GetHashCode(new TableKey(value.Table, value.Schema)),
-            IdentifierHashCode(normalizer, value.Name));
-    }
-
     private sealed class IdentifierComparer(ISafeMigrationProviderObjectIdentityNormalizer? normalizer)
         : IEqualityComparer<string>
     {
@@ -933,11 +993,9 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
         ) => IdentifierHashCode(normalizer, value);
     }
 
-    private sealed record ProjectedColumnState(
-        string Name,
+    private readonly record struct ProjectedColumnState(
         ExpectedColumnDefinition? Definition,
-        bool IsMissing,
-        bool IsUnknown
+        bool IsMissing
     );
 
     private sealed class ProjectedPrerequisites(
@@ -1056,6 +1114,9 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
         // alias without hiding a distinct physical object with the same shape.
         private readonly Dictionary<T, HashSet<PhysicalDefinition>> _semanticDefinitions = new(semanticComparer);
         private readonly HashSet<T> _mutatedSemanticDefinitions = new(semanticComparer);
+
+        /// <summary>Gets whether any accepted physical objects require column invalidation.</summary>
+        public bool HasPhysicalDefinitions => _physicalDefinitions.Count > 0;
 
         public void AcceptPhysical(
             string physicalName,
@@ -1318,7 +1379,9 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
         Unknown = 2,
     }
 
-    private sealed record ProjectedColumn(
+    // WHY: These four row-safety flags have value semantics. Inline dictionary storage
+    // avoids allocating one short-lived prerequisite object for every accepted column.
+    private readonly record struct ProjectedColumn(
         bool IsNullable,
         bool PreservesNullForExistingRows,
         bool IsComputed,
