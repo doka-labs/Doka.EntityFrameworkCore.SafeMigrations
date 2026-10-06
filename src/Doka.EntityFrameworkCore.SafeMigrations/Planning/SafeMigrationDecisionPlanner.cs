@@ -180,17 +180,28 @@ public static class SafeMigrationDecisionPlanner
         SafeMigrationRepairCapability repairCapability
     )
     {
-        if (!Enum.IsDefined(observedState))
+        // WHY: Enum.IsDefined can rebuild collectible runtime metadata after GC,
+        // allocating even after warmup. Named members preserve the exact contract
+        // without depending on cache lifetime or contiguous enum values.
+        if (observedState is not (SafeMigrationObservedState.Missing
+            or SafeMigrationObservedState.Matching
+            or SafeMigrationObservedState.Different
+            or SafeMigrationObservedState.Unsupported
+            or SafeMigrationObservedState.DataBlocked
+            or SafeMigrationObservedState.PrerequisiteMissing
+            or SafeMigrationObservedState.TransitionReady))
         {
             throw new ArgumentOutOfRangeException(nameof(observedState));
         }
 
-        if (!Enum.IsDefined(policy))
+        if (policy is not (SafeMigrationPolicy.ExistenceOnly
+            or SafeMigrationPolicy.ThrowIfDifferent
+            or SafeMigrationPolicy.RepairIfSafe))
         {
             throw new ArgumentOutOfRangeException(nameof(policy));
         }
 
-        if (!Enum.IsDefined(repairCapability))
+        if (repairCapability is not (SafeMigrationRepairCapability.None or SafeMigrationRepairCapability.Safe))
         {
             throw new ArgumentOutOfRangeException(nameof(repairCapability));
         }
