@@ -1,6 +1,6 @@
 ---
 id: D-014
-status: accepted
+status: implemented
 date: 2026-10-05
 decision-makers: [Dominic Kalkbrenner]
 consulted: []
@@ -48,7 +48,7 @@ catalog subquery, without weakening what classification verifies.
   into client comparison.
 - The fix must not depend on server configuration the library does not own.
 - The runtime path that EF executes per migration operation must stay a single
-  self-contained statement.
+  self-contained scoped migration command.
 - MySQL must not regress; it has no spill to remove.
 - The qualified MariaDB versions 10.11, 11.4, 11.8 and 12.3 must all benefit.
 
@@ -330,18 +330,29 @@ Hosted qualification:
   cross-database incoming-FK completeness, narrow live fallback, unique owned
   temporary tables and failure-safe cleanup. Parity tests must prove activation;
   suite evidence distinguishes changed test counts, skips and historical timing.
+- 2026-10-06: Status changed from accepted to implemented. Reconciled the
+  snapshot binding, lifecycle, fallback and parity contracts against the
+  `v10.4.7` source at `986b628aefff` and the existing local MariaDB 11.8.8 and
+  MySQL 8.4.11 qualification results. Both full provider suites report 1,050
+  passed, two generated-fixture skips and no failures; these are existing local
+  results, not newly executed tests or a substitute for hosted qualification.
 
 ### Implementation References
 
 - Evidence, raw logs and the refuted hypotheses:
   `artifacts/performance/mariadb-tmp-table-spill/README.md`.
-- Relation redirection and the snapshot projection:
-  `src/Doka.EntityFrameworkCore.SafeMigrations.MySql/Analysis/MySqlCatalogRelations.cs`
-  and `MySqlCatalogSnapshot.cs`.
-- Snapshot lifecycle in batched classification:
-  `src/Doka.EntityFrameworkCore.SafeMigrations.MySql/Analysis/MySqlSafeMigrationProviderAnalyzer.cs`.
-- Counter-based live proof and offline shape guards:
-  `tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests`.
+- [Catalog relation binding](../../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/Analysis/MySqlCatalogRelations.cs)
+  and [session snapshot lifecycle](../../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/Analysis/MySqlCatalogSnapshot.cs).
+- [Snapshot activation in batched classification](../../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/Analysis/MySqlSafeMigrationProviderAnalyzer.cs).
+- [Relation-binding regression tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Unit/MySqlCatalogRelationsTests.cs)
+  and [snapshot lifecycle regression tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Unit/MySqlCatalogSnapshotTests.cs).
+- [Live spill and verdict-parity tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Integration/Features/Tables/MySqlSafeMigrationIntegrationTests.Tables.CatalogSnapshot.cs)
+  and [live ownership and fallback tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Integration/Features/Tables/MySqlSafeMigrationIntegrationTests.Tables.CatalogSnapshot.Safety.cs).
+- Existing local qualification transcripts:
+  `artifacts/performance/runtime-three-paths/verification/span-final/full-mariadb.trx`
+  and `full-mysql.trx`, summarized in
+  `artifacts/performance/runtime-three-paths/README.md`. These local evidence
+  files are intentionally not tracked in the product repository.
 
 ### Sources
 
