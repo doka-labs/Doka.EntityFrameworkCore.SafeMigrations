@@ -550,10 +550,12 @@ public sealed class MySqlGuardCommandPlanTests
 
         var payloads = DecodeHexPayloads(command.CommandText);
 
+        Assert.Contains("STRICT_TRANS_TABLES", command.CommandText, StringComparison.Ordinal);
+        Assert.Contains("STRICT_ALL_TABLES", command.CommandText, StringComparison.Ordinal);
         Assert.Contains(
-            payloads,
-            payload => payload.Contains("STRICT_TRANS_TABLES", StringComparison.Ordinal)
-                && payload.Contains("STRICT_ALL_TABLES", StringComparison.Ordinal));
+            "SET @doka_sm_repair_ok = CASE WHEN @doka_sm_state = 'different' THEN COALESCE((",
+            command.CommandText,
+            StringComparison.Ordinal);
         Assert.DoesNotContain("ALTER IGNORE TABLE", command.CommandText, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(
             payloads,

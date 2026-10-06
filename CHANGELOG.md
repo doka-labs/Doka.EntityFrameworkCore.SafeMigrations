@@ -8,6 +8,16 @@ the shared release identity described in [Release process](docs/release-process.
 
 ### Changed
 
+- Reduce MySQL/MariaDB runtime migration work independently of preflight:
+  check repair-capable `EnsureColumn` plans for a fresh exact match before
+  repair probes, and evaluate the final repair precondition only after a `Different`
+  classification. Group owned setup commands within a 4096-byte UTF-8 copy
+  bound without crossing provider, guarded-body, or cleanup boundaries.
+  Render grouped SQL directly from immutable pieces into the final string;
+  render large independent fragments directly from spans without retaining
+  an intermediate descriptor array.
+  Preserve operation-local evidence, postconditions, policies, cancellation,
+  and per-command timeouts; do not change the assertion table's storage engine.
 - Materialize MariaDB catalog metadata once per sufficiently large analysis
   window to reduce repeated INFORMATION_SCHEMA work. Preserve live-catalog
   fallback when temporary-table DDL is not permitted, cross-database incoming
