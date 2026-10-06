@@ -6,6 +6,20 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
+## [10.4.7] - 2026-10-06
+
+Prepare stable 10.4.7 for all five packages. This patch reduces MariaDB
+analysis catalog work and MySQL/MariaDB runtime checks and command dispatches,
+with bounded direct SQL rendering. Public APIs, dependency ranges, migration
+source, policies, report schemas, and history remain unchanged. Core,
+PostgreSQL, SQLite, and SQL Server execution behavior is unchanged; all
+packages retain the shared release version.
+
+This entry records source preparation, not publication. Completion requires
+the full qualification matrix, signed `v10.4.7` source identity, all five exact
+NuGet primary and symbol packages, and verified GitHub Release, SBOM,
+provenance, attestation, and public package readback evidence.
+
 ### Changed
 
 - Reduce MySQL/MariaDB runtime migration work independently of preflight:
@@ -15,7 +29,8 @@ the shared release identity described in [Release process](docs/release-process.
   bound without crossing provider, guarded-body, or cleanup boundaries.
   Render grouped SQL directly from immutable pieces into the final string;
   render large independent fragments directly from spans without retaining
-  an intermediate descriptor array.
+  an intermediate descriptor array. This reduces grouping overhead but does
+  not guarantee lower total allocations than the earlier ungrouped path.
   Preserve operation-local evidence, postconditions, policies, cancellation,
   and per-command timeouts; do not change the assertion table's storage engine.
 - Materialize MariaDB catalog metadata once per sufficiently large analysis
@@ -1432,7 +1447,8 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.6...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.7...HEAD
+[10.4.7]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.6...v10.4.7
 [10.4.6]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.5...v10.4.6
 [10.4.5]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.4...v10.4.5
 [10.4.4]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.3...v10.4.4

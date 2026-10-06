@@ -1,5 +1,12 @@
 # MySQL and MariaDB DDL behavior
 
+Prepared stable 10.4.7 reduces batched MariaDB analysis work separately from
+MySQL/MariaDB runtime command work. It requires neither regenerated migrations
+nor changed server durability settings. Runtime checks continue to read the
+live catalog even when batched analysis uses session-owned catalog copies.
+Policies, data-safety proofs, postconditions, and recovery boundaries remain
+unchanged; required data scans and DDL can still dominate large-table workloads.
+
 ## Operational summary
 
 The `.MySql` package supports both MySQL and MariaDB through
@@ -193,6 +200,11 @@ Grouping cannot admit a scope that the provider would otherwise reject. The
 concatenated script text is unchanged. Opaque provider setup remains an
 independent boundary, as do the guarded body and every cleanup command. Keeping
 cleanup independent lets later cleanup run even if an earlier cleanup fails.
+
+Direct rendering reduces intermediate allocation introduced by grouping;
+grouping can still allocate more total bytes than the earlier ungrouped path.
+These are cumulative SQL-generation allocations, not retained or peak memory.
+Fewer command dispatches do not guarantee faster large-table scans or DDL.
 
 Grouping does not combine operations or cache live state. Every required
 identity, prerequisite, data-safety, decision, and postcondition check remains

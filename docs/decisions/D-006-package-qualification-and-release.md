@@ -247,6 +247,11 @@ owns independent consumer readback.
   signatures or migration history. Require the complete five-package matrix,
   provenance, SBOM, primary/symbol publication, and public readback before a
   publication claim. Releases 10.4.2 through 10.4.5 remain four-package sets.
+- 2026-10-06: Prepare stable 10.4.7 at the same five-package identity for
+  MariaDB analysis and MySQL/MariaDB runtime performance changes. Preserve
+  dependency ranges, API baselines, migration source, policies, report schemas,
+  and history. Keep the complete qualification and publication gates;
+  performance measurements remain informational rather than release blockers.
 
 ### Implementation References
 

@@ -11,7 +11,7 @@ with roll-forward disabled. SafeMigrations supports EF Core 10 only.
 | MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` `[10.4.2,10.5.0)` |
 | PostgreSQL | `Npgsql.EntityFrameworkCore.PostgreSQL` `[10.0.3,11.0.0)` |
 | SQLite | EF Core SQLite Core `[10.0.12,10.1.0)`; application-owned native bundle |
-| SQL Server (first release prepared as 10.4.6) | `Microsoft.EntityFrameworkCore.SqlServer` `[10.0.12,10.1.0)` |
+| SQL Server (available since 10.4.6) | `Microsoft.EntityFrameworkCore.SqlServer` `[10.0.12,10.1.0)` |
 
 The MySQL/MariaDB package requires Doka 10.4.2 or a compatible later 10.4 patch
 release and rejects the next minor line. This boundary avoids an exact
@@ -26,16 +26,26 @@ evidence.
 
 The remaining declared dependency graph and .NET 10 release metadata were
 rechecked on 2026-09-21. Bounded package ranges describe compatibility. The
-five 10.4.6 package-project lockfiles identify the exact dependency graph used to
-compile and qualify the package artifacts in a particular revision; they do
-not constrain a consumer's NuGet resolution or lock the engineering projects.
+five package-project lockfiles, unchanged for 10.4.7, identify the dependency
+graph used to compile and qualify the package artifacts in a particular
+revision; they do not constrain a consumer's NuGet resolution or lock the
+engineering projects.
 The SQL Server project supplies the fifth lockfile. Releases 10.4.2 through
 10.4.5 contain four package artifacts; their inventory remains unchanged.
 
-The prepared 10.4.6 release is the first five-package set, including the optional
-SQL Server provider. Publication still requires the blocking workflow, including
-all three native x86-64 SQL Server cells, and exact public readback of all five
-package IDs. Source preparation alone does not establish availability.
+The five-package set began with stable 10.4.6, including the optional SQL Server
+provider. Prepared stable 10.4.7 retains that inventory, the dependency ranges,
+and all public API baselines. Publication still requires the blocking workflow,
+including all three native x86-64 SQL Server cells, and exact public readback
+of all five package IDs. Source preparation alone does not establish availability.
+
+The 10.4.7 changes affect MariaDB batched catalog analysis and MySQL/MariaDB
+runtime checks, setup grouping, and SQL-generation allocations. They do not
+change other provider execution paths or remove any engine, tooling, package,
+or coverage gate. Performance measurements remain informational. See
+[MySQL and MariaDB behavior](mysql-mariadb-ddl-behavior.md) for the distinct
+analysis and runtime boundaries and [D-014](decisions/D-014-mariadb-catalog-snapshot-for-batched-classification.md)
+for catalog-copy ownership and fallback.
 
 ## Engine matrix
 

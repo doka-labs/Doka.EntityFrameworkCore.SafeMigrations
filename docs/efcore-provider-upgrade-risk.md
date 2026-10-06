@@ -119,7 +119,7 @@ qualified with realistic file-system capacity and lock behavior.
 
 ## SQL Server boundary
 
-The `.SqlServer` package prepared for its first release in 10.4.6 composes
+The `.SqlServer` package, introduced in 10.4.6, composes
 EF Core's SQL Server migrations generator and analyzes guarded operations
 against `sys.*` catalog metadata.
 Ordinary EF operations remain provider-owned. Metadata visibility, database
