@@ -34,7 +34,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         bool includeAnalysisEvidence = true,
         bool includeTransitionEvidence = true,
         bool parameterizeValues = true,
-        IReadOnlyList<string>? requiredDatabaseQualifiers = null
+        IReadOnlyList<string>? requiredDatabaseQualifiers = null,
+        bool requiresNullFreeBackfill = false
     )
     {
         ArgumentNullException.ThrowIfNull(operation);
@@ -77,7 +78,13 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                         includeTransitionEvidence),
                     DropColumnIntent value => BuildDropColumn(value),
                     RenameColumnIntent value => BuildRenameColumn(value),
-                    AlterColumnIntent value => BuildAlterColumn(value, context.ServerVersion.IsMariaDb),
+                    AlterColumnIntent value => BuildAlterColumn(
+                        value,
+                        context.ServerVersion.IsMariaDb,
+                        operation.Policy == SafeMigrationPolicy.RepairIfSafe,
+                        includeAnalysisEvidence,
+                        includeTransitionEvidence,
+                        requiresNullFreeBackfill),
                     EnsureIndexIntent value => BuildEnsureIndex(value, context.ServerVersion.IsMariaDb),
                     DropIndexIntent value => BuildDropIndex(value),
                     RenameIndexIntent value => BuildRenameIndex(value),
@@ -115,7 +122,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                     RequiresLazyStateEvaluation = RequiresLazyStateEvaluation(
                         operation.Intent,
                         plan.RepairCapability)
-                        || plan.RequiresDataProbe,
+                        || plan.RequiresDataProbe
+                        || plan.NullabilityDataProbe is not null,
                 };
             }
 

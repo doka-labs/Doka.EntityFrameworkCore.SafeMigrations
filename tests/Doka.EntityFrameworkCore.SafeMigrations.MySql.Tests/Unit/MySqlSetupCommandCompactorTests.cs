@@ -3,6 +3,60 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 /// <summary>Verifies bounded setup grouping never changes statement text or trusted execution boundaries.</summary>
 public sealed class MySqlSetupCommandCompactorTests
 {
+    /// <summary>Incomplete owned SQL remains an independent boundary without delimiter rewriting.</summary>
+    /// <param name="independent">The fragment that does not end in an owned statement terminator.</param>
+    [Theory]
+    [InlineData("DO 2")]
+    [InlineData("DO 2; -- trailing comment")]
+    [InlineData("")]
+    [InlineData(" \r\n")]
+    public void UnterminatedOwnedFragmentsRemainIndependent(string independent)
+    {
+        // Arrange
+        string[] setup = ["DO 0;", "DO 1;", independent, "DO 3;", "DO 4;"];
+        string[] expected = ["DO 0;DO 1;", independent, "DO 3;DO 4;"];
+
+        // Act
+        var compacted = Compact(setup, new string(' ', 100) + "DO 0;");
+
+        // Assert
+        Assert.Equal(expected, compacted);
+        Assert.Same(independent, compacted[1]);
+        Assert.Equal(string.Concat(setup), string.Concat(compacted));
+    }
+
+    /// <summary>Compaction cannot hide blank setup entries from the real provider scope validator.</summary>
+    /// <param name="blank">The empty or whitespace-only setup entry.</param>
+    /// <param name="deferred">Whether setup uses the deferred-fragment overload.</param>
+    [Theory]
+    [InlineData("", false)]
+    [InlineData(" \r\n", false)]
+    [InlineData("", true)]
+    [InlineData(" \r\n", true)]
+    public void BlankSetupFragmentsRetainProviderRejection(
+        string blank,
+        bool deferred
+    )
+    {
+        // Arrange
+        string[] setup = ["DO 0;", "DO 1;", blank, "DO 3;", "DO 4;"];
+        var fragments = setup.Select(static sql => new MySqlSafeMigrationSetupFragment(sql)).ToArray();
+        var body = new string(' ', 100) + "DO 0;";
+        string[] cleanup = ["DO 0;", "DO 0;"];
+
+        // Act
+        var compacted = deferred
+            ? MySqlSafeMigrationSetupCommandCompactor.Compact(fragments, body, cleanup, fragments.Length, 0)
+            : MySqlSafeMigrationSetupCommandCompactor.Compact(setup, body, cleanup, setup.Length, 0);
+
+        var exception = Record.Exception(() => MySqlMigrationCommandSpec.CreateScoped(compacted, body, cleanup));
+
+        // Assert
+        Assert.Contains(blank, compacted);
+        Assert.Equal(string.Concat(setup), string.Concat(compacted));
+        Assert.Equal("setupCommands", Assert.IsType<ArgumentException>(exception).ParamName);
+    }
+
     /// <summary>Owned setup is combined without adding delimiters or changing statement order.</summary>
     [Fact]
     public void OwnedFragmentsKeepExactTextAndOrder()
@@ -48,15 +102,15 @@ public sealed class MySqlSetupCommandCompactorTests
     public void Utf8ExpansionPreventsUnsafeGrouping()
     {
         // Arrange
-        string[] setup = ["\u20ac", "\u20ac", "a"];
-        string[] expected = ["\u20ac", "\u20aca"];
+        string[] setup = ["DO '\u20ac';", "DO '\u20ac';", "DO 0;"];
+        string[] expected = ["DO '\u20ac';", "DO '\u20ac';DO 0;"];
 
         // Act
-        var compacted = Compact(setup, "12345");
+        var compacted = Compact(setup, new string(' ', 9) + "DO 0;");
 
         // Assert
         Assert.Equal(expected, compacted);
-        Assert.All(compacted, command => Assert.True(Encoding.UTF8.GetByteCount(command) <= 5));
+        Assert.All(compacted, command => Assert.True(Encoding.UTF8.GetByteCount(command) <= 14));
     }
 
     /// <summary>Opaque provider setup is never joined or crossed even when a larger group would fit.</summary>
@@ -153,7 +207,7 @@ public sealed class MySqlSetupCommandCompactorTests
     public void OriginalTextBoundIsPreserved()
     {
         // Arrange
-        string[] setup = [new string('x', 1_048_576), "DO 0;"];
+        string[] setup = [new string(' ', 1_048_571) + "DO 0;", "DO 0;"];
 
         // Act
         var compacted = Compact(setup, "DO 0;");
@@ -271,7 +325,7 @@ public sealed class MySqlSetupCommandCompactorTests
     public void FusedControlsRetainOriginalTextAdmission(int textLength, bool accepted)
     {
         // Arrange
-        string[] setup = [new string('x', textLength - 15)];
+        string[] setup = [new string(' ', textLength - 20) + "DO 0;"];
         MySqlMigrationCommandSpec? scope = null;
 
         // Act
@@ -318,7 +372,7 @@ public sealed class MySqlSetupCommandCompactorTests
     public void LargeOwnedPayloadIsNotCopiedIntoAGroup()
     {
         // Arrange
-        var classifier = new string('x', 4097);
+        var classifier = new string(' ', 4092) + "DO 0;";
         string[] setup = ["DO 1;", "DO 2;", classifier, "DO 3;", "DO 4;"];
 
         // Act
@@ -342,7 +396,7 @@ public sealed class MySqlSetupCommandCompactorTests
     )
     {
         // Arrange
-        var fragment = new string('x', fragmentLength);
+        var fragment = new string(' ', fragmentLength - 5) + "DO 0;";
         string[] setup = [fragment, fragment, fragment];
 
         // Act
@@ -364,7 +418,7 @@ public sealed class MySqlSetupCommandCompactorTests
     )
     {
         // Arrange
-        var fragment = new string('\u20ac', 682) + new string('x', asciiSuffixLength);
+        var fragment = "DO '" + new string('\u20ac', 680) + new string('x', asciiSuffixLength) + "';";
         string[] setup = [fragment, fragment];
 
         // Act
@@ -381,7 +435,7 @@ public sealed class MySqlSetupCommandCompactorTests
     public void LargeMultibyteOwnedPayloadIsNotCopiedIntoAGroup()
     {
         // Arrange
-        var classifier = new string('\u20ac', 1365) + "xx";
+        var classifier = "DO '" + new string('\u20ac', 1363) + "xx';";
         string[] setup = ["DO 1;", "DO 2;", classifier, "DO 3;", "DO 4;"];
 
         // Act

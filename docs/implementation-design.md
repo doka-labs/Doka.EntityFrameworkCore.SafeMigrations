@@ -382,6 +382,52 @@ assessments that do not plan repair DDL. Explicit
 baseline; only inferred `EnsureColumnIntent` repair needs a separately rendered
 branch.
 
+Explicit alterations reuse the provider transition kernel but add exact old
+definition matching before physical eligibility or data probes. Eligibility is
+operation-specific; a physical column/length row fact may be shared only after
+each operation passes its own source contract. Core retains source identity,
+accepted intermediate column definitions, and row-proof freshness. It does not
+relax the provider-neutral same-type helper into a general conversion rule.
+MySQL/MariaDB capture candidate evidence against an existing table's original
+physical identity for later alterations and indexes after a rename. A candidate
+is consumed only after Core accepts that rename; an occupied target, intervening
+unproven mutation, or incompatible source cannot create an alias proof.
+Provider-specific validation checks cumulative declared-row, InnoDB in-page row,
+and key limits against the accepted intermediate shape. Physical keys survive
+certified repairs; an unproven mutation cannot silently erase their budget.
+New-table emptiness replaces a row scan only,
+never a storage or dependency proof. Backfill-capable repairs and applied
+model-managed data operations invalidate cross-table row evidence when their
+effects cannot be confined to one table. An insert into a fully projected new
+plain table preserves unrelated proofs: there can be no pre-existing table
+trigger, and inserts do not execute update/delete cascades. The current table
+definition must contain no SQL default, computed expression, check constraint,
+functional or filtered index, explicit index method or operator class, or
+unknown physical structure. SQL expressions are not assumed pure: PostgreSQL
+[defaults execute when inserted](https://www.postgresql.org/docs/18/ddl-default.html)
+and [functions can modify data](https://www.postgresql.org/docs/18/xfunc-volatility.html).
+The check walks only the target table's columns and indexes without copying its
+definition or scanning unrelated tables. It is re-evaluated after structural
+changes. Existing tables, raw provider DML, updates and deletes retain global
+invalidation. The written table still loses its generic empty-row proof; that
+local marker follows a rename and resets only for a new physical lifetime.
+Exact model-managed row tracking is separate from the lifetime of a captured
+live-data proof.
+After an accepted lossless expansion, a later alteration may use the original
+declared value domain only when provider evidence certifies the entire intervening
+column history and that domain fits the final target. A stale live `Matching`
+result alone is not a conversion proof. Recreated tables use creation defaults
+rather than the removed table's physical environment. A database-default change
+invalidates inherited charset evidence for subsequently created tables; it does
+not alter the charset already inherited by an earlier table or invalidate an
+independently resolved explicit column collation.
+
+SQLite's existing validated rebuild path can retain an exact same-shape column
+repair after unrelated safe column drops. This requires a provider certificate,
+an untouched source column, drop-only table history, and current row evidence.
+Other structural changes, opaque operations, recreated tables, and stale proofs
+cannot use that exception; it does not make the immutable snapshot sequence-aware.
+
 Missing MySQL/MariaDB BTREE indexes have an additional physical-achievability
 guard. The catalog plan calculates conservative maximum key bytes from the
 live InnoDB row format and page size, the referenced column metadata, and the
@@ -549,11 +595,17 @@ handler does not create a nested transaction.
 
 Ordered preflight projection retains only model-managed identities touched by
 the migration. Accepted ensures record targets, updates replace source with
-target candidate-key identities, and deletes record absence. Earlier accepted
-child deletes can therefore discharge the exact dependency needed by a later
-parent delete. An unmatched live dependent row, unknown data-changing operation,
-or incompletely known structural effect invalidates the relevant proof and
-fails closed.
+target candidate-key identities, and deletes record absence. An unconfined write
+invalidates all earlier exact rows and candidate-key evidence before recording
+only its own guarded keys and target columns. Original dependency counts cannot
+prove a child/parent delete handoff after triggers may have changed either table.
+Later seed operations without fresh proof therefore use `ValidateAtRuntime`
+and `RuntimeValidationRequired`, attributed to the preceding invalidation.
+Their existing runtime guards decide against the actual ordered state; an
+untouched conflict still blocks. Deferred writes also invalidate earlier proofs
+without claiming postconditions. Provider DML and data-changing repairs share
+this boundary. This accounts for [cross-table and cascading trigger effects](https://www.postgresql.org/docs/18/trigger-definition.html)
+without parsing or assuming the behavior of user trigger code.
 
 An accepted table creation additionally proves that its complete projected
 relation starts empty. A following model-managed ensure may therefore classify
@@ -561,7 +613,10 @@ an otherwise catalog-invisible key as missing when every referenced column is
 known and no intervening provider DML or opaque operation could have populated
 the table, including through a trigger. This inference is never used for an
 existing table or for a key whose earlier projected row is only partially
-known; those paths retain the live, fail-closed analysis.
+known. A confined insert into a fully known, newly created plain table retains
+unrelated empty-table proofs. Pure table renames move owned row and unique-key
+evidence. Discarding populated-table row knowledge revokes completeness rather
+than incorrectly inferring missing rows; genuinely empty new tables remain known.
 
 ## Preflight and postflight
 
@@ -650,6 +705,13 @@ safe effect, or treat this outcome as read-only `Ready`. Independently proven
 conflicts remain blocked. The existing guarded runtime operation performs its
 own live catalog and data check after preceding operations; on nontransactional
 DDL engines, a later rejection may follow already committed work.
+
+The same report contract covers later model-managed operations whose row state
+was invalidated by an unconfined write or lost structural evidence. These use
+`projected_model_managed_data_state_unknown` as their analysis code and identify
+the preceding invalidation in `DeferredOrigin`. No new report enum or schema
+version is needed; invariant unsupported contracts and known missing owners or
+required columns retain their blocking classifications.
 
 Operation-contract fingerprints include safe intent, expected definitions,
 policy, annotations, and ordering. An ordinary EF operation contributes

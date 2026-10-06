@@ -6,6 +6,81 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
+## [10.4.8] - 2026-10-06
+
+Prepare stable 10.4.8 for all five packages. This patch corrects explicit
+lossless column transitions, ordered proof invalidation, model-managed seed
+projection and rename-destination checks, and hardens MySQL/MariaDB default
+identity and setup compaction.
+Public APIs, dependency ranges, migration source, policies, report schemas,
+and history remain unchanged; existing migrations do not need regeneration.
+
+This entry records source preparation, not publication. Completion requires
+the full qualification matrix, signed `v10.4.8` source identity, all five exact
+NuGet primary and symbol packages, and verified GitHub Release, SBOM,
+provenance, attestation, and public package readback evidence.
+
+### Changed
+
+- Multi-step model-managed writes into existing tables can now report
+  `RuntimeValidationRequired` instead of `Ready` when earlier operations make
+  their seed-row or dependency evidence stale. Deferred assessments use
+  `ValidateAtRuntime` with null `ObservedState` and `PostconditionSatisfied`;
+  `DeferredOrigin` identifies the invalidating operation. `ThrowIfBlocked()`
+  does not throw for this status: ordered runtime guards remain authoritative.
+  Consumers gating deployment on `Status == Ready` must explicitly handle
+  runtime validation rather than treating it as either proven readiness or a
+  proven conflict. Migration source, public signatures and report schemas
+  do not change.
+
+### Fixed
+
+- Preserve unrelated row-safety proofs across model-managed inserts into
+  newly created plain tables. Generated initial migrations can seed one table
+  before adding a deferred cyclic foreign key on another table in both strict
+  and convergence modes. Existing tables, opaque structures, SQL-bearing
+  artifacts, updates and deletes retain global data-proof invalidation.
+  Local mutation markers follow table renames and reset on physical recreation.
+- Invalidate exact seed-row and candidate-key evidence before unconfined
+  model-managed writes, provider DML, and data-changing repairs. Later seed
+  states that cannot be proven use the existing `RuntimeValidationRequired`
+  report outcome instead of stale live classifications or count-only delete
+  handoffs. Ordered child/parent deletes remain guarded at runtime, including
+  intervening trigger effects; untouched conflicts still block. Pure table
+  renames preserve owned row evidence, and discarded row knowledge cannot
+  recreate an empty-table proof. Newly projected incoming FKs absent from a
+  delete's frozen dependency metadata are rejected before execution.
+- Reuse provider-proven lossless column transitions for explicit
+  `AlterColumnIfDifferent` operations under `RepairIfSafe`, including generated
+  `AlterColumnIfDifferentFromModel` calls. MySQL/MariaDB retain their existing
+  string and Boolean allowlist; PostgreSQL retains its independent `VARCHAR`
+  length contract. Repair still requires the exact old definition, physical
+  eligibility and fresh row proofs where needed. Matching targets remain
+  no-ops; unsupported conversions and overlength data reject without truncation.
+- Preserve accepted column-transition evidence in ordered preflight, including
+  MySQL/MariaDB table renames and dependent index validation. Do not reuse row
+  proofs across intervening data changes, infer live column shapes from an
+  existence-only table container, or ignore an occupied rename destination.
+  Existing migration source, public signatures, report schemas and history
+  remain unchanged.
+- Preserve independent rename-destination evidence in all providers so a
+  table created earlier in the same stream cannot hide an occupied live target.
+  Genuine missing-source replay remains a no-op; an accepted earlier target
+  drop is evaluated against the ordered state.
+- Compare MySQL/MariaDB string defaults using their exact engine-specific
+  catalog representation. Preserve case, quoting and SQL NULL distinctions;
+  a different literal cannot impersonate the approved source or target default.
+  Explicit type transitions reject default forms that the engine or current
+  SQL mode cannot preserve, before any backfill or DDL.
+- Keep unterminated owned MySQL/MariaDB setup fragments outside transport
+  groups. Preserve exact SQL, opaque provider boundaries and larger caller
+  buffers; avoid unused UTF-8 accounting when composing large independent
+  fragments. Default-only and collation-only drift retain runtime checks.
+- Keep action-only planning allocation-free after garbage collection by
+  validating enum members without GC-sensitive reflection caches. Preserve
+  accepted values, exception ordering and the strict zero-allocation contract;
+  cover cache eviction and invalid enum boundaries with regression tests.
+
 ## [10.4.7] - 2026-10-06
 
 Prepare stable 10.4.7 for all five packages. This patch reduces MariaDB

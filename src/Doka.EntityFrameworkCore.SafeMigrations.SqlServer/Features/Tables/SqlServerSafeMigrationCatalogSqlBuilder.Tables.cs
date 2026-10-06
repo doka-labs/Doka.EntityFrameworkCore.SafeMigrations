@@ -133,12 +133,20 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         }
 
         var target = ObjectExists(intent.NewName ?? intent.Name, intent.NewSchema ?? intent.Schema);
+        // WHY: EF renames within the source schema before transferring the
+        // renamed table. A free final name does not prove that intermediate
+        // schema/name is available when both parts change.
+        var intermediate = (intent.NewName ?? intent.Name) != intent.Name
+            && EffectiveSchema(intent.NewSchema ?? intent.Schema) != EffectiveSchema(intent.Schema)
+                ? " OR " + ObjectExists(intent.NewName ?? intent.Name, intent.Schema) : string.Empty;
+
         var dependent = $"EXISTS (SELECT 1 FROM sys.sql_expression_dependencies d "
             + $"WHERE d.referenced_id = {TableId(intent.Name, intent.Schema)} "
             + $"AND d.referencing_id <> {TableId(intent.Name, intent.Schema)})";
 
         return Plan(
-            $"CASE WHEN NOT {sourceOccupied} THEN N'missing' WHEN NOT {source} OR {target} OR {dependent} "
+            $"CASE WHEN NOT {sourceOccupied} THEN N'missing' "
+            + $"WHEN NOT {source} OR {target}{intermediate} OR {dependent} "
             + "THEN N'different' ELSE N'matching' END",
             Bit($"NOT {sourceOccupied} AND {TableExists(
                 intent.NewName ?? intent.Name, intent.NewSchema ?? intent.Schema)}"));

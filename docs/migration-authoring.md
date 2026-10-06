@@ -571,6 +571,16 @@ a structural non-null proof, such as a current value or `COALESCE` with a proven
 non-null argument. Raw SQL text, casts, binary arithmetic, and column
 references cannot justify the backfill.
 
+Generated `AlterColumnIfDifferentFromModel` retains the reviewed old and target
+definitions in both scaffolding modes. Under `RepairIfSafe`, explicit alterations
+use the same provider-qualified type transitions as column convergence, but
+only when the old definition matches. A matching target is a no-op; a missing
+source is not created. Do not remove old-definition metadata or rewrite an
+already published migration to bypass a rejected proof.
+For a MySQL/MariaDB type-changing default backfill, the literal replacement must
+also fit both the old and target domains under strict conversion. PostgreSQL
+does not backfill existing null rows through this repair path.
+
 Ordered preflight projects accepted safe operations into later safe
 prerequisites. A recognized deterministic postcondition of an ordinary EF
 operation, for example an `AddColumnOperation` followed by an index, can still

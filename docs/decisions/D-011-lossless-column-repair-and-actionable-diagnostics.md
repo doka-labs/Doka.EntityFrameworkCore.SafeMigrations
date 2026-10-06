@@ -58,6 +58,15 @@ and repeats the proof immediately before DDL. The server conversion and final
 postcondition remain the race boundary. Overlength data classifies as
 `DataBlocked`; no value is returned or logged.
 
+Explicit `AlterColumnIntent` operations reuse these provider proofs under
+`RepairIfSafe` while additionally requiring the exact old column definition.
+The reviewed provider alteration remains the mutation baseline; this is not
+an ensure operation and cannot create a missing column. Provider-neutral Core
+does not infer safe type conversion from CLR types or model metadata alone.
+Ordered projection owns source identity and proof freshness; provider-specific
+validation owns physical feasibility. A known empty table discharges row
+safety only, not storage or dependency constraints.
+
 PostgreSQL reads the declared character limit from the documented
 `information_schema.columns.character_maximum_length` contract. A null limit
 means unbounded `character varying` and is therefore a narrowing candidate for
@@ -162,17 +171,26 @@ recovery. D-005 remains authoritative for evidence bounds and privacy.
   without expanding typed facet differences or exposing managed values.
   Previously persisted v1/v2 reports retain their packaged schemas; consumers
   pinned to v2 must adopt the new wire contract deliberately.
+- 2026-10-06: Clarified explicit Alter parity with the existing provider
+  allowlists, exact old-definition approval, operation-specific eligibility,
+  and ordered projection proof ownership. This does not broaden unsupported
+  provider families or change immutable migration source and history.
 
 ### Implementation References
 
 - [MySQL/MariaDB column analysis](../../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/Features/Columns/MySqlSafeMigrationCatalogSqlBuilder.Columns.cs)
 - [PostgreSQL column analysis](../../src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/Features/Columns/PostgreSqlSafeMigrationCatalogSqlBuilder.Columns.cs)
+- [Ordered column projection](../../src/Doka.EntityFrameworkCore.SafeMigrations/Features/Columns/SafeMigrationPreflightProjection.Columns.cs)
+- [MySQL/MariaDB Alter regressions](../../tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Integration/Features/Columns/MySqlSafeMigrationIntegrationTests.Columns.AlterTransitions.cs)
+- [PostgreSQL Alter regressions](../../tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Integration/Features/Columns/PostgreSqlSafeMigrationIntegrationTests.Columns.AlterTransitions.cs)
 - [Diagnostic evidence](../../src/Doka.EntityFrameworkCore.SafeMigrations/Analysis/SafeMigrationDiagnosticsEvidence.cs)
 - [Report schema version 2](../../schemas/safe-migration-run-report-v2.schema.json)
 - [Failure-code runbook](../runbooks/failure-codes.md)
 
 ### Sources
 
+- MySQL 8.4 ALTER TABLE (`https://dev.mysql.com/doc/refman/8.4/en/alter-table.html`; primary source; retrieved 2026-10-06)
+- MariaDB ALTER TABLE (`https://mariadb.com/docs/server/reference/sql-statements/data-definition/alter/alter-table`; primary source; retrieved 2026-10-06)
 - [MySQL 8.4 online DDL operations](https://dev.mysql.com/doc/refman/8.4/en/innodb-online-ddl-operations.html) (primary source; retrieved 2026-09-05)
 - [MySQL 8.4 string functions](https://dev.mysql.com/doc/refman/8.4/en/string-functions.html) (primary source; retrieved 2026-09-05)
 - [MySQL 8.4 BIT type](https://dev.mysql.com/doc/refman/8.4/en/bit-type.html) (primary source; retrieved 2026-09-05)

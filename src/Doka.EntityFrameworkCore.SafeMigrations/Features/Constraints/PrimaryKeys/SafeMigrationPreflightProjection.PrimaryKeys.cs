@@ -112,11 +112,10 @@ internal sealed partial class SafeMigrationPreflightProjection
         SafeMigrationDecision decision
     )
     {
-        if (decision.Action is SafeMigrationAction.Apply or SafeMigrationAction.NoOp
-            && _prerequisites.TryGetValue(
-                new TableKey(intent.Definition.Table, intent.Definition.Schema),
-                out var prerequisites))
+        if (decision.Action is SafeMigrationAction.Apply or SafeMigrationAction.NoOp)
         {
+            var prerequisites = GetOrCreateProviderPrerequisites(intent.Definition.Table, intent.Definition.Schema);
+
             prerequisites.AcceptPrimaryKey(intent.Definition);
         }
 
@@ -177,7 +176,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         return _projectedKeyAnalyzer.ValidateProjectedPrimaryKey(
             intent,
             this,
-            liveAnalysis,
+            SelectProjectedKeyEnvironment(intent.Definition.Table, intent.Definition.Schema, liveAnalysis),
             projectedAnalysis);
     }
 }

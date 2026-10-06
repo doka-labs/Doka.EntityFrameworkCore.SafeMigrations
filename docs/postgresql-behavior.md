@@ -112,6 +112,15 @@ compatible. PostgreSQL preserves ordinary foreign-key dependencies across the
 independently qualified length change. Other type-family or semantic
 conversions remain fail-closed.
 
+Explicit `AlterColumnIfDifferent` and generated
+`AlterColumnIfDifferentFromModel` calls reuse this `VARCHAR` transition contract
+under `RepairIfSafe`, with an additional exact old-definition check. They do
+not create missing columns or extend the allowlist to `text -> varchar`.
+Operation-specific source eligibility is checked separately even when several
+operations share a character-length scan. Existing null values still block
+nullability tightening; a declared default does not authorize backfilling
+existing PostgreSQL rows through this path.
+
 Widening preserves the existing value domain and requires no row-value scan.
 Narrowing groups and deduplicates candidates per table and uses a bounded
 `char_length` existence proof. It returns only whether any value exceeds the

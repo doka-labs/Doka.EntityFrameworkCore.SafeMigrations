@@ -21,6 +21,8 @@ internal sealed class MySqlSafeMigrationPlanCapture
     private IReadOnlyList<string>? _generationDatabaseQualifiers;
     private MySqlExpectedUniqueIndexCatalog? _generationUniqueIndexes;
     private MySqlExpectedUniqueIndexCatalog? _expectedUniqueIndexes;
+    private MySqlBackfillConstraintCatalog? _expectedBackfillConstraints;
+    private MySqlBackfillConstraintCatalog? _generationBackfillConstraints;
     private MySqlSafeMigrationRuntimePlan?[]? _plans;
     private bool _includeAnalysisEvidence;
     private bool _includeTransitionEvidence;
@@ -86,6 +88,7 @@ internal sealed class MySqlSafeMigrationPlanCapture
     /// <param name="expectedTableConstraints">The complete migration's table-constraint transition catalog.</param>
     /// <param name="includeAnalysisEvidence">Whether to build detailed diagnostic SQL.</param>
     /// <param name="includeTransitionEvidence">Whether to build physical transition SQL.</param>
+    /// <param name="backfillConstraints">Complete-stream constraint hazards retained across bounded windows.</param>
     /// <returns>A lease that owns capture completion and cleanup.</returns>
     public Lease Begin(
         IReadOnlyList<SafeMigrationOperation> operations,
@@ -93,7 +96,8 @@ internal sealed class MySqlSafeMigrationPlanCapture
         IReadOnlyDictionary<
             (string? Schema, string Table), SafeMigrationExpectedTableConstraints> expectedTableConstraints,
         bool includeAnalysisEvidence = false,
-        bool includeTransitionEvidence = false
+        bool includeTransitionEvidence = false,
+        MySqlBackfillConstraintCatalog? backfillConstraints = null
     )
     {
         ArgumentNullException.ThrowIfNull(operations);
@@ -116,6 +120,7 @@ internal sealed class MySqlSafeMigrationPlanCapture
         _plans = new MySqlSafeMigrationRuntimePlan?[_expected.Length];
         _expectedUniqueIndexes = expectedUniqueIndexes;
         _expectedTableConstraints = expectedTableConstraints;
+        _expectedBackfillConstraints = backfillConstraints ?? MySqlBackfillConstraintCatalog.Create(operations);
         _includeAnalysisEvidence = includeAnalysisEvidence;
         _includeTransitionEvidence = includeTransitionEvidence;
 
@@ -158,6 +163,7 @@ internal sealed class MySqlSafeMigrationPlanCapture
         _generationDatabaseQualifiers = databaseQualifiers;
         _generationTableConstraints = tableConstraints;
         _generationUniqueIndexes = uniqueIndexes;
+        _generationBackfillConstraints = MySqlBackfillConstraintCatalog.Create(safeOperations, guardedDatabase);
 
         return new GenerationLease(this);
     }
@@ -214,6 +220,29 @@ internal sealed class MySqlSafeMigrationPlanCapture
 
         return new MySqlExpectedUniqueIndexCatalog(definitions, currentDatabase);
     }
+
+    /// <summary>Identifies newly admitted alterations whose backfill must honor ordered constraints.</summary>
+    /// <param name="operation">The operation being captured or rendered.</param>
+    /// <returns>Whether declared constraint participation must be retained.</returns>
+    internal static bool RequiresAlterBackfillContract(SafeMigrationOperation operation) =>
+        operation is
+        {
+            Policy: SafeMigrationPolicy.RepairIfSafe,
+            Intent: AlterColumnIntent
+            {
+                OldDefinition: { IsNullable: true } source,
+                Definition: { IsNullable: false } target,
+            },
+        }
+        && !SafeMigrationColumnRepairHelper.CanSafelyAlterColumn(source, target)
+        && SafeMigrationColumnRepairHelper.HasProvablyNonNullDefault(target.DefaultValue);
+
+    /// <summary>Gets whether declared constraints require a NULL-free backfill proof for this operation.</summary>
+    /// <param name="operation">The exact operation captured or rendered.</param>
+    /// <returns>Whether complete-stream declarations constrain this backfill.</returns>
+    public bool RequiresNullFreeBackfill(SafeMigrationOperation operation) =>
+        (IsActive ? _expectedBackfillConstraints : _generationBackfillConstraints)
+        ?.RequiresNullFreeRows(operation) == true;
 
     /// <summary>Gets expected unique-index definitions for a table in the active batch.</summary>
     /// <param name="table">The unqualified MySQL or MariaDB table name.</param>
@@ -354,6 +383,7 @@ internal sealed class MySqlSafeMigrationPlanCapture
 
     private void Clear()
     {
+        _expectedBackfillConstraints = null;
         if (_expected is not null)
         {
             Array.Clear(_expected);
@@ -375,6 +405,7 @@ internal sealed class MySqlSafeMigrationPlanCapture
 
     private void ClearGeneration()
     {
+        _generationBackfillConstraints = null;
         _generationDatabaseQualifiers = null;
         _generationTableConstraints = null;
         _generationUniqueIndexes = null;

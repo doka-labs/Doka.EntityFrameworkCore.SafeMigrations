@@ -69,6 +69,18 @@ public sealed class SafeMigrationDecisionPlannerActionTests
     [InlineData(0, -1, -1, -1, "observedState")]
     [InlineData(0, 0, -1, -1, "policy")]
     [InlineData(0, 0, 0, -1, "repairCapability")]
+    [InlineData(23, 7, 3, 2, "operationKind")]
+    [InlineData(int.MinValue, 0, 0, 0, "operationKind")]
+    [InlineData(int.MaxValue, 0, 0, 0, "operationKind")]
+    [InlineData(0, 7, 3, 2, "observedState")]
+    [InlineData(0, int.MinValue, 0, 0, "observedState")]
+    [InlineData(0, int.MaxValue, 0, 0, "observedState")]
+    [InlineData(0, 0, 3, 2, "policy")]
+    [InlineData(0, 0, int.MinValue, 0, "policy")]
+    [InlineData(0, 0, int.MaxValue, 0, "policy")]
+    [InlineData(0, 0, 0, 2, "repairCapability")]
+    [InlineData(0, 0, 0, int.MinValue, "repairCapability")]
+    [InlineData(0, 0, 0, int.MaxValue, "repairCapability")]
     public void ActionOnly_PreservesInvalidInputPrecedence(
         int kind,
         int state,

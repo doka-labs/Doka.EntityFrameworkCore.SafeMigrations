@@ -1,11 +1,13 @@
 # MySQL and MariaDB DDL behavior
 
-Prepared stable 10.4.7 reduces batched MariaDB analysis work separately from
-MySQL/MariaDB runtime command work. It requires neither regenerated migrations
-nor changed server durability settings. Runtime checks continue to read the
-live catalog even when batched analysis uses session-owned catalog copies.
-Policies, data-safety proofs, postconditions, and recovery boundaries remain
-unchanged; required data scans and DDL can still dominate large-table workloads.
+Prepared stable 10.4.8 corrects provider-proven explicit column transitions,
+ordered proof invalidation and rename-destination checks, and preserves exact
+default identity and setup-fragment boundaries. It requires neither regenerated
+migrations nor changed server durability settings. The analysis and runtime
+optimizations introduced in 10.4.7 remain in place. Runtime checks continue to
+read the live catalog even when batched analysis uses session-owned catalog
+copies. Policies, postconditions, and recovery boundaries remain unchanged;
+required data scans and DDL can still dominate large-table workloads.
 
 ## Operational summary
 
@@ -357,6 +359,45 @@ narrowing, a declared-domain-safe transition into the `TEXT` family, a
 text-family widening, a live-data-verified text-to-`VARCHAR(n)` transition, or
 the exact compatible Boolean transition from `BIT(1)` to `TINYINT(1)`.
 
+Explicit `AlterColumnIfDifferent` and generated
+`AlterColumnIfDifferentFromModel` operations share these transition checks when
+their policy is `RepairIfSafe`. They additionally require a complete, matching
+old definition and never create a missing source column. The reviewed provider
+alter operation remains the DDL baseline, including an explicitly permitted
+non-null default backfill. An exact target match short-circuits repair probes.
+Analysis keeps operation-specific source eligibility separate from shared
+physical row probes: two operations targeting the same length cannot borrow
+each other's old-definition approval.
+
+Type-changing explicit alterations additionally require a conservative InnoDB
+in-page row bound for the captured row format and page size, as well as the
+declared row and dependent-key limits. Ordered projection checks the cumulative
+accepted column shape and retained keys, not each alteration in isolation.
+An unsupported or unknown storage shape cannot establish repair permission.
+
+For a type-changing nullable-to-required alteration that uses a default
+backfill, the replacement must be a supported literal fitting both the old and
+target domains, and conversion must be strict. A merely non-null SQL expression
+does not prove this additional requirement. Accepted backfills invalidate
+subsequent preflight row proofs because their `UPDATE` can fire triggers.
+Where a live or stream-declared unique key or check constraint can restrict the
+replacement, the type-changing path additionally requires proof that no row
+needs backfilling. Analysis and generated runtime commands use the same
+normalized transition contract, including constraints not yet in the catalog.
+Supplementary Unicode characters in source or target default literals are not
+admitted by this type-changing path: the qualified catalog can expose a lossy
+default representation, which cannot prove exact identity or the postcondition.
+This restriction does not exclude supplementary characters in stored row data.
+On MySQL, this type-changing path also rejects target expression defaults with
+a quote in their literal payload while `NO_BACKSLASH_ESCAPES` is enabled, before
+any backfill or DDL. MariaDB and plain `VARCHAR` literal defaults do not have
+this quote-only restriction.
+
+MariaDB `TEXT` defaults containing backslashes or control characters remain
+unsupported by this type-changing path because expression serialization can
+change the subsequent `INSERT DEFAULT` value. This restriction does not apply
+to `VARCHAR` defaults or existing row data.
+
 A `VARCHAR` length repair requires the same nonbinary character family,
 character set, effective collation, generated/identity/row-version state,
 provider metadata, and compatible dependent indexes. A column on either side
@@ -411,6 +452,8 @@ complete column shape. Existing `NULL` values block a repair to `NOT NULL`
 unless a structurally proven non-null default permits Doka's guarded backfill
 before target DDL. Other store-family, collation, generated-value, row-version,
 and unsupported provider-metadata differences remain fail-closed.
+Type-changing explicit alterations additionally require the literal
+source-and-target representability and strict-mode conditions described above.
 
 This proof accepts non-null literals and parsed, typed SQL expressions with a
 guaranteed non-null shape, such as a current value or `COALESCE` with a proven

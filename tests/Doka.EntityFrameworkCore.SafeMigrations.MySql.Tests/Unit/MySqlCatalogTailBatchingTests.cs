@@ -3,6 +3,49 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 /// <summary>Verifies immutable 512-table MySQL physical and inventory statement transport contracts.</summary>
 public sealed class MySqlCatalogTailBatchingTests
 {
+    /// <summary>The environment result preserves engine-qualified default capabilities without extra queries.</summary>
+    /// <param name="version">The actual server version string returned by VERSION().</param>
+    /// <param name="sqlMode">The observed session mode.</param>
+    /// <param name="quoted">Whether quote-bearing expression defaults are supported.</param>
+    /// <param name="controls">Whether TEXT expression defaults preserve control characters.</param>
+    [Theory]
+    [InlineData("8.4.11", "STRICT_TRANS_TABLES", true, true)]
+    [InlineData("8.4.11", "STRICT_TRANS_TABLES,NO_BACKSLASH_ESCAPES", false, true)]
+    [InlineData("11.8.8-MariaDB", "STRICT_TRANS_TABLES", true, false)]
+    [InlineData("11.8.8-MariaDB", "STRICT_TRANS_TABLES,NO_BACKSLASH_ESCAPES", true, false)]
+    public async Task PhysicalDefaults_PreserveEngineAndSqlModeCapabilities(
+        string version,
+        string sqlMode,
+        bool quoted,
+        bool controls
+    )
+    {
+        // Arrange
+        await using var connection = new CatalogStatementTestConnection(true, (sql, parameters) =>
+        {
+            var rows = PhysicalResults(sql, parameters);
+            if (sql.StartsWith("SELECT @@default_storage_engine", StringComparison.Ordinal))
+            {
+                rows.Rows[0][4] = sqlMode;
+                rows.Rows[0][5] = version;
+            }
+
+            return rows;
+        });
+
+        // Act
+        var result = await MySqlSafeMigrationProviderAnalyzer.ReadIndexPhysicalEnvironmentsAsync(
+            connection, PhysicalOperations(1), 4 * 1024 * 1024, 71, CancellationToken.None);
+
+        // Assert
+        var environment = Assert.Single(result).Value;
+        Assert.Equal(quoted, environment.SupportsQuotedExpressionDefaults);
+        Assert.Equal(controls, environment.SupportsTextExpressionControlCharacters);
+        Assert.True(environment.StrictSqlMode);
+        Assert.Equal(2, connection.Submissions.Count);
+        Assert.Contains("VERSION()", connection.Submissions[0].Sql, StringComparison.Ordinal);
+    }
+
     /// <summary>Physical capture retains complete table chunks and returns only requested physical columns.</summary>
     /// <param name="native">Whether the connection exposes native batching.</param>
     [Theory]
@@ -286,8 +329,10 @@ public sealed class MySqlCatalogTailBatchingTests
     {
         if (sql.StartsWith("SELECT @@default_storage_engine", StringComparison.Ordinal))
         {
-            var defaults = Table(typeof(string), typeof(string), typeof(int));
-            defaults.Rows.Add("InnoDB", "Dynamic", 16384);
+            var defaults = Table(typeof(string), typeof(string), typeof(int), typeof(string), typeof(string),
+                typeof(string));
+
+            defaults.Rows.Add("InnoDB", "Dynamic", 16384, "utf8mb4", "STRICT_TRANS_TABLES", "8.4.11");
 
             return defaults;
         }

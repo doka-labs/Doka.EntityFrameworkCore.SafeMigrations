@@ -77,6 +77,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     ) => new(state, SafeMigrationRepairCapability.None, postconditionSatisfied: false, "test_live")
     {
         MatchedObjectName = matchedObjectName,
+        RenameTargetExists = false,
     };
 
     private static ExpectedColumnDefinition Column(

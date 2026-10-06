@@ -200,7 +200,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     }
 
     [Fact]
-    public async Task OrderedChildDeleteDischargesOnlyTheExactLiveParentDependency()
+    public async Task OrderedChildDeleteDefersStaleParentDependencyEvidence()
     {
         var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
@@ -230,18 +230,18 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             new SafeMigrationRunOptions("model-data-unmatched-dependency"),
             CancellationToken.None);
 
-        Assert.Equal(SafeMigrationReportStatus.Ready, exactPreflight.Status);
-        Assert.All(exactPreflight.Assessments, assessment =>
-            Assert.Equal(SafeMigrationObservedState.TransitionReady, assessment.ObservedState));
-        Assert.Equal("projected_dependency_handoff", exactPreflight.Assessments[1].Code);
+        Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, exactPreflight.Status);
+        Assert.Equal(SafeMigrationObservedState.TransitionReady, exactPreflight.Assessments[0].ObservedState);
+        Assert.Equal(SafeMigrationAction.ValidateAtRuntime, exactPreflight.Assessments[1].Action);
+        Assert.Equal("projected_model_managed_data_state_unknown", exactPreflight.Assessments[1].AnalysisCode);
         Assert.Equal(0, await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM model_roles WHERE id = 1;"));
         Assert.Equal(0, await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM model_user_roles WHERE role_id = 1;"));
-        Assert.Equal(SafeMigrationReportStatus.Blocked, unmatchedPreflight.Status);
-        Assert.Equal(SafeMigrationObservedState.DataBlocked, unmatchedPreflight.Assessments[1].ObservedState);
+        Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, unmatchedPreflight.Status);
+        Assert.Equal(SafeMigrationAction.ValidateAtRuntime, unmatchedPreflight.Assessments[1].Action);
         Assert.Equal(1, await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM model_roles WHERE id = 2;"));

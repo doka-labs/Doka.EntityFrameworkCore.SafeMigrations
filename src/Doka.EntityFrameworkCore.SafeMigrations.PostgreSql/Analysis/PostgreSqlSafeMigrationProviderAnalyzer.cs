@@ -1,7 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 
-internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationProviderAnalyzer,
-    ISafeMigrationIndexPrerequisiteSource
+internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationProviderAnalyzer,
+    ISafeMigrationIndexPrerequisiteSource, ISafeMigrationProjectedColumnAnalyzer
 {
     // PostgreSQL advisory locks are already local to the current database. A
     // fixed signed bigint therefore avoids coercing the database's unsigned OID
@@ -33,6 +33,36 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
     public IReadOnlyList<string> GetIndexPrerequisiteColumns(
         EnsureIndexIntent intent
     ) => _catalogSqlBuilder.IndexPrerequisiteColumns(intent);
+
+    /// <inheritdoc />
+    public SafeMigrationProviderAnalysis ValidateProjectedAlterColumn(
+        AlterColumnIntent intent,
+        ExpectedColumnDefinition source,
+        SafeMigrationProjectedAlterColumnContext context,
+        SafeMigrationProviderAnalysis liveAnalysis,
+        SafeMigrationProviderAnalysis projectedAnalysis
+    )
+    {
+        if (projectedAnalysis.RepairCapability == SafeMigrationRepairCapability.Safe
+            || !context.ProvesEmpty
+            || !context.HasCompleteTable
+            || !_catalogSqlBuilder.SupportsProjectedAlterColumn(intent))
+        {
+            return projectedAnalysis;
+        }
+
+        // WHY: An accepted complete empty table has no values to truncate.
+        // PostgreSQL supports VARCHAR length changes with its ordinary indexes
+        // and foreign keys; the static provider gate still excludes other types,
+        // collation changes and generation. No absent live row fact is reused.
+        return new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.Safe,
+            postconditionSatisfied: false,
+            "projected_column_transition",
+            SafeMigrationOperationalImpact.TableRewritePossible,
+            differences: null);
+    }
 
     public void ValidateContext(
         DbContext context
@@ -374,6 +404,13 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
                 commandTimeout,
                 cancellationToken);
 
+            await PopulateRenameTargetEvidenceAsync(
+                connection,
+                operations,
+                results,
+                commandTimeout,
+                cancellationToken);
+
             return Array.AsReadOnly(results);
         }
         finally
@@ -428,7 +465,14 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
                 probe.Schema,
                 probe.Table,
                 probe.Column,
-                probe.TargetLength);
+                probe.TargetLength,
+                operation.Intent switch
+                {
+                    EnsureColumnIntent value => value.Definition,
+                    AlterColumnIntent value => value.Definition,
+                    _ => throw new UnreachableException(),
+                },
+                (operation.Intent as AlterColumnIntent)?.OldDefinition);
 
             identities[ordinal] = identity;
             candidates.TryAdd(identity, new PostgreSqlDataProbeCandidate(identity, operation, probe, ordinal));
@@ -498,7 +542,7 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             var analysis = results[ordinal];
-            if (operations[ordinal].Intent is EnsureColumnIntent
+            if (operations[ordinal].Intent is EnsureColumnIntent or AlterColumnIntent
                 && analysis.Differences.Count == 0
                 && analysis.ObservedState is SafeMigrationObservedState.Different
                     or SafeMigrationObservedState.DataBlocked)
@@ -531,7 +575,11 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
                     var plan = builder.Build(
                         operations[ordinal], includeAnalysisEvidence: true, includeTransitionEvidence: false);
 
-                    nullabilityProofs[offset + index] = plan.MayRequireNullabilityDataProof;
+                    // WHY: Alter eligibility includes the exact old definition.
+                    // A diagnostic mismatch alone cannot establish that gate;
+                    // retain its catalog-qualified proof flag from classification.
+                    nullabilityProofs[offset + index] = plan.MayRequireNullabilityDataProof
+                        && operations[ordinal].Intent is not AlterColumnIntent;
                     selections.Add(
                         $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, "
                         + $"({plan.DiagnosticEvidenceExpression ?? "NULL"})");
@@ -669,7 +717,14 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
         CancellationToken cancellationToken
     )
     {
-        var statements = requiredCandidates
+        // WHY: Physical eligibility belongs to a complete old/target contract,
+        // while the same column/limit row fact is safe to share after that gate.
+        var rowGroups = requiredCandidates
+            .GroupBy(static candidate => candidate.RowIdentity)
+            .ToDictionary(static group => group.Key, static group => group.ToArray());
+
+        var statements = rowGroups.Values
+            .Select(static candidates => candidates[0])
             .GroupBy(static candidate => new PostgreSqlTableIdentity(candidate.Identity.Schema, candidate.Identity.Table))
             .SelectMany(static group => group.Chunk(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement))
             .ToArray();
@@ -727,8 +782,11 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
 
                 for (var index = 0; index < candidates.Length; index++)
                 {
-                    var identity = candidates[index].Identity;
-                    cache[identity] = cache[identity] with { IsBlocked = reader.GetBoolean(index) };
+                    var blocked = reader.GetBoolean(index);
+                    foreach (var candidate in rowGroups[candidates[index].RowIdentity])
+                    {
+                        cache[candidate.Identity] = cache[candidate.Identity] with { IsBlocked = blocked };
+                    }
                 }
 
                 if (await reader.ReadAsync(token))
@@ -1613,6 +1671,15 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
         string? Schema,
         string Table,
         string Column,
+        int TargetLength,
+        ExpectedColumnDefinition Definition,
+        ExpectedColumnDefinition? OldDefinition
+    );
+
+    private readonly record struct PostgreSqlDataProbeRowIdentity(
+        string? Schema,
+        string Table,
+        string Column,
         int TargetLength
     );
 
@@ -1632,7 +1699,11 @@ internal sealed class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationPr
         SafeMigrationOperation Operation,
         PostgreSqlSafeMigrationDataProbe Probe,
         int Ordinal
-    );
+    )
+    {
+        public PostgreSqlDataProbeRowIdentity RowIdentity => new(
+            Identity.Schema, Identity.Table, Identity.Column, Identity.TargetLength);
+    }
 
     private sealed class ExpectedTableLookup
     {

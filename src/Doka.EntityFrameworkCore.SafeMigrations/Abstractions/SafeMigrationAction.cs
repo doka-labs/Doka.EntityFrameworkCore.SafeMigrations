@@ -28,7 +28,7 @@ public enum SafeMigrationAction
 
     /// <summary>
     /// Defer classification until the guarded runtime operation observes the
-    /// database after an earlier opaque SQL operation.
+    /// database after earlier operations invalidated its read-only state proof.
     /// </summary>
     ValidateAtRuntime = 7,
 }

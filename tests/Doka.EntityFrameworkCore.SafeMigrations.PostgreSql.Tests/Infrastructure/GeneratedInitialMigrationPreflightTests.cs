@@ -37,7 +37,7 @@ public sealed class GeneratedInitialMigrationPreflightTests
             preflight.Assessments,
             static assessment => assessment.OperationKind == SafeMigrationOperationKind.EnsureModelManagedData);
 
-        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
+        AssertReady(preflight);
         Assert.Equal(SafeMigrationObservedState.Missing, dataAssessment.ObservedState);
         Assert.Equal(SafeMigrationAction.Apply, dataAssessment.Action);
         Assert.Equal("projected_missing", dataAssessment.Code);
@@ -50,7 +50,7 @@ public sealed class GeneratedInitialMigrationPreflightTests
             new SafeMigrationRunOptions($"generated-initial-{migrationName}-replay"),
             CancellationToken.None);
 
-        Assert.Equal(SafeMigrationReportStatus.Ready, replayPreflight.Status);
+        AssertReady(replayPreflight);
         Assert.All(
             replayPreflight.Assessments,
             static assessment =>
@@ -159,6 +159,32 @@ public sealed class GeneratedInitialMigrationPreflightTests
         return migrationsAssembly
             .CreateMigration(migration.Value, context.Database.ProviderName!)
             .UpOperations;
+    }
+
+    /// <summary>Reports the actual operation blockers when generated migration analysis fails.</summary>
+    private static void AssertReady(SafeMigrationRunReport report)
+    {
+        if (report.Status == SafeMigrationReportStatus.Ready)
+        {
+            return;
+        }
+
+        var blockers = report.Assessments
+            .Where(static assessment => assessment.Action is
+                SafeMigrationAction.RejectDifferent
+                or SafeMigrationAction.RejectUnsupported
+                or SafeMigrationAction.RejectDataBlocked
+                or SafeMigrationAction.RejectPrerequisiteMissing)
+            .Select(static assessment =>
+                $"{assessment.Ordinal}: {assessment.OperationKind} {assessment.ObjectName}; "
+                + $"state={assessment.ObservedState}; action={assessment.Action}; "
+                + $"analysis={assessment.AnalysisCode}; decision={assessment.DecisionCode}")
+            .ToArray();
+
+        Assert.Fail(
+            "Generated initial migration preflight was blocked:"
+            + Environment.NewLine
+            + string.Join(Environment.NewLine, blockers));
     }
 
     private static async Task ExecuteOperationsAsync(

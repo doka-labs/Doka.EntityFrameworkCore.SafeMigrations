@@ -6,6 +6,26 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     private const int ForeignPerformanceTableCount = 1000;
     private const int PerformanceFixtureCommandTimeoutSeconds = 180;
 
+    /// <summary>Checks managed-data deferral in several mixed-stream cycles before costly stress qualification.</summary>
+    [Fact]
+    public async Task Analyzer_BoundedMixedOperationsRetainExactDeferredContracts()
+    {
+        // Arrange
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, BuildLargeMigrationStressCatalog());
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        var expectation = LargeMigrationStressContract.Populate(
+            builder, LargeMigrationStressDialect.MySql, operationCount: 128);
+
+        // Act
+        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
+            context, builder.Operations, new SafeMigrationRunOptions("bounded-mixed-migration"));
+
+        // Assert
+        expectation.AssertReport(report);
+    }
+
     [Fact]
     [Trait("Category", "LargeScale")]
     public async Task Analyzer_OneHundredThousandMixedOperationsRemainBoundedOrderedAndComplete()

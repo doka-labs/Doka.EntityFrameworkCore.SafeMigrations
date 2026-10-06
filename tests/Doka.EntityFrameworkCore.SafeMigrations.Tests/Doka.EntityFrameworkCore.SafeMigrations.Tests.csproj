@@ -6,6 +6,8 @@
              Link="Infrastructure\SafeMigrationLiteralContract.cs" />
     <Compile Include="..\Shared\SafeMigrationStateSpaceGenerator.cs"
              Link="Infrastructure\SafeMigrationStateSpaceGenerator.cs" />
+    <Compile Include="..\Shared\LargeMigrationStressContract.cs"
+             Link="Infrastructure\LargeMigrationStressContract.cs" />
     <None Include="..\..\schemas\safe-migration-report-view-v1.schema.json"
           Link="schemas\safe-migration-report-view-v1.schema.json"
           CopyToOutputDirectory="PreserveNewest" />

@@ -161,19 +161,37 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     }
 
     private PostgreSqlSafeMigrationRuntimePlan BuildAlterColumn(
-        AlterColumnIntent intent
+        AlterColumnIntent intent,
+        bool repairRequested,
+        bool includeAnalysisEvidence,
+        bool includeTransitionEvidence
     )
     {
         var exists = ColumnExists(intent.Table, intent.Schema, intent.Definition.Name);
         var matching = ColumnMatches(intent.Table, intent.Schema, intent.Definition);
-        var repair = intent.OldDefinition is not null
-            && SafeMigrationColumnRepairHelper.CanSafelyAlterColumn(intent.OldDefinition, intent.Definition)
-                ? SafeMigrationRepairCapability.Safe
-                : SafeMigrationRepairCapability.None;
+        var sameTypeRepair = repairRequested
+            && intent.OldDefinition is not null
+            && SafeMigrationColumnRepairHelper.CanSafelyAlterColumn(intent.OldDefinition, intent.Definition);
 
-        var repairPrecondition = repair == SafeMigrationRepairCapability.Safe
+        var transition = repairRequested
+            && !sameTypeRepair
+            && intent.OldDefinition is not null
+            && CanAlterVarcharLength(intent.OldDefinition, intent.Definition)
+                ? BuildColumnRepairTransition(
+                    intent.Table,
+                    intent.Schema,
+                    intent.Definition,
+                    includeTransitionEvidence,
+                    intent.OldDefinition)
+                : PostgreSqlColumnRepairTransition.None;
+
+        var repair = sameTypeRepair || transition.HasDataProbe
+            ? SafeMigrationRepairCapability.Safe
+            : SafeMigrationRepairCapability.None;
+
+        var repairPrecondition = sameTypeRepair
             ? ColumnMatches(intent.Table, intent.Schema, intent.OldDefinition!)
-            : "FALSE";
+            : transition.InvariantExpression;
 
         var nullabilityDataProbe =
             repair == SafeMigrationRepairCapability.Safe
@@ -195,21 +213,73 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             ? repairPrecondition
             : PostgreSqlSafeMigrationRuntimePlan.NullabilityRepairInvariantPlaceholder;
 
+        var dataBlocked = transition.HasDataProbe
+            ? $"({nullBlocked}) OR ({transition.DataBlockedExpression})"
+            : nullBlocked;
+
         return Plan(
-            $"CASE WHEN NOT {exists} THEN 'different' WHEN {nullBlocked} THEN 'data_blocked' "
+            $"CASE WHEN NOT {exists} THEN 'different' "
+            + $"WHEN ({repairInvariantExpression}) AND ({dataBlocked}) THEN 'data_blocked' "
             + $"WHEN {matching} THEN 'matching' ELSE 'different' END",
             matching,
             repair,
-            $"({repairInvariantExpression}) AND NOT ({nullBlocked})") with
+            $"({repairInvariantExpression}) AND NOT ({dataBlocked})") with
         {
+            DataProbe = transition.DataProbe,
+            ClassificationCodeExpression = transition.HasDataProbe
+                ? $"CASE WHEN {transition.DataBlockedExpression} "
+                    + "THEN 'varchar_narrowing_value_too_long' ELSE NULL END"
+                : null,
+            RepairOperationalImpact = transition.HasDataProbe
+                ? transition.OperationalImpact
+                : SafeMigrationOperationalImpact.Unknown,
             NullabilityDataProbe = nullabilityDataProbe,
             StateEvaluationGuardExpression = exists,
             StateEvaluationGuardFailureExpression = "'different'",
             MayRequireNullabilityDataProof = repair == SafeMigrationRepairCapability.Safe
                 && intent.OldDefinition!.IsNullable
                 && !intent.Definition.IsNullable,
+            DiagnosticEvidenceExpression = includeAnalysisEvidence
+                ? BuildColumnDiagnosticEvidence(intent.Table, intent.Schema, intent.Definition)
+                : null,
         };
     }
+
+    /// <summary>Checks provider support before an empty projected table can authorize a length transition.</summary>
+    /// <param name="intent">The complete reviewed old and target contract.</param>
+    /// <returns>Whether the same static boundary used by runtime VARCHAR repair is satisfied.</returns>
+    public bool SupportsProjectedAlterColumn(
+        AlterColumnIntent intent
+    ) => GetUnsupportedFeature(intent) is null
+        && intent.OldDefinition is not null
+        && CanAlterVarcharLength(intent.OldDefinition, intent.Definition);
+
+    /// <summary>Keeps the provider length exception separate from unchanged intrinsic column facets.</summary>
+    private bool CanAlterVarcharLength(
+        ExpectedColumnDefinition source,
+        ExpectedColumnDefinition target
+    ) => source.ClrType == typeof(string)
+        && target.ClrType == typeof(string)
+        && PostgreSqlSafeMigrationColumnMetadata.CanSafelyConverge(source)
+        && PostgreSqlSafeMigrationColumnMetadata.CanSafelyConverge(target)
+        && PostgreSqlSafeMigrationColumnMetadata.GetValueGenerationStrategy(source)
+            is null or NpgsqlValueGenerationStrategy.None
+        && PostgreSqlSafeMigrationColumnMetadata.GetValueGenerationStrategy(target)
+            is null or NpgsqlValueGenerationStrategy.None
+        && StringComparer.Ordinal.Equals(source.Name, target.Name)
+        && source.IsUnicode == target.IsUnicode
+        && source.IsFixedLength == target.IsFixedLength
+        && source.Precision == target.Precision
+        && source.Scale == target.Scale
+        && Equals(source.Collation, target.Collation)
+        && IsVarcharType(ResolveStoreType(source))
+        && TryParseVarcharLength(ResolveStoreType(target), out _);
+
+    private static bool IsVarcharType(
+        string storeType
+    ) => TryParseVarcharLength(storeType, out _)
+        || storeType.AsSpan().Trim().Equals("varchar", StringComparison.OrdinalIgnoreCase)
+        || storeType.AsSpan().Trim().Equals("character varying", StringComparison.OrdinalIgnoreCase);
 
     private string ColumnMatches(
         string table,
@@ -275,7 +345,20 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     private static string ColumnStoreType(
         ExpectedColumnDefinition definition,
         RelationalTypeMapping mapping
-    ) => definition.StoreType ?? mapping.StoreType;
+    )
+    {
+        var storeType = definition.StoreType ?? mapping.StoreType;
+        if (storeType.StartsWith("character varying(", StringComparison.Ordinal))
+        {
+            return storeType;
+        }
+
+        // WHY: format_type renders the canonical spelling even when the public
+        // old/target contract uses PostgreSQL's VARCHAR alias.
+        return TryParseVarcharLength(storeType, out var length)
+            ? $"character varying({length.ToString(CultureInfo.InvariantCulture)})"
+            : IsVarcharType(storeType) ? "character varying" : storeType;
+    }
 
     private RelationalTypeMapping ColumnMapping(
         ExpectedColumnDefinition definition
@@ -450,7 +533,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             ?? throw new InvalidOperationException(
                 $"No PostgreSQL type mapping exists for '{definition.ClrType.FullName}'.");
 
-        var storeType = definition.StoreType ?? mapping.StoreType;
+        var storeType = ColumnStoreType(definition, mapping);
         var defaultMatches = DefaultAndGenerationMatches(definition, mapping);
         var defaultKind = DefaultKind(definition);
         var expectedDefaultPayload = DefaultDiagnosticPayload(definition, mapping);
@@ -621,7 +704,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         string table,
         string? schema,
         ExpectedColumnDefinition definition,
-        bool includeTransitionEvidence
+        bool includeTransitionEvidence,
+        ExpectedColumnDefinition? oldDefinition = null
     )
     {
         var storeType = ResolveStoreType(definition);
@@ -650,14 +734,17 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 Qualified(table, schema),
                 _sqlGenerationHelper.DelimitIdentifier(definition.Name),
                 includeTransitionEvidence
-                    ? ColumnWithInvariantExists(
-                        table,
-                        schema,
-                        definition.Name,
-                        "t.typname = 'varchar' "
-                        + $"AND live_column.character_maximum_length IS DISTINCT FROM {targetLength} "
-                        + $"AND {CollationMatches(definition)} "
-                        + $"AND {GenerationMatches(definition)}")
+                    ? (oldDefinition is null
+                        ? string.Empty
+                        : $"({ColumnMatches(table, schema, oldDefinition)}) AND ")
+                        + ColumnWithInvariantExists(
+                            table,
+                            schema,
+                            definition.Name,
+                            "t.typname = 'varchar' "
+                            + $"AND live_column.character_maximum_length IS DISTINCT FROM {targetLength} "
+                            + $"AND {CollationMatches(definition)} "
+                            + $"AND {GenerationMatches(definition)}")
                     : null,
                 narrowing),
             SafeMigrationOperationalImpact.TableRewritePossible);

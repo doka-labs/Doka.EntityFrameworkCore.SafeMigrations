@@ -118,6 +118,67 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(1, preservedRows);
     }
 
+    /// <summary>Default and collation drift cannot enter the exact-match short circuit.</summary>
+    /// <param name="collationDrift">
+    /// Whether the mismatch is an unsafe collation rather than a repairable default.
+    /// </param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RuntimeMatching_DefaultAndCollationDriftVisitRepairCatalogs(bool collationDrift)
+    {
+        // Arrange
+        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var columnCollation = collationDrift ? "utf8mb4_bin" : "utf8mb4_unicode_ci";
+        var defaultClause = collationDrift ? string.Empty : "DEFAULT 'prior' ";
+        await ExecuteSqlAsync(connectionString,
+            "CREATE TABLE `runtime_match_rows` (`id` int PRIMARY KEY, `value` varchar(5) "
+            + $"COLLATE {columnCollation} NOT NULL {defaultClause}COMMENT 'canonical') "
+            + "ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
+            + "INSERT INTO `runtime_match_rows` VALUES (1, 'kept');");
+
+        var observer = new RuntimeMatchingProbeInterceptor();
+        await using var context = CreateRuntimeMatchingContext(connectionString, observer);
+        await context.Database.OpenConnectionAsync(CancellationToken.None);
+        await context.Database.ExecuteSqlRawAsync(RuntimeMatchingResetSql);
+        var operation = RuntimeMatchingOperation(textColumn: true);
+
+        // Act
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
+        var visits = await ReadRuntimeMatchingVisitsAsync(context);
+        var cleaned = await ContextScalarIntAsync(context, NullProofVariablesClearedSql);
+        var preservedRows = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM `runtime_match_rows` WHERE `id` = 1 AND `value` = 'kept';");
+
+        var finalColumns = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
+            + "AND TABLE_NAME = 'runtime_match_rows' AND COLUMN_NAME = 'value' "
+            + $"AND COLLATION_NAME = '{columnCollation}' AND COLUMN_DEFAULT IS NULL "
+            + "AND IS_NULLABLE = 'NO' AND COLUMN_COMMENT = 'canonical';");
+
+        var report = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
+            context, [operation], CancellationToken.None);
+
+        // Assert
+        AssertRuntimeMatchingInstrumentation(observer, textColumn: true, operationCount: 1);
+        Assert.Equal(new RuntimeMatchingVisits(1, 1, 1, 0, 0, 1), visits);
+        if (collationDrift)
+        {
+            Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(exception).Message,
+                StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.Null(exception);
+        }
+
+        Assert.Equal(collationDrift ? SafeMigrationObservedState.Different : SafeMigrationObservedState.Matching,
+            Assert.Single(report).ObservedState);
+        Assert.Equal(1, finalColumns);
+        Assert.Equal(1, cleaned);
+        Assert.Equal(1, preservedRows);
+    }
+
     /// <summary>Invalidates an earlier exact match after raw DDL and DML in the same operation stream.</summary>
     /// <param name="textColumn">Whether the invalidated column is varchar rather than int.</param>
     [Theory]

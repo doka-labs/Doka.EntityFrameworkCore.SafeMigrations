@@ -8,9 +8,32 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// The live physical column shapes available when an ordered composite index
 /// includes columns that were not changed earlier in the migration.
 /// </param>
+/// <param name="StorageRowFormat">The physical storage format, when required for ordered row-size proofs.</param>
+/// <param name="StoragePageSize">The physical page size in bytes, when captured by the provider.</param>
+/// <param name="DefaultCharacterSet">The current database character set used by unqualified text columns.</param>
+/// <param name="StrictSqlMode">Whether strict conversion mode was observed on the analysis connection.</param>
+/// <param name="CollationCharacterSets">Resolved character sets for explicitly requested column collations.</param>
+/// <param name="NewTableEnvironment">
+/// The captured creation defaults, distinct from an existing table's physical layout.
+/// </param>
+/// <param name="SupportsQuotedExpressionDefaults">
+/// Whether the provider and current SQL mode can preserve quoted payloads in expression defaults.
+/// </param>
+/// <param name="SupportsTextExpressionControlCharacters">
+/// Whether TEXT expression defaults preserve backslashes and control characters in literal payloads.
+/// </param>
 internal sealed record SafeMigrationIndexPhysicalEnvironment(
     int MaximumKeyBytes,
-    IReadOnlyDictionary<string, SafeMigrationIndexColumnPhysicalShape>? Columns = null);
+    IReadOnlyDictionary<string, SafeMigrationIndexColumnPhysicalShape>? Columns = null,
+    string? StorageRowFormat = null,
+    int? StoragePageSize = null,
+    string? DefaultCharacterSet = null,
+    bool StrictSqlMode = false,
+    IReadOnlyDictionary<string, string>? CollationCharacterSets = null,
+    SafeMigrationIndexPhysicalEnvironment? NewTableEnvironment = null,
+    bool SupportsQuotedExpressionDefaults = false,
+    bool SupportsTextExpressionControlCharacters = false
+);
 
 /// <summary>Contains one live column's bounded physical index-key shape.</summary>
 /// <param name="MaximumPrefixUnits">The maximum legal prefix units, when prefixes are supported.</param>

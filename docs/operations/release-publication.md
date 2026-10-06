@@ -5,9 +5,10 @@ untagged `main` commit first, then waits at the protected `nuget` environment.
 Only after that wait begins does the operator create the signed tag and approve
 publication. Run every command separately and stop on the first failure.
 
-The current source prepares 10.4.7 for all five package IDs. This maintenance
-patch retains the package inventory introduced in 10.4.6 and changes only
-MySQL/MariaDB performance paths. Do not publish a subset or treat preparation as
+The current source prepares 10.4.8 for all five package IDs. This maintenance
+patch retains the package inventory introduced in 10.4.6 and corrects column
+transitions, ordered projection and provider checks without changing public
+contracts or dependencies. Do not publish a subset or treat preparation as
 proof that qualification or public readback has succeeded.
 
 ## One-time configuration

@@ -472,6 +472,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
             }
 
             CaptureIdentitySlotConflicts(operations, results);
+            _dependencyGraph?.CaptureRenameTargetPresence(operations, results);
 
             // WHY: Inventory may reuse completed analysis proofs only within the same
             // lock/transaction scope. A partial or separately invoked analysis is not a certificate.

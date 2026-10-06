@@ -65,8 +65,11 @@ A successful release run and exact-version public package readback remain the
 authority for a published API; shipped baseline files record its prepared
 contract, not proof of publication.
 
-Prepared stable 10.4.7 preserves the complete 10.4.6 public API and dependency
-ranges. It changes only internal MySQL/MariaDB analysis and runtime work.
+Prepared stable 10.4.8 preserves the complete 10.4.6 public API and dependency
+ranges. It corrects internal explicit column-transition proofs and ordered
+projection, rename-destination evidence across providers, and MySQL/MariaDB
+default comparison and setup-fragment handling. The internal MySQL/MariaDB
+performance changes introduced in 10.4.7 remain in place.
 Migration source does not need regeneration; policies, canonical report v3,
 filtered-view v2, and migration histories remain unchanged. No API-baseline
 promotion is required for this patch.
@@ -267,6 +270,10 @@ structure guarantees non-null, for example a current-value node, a null test,
 or `COALESCE` with a proven non-null argument. Unparsed SQL text, column
 references, casts, binary arithmetic, opaque fragments, and general SQL
 functions do not qualify. This is a structural proof, not a data scan.
+An explicit MySQL/MariaDB alteration that changes the type has an additional
+backfill condition: the supported literal replacement must fit both the old
+and target domains under strict conversion. A non-null `COALESCE` or current
+value expression alone cannot prove this condition.
 
 The [migration authoring guide](migration-authoring.md) contains complete
 generated strict and legacy-convergence migrations plus the equivalent
@@ -418,6 +425,12 @@ through explicit ensure operations in the contract or independent checks;
 rename postflight alone is not proof of destination equivalence.
 `AlterColumnIfDifferent` takes the target definition, nullable old definition,
 and policy; an absent or mismatching old definition does not authorize repair.
+Under explicit `RepairIfSafe`, MySQL/MariaDB and PostgreSQL reuse their
+independently qualified column-transition families described above. The old
+definition is a source-shape check, not evidence that live values fit a smaller
+target. Narrowing requires a current row proof, and a matching target requires
+no repair scan. Alter never creates a missing source column. A successful
+preflight does not replace execution-time guards or permit truncation.
 
 The three model-managed-data methods are public targets for generated migration
 source. They always use `ThrowIfDifferent`; they expose no overwrite or repair
@@ -627,7 +640,7 @@ Each schema-version-3 assessment exposes:
 | `DecisionCode` | Provider-neutral policy-decision code |
 | `Differences` | At most 16 typed catalog-facet differences with bounded printable ASCII metadata |
 | `OperationalImpact` | `NotApplicable`, `TableRewritePossible`, or `Unknown` |
-| `DeferredOrigin` | Owning migration ID when known, zero-based operation ordinal, and CLR type of the earlier raw SQL operation requiring runtime validation; otherwise null |
+| `DeferredOrigin` | Owning migration ID when known, zero-based operation ordinal, and CLR type of the preceding proof-invalidating operation requiring runtime validation; otherwise null |
 
 Representative difference facets include `column_store_type`,
 `column_max_length`, `column_collation`, `foreign_key_delete_behavior`,
@@ -652,7 +665,7 @@ digest.
 | `NoOperations` | No operation was assessed; verify intended target/history separately |
 | `Ready` | Preflight permits the safe sequence subject to external gates; postflight confirms all supplied safe postconditions |
 | `ReadyWithProviderOperations` | Safe operations are accepted, but ordinary EF or provider operations remain unanalyzed and need independent artifact and postcondition review |
-| `RuntimeValidationRequired` | Earlier raw SQL makes later safe states unprovable from a read-only snapshot; review the SQL independently and rely on the ordered runtime guards |
+| `RuntimeValidationRequired` | Earlier raw SQL or unconfined data changes make later states unprovable from a read-only snapshot; review provider-owned SQL independently and rely on the ordered runtime guards |
 | `Blocked` | One or more operations reject; do not execute/continue deployment |
 
 `SafeMigrationObservedState.TransitionReady` is used only when a captured
@@ -695,9 +708,13 @@ Zero and undefined enum values throw before output is written.
 `RuntimeValidationRequired` is a preflight status distinct from `Ready` and
 `Blocked`. A later safe assessment with `ValidateAtRuntime` has nullable state
 and postcondition, code `runtime_validation_required`, and a `DeferredOrigin`
-containing the preceding raw SQL's migration ID (null for ad-hoc streams),
+containing the preceding proof-invalidating operation's migration ID (null for ad-hoc streams),
 stream ordinal, and CLR operation type. `ThrowIfBlocked()` does not throw for
 this status; runtime guards make the actual decision in operation order.
+For model-managed data, unconfined writes invalidate earlier exact rows and
+dependency evidence. Later unprovable seed assessments carry analysis code
+`projected_model_managed_data_state_unknown`; deferred writes establish no new
+postconditions. The existing guarded execution remains authoritative.
 Independently proven blockers remain `Blocked`. The
 [version 1 view schema](../schemas/safe-migration-report-view-v1.schema.json)
 remains available for previously persisted views.

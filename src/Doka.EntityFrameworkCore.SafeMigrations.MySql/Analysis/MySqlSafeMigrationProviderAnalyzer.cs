@@ -121,14 +121,30 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         return new AnalysisScope(migrationLock);
     }
 
-    public async Task<IReadOnlyList<SafeMigrationProviderAnalysis>> AnalyzeAsync(
+    public Task<IReadOnlyList<SafeMigrationProviderAnalysis>> AnalyzeAsync(
         DbContext context,
         IReadOnlyList<SafeMigrationOperation> operations,
         CancellationToken cancellationToken = default
+    ) => AnalyzeCoreAsync(context, operations, captureRenameSources: true, cancellationToken);
+
+    /// <summary>Analyzes one immutable snapshot without recursively capturing rename-source evidence.</summary>
+    private async Task<IReadOnlyList<SafeMigrationProviderAnalysis>> AnalyzeCoreAsync(
+        DbContext context,
+        IReadOnlyList<SafeMigrationOperation> operations,
+        bool captureRenameSources,
+        CancellationToken cancellationToken,
+        MySqlBackfillConstraintCatalog? inheritedBackfillConstraints = null
     )
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(operations);
+
+        if (captureRenameSources)
+        {
+            _projectedAlterPhysicalSnapshots.Clear();
+            _renamedSourceAnalyses.Clear();
+            _renameTargetConflicts.Clear();
+        }
 
         if (operations.Count == 0)
         {
@@ -155,6 +171,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                 _currentDatabase = await ReadCurrentDatabaseAsync(connection, commandTimeout, cancellationToken);
             }
 
+            var backfillConstraints = inheritedBackfillConstraints
+                ?? MySqlBackfillConstraintCatalog.Create(operations, _currentDatabase);
+
             var maximumPayloadBytes = await GetMaximumPayloadBytesAsync(connection, commandTimeout, cancellationToken);
             var physicalKeyOperations = operations
                 .Where(operation => TargetsCurrentDatabase(operation.Intent, _currentDatabase))
@@ -163,6 +182,14 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
             var indexEnvironments = await ReadIndexPhysicalEnvironmentsAsync(
                 connection,
                 physicalKeyOperations,
+                maximumPayloadBytes,
+                commandTimeout,
+                cancellationToken);
+
+            var alterPhysicalSnapshots = await ReadProjectedAlterPhysicalSnapshotsAsync(
+                connection,
+                physicalKeyOperations,
+                indexEnvironments,
                 maximumPayloadBytes,
                 commandTimeout,
                 cancellationToken);
@@ -187,7 +214,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
             var results = new SafeMigrationProviderAnalysis[operations.Count];
             var separatorBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Separator);
             var trailerBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Trailer);
-            var dataProbeCache = new Dictionary<MySqlDataProbeIdentity, MySqlDataProbeResult>();
+            var dataProbeCache = new Dictionary<MySqlDataProbeContract, MySqlDataProbeResult>();
+            var blockingDataCache = new Dictionary<MySqlDataProbeIdentity, bool>();
             var operationOffset = 0;
             foreach (var operationWindow in operations.Chunk(
                          SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture))
@@ -196,7 +224,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                     operationWindow,
                     context.Model,
                     expectedUniqueIndexes,
-                    expectedTableConstraints);
+                    expectedTableConstraints,
+                    backfillConstraints);
 
                 AttachIndexPhysicalEnvironments(operationWindow, plans, indexEnvironments);
                 var shortCircuitStates = await FindShortCircuitStatesAsync(
@@ -261,9 +290,11 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                         plans,
                         shortCircuitStates,
                         dataProbeCache,
+                        blockingDataCache,
                         context.Model,
                         expectedUniqueIndexes,
                         expectedTableConstraints,
+                        backfillConstraints,
                         maximumPayloadBytes,
                         commandTimeout,
                         operationOffset,
@@ -425,6 +456,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                             batch,
                             results,
                             plans,
+                            operationWindow,
                             dataProbeResults,
                             operationOffset,
                             submittedOrdinals,
@@ -438,6 +470,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                         context.Model,
                         expectedUniqueIndexes,
                         expectedTableConstraints,
+                        backfillConstraints,
                         maximumPayloadBytes,
                         commandTimeout,
                         operationOffset,
@@ -462,6 +495,32 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
             {
                 throw new InvalidOperationException(
                     "The MySQL SafeMigrations classifier returned an inconsistent row count.");
+            }
+
+            // WHY: Same-type Ensure repair can use its metadata-only branch,
+            // which does not establish the transition's dependency guards.
+            // Refine after batched diagnostics and before reference-bound
+            // snapshots are attached, retaining only actual type expansion.
+            for (var ordinal = 0; ordinal < results.Length; ordinal++)
+            {
+                var analysis = results[ordinal];
+                if (analysis.RepairPreservesLiveValueDomain
+                    && !analysis.Differences.Any(static difference =>
+                        StringComparer.Ordinal.Equals(difference.Facet, "column_store_type")))
+                {
+                    results[ordinal] = analysis.WithRepairPreservesLiveValueDomain(false);
+                }
+                else if (analysis.RepairPreservesLiveValueDomain)
+                {
+                    results[ordinal] = analysis.WithRepairPreservesPhysicalKeys();
+                }
+            }
+
+            AttachProjectedAlterPhysicalSnapshots(operations, results, alterPhysicalSnapshots);
+            if (captureRenameSources)
+            {
+                await CaptureRenameSourceAnalysesAsync(
+                    context, operations, results, backfillConstraints, cancellationToken);
             }
 
             return Array.AsReadOnly(results);
@@ -496,6 +555,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         MySqlExpectedUniqueIndexCatalog expectedUniqueIndexes,
         IReadOnlyDictionary<
             (string? Schema, string Table), SafeMigrationExpectedTableConstraints> expectedTableConstraints,
+        MySqlBackfillConstraintCatalog backfillConstraints,
         bool includeAnalysisEvidence = false,
         bool includeTransitionEvidence = false
     )
@@ -508,7 +568,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
             expectedUniqueIndexes,
             expectedTableConstraints,
             includeAnalysisEvidence,
-            includeTransitionEvidence);
+            includeTransitionEvidence,
+            backfillConstraints);
 
         _ = _sqlGenerator.Generate(operations, model);
 
@@ -523,6 +584,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         MySqlExpectedUniqueIndexCatalog expectedUniqueIndexes,
         IReadOnlyDictionary<
             (string? Schema, string Table), SafeMigrationExpectedTableConstraints> expectedTableConstraints,
+        MySqlBackfillConstraintCatalog backfillConstraints,
         int maximumPayloadBytes,
         int? commandTimeout,
         int operationOffset,
@@ -533,7 +595,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         for (var localOrdinal = 0; localOrdinal < operations.Length; localOrdinal++)
         {
             var analysis = results[operationOffset + localOrdinal];
-            if (operations[localOrdinal].Intent is EnsureColumnIntent
+            if (operations[localOrdinal].Intent is EnsureColumnIntent or AlterColumnIntent
                 && analysis.Differences.Count == 0
                 && analysis.ObservedState is SafeMigrationObservedState.Different
                     or SafeMigrationObservedState.DataBlocked)
@@ -555,6 +617,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
             model,
             expectedUniqueIndexes,
             expectedTableConstraints,
+            backfillConstraints,
             includeAnalysisEvidence: true,
             includeTransitionEvidence: false);
 
@@ -630,6 +693,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         results[ordinal] = current.WithDifferences(
             differences,
             plan.MayRequireNullabilityDataProof
+                && (current.RepairCapability == SafeMigrationRepairCapability.Safe
+                    || current.ObservedState == SafeMigrationObservedState.DataBlocked)
                 && differences.Any(static difference =>
                     StringComparer.Ordinal.Equals(difference.Facet, "column_nullability")));
     }
@@ -639,11 +704,13 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         SafeMigrationOperation[] operations,
         MySqlSafeMigrationRuntimePlan[] plans,
         MySqlShortCircuitState?[] shortCircuitStates,
-        Dictionary<MySqlDataProbeIdentity, MySqlDataProbeResult> cache,
+        Dictionary<MySqlDataProbeContract, MySqlDataProbeResult> cache,
+        Dictionary<MySqlDataProbeIdentity, bool> blockingDataCache,
         IModel model,
         MySqlExpectedUniqueIndexCatalog expectedUniqueIndexes,
         IReadOnlyDictionary<
             (string? Schema, string Table), SafeMigrationExpectedTableConstraints> expectedTableConstraints,
+        MySqlBackfillConstraintCatalog backfillConstraints,
         int maximumPayloadBytes,
         int? commandTimeout,
         int operationOffset,
@@ -651,7 +718,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
     )
     {
         var results = new MySqlDataProbeResult?[plans.Length];
-        var candidates = new Dictionary<MySqlDataProbeIdentity, MySqlDataProbeCandidate>();
+        var candidates = new Dictionary<MySqlDataProbeContract, MySqlDataProbeCandidate>();
         for (var ordinal = 0; ordinal < plans.Length; ordinal++)
         {
             var probe = plans[ordinal].DataProbe;
@@ -661,7 +728,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
             }
 
             var identity = new MySqlDataProbeIdentity(probe.Table, probe.Column, probe.TargetLength);
-            if (cache.TryGetValue(identity, out var cached))
+            var contract = CreateDataProbeContract(identity, operations[ordinal]);
+            if (cache.TryGetValue(contract, out var cached))
             {
                 results[ordinal] = cached;
 
@@ -669,8 +737,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
             }
 
             candidates.TryAdd(
-                identity,
-                new MySqlDataProbeCandidate(identity, operations[ordinal], probe, operationOffset + ordinal));
+                contract,
+                new MySqlDataProbeCandidate(identity, operations[ordinal], probe, operationOffset + ordinal, contract));
         }
 
         if (candidates.Count > 0)
@@ -681,6 +749,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                 model,
                 expectedUniqueIndexes,
                 expectedTableConstraints,
+                backfillConstraints,
                 includeTransitionEvidence: true);
 
             var resolved = await FindRequiredDataProbesAsync(
@@ -691,18 +760,27 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                 commandTimeout,
                 cancellationToken);
 
-            foreach (var entry in resolved)
-            {
-                cache.Add(entry.Key, entry.Value);
-            }
-
+            // WHY: Exact source and target metadata belong to the operation,
+            // not to the physical row probe. Distinct Ensure/Alter contracts
+            // may share one length scan only after independent eligibility.
             await FindBlockingDataAsync(
                 connection,
-                candidateArray.Where(candidate => cache[candidate.Identity].IsRequired),
-                cache,
+                candidateArray.Where(candidate => resolved[candidate.Contract].IsRequired
+                        && !blockingDataCache.ContainsKey(candidate.Identity))
+                    .DistinctBy(static candidate => candidate.Identity),
+                blockingDataCache,
                 maximumPayloadBytes,
                 commandTimeout,
                 cancellationToken);
+
+            foreach (var candidate in candidateArray)
+            {
+                var result = resolved[candidate.Contract];
+                cache.Add(candidate.Contract, result with
+                {
+                    IsBlocked = result.IsRequired && blockingDataCache[candidate.Identity],
+                });
+            }
         }
 
         for (var ordinal = 0; ordinal < plans.Length; ordinal++)
@@ -714,7 +792,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
             }
 
             var identity = new MySqlDataProbeIdentity(probe.Table, probe.Column, probe.TargetLength);
-            results[ordinal] = cache.TryGetValue(identity, out var result)
+            results[ordinal] = cache.TryGetValue(CreateDataProbeContract(identity, operations[ordinal]), out var result)
                 ? result
                 : throw new InvalidOperationException(
                     "The MySQL narrowing probe did not resolve every candidate.");
@@ -723,7 +801,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         return results;
     }
 
-    private async Task<Dictionary<MySqlDataProbeIdentity, MySqlDataProbeResult>> FindRequiredDataProbesAsync(
+    private async Task<Dictionary<MySqlDataProbeContract, MySqlDataProbeResult>> FindRequiredDataProbesAsync(
         DbConnection connection,
         IReadOnlyList<MySqlDataProbeCandidate> candidates,
         MySqlSafeMigrationRuntimePlan[] transitionPlans,
@@ -732,7 +810,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         CancellationToken cancellationToken
     )
     {
-        var results = new Dictionary<MySqlDataProbeIdentity, MySqlDataProbeResult>(candidates.Count);
+        var results = new Dictionary<MySqlDataProbeContract, MySqlDataProbeResult>(candidates.Count);
         await SafeMigrationCatalogProbeBatch.ReadAsync(
             connection,
             candidates.Count,
@@ -790,7 +868,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                     var narrowing = reader.GetBoolean(2);
 
                     results.Add(
-                        candidates[offset + row].Identity,
+                        candidates[offset + row].Contract,
                         new MySqlDataProbeResult(
                             transitionEligible, IsRequired: transitionEligible && narrowing, IsBlocked: false));
 
@@ -811,7 +889,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
     private static async Task FindBlockingDataAsync(
         DbConnection connection,
         IEnumerable<MySqlDataProbeCandidate> requiredCandidates,
-        Dictionary<MySqlDataProbeIdentity, MySqlDataProbeResult> cache,
+        Dictionary<MySqlDataProbeIdentity, bool> cache,
         int maximumPayloadBytes,
         int? commandTimeout,
         CancellationToken cancellationToken
@@ -874,7 +952,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                     var blocked = Convert.ToBoolean(reader.GetValue(index), CultureInfo.InvariantCulture);
 
                     var identity = candidates[index].Identity;
-                    cache[identity] = cache[identity] with { IsBlocked = blocked };
+                    cache.Add(identity, blocked);
                 }
 
                 if (await reader.ReadAsync(token))
@@ -1361,6 +1439,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         SafeMigrationCatalogBatch batch,
         SafeMigrationProviderAnalysis[] results,
         MySqlSafeMigrationRuntimePlan[] plans,
+        SafeMigrationOperation[] operations,
         MySqlDataProbeResult?[] dataProbeResults,
         int operationOffset,
         IReadOnlyList<int> submittedOrdinals,
@@ -1433,6 +1512,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                             : SafeMigrationOperationalImpact.NotApplicable;
 
                     var requiresNullabilityDataProof = plan.MayRequireNullabilityDataProof
+                        && (state == SafeMigrationObservedState.DataBlocked
+                            || (state == SafeMigrationObservedState.Different
+                                && repairCapability == SafeMigrationRepairCapability.Safe))
                         && differences.Any(static difference =>
                             StringComparer.Ordinal.Equals(difference.Facet, "column_nullability"));
 
@@ -1458,6 +1540,35 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                         // after projected DML.
                         RequiresLiveDataProof = dataProbeResults[localOrdinal]?.IsRequired == true
                             || requiresNullabilityDataProof,
+                        // WHY: Provider backfill executes UPDATE before MODIFY.
+                        // Triggers can change any table, so ordered projection
+                        // must invalidate all row proofs after accepted repair.
+                        RepairMutatesData = state == SafeMigrationObservedState.Different
+                            && repairCapability == SafeMigrationRepairCapability.Safe
+                            && operations[localOrdinal] is
+                            {
+                                Policy: SafeMigrationPolicy.RepairIfSafe,
+                                Intent: AlterColumnIntent
+                                {
+                                    OldDefinition.IsNullable: true,
+                                    Definition.IsNullable: false,
+                                } alterIntent,
+                            }
+                            && SafeMigrationColumnRepairHelper.HasProvablyNonNullDefault(
+                                alterIntent.Definition.DefaultValue),
+                        // WHY: Ensure's full-definition repair never emits
+                        // UPDATE. Only its non-narrowing string proof can retain
+                        // a captured source-domain bound across ordered DDL.
+                        RepairPreservesLiveValueDomain = state == SafeMigrationObservedState.Different
+                            && repairCapability == SafeMigrationRepairCapability.Safe
+                            && plan.RepairOperationalImpact == SafeMigrationOperationalImpact.TableRewritePossible
+                            && dataProbeResults[localOrdinal]?.IsRequired != true
+                            && operations[localOrdinal] is
+                            {
+                                Policy: SafeMigrationPolicy.RepairIfSafe,
+                                Intent: EnsureColumnIntent { Definition.ClrType: var columnType },
+                            }
+                            && columnType == typeof(string),
                     };
 
                     results[ordinal] = analysis;
@@ -1984,6 +2095,26 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         int TargetLength
     );
 
+    /// <summary>Retains exact immutable definition identities without allocating serialized contracts.</summary>
+    private static MySqlDataProbeContract CreateDataProbeContract(
+        MySqlDataProbeIdentity identity,
+        SafeMigrationOperation operation
+    ) => operation.Intent switch
+    {
+        EnsureColumnIntent intent => new(identity, intent.Definition, null, intent.Schema, operation.Policy),
+        AlterColumnIntent intent => new(
+            identity, intent.Definition, intent.OldDefinition, intent.Schema, operation.Policy),
+        _ => throw new InvalidOperationException("A MySQL column data probe requires a column intent."),
+    };
+
+    private readonly record struct MySqlDataProbeContract(
+        MySqlDataProbeIdentity Identity,
+        ExpectedColumnDefinition Target,
+        ExpectedColumnDefinition? Source,
+        string? Schema,
+        SafeMigrationPolicy Policy
+    );
+
     private readonly record struct MySqlDataProbeResult(
         bool IsTransitionEligible,
         bool IsRequired,
@@ -1994,7 +2125,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         MySqlDataProbeIdentity Identity,
         SafeMigrationOperation Operation,
         MySqlSafeMigrationDataProbe Probe,
-        int Ordinal
+        int Ordinal,
+        MySqlDataProbeContract Contract
     );
 
     private readonly record struct MySqlDiagnosticCandidate(

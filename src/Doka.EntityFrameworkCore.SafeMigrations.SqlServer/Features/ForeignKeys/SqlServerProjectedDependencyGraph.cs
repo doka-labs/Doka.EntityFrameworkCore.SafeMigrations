@@ -42,6 +42,47 @@ internal sealed class SqlServerProjectedDependencyGraph : ISafeMigrationProjecte
         _inlinePhysicalWidthSupported = inlinePhysicalWidthSupported;
     }
 
+    /// <summary>Copies independently captured rename destination occupancy before ordered graph mutations.</summary>
+    /// <param name="operations">The operation stream used to bind the immutable catalog names.</param>
+    /// <param name="analyses">The corresponding immutable classifications to enrich.</param>
+    internal void CaptureRenameTargetPresence(
+        IReadOnlyList<SafeMigrationOperation> operations,
+        SafeMigrationProviderAnalysis[] analyses
+    )
+    {
+        for (var index = 0; index < operations.Count; index++)
+        {
+            if (operations[index].Intent is not RenameTableIntent rename)
+            {
+                continue;
+            }
+
+            var target = new TableKey(rename.NewSchema ?? rename.Schema ?? "dbo", rename.NewName ?? rename.Name);
+            if (!_tables.TryGetValue(target, out var identity))
+            {
+                continue;
+            }
+
+            // WHY: Rename identities are already bound using catalog collation.
+            // Reuse that snapshot without another query, and retain non-table
+            // occupants rather than mistaking them for a free schema name.
+            bool? intermediateExists = null;
+            if ((rename.NewName ?? rename.Name) != rename.Name
+                && (rename.NewSchema ?? rename.Schema ?? "dbo") != (rename.Schema ?? "dbo"))
+            {
+                var intermediate = new TableKey(rename.Schema ?? "dbo", rename.NewName ?? rename.Name);
+                if (_tables.TryGetValue(intermediate, out var intermediateIdentity))
+                {
+                    intermediateExists = !_missingTables.Contains(intermediateIdentity)
+                        || _nonTableNames.Contains(intermediate);
+                }
+            }
+
+            analyses[index] = analyses[index].WithRenameTargetExists(
+                !_missingTables.Contains(identity) || _nonTableNames.Contains(target), intermediateExists);
+        }
+    }
+
     /// <summary>Determines whether an operation stream needs dependency metadata.</summary>
     /// <param name="operations">The safe operation stream.</param>
     /// <returns>Whether structural dependency or schema validation is necessary.</returns>
@@ -120,6 +161,8 @@ internal sealed class SqlServerProjectedDependencyGraph : ISafeMigrationProjecte
 
             // WHY: Literal binding uses CATALOG_DEFAULT, not a guessed .NET
             // case-folding comparer. A table alias maps to the real object id.
+            // Occupancy includes schema-scoped child objects, matching the
+            // runtime ObjectExists guard rather than assuming only root names collide.
             var values = string.Join(", ", chunk.Select(static request => "("
                 + Literal(request.Schema) + ", " + Literal(request.Table) + ", "
                 + Literal(request.Column) + ", " + Literal(request.ForeignKey) + ")"));
@@ -140,7 +183,6 @@ internal sealed class SqlServerProjectedDependencyGraph : ISafeMigrationProjecte
                 + "AND t.name = requested.table_name COLLATE CATALOG_DEFAULT "
                 + "LEFT JOIN sys.objects occupied ON occupied.schema_id = s.schema_id "
                 + "AND occupied.name = requested.table_name COLLATE CATALOG_DEFAULT "
-                + "AND occupied.parent_object_id = 0 "
                 + "LEFT JOIN sys.columns c ON c.object_id = t.object_id "
                 + "AND c.name = requested.column_name COLLATE CATALOG_DEFAULT "
                 + "LEFT JOIN sys.foreign_keys fk ON fk.parent_object_id = t.object_id "
@@ -1029,6 +1071,19 @@ internal sealed class SqlServerProjectedDependencyGraph : ISafeMigrationProjecte
                 SafeMigrationRepairCapability.None, false, "projected_rename_target_occupied");
         }
 
+        if (targetName.Table != intent.Name
+            && targetName.Schema != (intent.Schema ?? "dbo"))
+        {
+            var intermediate = new TableKey(intent.Schema ?? "dbo", targetName.Table);
+            if (!_tables.TryGetValue(intermediate, out var intermediateId)
+                || !_missingTables.Contains(intermediateId)
+                || _nonTableNames.Contains(intermediate))
+            {
+                return new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
+                    SafeMigrationRepairCapability.None, false, "projected_rename_target_occupied");
+            }
+        }
+
         // WHY: Only an accepted prior rename carries this proof that the same
         // ordinary physical table has no unsafe textual dependencies. Catalog
         // absence under the later source name alone cannot authorize a rename.
@@ -1201,6 +1256,12 @@ internal sealed class SqlServerProjectedDependencyGraph : ISafeMigrationProjecte
                     result.Add(new BindingRequest(table.Schema ?? "dbo", table.Name, null, null));
                     result.Add(new BindingRequest(
                         table.NewSchema ?? table.Schema ?? "dbo", table.NewName ?? table.Name, null, null));
+                    if ((table.NewName ?? table.Name) != table.Name
+                        && (table.NewSchema ?? table.Schema ?? "dbo") != (table.Schema ?? "dbo"))
+                    {
+                        result.Add(new BindingRequest(table.Schema ?? "dbo", table.NewName ?? table.Name, null, null));
+                    }
+
                     break;
                 case EnsureForeignKeyIntent foreignKey:
                     AddForeignKey(foreignKey.Definition);

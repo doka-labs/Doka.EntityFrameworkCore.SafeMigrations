@@ -545,9 +545,14 @@ public sealed partial class SafeMigrationModelManagedDataTests
         Assert.Equal(SafeMigrationObservedState.TransitionReady, projectedDelete.ObservedState);
     }
 
-    [Fact]
-    public void PreflightDischargesOnlyExactlyCoveredAcceptedDependencies()
+    /// <summary>Prior child writes cannot certify immutable parent dependency counts.</summary>
+    /// <param name="dependencyCount">The original number of incoming dependent rows.</param>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void PreflightDefersParentDependenciesAfterChildWrites(long dependencyCount)
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         var childDelete = Operation(
             new DeleteModelManagedDataIntent(
@@ -593,23 +598,18 @@ public sealed partial class SafeMigrationModelManagedDataTests
                         "identity"),
                 ]));
 
-        var exactlyCovered = projection.Project(
+        // Act
+        var projected = projection.Project(
             parentDelete,
             EvidenceAnalysis(
                 SafeMigrationObservedState.DataBlocked,
                 [SafeMigrationModelManagedRowState.Source],
-                [1]));
+                [dependencyCount]));
 
-        var additionalLiveDependency = projection.Project(
-            parentDelete,
-            EvidenceAnalysis(
-                SafeMigrationObservedState.DataBlocked,
-                [SafeMigrationModelManagedRowState.Source],
-                [2]));
-
-        Assert.Equal(SafeMigrationObservedState.TransitionReady, exactlyCovered.ObservedState);
-        Assert.Equal("projected_dependency_handoff", exactlyCovered.Code);
-        Assert.Equal(SafeMigrationObservedState.DataBlocked, additionalLiveDependency.ObservedState);
+        // Assert
+        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, projected.ObservedState);
+        Assert.Equal("projected_model_managed_data_state_unknown", projected.Code);
+        Assert.True(projected.IsModelManagedProjectionUnknown);
     }
 
     [Fact]

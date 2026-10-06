@@ -16,7 +16,8 @@ transitions are retained in each record's Decision History. D-010 and D-011
 record the implemented ownership and lossless-repair contracts selected on
 2026-09-05. D-012 records the implemented report-view contract selected on
 2026-09-10. D-013 records the implemented SQLite provider contract selected on
-2026-09-18.
+2026-09-18. D-014 records the MariaDB catalog-snapshot decision selected on
+2026-10-05; its implementation confirmation is recorded on 2026-10-06.
 
 | Record | Bounded decision |
 | --- | --- |

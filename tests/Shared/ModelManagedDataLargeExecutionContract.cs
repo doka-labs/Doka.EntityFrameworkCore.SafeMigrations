@@ -199,16 +199,21 @@ internal sealed class ModelManagedDataLargeExecutionExpectation
     {
         ArgumentNullException.ThrowIfNull(report);
 
-        Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
+        Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, report.Status);
         Assert.Equal(OperationCount, report.Assessments.Count);
-        Assert.All(report.Assessments, static assessment =>
-            Assert.Equal(SafeMigrationAction.Apply, assessment.Action));
-        Assert.Contains(
-            report.Assessments,
-            static assessment => assessment.ObservedState == SafeMigrationObservedState.Missing);
-        Assert.Contains(
-            report.Assessments,
-            static assessment => assessment.ObservedState == SafeMigrationObservedState.TransitionReady);
+        Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
+        Assert.Equal(SafeMigrationObservedState.Missing, report.Assessments[0].ObservedState);
+
+        // WHY: The existing-table fixture has no certified side-effect boundary.
+        // Later batches use their unchanged runtime guards, not stale row scans.
+        for (var ordinal = 1; ordinal < report.Assessments.Count; ordinal++)
+        {
+            var assessment = report.Assessments[ordinal];
+
+            Assert.Equal(SafeMigrationAction.ValidateAtRuntime, assessment.Action);
+            Assert.Null(assessment.ObservedState);
+            Assert.Equal(ordinal - 1, assessment.DeferredOrigin?.OperationOrdinal);
+        }
     }
 
     public void AssertReplayReport(

@@ -171,8 +171,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     }
 
     [Fact]
-    public void ModelManagedMutationInvalidatesOnlyItsTableNarrowingProof()
+    public void ModelManagedMutationInvalidatesEveryTableNarrowingProof()
     {
+        // Arrange
         var projection = ProjectionWithExistingVarcharLength(200);
         var auditTable = new ExpectedTableDefinition("audit", [VarcharColumn(200)]);
         var auditData = new EnsureModelManagedDataIntent(
@@ -196,11 +197,13 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             new EnsureColumnIntent("audit", VarcharColumn(10)),
             SafeMigrationPolicy.RepairIfSafe);
 
+        // Act
         var itemAnalysis = projection.Project(itemOperation, RepairableVarcharNarrowingAnalysis());
         var auditAnalysis = projection.Project(auditOperation, RepairableVarcharNarrowingAnalysis());
 
-        Assert.Equal(SafeMigrationObservedState.Different, itemAnalysis.ObservedState);
-        Assert.Equal(SafeMigrationRepairCapability.Safe, itemAnalysis.RepairCapability);
+        // Assert
+        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, itemAnalysis.ObservedState);
+        Assert.Equal(SafeMigrationRepairCapability.None, itemAnalysis.RepairCapability);
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, auditAnalysis.ObservedState);
         Assert.Equal("projected_data_state_unknown", auditAnalysis.Code);
     }

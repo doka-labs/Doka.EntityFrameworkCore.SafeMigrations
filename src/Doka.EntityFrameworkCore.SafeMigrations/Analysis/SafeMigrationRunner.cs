@@ -294,6 +294,8 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
         var hasProviderOperations = false;
         var hasDeferredOperations = false;
         SafeMigrationDeferredOrigin? rawSqlOrigin = null;
+        SafeMigrationDeferredOrigin? managedDataOrigin = null;
+        SafeMigrationDeferredOrigin? globalDataOrigin = null;
 
         var safeOperations = operations
             .OfType<SafeMigrationOperation>()
@@ -338,7 +340,9 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
                     _providerAnalyzer as ISafeMigrationProjectedKeyAnalyzer,
                     objectIdentityNormalizer,
                     _providerAnalyzer as ISafeMigrationProjectedDependencyAnalyzer,
-                    _providerAnalyzer as ISafeMigrationIndexPrerequisiteSource)
+                    _providerAnalyzer as ISafeMigrationIndexPrerequisiteSource,
+                    _providerAnalyzer as ISafeMigrationProjectedColumnAnalyzer,
+                    _providerAnalyzer as ISafeMigrationRenamedTableAnalyzer)
                 : null;
 
             var safeOperationOrdinal = 0;
@@ -347,6 +351,13 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
                 cancellationToken.ThrowIfCancellationRequested();
 
                 var operation = operations[ordinal];
+                if (preflightProjection is not null)
+                {
+                    preflightProjection.CurrentOperationOrdinal = ordinal;
+                }
+
+                var managedDataVersion = preflightProjection?.ModelManagedDataChangeVersion;
+                var globalDataVersion = preflightProjection?.DataMutationVersion;
                 if (operation is not SafeMigrationOperation safeOperation)
                 {
                     hasProviderOperations = true;
@@ -371,6 +382,18 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
                     {
                         preflightProjection.ObserveProviderPostcondition(operation);
 
+                        if (preflightProjection.ModelManagedDataChangeVersion != managedDataVersion)
+                        {
+                            managedDataOrigin = new SafeMigrationDeferredOrigin(
+                                migrationIds?[ordinal], ordinal,
+                                operation.GetType().FullName ?? operation.GetType().Name);
+                        }
+
+                        if (preflightProjection.DataMutationVersion != globalDataVersion)
+                        {
+                            globalDataOrigin = managedDataOrigin;
+                        }
+
                         if (preflightProjection.HasOpaqueSqlPostcondition
                             && operation is SqlOperation)
                         {
@@ -386,15 +409,38 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
 
                 var liveAnalysis = liveAnalyses[safeOperationOrdinal++];
                 var analysis = preflightProjection?.Project(safeOperation, liveAnalysis) ?? liveAnalysis;
+                var deferredOrigin = analysis.IsModelManagedProjectionUnknown
+                    ? analysis.HasStaleGlobalModelManagedData
+                        ? globalDataOrigin ?? managedDataOrigin
+                        : managedDataOrigin
+                    : analysis.IsOpaqueProjectionUnknown ? rawSqlOrigin : null;
+
+                if (analysis.IsModelManagedProjectionUnknown
+                    && !analysis.HasStaleGlobalModelManagedData
+                    && analysis.ModelManagedLocalOriginOrdinal is { } localOriginOrdinal)
+                {
+                    var originOperation = operations[localOriginOrdinal];
+
+                    deferredOrigin = new SafeMigrationDeferredOrigin(
+                        migrationIds?[localOriginOrdinal], localOriginOrdinal,
+                        originOperation.GetType().FullName ?? originOperation.GetType().Name);
+                }
 
                 if (mode == SafeMigrationReportMode.Preflight
-                    && rawSqlOrigin is not null
-                    && analysis.IsOpaqueProjectionUnknown)
+                    && deferredOrigin is not null)
                 {
-                    // WHY: Raw SQL can change any catalog or row state. The immutable
-                    // batch analysis cannot prove this later operation's state, but
-                    // its runtime guard will analyze it after the SQL has executed.
-                    // Do not project an effect that has not yet been established.
+                    // WHY: Raw SQL and unconfined writes invalidate earlier live
+                    // evidence. Runtime guards inspect the actual ordered state.
+                    // A deferred seed write may itself fire triggers, so discard
+                    // earlier row proofs without inventing its postconditions.
+                    if (analysis.IsModelManagedProjectionUnknown)
+                    {
+                        preflightProjection!.ObserveDeferredModelManagedMutation();
+                        managedDataOrigin = new SafeMigrationDeferredOrigin(
+                            migrationIds?[ordinal], ordinal, typeof(SafeMigrationOperation).FullName!);
+                        globalDataOrigin = managedDataOrigin;
+                    }
+
                     hasDeferredOperations = true;
                     assessments.Add(
                         new SafeMigrationAssessment(
@@ -411,7 +457,7 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
                             "runtime_validation_required",
                             SafeMigrationOperationalImpact.Unknown,
                             differences: null,
-                            deferredOrigin: rawSqlOrigin));
+                            deferredOrigin: deferredOrigin));
 
                     continue;
                 }
@@ -431,6 +477,20 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
 
                 blocked |= operationBlocked;
                 preflightProjection?.Observe(safeOperation, liveAnalysis, analysis, decision);
+
+                if (preflightProjection is not null
+                    && preflightProjection.ModelManagedDataChangeVersion != managedDataVersion)
+                {
+                    managedDataOrigin = new SafeMigrationDeferredOrigin(
+                        migrationIds?[ordinal], ordinal, typeof(SafeMigrationOperation).FullName!);
+                }
+
+                if (preflightProjection is not null
+                    && preflightProjection.DataMutationVersion != globalDataVersion)
+                {
+                    globalDataOrigin = managedDataOrigin;
+                }
+
                 var assessmentCode = postconditionSuperseded
                     ? "postcondition_superseded"
                     : operationBlocked

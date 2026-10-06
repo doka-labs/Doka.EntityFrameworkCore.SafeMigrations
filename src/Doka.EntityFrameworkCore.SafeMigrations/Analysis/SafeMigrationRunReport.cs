@@ -30,13 +30,13 @@ public enum SafeMigrationReportStatus
     Blocked = 3,
 
     /// <summary>
-    /// No conflict is proven, but opaque SQL prevents a read-only preflight
-    /// from classifying later safe operations. Their runtime guards must decide.
+    /// No conflict is proven, but opaque SQL or unconfined data writes prevent
+    /// read-only classification of later operations. Their runtime guards must decide.
     /// </summary>
     RuntimeValidationRequired = 4,
 }
 
-/// <summary>Identifies the earlier operation that made a preflight projection opaque.</summary>
+/// <summary>Identifies the earlier operation that invalidated a preflight state proof.</summary>
 public sealed class SafeMigrationDeferredOrigin
 {
     /// <summary>Initializes the source of an unknown projected state.</summary>
@@ -172,7 +172,7 @@ public sealed class SafeMigrationAssessment
     /// <param name="decisionCode">The stable provider-neutral decision code.</param>
     /// <param name="operationalImpact">The provider-proven execution-impact classification.</param>
     /// <param name="differences">The bounded typed facet differences.</param>
-    /// <param name="deferredOrigin">The preceding opaque operation when runtime validation is required.</param>
+    /// <param name="deferredOrigin">The preceding proof-invalidating operation requiring runtime validation.</param>
     internal SafeMigrationAssessment(
         int ordinal,
         string operationType,
@@ -295,7 +295,7 @@ public sealed class SafeMigrationAssessment
     /// <summary>Gets the bounded typed facet differences.</summary>
     public IReadOnlyList<SafeMigrationFacetDifference> Differences { get; }
 
-    /// <summary>Gets the opaque operation requiring a later runtime decision, if any.</summary>
+    /// <summary>Gets the proof-invalidating operation requiring a later runtime decision, if any.</summary>
     public SafeMigrationDeferredOrigin? DeferredOrigin { get; }
 }
 
