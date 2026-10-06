@@ -142,6 +142,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
             await connection.OpenAsync(cancellationToken);
         }
 
+        Exception? analysisFailure = null;
         try
         {
             MySqlSafeMigrationConnectionValidator.Validate(connection);
@@ -174,6 +175,15 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                 operations,
                 schema => MySqlTableIdentity.NormalizeDatabase(schema, _currentDatabase));
 
+            // WHY: MariaDB spills every INFORMATION_SCHEMA subquery of a classification statement to
+            // an on-disk temporary table, so the catalog of the connected database is copied once
+            // per operation window and classified against instead. MySQL keeps the equivalent work
+            // in memory and rejects a second reference to a temporary table in one statement, so it
+            // stays on the live views. See D-014.
+            var snapshotEligible = MySqlServerVersion
+                .AutoDetect(connection, MySqlServerVersionCompatibilityMode.AllowUnsupported)
+                .IsMariaDb;
+
             var results = new SafeMigrationProviderAnalysis[operations.Count];
             var separatorBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Separator);
             var trailerBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Trailer);
@@ -197,195 +207,255 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                     operationOffset,
                     cancellationToken);
 
-                var dataProbeResults = await ResolveDataProbeResultsAsync(
-                    connection,
-                    operationWindow,
-                    plans,
-                    shortCircuitStates,
-                    dataProbeCache,
-                    context.Model,
-                    expectedUniqueIndexes,
-                    expectedTableConstraints,
-                    maximumPayloadBytes,
-                    commandTimeout,
-                    operationOffset,
-                    cancellationToken);
-
-                for (var localOrdinal = 0; localOrdinal < operationWindow.Length; localOrdinal++)
+                // WHY: Explicit qualifiers keep live reads, including a foreign key's principal.
+                // Unqualified operations use local catalog rows plus incoming foreign keys owned
+                // by other databases; those dependencies must not disappear from the snapshot.
+                var bindable = new bool[operationWindow.Length];
+                var bindableCount = 0;
+                for (var ordinal = 0; ordinal < operationWindow.Length; ordinal++)
                 {
-                    if (shortCircuitStates[localOrdinal] is { } shortCircuitState)
+                    bindable[ordinal] = shortCircuitStates[ordinal] is null
+                        && !MySqlSafeMigrationCatalogSqlBuilder.HasDatabaseQualifier(
+                            operationWindow[ordinal].Intent);
+
+                    if (bindable[ordinal])
                     {
-                        results[operationOffset + localOrdinal] = ShortCircuitAnalysis(
-                            shortCircuitState,
-                            plans[localOrdinal]);
+                        bindableCount++;
                     }
                 }
 
-                // WHY: Local classifications do not divide the immutable live
-                // snapshot. Pack the unresolved work while retaining the
-                // original operation identities for later ordered projection.
-                var workOrder = SafeMigrationCatalogWorkOrder.Create(
-                    operationWindow.Length,
-                    ordinal => shortCircuitStates[ordinal] is null,
-                    cancellationToken);
+                // WHY: Copying the catalog costs a fixed set of statements, so it only pays once a
+                // window classifies at least a full statement's worth of operations against it. A
+                // migration of a handful of operations stays on the live views, where the copy would
+                // be pure overhead rather than a saving.
+                var useSnapshot = snapshotEligible
+                    && bindableCount >= SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement;
 
-                var workIndex = 0;
-                while (workIndex < workOrder.Length)
+                await using var catalogSnapshot = useSnapshot
+                    ? await MySqlCatalogSnapshot.TryCreateAsync(connection, commandTimeout, cancellationToken)
+                    : null;
+
+                if (useSnapshot && catalogSnapshot is null)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
+                    // WHY: An unavailable snapshot capability applies to this analysis session.
+                    // Do not repeat the same failed DDL for every capture window.
+                    snapshotEligible = false;
+                }
 
-                    await using var batch = new SafeMigrationCatalogBatch(connection, commandTimeout);
-                    var submittedOrdinals = new List<int>(
-                        SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement
-                        * SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch);
-
-                    var batchParameterCount = 0;
-                    var batchPayloadBytes = 0;
-                    while (batch.Count < SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch
-                           && workIndex < workOrder.Length)
+                try
+                {
+                    if (catalogSnapshot is not null)
                     {
-                        var command = batch.CreateCommand();
-                        var parameterizer = new MySqlCatalogQueryParameterizer(command, _typeMappingSource);
-                        var selections = new List<string>(
-                            Math.Min(
-                                SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement,
-                                workOrder.Length - workIndex));
-
-                        var sqlBytes = trailerBytes;
-                        while (workIndex < workOrder.Length
-                               && selections.Count < SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
+                        for (var ordinal = 0; ordinal < plans.Length; ordinal++)
                         {
-                            var ordinal = workOrder[workIndex];
-                            var checkpoint = parameterizer.Capture();
-                            var plan = plans[ordinal];
-                            MySqlDataProbeResult? dataProbeResult = plan.DataProbe is null
-                                ? null
-                                : dataProbeResults[ordinal]
-                                    ?? throw new InvalidOperationException(
-                                        "The MySQL narrowing probe returned no classification result.");
-
-                            var stateExpression = plan.DataProbe is null
-                                ? plan.RenderStateExpression(parameterizer.Add)
-                                : plan.RenderStateExpression(
-                                    parameterizer.Add,
-                                    dataProbeResult!.Value.IsBlocked,
-                                    dataProbeResult.Value.IsTransitionEligible);
-
-                            var postcondition = plan.RenderPostcondition(parameterizer.Add);
-                            var repairPrecondition = plan.DataProbe is null
-                                ? plan.RenderRepairPrecondition(parameterizer.Add)
-                                : plan.RenderRepairPrecondition(
-                                    parameterizer.Add,
-                                    dataProbeResult!.Value.IsBlocked,
-                                    dataProbeResult.Value.IsTransitionEligible);
-
-                            var classificationCode = plan.ClassificationCodeExpression is null
-                                ? "NULL"
-                                : plan.DataProbe is null
-                                    ? plan.RenderClassificationCodeExpression(parameterizer.Add)
-                                    : plan.RenderClassificationCodeExpression(
-                                        parameterizer.Add,
-                                        dataProbeResult!.Value.IsBlocked);
-
-                            var rowEvidence = plan.ModelManagedRowEvidenceExpression is null
-                                ? "NULL"
-                                : plan.RenderModelManagedRowEvidenceExpression(parameterizer.Add);
-
-                            var dependencyCounts = plan.ModelManagedDependencyCountsExpression is null
-                                ? "NULL"
-                                : plan.RenderModelManagedDependencyCountsExpression(parameterizer.Add);
-
-                            var diagnosticEvidence = plan.DiagnosticEvidenceExpression is null
-                                ? "NULL"
-                                : plan.RenderDiagnosticEvidenceExpression(parameterizer.Add);
-
-                            var matchedObjectName = plan.MatchedObjectNameExpression is null
-                                ? "NULL"
-                                : plan.RenderMatchedObjectNameExpression(parameterizer.Add);
-
-                            var resultOrdinal = operationOffset + ordinal;
-                            var selection = $"SELECT {resultOrdinal.ToString(CultureInfo.InvariantCulture)}, "
-                                + $"({stateExpression}), "
-                                + $"COALESCE(({postcondition}), FALSE), "
-                                + $"COALESCE(({repairPrecondition}), FALSE), "
-                                + $"({classificationCode}), "
-                                + $"({rowEvidence}), "
-                                + $"({dependencyCounts}), "
-                                + $"({diagnosticEvidence}), "
-                                + $"({matchedObjectName})";
-
-                            var selectionBytes = Encoding.UTF8.GetByteCount(selection)
-                                + (selections.Count == 0 ? 0 : separatorBytes);
-
-                            var statementPayload = sqlBytes + selectionBytes + parameterizer.Utf8PayloadBytes;
-                            var prospectiveBatchParameters = batchParameterCount + parameterizer.Count;
-                            var prospectiveBatchPayload = batchPayloadBytes + statementPayload;
-                            if (SafeMigrationCatalogQueryLimits.Exceeded(
-                                    prospectiveBatchParameters,
-                                    prospectiveBatchPayload,
-                                    maximumPayloadBytes))
+                            if (bindable[ordinal])
                             {
-                                parameterizer.Rollback(checkpoint);
-                                if (selections.Count == 0)
-                                {
-                                    if (batch.Count == 1)
-                                    {
-                                        batch.RemoveLastCommand(command);
+                                plans[ordinal] = plans[ordinal] with { CatalogRelations = catalogSnapshot.Resolve };
+                            }
+                        }
+                    }
 
-                                        throw SafeMigrationCatalogQueryLimits.OversizedOperation(
-                                            operationOffset + ordinal,
-                                            prospectiveBatchParameters,
-                                            prospectiveBatchPayload);
+                    var dataProbeResults = await ResolveDataProbeResultsAsync(
+                        connection,
+                        operationWindow,
+                        plans,
+                        shortCircuitStates,
+                        dataProbeCache,
+                        context.Model,
+                        expectedUniqueIndexes,
+                        expectedTableConstraints,
+                        maximumPayloadBytes,
+                        commandTimeout,
+                        operationOffset,
+                        cancellationToken);
+
+                    for (var localOrdinal = 0; localOrdinal < operationWindow.Length; localOrdinal++)
+                    {
+                        if (shortCircuitStates[localOrdinal] is { } shortCircuitState)
+                        {
+                            results[operationOffset + localOrdinal] = ShortCircuitAnalysis(
+                                shortCircuitState,
+                                plans[localOrdinal]);
+                        }
+                    }
+
+                    // WHY: Local classifications do not divide the immutable live
+                    // snapshot. Pack the unresolved work while retaining the
+                    // original operation identities for later ordered projection.
+                    var workOrder = SafeMigrationCatalogWorkOrder.Create(
+                        operationWindow.Length,
+                        ordinal => shortCircuitStates[ordinal] is null,
+                        cancellationToken);
+
+                    var workIndex = 0;
+                    while (workIndex < workOrder.Length)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+
+                        await using var batch = new SafeMigrationCatalogBatch(connection, commandTimeout);
+                        var submittedOrdinals = new List<int>(
+                            SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement
+                            * SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch);
+
+                        var batchParameterCount = 0;
+                        var batchPayloadBytes = 0;
+                        while (batch.Count < SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch
+                               && workIndex < workOrder.Length)
+                        {
+                            var command = batch.CreateCommand();
+                            var parameterizer = new MySqlCatalogQueryParameterizer(command, _typeMappingSource);
+                            var selections = new List<string>(
+                                Math.Min(
+                                    SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement,
+                                    workOrder.Length - workIndex));
+
+                            var sqlBytes = trailerBytes;
+                            while (workIndex < workOrder.Length
+                                   && selections.Count < SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
+                            {
+                                var ordinal = workOrder[workIndex];
+                                var checkpoint = parameterizer.Capture();
+                                var plan = plans[ordinal];
+                                MySqlDataProbeResult? dataProbeResult = plan.DataProbe is null
+                                    ? null
+                                    : dataProbeResults[ordinal]
+                                        ?? throw new InvalidOperationException(
+                                            "The MySQL narrowing probe returned no classification result.");
+
+                                var stateExpression = plan.DataProbe is null
+                                    ? plan.RenderStateExpression(parameterizer.Add)
+                                    : plan.RenderStateExpression(
+                                        parameterizer.Add,
+                                        dataProbeResult!.Value.IsBlocked,
+                                        dataProbeResult.Value.IsTransitionEligible);
+
+                                var postcondition = plan.RenderPostcondition(parameterizer.Add);
+                                var repairPrecondition = plan.DataProbe is null
+                                    ? plan.RenderRepairPrecondition(parameterizer.Add)
+                                    : plan.RenderRepairPrecondition(
+                                        parameterizer.Add,
+                                        dataProbeResult!.Value.IsBlocked,
+                                        dataProbeResult.Value.IsTransitionEligible);
+
+                                var classificationCode = plan.ClassificationCodeExpression is null
+                                    ? "NULL"
+                                    : plan.DataProbe is null
+                                        ? plan.RenderClassificationCodeExpression(parameterizer.Add)
+                                        : plan.RenderClassificationCodeExpression(
+                                            parameterizer.Add,
+                                            dataProbeResult!.Value.IsBlocked);
+
+                                var rowEvidence = plan.ModelManagedRowEvidenceExpression is null
+                                    ? "NULL"
+                                    : plan.RenderModelManagedRowEvidenceExpression(parameterizer.Add);
+
+                                var dependencyCounts = plan.ModelManagedDependencyCountsExpression is null
+                                    ? "NULL"
+                                    : plan.RenderModelManagedDependencyCountsExpression(parameterizer.Add);
+
+                                var diagnosticEvidence = plan.DiagnosticEvidenceExpression is null
+                                    ? "NULL"
+                                    : plan.RenderDiagnosticEvidenceExpression(parameterizer.Add);
+
+                                var matchedObjectName = plan.MatchedObjectNameExpression is null
+                                    ? "NULL"
+                                    : plan.RenderMatchedObjectNameExpression(parameterizer.Add);
+
+                                var resultOrdinal = operationOffset + ordinal;
+                                var selection = $"SELECT {resultOrdinal.ToString(CultureInfo.InvariantCulture)}, "
+                                    + $"({stateExpression}), "
+                                    + $"COALESCE(({postcondition}), FALSE), "
+                                    + $"COALESCE(({repairPrecondition}), FALSE), "
+                                    + $"({classificationCode}), "
+                                    + $"({rowEvidence}), "
+                                    + $"({dependencyCounts}), "
+                                    + $"({diagnosticEvidence}), "
+                                    + $"({matchedObjectName})";
+
+                                var selectionBytes = Encoding.UTF8.GetByteCount(selection)
+                                    + (selections.Count == 0 ? 0 : separatorBytes);
+
+                                var statementPayload = sqlBytes + selectionBytes + parameterizer.Utf8PayloadBytes;
+                                var prospectiveBatchParameters = batchParameterCount + parameterizer.Count;
+                                var prospectiveBatchPayload = batchPayloadBytes + statementPayload;
+                                if (SafeMigrationCatalogQueryLimits.Exceeded(
+                                        prospectiveBatchParameters,
+                                        prospectiveBatchPayload,
+                                        maximumPayloadBytes))
+                                {
+                                    parameterizer.Rollback(checkpoint);
+                                    if (selections.Count == 0)
+                                    {
+                                        if (batch.Count == 1)
+                                        {
+                                            batch.RemoveLastCommand(command);
+
+                                            throw SafeMigrationCatalogQueryLimits.OversizedOperation(
+                                                operationOffset + ordinal,
+                                                prospectiveBatchParameters,
+                                                prospectiveBatchPayload);
+                                        }
+
+                                        break;
                                     }
 
                                     break;
                                 }
 
+                                selections.Add(selection);
+                                submittedOrdinals.Add(resultOrdinal);
+                                sqlBytes += selectionBytes;
+                                workIndex++;
+                            }
+
+                            if (selections.Count == 0)
+                            {
+                                batch.RemoveLastCommand(command);
+
                                 break;
                             }
 
-                            selections.Add(selection);
-                            submittedOrdinals.Add(resultOrdinal);
-                            sqlBytes += selectionBytes;
-                            workIndex++;
+                            command.CommandText = string.Join(SafeMigrationCatalogQueryLimits.Separator, selections)
+                                + SafeMigrationCatalogQueryLimits.Trailer;
+                            batchParameterCount += parameterizer.Count;
+                            batchPayloadBytes += sqlBytes + parameterizer.Utf8PayloadBytes;
                         }
 
-                        if (selections.Count == 0)
-                        {
-                            batch.RemoveLastCommand(command);
-
-                            break;
-                        }
-
-                        command.CommandText = string.Join(SafeMigrationCatalogQueryLimits.Separator, selections)
-                            + SafeMigrationCatalogQueryLimits.Trailer;
-                        batchParameterCount += parameterizer.Count;
-                        batchPayloadBytes += sqlBytes + parameterizer.Utf8PayloadBytes;
+                        await ReadAnalysisAsync(
+                            batch,
+                            results,
+                            plans,
+                            dataProbeResults,
+                            operationOffset,
+                            submittedOrdinals,
+                            cancellationToken);
                     }
 
-                    await ReadAnalysisAsync(
-                        batch,
+                    await PopulateColumnDiagnosticsAsync(
+                        connection,
+                        operationWindow,
                         results,
-                        plans,
-                        dataProbeResults,
+                        context.Model,
+                        expectedUniqueIndexes,
+                        expectedTableConstraints,
+                        maximumPayloadBytes,
+                        commandTimeout,
                         operationOffset,
-                        submittedOrdinals,
                         cancellationToken);
+
+                    operationOffset += operationWindow.Length;
                 }
+                catch (Exception exception)
+                {
+                    if (catalogSnapshot is not null)
+                    {
+                        // WHY: Normal disposal may fail after a timeout has closed the connection.
+                        // Release owned copies without hiding the original analysis failure.
+                        await catalogSnapshot.DisposeAfterFailureAsync(exception);
+                    }
 
-                await PopulateColumnDiagnosticsAsync(
-                    connection,
-                    operationWindow,
-                    results,
-                    context.Model,
-                    expectedUniqueIndexes,
-                    expectedTableConstraints,
-                    maximumPayloadBytes,
-                    commandTimeout,
-                    operationOffset,
-                    cancellationToken);
-
-                operationOffset += operationWindow.Length;
+                    throw;
+                }
             }
 
             if (results.Any(static result => result is null))
@@ -396,11 +466,26 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
 
             return Array.AsReadOnly(results);
         }
+        catch (Exception exception)
+        {
+            analysisFailure = exception;
+
+            throw;
+        }
         finally
         {
             if (openedHere)
             {
-                await connection.CloseAsync();
+                try
+                {
+                    await connection.CloseAsync();
+                }
+                catch (Exception exception) when (analysisFailure is not null)
+                {
+                    // WHY: Closing a failed or cancelled session can itself fail. Preserve the
+                    // primary analysis exception, while keeping the close failure diagnosable.
+                    analysisFailure.Data["SafeMigrations.AnalysisConnectionCloseException"] = exception;
+                }
             }
         }
     }

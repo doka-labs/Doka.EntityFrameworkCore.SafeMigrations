@@ -22,6 +22,8 @@ public sealed class MySqlPreparedSetupFusionTests
     [InlineData("guard", 104, 3, true)]
     [InlineData("data", 103, 3, false)]
     [InlineData("data", 103, 3, true)]
+    [InlineData("qualified", 112, 1, false)]
+    [InlineData("qualified", 112, 1, true)]
     public void ExactOriginalFragmentLimitIsAcceptedByHandler(
         string scenario,
         int providerSetupCount,
@@ -92,6 +94,7 @@ public sealed class MySqlPreparedSetupFusionTests
     [InlineData("state", 114)]
     [InlineData("guard", 105)]
     [InlineData("data", 104)]
+    [InlineData("qualified", 113)]
     public void OriginalFragmentOverflowIsRejectedByHandler(
         string scenario,
         int providerSetupCount
@@ -128,6 +131,7 @@ public sealed class MySqlPreparedSetupFusionTests
     [InlineData("state", 1, 12)]
     [InlineData("guard", 3, 21)]
     [InlineData("data", 3, 22)]
+    [InlineData("qualified", 1, 13)]
     public void MultipleProviderBaselinesRetainCommandLocalPreparation(
         string scenario,
         int evaluations,
@@ -184,6 +188,85 @@ public sealed class MySqlPreparedSetupFusionTests
         }
     }
 
+    /// <summary>A qualified nullable column retains exact matching even when neither row proof is needed.</summary>
+    [Fact]
+    public void QualifiedNullableRepairMatchesBeforeStateEvaluationWithoutRowProbes()
+    {
+        // Arrange
+        using var context = CreateContext();
+        var handler = CreateHandler(context);
+        var operation = CreateOperation("qualified");
+        MySqlMigrationCommandSpec[] baseline = [MySqlMigrationCommandSpec.Create("DO 7;")];
+        var operationContext = CreateOperationContext(context, handler, operation, _ => baseline);
+
+        // Act
+        var result = handler.Generate(operationContext);
+
+        // Assert
+        var command = Assert.Single(result.Commands);
+        var setup = Fragments(command, MySqlMigrationCommandFragmentKind.Setup);
+        var setupSql = string.Concat(setup);
+        const string matchingPrefix = "SET @doka_sm_state = CASE WHEN @doka_sm_state IS NULL THEN CASE";
+        var evaluation = Assert.Single(setup, text => text.Contains(matchingPrefix, StringComparison.Ordinal));
+        Assert.Contains("SET @doka_sm_sql = CASE WHEN @doka_sm_state IS NULL THEN CONVERT(0x",
+            evaluation, StringComparison.Ordinal);
+        Assert.Contains("SET @doka_sm_repair_ok = CASE WHEN @doka_sm_state = 'different'",
+            evaluation, StringComparison.Ordinal);
+        Assert.DoesNotContain("SET @doka_sm_data_probe_required", setupSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("SET @doka_sm_column_repair_eligible", setupSql, StringComparison.Ordinal);
+        Assert.True(setupSql.IndexOf("ELSE 'unsupported' END;", StringComparison.Ordinal)
+            < setupSql.IndexOf(matchingPrefix, StringComparison.Ordinal));
+        Assert.True(setupSql.IndexOf("WHEN NOT @doka_sm_prerequisite_ok THEN 'prerequisite_missing'",
+                StringComparison.Ordinal)
+            < setupSql.IndexOf(matchingPrefix, StringComparison.Ordinal));
+        AssertPreparedSetup(setup, evaluations: 1, baselinePreparedInSetup: true, hasDataProbe: false);
+    }
+
+    /// <summary>Prepared controls split across dispatches cannot satisfy the contiguous-fusion assertion.</summary>
+    [Fact]
+    public void SplitPreparedControlsAreRejectedByFusionAssertion()
+    {
+        // Arrange
+        string[] setup = [PrepareSql, ExecuteSql, DeallocateSql];
+
+        // Act
+        var exception = Record.Exception(() =>
+            AssertPreparedSetup(setup, evaluations: 1, baselinePreparedInSetup: false, hasDataProbe: false));
+
+        // Assert
+        Assert.IsAssignableFrom<Xunit.Sdk.XunitException>(exception);
+    }
+
+    /// <summary>Provider snapshots cannot mutate shared cleanup templates or leak proof-specific cleanup.</summary>
+    [Fact]
+    public void CleanupTemplatesRemainIsolatedAcrossProofShapes()
+    {
+        // Arrange
+        using var context = CreateContext();
+        var handler = CreateHandler(context);
+        MySqlMigrationCommandSpec[] baseline = [MySqlMigrationCommandSpec.Create("DO 7;")];
+        var nullableContext = CreateOperationContext(context, handler, CreateOperation("catalog"), _ => baseline);
+        var requiredContext = CreateOperationContext(context, handler, CreateOperation("guard"), _ => baseline);
+
+        // Act
+        var first = handler.Generate(nullableContext);
+        var required = handler.Generate(requiredContext);
+        var repeated = handler.Generate(nullableContext);
+
+        // Assert
+        var firstCleanup = Fragments(Assert.Single(first.Commands), MySqlMigrationCommandFragmentKind.Cleanup);
+        var requiredCleanup = Fragments(Assert.Single(required.Commands), MySqlMigrationCommandFragmentKind.Cleanup);
+        var repeatedCleanup = Fragments(Assert.Single(repeated.Commands), MySqlMigrationCommandFragmentKind.Cleanup);
+        Assert.Equal(firstCleanup, repeatedCleanup);
+        Assert.Equal(2, firstCleanup.Length);
+        Assert.Equal(2, requiredCleanup.Length);
+        Assert.StartsWith("PREPARE doka_sm_statement FROM 'DO 0';", firstCleanup[0], StringComparison.Ordinal);
+        Assert.EndsWith("DROP TEMPORARY TABLE IF EXISTS `__doka_sm_assert`;",
+            firstCleanup[1], StringComparison.Ordinal);
+        Assert.DoesNotContain("@doka_sm_nullability_blocked", firstCleanup[1], StringComparison.Ordinal);
+        Assert.Contains("@doka_sm_nullability_blocked = NULL", requiredCleanup[1], StringComparison.Ordinal);
+    }
+
     /// <summary>
     /// Lists independently counted pre-fusion setup, body and cleanup fragments excluding provider setup.
     /// </summary>
@@ -196,6 +279,7 @@ public sealed class MySqlPreparedSetupFusionTests
         "state" => 15,
         "guard" => 24,
         "data" => 25,
+        "qualified" => 16,
         _ => throw new ArgumentOutOfRangeException(nameof(scenario)),
     };
 
@@ -206,14 +290,15 @@ public sealed class MySqlPreparedSetupFusionTests
         .Select(index => "DO 0; /* provider setup " + index.ToString(CultureInfo.InvariantCulture) + " */\n")
         .ToArray();
 
-    /// <summary>Creates the four real planner paths without synthetic runtime plans.</summary>
+    /// <summary>Creates the real planner paths without synthetic runtime plans.</summary>
     private static SafeMigrationOperation CreateOperation(
         string scenario
     )
     {
         var definition = scenario switch
         {
-            "catalog" => new ExpectedColumnDefinition("value", typeof(int), isNullable: true, storeType: "int"),
+            "catalog" or "qualified" => new ExpectedColumnDefinition(
+                "value", typeof(int), isNullable: true, storeType: "int"),
             "state" or "guard" => new ExpectedColumnDefinition(
                 "value", typeof(int), isNullable: false, storeType: "int"),
             "data" => new ExpectedColumnDefinition(
@@ -221,11 +306,13 @@ public sealed class MySqlPreparedSetupFusionTests
             _ => throw new ArgumentOutOfRangeException(nameof(scenario)),
         };
 
-        var policy = scenario is "guard" or "data"
+        var policy = scenario is "guard" or "data" or "qualified"
             ? SafeMigrationPolicy.RepairIfSafe
             : SafeMigrationPolicy.ThrowIfDifferent;
 
-        return new SafeMigrationOperation(new EnsureColumnIntent("items", definition), policy);
+        return new SafeMigrationOperation(
+            new EnsureColumnIntent("items", definition, schema: scenario == "qualified" ? "application" : null),
+            policy);
     }
 
     /// <summary>Creates the real provider context while replacing only bounded standard-renderer output.</summary>
@@ -308,8 +395,9 @@ public sealed class MySqlPreparedSetupFusionTests
         Assert.Equal(evaluations + (baselinePreparedInSetup ? 1 : 0), Count(setupSql, PrepareSql));
         Assert.Equal(evaluations, Count(setupSql, ExecuteSql));
         Assert.Equal(evaluations, Count(setupSql, DeallocateSql));
-        Assert.Equal(evaluations, setup.Count(text => text.EndsWith(
-            PrepareSql + ExecuteSql + DeallocateSql, StringComparison.Ordinal)));
+        // WHY: A fused fragment may contain later assignments or multiple evaluation triples.
+        // Count only complete triples within one fragment; concatenating first would hide a split dispatch.
+        Assert.Equal(evaluations, setup.Sum(text => Count(text, PrepareSql + ExecuteSql + DeallocateSql)));
         Assert.Equal(hasDataProbe, setupSql.Contains("SET @doka_sm_data_probe_required", StringComparison.Ordinal));
     }
 

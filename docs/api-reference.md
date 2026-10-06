@@ -54,7 +54,7 @@ and history remain unchanged. The 10.4.5 patch preserves that public
 API, generated migration source, report schemas, and history. It changes only
 the MySQL/MariaDB index-catalog comparison query shape.
 
-The prepared 10.4.6 release adds the optional SQL Server package with
+Stable 10.4.6 adds the optional SQL Server package with
 provider-specific registration and generator composition. Core adds
 `CreateIndexWithIncludesIfNotExistsFromModel` and
 `CreateCompositeIndexWithIncludesIfNotExistsFromModel`; existing signatures
@@ -64,6 +64,12 @@ Consumers with exhaustive engine-family handling must recognize the new value.
 A successful release run and exact-version public package readback remain the
 authority for a published API; shipped baseline files record its prepared
 contract, not proof of publication.
+
+Prepared stable 10.4.7 preserves the complete 10.4.6 public API and dependency
+ranges. It changes only internal MySQL/MariaDB analysis and runtime work.
+Migration source does not need regeneration; policies, canonical report v3,
+filtered-view v2, and migration histories remain unchanged. No API-baseline
+promotion is required for this patch.
 
 ## Packages and registration
 
@@ -582,6 +588,15 @@ uncancellable. Do not use a `DbContext` concurrently. Analysis opens/closes a
 connection only when it owns that open; it does not assume ownership of a
 caller transaction. PostgreSQL caller transactions must be read-only and use
 `RepeatableRead` or `Serializable`. Analysis never calls `Migrate` for you.
+
+Large MariaDB analyses may create uniquely named session temporary tables that
+copy catalog metadata. This does not modify application tables or migration
+history. Missing temporary-table privileges, a read-only transaction, or a pool
+with `ConnectionReset=false` retain the live-catalog path without changing
+classification semantics. Snapshot cleanup preserves the original analysis
+failure; failed cleanup closes the connection, with pooled sessions reset before
+reuse. See
+[catalog transport](mysql-mariadb-ddl-behavior.md#read-only-catalog-transport).
 
 ## Provider analyzer SPI
 

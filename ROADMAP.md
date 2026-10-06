@@ -13,7 +13,7 @@ functionality into a later version.
 
 - Prepare the repository for public contribution and auditable maintenance.
 - Qualify all published packages together: Core, MySQL/MariaDB, PostgreSQL,
-  SQLite, and, beginning with the prepared 10.4.6 release, SQL Server.
+  SQLite, and, beginning with 10.4.6, SQL Server.
 - Exercise the real candidate workflow before stable publication, including
   protected approval, signed identity, exact-byte publication, and readback.
 - Validate heterogeneous legacy convergence, runtime/history semantics,
@@ -65,12 +65,15 @@ and corrects ordered provider transitions. Stable 10.4.4 corrects opaque-SQL
 mixed-stream preflight without rewriting migration source or runtime guards,
 and versions the corresponding report contract. The 10.4.5 patch
 bounds MySQL/MariaDB composite-index catalog analysis and includes dependency-
-workflow maintenance. The prepared 10.4.6 release adds the optional SQL Server
+workflow maintenance. Published stable 10.4.6 adds the optional SQL Server
 package and compatible catalog, allocation, roundtrip, and correctness fixes
-for the existing providers. Publication still requires the full five-package
-release gate and independent engine evidence. These releases follow changed
-dependency conditions and confirmed correctness requirements; they are not
-deferred initial scope.
+for the existing providers. Prepared stable 10.4.7 reduces MariaDB batched
+analysis catalog work and MySQL/MariaDB runtime checks and command dispatches,
+with bounded SQL-generation allocations, without changing public APIs,
+dependency ranges, migration source, policies, reports, or history. Its publication still
+requires the full five-package release gate and independent engine evidence.
+These releases follow changed dependency conditions and confirmed correctness
+requirements; they are not deferred initial scope.
 
 Requalify affected behavior before adopting a provider, EF Core, database,
 SDK, action, or tooling update. Preserve public API, report, migration, data

@@ -45,6 +45,12 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
     /// <summary>Gets the number of dispatched statements returning the nine classifier facets.</summary>
     public int ClassificationStatementCount { get; private set; }
 
+    /// <summary>Gets attempts to create test-observed MariaDB catalog snapshot tables.</summary>
+    public int CatalogSnapshotCreateCount { get; private set; }
+
+    /// <summary>Gets classifier statements that actually read MariaDB snapshot relations.</summary>
+    public int CatalogSnapshotClassificationStatementCount { get; private set; }
+
     /// <summary>Gets dispatched nonconstant prerequisite statements.</summary>
     public int PrerequisiteStatementCount { get; private set; }
 
@@ -242,12 +248,31 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
         public override void Prepare() => _innerCommand.Prepare();
 
         /// <inheritdoc />
-        public override int ExecuteNonQuery() => _innerCommand.ExecuteNonQuery();
+        public override int ExecuteNonQuery()
+        {
+            CountSnapshotCreation();
+
+            return _innerCommand.ExecuteNonQuery();
+        }
 
         /// <inheritdoc />
         public override Task<int> ExecuteNonQueryAsync(
             CancellationToken cancellationToken
-        ) => _innerCommand.ExecuteNonQueryAsync(cancellationToken);
+        )
+        {
+            CountSnapshotCreation();
+
+            return _innerCommand.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        /// <summary>Records snapshot activation without keeping SQL or relying on elapsed time.</summary>
+        private void CountSnapshotCreation()
+        {
+            if (CommandText.Contains("CREATE TEMPORARY TABLE `__doka_sm_cat_", StringComparison.Ordinal))
+            {
+                _owner.CatalogSnapshotCreateCount++;
+            }
+        }
 
         /// <inheritdoc />
         public override object? ExecuteScalar() => _innerCommand.ExecuteScalar();
@@ -352,6 +377,10 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
             if (reader.FieldCount is 9 or 10)
             {
                 _owner.ClassificationStatementCount++;
+                if (CommandText.Contains("`__doka_sm_cat_", StringComparison.Ordinal))
+                {
+                    _owner.CatalogSnapshotClassificationStatementCount++;
+                }
             }
             else if (IsPrerequisite(reader))
             {

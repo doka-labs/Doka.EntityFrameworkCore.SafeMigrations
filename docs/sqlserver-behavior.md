@@ -1,11 +1,12 @@
 # SQL Server behavior
 
-The SQL Server adapter is a separate, optional package whose first release is
-prepared as 10.4.6. Releases 10.4.2 through 10.4.5 contain only Core, MySQL/MariaDB,
-PostgreSQL, and SQLite. Availability requires full qualification and verified
-publication of all five 10.4.6 packages; source and API baselines alone are not
-publication evidence. Selecting an existing provider does not introduce SQL
-Server runtime dependencies.
+The SQL Server adapter is a separate, optional package introduced in 10.4.6.
+Releases 10.4.2 through 10.4.5 contain only Core, MySQL/MariaDB, PostgreSQL,
+and SQLite. Prepared stable 10.4.7 retains SQL Server's existing execution
+and public API contracts at the shared package version. Availability of the
+new patch requires full qualification and verified five-package publication;
+source and API baselines alone are not publication evidence. Selecting another
+provider does not introduce SQL Server runtime dependencies.
 
 ## Supported engine boundary
 

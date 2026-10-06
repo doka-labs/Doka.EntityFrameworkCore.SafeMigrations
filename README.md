@@ -14,7 +14,7 @@ SafeMigrations is a fail-closed EF Core 10 migration library for databases whose
 starting schema may differ between application instances. It supports one
 canonical migration sequence across MySQL, MariaDB, PostgreSQL, SQLite, and
 SQL Server without assuming a common legacy migration history or deleting
-unknown objects. The prepared 10.4.6 release adds SQL Server as a separate,
+unknown objects. Stable 10.4.6 introduced SQL Server as a separate,
 optional provider package; releases 10.4.2 through 10.4.5 contain four packages.
 
 The library classifies each operation against the live catalog as `missing`,
@@ -37,7 +37,7 @@ equivalent.
 - `Doka.EntityFrameworkCore.SafeMigrations.Sqlite`: SQLite adapter on the
   bundle-neutral official EF Core SQLite 10 provider core
 - `Doka.EntityFrameworkCore.SafeMigrations.SqlServer`: SQL Server adapter on
-  the official EF Core SQL Server 10 provider (first release prepared as 10.4.6)
+  the official EF Core SQL Server 10 provider (available since 10.4.6)
 
 The declared release-qualification matrix is:
 
@@ -53,17 +53,20 @@ when that matrix executes. The exact successful run, not this table, is release
 evidence. See [Support and qualification](docs/support-and-qualification.md).
 
 The initial complete stable delivery is 10.0.0. The versioned installation
-examples below target the prepared five-package 10.4.6 release. Verify the exact
+examples below target the prepared five-package 10.4.7 release. Verify the exact
 package's public availability before installation; source and changelog entries
 alone are not publication evidence. See the [changelog](CHANGELOG.md).
 
-The 10.4.6 maintenance changes bound catalog work, allocations, and database
-roundtrips across the existing providers without weakening live-state or data
-proofs. They also correct PostgreSQL index identity and canonical NULL-filter
-handling. SQL Server adds its own registration and guarded generator surface;
-Core adds two included-index helpers and the `sqlserver` report engine-family
-value. Existing signatures, migration source, policies, report schema versions,
-and history remain compatible. See the [API reference](docs/api-reference.md).
+The 10.4.7 patch reduces MariaDB catalog work during batched analysis and
+MySQL/MariaDB runtime checks and command dispatches, with bounded direct
+SQL rendering. Runtime improvements also apply with explicit preflight disabled;
+runtime guards still read fresh live metadata. MariaDB's analysis-only catalog
+copies retain live-catalog fallback when their prerequisites are unavailable.
+Public APIs, dependency ranges, migration source, policies, report schemas,
+and history are unchanged. No migration regeneration or server durability
+change is required. Other provider execution paths are unchanged.
+See [MySQL and MariaDB behavior](docs/mysql-mariadb-ddl-behavior.md) for
+scope, resource bounds, and command-timeout semantics.
 
 The 10.4.4 patch corrected read-only preflight for mixed legacy-convergence and
 strict migration streams containing raw SQL. Unprovable later safe operations
@@ -77,34 +80,34 @@ are not rewritten. See the
 ## Installation
 
 Install one provider package. The core package is included transitively. The
-commands select the intended 10.4.6 release exactly so restore does not move
+commands select the intended 10.4.7 release exactly so restore does not move
 to a different package version implicitly. Use them only after the matching
 release and all five NuGet package pages are public; source or changelog
 entries alone do not establish package availability.
 
 ```bash
-package_version='10.4.6'
+package_version='10.4.7'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.MySql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.4.6'
+package_version='10.4.7'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.4.6'
+package_version='10.4.7'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.Sqlite --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.4.6'
+package_version='10.4.7'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.SqlServer --version "$package_version"
 ```
 
@@ -116,8 +119,8 @@ SQLite or SQLCipher deployment. The connected engine must report SQLite
 3.46.1 or later.
 
 SQL Server is optional: selecting another provider package does not introduce
-SQL Server runtime dependencies. Its first package version is prepared as
-10.4.6; it is not available in the historical 10.4.5 package set.
+SQL Server runtime dependencies. Its first package version is 10.4.6;
+it is not available in the historical 10.4.5 package set.
 
 The [.NET package command](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-package-add)
 documents exact-version selection. Verify release identity and content using
@@ -544,6 +547,11 @@ EF CLI contract.
 
 Preflight is not a migration policy. It is a separate read-only runner outside
 `IMigrator` and EF migration history.
+
+MariaDB can use session-local temporary catalog copies for large analyses;
+application tables and migration history remain untouched. Analysis retains the
+live-catalog path when temporary-table DDL is not permitted. Generated migration
+commands always read the live catalog. See [catalog transport](docs/mysql-mariadb-ddl-behavior.md#read-only-catalog-transport).
 
 | Policy | Existing matching object | Existing different object |
 | --- | --- | --- |
@@ -987,7 +995,7 @@ signatures and package content, and creates or verifies an immutable GitHub
 Release with the exact ten package files, checksums, SPDX manifest, and
 `release-provenance.intoto.jsonl`. Candidates are marked prerelease and never
 replace the latest stable release.
-The five-package release contract begins with the prepared 10.4.6 release;
+The five-package release contract began with 10.4.6 and is unchanged for 10.4.7;
 the historical 10.4.5 release remains the four-package set.
 See [Publication operations](docs/operations/release-publication.md) for the
 step-by-step maintainer guide and current readiness, and

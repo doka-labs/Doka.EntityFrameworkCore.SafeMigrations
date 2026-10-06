@@ -33,8 +33,13 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var proofSql = Assert.Single(payloads, sql => sql.EndsWith(
             "INTO @doka_sm_nullability_blocked", StringComparison.Ordinal));
 
-        var stateSql = Assert.Single(payloads, sql => sql.EndsWith(
-            "INTO @doka_sm_state, @doka_sm_repair_ok", StringComparison.Ordinal));
+        var stateSql = Assert.Single(payloads, sql => sql.StartsWith("SELECT (", StringComparison.Ordinal)
+            && sql.EndsWith("INTO @doka_sm_state", StringComparison.Ordinal));
+
+        const string repairPrefix = "SET @doka_sm_repair_ok = CASE WHEN @doka_sm_state = 'different'";
+        var repairStart = command.CommandText.IndexOf(repairPrefix, StringComparison.Ordinal);
+        var repairEnd = command.CommandText.IndexOf(';', repairStart);
+        var repairSql = command.CommandText[repairStart..(repairEnd + 1)];
 
         const string eligibilityPrefix = "SET @doka_sm_column_repair_eligible = CASE WHEN @doka_sm_state IS NULL "
             + "THEN COALESCE((";
@@ -47,9 +52,9 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var eligibilitySql = command.CommandText[eligibilityStart..eligibilityEnd];
 
         // WHY: Expand only the cache references in this generic fixture to retain
-        // exactly the former classification/repair double-read shape. Both paths
+        // the former classification/repair double-read behavior. Both paths
         // use the same catalog SQL and unchanged table, excluding DDL rewrite I/O.
-        var baselineSql = stateSql.Replace("@doka_sm_nullability_blocked",
+        var baselineSql = (stateSql + ";" + repairSql).Replace("@doka_sm_nullability_blocked",
                 "EXISTS (SELECT 1 FROM `null_read_rows` WHERE `Value` IS NULL LIMIT 1)", StringComparison.Ordinal)
             .Replace("@doka_sm_column_repair_eligible", "(" + eligibilitySql + ")", StringComparison.Ordinal);
 
@@ -64,6 +69,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             "SET @doka_sm_column_repair_eligible = (" + eligibilitySql + ");");
         await ExecuteNullProofMeasurementSqlAsync(connection, proofSql);
         await ExecuteNullProofMeasurementSqlAsync(connection, stateSql);
+        await ExecuteNullProofMeasurementSqlAsync(connection, repairSql);
         var sharedReads = await ReadNullProofHandlerReadsAsync(connection) - before;
         Console.WriteLine(
             $"NULL-proof row-read evidence: rows={rowCount}, baseline={baselineReads}, shared={sharedReads}");

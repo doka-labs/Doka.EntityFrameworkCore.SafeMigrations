@@ -8,7 +8,19 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
     private const string PrepareStatementSql = "PREPARE " + PreparedStatementName + " FROM @doka_sm_sql;";
     private const string EvaluatePreparedStatementSql = PrepareStatementSql
         + "EXECUTE " + PreparedStatementName + ";DEALLOCATE PREPARE " + PreparedStatementName + ";";
+
+    private const string MatchingStatePrefix =
+        "SET @doka_sm_state = CASE WHEN @doka_sm_state IS NULL THEN CASE WHEN COALESCE((";
+
+    private const string MatchingStateSuffix =
+        "), FALSE) THEN 'matching' ELSE NULL END ELSE @doka_sm_state END;";
+
     private static readonly IReadOnlyList<ExpectedIndexDefinition> s_emptyUniqueIndexes = [];
+    private static readonly IReadOnlyList<string> s_guardCleanupCommands = Array.AsReadOnly<string>(
+        [BuildGuardCleanupSql(hasNullabilityProof: false), BuildPreparedStatementCleanupSql()]);
+
+    private static readonly IReadOnlyList<string> s_nullabilityGuardCleanupCommands = Array.AsReadOnly<string>(
+        [BuildGuardCleanupSql(hasNullabilityProof: true), BuildPreparedStatementCleanupSql()]);
 
     private readonly MySqlSafeMigrationCatalogSqlBuilder _catalogSqlBuilder;
     private readonly IModel _designTimeModel;
@@ -93,15 +105,23 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             context,
             baseline);
 
-        var renderedParameterValues = runtimePlan
-            .ParameterValues
-            .Select(RenderParameterLiteral)
-            .ToArray();
+        // WHY: Runtime plans normally contain no captured parameters. Avoid a per-operation
+        // LINQ iterator and instance delegate even when the result would be the shared empty array.
+        var renderedParameterValues = runtimePlan.ParameterValues.Length == 0
+            ? Array.Empty<string>()
+            : new string[runtimePlan.ParameterValues.Length];
+
+        for (var index = 0; index < renderedParameterValues.Length; index++)
+        {
+            renderedParameterValues[index] = RenderParameterLiteral(runtimePlan.ParameterValues[index]);
+        }
 
         // A connection-local temporary table turns rejected decisions and a
         // failed postcondition into deterministic server errors without a
         // persistent stored routine or shared database object.
-        var setupCommands = new List<string>(24)
+        // WHY: These capacities cover the owned fragments, including the qualified lazy path.
+        // Opaque provider setup grows on demand instead of reserving its space for every operation.
+        var setupCommands = new List<MySqlSafeMigrationSetupFragment>(runtimePlan.RequiresLazyStateEvaluation ? 13 : 5)
         {
             BuildAssertionSetupSql(),
         };
@@ -111,25 +131,23 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         {
             if (runtimePlan.CurrentDatabaseQualificationExpression is not null)
             {
-                setupCommands.Add(
-                    "SET @doka_sm_state = CASE WHEN COALESCE(("
-                    + runtimePlan.RenderPreparedCurrentDatabaseQualificationExpression(renderedParameterValues)
-                    + "), FALSE) THEN NULL ELSE 'unsupported' END;");
+                setupCommands.Add(MySqlSafeMigrationSetupFragment.Compose(
+                    "SET @doka_sm_state = CASE WHEN COALESCE((",
+                    runtimePlan.RenderPreparedCurrentDatabaseQualificationExpression(renderedParameterValues),
+                    "), FALSE) THEN NULL ELSE 'unsupported' END;"));
 
-                setupCommands.Add(
-                    "SET @doka_sm_prerequisite_ok = CASE WHEN @doka_sm_state IS NULL THEN COALESCE(("
-                    + runtimePlan.RenderPreparedPrerequisiteExpression(renderedParameterValues)
-                    + "), FALSE) ELSE FALSE END;");
+                setupCommands.Add(MySqlSafeMigrationSetupFragment.Compose(
+                    "SET @doka_sm_prerequisite_ok = CASE WHEN @doka_sm_state IS NULL THEN COALESCE((",
+                    runtimePlan.RenderPreparedPrerequisiteExpression(renderedParameterValues),
+                    "), FALSE) ELSE FALSE END;"));
             }
             else
             {
-                // WHY: Keep the unqualified hot path byte-for-byte equivalent to
-                // its established allocation profile. Only qualified operations
-                // need an earlier state that the prerequisite phase preserves.
-                setupCommands.Add(
-                    "SET @doka_sm_prerequisite_ok = COALESCE(("
-                    + runtimePlan.RenderPreparedPrerequisiteExpression(renderedParameterValues)
-                    + "), FALSE);");
+                // WHY: Only qualified operations need an earlier state that the prerequisite phase preserves.
+                setupCommands.Add(MySqlSafeMigrationSetupFragment.Compose(
+                    "SET @doka_sm_prerequisite_ok = COALESCE((",
+                    runtimePlan.RenderPreparedPrerequisiteExpression(renderedParameterValues),
+                    "), FALSE);"));
             }
 
             setupCommands.Add(BuildInitialLazyStateAssignment(
@@ -140,9 +158,19 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
                 fusedSetupFragmentCount += 3;
             }
 
+            // WHY: An exact match needs no repair proof. Its classification belongs to the first
+            // existing evaluation fragment after identity, existence and guard decisions; it is
+            // not an extra provider fragment and is never retained across operations or their DDL.
+            var matchingPrecondition = operation.Intent is EnsureColumnIntent
+                && runtimePlan.RepairCapability == SafeMigrationRepairCapability.Safe
+                    ? runtimePlan.RenderPreparedExecutionPostcondition(renderedParameterValues)
+                    : null;
+
             if (runtimePlan.DataProbe is not null)
             {
-                setupCommands.Add(BuildTransitionEligibilityAssignment(runtimePlan, renderedParameterValues));
+                setupCommands.Add(BuildTransitionEligibilityAssignment(
+                    runtimePlan, renderedParameterValues, matchingPrecondition));
+                matchingPrecondition = null;
                 setupCommands.Add(BuildDataProbeRequiredAssignment(runtimePlan, renderedParameterValues));
                 setupCommands.Add(BuildDataProbeEvaluationAssignment(runtimePlan, renderedParameterValues));
                 fusedSetupFragmentCount += 3;
@@ -150,18 +178,37 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
 
             if (runtimePlan.NullabilityDataProbe is not null)
             {
-                setupCommands.Add(BuildNullabilityDataProbeEvaluationAssignment(runtimePlan, renderedParameterValues));
+                setupCommands.Add(BuildNullabilityDataProbeEvaluationAssignment(
+                    runtimePlan, renderedParameterValues, matchingPrecondition));
+                matchingPrecondition = null;
                 fusedSetupFragmentCount += 4;
             }
 
-            setupCommands.Add(BuildStateEvaluationAssignment(runtimePlan, renderedParameterValues));
+            setupCommands.Add(BuildStateEvaluationAssignment(
+                runtimePlan, renderedParameterValues, matchingPrecondition));
             fusedSetupFragmentCount += 3;
         }
         else
         {
-            setupCommands.Add(
-                $"SET @doka_sm_state = ({runtimePlan.RenderPreparedStateExpression(renderedParameterValues)}), "
-                + $"@doka_sm_repair_ok = ({runtimePlan.RenderPreparedRepairPrecondition(renderedParameterValues)});");
+            if (runtimePlan.RepairCapability == SafeMigrationRepairCapability.Safe)
+            {
+                // WHY: State must be assigned by a completed statement before repair reads it.
+                setupCommands.Add(MySqlSafeMigrationSetupFragment.Compose(
+                    "SET @doka_sm_state = (",
+                    runtimePlan.RenderPreparedStateExpression(renderedParameterValues),
+                    ");SET @doka_sm_repair_ok = CASE WHEN @doka_sm_state = 'different' THEN COALESCE((",
+                    runtimePlan.RenderPreparedRepairPrecondition(renderedParameterValues),
+                    "), FALSE) ELSE FALSE END;"));
+            }
+            else
+            {
+                setupCommands.Add(MySqlSafeMigrationSetupFragment.Compose(
+                    "SET @doka_sm_state = (",
+                    runtimePlan.RenderPreparedStateExpression(renderedParameterValues),
+                    "), @doka_sm_repair_ok = (",
+                    runtimePlan.RenderPreparedRepairPrecondition(renderedParameterValues),
+                    ");"));
+            }
         }
 
         setupCommands.Add(BuildActionAssignment(operation.Intent.Kind, operation.Policy, runtimePlan.RepairCapability));
@@ -177,7 +224,11 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             // WHY: Preserve the established single-command hot path. Only
             // genuine provider sequences need command-local preparation in the body.
             providerSetupCount = command.SetupCommands.Count;
-            setupCommands.AddRange(command.SetupCommands);
+            for (var index = 0; index < command.SetupCommands.Count; index++)
+            {
+                setupCommands.Add(command.SetupCommands[index]);
+            }
+
             setupCommands.Add(
                 BuildPreparedSqlAssignment(
                     command.BodyCommand,
@@ -384,9 +435,10 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
     );
 
     /// <summary>Classifies state and repair eligibility using the same operation-local row proofs.</summary>
-    private static string BuildStateEvaluationAssignment(
+    private static MySqlSafeMigrationSetupFragment BuildStateEvaluationAssignment(
         MySqlSafeMigrationRuntimePlan runtimePlan,
-        IReadOnlyList<string> renderedParameterValues
+        IReadOnlyList<string> renderedParameterValues,
+        string? matchingPrecondition
     )
     {
         var stateExpression = runtimePlan.DataProbe is null
@@ -403,33 +455,53 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
                 "@doka_sm_data_blocked",
                 "@doka_sm_transition_eligible");
 
-        var statement = "SELECT ("
-            + stateExpression
-            + "), COALESCE(("
-            + repairPrecondition
-            + "), FALSE) INTO @doka_sm_state, @doka_sm_repair_ok";
+        var canRepair = runtimePlan.RepairCapability == SafeMigrationRepairCapability.Safe;
+        var statement = canRepair
+            ? "SELECT (" + stateExpression + ") INTO @doka_sm_state"
+            : "SELECT (" + stateExpression + "), COALESCE((" + repairPrecondition
+                + "), FALSE) INTO @doka_sm_state, @doka_sm_repair_ok";
 
+        // WHY: Only Different consumes repair eligibility. A separate SET uses the completed
+        // classification without undefined same-statement variable ordering. Runtime repair
+        // predicates contain catalog reads and already materialized proofs, never target-row SQL.
         return BuildHexAssignment(
             "SET @doka_sm_sql = CASE WHEN @doka_sm_state IS NULL THEN CONVERT(0x",
             statement,
-            " USING utf8mb4) ELSE 'DO 0' END;" + EvaluatePreparedStatementSql);
+            " USING utf8mb4) ELSE 'DO 0' END;" + EvaluatePreparedStatementSql,
+            repairPrecondition: canRepair ? repairPrecondition : null,
+            matchingPrecondition: matchingPrecondition);
     }
 
-    private static string BuildTransitionEligibilityAssignment(
+    /// <summary>Classifies an exact column match before considering a data-dependent transition.</summary>
+    private static MySqlSafeMigrationSetupFragment BuildTransitionEligibilityAssignment(
+        MySqlSafeMigrationRuntimePlan runtimePlan,
+        IReadOnlyList<string> renderedParameterValues,
+        string? matchingPrecondition
+    )
+    {
+        const string prefix = "SET @doka_sm_transition_eligible = CASE WHEN @doka_sm_state IS NULL THEN COALESCE((";
+        const string suffix = "), FALSE) ELSE FALSE END;";
+        var transition = runtimePlan.RenderPreparedTransitionInvariantExpression(renderedParameterValues);
+        // WHY: Keep constituent strings until grouping so classification and transition are
+        // copied directly into the final transport string, not an intermediate assignment.
+        return MySqlSafeMigrationSetupFragment.Compose(
+            matchingPrecondition is null ? string.Empty : MatchingStatePrefix,
+            matchingPrecondition ?? string.Empty,
+            matchingPrecondition is null ? string.Empty : MatchingStateSuffix,
+            prefix,
+            transition,
+            suffix);
+    }
+
+    private static MySqlSafeMigrationSetupFragment BuildDataProbeRequiredAssignment(
         MySqlSafeMigrationRuntimePlan runtimePlan,
         IReadOnlyList<string> renderedParameterValues
-    ) => "SET @doka_sm_transition_eligible = CASE WHEN @doka_sm_state IS NULL THEN COALESCE(("
-        + runtimePlan.RenderPreparedTransitionInvariantExpression(renderedParameterValues)
-        + "), FALSE) ELSE FALSE END;";
+    ) => MySqlSafeMigrationSetupFragment.Compose(
+        "SET @doka_sm_data_probe_required = CASE WHEN @doka_sm_transition_eligible THEN COALESCE((",
+        runtimePlan.RenderPreparedDataProbeRequiredExpression(renderedParameterValues),
+        "), FALSE) ELSE FALSE END, @doka_sm_data_blocked = FALSE;");
 
-    private static string BuildDataProbeRequiredAssignment(
-        MySqlSafeMigrationRuntimePlan runtimePlan,
-        IReadOnlyList<string> renderedParameterValues
-    ) => "SET @doka_sm_data_probe_required = CASE WHEN @doka_sm_transition_eligible THEN COALESCE(("
-        + runtimePlan.RenderPreparedDataProbeRequiredExpression(renderedParameterValues)
-        + "), FALSE) ELSE FALSE END, @doka_sm_data_blocked = FALSE;";
-
-    private static string BuildDataProbeEvaluationAssignment(
+    private static MySqlSafeMigrationSetupFragment BuildDataProbeEvaluationAssignment(
         MySqlSafeMigrationRuntimePlan runtimePlan,
         IReadOnlyList<string> renderedParameterValues
     )
@@ -448,9 +520,10 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
     }
 
     /// <summary>Materializes the shared NULL proof only for a physically eligible nullable column.</summary>
-    private static string BuildNullabilityDataProbeEvaluationAssignment(
+    private static MySqlSafeMigrationSetupFragment BuildNullabilityDataProbeEvaluationAssignment(
         MySqlSafeMigrationRuntimePlan runtimePlan,
-        IReadOnlyList<string> renderedParameterValues
+        IReadOnlyList<string> renderedParameterValues,
+        string? matchingPrecondition
     )
     {
         var statement = "SELECT COALESCE(("
@@ -469,10 +542,11 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             " USING utf8mb4) ELSE 'DO 0' END ELSE 'DO 0' END;" + EvaluatePreparedStatementSql,
             (
                 runtimePlan.RenderPreparedNullabilityColumnExpression(renderedParameterValues),
-                runtimePlan.RenderPreparedNullabilityRepairInvariantExpression(renderedParameterValues)));
+                runtimePlan.RenderPreparedNullabilityRepairInvariantExpression(renderedParameterValues)),
+            matchingPrecondition: matchingPrecondition);
     }
 
-    private static string BuildGuardEvaluationAssignment(
+    private static MySqlSafeMigrationSetupFragment BuildGuardEvaluationAssignment(
         MySqlSafeMigrationRuntimePlan runtimePlan,
         IReadOnlyList<string> renderedParameterValues
     )
@@ -500,12 +574,12 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         : "SET @doka_sm_state = CASE WHEN NOT @doka_sm_prerequisite_ok THEN 'prerequisite_missing' "
             + "ELSE NULL END, @doka_sm_repair_ok = FALSE;";
 
-    /// <summary>Encodes the guarded provider body once, optionally preparing it in the same setup dispatch.</summary>
+    /// <summary>Defers body encoding until the final setup group is written.</summary>
     /// <param name="applyDdl">The provider-rendered apply statement.</param>
     /// <param name="repairDdl">The separately guarded safe repair statement, when available.</param>
     /// <param name="prepareInSetup">Whether the immediate PREPARE belongs to this owned setup assignment.</param>
     /// <returns>The exact assignment and optional control suffix, never the guarded body execution.</returns>
-    private static string BuildPreparedSqlAssignment(
+    private static MySqlSafeMigrationSetupFragment BuildPreparedSqlAssignment(
         string applyDdl,
         string? repairDdl,
         bool prepareInSetup = false
@@ -516,150 +590,59 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         const string assignmentSuffix = " USING utf8mb4) ELSE 'DO 0' END;";
         var suffix = prepareInSetup ? assignmentSuffix + PrepareStatementSql : assignmentSuffix;
 
-        var repairMaximumByteCount = repairDdl is null ? 0 : Encoding.UTF8.GetMaxByteCount(repairDdl.Length);
-        var maximumByteCount = checked(
-            Encoding.UTF8.GetMaxByteCount(applyDdl.Length)
-            + repairMaximumByteCount);
-        var buffer = ArrayPool<byte>.Shared.Rent(maximumByteCount);
-
-        try
-        {
-            var applyByteCount = Encoding.UTF8.GetBytes(applyDdl.AsSpan(), buffer);
-            var repairByteCount = repairDdl is null
-                ? 0
-                : Encoding.UTF8.GetBytes(repairDdl.AsSpan(), buffer.AsSpan(applyByteCount));
-
-            var resultLength = checked(
-                applyPrefix.Length
-                + (applyByteCount * 2)
-                + (repairDdl is null ? 0 : repairPrefix.Length + (repairByteCount * 2))
-                + suffix.Length);
-
-            return string.Create(
-                resultLength,
-                (
-                    Buffer: buffer,
-                    ApplyByteCount: applyByteCount,
-                    RepairByteCount: repairByteCount,
-                    HasRepair: repairDdl is not null,
-                    Suffix: suffix),
-                static (destination, state) =>
-                {
-                    applyPrefix.AsSpan().CopyTo(destination);
-                    var offset = applyPrefix.Length;
-
-                    WriteHexadecimal(
-                        state.Buffer.AsSpan(0, state.ApplyByteCount),
-                        destination.Slice(offset, state.ApplyByteCount * 2));
-                    offset += state.ApplyByteCount * 2;
-
-                    if (state.HasRepair)
-                    {
-                        repairPrefix.AsSpan().CopyTo(destination[offset..]);
-                        offset += repairPrefix.Length;
-
-                        WriteHexadecimal(
-                            state.Buffer.AsSpan(state.ApplyByteCount, state.RepairByteCount),
-                            destination.Slice(offset, state.RepairByteCount * 2));
-                        offset += state.RepairByteCount * 2;
-                    }
-
-                    state.Suffix.AsSpan().CopyTo(destination[offset..]);
-                });
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(buffer);
-        }
+        // WHY: PREPARE still receives one SQL string. Retaining the source values lets the
+        // compactor encode into that final string without an intermediate hexadecimal assignment.
+        return MySqlSafeMigrationSetupFragment.Compose(
+            applyPrefix,
+            MySqlSafeMigrationSetupFragment.Part.Hex(applyDdl),
+            repairDdl is null ? string.Empty : repairPrefix,
+            MySqlSafeMigrationSetupFragment.Part.Hex(repairDdl ?? string.Empty),
+            suffix);
     }
 
-    /// <summary>
-    /// Writes a prepared assignment into its final string with optional operation-local NULL-proof eligibility.
-    /// </summary>
+    /// <summary>Defers a prepared assignment with optional operation-local NULL-proof eligibility.</summary>
     /// <param name="prefix">The literal assignment prefix.</param>
     /// <param name="statement">The statement encoded as hexadecimal UTF-8.</param>
     /// <param name="suffix">The assignment suffix and immediate prepared controls.</param>
     /// <param name="nullabilityEligibility">The separately rendered physical predicates, when required.</param>
-    /// <returns>The immutable final assignment without concatenated predicate intermediates.</returns>
-    private static string BuildHexAssignment(
+    /// <param name="repairPrecondition">The catalog-only repair predicate evaluated after classification.</param>
+    /// <param name="matchingPrecondition">The exact match classified before the remaining evaluation.</param>
+    /// <returns>The immutable SQL pieces without concatenated predicate intermediates.</returns>
+    private static MySqlSafeMigrationSetupFragment BuildHexAssignment(
         string prefix,
         string statement,
         string suffix,
-        (string NullableColumn, string RepairInvariant)? nullabilityEligibility = null
+        (string NullableColumn, string RepairInvariant)? nullabilityEligibility = null,
+        string? repairPrecondition = null,
+        string? matchingPrecondition = null
     )
     {
-        var maximumByteCount = Encoding.UTF8.GetMaxByteCount(statement.Length);
-        var buffer = ArrayPool<byte>.Shared.Rent(maximumByteCount);
+        const string nullabilityPrefix = "), FALSE) ELSE FALSE END, @doka_sm_nullability_blocked = FALSE;"
+            + "SET @doka_sm_sql = CASE WHEN @doka_sm_state IS NULL THEN CASE WHEN COALESCE((";
 
-        try
-        {
-            var byteCount = Encoding.UTF8.GetBytes(statement.AsSpan(), buffer);
-            var hexadecimalLength = checked(byteCount * 2);
-            const string nullabilityPrefix = "), FALSE) ELSE FALSE END, @doka_sm_nullability_blocked = FALSE;"
-                + "SET @doka_sm_sql = CASE WHEN @doka_sm_state IS NULL THEN CASE WHEN COALESCE((";
+        const string eligibilitySuffix = ") AND @doka_sm_column_repair_eligible, FALSE) THEN CONVERT(0x";
+        const string repairPrefix = "SET @doka_sm_repair_ok = CASE WHEN @doka_sm_state = 'different' "
+            + "THEN COALESCE((";
 
-            const string eligibilitySuffix = ") AND @doka_sm_column_repair_eligible, FALSE) THEN CONVERT(0x";
-            var eligibilityLength = nullabilityEligibility is { } eligibility
-                ? eligibility.NullableColumn.Length + nullabilityPrefix.Length
-                    + eligibility.RepairInvariant.Length + eligibilitySuffix.Length
-                : 0;
+        const string repairSuffix = "), FALSE) ELSE FALSE END;";
 
-            // WHY: PREPARE requires one SQL string, but allocating a temporary
-            // UTF-8 array and a second hexadecimal string triples peak traffic
-            // for large guarded migrations. Write both representations into
-            // the final immutable command while retaining byte-exact SQL-mode-
-            // independent prepared statements.
-            // WHY: Append immediate owned PREPARE/EXECUTE/DEALLOCATE bytes in this allocation,
-            // not by copying the completed assignment. Semicolons preserve dependent SET evaluation,
-            // and the original logical fragment count still gates the smaller transport sequence.
-            return string.Create(
-                checked(prefix.Length + eligibilityLength + hexadecimalLength + suffix.Length),
-                (Prefix: prefix, Buffer: buffer, ByteCount: byteCount, Suffix: suffix,
-                    Eligibility: nullabilityEligibility),
-                static (destination, state) =>
-                {
-                    state.Prefix.AsSpan().CopyTo(destination);
-                    var offset = state.Prefix.Length;
-                    if (state.Eligibility is { } predicates)
-                    {
-                        // WHY: Analysis never needs this runtime-only conjunction.
-                        // Keep its original strings and write them into the final
-                        // command without allocating a combined predicate or prefix.
-                        // The same physical invariant gates classification and repair,
-                        // so the NULL proof does not add duplicate catalog evaluations.
-                        predicates.RepairInvariant.AsSpan().CopyTo(destination[offset..]);
-                        offset += predicates.RepairInvariant.Length;
-                        nullabilityPrefix.AsSpan().CopyTo(destination[offset..]);
-                        offset += nullabilityPrefix.Length;
-                        predicates.NullableColumn.AsSpan().CopyTo(destination[offset..]);
-                        offset += predicates.NullableColumn.Length;
-                        eligibilitySuffix.AsSpan().CopyTo(destination[offset..]);
-                        offset += eligibilitySuffix.Length;
-                    }
-
-                    var hexadecimal = destination.Slice(offset, state.ByteCount * 2);
-                    WriteHexadecimal(state.Buffer.AsSpan(0, state.ByteCount), hexadecimal);
-
-                    state.Suffix.AsSpan().CopyTo(destination[(offset + hexadecimal.Length)..]);
-                });
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(buffer);
-        }
-    }
-
-    private static void WriteHexadecimal(
-        ReadOnlySpan<byte> source,
-        Span<char> destination
-    )
-    {
-        if (!Convert.TryToHexString(source, destination, out var charsWritten)
-            || charsWritten != destination.Length)
-        {
-            throw new InvalidOperationException(
-                "The MySQL prepared statement could not be encoded as hexadecimal UTF-8.");
-        }
+        // WHY: The physical predicates, matching classification and dependent repair statement
+        // retain their exact order. Only their storage changes; no row proof or catalog result
+        // escapes this operation, and the original logical fragment count still gates admission.
+        return MySqlSafeMigrationSetupFragment.Compose(
+            matchingPrecondition is null ? string.Empty : MatchingStatePrefix,
+            matchingPrecondition ?? string.Empty,
+            matchingPrecondition is null ? string.Empty : MatchingStateSuffix,
+            prefix,
+            nullabilityEligibility?.RepairInvariant ?? string.Empty,
+            nullabilityEligibility is null ? string.Empty : nullabilityPrefix,
+            nullabilityEligibility?.NullableColumn ?? string.Empty,
+            nullabilityEligibility is null ? string.Empty : eligibilitySuffix,
+            MySqlSafeMigrationSetupFragment.Part.Hex(statement),
+            suffix,
+            repairPrecondition is null ? string.Empty : repairPrefix,
+            repairPrecondition ?? string.Empty,
+            repairPrecondition is null ? string.Empty : repairSuffix);
     }
 
     internal static void ValidateMultiCommandCleanup(
@@ -833,7 +816,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
                 builder,
                 BuildPreparedSqlAssignment(
                     command.BodyCommand,
-                    GetRepairBody(operation, runtimePlan, repair, command, index)));
+                    GetRepairBody(operation, runtimePlan, repair, command, index)).ToSql());
             AppendCommand(builder, $"PREPARE {PreparedStatementName} FROM @doka_sm_sql;");
             AppendCommand(builder, $"EXECUTE {PreparedStatementName};");
             AppendCommand(builder, $"DEALLOCATE PREPARE {PreparedStatementName};");
@@ -870,7 +853,8 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
                 ? applyCommand.BodyCommand
                 : null);
 
-    private static List<string> BuildCleanupCommands(
+    /// <summary>Preserves cleanup order without allocating containers for the common owned-only path.</summary>
+    private static IReadOnlyList<string> BuildCleanupCommands(
         BaselineBatch baseline,
         bool hasNullabilityProof
     )
@@ -879,6 +863,13 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         foreach (var command in baseline.Commands)
         {
             cleanupCommandCount += command.CleanupCommands.Count;
+        }
+
+        if (cleanupCommandCount == 0)
+        {
+            // WHY: These immutable SQL templates contain no operation or database state.
+            // CreateScoped snapshots and reverses its own copy; it never mutates this input.
+            return hasNullabilityProof ? s_nullabilityGuardCleanupCommands : s_guardCleanupCommands;
         }
 
         var commands = new List<string>(2 + cleanupCommandCount)

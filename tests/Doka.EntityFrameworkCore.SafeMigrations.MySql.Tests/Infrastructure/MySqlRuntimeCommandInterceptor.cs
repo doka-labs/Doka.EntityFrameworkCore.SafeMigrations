@@ -331,14 +331,18 @@ internal sealed class MySqlRuntimeCommandInterceptor : DbCommandInterceptor
         {
             if (_injectCompactedPrepareGroup)
             {
-                var offset = command.CommandText.IndexOf(PreparedSetupGroup, StringComparison.Ordinal);
                 var assignmentPrefix = _injectNullabilityProbeGroup
                     ? "SET @doka_sm_column_repair_eligible ="
                     : _injectDataProbeGroup
                     ? "SET @doka_sm_sql = CASE WHEN @doka_sm_data_probe_required"
                     : "SET @doka_sm_sql =";
 
-                if (offset >= 0 && command.CommandText.StartsWith(assignmentPrefix, StringComparison.Ordinal))
+                var assignmentOffset = command.CommandText.IndexOf(assignmentPrefix, StringComparison.Ordinal);
+                var offset = assignmentOffset < 0
+                    ? -1
+                    : command.CommandText.IndexOf(PreparedSetupGroup, assignmentOffset, StringComparison.Ordinal);
+
+                if (offset >= 0)
                 {
                     // WHY: The assignment and contiguous triple must share the actual dispatch;
                     // an isolated short PREPARE group cannot prove the fused large-command boundary.
@@ -428,8 +432,10 @@ internal sealed class MySqlRuntimeCommandInterceptor : DbCommandInterceptor
         return category;
     }
 
-    /// <summary>Separates owned guard setup, body, independent cleanup, and ordinary EF infrastructure.</summary>
-    private static string Classify(
+    /// <summary>Identifies one dispatched command's purpose without retaining or decoding its SQL.</summary>
+    /// <param name="sql">The emitted command text inspected only for fixed ownership markers.</param>
+    /// <returns>A fixed category, including a shared category for mixed-purpose setup batches.</returns>
+    internal static string Classify(
         string sql
     )
     {
@@ -450,11 +456,93 @@ internal sealed class MySqlRuntimeCommandInterceptor : DbCommandInterceptor
 
         if (sql.Contains("doka_sm", StringComparison.Ordinal))
         {
-            return "guard_setup";
+            return ClassifySetup(sql);
         }
 
         return "migration_infrastructure";
     }
+
+    /// <summary>Attributes a mixed setup dispatch once rather than inventing per-statement durations.</summary>
+    private static string ClassifySetup(
+        string sql
+    )
+    {
+        string? category = null;
+        if (sql.Contains("CREATE TEMPORARY TABLE `__doka_sm_assert`", StringComparison.Ordinal))
+        {
+            category = "assertion_setup";
+        }
+
+        if (sql.Contains("WHERE @doka_sm_action", StringComparison.Ordinal))
+        {
+            category = CombineSetupCategories(category, "decision_prepare");
+        }
+
+        var offset = 0;
+        while ((offset = sql.IndexOf("SET @doka_sm_", offset, StringComparison.Ordinal)) >= 0)
+        {
+            // WHY: Owned dynamic SQL is hex-encoded. Inspect only emitted assignment markers;
+            // PREPARE/EXECUTE/DEALLOCATE stay with their assignment's command-level measurement.
+            category = CombineSetupCategories(category, ClassifySetupAssignment(sql.AsSpan(offset)));
+            offset += "SET @doka_sm_".Length;
+        }
+
+        if (category is not null)
+        {
+            return category;
+        }
+
+        return sql.StartsWith(PreparedSetupStatement, StringComparison.Ordinal)
+            ? "decision_prepare"
+            : "other_setup";
+    }
+
+    /// <summary>Recognizes the fixed assignment prefixes emitted by the owned operation handler.</summary>
+    private static string ClassifySetupAssignment(
+        ReadOnlySpan<char> sql
+    )
+    {
+        if (sql.StartsWith("SET @doka_sm_prerequisite_ok =", StringComparison.Ordinal)
+            || sql.StartsWith("SET @doka_sm_state = CASE WHEN COALESCE((", StringComparison.Ordinal)
+            || sql.StartsWith("SET @doka_sm_state = CASE WHEN NOT @doka_sm_prerequisite_ok", StringComparison.Ordinal)
+            || sql.StartsWith("SET @doka_sm_state = CASE WHEN @doka_sm_state IS NOT NULL", StringComparison.Ordinal))
+        {
+            return "prerequisite_qualification";
+        }
+
+        if (sql.StartsWith("SET @doka_sm_transition_eligible =", StringComparison.Ordinal)
+            || sql.StartsWith("SET @doka_sm_data_probe_required =", StringComparison.Ordinal)
+            || sql.StartsWith("SET @doka_sm_column_repair_eligible =", StringComparison.Ordinal)
+            || sql.StartsWith("SET @doka_sm_sql = CASE WHEN @doka_sm_data_probe_required", StringComparison.Ordinal)
+            || sql.StartsWith("SET @doka_sm_sql = CASE WHEN @doka_sm_state IS NULL THEN CASE", StringComparison.Ordinal)
+            || sql.StartsWith("SET @doka_sm_sql = CASE WHEN @doka_sm_state IS NULL THEN CONVERT(0x"
+                + "53454C4543542043415345205748454E204E4F5420434F414C455343452828", StringComparison.Ordinal))
+        {
+            return "column_data_probe";
+        }
+
+        if (sql.StartsWith("SET @doka_sm_state =", StringComparison.Ordinal)
+            || sql.StartsWith("SET @doka_sm_repair_ok =", StringComparison.Ordinal)
+            || sql.StartsWith("SET @doka_sm_sql = CASE WHEN @doka_sm_state IS NULL THEN CONVERT(0x"
+                + "53454C4543542028", StringComparison.Ordinal))
+        {
+            return "state_classification_repair";
+        }
+
+        if (sql.StartsWith("SET @doka_sm_action =", StringComparison.Ordinal)
+            || sql.StartsWith("SET @doka_sm_sql = CASE WHEN @doka_sm_action =", StringComparison.Ordinal))
+        {
+            return "decision_prepare";
+        }
+
+        return "other_setup";
+    }
+
+    /// <summary>Keeps a single aggregate category when concatenated setup crosses purpose boundaries.</summary>
+    private static string CombineSetupCategories(
+        string? current,
+        string next
+    ) => current is null || current == next ? next : "owned_setup_batch";
 
     /// <summary>Stores bounded aggregate counters for one command purpose.</summary>
     private sealed class CommandCategory

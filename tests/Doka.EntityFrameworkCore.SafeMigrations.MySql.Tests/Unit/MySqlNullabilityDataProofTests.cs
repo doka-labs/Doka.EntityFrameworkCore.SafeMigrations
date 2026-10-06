@@ -10,6 +10,7 @@ public sealed class MySqlNullabilityDataProofTests
     [InlineData(true)]
     public void RequiredRepair_MaterializesOneNullScan(bool varchar)
     {
+        // Arrange
         using var context = CreateContext();
         var operation = new SafeMigrationOperation(
             new EnsureColumnIntent(
@@ -22,13 +23,15 @@ public sealed class MySqlNullabilityDataProofTests
                     maxLength: varchar ? 20 : null)),
             SafeMigrationPolicy.RepairIfSafe);
 
+        // Act
         var command = Assert.Single(context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model));
         var payloads = DecodePayloads(command.CommandText);
 
+        // Assert
         const string nullScan = "EXISTS (SELECT 1 FROM `proof_rows` WHERE `Value` IS NULL LIMIT 1)";
         var proof = Assert.Single(payloads, sql => sql.Contains(nullScan, StringComparison.Ordinal));
-        var state = Assert.Single(payloads, sql => sql.EndsWith(
-            "INTO @doka_sm_state, @doka_sm_repair_ok", StringComparison.Ordinal));
+        var state = Assert.Single(payloads, sql => sql.StartsWith("SELECT (", StringComparison.Ordinal)
+            && sql.EndsWith("INTO @doka_sm_state", StringComparison.Ordinal));
 
         Assert.EndsWith("INTO @doka_sm_nullability_blocked", proof, StringComparison.Ordinal);
         Assert.Contains("@doka_sm_nullability_blocked", state, StringComparison.Ordinal);
@@ -38,6 +41,12 @@ public sealed class MySqlNullabilityDataProofTests
         Assert.Contains("@doka_sm_nullability_blocked = FALSE;", command.CommandText, StringComparison.Ordinal);
         Assert.Contains("@doka_sm_nullability_blocked = NULL,", command.CommandText, StringComparison.Ordinal);
         Assert.Contains("@doka_sm_column_repair_eligible", state, StringComparison.Ordinal);
+        Assert.Contains(
+            "SET @doka_sm_repair_ok = CASE WHEN @doka_sm_state = 'different' THEN COALESCE((",
+            command.CommandText,
+            StringComparison.Ordinal);
+
+        Assert.DoesNotContain(nullScan, command.CommandText, StringComparison.Ordinal);
         Assert.True(command.CommandText.IndexOf("@doka_sm_prerequisite_ok", StringComparison.Ordinal)
             < command.CommandText.IndexOf("SET @doka_sm_column_repair_eligible", StringComparison.Ordinal));
     }
@@ -142,8 +151,9 @@ public sealed class MySqlNullabilityDataProofTests
             SafeMigrationPolicy.RepairIfSafe);
 
         var command = Assert.Single(context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model));
-        var state = Assert.Single(DecodePayloads(command.CommandText), sql => sql.EndsWith(
-            "INTO @doka_sm_state, @doka_sm_repair_ok", StringComparison.Ordinal));
+        var state = Assert.Single(DecodePayloads(command.CommandText),
+            sql => sql.StartsWith("SELECT (", StringComparison.Ordinal)
+            && sql.EndsWith("INTO @doka_sm_state", StringComparison.Ordinal));
 
         Assert.Contains("c.COLUMN_NAME = '" + token + "'", state, StringComparison.Ordinal);
         Assert.Contains("c.TABLE_NAME = '" + token + "'", state, StringComparison.Ordinal);

@@ -550,10 +550,12 @@ public sealed class MySqlGuardCommandPlanTests
 
         var payloads = DecodeHexPayloads(command.CommandText);
 
+        Assert.Contains("STRICT_TRANS_TABLES", command.CommandText, StringComparison.Ordinal);
+        Assert.Contains("STRICT_ALL_TABLES", command.CommandText, StringComparison.Ordinal);
         Assert.Contains(
-            payloads,
-            payload => payload.Contains("STRICT_TRANS_TABLES", StringComparison.Ordinal)
-                && payload.Contains("STRICT_ALL_TABLES", StringComparison.Ordinal));
+            "SET @doka_sm_repair_ok = CASE WHEN @doka_sm_state = 'different' THEN COALESCE((",
+            command.CommandText,
+            StringComparison.Ordinal);
         Assert.DoesNotContain("ALTER IGNORE TABLE", command.CommandText, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(
             payloads,
@@ -613,6 +615,95 @@ public sealed class MySqlGuardCommandPlanTests
         }
 
         return count;
+    }
+
+    /// <summary>Checks the relation binding redirects classification to a catalog snapshot.</summary>
+    /// <param name="redirect">Whether a snapshot binding is supplied.</param>
+    /// <remarks>
+    /// WHY: The binding is what makes a snapshot possible without restating a single facet. This
+    /// pins both directions: no binding leaves the live views in place, and a binding moves every
+    /// relation while the facet predicates around them stay byte-identical.
+    /// </remarks>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CatalogRelationBindingRedirectsEveryRelation(
+        bool redirect
+    )
+    {
+        // Arrange
+        using var context = CreateContext();
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureTable(
+            new ExpectedTableDefinition("items", [Column("a0"), Column("a1")]),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+        var capture = context.GetService<MySqlSafeMigrationPlanCapture>();
+        using var lease = capture.Begin(builder.Operations.Cast<SafeMigrationOperation>().ToArray());
+        using var command = new MySqlCommand();
+        var parameterizer = new MySqlCatalogQueryParameterizer(
+            command,
+            context.GetService<IRelationalTypeMappingSource>());
+
+        // Act
+        _ = generator.Generate(builder.Operations, context.Model);
+        var plan = lease.Complete().Single();
+        var bound = redirect
+            ? plan with { CatalogRelations = static view => $"`snap_{view.Length}`" }
+            : plan;
+
+        var sql = bound.RenderStateExpression(parameterizer.Add);
+
+        // Assert
+        if (redirect)
+        {
+            Assert.DoesNotContain("INFORMATION_SCHEMA.", sql, StringComparison.Ordinal);
+            Assert.Contains("`snap_26`", sql, StringComparison.Ordinal);
+            Assert.Contains("`snap_25`", sql, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.Contains("INFORMATION_SCHEMA.COLUMNS", sql, StringComparison.Ordinal);
+            Assert.Contains("INFORMATION_SCHEMA.TABLES", sql, StringComparison.Ordinal);
+            Assert.DoesNotContain("`snap_", sql, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>Checks the runtime generation path keeps reading the live catalog.</summary>
+    /// <remarks>
+    /// WHY: Only batched analysis can amortise a snapshot; a scoped command classifies one
+    /// operation. The redirection must therefore never reach generated migration SQL, which also
+    /// keeps that path free of the scan the binding performs.
+    /// </remarks>
+    [Fact]
+    public void GeneratedCommandsReadTheLiveCatalog()
+    {
+        // Arrange
+        using var context = CreateContext();
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureTable(
+            new ExpectedTableDefinition("items", [Column("a0"), Column("a1")]),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        builder.CreateIndexIfNotExists("ix_items_a0", "items", ["a0"]);
+
+        // Act
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(builder.Operations, context.Model);
+
+        // Assert
+        Assert.NotEmpty(commands);
+        Assert.All(
+            commands,
+            command =>
+            {
+                Assert.Contains("INFORMATION_SCHEMA.", command.CommandText, StringComparison.Ordinal);
+                Assert.DoesNotContain("__doka_sm_cat_", command.CommandText, StringComparison.Ordinal);
+            });
     }
 
     private static ExpectedColumnDefinition Column(

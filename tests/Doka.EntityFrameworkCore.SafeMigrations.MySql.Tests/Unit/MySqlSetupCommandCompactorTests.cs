@@ -318,7 +318,7 @@ public sealed class MySqlSetupCommandCompactorTests
     public void LargeOwnedPayloadIsNotCopiedIntoAGroup()
     {
         // Arrange
-        var classifier = new string('x', 257);
+        var classifier = new string('x', 4097);
         string[] setup = ["DO 1;", "DO 2;", classifier, "DO 3;", "DO 4;"];
 
         // Act
@@ -334,8 +334,8 @@ public sealed class MySqlSetupCommandCompactorTests
 
     /// <summary>The small-control copy ceiling is exact and never admits a larger grouped command.</summary>
     [Theory]
-    [InlineData(128, 2)]
-    [InlineData(129, 3)]
+    [InlineData(2048, 2)]
+    [InlineData(2049, 3)]
     public void SmallControlPayloadCeilingLimitsCopiedBytes(
         int fragmentLength,
         int expectedGroups
@@ -346,12 +346,12 @@ public sealed class MySqlSetupCommandCompactorTests
         string[] setup = [fragment, fragment, fragment];
 
         // Act
-        var compacted = Compact(setup, new string('x', 1000));
+        var compacted = Compact(setup, new string('x', 8192));
 
         // Assert
         Assert.Equal(expectedGroups, compacted.Count);
         Assert.Equal(string.Concat(setup), string.Concat(compacted));
-        Assert.All(compacted, command => Assert.True(Encoding.UTF8.GetByteCount(command) <= 256));
+        Assert.All(compacted, command => Assert.True(Encoding.UTF8.GetByteCount(command) <= 4096));
     }
 
     /// <summary>Multibyte fragments obey the byte ceiling rather than the UTF-16 length fast path.</summary>
@@ -364,16 +364,16 @@ public sealed class MySqlSetupCommandCompactorTests
     )
     {
         // Arrange
-        var fragment = new string('\u20ac', 42) + new string('x', asciiSuffixLength);
+        var fragment = new string('\u20ac', 682) + new string('x', asciiSuffixLength);
         string[] setup = [fragment, fragment];
 
         // Act
-        var compacted = Compact(setup, new string('x', 1000));
+        var compacted = Compact(setup, new string('x', 8192));
 
         // Assert
         Assert.Equal(expectedGroups, compacted.Count);
         Assert.Equal(string.Concat(setup), string.Concat(compacted));
-        Assert.All(compacted, command => Assert.InRange(Encoding.UTF8.GetByteCount(command), 1, 256));
+        Assert.All(compacted, command => Assert.InRange(Encoding.UTF8.GetByteCount(command), 1, 4096));
     }
 
     /// <summary>A large UTF-8 payload with short UTF-16 length remains the same original string.</summary>
@@ -381,15 +381,15 @@ public sealed class MySqlSetupCommandCompactorTests
     public void LargeMultibyteOwnedPayloadIsNotCopiedIntoAGroup()
     {
         // Arrange
-        var classifier = new string('\u20ac', 85) + "xx";
+        var classifier = new string('\u20ac', 1365) + "xx";
         string[] setup = ["DO 1;", "DO 2;", classifier, "DO 3;", "DO 4;"];
 
         // Act
         var compacted = Compact(setup, new string('x', 1000));
 
         // Assert
-        Assert.Equal(257, Encoding.UTF8.GetByteCount(classifier));
-        Assert.True(classifier.Length < 256);
+        Assert.Equal(4097, Encoding.UTF8.GetByteCount(classifier));
+        Assert.True(classifier.Length < 4096);
         Assert.Equal(3, compacted.Count);
         Assert.Same(classifier, compacted[1]);
         Assert.Equal("DO 1;DO 2;", compacted[0]);
