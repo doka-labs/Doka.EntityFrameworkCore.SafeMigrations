@@ -1,9 +1,10 @@
 # Documentation
 
 This is the task-oriented entry point for SafeMigrations documentation. This
-source prepares stable 10.4.7 for all five packages, with MariaDB analysis and
-MySQL/MariaDB runtime performance improvements. Public APIs, dependency ranges,
-migration source, policies, report schemas, and history remain unchanged.
+source prepares stable 10.4.8 for all five packages, with explicit column
+transition and ordered-projection fixes, cross-provider rename checks, and
+MySQL/MariaDB default and setup-fragment hardening. Public APIs, dependency
+ranges, migration source, policies, report schemas, and history remain unchanged.
 Package availability and OpenSSF status are established by their linked
 external registries, not by source documentation alone.
 

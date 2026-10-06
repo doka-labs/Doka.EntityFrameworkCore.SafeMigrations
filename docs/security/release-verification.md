@@ -5,7 +5,7 @@ and verification; it does not dispatch workflows, create tags, request OIDC
 credentials, or publish packages.
 
 The five-package inventory below applies beginning with 10.4.6, SQL Server's
-first package version, and remains unchanged for prepared 10.4.7. Releases
+first package version, and remains unchanged for prepared 10.4.8. Releases
 10.4.2 through 10.4.5 contain four packages and no SQL Server artifact; earlier
 stable releases contain three packages. Verify a historical release with its
 matching reviewed source and inventory rather than the current five-package

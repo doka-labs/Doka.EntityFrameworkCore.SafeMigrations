@@ -6,6 +6,19 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
+## [10.4.8] - 2026-10-06
+
+Prepare stable 10.4.8 for all five packages. This patch corrects explicit
+lossless column transitions, ordered proof invalidation and rename-destination
+checks, and hardens MySQL/MariaDB default identity and setup compaction.
+Public APIs, dependency ranges, migration source, policies, report schemas,
+and history remain unchanged; existing migrations do not need regeneration.
+
+This entry records source preparation, not publication. Completion requires
+the full qualification matrix, signed `v10.4.8` source identity, all five exact
+NuGet primary and symbol packages, and verified GitHub Release, SBOM,
+provenance, attestation, and public package readback evidence.
+
 ### Fixed
 
 - Reuse provider-proven lossless column transitions for explicit
@@ -34,6 +47,10 @@ the shared release identity described in [Release process](docs/release-process.
   groups. Preserve exact SQL, opaque provider boundaries and larger caller
   buffers; avoid unused UTF-8 accounting when composing large independent
   fragments. Default-only and collation-only drift retain runtime checks.
+- Keep action-only planning allocation-free after garbage collection by
+  validating enum members without GC-sensitive reflection caches. Preserve
+  accepted values, exception ordering and the strict zero-allocation contract;
+  cover cache eviction and invalid enum boundaries with regression tests.
 
 ## [10.4.7] - 2026-10-06
 

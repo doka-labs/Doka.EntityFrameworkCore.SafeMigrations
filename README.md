@@ -53,20 +53,27 @@ when that matrix executes. The exact successful run, not this table, is release
 evidence. See [Support and qualification](docs/support-and-qualification.md).
 
 The initial complete stable delivery is 10.0.0. The versioned installation
-examples below target the prepared five-package 10.4.7 release. Verify the exact
+examples below target the prepared five-package 10.4.8 release. Verify the exact
 package's public availability before installation; source and changelog entries
 alone are not publication evidence. See the [changelog](CHANGELOG.md).
 
-The 10.4.7 patch reduces MariaDB catalog work during batched analysis and
-MySQL/MariaDB runtime checks and command dispatches, with bounded direct
-SQL rendering. Runtime improvements also apply with explicit preflight disabled;
-runtime guards still read fresh live metadata. MariaDB's analysis-only catalog
-copies retain live-catalog fallback when their prerequisites are unavailable.
-Public APIs, dependency ranges, migration source, policies, report schemas,
-and history are unchanged. No migration regeneration or server durability
-change is required. Other provider execution paths are unchanged.
-See [MySQL and MariaDB behavior](docs/mysql-mariadb-ddl-behavior.md) for
-scope, resource bounds, and command-timeout semantics.
+The 10.4.8 patch corrects provider-proven explicit column transitions under
+`RepairIfSafe` and their ordered preflight evidence. Approved transitions
+retain exact source, physical and data-safety checks; intervening mutations
+cannot inherit stale proofs. Rename-destination checks are corrected across
+providers. MySQL/MariaDB additionally preserve exact default identity and safe
+setup-fragment boundaries. Public APIs, dependency ranges, migration source,
+policies, report schemas, and history are unchanged. Existing migrations do
+not need regeneration. Action-only planning also stays allocation-free after
+garbage collection without relying on runtime enum-metadata caches.
+See [Migration authoring](docs/migration-authoring.md)
+and the provider guides for the supported transition contracts.
+
+The catalog and runtime performance improvements introduced in 10.4.7 remain
+in place. Runtime guards still read fresh live metadata, including with explicit
+preflight disabled; required data scans and DDL can still dominate large tables.
+See [MySQL and MariaDB behavior](docs/mysql-mariadb-ddl-behavior.md) for resource
+bounds and command-timeout semantics.
 
 The 10.4.4 patch corrected read-only preflight for mixed legacy-convergence and
 strict migration streams containing raw SQL. Unprovable later safe operations
@@ -80,34 +87,34 @@ are not rewritten. See the
 ## Installation
 
 Install one provider package. The core package is included transitively. The
-commands select the intended 10.4.7 release exactly so restore does not move
+commands select the intended 10.4.8 release exactly so restore does not move
 to a different package version implicitly. Use them only after the matching
 release and all five NuGet package pages are public; source or changelog
 entries alone do not establish package availability.
 
 ```bash
-package_version='10.4.7'
+package_version='10.4.8'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.MySql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.4.7'
+package_version='10.4.8'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.4.7'
+package_version='10.4.8'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.Sqlite --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.4.7'
+package_version='10.4.8'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.SqlServer --version "$package_version"
 ```
 
@@ -1006,7 +1013,7 @@ signatures and package content, and creates or verifies an immutable GitHub
 Release with the exact ten package files, checksums, SPDX manifest, and
 `release-provenance.intoto.jsonl`. Candidates are marked prerelease and never
 replace the latest stable release.
-The five-package release contract began with 10.4.6 and is unchanged for 10.4.7;
+The five-package release contract began with 10.4.6 and is unchanged for 10.4.8;
 the historical 10.4.5 release remains the four-package set.
 See [Publication operations](docs/operations/release-publication.md) for the
 step-by-step maintainer guide and current readiness, and

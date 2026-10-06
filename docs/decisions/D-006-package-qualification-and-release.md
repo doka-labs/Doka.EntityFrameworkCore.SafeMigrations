@@ -252,6 +252,11 @@ owns independent consumer readback.
   dependency ranges, API baselines, migration source, policies, report schemas,
   and history. Keep the complete qualification and publication gates;
   performance measurements remain informational rather than release blockers.
+- 2026-10-06: Prepare stable 10.4.8 at the same five-package identity for explicit
+  column-transition, ordered-projection and provider correctness fixes. Preserve
+  dependency ranges, API baselines, migration source, policies, report schemas
+  and history. Historical 10.4.7 qualification evidence is not new patch evidence;
+  require the full qualification, provenance and public readback gates again.
 
 ### Implementation References
 

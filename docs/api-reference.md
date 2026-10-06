@@ -65,8 +65,11 @@ A successful release run and exact-version public package readback remain the
 authority for a published API; shipped baseline files record its prepared
 contract, not proof of publication.
 
-Prepared stable 10.4.7 preserves the complete 10.4.6 public API and dependency
-ranges. It changes only internal MySQL/MariaDB analysis and runtime work.
+Prepared stable 10.4.8 preserves the complete 10.4.6 public API and dependency
+ranges. It corrects internal explicit column-transition proofs and ordered
+projection, rename-destination evidence across providers, and MySQL/MariaDB
+default comparison and setup-fragment handling. The internal MySQL/MariaDB
+performance changes introduced in 10.4.7 remain in place.
 Migration source does not need regeneration; policies, canonical report v3,
 filtered-view v2, and migration histories remain unchanged. No API-baseline
 promotion is required for this patch.

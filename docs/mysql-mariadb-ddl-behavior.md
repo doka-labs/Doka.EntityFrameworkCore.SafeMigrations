@@ -1,11 +1,13 @@
 # MySQL and MariaDB DDL behavior
 
-Prepared stable 10.4.7 reduces batched MariaDB analysis work separately from
-MySQL/MariaDB runtime command work. It requires neither regenerated migrations
-nor changed server durability settings. Runtime checks continue to read the
-live catalog even when batched analysis uses session-owned catalog copies.
-Policies, data-safety proofs, postconditions, and recovery boundaries remain
-unchanged; required data scans and DDL can still dominate large-table workloads.
+Prepared stable 10.4.8 corrects provider-proven explicit column transitions,
+ordered proof invalidation and rename-destination checks, and preserves exact
+default identity and setup-fragment boundaries. It requires neither regenerated
+migrations nor changed server durability settings. The analysis and runtime
+optimizations introduced in 10.4.7 remain in place. Runtime checks continue to
+read the live catalog even when batched analysis uses session-owned catalog
+copies. Policies, postconditions, and recovery boundaries remain unchanged;
+required data scans and DDL can still dominate large-table workloads.
 
 ## Operational summary
 
