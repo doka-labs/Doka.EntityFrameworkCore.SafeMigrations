@@ -73,7 +73,7 @@ internal sealed partial class SafeMigrationPreflightProjection
     {
         if (!_prerequisites.TryGetValue(new TableKey(intent.Table, intent.Schema), out var prerequisites)
             || !prerequisites.NewlyCreated
-            || prerequisites.DataMutationVersion != _providerDataMutationVersion)
+            || prerequisites.ModelManagedDataMutationVersion != _providerDataMutationVersion)
         {
             return false;
         }
@@ -311,10 +311,20 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         if (decision.Action == SafeMigrationAction.Apply)
         {
-            // WHY: A later data-dependent column repair was analyzed against
-            // the pre-migration rows. Track the exact mutated table so that
-            // proof cannot authorize DDL after ordered model-managed changes.
             var table = new TableKey(intent.Table, intent.Schema);
+            var retainsCompleteness = _prerequisites.TryGetValue(table, out var prerequisites)
+                && prerequisites.NewlyCreated
+                && prerequisites.ModelManagedDataMutationVersion == _providerDataMutationVersion;
+
+            // WHY: Model-managed writes can fire cross-table triggers too.
+            // Only the already-current own-table row catalog remains complete;
+            // the generic live-data epoch must never be refreshed with it.
+            ObserveProviderDataMutation();
+            if (retainsCompleteness
+                && prerequisites is not null)
+            {
+                prerequisites.ModelManagedDataMutationVersion = _providerDataMutationVersion;
+            }
 
             _projectedDataMutationTables.Add(table);
             ObserveProjectedUniqueKeys(table, intent);

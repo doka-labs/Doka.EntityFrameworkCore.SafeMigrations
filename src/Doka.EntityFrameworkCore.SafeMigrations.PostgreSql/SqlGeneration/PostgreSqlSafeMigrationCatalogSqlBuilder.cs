@@ -61,7 +61,11 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 includeTransitionEvidence),
             DropColumnIntent value => BuildDropColumn(value),
             RenameColumnIntent value => BuildRenameColumn(value),
-            AlterColumnIntent value => BuildAlterColumn(value),
+            AlterColumnIntent value => BuildAlterColumn(
+                value,
+                operation.Policy == SafeMigrationPolicy.RepairIfSafe,
+                includeAnalysisEvidence,
+                includeTransitionEvidence),
             EnsureIndexIntent value => BuildEnsureIndex(value),
             DropIndexIntent value => BuildDropIndex(value),
             RenameIndexIntent value => BuildRenameIndex(value),

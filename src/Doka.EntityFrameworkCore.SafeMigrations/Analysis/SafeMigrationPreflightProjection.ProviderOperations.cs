@@ -15,6 +15,7 @@ internal sealed partial class SafeMigrationPreflightProjection
     )
     {
         var key = new TableKey(operation.Name, operation.Schema);
+        _renamedTableSources.Remove(key);
         var prerequisites = new ProjectedPrerequisites(
             newlyCreated: true,
             dataMutationVersion: _providerDataMutationVersion,
@@ -28,7 +29,10 @@ internal sealed partial class SafeMigrationPreflightProjection
             var table = new ProjectedTable(
                 definition,
                 dataMutationVersion: _providerDataMutationVersion,
-                objectIdentityNormalizer: _objectIdentityNormalizer);
+                objectIdentityNormalizer: _objectIdentityNormalizer)
+            {
+                CanReuseCreationCharacterSet = !_creationCharacterSetChanged,
+            };
 
             CaptureSharedUniqueKeys(table, definition);
             _tables[key] = table;
@@ -44,7 +48,9 @@ internal sealed partial class SafeMigrationPreflightProjection
         RemoveDroppedPhysicalKeys(operation.Name, operation.Schema);
         _projectedMissingTables.Remove(key);
         _projectedUnknownTableStructures.Remove(key);
+        _projectedUnknownPhysicalKeys.Remove(key);
         _projectedStructurallyModifiedTables.Remove(key);
+        _projectedColumnDropOnlyTables?.Remove(key);
         _projectedChangedColumns.Remove(key);
 
         foreach (var column in operation.Columns)
@@ -91,6 +97,16 @@ internal sealed partial class SafeMigrationPreflightProjection
         AlterColumnOperation operation
     )
     {
+        if (operation.OldColumn.IsNullable
+            && !operation.IsNullable
+            && (operation.DefaultValue is not null
+                || operation.DefaultValueSql is not null))
+        {
+            // WHY: A provider can backfill NULLs before changing nullability.
+            // Row triggers may invalidate captured proofs on other tables too.
+            ObserveProviderDataMutation();
+        }
+
         var key = new TableKey(operation.Table, operation.Schema);
 
         _tables.Remove(key);
@@ -228,6 +244,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         _projectedMissingTables.Add(key);
         _projectedUnknownTableStructures.Remove(key);
         _projectedStructurallyModifiedTables.Remove(key);
+        _projectedColumnDropOnlyTables?.Remove(key);
         _projectedChangedColumns.Remove(key);
         RemoveProjectedColumnDefinitions(operation.Name, operation.Schema);
         RemoveDroppedPhysicalKeys(operation.Name, operation.Schema);
@@ -341,8 +358,12 @@ internal sealed partial class SafeMigrationPreflightProjection
         var candidateKeyInvalidated = false;
         if (_prerequisites.TryGetValue(key, out var prerequisites))
         {
-            prerequisites.Indexes.RemoveWhere(index => index.Keys.Any(indexKey =>
-                indexKey.Column is not null && IdentifierEquals(_objectIdentityNormalizer, indexKey.Column, column)));
+            if (prerequisites.Indexes.RemoveWhere(index => index.Keys.Any(indexKey =>
+                    indexKey.Column is not null
+                    && IdentifierEquals(_objectIdentityNormalizer, indexKey.Column, column))))
+            {
+                _projectedUnknownPhysicalKeys.Add(key);
+            }
 
             if (SharesUniqueConstraintAndIndexIdentity)
             {
@@ -351,6 +372,10 @@ internal sealed partial class SafeMigrationPreflightProjection
                         _objectIdentityNormalizer,
                         candidate,
                         column)));
+                if (candidateKeyInvalidated)
+                {
+                    _projectedUnknownPhysicalKeys.Add(key);
+                }
             }
         }
 
@@ -373,6 +398,7 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         foreach (var name in names)
         {
+            _projectedUnknownPhysicalKeys.Add(key);
             projectedTable.Indexes.Remove(name);
             candidateKeyInvalidated |= DropSharedUniqueIndex(projectedTable, name);
         }
@@ -415,13 +441,18 @@ internal sealed partial class SafeMigrationPreflightProjection
         }
 
         _tables.Clear();
+        _projectedForeignKeyOwners.Clear();
+        _projectedForeignKeyColumns = null;
+        _renamedTableSources.Clear();
         _prerequisites.Clear();
         _droppedPhysicalKeys.Clear();
         _projectedCandidateKeyMutationTables.Clear();
         _projectedColumnStates.Clear();
         _projectedMissingTables.Clear();
         _projectedUnknownTableStructures.Clear();
+        _projectedUnknownPhysicalKeys.Clear();
         _projectedStructurallyModifiedTables.Clear();
+        _projectedColumnDropOnlyTables?.Clear();
         _projectedChangedColumns.Clear();
         _hasOpaqueProviderPostcondition = true;
         InvalidateModelManagedDataProjection();

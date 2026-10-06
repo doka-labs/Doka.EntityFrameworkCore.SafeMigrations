@@ -93,6 +93,43 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         var target = new TableKey(intent.NewName ?? intent.Name, intent.NewSchema ?? intent.Schema);
 
+        if (liveAnalysis.ObservedState == SafeMigrationObservedState.Unsupported)
+        {
+            return liveAnalysis;
+        }
+
+        if (liveAnalysis.RenameApplyUnsupportedCode is { } unsupportedCode)
+        {
+            return new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Unsupported,
+                SafeMigrationRepairCapability.None, postconditionSatisfied: false, unsupportedCode);
+        }
+
+        var intermediate = new TableKey(intent.NewName ?? intent.Name, intent.Schema);
+        if (liveAnalysis.RenameIntermediateTargetExists is { } intermediateExists
+            && ((intermediateExists && !_projectedMissingTables.Contains(intermediate))
+                || _tables.ContainsKey(intermediate)
+                || _prerequisites.ContainsKey(intermediate)))
+        {
+            return Analysis(SafeMigrationObservedState.Different);
+        }
+
+        if ((liveAnalysis.ObservedState == SafeMigrationObservedState.Different
+             || liveAnalysis.RenameTargetExists == true)
+            && !_projectedMissingTables.Contains(target))
+        {
+            return Analysis(SafeMigrationObservedState.Different);
+        }
+
+        if (liveAnalysis.ObservedState == SafeMigrationObservedState.Missing
+            && liveAnalysis.RenameTargetExists is null
+            && !_projectedMissingTables.Contains(target))
+        {
+            // WHY: Missing source is also the replay state. It contains no
+            // destination evidence, so creating the source earlier in this
+            // batch cannot turn it into permission to overwrite a live name.
+            return StructureStateUnknown();
+        }
+
         return Analysis(
             Contains(intent.NewName ?? intent.Name, intent.NewSchema ?? intent.Schema)
             || _prerequisites.ContainsKey(target)
@@ -109,9 +146,12 @@ internal sealed partial class SafeMigrationPreflightProjection
         var key = new TableKey(intent.Definition.Table, intent.Definition.Schema);
         if (analysis.ObservedState == SafeMigrationObservedState.Missing)
         {
+            _renamedTableSources.Remove(key);
             _projectedMissingTables.Remove(key);
             _projectedUnknownTableStructures.Remove(key);
+            _projectedUnknownPhysicalKeys.Remove(key);
             _projectedStructurallyModifiedTables.Remove(key);
+            _projectedColumnDropOnlyTables?.Remove(key);
             _projectedChangedColumns.Remove(key);
             RemoveProjectedColumnDefinitions(intent.Definition.Table, intent.Definition.Schema);
             foreach (var column in intent.Definition.Columns)
@@ -122,7 +162,10 @@ internal sealed partial class SafeMigrationPreflightProjection
             var table = new ProjectedTable(
                 intent.Definition,
                 dataMutationVersion: _providerDataMutationVersion,
-                objectIdentityNormalizer: _objectIdentityNormalizer);
+                objectIdentityNormalizer: _objectIdentityNormalizer)
+            {
+                CanReuseCreationCharacterSet = !_creationCharacterSetChanged,
+            };
 
             CaptureSharedUniqueKeys(table, intent.Definition);
             _tables[key] = table;
@@ -196,11 +239,14 @@ internal sealed partial class SafeMigrationPreflightProjection
         {
             var key = new TableKey(intent.Table, intent.Schema);
             _tables.Remove(key);
+            _renamedTableSources.Remove(key);
+            _projectedUnknownPhysicalKeys.Remove(key);
             _prerequisites.Remove(key);
             _projectedDataMutationTables.Remove(key);
             _projectedModelManagedUniqueKeys.Remove(key);
             _projectedUnknownTableStructures.Remove(key);
             _projectedStructurallyModifiedTables.Remove(key);
+            _projectedColumnDropOnlyTables?.Remove(key);
             _projectedChangedColumns.Remove(key);
             RemoveProjectedColumnDefinitions(intent.Table, intent.Schema);
             _projectedMissingTables.Add(key);
@@ -229,6 +275,14 @@ internal sealed partial class SafeMigrationPreflightProjection
             var targetTable = intent.NewName ?? intent.Name;
             var targetSchema = intent.NewSchema ?? intent.Schema;
             var target = new TableKey(targetTable, targetSchema);
+            var physicalSource = _renamedTableSources.Remove(source, out var originalSource) ? originalSource : source;
+
+            _renamedTableSources[target] = physicalSource;
+            if (_projectedUnknownPhysicalKeys.Remove(source))
+            {
+                _projectedUnknownPhysicalKeys.Add(target);
+            }
+
             _projectedMissingTables.Add(source);
             _projectedMissingTables.Remove(target);
 
@@ -257,6 +311,7 @@ internal sealed partial class SafeMigrationPreflightProjection
             }
 
             _prerequisites.Remove(source);
+            prerequisites.RenameKeys(targetTable, targetSchema);
             _prerequisites[target] = prerequisites;
             table.RenameTable(targetTable, targetSchema);
             foreach (var projection in _tables.Values)
@@ -268,10 +323,77 @@ internal sealed partial class SafeMigrationPreflightProjection
             return;
         }
 
+        if (_renamedTableAnalyzer is not null)
+        {
+            var target = new TableKey(intent.NewName ?? intent.Name, intent.NewSchema ?? intent.Schema);
+            var physical = _renamedTableSources.Remove(source, out var original) ? original : source;
+
+            _renamedTableSources[target] = physical;
+            if (_projectedUnknownPhysicalKeys.Remove(source))
+            {
+                _projectedUnknownPhysicalKeys.Add(target);
+            }
+
+            _projectedMissingTables.Add(source);
+            _projectedMissingTables.Remove(target);
+            if (_prerequisites.Remove(source, out var existing))
+            {
+                existing.RenameKeys(target.Table, target.Schema);
+                _prerequisites[target] = existing;
+            }
+
+            RenameProjectedTableColumnDefinitions(intent.Name, intent.Schema, target.Table, target.Schema);
+            if (_projectedDataMutationTables.Remove(source))
+            {
+                _projectedDataMutationTables.Add(target);
+            }
+
+            if (_projectedStructurallyModifiedTables.Remove(source))
+            {
+                _projectedStructurallyModifiedTables.Add(target);
+            }
+
+            if (_projectedUnknownTableStructures.Remove(source))
+            {
+                _projectedUnknownTableStructures.Add(target);
+            }
+
+            _hasOpaqueProviderPostcondition = true;
+            InvalidateModelManagedDataProjection();
+
+            return;
+        }
+
         // WHY: A rename on an existing table can rewrite provider-owned foreign
         // keys outside the locally projected table. Retaining the pre-batch
         // snapshot would let a later safe operation act on stale identities.
         SetOpaqueProviderPostcondition(mayMutateData: false);
+    }
+
+    private bool TryBindRenamedTableAnalysis(
+        SafeMigrationOperation operation,
+        [NotNullWhen(true)] out SafeMigrationProviderAnalysis? analysis
+    )
+    {
+        var owner = operation.Intent switch
+        {
+            AlterColumnIntent value => new TableKey(value.Table, value.Schema),
+            EnsureIndexIntent value => new TableKey(value.Definition.Table, value.Definition.Schema),
+            _ => (TableKey?)null,
+        };
+
+        if (owner is { } table
+            && _renamedTableSources.TryGetValue(table, out var source)
+            && !IsProjectedTableStructureUnknown(table.Table, table.Schema)
+            && _renamedTableAnalyzer is not null)
+        {
+            return _renamedTableAnalyzer.TryGetRenamedTableAnalysis(
+                operation, source.Table, source.Schema, out analysis);
+        }
+
+        analysis = null;
+
+        return false;
     }
 
     private sealed partial class ProjectedTable

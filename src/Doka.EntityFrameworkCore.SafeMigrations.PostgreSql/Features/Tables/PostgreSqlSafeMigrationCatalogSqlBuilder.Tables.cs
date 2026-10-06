@@ -48,18 +48,37 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         RenameTableIntent intent
     )
     {
-        var targetName = intent.NewName ?? intent.Name;
-        var targetSchema = intent.NewSchema ?? intent.Schema;
         var sourceObject = RelationExists(intent.Name, intent.Schema);
         var source = TableExists(intent.Name, intent.Schema);
-        var target = RelationExists(targetName, targetSchema);
+        var target = BuildRenameTargetExistsExpression(intent);
+        var intermediateTarget = BuildRenameIntermediateTargetExistsExpression(intent);
+        var collision = intermediateTarget is null ? target : $"({target}) OR ({intermediateTarget})";
 
         return Plan(
             $"CASE WHEN NOT {sourceObject} THEN 'missing' WHEN NOT {source} THEN 'different' "
-            + $"WHEN {target} THEN 'different' "
+            + $"WHEN {collision} THEN 'different' "
             + "ELSE 'matching' END",
             $"NOT {RelationExists(intent.Name, intent.Schema)}");
     }
+
+    /// <summary>Resolves destination occupancy independently of the rename source's current existence.</summary>
+    /// <param name="intent">The immutable source and destination identities.</param>
+    /// <returns>The same relation-level destination predicate used by the runtime rename guard.</returns>
+    public string BuildRenameTargetExistsExpression(
+        RenameTableIntent intent
+    ) => RelationExists(intent.NewName ?? intent.Name, intent.NewSchema ?? intent.Schema);
+
+    /// <summary>Checks the source-schema name used before Npgsql transfers a renamed table to its new schema.</summary>
+    /// <param name="intent">The immutable source and destination identities.</param>
+    /// <returns>The occupancy predicate, or null when the baseline has no separate intermediate name.</returns>
+    public string? BuildRenameIntermediateTargetExistsExpression(
+        RenameTableIntent intent
+    ) => intent.NewName is not null
+        && !StringComparer.Ordinal.Equals(intent.NewName, intent.Name)
+        && intent.NewSchema is not null
+        && !StringComparer.Ordinal.Equals(intent.NewSchema, intent.Schema)
+            ? RelationExists(intent.NewName, intent.Schema)
+            : null;
 
     private string TableMatches(
         ExpectedTableDefinition definition,

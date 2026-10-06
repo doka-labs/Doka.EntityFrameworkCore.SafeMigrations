@@ -6,7 +6,7 @@ public sealed class MySqlRuntimeAllocationTests(Xunit.Abstractions.ITestOutputHe
 {
     /// <summary>Runtime column generation preserves every command and its exact SQL.</summary>
     [Theory]
-    [InlineData(false, "EE6F0215DD906B2FF4E60421E84F8984ACDD1093E6C67438411EC99D789BC0E9")]
+    [InlineData(false, "2F3741B301CF5FAB1F738720C341692E951B8168E2FC99A77526083E332C8FBA")]
     [InlineData(true, "C6233A2E99E6316A8117A741C58CE924718E172226A90280680C59D5B290C8BE")]
     public void PreparedRuntimeColumnGenerationRemainsBounded(bool isMariaDb, string expectedSqlHash)
     {
@@ -27,17 +27,32 @@ public sealed class MySqlRuntimeAllocationTests(Xunit.Abstractions.ITestOutputHe
         var commands = generator.Generate(operations, context.Model);
         var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
-        // Assert
         var sql = string.Concat(commands.Select(static command => command.CommandText));
         var canonicalSql = sql.Replace("\r\n", "\n", StringComparison.Ordinal);
         var hash = Convert.ToHexString(
             System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(canonicalSql)));
 
+        var legacySql = canonicalSql.Replace(
+            "(c.COLUMN_DEFAULT IS NULL OR (CAST(c.COLUMN_DEFAULT AS BINARY) = 'NULL' "
+                + "AND LOCATE('DEFAULT_GENERATED', UPPER(COALESCE(c.EXTRA, ''))) > 0))",
+            "(c.COLUMN_DEFAULT IS NULL OR UPPER(c.COLUMN_DEFAULT) = 'NULL')", StringComparison.Ordinal);
+
+        var legacyHash = Convert.ToHexString(
+            System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(legacySql)));
+
+        // Assert
         output.WriteLine(
             $"Prepared {(isMariaDb ? "MariaDB" : "MySQL")} generation: {allocated} bytes, SQL SHA256 {hash}.");
 
-        // WHY: These fingerprints were captured before the allocation changes.
-        // Normalize platform newlines only; guards, ordering, cleanup and SQL text must stay identical.
+        if (!isMariaDb)
+        {
+            // WHY: Restoring only the unsafe NULL-text alternative reproduces
+            // the previous fingerprint, proving no unrelated SQL drift.
+            Assert.Equal("EE6F0215DD906B2FF4E60421E84F8984ACDD1093E6C67438411EC99D789BC0E9", legacyHash);
+        }
+
+        // Normalize platform newlines only; allocation changes must preserve
+        // guards, ordering, cleanup, and the qualified default-identity SQL.
         Assert.Equal(expectedSqlHash, hash);
         Assert.Equal(operations.Length, commands.Count);
         Assert.All(commands, command =>

@@ -99,11 +99,10 @@ internal sealed partial class SafeMigrationPreflightProjection
         SafeMigrationDecision decision
     )
     {
-        if (decision.Action is SafeMigrationAction.Apply or SafeMigrationAction.NoOp
-            && _prerequisites.TryGetValue(
-                new TableKey(intent.Definition.Table, intent.Definition.Schema),
-                out var prerequisites))
+        if (decision.Action is SafeMigrationAction.Apply or SafeMigrationAction.NoOp)
         {
+            var prerequisites = GetOrCreateProviderPrerequisites(intent.Definition.Table, intent.Definition.Schema);
+
             ObserveAcceptedDefinition(
                 prerequisites.ForeignKeys,
                 intent.Definition.Name,

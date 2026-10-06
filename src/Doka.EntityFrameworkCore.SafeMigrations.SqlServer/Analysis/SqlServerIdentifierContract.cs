@@ -51,6 +51,15 @@ internal static class SqlServerIdentifierContract
                 case RenameTableIntent value:
                     AddTable(names, value.Schema, value.Name);
                     AddTable(names, value.NewSchema ?? value.Schema, value.NewName ?? value.Name);
+                    if ((value.NewName ?? value.Name) != value.Name
+                        && (value.NewSchema ?? value.Schema ?? "dbo") != (value.Schema ?? "dbo"))
+                    {
+                        // WHY: The baseline first allocates the new name in
+                        // the source schema, so that identity needs the same
+                        // catalog-collation guard as the final destination.
+                        AddTable(names, value.Schema, value.NewName ?? value.Name);
+                    }
+
                     break;
                 case EnsureColumnIntent value:
                     AddColumn(names, value.Schema, value.Table, value.Definition.Name);

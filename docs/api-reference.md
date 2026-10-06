@@ -267,6 +267,10 @@ structure guarantees non-null, for example a current-value node, a null test,
 or `COALESCE` with a proven non-null argument. Unparsed SQL text, column
 references, casts, binary arithmetic, opaque fragments, and general SQL
 functions do not qualify. This is a structural proof, not a data scan.
+An explicit MySQL/MariaDB alteration that changes the type has an additional
+backfill condition: the supported literal replacement must fit both the old
+and target domains under strict conversion. A non-null `COALESCE` or current
+value expression alone cannot prove this condition.
 
 The [migration authoring guide](migration-authoring.md) contains complete
 generated strict and legacy-convergence migrations plus the equivalent
@@ -418,6 +422,12 @@ through explicit ensure operations in the contract or independent checks;
 rename postflight alone is not proof of destination equivalence.
 `AlterColumnIfDifferent` takes the target definition, nullable old definition,
 and policy; an absent or mismatching old definition does not authorize repair.
+Under explicit `RepairIfSafe`, MySQL/MariaDB and PostgreSQL reuse their
+independently qualified column-transition families described above. The old
+definition is a source-shape check, not evidence that live values fit a smaller
+target. Narrowing requires a current row proof, and a matching target requires
+no repair scan. Alter never creates a missing source column. A successful
+preflight does not replace execution-time guards or permit truncation.
 
 The three model-managed-data methods are public targets for generated migration
 source. They always use `ThrowIfDifferent`; they expose no overwrite or repair

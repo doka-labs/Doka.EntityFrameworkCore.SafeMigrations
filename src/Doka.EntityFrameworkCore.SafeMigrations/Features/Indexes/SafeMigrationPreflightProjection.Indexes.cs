@@ -159,11 +159,10 @@ internal sealed partial class SafeMigrationPreflightProjection
         SafeMigrationDecision decision
     )
     {
-        if (decision.Action is SafeMigrationAction.Apply or SafeMigrationAction.NoOp
-            && _prerequisites.TryGetValue(
-                new TableKey(intent.Definition.Table, intent.Definition.Schema),
-                out var prerequisites))
+        if (decision.Action is SafeMigrationAction.Apply or SafeMigrationAction.NoOp)
         {
+            var prerequisites = GetOrCreateProviderPrerequisites(intent.Definition.Table, intent.Definition.Schema);
+
             ObserveAcceptedDefinition(
                 prerequisites.Indexes,
                 intent.Definition.Name,
@@ -308,16 +307,16 @@ internal sealed partial class SafeMigrationPreflightProjection
             return true;
         }
 
+        if (prerequisites.NewlyCreated)
+        {
+            return ProvesTableEmpty(intent.Definition.Table, intent.Definition.Schema, prerequisites)
+                || (prerequisites.ModelManagedDataMutationVersion == _providerDataMutationVersion
+                    && HasProjectedModelManagedUniqueKey(intent.Definition));
+        }
+
         if (prerequisites.DataMutationVersion < _providerDataMutationVersion)
         {
             return false;
-        }
-
-        if (prerequisites.NewlyCreated)
-        {
-            return !_projectedDataMutationTables.Contains(
-                    new TableKey(intent.Definition.Table, intent.Definition.Schema))
-                || HasProjectedModelManagedUniqueKey(intent.Definition);
         }
 
         if (intent.Definition.NullsDistinct == false)
@@ -404,7 +403,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         return _projectedKeyAnalyzer.ValidateProjectedIndex(
             intent,
             this,
-            liveAnalysis,
+            SelectProjectedKeyEnvironment(intent.Definition.Table, intent.Definition.Schema, liveAnalysis),
             projectedAnalysis);
     }
 

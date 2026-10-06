@@ -6,6 +6,31 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
+### Fixed
+
+- Reuse provider-proven lossless column transitions for explicit
+  `AlterColumnIfDifferent` operations under `RepairIfSafe`, including generated
+  `AlterColumnIfDifferentFromModel` calls. MySQL/MariaDB retain their existing
+  string and Boolean allowlist; PostgreSQL retains its independent `VARCHAR`
+  length contract. Repair still requires the exact old definition, physical
+  eligibility and fresh row proofs where needed. Matching targets remain
+  no-ops; unsupported conversions and overlength data reject without truncation.
+- Preserve accepted column-transition evidence in ordered preflight, including
+  MySQL/MariaDB table renames and dependent index validation. Do not reuse row
+  proofs across intervening data changes, infer live column shapes from an
+  existence-only table container, or ignore an occupied rename destination.
+  Existing migration source, public signatures, report schemas and history
+  remain unchanged.
+- Preserve independent rename-destination evidence in all providers so a
+  table created earlier in the same stream cannot hide an occupied live target.
+  Genuine missing-source replay remains a no-op; an accepted earlier target
+  drop is evaluated against the ordered state.
+- Compare MySQL/MariaDB string defaults using their exact engine-specific
+  catalog representation. Preserve case, quoting and SQL NULL distinctions;
+  a different literal cannot impersonate the approved source or target default.
+  Explicit type transitions reject default forms that the engine or current
+  SQL mode cannot preserve, before any backfill or DDL.
+
 ## [10.4.7] - 2026-10-06
 
 Prepare stable 10.4.7 for all five packages. This patch reduces MariaDB

@@ -584,6 +584,14 @@ an incomplete proof, or concurrent violating data stops without truncation.
 SafeMigrations separately reports that accepted column DDL may rewrite a table;
 data safety is not an online-DDL promise.
 
+Explicit `AlterColumnIfDifferent` and generated
+`AlterColumnIfDifferentFromModel` calls use the same provider-qualified
+transition families under `RepairIfSafe`, with an additional exact old-definition
+check. A missing or different source definition never authorizes an alteration;
+an already matching target remains a no-op. This applies to ordinary strict
+migrations as well as legacy-convergence streams. SQLite and SQL Server keep
+their own provider-specific alteration contracts.
+
 All other pre-existing requirements remain: the resolved character family,
 collation, generated/identity state, row-version state, provider metadata, and
 dependent indexes or constraints must be fully understood and compatible. A
@@ -608,6 +616,9 @@ A structurally proven non-null default is a non-null literal or a parsed,
 typed SQL expression whose shape proves a non-null result, such as a current
 value or `COALESCE` with a proven non-null argument. Raw SQL text, casts,
 binary arithmetic, and ordinary column references do not provide that proof.
+For an explicit MySQL/MariaDB type-changing alteration with default backfill,
+non-nullness alone is insufficient: the replacement must be a supported literal
+that fits both the old and target domains, with strict conversion enabled.
 
 SQLite uses the official provider's model-owned rebuild path for changes that
 the engine cannot alter directly. A rebuild is accepted only when the terminal

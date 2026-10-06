@@ -671,10 +671,24 @@ internal sealed class SqliteSafeMigrationProviderAnalyzer : ISafeMigrationProvid
         var targetName = intent.NewName ?? intent.Name;
         var sourceExists = snapshot.Tables.ContainsKey(intent.Name);
         var targetExists = snapshot.Tables.ContainsKey(targetName);
-
-        return sourceExists switch
+        var targetOccupied = targetExists;
+        if (!targetOccupied)
         {
-            true when !targetExists => snapshot.LegacyAlterTableEnabled
+            foreach (var schemaObject in snapshot.OtherObjects)
+            {
+                if (schemaObject.Type is "view" or "index"
+                    && s_identifierComparer.Equals(schemaObject.Name, targetName))
+                {
+                    targetOccupied = true;
+
+                    break;
+                }
+            }
+        }
+
+        var analysis = sourceExists switch
+        {
+            true when !targetOccupied => snapshot.LegacyAlterTableEnabled
                 ? Unsupported("legacy_alter_table")
                 : Matching(postconditionSatisfied: false, matchedObjectName: intent.Name),
             false when targetExists => Missing(postconditionSatisfied: true),
@@ -682,6 +696,13 @@ internal sealed class SqliteSafeMigrationProviderAnalyzer : ISafeMigrationProvid
                 ? Different("rename_target", "missing", "existing")
                 : Missing(postconditionSatisfied: false)
         };
+
+        // WHY: Missing source also describes an idempotent replay. An earlier
+        // accepted creation may establish the source, but cannot prove that its
+        // destination is absent from the immutable live catalog. Tables, views
+        // and indexes occupy that namespace; an unrelated trigger does not.
+        return analysis.WithRenameTargetExists(targetOccupied,
+            applyUnsupportedCode: snapshot.LegacyAlterTableEnabled ? "legacy_alter_table" : null);
     }
 
     private SafeMigrationProviderAnalysis AnalyzeEnsureColumn(
@@ -775,6 +796,10 @@ internal sealed class SqliteSafeMigrationProviderAnalyzer : ISafeMigrationProvid
             ColumnDifferences(column, intent.Definition))
         {
             MatchedObjectName = column.Name,
+            RequiresLiveDataProof = column.IsNullable && !intent.Definition.IsNullable,
+            CanReuseAfterUnrelatedColumnDrops = oldDefinitionMatches
+                && intent.OldDefinition is not null
+                && SafeMigrationColumnRepairHelper.CanSafelyAlterColumn(intent.OldDefinition, intent.Definition),
         };
     }
 

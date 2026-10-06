@@ -250,6 +250,17 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             commandTimeout,
             cancellationToken);
 
+        var collationCharacterSets = await ReadProjectedAlterCollationCharacterSetsAsync(
+            connection, operations, maximumPayloadBytes, commandTimeout, cancellationToken);
+
+        environmentDefaults = environmentDefaults with
+        {
+            DefaultEnvironment = environmentDefaults.DefaultEnvironment with
+            {
+                CollationCharacterSets = collationCharacterSets,
+            },
+        };
+
         var result = tables.ToDictionary(
             static table => table,
             _ => environmentDefaults.DefaultEnvironment,
@@ -315,7 +326,18 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                         result[table] = CreateIndexPhysicalEnvironment(
                             engine,
                             rowFormat,
-                            environmentDefaults.DynamicMaximumKeyBytes);
+                            environmentDefaults.DynamicMaximumKeyBytes,
+                            environmentDefaults.PageSize) with
+                        {
+                            DefaultCharacterSet = environmentDefaults.DefaultEnvironment.DefaultCharacterSet,
+                            StrictSqlMode = environmentDefaults.DefaultEnvironment.StrictSqlMode,
+                            SupportsQuotedExpressionDefaults =
+                                environmentDefaults.DefaultEnvironment.SupportsQuotedExpressionDefaults,
+                            SupportsTextExpressionControlCharacters =
+                                environmentDefaults.DefaultEnvironment.SupportsTextExpressionControlCharacters,
+                            CollationCharacterSets = environmentDefaults.DefaultEnvironment.CollationCharacterSets,
+                            NewTableEnvironment = environmentDefaults.DefaultEnvironment,
+                        };
                     }
 
                     var column = reader.GetString(3);
@@ -353,6 +375,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         SafeMigrationIntent intent
     ) => intent switch
     {
+        AlterColumnIntent value => value.Table,
         EnsureIndexIntent value => value.Definition.Table,
         EnsurePrimaryKeyIntent value => value.Definition.Table,
         EnsureUniqueConstraintIntent value => value.Definition.Table,
@@ -363,6 +386,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         SafeMigrationIntent intent
     ) => intent switch
     {
+        AlterColumnIntent value => [value.Definition.Name],
         EnsureIndexIntent value => value.Definition.Keys
             .Where(static key => key.Column is not null)
             .Select(static key => key.Column!),
@@ -393,7 +417,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
     {
         await using var command = connection.CreateCommand();
         ApplyCommandTimeout(command, commandTimeout);
-        command.CommandText = "SELECT @@default_storage_engine, @@innodb_default_row_format, @@innodb_page_size;";
+        command.CommandText = "SELECT @@default_storage_engine, @@innodb_default_row_format, @@innodb_page_size, "
+            + "@@character_set_database, @@SESSION.sql_mode, VERSION();";
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken))
@@ -405,16 +430,34 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         var rowFormat = reader.IsDBNull(1) ? null : reader.GetString(1);
         var pageSize = Convert.ToInt32(reader.GetValue(2), CultureInfo.InvariantCulture);
         var dynamicMaximumKeyBytes = MaximumIndexKeyBytes(pageSize);
+        var characterSet = reader.IsDBNull(3) ? null : reader.GetString(3);
+        var sqlMode = reader.IsDBNull(4) ? string.Empty : reader.GetString(4);
+        var strictMode = sqlMode.Split(',').Any(static mode =>
+            mode.AsSpan().Trim().Equals("STRICT_TRANS_TABLES", StringComparison.OrdinalIgnoreCase)
+            || mode.AsSpan().Trim().Equals("STRICT_ALL_TABLES", StringComparison.OrdinalIgnoreCase));
+
+        var isMariaDb = reader.GetString(5).Contains("MariaDB", StringComparison.OrdinalIgnoreCase);
+        var supportsQuotedExpressionDefaults = isMariaDb
+            || !sqlMode.Split(',').Any(static mode =>
+                mode.AsSpan().Trim().Equals("NO_BACKSLASH_ESCAPES", StringComparison.OrdinalIgnoreCase));
 
         return new IndexEnvironmentDefaults(
-            CreateIndexPhysicalEnvironment(engine, rowFormat, dynamicMaximumKeyBytes),
-            dynamicMaximumKeyBytes);
+            CreateIndexPhysicalEnvironment(engine, rowFormat, dynamicMaximumKeyBytes, pageSize) with
+            {
+                DefaultCharacterSet = characterSet,
+                StrictSqlMode = strictMode,
+                SupportsQuotedExpressionDefaults = supportsQuotedExpressionDefaults,
+                SupportsTextExpressionControlCharacters = !isMariaDb,
+            },
+            dynamicMaximumKeyBytes,
+            pageSize);
     }
 
     private static SafeMigrationIndexPhysicalEnvironment CreateIndexPhysicalEnvironment(
         string? engine,
         string? rowFormat,
-        int dynamicMaximumKeyBytes
+        int dynamicMaximumKeyBytes,
+        int pageSize
     )
     {
         if (!StringComparer.OrdinalIgnoreCase.Equals(engine, "InnoDB"))
@@ -426,7 +469,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             StringComparer.OrdinalIgnoreCase.Equals(rowFormat, "Compact")
             || StringComparer.OrdinalIgnoreCase.Equals(rowFormat, "Redundant")
                 ? 767
-                : dynamicMaximumKeyBytes);
+                : dynamicMaximumKeyBytes,
+            StorageRowFormat: rowFormat,
+            StoragePageSize: pageSize);
     }
 
     private static int MaximumIndexKeyBytes(
@@ -440,5 +485,6 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
     private readonly record struct IndexEnvironmentDefaults(
         SafeMigrationIndexPhysicalEnvironment DefaultEnvironment,
-        int DynamicMaximumKeyBytes);
+        int DynamicMaximumKeyBytes,
+        int PageSize);
 }

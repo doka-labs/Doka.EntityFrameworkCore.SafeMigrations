@@ -88,7 +88,8 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             parameterizeValues: _planCapture.IsActive,
             requiredDatabaseQualifiers: _planCapture.HasGenerationContract
                 ? _planCapture.GenerationDatabaseQualifiers
-                : null);
+                : null,
+            requiresNullFreeBackfill: _planCapture.RequiresNullFreeBackfill(operation));
         if (_planCapture.IsActive)
         {
             _planCapture.Record(context.OperationOrdinal, operation, runtimePlan);
@@ -161,7 +162,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             // WHY: An exact match needs no repair proof. Its classification belongs to the first
             // existing evaluation fragment after identity, existence and guard decisions; it is
             // not an extra provider fragment and is never retained across operations or their DDL.
-            var matchingPrecondition = operation.Intent is EnsureColumnIntent
+            var matchingPrecondition = operation.Intent is EnsureColumnIntent or AlterColumnIntent
                 && runtimePlan.RepairCapability == SafeMigrationRepairCapability.Safe
                     ? runtimePlan.RenderPreparedExecutionPostcondition(renderedParameterValues)
                     : null;
@@ -953,6 +954,17 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             operation.Intent,
             _expressionRenderer.Render,
             static collation => collation.Schema is null ? collation.Name : null);
+
+        if (runtimePlan.NullabilityDataProbe is not null
+            && standardOperation is AlterColumnOperation alterColumn
+            && operation.Intent is AlterColumnIntent alterIntent
+            && !SafeMigrationColumnRepairHelper.HasProvablyNonNullDefault(alterIntent.Definition.DefaultValue))
+        {
+            // WHY: The guarded NULL proof rejects every row requiring a
+            // backfill. Suppress provider backfill generation only on this
+            // path; explicit non-null defaults retain their existing UPDATE.
+            alterColumn.OldColumn.IsNullable = alterColumn.IsNullable;
+        }
 
         return context.RenderStandardOperation(standardOperation);
     }

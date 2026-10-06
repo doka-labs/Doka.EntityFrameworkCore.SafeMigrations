@@ -382,6 +382,39 @@ assessments that do not plan repair DDL. Explicit
 baseline; only inferred `EnsureColumnIntent` repair needs a separately rendered
 branch.
 
+Explicit alterations reuse the provider transition kernel but add exact old
+definition matching before physical eligibility or data probes. Eligibility is
+operation-specific; a physical column/length row fact may be shared only after
+each operation passes its own source contract. Core retains source identity,
+accepted intermediate column definitions, and row-proof freshness. It does not
+relax the provider-neutral same-type helper into a general conversion rule.
+MySQL/MariaDB capture candidate evidence against an existing table's original
+physical identity for later alterations and indexes after a rename. A candidate
+is consumed only after Core accepts that rename; an occupied target, intervening
+unproven mutation, or incompatible source cannot create an alias proof.
+Provider-specific validation checks cumulative declared-row, InnoDB in-page row,
+and key limits against the accepted intermediate shape. Physical keys survive
+certified repairs; an unproven mutation cannot silently erase their budget.
+New-table emptiness replaces a row scan only,
+never a storage or dependency proof. Backfill-capable repairs and applied
+model-managed data operations invalidate cross-table row evidence because their
+updates, inserts, or deletes can fire triggers. Exact model-managed row tracking
+is separate from the lifetime of a captured live-data proof.
+After an accepted lossless expansion, a later alteration may use the original
+declared value domain only when provider evidence certifies the entire intervening
+column history and that domain fits the final target. A stale live `Matching`
+result alone is not a conversion proof. Recreated tables use creation defaults
+rather than the removed table's physical environment. A database-default change
+invalidates inherited charset evidence for subsequently created tables; it does
+not alter the charset already inherited by an earlier table or invalidate an
+independently resolved explicit column collation.
+
+SQLite's existing validated rebuild path can retain an exact same-shape column
+repair after unrelated safe column drops. This requires a provider certificate,
+an untouched source column, drop-only table history, and current row evidence.
+Other structural changes, opaque operations, recreated tables, and stale proofs
+cannot use that exception; it does not make the immutable snapshot sequence-aware.
+
 Missing MySQL/MariaDB BTREE indexes have an additional physical-achievability
 guard. The catalog plan calculates conservative maximum key bytes from the
 live InnoDB row format and page size, the referenced column metadata, and the

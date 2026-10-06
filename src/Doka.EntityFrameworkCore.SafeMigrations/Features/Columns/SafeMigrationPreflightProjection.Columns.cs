@@ -76,7 +76,7 @@ internal sealed partial class SafeMigrationPreflightProjection
                 intent.Definition.Name,
                 out var projectedDefinition))
         {
-            return AnalyzeAlterColumn(projectedDefinition, intent);
+            return AnalyzeAlterColumn(projectedDefinition, intent, liveAnalysis);
         }
 
         if (IsProjectedColumnMissing(intent.Table, intent.Schema, intent.Definition.Name))
@@ -91,22 +91,48 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         if (!TryGet(intent.Table, intent.Schema, out var table))
         {
+            var key = new TableKey(intent.Table, intent.Schema);
+            if (liveAnalysis.CanReuseAfterUnrelatedColumnDrops
+                && liveAnalysis.ObservedState == SafeMigrationObservedState.Different
+                && liveAnalysis.RepairCapability == SafeMigrationRepairCapability.Safe
+                && intent.OldDefinition is not null
+                && SafeMigrationColumnRepairHelper.CanSafelyAlterColumn(intent.OldDefinition, intent.Definition)
+                && _projectedColumnDropOnlyTables?.Contains(key) == true
+                && (!_prerequisites.TryGetValue(key, out var sourcePrerequisites)
+                    || !sourcePrerequisites.NewlyCreated)
+                && !_projectedUnknownPhysicalKeys.Contains(key)
+                && !HasProjectedAlterForeignKeyDependency(intent))
+            {
+                return HasUnanalyzedDataChanges(intent.Table, intent.Schema)
+                    ? DataStateUnknown()
+                    : liveAnalysis;
+            }
+
+            if (_projectedColumnAnalyzer is not null
+                && intent.OldDefinition is not null
+                && liveAnalysis.RepairCapability == SafeMigrationRepairCapability.Safe
+                && liveAnalysis.ObservedState == SafeMigrationObservedState.Different)
+            {
+                return AnalyzeAlterColumn(intent.OldDefinition, intent, liveAnalysis);
+            }
+
+            if (_projectedStructurallyModifiedTables.Contains(new TableKey(intent.Table, intent.Schema))
+                || IsProjectedTableStructureUnknown(intent.Table, intent.Schema))
+            {
+                return StructureStateUnknown();
+            }
+
             return HasUnanalyzedDataChanges(intent.Table, intent.Schema)
                 && liveAnalysis.ObservedState == SafeMigrationObservedState.Different
                 && intent.OldDefinition?.IsNullable == true
                 && !intent.Definition.IsNullable
                     ? DataStateUnknown()
-                    : liveAnalysis;
+                    : InvalidateStaleLiveDataProof(intent.Table, intent.Schema, liveAnalysis);
         }
 
-        var analysis = AnalyzeAlterColumn(table, intent);
-
-        return HasUnanalyzedDataChanges(table.Table, table.Schema)
-            && analysis.ObservedState == SafeMigrationObservedState.Different
-            && intent.OldDefinition?.IsNullable == true
-            && !intent.Definition.IsNullable
-                ? DataStateUnknown()
-                : analysis;
+        return table.Columns.TryGetValue(intent.Definition.Name, out var actual)
+            ? AnalyzeAlterColumn(actual, intent, liveAnalysis)
+            : Analysis(SafeMigrationObservedState.Missing);
     }
 
     private SafeMigrationProviderAnalysis Project(
@@ -210,7 +236,7 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         if (decision.Action is SafeMigrationAction.Apply or SafeMigrationAction.NoOp or SafeMigrationAction.Repair)
         {
-            SetProjectedColumnDefinition(intent.Table, intent.Schema, intent.Definition);
+            ObserveAcceptedColumnDefinition(intent.Table, intent.Schema, intent.Definition, liveAnalysis, decision);
         }
 
         if (decision.Action is SafeMigrationAction.Apply or SafeMigrationAction.Repair
@@ -221,13 +247,18 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         if (decision.Action is SafeMigrationAction.Apply or SafeMigrationAction.Repair)
         {
-            InvalidateAcceptedIndexesForColumn(intent.Table, intent.Schema, intent.Definition.Name);
+            if (!liveAnalysis.RepairPreservesPhysicalKeys)
+            {
+                InvalidateAcceptedIndexesForColumn(intent.Table, intent.Schema, intent.Definition.Name);
+            }
+
             MarkProjectedColumnChanged(intent.Table, intent.Schema, intent.Definition.Name);
         }
     }
 
     private void Observe(
         AlterColumnIntent intent,
+        SafeMigrationProviderAnalysis analysis,
         SafeMigrationDecision decision
     )
     {
@@ -242,7 +273,7 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         if (decision.Action is SafeMigrationAction.NoOp or SafeMigrationAction.Repair)
         {
-            SetProjectedColumnDefinition(intent.Table, intent.Schema, intent.Definition);
+            ObserveAcceptedColumnDefinition(intent.Table, intent.Schema, intent.Definition, analysis, decision);
         }
 
         if (decision.Action == SafeMigrationAction.Repair
@@ -253,7 +284,11 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         if (decision.Action == SafeMigrationAction.Repair)
         {
-            InvalidateAcceptedIndexesForColumn(intent.Table, intent.Schema, intent.Definition.Name);
+            if (!analysis.RepairPreservesPhysicalKeys)
+            {
+                InvalidateAcceptedIndexesForColumn(intent.Table, intent.Schema, intent.Definition.Name);
+            }
+
             MarkProjectedColumnChanged(intent.Table, intent.Schema, intent.Definition.Name);
         }
     }
@@ -338,22 +373,10 @@ internal sealed partial class SafeMigrationPreflightProjection
         SetOpaqueProviderPostcondition(mayMutateData: false);
     }
 
-    private static SafeMigrationProviderAnalysis AnalyzeAlterColumn(
-        ProjectedTable table,
-        AlterColumnIntent intent
-    )
-    {
-        if (!table.Columns.TryGetValue(intent.Definition.Name, out var actual))
-        {
-            return Analysis(SafeMigrationObservedState.Missing);
-        }
-
-        return AnalyzeAlterColumn(actual, intent);
-    }
-
-    private static SafeMigrationProviderAnalysis AnalyzeAlterColumn(
+    private SafeMigrationProviderAnalysis AnalyzeAlterColumn(
         ExpectedColumnDefinition actual,
-        AlterColumnIntent intent
+        AlterColumnIntent intent,
+        SafeMigrationProviderAnalysis liveAnalysis
     )
     {
         ArgumentNullException.ThrowIfNull(actual);
@@ -363,13 +386,145 @@ internal sealed partial class SafeMigrationPreflightProjection
             return Analysis(SafeMigrationObservedState.Matching);
         }
 
-        var repair = intent.OldDefinition is not null
-            && SafeMigrationDefinitionEquivalence.Column(actual, intent.OldDefinition)
-            && SafeMigrationColumnRepairHelper.CanSafelyAlterColumn(intent.OldDefinition, intent.Definition)
-                ? SafeMigrationRepairCapability.Safe
-                : SafeMigrationRepairCapability.None;
+        if (intent.OldDefinition is null
+            || !SafeMigrationDefinitionEquivalence.Column(actual, intent.OldDefinition))
+        {
+            return Analysis(SafeMigrationObservedState.Different);
+        }
 
-        return Analysis(SafeMigrationObservedState.Different, repair);
+        var key = new TableKey(intent.Table, intent.Schema);
+        if (IsProjectedTableStructureUnknown(intent.Table, intent.Schema)
+            || _projectedUnknownPhysicalKeys.Contains(key))
+        {
+            return StructureStateUnknown();
+        }
+
+        var provesEmpty = _prerequisites.TryGetValue(key, out var prerequisites)
+            && ProvesTableEmpty(intent.Table, intent.Schema, prerequisites);
+        var dataChanged = HasUnanalyzedDataChanges(intent.Table, intent.Schema);
+        var tightensNullability = actual.IsNullable && !intent.Definition.IsNullable;
+
+        // WHY: An exact old shape proves no facts about existing rows. A
+        // projected definition must never erase a provider's blocking NULL or
+        // length evidence, nor reuse that evidence after accepted DML.
+        if (!provesEmpty
+            && (liveAnalysis.RequiresLiveDataProof
+                || tightensNullability))
+        {
+            if (dataChanged)
+            {
+                return DataStateUnknown();
+            }
+
+            if (liveAnalysis.ObservedState == SafeMigrationObservedState.DataBlocked)
+            {
+                return liveAnalysis;
+            }
+        }
+
+        var repair = SafeMigrationColumnRepairHelper.CanSafelyAlterColumn(actual, intent.Definition)
+            ? SafeMigrationRepairCapability.Safe
+            : SafeMigrationRepairCapability.None;
+
+        if (tightensNullability
+            && !provesEmpty
+            && liveAnalysis.RepairCapability != SafeMigrationRepairCapability.Safe)
+        {
+            repair = SafeMigrationRepairCapability.None;
+        }
+
+        var analysis = Analysis(SafeMigrationObservedState.Different, repair);
+        var canReuseLiveProof = !_projectedStructurallyModifiedTables.Contains(key)
+            && !IsProjectedTableStructureUnknown(intent.Table, intent.Schema)
+            && (!liveAnalysis.RequiresLiveDataProof || !dataChanged);
+
+        _tables.TryGetValue(key, out var table);
+
+        if (canReuseLiveProof
+            && liveAnalysis.ObservedState == SafeMigrationObservedState.Different
+            && liveAnalysis.RepairCapability == SafeMigrationRepairCapability.Safe)
+        {
+            analysis = liveAnalysis;
+        }
+
+        return _projectedColumnAnalyzer?.ValidateProjectedAlterColumn(
+                intent,
+                actual,
+                new SafeMigrationProjectedAlterColumnContext(
+                    (ISafeMigrationProjectedAlterTable?)table ?? new ProjectedAlterTableView(this, key),
+                    HasCompleteTable: table is not null,
+                    ProvesEmpty: provesEmpty,
+                    HasForeignKeyDependency: HasProjectedAlterForeignKeyDependency(intent),
+                    CanReuseLiveProof: canReuseLiveProof,
+                    HasDataMutation: dataChanged,
+                    PreservesLiveValueDomain: !dataChanged
+                        && TryGetProjectedColumnState(intent.Table, intent.Schema, actual.Name, out var state)
+                        && state.PreservesLiveValueDomain,
+                    CanReuseCreationCharacterSet: table?.CanReuseCreationCharacterSet == true),
+                liveAnalysis,
+                analysis)
+            ?? analysis;
+    }
+
+    private void ObserveAcceptedColumnDefinition(
+        string table,
+        string? schema,
+        ExpectedColumnDefinition definition,
+        SafeMigrationProviderAnalysis analysis,
+        SafeMigrationDecision decision
+    )
+    {
+        var hasPrevious = TryGetProjectedColumnState(table, schema, definition.Name, out var previous);
+        var preservesDomain = decision.Action switch
+        {
+            SafeMigrationAction.NoOp => hasPrevious && previous.PreservesLiveValueDomain,
+            SafeMigrationAction.Repair => analysis.RepairPreservesLiveValueDomain
+                && !analysis.RepairMutatesData
+                && (!hasPrevious || previous.PreservesLiveValueDomain),
+            _ => false,
+        };
+
+        // WHY: A later certificate cannot erase an earlier uncertified conversion.
+        // Row epochs are checked separately because triggers can mutate another table.
+        SetProjectedColumnDefinition(table, schema, definition, preservesDomain);
+    }
+
+    /// <summary>Reads accepted facts for an incomplete table without inventing missing live definitions.</summary>
+    private sealed class ProjectedAlterTableView(
+        SafeMigrationPreflightProjection projection,
+        TableKey key
+    ) : ISafeMigrationProjectedAlterTable
+    {
+        /// <inheritdoc />
+        public IEnumerable<ExpectedColumnDefinition> Columns =>
+            projection._projectedColumnStates.TryGetValue(key, out var columns)
+                ? columns.Values.Where(static value => value.Definition is not null)
+                    .Select(static value => value.Definition!)
+                : [];
+
+        /// <inheritdoc />
+        public ExpectedPrimaryKeyDefinition? PrimaryKey =>
+            projection._prerequisites.TryGetValue(key, out var prerequisites) ? prerequisites.PrimaryKey : null;
+
+        /// <inheritdoc />
+        public IEnumerable<ExpectedUniqueConstraintDefinition> UniqueConstraints =>
+            projection._prerequisites.TryGetValue(key, out var prerequisites)
+                ? prerequisites.UniqueConstraints.Definitions
+                : [];
+
+        /// <inheritdoc />
+        public IEnumerable<ExpectedIndexDefinition> Indexes =>
+            projection._prerequisites.TryGetValue(key, out var prerequisites)
+                ? prerequisites.Indexes.Definitions
+                : [];
+
+        /// <inheritdoc />
+        public bool TryGetProjectedColumn(
+            string table,
+            string? schema,
+            string column,
+            [NotNullWhen(true)] out ExpectedColumnDefinition? definition
+        ) => projection.TryGetProjectedColumnDefinition(key.Table, key.Schema, column, out definition);
     }
 
     private sealed partial class ProjectedTable
