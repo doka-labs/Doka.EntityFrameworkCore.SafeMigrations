@@ -640,7 +640,7 @@ Each schema-version-3 assessment exposes:
 | `DecisionCode` | Provider-neutral policy-decision code |
 | `Differences` | At most 16 typed catalog-facet differences with bounded printable ASCII metadata |
 | `OperationalImpact` | `NotApplicable`, `TableRewritePossible`, or `Unknown` |
-| `DeferredOrigin` | Owning migration ID when known, zero-based operation ordinal, and CLR type of the earlier raw SQL operation requiring runtime validation; otherwise null |
+| `DeferredOrigin` | Owning migration ID when known, zero-based operation ordinal, and CLR type of the preceding proof-invalidating operation requiring runtime validation; otherwise null |
 
 Representative difference facets include `column_store_type`,
 `column_max_length`, `column_collation`, `foreign_key_delete_behavior`,
@@ -665,7 +665,7 @@ digest.
 | `NoOperations` | No operation was assessed; verify intended target/history separately |
 | `Ready` | Preflight permits the safe sequence subject to external gates; postflight confirms all supplied safe postconditions |
 | `ReadyWithProviderOperations` | Safe operations are accepted, but ordinary EF or provider operations remain unanalyzed and need independent artifact and postcondition review |
-| `RuntimeValidationRequired` | Earlier raw SQL makes later safe states unprovable from a read-only snapshot; review the SQL independently and rely on the ordered runtime guards |
+| `RuntimeValidationRequired` | Earlier raw SQL or unconfined data changes make later states unprovable from a read-only snapshot; review provider-owned SQL independently and rely on the ordered runtime guards |
 | `Blocked` | One or more operations reject; do not execute/continue deployment |
 
 `SafeMigrationObservedState.TransitionReady` is used only when a captured
@@ -708,9 +708,13 @@ Zero and undefined enum values throw before output is written.
 `RuntimeValidationRequired` is a preflight status distinct from `Ready` and
 `Blocked`. A later safe assessment with `ValidateAtRuntime` has nullable state
 and postcondition, code `runtime_validation_required`, and a `DeferredOrigin`
-containing the preceding raw SQL's migration ID (null for ad-hoc streams),
+containing the preceding proof-invalidating operation's migration ID (null for ad-hoc streams),
 stream ordinal, and CLR operation type. `ThrowIfBlocked()` does not throw for
 this status; runtime guards make the actual decision in operation order.
+For model-managed data, unconfined writes invalidate earlier exact rows and
+dependency evidence. Later unprovable seed assessments carry analysis code
+`projected_model_managed_data_state_unknown`; deferred writes establish no new
+postconditions. The existing guarded execution remains authoritative.
 Independently proven blockers remain `Blocked`. The
 [version 1 view schema](../schemas/safe-migration-report-view-v1.schema.json)
 remains available for previously persisted views.

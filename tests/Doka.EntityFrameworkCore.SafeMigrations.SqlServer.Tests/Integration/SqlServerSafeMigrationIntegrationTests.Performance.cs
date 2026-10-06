@@ -5,6 +5,35 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
     private const int ExpectedPerformanceTableCount = 100;
     private const int ForeignPerformanceTableCount = 1000;
     private const int PerformanceFixtureCommandTimeoutSeconds = 180;
+    private const string MixedStressSchemaSql =
+        "CREATE TABLE dbo.sqlserver_stress_target (id int NOT NULL); "
+        + "INSERT INTO dbo.sqlserver_stress_target VALUES (1); "
+        + "CREATE TABLE dbo.sqlserver_stress_alter (caption varchar(10) NOT NULL); "
+        + "INSERT INTO dbo.sqlserver_stress_alter VALUES ('short'); "
+        + "CREATE TABLE dbo.sqlserver_stress_managed (id int NOT NULL PRIMARY KEY, "
+        + "managed_value nvarchar(32) NOT NULL);";
+
+    /// <summary>Checks managed-data deferral in several mixed-stream cycles before costly stress qualification.</summary>
+    [SqlServerLiveFact]
+    public async Task Analyzer_BoundedMixedOperationsRetainExactDeferredContracts()
+    {
+        // Arrange
+        var connectionString = await CreateDatabaseAsync();
+        await ExecuteSqlAsync(connectionString, MixedStressSchemaSql);
+        await PopulateStressModelManagedRowsAsync(connectionString);
+        await using var context = CreateContext(connectionString);
+        context.Database.SetCommandTimeout(PerformanceFixtureCommandTimeoutSeconds);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        var expectation = LargeMigrationStressContract.Populate(
+            builder, LargeMigrationStressDialect.SqlServer, operationCount: 128);
+
+        // Act
+        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
+            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-bounded-mixed-migration"));
+
+        // Assert
+        expectation.AssertReport(report);
+    }
 
     /// <summary>
     /// Classifies every mixed operation in the shared hundred-thousand-operation contract in original order.
@@ -16,13 +45,7 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
         // Arrange
         SqlServerLiveQualificationEvidence.WriteStage("mixed-100k", "fixture-setup");
         var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE dbo.sqlserver_stress_target (id int NOT NULL); "
-            + "INSERT INTO dbo.sqlserver_stress_target VALUES (1); "
-            + "CREATE TABLE dbo.sqlserver_stress_alter (caption varchar(10) NOT NULL); "
-            + "INSERT INTO dbo.sqlserver_stress_alter VALUES ('short'); "
-            + "CREATE TABLE dbo.sqlserver_stress_managed (id int NOT NULL PRIMARY KEY, "
-            + "managed_value nvarchar(32) NOT NULL);");
+        await ExecuteSqlAsync(connectionString, MixedStressSchemaSql);
         SqlServerLiveQualificationEvidence.WriteStage("mixed-100k", "populate-source-rows");
         await PopulateStressModelManagedRowsAsync(connectionString);
         await using var context = CreateContext(connectionString);

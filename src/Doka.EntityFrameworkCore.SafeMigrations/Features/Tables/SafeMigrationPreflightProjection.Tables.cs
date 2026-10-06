@@ -148,6 +148,10 @@ internal sealed partial class SafeMigrationPreflightProjection
         {
             _renamedTableSources.Remove(key);
             _projectedMissingTables.Remove(key);
+            // WHY: Row mutations belong to the old physical lifetime, not a
+            // newly created relation that happens to reuse the same name.
+            _projectedDataMutationTables.Remove(key);
+            _modelManagedLocalOrigins?.Remove(key);
             _projectedUnknownTableStructures.Remove(key);
             _projectedUnknownPhysicalKeys.Remove(key);
             _projectedStructurallyModifiedTables.Remove(key);
@@ -243,6 +247,7 @@ internal sealed partial class SafeMigrationPreflightProjection
             _projectedUnknownPhysicalKeys.Remove(key);
             _prerequisites.Remove(key);
             _projectedDataMutationTables.Remove(key);
+            _modelManagedLocalOrigins?.Remove(key);
             _projectedModelManagedUniqueKeys.Remove(key);
             _projectedUnknownTableStructures.Remove(key);
             _projectedStructurallyModifiedTables.Remove(key);
@@ -269,12 +274,10 @@ internal sealed partial class SafeMigrationPreflightProjection
             && prerequisites.NewlyCreated
             && _tables.Remove(source, out var table))
         {
-            _projectedModelManagedUniqueKeys.Remove(source, out var projectedUniqueKeys);
-            InvalidateModelManagedDataProjection();
-
             var targetTable = intent.NewName ?? intent.Name;
             var targetSchema = intent.NewSchema ?? intent.Schema;
             var target = new TableKey(targetTable, targetSchema);
+            RenameModelManagedTable(source, target);
             var physicalSource = _renamedTableSources.Remove(source, out var originalSource) ? originalSource : source;
 
             _renamedTableSources[target] = physicalSource;
@@ -300,14 +303,6 @@ internal sealed partial class SafeMigrationPreflightProjection
             if (_projectedDataMutationTables.Remove(source))
             {
                 _projectedDataMutationTables.Add(target);
-            }
-
-            if (projectedUniqueKeys is not null)
-            {
-                // WHY: Renaming a table cannot change the uniqueness of rows
-                // accepted earlier in this batch. Retain that exact proof so a
-                // following unique index does not fail on stale table identity.
-                _projectedModelManagedUniqueKeys.Add(target, projectedUniqueKeys);
             }
 
             _prerequisites.Remove(source);

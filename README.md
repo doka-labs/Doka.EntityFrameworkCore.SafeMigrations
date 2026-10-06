@@ -753,6 +753,13 @@ safe operation is catalog- and data-checked again when execution reaches it.
 Raw SQL itself remains provider-owned and unanalyzed. On MySQL/MariaDB, earlier
 DDL can already be committed if a later guard rejects the migration.
 
+Model-managed seed operations also use runtime validation when preceding
+unconfined writes or discarded row evidence invalidate their read-only proof.
+This includes ordered child/parent deletes: old dependency counts cannot account
+for trigger side effects. `DeferredOrigin` identifies the preceding invalidation.
+Direct guarded row postconditions and confined inserts into newly created plain
+tables retain their proven classifications; untouched conflicts still block.
+
 For focused operator output, serialize a self-describing report view instead
 of copying or mutating the immutable report:
 

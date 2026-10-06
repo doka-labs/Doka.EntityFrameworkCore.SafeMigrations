@@ -217,11 +217,21 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
             "SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.authored_seed_keys') "
             + "AND name = N'IX_authored_seed_keys_Code';");
 
+        var origin = report.Assessments[2].DeferredOrigin;
+
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, initial.Status);
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[1].Action);
-        Assert.Equal(SafeMigrationAction.Apply, report.Assessments[2].Action);
+        Assert.Equal(SafeMigrationAction.ValidateAtRuntime, report.Assessments[2].Action);
+        Assert.Null(report.Assessments[2].ObservedState);
+        Assert.Null(report.Assessments[2].PostconditionSatisfied);
+        Assert.Equal("projected_model_managed_data_state_unknown", report.Assessments[2].AnalysisCode);
+        Assert.Equal("runtime_validation_required", report.Assessments[2].DecisionCode);
+        Assert.NotNull(origin);
+        Assert.Equal(1, origin.OperationOrdinal);
+        Assert.Equal(typeof(SafeMigrationOperation).FullName, origin.OperationType);
+        Assert.Null(origin.MigrationId);
         Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, report.Assessments[3].Action);
         Assert.Equal("projected_data_state_unknown", report.Assessments[3].AnalysisCode);
         Assert.Equal(1, originalCount);

@@ -56,7 +56,10 @@ public sealed partial class SqliteSafeMigrationCatalogIntegrationTests
             builder.Operations,
             new SafeMigrationRunOptions("sqlite-composite-model-data-replay"));
 
-        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
+        Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
+        Assert.Equal(SafeMigrationAction.Apply, preflight.Assessments[0].Action);
+        Assert.Equal(SafeMigrationAction.ValidateAtRuntime, preflight.Assessments[1].Action);
+        Assert.Equal(SafeMigrationAction.ValidateAtRuntime, preflight.Assessments[2].Action);
         Assert.All(replay.Assessments, assessment => Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
         Assert.Equal(
             2,
@@ -277,10 +280,10 @@ public sealed partial class SqliteSafeMigrationCatalogIntegrationTests
             builder.Operations,
             new SafeMigrationRunOptions("sqlite-managed-dependency-replay"));
 
-        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
-        Assert.All(preflight.Assessments, assessment =>
-            Assert.Equal(SafeMigrationObservedState.TransitionReady, assessment.ObservedState));
-        Assert.Equal("projected_dependency_handoff", preflight.Assessments[1].Code);
+        Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
+        Assert.Equal(SafeMigrationObservedState.TransitionReady, preflight.Assessments[0].ObservedState);
+        Assert.Equal(SafeMigrationAction.ValidateAtRuntime, preflight.Assessments[1].Action);
+        Assert.Equal("projected_model_managed_data_state_unknown", preflight.Assessments[1].AnalysisCode);
         Assert.Equal(SafeMigrationReportStatus.Ready, replay.Status);
         Assert.All(replay.Assessments, assessment => Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
         Assert.Equal(0, await ScalarIntAsync(connection, "SELECT COUNT(*) FROM managed_roles;"));

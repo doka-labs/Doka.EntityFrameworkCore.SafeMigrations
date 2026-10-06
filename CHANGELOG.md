@@ -9,8 +9,9 @@ the shared release identity described in [Release process](docs/release-process.
 ## [10.4.8] - 2026-10-06
 
 Prepare stable 10.4.8 for all five packages. This patch corrects explicit
-lossless column transitions, ordered proof invalidation and rename-destination
-checks, and hardens MySQL/MariaDB default identity and setup compaction.
+lossless column transitions, ordered proof invalidation, model-managed seed
+projection and rename-destination checks, and hardens MySQL/MariaDB default
+identity and setup compaction.
 Public APIs, dependency ranges, migration source, policies, report schemas,
 and history remain unchanged; existing migrations do not need regeneration.
 
@@ -19,8 +20,36 @@ the full qualification matrix, signed `v10.4.8` source identity, all five exact
 NuGet primary and symbol packages, and verified GitHub Release, SBOM,
 provenance, attestation, and public package readback evidence.
 
+### Changed
+
+- Multi-step model-managed writes into existing tables can now report
+  `RuntimeValidationRequired` instead of `Ready` when earlier operations make
+  their seed-row or dependency evidence stale. Deferred assessments use
+  `ValidateAtRuntime` with null `ObservedState` and `PostconditionSatisfied`;
+  `DeferredOrigin` identifies the invalidating operation. `ThrowIfBlocked()`
+  does not throw for this status: ordered runtime guards remain authoritative.
+  Consumers gating deployment on `Status == Ready` must explicitly handle
+  runtime validation rather than treating it as either proven readiness or a
+  proven conflict. Migration source, public signatures and report schemas
+  do not change.
+
 ### Fixed
 
+- Preserve unrelated row-safety proofs across model-managed inserts into
+  newly created plain tables. Generated initial migrations can seed one table
+  before adding a deferred cyclic foreign key on another table in both strict
+  and convergence modes. Existing tables, opaque structures, SQL-bearing
+  artifacts, updates and deletes retain global data-proof invalidation.
+  Local mutation markers follow table renames and reset on physical recreation.
+- Invalidate exact seed-row and candidate-key evidence before unconfined
+  model-managed writes, provider DML, and data-changing repairs. Later seed
+  states that cannot be proven use the existing `RuntimeValidationRequired`
+  report outcome instead of stale live classifications or count-only delete
+  handoffs. Ordered child/parent deletes remain guarded at runtime, including
+  intervening trigger effects; untouched conflicts still block. Pure table
+  renames preserve owned row evidence, and discarded row knowledge cannot
+  recreate an empty-table proof. Newly projected incoming FKs absent from a
+  delete's frozen dependency metadata are rejected before execution.
 - Reuse provider-proven lossless column transitions for explicit
   `AlterColumnIfDifferent` operations under `RepairIfSafe`, including generated
   `AlterColumnIfDifferentFromModel` calls. MySQL/MariaDB retain their existing

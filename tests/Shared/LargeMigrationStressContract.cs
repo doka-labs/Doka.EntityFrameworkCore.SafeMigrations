@@ -17,26 +17,34 @@ internal static class LargeMigrationStressContract
     private const int MissingIndexColumnLag = 10;
     private const int MissingUniqueConstraintColumnLag = 14;
 
+    /// <summary>Builds the same ordered mixed stream for a bounded regression or full qualification.</summary>
+    /// <param name="builder">The migration operation sink.</param>
+    /// <param name="dialect">The fixture's provider-specific contract.</param>
+    /// <param name="operationCount">The bounded prefix length; full qualification retains 100,000 operations.</param>
     public static LargeMigrationStressExpectation Populate(
         MigrationBuilder builder,
-        LargeMigrationStressDialect dialect
+        LargeMigrationStressDialect dialect,
+        int operationCount = OperationCount
     )
     {
         ArgumentNullException.ThrowIfNull(builder);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(operationCount);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(operationCount, OperationCount);
 
         var scenarios = CreateScenarios(dialect);
 
         // Missing resources use ordinal-specific definitions. A different name
         // alone cannot make a semantically identical index or constraint a new
         // object, so the stress catalog varies structural identity as well.
-        for (var ordinal = 0; ordinal < OperationCount; ordinal++)
+        for (var ordinal = 0; ordinal < operationCount; ordinal++)
         {
             scenarios[ordinal % scenarios.Count].AddOperation(builder, ordinal);
         }
 
         return new LargeMigrationStressExpectation(
             scenarios,
-            allowUnexpectedObjects: dialect == LargeMigrationStressDialect.SqlServer);
+            allowUnexpectedObjects: dialect == LargeMigrationStressDialect.SqlServer,
+            operationCount);
     }
 
     public static IEnumerable<int> ModelManagedUpdateOrdinals(
@@ -873,16 +881,25 @@ internal sealed class LargeMigrationStressExpectation
 {
     private readonly IReadOnlyList<LargeMigrationStressScenario> _scenarios;
     private readonly bool _allowUnexpectedObjects;
+    private readonly int _operationCount;
 
+    /// <summary>Captures the source scenarios and exact size of the ordered report to verify.</summary>
+    /// <param name="scenarios">The repeating immutable source-state contracts.</param>
+    /// <param name="allowUnexpectedObjects">Whether the SQL Server fixture permits stamped catalog artifacts.</param>
+    /// <param name="operationCount">The number of operations populated for this run.</param>
     public LargeMigrationStressExpectation(
         IReadOnlyList<LargeMigrationStressScenario> scenarios,
-        bool allowUnexpectedObjects = false
+        bool allowUnexpectedObjects = false,
+        int operationCount = LargeMigrationStressContract.OperationCount
     )
     {
         ArgumentNullException.ThrowIfNull(scenarios);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(operationCount);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(operationCount, LargeMigrationStressContract.OperationCount);
 
         _scenarios = scenarios;
         _allowUnexpectedObjects = allowUnexpectedObjects;
+        _operationCount = operationCount;
     }
 
     public void AssertReport(
@@ -893,17 +910,18 @@ internal sealed class LargeMigrationStressExpectation
 
         Assert.Equal(SafeMigrationReportMode.Preflight, report.Mode);
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(LargeMigrationStressContract.OperationCount, report.Assessments.Count);
+        Assert.Equal(_operationCount, report.Assessments.Count);
         if (!_allowUnexpectedObjects)
         {
             Assert.Empty(report.UnexpectedObjects);
         }
 
 
-        var stateCounts = new int[Enum.GetValues<SafeMigrationObservedState>().Length];
+        var sourceStateCounts = new int[Enum.GetValues<SafeMigrationObservedState>().Length];
         var actionCounts = new int[Enum.GetValues<SafeMigrationAction>().Length];
         var convergedScenarios = new bool[_scenarios.Count];
         var projectedDataMutationSeen = false;
+        var managedMutationOrigin = -1;
 
         for (var ordinal = 0; ordinal < report.Assessments.Count; ordinal++)
         {
@@ -911,28 +929,47 @@ internal sealed class LargeMigrationStressExpectation
             var scenario = _scenarios[scenarioIndex];
             var assessment = report.Assessments[ordinal];
             var alreadyConverged = convergedScenarios[scenarioIndex];
+            var mutatesModelManagedData = scenario.OperationKind is
+                SafeMigrationOperationKind.EnsureModelManagedData
+                or SafeMigrationOperationKind.UpdateModelManagedData
+                or SafeMigrationOperationKind.DeleteModelManagedData;
+
+            // WHY: These managed writes target existing tables. A prior write
+            // can fire triggers and invalidate even a live Missing/NoOp result.
+            // Deferred writes also advance the origin without inventing row facts.
+            var deferred = mutatesModelManagedData && projectedDataMutationSeen;
             var proofInvalidated = !alreadyConverged
                 && scenario.RequiresLiveDataProof
                 && projectedDataMutationSeen;
 
-            var expectedState = alreadyConverged
-                ? SafeMigrationObservedState.Matching
-                : proofInvalidated
-                    ? SafeMigrationObservedState.PrerequisiteMissing
-                    : scenario.ObservedState;
+            SafeMigrationObservedState? expectedState = deferred
+                ? null
+                : alreadyConverged
+                    ? SafeMigrationObservedState.Matching
+                    : proofInvalidated
+                        ? SafeMigrationObservedState.PrerequisiteMissing
+                        : scenario.ObservedState;
 
-            var expectedAction = alreadyConverged
-                ? SafeMigrationAction.NoOp
-                : proofInvalidated
-                    ? SafeMigrationAction.RejectPrerequisiteMissing
-                    : scenario.Action;
+            var expectedAction = deferred
+                ? SafeMigrationAction.ValidateAtRuntime
+                : alreadyConverged
+                    ? SafeMigrationAction.NoOp
+                    : proofInvalidated
+                        ? SafeMigrationAction.RejectPrerequisiteMissing
+                        : scenario.Action;
 
-            var expectedPostcondition = alreadyConverged
-                || (!proofInvalidated && scenario.PostconditionSatisfied);
+            bool? expectedPostcondition = deferred
+                ? null
+                : alreadyConverged || (!proofInvalidated && scenario.PostconditionSatisfied);
 
-            var expectedOperationalImpact = alreadyConverged || proofInvalidated
-                ? SafeMigrationOperationalImpact.NotApplicable
-                : scenario.OperationalImpact;
+            var expectedOperationalImpact = deferred
+                ? SafeMigrationOperationalImpact.Unknown
+                : alreadyConverged || proofInvalidated
+                    ? SafeMigrationOperationalImpact.NotApplicable
+                    : scenario.OperationalImpact;
+
+            Assert.True(assessment.IsSafeOperation);
+            Assert.Equal(typeof(SafeMigrationOperation).FullName, assessment.OperationType);
 
             if (assessment.Ordinal != ordinal)
             {
@@ -954,7 +991,8 @@ internal sealed class LargeMigrationStressExpectation
             {
                 Assert.Fail(
                     $"Operation {ordinal} ({scenario.OperationKind} {expectedObjectName}) "
-                    + $"expected state {expectedState}, actual {assessment.ObservedState}.");
+                    + $"expected state {expectedState?.ToString() ?? "deferred"}, "
+                    + $"actual {assessment.ObservedState?.ToString() ?? "deferred"}.");
             }
 
             if (assessment.Action != expectedAction)
@@ -973,7 +1011,29 @@ internal sealed class LargeMigrationStressExpectation
                 Assert.Equal(expectedOperationalImpact, assessment.OperationalImpact);
             }
 
-            stateCounts[(int)expectedState]++;
+            if (deferred)
+            {
+                Assert.Equal("runtime_validation_required", assessment.Code);
+                Assert.Equal("runtime_validation_required", assessment.DecisionCode);
+                Assert.Equal("projected_model_managed_data_state_unknown", assessment.AnalysisCode);
+                Assert.Empty(assessment.Differences);
+                var origin = assessment.DeferredOrigin;
+
+                Assert.NotNull(origin);
+                Assert.Equal(managedMutationOrigin, origin.OperationOrdinal);
+                Assert.Equal(typeof(SafeMigrationOperation).FullName, origin.OperationType);
+                Assert.Null(origin.MigrationId);
+            }
+            else
+            {
+                Assert.Null(assessment.DeferredOrigin);
+            }
+
+            // WHY: TransitionReady is a source-state fixture, but all such
+            // updates in MySQL/PostgreSQL follow a seed insert and must defer.
+            // Exact per-operation checks above retain coverage without counting
+            // null as an observed enum or claiming a stale state was certified.
+            sourceStateCounts[(int)scenario.ObservedState]++;
             actionCounts[(int)expectedAction]++;
 
             if (scenario.ConvergesOnFirstAcceptedMutation
@@ -982,31 +1042,18 @@ internal sealed class LargeMigrationStressExpectation
                 convergedScenarios[scenarioIndex] = true;
             }
 
-            var mutatesModelManagedData = scenario.OperationKind is
-                SafeMigrationOperationKind.EnsureModelManagedData
-                or SafeMigrationOperationKind.UpdateModelManagedData
-                or SafeMigrationOperationKind.DeleteModelManagedData;
-
             if (mutatesModelManagedData
-                && expectedAction == SafeMigrationAction.Apply)
+                && (expectedAction is SafeMigrationAction.Apply or SafeMigrationAction.ValidateAtRuntime))
             {
                 projectedDataMutationSeen = true;
+                managedMutationOrigin = ordinal;
             }
         }
 
-        Assert.DoesNotContain(0, stateCounts);
+        Assert.DoesNotContain(0, sourceStateCounts);
 
         foreach (var action in Enum.GetValues<SafeMigrationAction>())
         {
-            if (action == SafeMigrationAction.ValidateAtRuntime)
-            {
-                // WHY: This stress stream contains no raw SQL, so a deferred
-                // runtime decision would conceal a projection regression.
-                Assert.Equal(0, actionCounts[(int)action]);
-
-                continue;
-            }
-
             Assert.True(actionCounts[(int)action] > 0, $"Action {action} was not exercised.");
         }
     }

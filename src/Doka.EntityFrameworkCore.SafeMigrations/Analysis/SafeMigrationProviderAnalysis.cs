@@ -99,6 +99,15 @@ public sealed class SafeMigrationProviderAnalysis
     /// <summary>Gets whether opaque earlier operations prevent read-only state projection.</summary>
     internal bool IsOpaqueProjectionUnknown { get; init; }
 
+    /// <summary>Gets whether earlier writes invalidated this managed operation's immutable row evidence.</summary>
+    internal bool IsModelManagedProjectionUnknown { get; init; }
+
+    /// <summary>Gets whether global data effects postdate the managed target or its dependency proofs.</summary>
+    internal bool HasStaleGlobalModelManagedData { get; init; }
+
+    /// <summary>Gets the affected owner or dependency's latest local invalidation ordinal, when known.</summary>
+    internal int? ModelManagedLocalOriginOrdinal { get; init; }
+
     /// <summary>Gets whether preceding operations cannot repair this unsupported contract.</summary>
     internal bool IsInvariantUnsupported { get; init; }
 

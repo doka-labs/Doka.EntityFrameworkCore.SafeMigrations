@@ -264,7 +264,8 @@ public sealed partial class SafeMigrationModelManagedDataTests
 
             var projected = projection.Project(RoleEnsure(), live);
 
-            Assert.Same(live, projected);
+            Assert.True(projected.IsModelManagedProjectionUnknown);
+            Assert.Equal("projected_model_managed_data_state_unknown", projected.Code);
         }
     }
 
@@ -355,7 +356,8 @@ public sealed partial class SafeMigrationModelManagedDataTests
         var live = Live(SafeMigrationObservedState.PrerequisiteMissing);
         var projected = projection.Project(overlapping, live);
 
-        Assert.Same(live, projected);
+        Assert.True(projected.IsModelManagedProjectionUnknown);
+        Assert.Equal("projected_model_managed_data_state_unknown", projected.Code);
     }
 
     [Fact]
@@ -423,7 +425,7 @@ public sealed partial class SafeMigrationModelManagedDataTests
     /// <param name="mutation">The accepted structural operation.</param>
     /// <param name="expectedCode">The expected projected diagnostic.</param>
     [Theory]
-    [InlineData("column-drop", "test_live")]
+    [InlineData("column-drop", "projected_prerequisite_missing")]
     [InlineData("column-rename", "projected_structure_state_unknown")]
     [InlineData("table-drop", "projected_prerequisite_missing")]
     [InlineData("table-rename", "projected_structure_state_unknown")]

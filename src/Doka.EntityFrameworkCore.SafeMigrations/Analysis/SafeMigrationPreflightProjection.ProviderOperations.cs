@@ -2,13 +2,16 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 internal sealed partial class SafeMigrationPreflightProjection
 {
-    private void ObserveProviderDataMutation() =>
+    private void ObserveProviderDataMutation()
+    {
         // WHY: EF's typed data operations cannot change schema prerequisites, but
         // triggers can change rows beyond the named table. Preserve structural
         // facts while invalidating every data-dependent proof that existed
-        // before this operation. A monotonic version keeps this O(1) even for
-        // migrations with many seed rows and projected tables.
+        // before this operation. The epoch invalidates generic table proofs in
+        // O(1); exact rows are cleared only at these unconfined boundaries.
         _providerDataMutationVersion++;
+        InvalidateModelManagedDataProjection();
+    }
 
     private void ObserveProviderPostcondition(
         CreateTableOperation operation
@@ -47,6 +50,8 @@ internal sealed partial class SafeMigrationPreflightProjection
         RemoveProjectedColumnDefinitions(operation.Name, operation.Schema);
         RemoveDroppedPhysicalKeys(operation.Name, operation.Schema);
         _projectedMissingTables.Remove(key);
+        _projectedDataMutationTables.Remove(key);
+        _modelManagedLocalOrigins?.Remove(key);
         _projectedUnknownTableStructures.Remove(key);
         _projectedUnknownPhysicalKeys.Remove(key);
         _projectedStructurallyModifiedTables.Remove(key);
@@ -241,6 +246,8 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         _tables.Remove(key);
         _prerequisites.Remove(key);
+        _projectedDataMutationTables.Remove(key);
+        _modelManagedLocalOrigins?.Remove(key);
         _projectedMissingTables.Add(key);
         _projectedUnknownTableStructures.Remove(key);
         _projectedStructurallyModifiedTables.Remove(key);
@@ -260,14 +267,21 @@ internal sealed partial class SafeMigrationPreflightProjection
             && prerequisites.NewlyCreated
             && _tables.Remove(source, out var table))
         {
-            InvalidateModelManagedDataProjection();
-
             var targetTable = operation.NewName ?? operation.Name;
             var targetSchema = operation.NewSchema ?? operation.Schema;
             var target = new TableKey(targetTable, targetSchema);
 
+            RenameModelManagedTable(source, target);
+
             _projectedMissingTables.Add(source);
             _projectedMissingTables.Remove(target);
+            if (_projectedDataMutationTables.Remove(source))
+            {
+                // WHY: A rename moves the populated relation, not an empty
+                // replacement. Keep its local row-safety invalidation attached.
+                _projectedDataMutationTables.Add(target);
+            }
+
             RenameProjectedTableColumnDefinitions(
                 operation.Name,
                 operation.Schema,

@@ -33,13 +33,11 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             new SafeMigrationRunOptions("model-data-composite-keys-replay"),
             CancellationToken.None);
 
-        Assert.Equal(
-            [
-                SafeMigrationObservedState.Missing,
-                SafeMigrationObservedState.TransitionReady,
-                SafeMigrationObservedState.TransitionReady,
-            ],
-            preflight.Assessments.Select(static assessment => assessment.ObservedState));
+        Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
+        Assert.Equal(SafeMigrationObservedState.Missing, preflight.Assessments[0].ObservedState);
+        Assert.Equal(SafeMigrationAction.Apply, preflight.Assessments[0].Action);
+        Assert.Equal(SafeMigrationAction.ValidateAtRuntime, preflight.Assessments[1].Action);
+        Assert.Equal(SafeMigrationAction.ValidateAtRuntime, preflight.Assessments[2].Action);
         Assert.All(replay.Assessments, static assessment =>
             Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
         Assert.Equal(

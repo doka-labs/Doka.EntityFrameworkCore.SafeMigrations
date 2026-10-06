@@ -42,6 +42,9 @@ internal sealed partial class SafeMigrationPreflightProjection :
 
     internal bool HasOpaqueSqlPostcondition => _hasOpaqueSqlPostcondition;
 
+    /// <summary>Gets the revision of globally invalidated row evidence.</summary>
+    internal long DataMutationVersion => _providerDataMutationVersion;
+
     public SafeMigrationPreflightProjection(
         ISafeMigrationProviderOperationProjection? providerOperationProjection = null,
         ISafeMigrationProjectedKeyAnalyzer? projectedKeyAnalyzer = null,
@@ -316,7 +319,7 @@ internal sealed partial class SafeMigrationPreflightProjection :
                 Observe(value, decision);
                 break;
             case ModelManagedDataIntent value:
-                Observe(value, analysis, decision);
+                Observe(value, decision);
                 break;
         }
 
@@ -393,7 +396,6 @@ internal sealed partial class SafeMigrationPreflightProjection :
             case UpdateDataOperation:
             case DeleteDataOperation:
                 ObserveProviderDataMutation();
-                InvalidateModelManagedDataProjection();
                 break;
             default:
                 // WHY: An unrecognized provider operation may contain arbitrary DDL
