@@ -3,6 +3,80 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 /// <summary>Verifies deferred setup materialization retains exact SQL and transport boundaries.</summary>
 public sealed class MySqlDeferredSetupFragmentTests
 {
+    /// <summary>Suffix inspection uses emitted parts and leaves whitespace bytes unchanged.</summary>
+    /// <param name="hexadecimalSuffix">Whether encoded bytes follow the raw terminator.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void DeferredTerminatorInspectionUsesTheEmittedSuffix(bool hexadecimalSuffix)
+    {
+        // Arrange
+        var suffix = hexadecimalSuffix
+            ? MySqlSafeMigrationSetupFragment.Part.Hex(";")
+            : (MySqlSafeMigrationSetupFragment.Part)" \r\n";
+
+        var fragment = MySqlSafeMigrationSetupFragment.Compose("DO 0;", suffix, string.Empty, "\t");
+        var expected = hexadecimalSuffix ? "DO 0;3B\t" : "DO 0; \r\n\t";
+
+        // Act
+        var terminated = fragment.EndsWithStatementTerminator;
+        var rendered = fragment.ToSql();
+
+        // Assert
+        Assert.Equal(!hexadecimalSuffix, terminated);
+        Assert.Equal(expected, rendered);
+    }
+
+    /// <summary>Every storage path fills only its own destination region and preserves caller padding.</summary>
+    /// <param name="length">The fragment length covering empty, materialized, deferred, and eager paths.</param>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(20)]
+    [InlineData(4096)]
+    public void WriteToPreservesPaddingAcrossStoragePaths(int length)
+    {
+        // Arrange
+        var expected = new string('x', length);
+        var fragment = SplitRaw(expected);
+        var destination = Enumerable.Repeat('#', length + 7).ToArray();
+
+        // Act
+        fragment.WriteTo(destination.AsSpan(2));
+
+        // Assert
+        Assert.Equal(expected, new string(destination, 2, length));
+        Assert.All(destination.AsSpan(0, 2).ToArray(), character => Assert.Equal('#', character));
+        Assert.All(destination.AsSpan(length + 2).ToArray(), character => Assert.Equal('#', character));
+    }
+
+    /// <summary>
+    /// Deferred pieces preserve independent statement boundaries without materializing for inspection.
+    /// </summary>
+    /// <param name="independent">The incomplete SQL that must not be joined to either neighbor.</param>
+    [Theory]
+    [InlineData("DO 2")]
+    [InlineData("DO 2; -- trailing comment")]
+    [InlineData("")]
+    [InlineData(" \r\n")]
+    public void UnterminatedDeferredFragmentsRemainIndependent(string independent)
+    {
+        // Arrange
+        MySqlSafeMigrationSetupFragment[] setup =
+        [
+            SplitRaw("DO 0;"), SplitRaw("DO 1;"), SplitRaw(independent),
+            SplitRaw("DO 3;"), SplitRaw("DO 4;"),
+        ];
+
+        string[] expected = ["DO 0;DO 1;", independent, "DO 3;DO 4;"];
+
+        // Act
+        var compacted = Compact(setup, new string(' ', 100) + "DO 0;");
+
+        // Assert
+        Assert.Equal(expected, compacted);
+    }
+
     /// <summary>Already materialized SQL remains the original string without a second copy.</summary>
     [Fact]
     public void MaterializedFragmentReusesOriginalString()
@@ -295,6 +369,7 @@ public sealed class MySqlDeferredSetupFragmentTests
     [InlineData(1)]
     [InlineData(2)]
     [InlineData(3)]
+    [InlineData(4)]
     public void DefaultFragmentIsRejected(int member)
     {
         // Arrange
@@ -316,6 +391,9 @@ public sealed class MySqlDeferredSetupFragmentTests
                     break;
                 case 3:
                     fragment.WriteTo([]);
+                    break;
+                case 4:
+                    _ = fragment.EndsWithStatementTerminator;
                     break;
                 default:
                     throw new UnreachableException();
@@ -383,10 +461,10 @@ public sealed class MySqlDeferredSetupFragmentTests
     /// <param name="asciiCount">The ASCII suffix length in each fragment.</param>
     /// <param name="expectedGroups">The expected group count at the exact boundary.</param>
     [Theory]
-    [InlineData(0, 2048, 1)]
-    [InlineData(0, 2049, 2)]
-    [InlineData(682, 2, 1)]
-    [InlineData(682, 3, 2)]
+    [InlineData(0, 2042, 1)]
+    [InlineData(0, 2043, 2)]
+    [InlineData(680, 2, 1)]
+    [InlineData(680, 3, 2)]
     public void DeferredGroupingMatchesMaterializedUtf8Boundary(
         int euroCount,
         int asciiCount,
@@ -394,7 +472,7 @@ public sealed class MySqlDeferredSetupFragmentTests
     )
     {
         // Arrange
-        var raw = new string('\u20ac', euroCount) + new string('x', asciiCount);
+        var raw = "DO '" + new string('\u20ac', euroCount) + new string('x', asciiCount) + "';";
         string[] materialized = [raw, raw];
         MySqlSafeMigrationSetupFragment[] deferred = [SplitRaw(raw), SplitRaw(raw)];
         var body = new string('x', 8192);
@@ -418,12 +496,12 @@ public sealed class MySqlDeferredSetupFragmentTests
     public void LargeCompositionBoundaryPreservesMaterializedGrouping(int length)
     {
         // Arrange
-        var prefix = new string('x', length - 4);
-        string[] materialized = [prefix + "4142", ";", "DO 2;"];
+        var prefix = new string(' ', length - 11) + "DO X'";
+        string[] materialized = [prefix + "4142';", "DO 1;", "DO 2;"];
         MySqlSafeMigrationSetupFragment[] deferred =
         [
-            MySqlSafeMigrationSetupFragment.Compose(prefix, MySqlSafeMigrationSetupFragment.Part.Hex("AB")),
-            ";", SplitRaw("DO 2;"),
+            MySqlSafeMigrationSetupFragment.Compose(prefix, MySqlSafeMigrationSetupFragment.Part.Hex("AB"), "';"),
+            "DO 1;", SplitRaw("DO 2;"),
         ];
 
         var body = new string('x', 8192);
@@ -435,7 +513,7 @@ public sealed class MySqlDeferredSetupFragmentTests
         // Assert
         Assert.Equal(expected, actual);
         Assert.Equal(2, actual.Count);
-        Assert.Equal(length == 4095 ? 4096 : length, actual[0].Length);
+        Assert.Equal(length, actual[0].Length);
         Assert.Equal(string.Concat(materialized), string.Concat(actual));
     }
 
@@ -446,20 +524,20 @@ public sealed class MySqlDeferredSetupFragmentTests
         // Arrange
         MySqlSafeMigrationSetupFragment[] deferred =
         [
-            MySqlSafeMigrationSetupFragment.Compose("\ud83d", string.Empty, "\ude00"),
+            MySqlSafeMigrationSetupFragment.Compose("DO '\ud83d", string.Empty, "\ude00';"),
             MySqlSafeMigrationSetupFragment.Compose("D", "O 0;"),
         ];
 
-        string[] materialized = ["\ud83d\ude00", "DO 0;"];
-        var expected = Compact(materialized, new string('x', 9));
+        string[] materialized = ["DO '\ud83d\ude00';", "DO 0;"];
+        var expected = Compact(materialized, new string('x', 15));
 
         // Act
-        var actual = Compact(deferred, new string('x', 9));
+        var actual = Compact(deferred, new string('x', 15));
 
         // Assert
         Assert.Single(actual);
         Assert.Equal(expected, actual);
-        Assert.Equal(9, Encoding.UTF8.GetByteCount(actual[0]));
+        Assert.Equal(15, Encoding.UTF8.GetByteCount(actual[0]));
     }
 
     /// <summary>The original payload ceiling still wins over the larger fixed grouping limit.</summary>
@@ -568,7 +646,7 @@ public sealed class MySqlDeferredSetupFragmentTests
     public void DeferredGroupingCannotHideOversizedOriginalTextScope()
     {
         // Arrange
-        var largeSql = new string('x', 1_048_576);
+        var largeSql = new string(' ', 1_048_571) + "DO 0;";
         string[] materialized = [largeSql, "DO 0;"];
         MySqlSafeMigrationSetupFragment[] deferred = [SplitRaw(largeSql), SplitRaw("DO 0;")];
         var expected = Compact(materialized, "DO 0;");

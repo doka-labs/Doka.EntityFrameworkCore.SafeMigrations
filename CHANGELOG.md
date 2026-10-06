@@ -30,6 +30,10 @@ the shared release identity described in [Release process](docs/release-process.
   a different literal cannot impersonate the approved source or target default.
   Explicit type transitions reject default forms that the engine or current
   SQL mode cannot preserve, before any backfill or DDL.
+- Keep unterminated owned MySQL/MariaDB setup fragments outside transport
+  groups. Preserve exact SQL, opaque provider boundaries and larger caller
+  buffers; avoid unused UTF-8 accounting when composing large independent
+  fragments. Default-only and collation-only drift retain runtime checks.
 
 ## [10.4.7] - 2026-10-06
 

@@ -5,7 +5,7 @@ internal static class MySqlSafeMigrationSetupCommandCompactor
 {
     private const int MaximumOriginalFragmentCount = 128;
     private const int MaximumOriginalTextLength = 1_048_576;
-    /// <summary>Bounds grouping copies and identifies fragments that need no deferred descriptor snapshot.</summary>
+    /// <summary>Bounds each grouped transport payload in encoded UTF-8 bytes.</summary>
     internal const int MaximumGroupedPayloadBytes = 4096;
 
     /// <summary>
@@ -135,9 +135,11 @@ internal static class MySqlSafeMigrationSetupCommandCompactor
         while (offset < setupCommands.Count)
         {
             if ((offset >= providerSetupOffset && offset < providerSetupEnd)
-                || setupCommands[offset].Length >= MaximumGroupedPayloadBytes)
+                || setupCommands[offset].Length >= MaximumGroupedPayloadBytes
+                || !setupCommands[offset].EndsWithStatementTerminator)
             {
-                // WHY: Provider setup remains opaque, and large owned strings need no additional copy.
+                // WHY: Provider setup remains opaque, large strings need no additional copy, and
+                // incomplete owned statements cannot be joined safely without rewriting SQL.
                 compacted?.Add(setupCommands[offset].ToSql());
                 offset++;
 
@@ -151,7 +153,8 @@ internal static class MySqlSafeMigrationSetupCommandCompactor
                    && (end < providerSetupOffset || end >= providerSetupEnd))
             {
                 var next = setupCommands[end];
-                if (next.Length > maximumBytes - bytes)
+                if (next.Length > maximumBytes - bytes
+                    || !next.EndsWithStatementTerminator)
                 {
                     break;
                 }

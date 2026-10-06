@@ -3,6 +3,11 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 /// <summary>Defers owned setup SQL until its final transport group is known.</summary>
 internal readonly struct MySqlSafeMigrationSetupFragment
 {
+    // WHY: UTF-16 length is only a lower bound for UTF-8 bytes. At this length no grouping can
+    // save a copy; smaller fragments still require exact encoded-byte accounting.
+    private const int MinimumUngroupableUtf16Length =
+        MySqlSafeMigrationSetupCommandCompactor.MaximumGroupedPayloadBytes;
+
     private readonly string? _text;
     private readonly Part[]? _parts;
     private readonly int _length;
@@ -24,17 +29,55 @@ internal readonly struct MySqlSafeMigrationSetupFragment
         _utf8ByteCount = utf8ByteCount;
     }
 
-    /// <summary>Gets the exact UTF-16 length before allocating the final SQL string.</summary>
+    /// <summary>Gets the stable UTF-16 length of the complete immutable fragment.</summary>
     internal int Length => _text?.Length ?? (_parts is not null
         ? _length
         : throw new InvalidOperationException("The MySQL setup fragment is not initialized."));
 
     /// <summary>Gets the encoded payload length used by the unchanged grouping budget.</summary>
+    // WHY: Materialized strings are counted only when grouping needs their exact size. Caching
+    // would add eager work or mutable state to fragments already excluded by their UTF-16 length.
     internal int Utf8ByteCount => _text is { } text
         ? Encoding.UTF8.GetByteCount(text)
         : _parts is not null
             ? _utf8ByteCount
             : throw new InvalidOperationException("The MySQL setup fragment is not initialized.");
+
+    /// <summary>Gets whether owned SQL ends in a statement terminator without rendering deferred parts.</summary>
+    internal bool EndsWithStatementTerminator
+    {
+        get
+        {
+            if (_text is { } text)
+            {
+                return text.AsSpan().TrimEnd().EndsWith(";", StringComparison.Ordinal);
+            }
+
+            if (_parts is null)
+            {
+                throw new InvalidOperationException("The MySQL setup fragment is not initialized.");
+            }
+
+            // WHY: Owned generated fragments have known SQL structure. This is not a SQL parser;
+            // fragments without the owned terminator remain independent commands.
+            for (var index = _parts.Length - 1; index >= 0; index--)
+            {
+                var part = _parts[index];
+                if (part.IsHexadecimal)
+                {
+                    return false;
+                }
+
+                var suffix = part.Text.AsSpan().TrimEnd();
+                if (!suffix.IsEmpty)
+                {
+                    return suffix[^1] == ';';
+                }
+            }
+
+            return false;
+        }
+    }
 
     /// <summary>Retains already materialized provider or constant SQL without allocating a wrapper.</summary>
     /// <param name="text">The existing SQL string.</param>
@@ -48,9 +91,7 @@ internal readonly struct MySqlSafeMigrationSetupFragment
         var count = 0;
         var length = 0;
         var bytes = 0;
-        var previous = '\0';
         Part single = default;
-        Span<char> boundary = stackalloc char[2];
         foreach (var part in parts)
         {
             var text = part.Text;
@@ -61,20 +102,11 @@ internal readonly struct MySqlSafeMigrationSetupFragment
 
             var partLength = part.Length;
             length = checked(length + partLength);
-            bytes = checked(bytes + (part.IsHexadecimal ? partLength : Encoding.UTF8.GetByteCount(text)));
-            if (!part.IsHexadecimal && char.IsHighSurrogate(previous) && char.IsLowSurrogate(text[0]))
+            if (part.IsHexadecimal)
             {
-                // WHY: Separate UTF-8 counts treat split surrogates as fallbacks. The final string
-                // joins them into one scalar; calculate the actual encoder delta instead of assuming
-                // a fallback size or allocating a combined string merely to measure its payload.
-                boundary[0] = previous;
-                boundary[1] = text[0];
-                bytes += Encoding.UTF8.GetByteCount(boundary)
-                    - Encoding.UTF8.GetByteCount(boundary[..1])
-                    - Encoding.UTF8.GetByteCount(boundary[1..]);
+                bytes = checked(bytes + partLength);
             }
 
-            previous = part.IsHexadecimal ? '0' : text[^1];
             single = part;
             count++;
         }
@@ -89,7 +121,7 @@ internal readonly struct MySqlSafeMigrationSetupFragment
             return new MySqlSafeMigrationSetupFragment(single.Text);
         }
 
-        if (length >= MySqlSafeMigrationSetupCommandCompactor.MaximumGroupedPayloadBytes)
+        if (length >= MinimumUngroupableUtf16Length)
         {
             // WHY: The compactor passes large fragments through. Write directly from the caller's
             // span before it expires; a deferred descriptor array could not save a later SQL copy.
@@ -103,12 +135,34 @@ internal readonly struct MySqlSafeMigrationSetupFragment
         // mutable array escapes, and no rented buffer or closure lives until later rendering.
         var snapshot = new Part[count];
         var offset = 0;
+        var previous = '\0';
+        Span<char> boundary = stackalloc char[2];
         foreach (var part in parts)
         {
-            if (part.Text.Length != 0)
+            var text = part.Text;
+            if (text.Length == 0)
             {
-                snapshot[offset++] = part;
+                continue;
             }
+
+            snapshot[offset++] = part;
+            if (!part.IsHexadecimal)
+            {
+                bytes = checked(bytes + Encoding.UTF8.GetByteCount(text));
+                if (char.IsHighSurrogate(previous)
+                    && char.IsLowSurrogate(text[0]))
+                {
+                    // WHY: Split raw surrogates join in the final string. Apply the actual encoder
+                    // delta only for deferred fragments whose grouping needs an exact byte count.
+                    boundary[0] = previous;
+                    boundary[1] = text[0];
+                    bytes += Encoding.UTF8.GetByteCount(boundary)
+                        - Encoding.UTF8.GetByteCount(boundary[..1])
+                        - Encoding.UTF8.GetByteCount(boundary[1..]);
+                }
+            }
+
+            previous = part.IsHexadecimal ? '0' : text[^1];
         }
 
         return new MySqlSafeMigrationSetupFragment(snapshot, length, bytes);
@@ -120,10 +174,13 @@ internal readonly struct MySqlSafeMigrationSetupFragment
         static (destination, fragment) => fragment.WriteTo(destination));
 
     /// <summary>Writes this fragment directly into its final group without an intermediate string.</summary>
-    /// <param name="destination">A destination with at least <see cref="Length" /> characters.</param>
+    /// <param name="destination">
+    /// A destination with at least <see cref="Length" /> characters; any remaining suffix is untouched.
+    /// </param>
     internal void WriteTo(Span<char> destination)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(destination.Length, Length);
+        destination = destination[..Length];
         if (_text is { } text)
         {
             text.AsSpan().CopyTo(destination);
@@ -135,6 +192,8 @@ internal readonly struct MySqlSafeMigrationSetupFragment
     }
 
     /// <summary>Writes immutable parts from either a transient caller span or the deferred snapshot.</summary>
+    /// <param name="parts">The validated immutable pieces in emission order.</param>
+    /// <param name="destination">Exactly the region owned by the complete fragment.</param>
     private static void WriteParts(ReadOnlySpan<Part> parts, Span<char> destination)
     {
         var offset = 0;
@@ -152,10 +211,15 @@ internal readonly struct MySqlSafeMigrationSetupFragment
             }
             else
             {
-                part.Text.AsSpan().CopyTo(destination[offset..]);
+                part.Text.AsSpan().CopyTo(destination.Slice(offset, length));
             }
 
             offset += length;
+        }
+
+        if (offset != destination.Length)
+        {
+            throw new InvalidOperationException("The MySQL setup fragment did not fill its complete destination.");
         }
     }
 
