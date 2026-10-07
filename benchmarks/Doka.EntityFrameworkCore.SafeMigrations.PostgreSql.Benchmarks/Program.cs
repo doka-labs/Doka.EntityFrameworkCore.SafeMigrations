@@ -1,3 +1,9 @@
+if (args.Length == 2
+    && args[0] == "--column-attribution")
+{
+    return PostgreSqlColumnAttributionWorkload.Run(args[1]);
+}
+
 using var context = new PostgreSqlGenerationContext();
 
 var generator = context.GetService<IMigrationsSqlGenerator>();

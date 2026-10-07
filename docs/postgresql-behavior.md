@@ -121,6 +121,14 @@ operations share a character-length scan. Existing null values still block
 nullability tightening; a declared default does not authorize backfilling
 existing PostgreSQL rows through this path.
 
+Qualified column collations are preserved by both the initial ALTER and an
+accepted repair. The repair emits the same schema-qualified `COLLATE` clause
+before verifying the full target contract; otherwise PostgreSQL can reset the
+column to its default collation during `ALTER TYPE`. See PostgreSQL's
+[ALTER TABLE contract](https://www.postgresql.org/docs/18/sql-altertable.html).
+Resolving an explicit collation compares its OID once and treats an absent OID
+as a failed match, never as equality through SQL NULL.
+
 Widening preserves the existing value domain and requires no row-value scan.
 Narrowing groups and deduplicates candidates per table and uses a bounded
 `char_length` existence proof. It returns only whether any value exceeds the
@@ -174,6 +182,16 @@ Matching columns do not acquire that repair lock. A dirty unvalidated constraint
 is `DataBlocked`, not `Matching`; a clean one can be validated by the provider's
 `SET NOT NULL` repair. These are structural eligibility checks, not retained
 row proofs or a bound on rows examined.
+
+Proof-bearing column runtime guards first establish the complete target and
+NOT NULL relation contract using fresh metadata. An exact matching replay
+skips unused repair and row-probe evaluation. Parent-only `NO INHERIT` metadata
+does not discharge descendant NULL checks. Explicit ALTER additionally retains
+the exact old-definition authority: a superficially matching parent cannot
+authorize an otherwise unproven transition over descendants. Each locked
+recheck recomputes these operation-local results, and the independent
+postcondition still runs after DDL. These changes reduce repeated catalog work,
+not client roundtrips or the necessary scans for a genuine narrowing.
 
 Guard rendering appends action cases, state-guard branches and canonical
 baseline commands directly into the final operation-owned buffer. Original

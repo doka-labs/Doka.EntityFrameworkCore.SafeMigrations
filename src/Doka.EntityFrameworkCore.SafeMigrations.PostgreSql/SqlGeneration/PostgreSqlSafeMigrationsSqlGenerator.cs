@@ -175,7 +175,20 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             static collation => collation.Schema is null ? collation.Name : null,
             PostgreSqlSafeMigrationColumnMetadata.CanSafelyConverge);
 
-        return _baselineGenerator.Generate([repairOperation], model, options);
+        if (intent.Definition.Collation?.Schema is null)
+        {
+            return _baselineGenerator.Generate([repairOperation], model, options);
+        }
+
+        // WHY: ALTER TYPE without COLLATE resets PostgreSQL's collation.
+        // Npgsql renders unqualified identities itself; the qualified
+        // repair needs the same companion statement as an ordinary apply.
+        var collationOperation = new SqlOperation
+        {
+            Sql = BuildQualifiedColumnCollationSql(intent.Table, intent.Schema, intent.Definition),
+        };
+
+        return _baselineGenerator.Generate([repairOperation, collationOperation], model, options);
     }
 
     private static IEnumerable<(string Table, string? Schema, ExpectedColumnDefinition Definition)>
@@ -250,6 +263,9 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         var proofTable = runtimePlan.DataProbe?.QualifiedTable ?? runtimePlan.NullabilityDataProbe?.QualifiedTable;
         var evaluationIndentation = proofTable is null ? "    " : "        ";
         var evaluationBodyIndentation = evaluationIndentation + "    ";
+        var classificationIndentation = proofTable is null
+            ? evaluationBodyIndentation
+            : evaluationBodyIndentation + "    ";
 
         var tag = SelectDollarTag(
             baseline,
@@ -267,6 +283,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             runtimePlan.NullabilityDataProbe?.RepairInvariantExpression ?? string.Empty,
             runtimePlan.NullabilityDataProbe?.BlockedExpression ?? string.Empty,
             runtimePlan.NullabilityDataProbe?.QualifiedTable ?? string.Empty,
+            runtimePlan.Postcondition,
             runtimePlan.ExecutionPostcondition ?? runtimePlan.Postcondition);
 
         // The selected dollar tag cannot occur in embedded SQL, so provider
@@ -278,6 +295,9 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             .Append("DO ")
             .Append(tag)
             .Append(declarations)
+            .Append(proofTable is null
+                ? string.Empty
+                : "    doka_target_matches boolean := FALSE;\n")
             .Append(runtimePlan.DataProbe is null
                 ? string.Empty
                 : "    doka_data_probe_required boolean := FALSE;\n"
@@ -286,7 +306,8 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             .Append(runtimePlan.NullabilityDataProbe is null
                 ? string.Empty
                 : "    doka_nullability_blocked boolean := FALSE;\n"
-                + "    doka_nullability_repair_eligible boolean := FALSE;\n")
+                + "    doka_nullability_repair_eligible boolean := FALSE;\n"
+                + "    doka_complete_not_null boolean := FALSE;\n")
             .Append("BEGIN\n");
 
         if (proofTable is not null)
@@ -326,29 +347,66 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             .Append(evaluationIndentation)
             .Append("ELSE\n");
 
+        if (proofTable is not null)
+        {
+            // WHY: Exact target and complete NULL metadata are fresh in each
+            // classifier pass, including the locked recheck. Matching leaves
+            // need no repair qualification; parent-only NOT NULL still does.
+            builder
+                .Append(evaluationBodyIndentation)
+                .Append("doka_target_matches := COALESCE((")
+                .Append(runtimePlan.Postcondition)
+                .Append("), FALSE);\n");
+
+            if (runtimePlan.NullabilityDataProbe is not null)
+            {
+                builder
+                    .Append(evaluationBodyIndentation)
+                    .Append("doka_complete_not_null := COALESCE((")
+                    .Append(runtimePlan.NullabilityDataProbe.NotNullContractExpression)
+                    .Append("), FALSE);\n");
+            }
+
+            builder
+                .Append(evaluationBodyIndentation)
+                .Append("IF doka_target_matches")
+                .Append(runtimePlan.NullabilityDataProbe is null ? string.Empty : " AND doka_complete_not_null")
+                .Append(" THEN\n")
+                .Append(classificationIndentation)
+                .Append("doka_state := 'matching';\n")
+                .Append(classificationIndentation)
+                .Append("doka_repair_ok := FALSE;\n")
+                .Append(evaluationBodyIndentation)
+                .Append("ELSE\n");
+        }
+
         if (runtimePlan.DataProbe is not null)
         {
             AppendDataProbeEvaluationSql(
-                builder, runtimePlan.DataProbe, blockedExpression, evaluationBodyIndentation);
+                builder, runtimePlan.DataProbe, blockedExpression, classificationIndentation);
         }
 
         if (runtimePlan.NullabilityDataProbe is not null)
         {
-            AppendNullabilityDataProbeEvaluationSql(builder, runtimePlan, evaluationBodyIndentation);
+            AppendNullabilityDataProbeEvaluationSql(
+                builder, runtimePlan, classificationIndentation, "doka_complete_not_null");
         }
 
         builder
-            .Append(evaluationBodyIndentation)
+            .Append(classificationIndentation)
             .Append("doka_state := (");
 
         runtimePlan.AppendStateExpression(
             builder,
             dataBlockedExpression,
-            transitionEligibleExpression);
+            transitionEligibleExpression,
+            proofTable is null ? null : runtimePlan.NullabilityDataProbe?.MatchingRequiresSourceContractProof != true
+                ? "doka_target_matches"
+                : "(doka_target_matches AND (doka_complete_not_null OR doka_nullability_repair_eligible))");
 
         builder
             .Append(");\n")
-            .Append(evaluationBodyIndentation)
+            .Append(classificationIndentation)
             .Append("doka_repair_ok := COALESCE((");
 
         runtimePlan.AppendRepairPrecondition(
@@ -356,8 +414,15 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             dataBlockedExpression,
             transitionEligibleExpression);
 
+        builder.Append("), FALSE);\n");
+        if (proofTable is not null)
+        {
+            builder
+                .Append(evaluationBodyIndentation)
+                .Append("END IF;\n");
+        }
+
         builder
-            .Append("), FALSE);\n")
             .Append(evaluationIndentation)
             .Append("END IF;\n")
             .Append(evaluationIndentation)
@@ -451,10 +516,15 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
     }
 
     /// <summary>Materializes one fresh, catalog-qualified NULL proof for both runtime decisions.</summary>
+    /// <param name="builder">The operation-owned final guard buffer.</param>
+    /// <param name="runtimePlan">The reviewed plan containing the fresh source and row proofs.</param>
+    /// <param name="indentation">The unchanged indentation for this classifier branch.</param>
+    /// <param name="notNullContractExpression">The complete NOT NULL verdict evaluated in this pass.</param>
     private static void AppendNullabilityDataProbeEvaluationSql(
         StringBuilder builder,
         PostgreSqlSafeMigrationRuntimePlan runtimePlan,
-        string indentation
+        string indentation,
+        string notNullContractExpression
     )
     {
         var proof = runtimePlan.NullabilityDataProbe
@@ -475,7 +545,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             .Append("doka_nullability_blocked := FALSE;\n")
             .Append(indentation)
             .Append("IF doka_nullability_repair_eligible AND NOT COALESCE((")
-            .Append(proof.NotNullContractExpression)
+            .Append(notNullContractExpression)
             .Append("), FALSE) THEN\n")
             .Append(indentation)
             .Append("    doka_nullability_blocked := COALESCE((")

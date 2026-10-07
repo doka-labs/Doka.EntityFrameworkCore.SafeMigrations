@@ -91,12 +91,16 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             ? $"({repairInvariantExpression}) AND NOT ({repairDataBlocked})"
             : "FALSE";
 
+        var stateMatching = nullabilityDataProbe is not null || transition.HasDataProbe
+            ? PostgreSqlSafeMigrationRuntimePlan.MatchingPlaceholder
+            : matching;
+
         var plan = Plan(
             $"CASE WHEN NOT {table} THEN 'prerequisite_missing' "
             + $"WHEN NOT {exists} AND {dataBlocked} THEN 'data_blocked' "
             + $"WHEN NOT {exists} THEN 'missing' "
             + $"WHEN ({repairInvariantExpression}) AND ({repairDataBlocked}) THEN 'data_blocked' "
-            + $"WHEN {matching} THEN 'matching' ELSE 'different' END",
+            + $"WHEN {stateMatching} THEN 'matching' ELSE 'different' END",
             matching,
             repairCapability,
             repairPrecondition) with
@@ -203,6 +207,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                     $"EXISTS (SELECT 1 FROM {Qualified(intent.Table, intent.Schema)} WHERE "
                         + $"{_sqlGenerationHelper.DelimitIdentifier(intent.Definition.Name)} IS NULL LIMIT 1)",
                     Qualified(intent.Table, intent.Schema))
+                {
+                    MatchingRequiresSourceContractProof = true,
+                }
                 : null;
 
         var nullBlocked = nullabilityDataProbe is null
@@ -217,10 +224,14 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             ? $"({nullBlocked}) OR ({transition.DataBlockedExpression})"
             : nullBlocked;
 
+        var stateMatching = nullabilityDataProbe is not null || transition.HasDataProbe
+            ? PostgreSqlSafeMigrationRuntimePlan.MatchingPlaceholder
+            : matching;
+
         return Plan(
             $"CASE WHEN NOT {exists} THEN 'different' "
             + $"WHEN ({repairInvariantExpression}) AND ({dataBlocked}) THEN 'data_blocked' "
-            + $"WHEN {matching} THEN 'matching' ELSE 'different' END",
+            + $"WHEN {stateMatching} THEN 'matching' ELSE 'different' END",
             matching,
             repair,
             $"({repairInvariantExpression}) AND NOT ({dataBlocked})") with
@@ -850,7 +861,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 ? $"AND pg_catalog.pg_collation_is_visible(coll.oid) LIMIT 1)"
                 : $"AND ns.nspname = {Literal(definition.Collation.Schema)})");
 
-        return $"{expected} IS NOT NULL AND a.attcollation = {expected}";
+        // WHY: An absent resolver row must remain FALSE, including diagnostic
+        // negation, but comparing its OID once avoids a second identical scan.
+        return $"COALESCE(a.attcollation = {expected}, FALSE)";
     }
 
     private string DefaultAndGenerationMatches(

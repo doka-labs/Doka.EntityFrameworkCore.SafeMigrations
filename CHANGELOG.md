@@ -39,6 +39,10 @@ the shared release identity described in [Release process](docs/release-process.
 - Validate missing simple integer CHECK constraints on populated SQL Server
   tables using FALSE-only probes; preserve UNKNOWN semantics, binding gates,
   provenance, trust, ordered proof invalidation, and runtime rechecks.
+- Preserve qualified PostgreSQL collations in accepted column repairs instead
+  of resetting them during `ALTER TYPE` and failing the target postcondition.
+- Retain explicit PostgreSQL ALTER source authority when parent-only NOT NULL
+  metadata does not prove the queried descendant relation is non-NULL.
 - Keep SQL Server integer ALTER baselines within their captured operation:
   do not infer extra index rebuilds from the target model or execute a redundant
   default UPDATE whose zero affected rows would still fire DML triggers.
@@ -64,6 +68,11 @@ the shared release identity described in [Release process](docs/release-process.
 - Avoid evaluating SQL Server runtime repair predicates for matching states,
   non-repair policies, or plans without a safe repair capability. Preserve fresh
   classification, prerequisite gates, target postconditions, and transactions.
+- Classify fully matching PostgreSQL proof-bearing columns from fresh target
+  metadata before evaluating unused repair/data scopes, and avoid duplicate
+  explicit-collation OID lookups. Required row scans,
+  permissions, transaction boundaries, locked rechecks, and postconditions remain
+  authoritative; no cross-operation cache or new client roundtrip is introduced.
 
 ## [10.4.8] - 2026-10-06
 
