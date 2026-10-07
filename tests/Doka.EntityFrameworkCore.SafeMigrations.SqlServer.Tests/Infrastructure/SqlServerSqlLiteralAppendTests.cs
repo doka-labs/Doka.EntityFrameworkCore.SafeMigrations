@@ -64,7 +64,7 @@ public sealed class SqlServerSqlLiteralAppendTests
         Assert.Equal("excluded-prefix|" + payload + "|excluded-suffix", source);
     }
 
-    /// <summary>Generated state, repair and postcondition scopes retain the exact former scalar escaping.</summary>
+    /// <summary>State and postcondition scopes retain scalar escaping without an unused repair scope.</summary>
     [Fact]
     public void GeneratedManagedGuard_NestedScalarScopesMatchIndependentReference()
     {
@@ -81,7 +81,6 @@ public sealed class SqlServerSqlLiteralAppendTests
         var expectedState = ScalarReference(
             plan.StateExpression, "nvarchar(32)", "@doka_state", plan.CatalogPreambleSql);
 
-        var expectedRepair = ScalarReference($"COALESCE(({plan.RepairPrecondition}), 0)", "int", "@doka_repair_ok");
         var postconditionExpression = $"COALESCE(({plan.ExecutionPostcondition ?? plan.Postcondition}), 0)";
         var expectedPostcondition = ScalarReference(postconditionExpression, "int", "@doka_postcondition");
 
@@ -91,7 +90,7 @@ public sealed class SqlServerSqlLiteralAppendTests
         // Assert
         Assert.True(plan.RequiresDelayedBinding || plan.CatalogPreambleSql is not null);
         Assert.Contains(expectedState, guard, StringComparison.Ordinal);
-        Assert.Contains(expectedRepair, guard, StringComparison.Ordinal);
+        Assert.DoesNotContain("@doka_value = @doka_repair_ok OUTPUT", guard, StringComparison.Ordinal);
         Assert.Contains(expectedPostcondition, guard, StringComparison.Ordinal);
         Assert.Contains("THROW 51005, N'doka_sm_postcondition'", guard, StringComparison.Ordinal);
     }

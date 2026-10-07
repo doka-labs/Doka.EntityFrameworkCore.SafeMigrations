@@ -6,6 +6,65 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
+### Fixed
+
+- Admit explicit SQL Server built-in integer widenings under `RepairIfSafe`
+  with exact source, preserved default/identity, declared-row layout, and ordered
+  dependency proofs. Reject numeric narrowing and unproven layouts without DDL.
+- Exclude encrypted and legacy-rule-bound SQL Server columns from ordinary
+  column matching. This applies to all column contracts, not only integer
+  widening: an existing encrypted or rule-bound column cannot become a matching
+  NoOp merely because its type and length agree. No encryption or rule is
+  silently removed; affected migrations require an independently reviewed path.
+- Reconcile ordered SQL Server FK-to-key drops against the exact backing-index
+  identity; do not retain a stale key blocker after its accepted FK drop or
+  promote wrong-kind and surviving-reference conflicts.
+- Preserve SQL Server standalone foreign-key prerequisites after accepted
+  creation of a fresh, initially empty child table. A captured unchanged live
+  principal key and exact compatible column storage can satisfy the ordered
+  proof; intervening writes, unknown state, orphan data, and permission refusals
+  do not acquire a bypass. Retain schema-wide name occupancy from live objects
+  and earlier accepted tables and PK/UNIQUE/CHECK/FK constraints instead of promoting
+  a conflicting standalone FK to `Missing`.
+- Guard protected SQL Server expression-dependency catalog reads with their
+  effective database and view permissions before delayed compilation. Missing
+  access reports `dependency_catalog_permission` without an unsafe absence proof,
+  automatic grants, or a raw catalog permission exception.
+- Preserve independent SQL Server permission refusals through ordered projection,
+  including initially absent owners. Require effective UPDATE permission for
+  approved integer/text ALTER mutations; matching NoOps do not require UPDATE.
+- Reject SQL Server text ALTER row classifiers without effective table SELECT
+  before binding, including matching replays. Retain the independent permission
+  refusal through ordered projection instead of leaking a raw provider exception.
+- Validate missing simple integer CHECK constraints on populated SQL Server
+  tables using FALSE-only probes; preserve UNKNOWN semantics, binding gates,
+  provenance, trust, ordered proof invalidation, and runtime rechecks.
+- Keep SQL Server integer ALTER baselines within their captured operation:
+  do not infer extra index rebuilds from the target model or execute a redundant
+  default UPDATE whose zero affected rows would still fire DML triggers.
+- Invalidate SQL Server ordered row certificates after executable safe or typed
+  provider DDL when enabled DDL triggers or insufficient database/server metadata
+  visibility leave later rows unproven. Report affected assessments as
+  `ValidateAtRuntime` with the DDL origin, distinguishing known trigger risk
+  from visibility uncertainty rather than blocking a least-privilege stream
+  or claiming read-only readiness. Before a structural deferral, preserve genuine
+  missing prerequisites, unsupported contracts, unapproved metadata differences,
+  metadata-only matching, and non-executing no-ops; runtime rechecks remain authoritative.
+- Preserve a conservative runtime-validation boundary after provider-specific
+  structural deferrals. Later supported safe operations retain the first
+  deferred structural origin instead of depending on an invented candidate key
+  or reporting a false missing prerequisite. All independently captured live
+  `Unsupported` results, including permission and capability refusals, and
+  identifier mismatches remain blocking. Later supported immutable state and
+  data classifications become runtime-validation assessments, not approval of
+  their stale batch observations; already blocked assessments stay blocked.
+
+### Changed
+
+- Avoid evaluating SQL Server runtime repair predicates for matching states,
+  non-repair policies, or plans without a safe repair capability. Preserve fresh
+  classification, prerequisite gates, target postconditions, and transactions.
+
 ## [10.4.8] - 2026-10-06
 
 Prepare stable 10.4.8 for all five packages. This patch corrects explicit

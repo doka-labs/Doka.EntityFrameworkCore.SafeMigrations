@@ -599,6 +599,15 @@ an already matching target remains a no-op. This applies to ordinary strict
 migrations as well as legacy-convergence streams. SQLite and SQL Server keep
 their own provider-specific alteration contracts.
 
+SQL Server also supports explicit lossless `tinyint -> smallint/int/bigint`,
+`smallint -> int/bigint`, and `int -> bigint` alterations under `RepairIfSafe`.
+The exact source, unchanged defaults and identity semantics, supported storage,
+and absence of blocking dependencies must be proved. Drop dependent objects
+explicitly before changing their columns; recreate their reviewed target
+contracts afterward. Populated tables can receive simple nonthrowing integer
+CHECK predicates after a FALSE-only validation. See
+[SQL Server transition boundaries](docs/sqlserver-behavior.md#lossless-integer-alterations-and-check-validation).
+
 All other pre-existing requirements remain: the resolved character family,
 collation, generated/identity state, row-version state, provider metadata, and
 dependent indexes or constraints must be fully understood and compatible. A
@@ -759,6 +768,17 @@ This includes ordered child/parent deletes: old dependency counts cannot account
 for trigger side effects. `DeferredOrigin` identifies the preceding invalidation.
 Direct guarded row postconditions and confined inserts into newly created plain
 tables retain their proven classifications; untouched conflicts still block.
+
+SQL Server also records a DDL origin when an enabled DDL trigger or insufficient
+database/server metadata visibility prevents trusting later row evidence.
+Affected assessments use the same runtime-validation contract; lack of server
+visibility is not a trigger-absence proof or an automatic permission grant.
+Runtime validates immediately before the affected operation, not in the
+background. Independent invariant blockers remain blocking; matching and no-op
+assessments alone do not invalidate row evidence. After a structural operation
+is deferred, later supported operations retain runtime validation without an
+invented physical postcondition. See
+[SQL Server row-proof freshness](docs/sqlserver-behavior.md#lossless-integer-alterations-and-check-validation).
 
 For focused operator output, serialize a self-describing report view instead
 of copying or mutating the immutable report:

@@ -432,6 +432,13 @@ target. Narrowing requires a current row proof, and a matching target requires
 no repair scan. Alter never creates a missing source column. A successful
 preflight does not replace execution-time guards or permit truncation.
 
+SQL Server additionally admits the documented lossless built-in integer
+widenings for explicit alterations with exact old-definition, storage, and
+dependency proofs. This is not a general numeric conversion or automatic
+constraint replacement. Its populated-table integer CHECK validation and
+ordered drop/alter/recreate boundaries are described in
+[SQL Server behavior](sqlserver-behavior.md#lossless-integer-alterations-and-check-validation).
+
 The three model-managed-data methods are public targets for generated migration
 source. They always use `ThrowIfDifferent`; they expose no overwrite or repair
 policy. Ensure receives key columns and complete target rows. Update receives
@@ -665,7 +672,7 @@ digest.
 | `NoOperations` | No operation was assessed; verify intended target/history separately |
 | `Ready` | Preflight permits the safe sequence subject to external gates; postflight confirms all supplied safe postconditions |
 | `ReadyWithProviderOperations` | Safe operations are accepted, but ordinary EF or provider operations remain unanalyzed and need independent artifact and postcondition review |
-| `RuntimeValidationRequired` | Earlier raw SQL or unconfined data changes make later states unprovable from a read-only snapshot; review provider-owned SQL independently and rely on the ordered runtime guards |
+| `RuntimeValidationRequired` | Earlier raw SQL, unconfined data changes, or DDL-related row uncertainty make later states unprovable from a read-only snapshot; review provider-owned operations independently and rely on the ordered runtime guards |
 | `Blocked` | One or more operations reject; do not execute/continue deployment |
 
 `SafeMigrationObservedState.TransitionReady` is used only when a captured
@@ -715,7 +722,28 @@ For model-managed data, unconfined writes invalidate earlier exact rows and
 dependency evidence. Later unprovable seed assessments carry analysis code
 `projected_model_managed_data_state_unknown`; deferred writes establish no new
 postconditions. The existing guarded execution remains authoritative.
-Independently proven blockers remain `Blocked`. The
+SQL Server DDL-trigger risk also uses this contract after accepted executable
+DDL. Analysis codes `projected_ddl_trigger_data_unknown` and
+`projected_ddl_visibility_data_unknown` distinguish a visible enabled trigger
+from insufficient metadata visibility. The origin identifies the DDL, not a
+hypothetical row change. Runtime validates fresh state immediately before the
+affected operation; no background work or automatic grant is introduced. See
+[SQL Server behavior](sqlserver-behavior.md#lossless-integer-alterations-and-check-validation).
+After a provider-specific structural deferral, later supported safe assessments
+retain runtime validation with `projected_provider_postcondition_unknown` and
+the first deferred structural operation as their origin. No physical
+postcondition or candidate key is inferred; deferred model-managed writes alone
+do not activate this structural boundary. All independently captured live
+`Unsupported` results, including permission and capability refusals, and
+identifier mismatches remain blocking.
+Within this structural boundary, later supported immutable `Matching`,
+`Missing`, `Different`, `DataBlocked`, and `PrerequisiteMissing` results are
+deliberately deferred, not treated as current ordered-state evidence. Runtime
+can still reject after classifying the actual state. Before the first structural
+deferral, SQL Server's DDL row-freshness qualifier preserves genuine missing
+prerequisites, `Unsupported`, and unapproved metadata `Different` results.
+Already blocked assessments remain `Blocked`; the boundary does not change
+their aggregate precedence. The
 [version 1 view schema](../schemas/safe-migration-report-view-v1.schema.json)
 remains available for previously persisted views.
 

@@ -407,6 +407,8 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
             _expressionRenderer.Render,
             static collation => collation.Schema is null ? collation.Name : null);
 
+        var generationModel = model;
+
         if (operation.Intent is RenameTableIntent rename && baselineOperation is RenameTableOperation renameTable)
         {
             // WHY: EF interprets an omitted NewSchema as a transfer to the
@@ -423,7 +425,28 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
             createIndex["SqlServer:Include"] = index.Definition.IncludedColumns.ToArray();
         }
 
-        return _baselineGenerator.Generate([baselineOperation], model, options);
+        if (operation.Intent is AlterColumnIntent
+            && baselineOperation is AlterColumnOperation alteration)
+        {
+            // WHY: A safe ALTER owns a complete captured column contract.
+            // EF's single-operation generation otherwise derives extra index
+            // drops/recreates from the target model, outside the ordered safe
+            // operations and their proofs. Dependencies must be explicit.
+            generationModel = null;
+            if (plan.RepairCapability == SafeMigrationRepairCapability.Safe
+                && plan.MayRequireNullabilityDataProof
+                && !alteration.IsNullable
+                && (alteration.DefaultValue is not null || alteration.DefaultValueSql is not null))
+            {
+                // WHY: Runtime already rejects any NULL row before ALTER.
+                // EF would still emit a zero-row default UPDATE, which fires
+                // DML triggers. This renderer-only hint suppresses that write;
+                // the original immutable source/null proof remains unchanged.
+                alteration.OldColumn.IsNullable = false;
+            }
+        }
+
+        return _baselineGenerator.Generate([baselineOperation], generationModel, options);
     }
 
     /// <summary>Identifies the exact safe rename whose guarded contract needs no physical DDL.</summary>
@@ -537,8 +560,8 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
             // WHY: EF's unqualified DDL targets the caller's default schema.
             // Catalog classification uses dbo, so prohibit a different default
             // before any baseline command can run.
-            builder.Append("IF COALESCE(SCHEMA_NAME(), N'') <> N'dbo'\nBEGIN\n")
-                .Append("    THROW 51004, N'doka_sm_prerequisite_missing', 1;\nEND;\n");
+            builder.Append("IF COALESCE(SCHEMA_NAME(), N'') <> N'dbo'\nBEGIN\n"
+                + "    THROW 51004, N'doka_sm_prerequisite_missing', 1;\nEND;\n");
         }
 
         builder.Append("DECLARE @doka_state nvarchar(32);\n")
@@ -551,7 +574,9 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
             .Append("), 0) <> 1\nBEGIN\n")
             .Append("    SET @doka_state = (")
             .Append(plan.StateEvaluationGuardFailureExpression ?? "N'unsupported'")
-            .Append(");\n    SET @doka_repair_ok = 0;\nEND\nELSE\nBEGIN\n");
+            .Append(");\n    SET @doka_repair_ok = 0;\nEND\n");
+
+        builder.Append("ELSE\nBEGIN\n");
 
         if (plan.RequiresDelayedBinding || plan.CatalogPreambleSql is not null)
         {
@@ -565,20 +590,37 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
                 "@doka_state",
                 "    ",
                 plan.CatalogPreambleSql);
-
-            AppendDelayedScalar(
-                builder,
-                plan.RepairPrecondition ?? string.Empty,
-                "int",
-                "@doka_repair_ok",
-                "    ",
-                coalesce: true);
         }
         else
         {
-            builder.Append("    SET @doka_state = (").Append(plan.StateExpression).Append(");\n")
-                .Append("    SET @doka_repair_ok = COALESCE((")
-                .Append(plan.RepairPrecondition).Append("), 0);\n");
+            builder.Append("    SET @doka_state = (").Append(plan.StateExpression).Append(");\n");
+        }
+
+        // WHY: Only Different can consume repair evidence. A Matching replay,
+        // a non-repair policy, or a plan without safe repair must not compile
+        // and execute another catalog/data scope whose result is discarded.
+        // Classification and all prerequisite/support gates remain fresh.
+        if (operation.Policy == SafeMigrationPolicy.RepairIfSafe
+            && plan.RepairCapability == SafeMigrationRepairCapability.Safe)
+        {
+            builder.Append("    IF @doka_state = N'different'\n    BEGIN\n");
+            if (plan.RequiresDelayedBinding
+                || plan.CatalogPreambleSql is not null)
+            {
+                AppendDelayedScalar(builder, plan.RepairPrecondition ?? string.Empty,
+                    "int", "@doka_repair_ok", "        ", coalesce: true);
+            }
+            else
+            {
+                builder.Append("        SET @doka_repair_ok = COALESCE((")
+                    .Append(plan.RepairPrecondition).Append("), 0);\n");
+            }
+
+            builder.Append("    END\n    ELSE\n    BEGIN\n        SET @doka_repair_ok = 0;\n    END;\n");
+        }
+        else
+        {
+            builder.Append("    SET @doka_repair_ok = 0;\n");
         }
 
         builder.Append("END;\nSET @doka_action = ");

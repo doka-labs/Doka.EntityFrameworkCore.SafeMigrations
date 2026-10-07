@@ -74,6 +74,9 @@ internal sealed record SqlServerSafeMigrationRuntimePlan(
     /// <summary>Gets whether rows or validated authored facets require delayed SQL Server name binding.</summary>
     public bool RequiresDelayedBinding { get; init; }
 
+    /// <summary>Gets whether classification reads the separately protected expression-dependency catalog.</summary>
+    public bool RequiresExpressionDependencyRead { get; init; }
+
     /// <summary>Gets invocation-local source bindings retained only by analysis plans.</summary>
     public IReadOnlyList<SqlServerCatalogParameterValue> AnalysisParameters { get; init; } = [];
 
@@ -110,6 +113,9 @@ internal sealed record SqlServerSafeMigrationRuntimePlan(
 
     /// <summary>Gets whether a nullable-to-required change requires row evidence.</summary>
     public bool MayRequireNullabilityDataProof { get; init; }
+
+    /// <summary>Gets whether a nonmatching classification depends on a current row-safety proof.</summary>
+    public bool RequiresLiveDataProof { get; init; }
 
     /// <summary>Renders the state expression without a separate data probe.</summary>
     /// <returns>The scalar state expression.</returns>

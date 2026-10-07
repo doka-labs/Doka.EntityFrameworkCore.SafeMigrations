@@ -78,7 +78,10 @@ public sealed class SqlServerGeneratorSafetyTests
         // Assert
         Assert.Contains("HAS_PERMS_BY_NAME", sql, StringComparison.Ordinal);
         Assert.Contains("SCHEMA_NAME()", sql, StringComparison.Ordinal);
-        Assert.Contains("N'O''Brien'", sql, StringComparison.Ordinal);
+        // WHY: The permission-qualified classifier is a nested SQL literal;
+        // both quoting levels must retain the original apostrophe as data.
+        Assert.Contains("N''O''''Brien''", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("N'O'Brien'", sql, StringComparison.Ordinal);
         Assert.Contains("THROW", sql, StringComparison.Ordinal);
     }
 

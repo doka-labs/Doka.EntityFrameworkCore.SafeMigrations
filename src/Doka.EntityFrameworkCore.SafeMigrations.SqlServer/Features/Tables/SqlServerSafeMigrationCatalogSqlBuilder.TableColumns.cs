@@ -84,6 +84,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             .Append("AND c.is_nullable = expected.is_nullable AND c.is_identity = expected.is_identity ")
             .Append("AND c.is_computed = 0 AND c.is_sparse = 0 AND c.is_column_set = 0 AND c.is_rowguidcol = 0 ")
             .Append("AND c.is_filestream = 0 AND c.is_hidden = 0 AND c.generated_always_type = 0 ")
+            // WHY: Whole-table matching must reject the same unsupported storage as
+            // standalone column matching, rather than certifying an encrypted or RULE-bound column.
+            .Append("AND c.rule_object_id = 0 AND c.encryption_type IS NULL ")
             .Append("AND (expected.max_length IS NULL OR c.max_length = expected.max_length) ")
             .Append("AND (expected.precision_value IS NULL OR c.precision = expected.precision_value) ")
             .Append("AND (expected.scale_value IS NULL OR c.scale = expected.scale_value) ")

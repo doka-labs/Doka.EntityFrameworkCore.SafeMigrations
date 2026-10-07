@@ -8,9 +8,18 @@ internal sealed partial class SafeMigrationPreflightProjection
 
     private readonly Dictionary<ModelManagedRowKey, ProjectedModelManagedRow> _modelManagedRows;
     private Dictionary<TableKey, int>? _modelManagedLocalOrigins;
+    private int _currentOperationOrdinal = -1;
 
-    /// <summary>Gets or sets the runner ordinal used to attribute table-local proof invalidation.</summary>
-    internal int CurrentOperationOrdinal { get; set; } = -1;
+    /// <summary>Gets or sets the complete-stream ordinal used to attribute ordered proof invalidation.</summary>
+    internal int CurrentOperationOrdinal
+    {
+        get => _currentOperationOrdinal;
+        set
+        {
+            _currentOperationOrdinal = value;
+            _projectedDependencyAnalyzer?.SetCurrentOperationOrdinal(value);
+        }
+    }
 
     /// <summary>Gets the ordered evidence revision used to attribute deferred seed validation.</summary>
     internal long ModelManagedDataChangeVersion { get; private set; }

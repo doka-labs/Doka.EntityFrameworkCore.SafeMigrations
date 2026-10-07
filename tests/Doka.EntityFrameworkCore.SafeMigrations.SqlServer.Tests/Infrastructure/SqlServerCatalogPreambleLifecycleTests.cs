@@ -3,6 +3,25 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 /// <summary>Exercises catalog-proof lifetime through the real analyzer and its analysis scope.</summary>
 public sealed class SqlServerCatalogPreambleLifecycleTests
 {
+    /// <summary>Server permission evidence uses the documented null securable and class, not an invalid SERVER class.</summary>
+    [Fact]
+    public async Task EnvironmentProbe_UsesSupportedServerPermissionArguments()
+    {
+        // Arrange
+        await using var connection = new PreambleConnection();
+        await using var context = Context(connection);
+        var analyzer = Analyzer(context);
+
+        // Act
+        await analyzer.AnalyzeAsync(context, AnalysisOperations());
+
+        // Assert
+        Assert.Contains("HAS_PERMS_BY_NAME(NULL,NULL,N'VIEW ANY DEFINITION')", connection.EnvironmentCommand,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("HAS_PERMS_BY_NAME(NULL,N'SERVER'", connection.EnvironmentCommand,
+            StringComparison.Ordinal);
+    }
+
     /// <summary>Successful analysis and inventory still recheck the current environment inside their active scope.</summary>
     /// <param name="borrowed">Whether the caller supplies the transaction.</param>
     [Theory]
@@ -501,6 +520,7 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         public int IdentifierReads { get; set; }
         public Exception? ClassificationFailure { get; set; }
         public int EnvironmentReads { get; set; }
+        public string EnvironmentCommand { get; set; } = string.Empty;
         public int ClassificationReads { get; set; }
         public int ScopeReleases { get; set; }
 
@@ -577,16 +597,19 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
             if (CommandText.StartsWith("SELECT SCHEMA_NAME()", StringComparison.Ordinal))
             {
                 connection.EnvironmentReads++;
+                connection.EnvironmentCommand = CommandText;
                 _result.Columns.Add("schema", typeof(string));
                 _result.Columns.Add("collation", typeof(string));
                 _result.Columns.Add("metadata_visible", typeof(int));
                 _result.Columns.Add("default_is_dbo", typeof(int));
                 _result.Columns.Add("principal", typeof(int));
                 _result.Columns.Add("login", typeof(string));
+                _result.Columns.Add("ddl_row_effects_unproven", typeof(int));
+                _result.Columns.Add("expression_dependencies_readable", typeof(int));
                 _result.Rows.Add(connection.DefaultSchema, connection.Collation, connection.MetadataVisible ? 1 : 0,
                     connection.DefaultSchema == "dbo" ? 1 : 0,
                     connection.PrincipalId is { } principal ? principal : DBNull.Value,
-                    connection.LoginSid is { } sid ? sid : DBNull.Value);
+                    connection.LoginSid is { } sid ? sid : DBNull.Value, 0, 1);
             }
             else if (CommandText.StartsWith("SELECT requested.ordinal,", StringComparison.Ordinal))
             {

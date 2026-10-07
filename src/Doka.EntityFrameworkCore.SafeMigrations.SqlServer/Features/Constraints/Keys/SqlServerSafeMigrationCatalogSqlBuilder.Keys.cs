@@ -127,7 +127,14 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         return Plan(
             $"CASE WHEN NOT {occupied} THEN N'missing' WHEN {matchesKind} AND NOT {referenced} "
             + "THEN N'matching' ELSE N'different' END",
-            Bit($"NOT {occupied}"));
+            Bit($"NOT {occupied}")) with
+        {
+            // WHY: Only an exact key-kind match can lend its incoming-FK
+            // blocker to ordered projection. Occupancy and wrong-kind
+            // conflicts must never become approved drops after another FK drops.
+            ClassificationCodeExpression = $"CASE WHEN {matchesKind} AND {referenced} "
+                + "THEN N'incoming_foreign_key_key_dependency' ELSE NULL END",
+        };
     }
 
     private string KeyMatches(

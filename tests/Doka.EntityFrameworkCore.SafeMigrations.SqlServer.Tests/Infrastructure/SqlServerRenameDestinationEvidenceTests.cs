@@ -167,9 +167,15 @@ public sealed class SqlServerRenameDestinationEvidenceTests
         Assert.Contains(finalTarget, plan.StateExpression, StringComparison.Ordinal);
         var rename = runtime.IndexOf("sp_rename", StringComparison.Ordinal);
         var transfer = runtime.IndexOf("TRANSFER", StringComparison.Ordinal);
-        var guard = runtime.IndexOf(intermediate, StringComparison.Ordinal);
+        // WHY: Protected catalog access defers classification into one nested
+        // SQL literal; its escaping must not hide the guard's execution order.
+        var guard = runtime.IndexOf(intermediate.Replace("'", "''", StringComparison.Ordinal), StringComparison.Ordinal);
+        var permission = runtime.IndexOf(SqlServerSafeMigrationCatalogSqlBuilder.ExpressionDependencyReadPermission,
+            StringComparison.Ordinal);
 
         Assert.True(guard >= 0 && rename > guard && transfer > rename);
+        Assert.True(plan.RequiresExpressionDependencyRead);
+        Assert.True(permission >= 0 && permission < guard);
         Assert.Contains("[dbo].[source]", runtime, StringComparison.Ordinal);
         Assert.Contains("[target] TRANSFER [dbo].[destination]", runtime, StringComparison.Ordinal);
         Assert.Contains(identifiers, static identifier => identifier.Scope == SqlServerIdentifierScope.SchemaObject
@@ -199,7 +205,7 @@ public sealed class SqlServerRenameDestinationEvidenceTests
         var result = new DataTable { Locale = CultureInfo.InvariantCulture };
         Type[] types = [typeof(string), typeof(string), typeof(string), typeof(string), typeof(int), typeof(int),
             typeof(byte), typeof(bool), typeof(int), typeof(int), typeof(bool), typeof(bool), typeof(int),
-            typeof(int), typeof(int), typeof(int)];
+            typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(string)];
 
         for (var index = 0; index < types.Length; index++)
         {
@@ -207,17 +213,20 @@ public sealed class SqlServerRenameDestinationEvidenceTests
         }
 
         result.Rows.Add("dbo", "source", DBNull.Value, DBNull.Value, 1, DBNull.Value, DBNull.Value, DBNull.Value,
-            DBNull.Value, DBNull.Value, false, false, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value);
+            DBNull.Value, DBNull.Value, false, false, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value,
+            DBNull.Value, DBNull.Value, DBNull.Value);
         result.Rows.Add(crossSchema ? "target" : "dbo", "destination", DBNull.Value, DBNull.Value, 1,
             targetExists ? 42 : DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, false, false,
-            DBNull.Value, DBNull.Value, DBNull.Value, targetExists || otherObjectExists ? 42 : DBNull.Value);
+            DBNull.Value, DBNull.Value, DBNull.Value, targetExists || otherObjectExists ? 42 : DBNull.Value,
+            DBNull.Value, DBNull.Value, DBNull.Value);
         if (crossSchema)
         {
             Assert.Contains("(N'dbo', N'destination', CONVERT(nvarchar(128), NULL), CONVERT(nvarchar(128), NULL))",
                 sql, StringComparison.Ordinal);
             result.Rows.Add("dbo", "destination", DBNull.Value, DBNull.Value, 1,
                 intermediateExists ? 43 : DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value,
-                false, false, DBNull.Value, DBNull.Value, DBNull.Value, intermediateExists ? 43 : DBNull.Value);
+                false, false, DBNull.Value, DBNull.Value, DBNull.Value, intermediateExists ? 43 : DBNull.Value,
+                DBNull.Value, DBNull.Value, DBNull.Value);
         }
 
         return result;

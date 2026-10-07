@@ -39,6 +39,7 @@ internal sealed partial class SafeMigrationPreflightProjection :
     private bool _hasOpaqueSqlPostcondition;
     private bool _creationCharacterSetChanged;
     private long _providerDataMutationVersion;
+    private int? _deferredProviderOperationOriginOrdinal;
 
     internal bool HasOpaqueSqlPostcondition => _hasOpaqueSqlPostcondition;
 
@@ -114,6 +115,26 @@ internal sealed partial class SafeMigrationPreflightProjection :
             // the original stream. Safe renames may be opaque to generic
             // projection, but their provider-proven sequence results still hold.
             return StructureStateUnknown();
+        }
+
+        if (_deferredProviderOperationOriginOrdinal is { } deferredOrdinal)
+        {
+            if (liveAnalysis.ObservedState == SafeMigrationObservedState.Unsupported)
+            {
+                // WHY: Deferred safe DDL does not authorize permission or capability
+                // changes. Keep an independently captured unsupported contract visible.
+                return liveAnalysis;
+            }
+
+            // WHY: A deferred key, table or column has no proven postcondition.
+            // Later operations may depend on it, but recording it as accepted
+            // would invent a physical prerequisite. Preserve the runtime boundary
+            // and its real origin instead of misclassifying the dependency as absent.
+            return new SafeMigrationProviderAnalysis(SafeMigrationObservedState.PrerequisiteMissing,
+                SafeMigrationRepairCapability.None, false, "projected_provider_postcondition_unknown")
+            {
+                ProviderDeferredOriginOrdinal = deferredOrdinal,
+            };
         }
 
         // WHY: Accepted table removal invalidates every owned object, including
@@ -332,6 +353,11 @@ internal sealed partial class SafeMigrationPreflightProjection :
             MarkProjectedTableStructureChanged(operation.Intent);
         }
     }
+
+    /// <summary>Retains uncertainty, not an accepted postcondition, after provider-specific deferred DDL.</summary>
+    /// <param name="operationOrdinal">The complete-stream ordinal of the deferred structural operation.</param>
+    internal void ObserveDeferredProviderOperation(int operationOrdinal)
+        => _deferredProviderOperationOriginOrdinal ??= operationOrdinal;
 
     /// <summary>
     /// Conservatively updates projected evidence after a non-safe operation.

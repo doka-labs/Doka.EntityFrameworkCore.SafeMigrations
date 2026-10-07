@@ -30,7 +30,7 @@ public enum SafeMigrationReportStatus
     Blocked = 3,
 
     /// <summary>
-    /// No conflict is proven, but opaque SQL or unconfined data writes prevent
+    /// No conflict is proven, but opaque SQL, provider DDL effects or unconfined data writes prevent
     /// read-only classification of later operations. Their runtime guards must decide.
     /// </summary>
     RuntimeValidationRequired = 4,

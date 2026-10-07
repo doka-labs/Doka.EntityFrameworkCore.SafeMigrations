@@ -108,6 +108,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             + "THEN N'different' ELSE N'matching' END",
             Bit($"NOT {occupied}")) with
         {
+            RequiresExpressionDependencyRead = true,
             // WHY: Projection may discharge incoming FKs through an earlier
             // accepted dependent/FK DROP, but must preserve every independent
             // view, temporal, FileTable, or wrong-object-kind conflict.
@@ -149,7 +150,10 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             + $"WHEN NOT {source} OR {target}{intermediate} OR {dependent} "
             + "THEN N'different' ELSE N'matching' END",
             Bit($"NOT {sourceOccupied} AND {TableExists(
-                intent.NewName ?? intent.Name, intent.NewSchema ?? intent.Schema)}"));
+                intent.NewName ?? intent.Name, intent.NewSchema ?? intent.Schema)}")) with
+        {
+            RequiresExpressionDependencyRead = true,
+        };
     }
 
     /// <summary>Compares table columns and bounded allowed or required constraint contracts.</summary>

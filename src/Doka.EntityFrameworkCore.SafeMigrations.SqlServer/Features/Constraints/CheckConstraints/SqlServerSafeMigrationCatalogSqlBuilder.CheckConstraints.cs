@@ -2,31 +2,82 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 
 internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 {
-    private SqlServerSafeMigrationRuntimePlan BuildEnsureCheck(EnsureCheckConstraintIntent intent)
+    private SqlServerSafeMigrationRuntimePlan BuildEnsureCheck(
+        EnsureCheckConstraintIntent intent,
+        bool orderedCapture = false
+    )
     {
         var definition = intent.Definition;
         var table = TableExists(definition.Table, definition.Schema);
         var occupied = ConstraintNameOccupiedInSchema(definition.Schema, definition.Name);
-        var matching = CheckMatches(definition);
-        var hasRows = $"EXISTS (SELECT TOP (1) 1 FROM {QualifiedTable(definition.Table, definition.Schema)})";
 
-        // WHY: SQL Server validates a new CHECK against existing rows. Without
-        // interpreting an arbitrary authored predicate, only an empty table
-        // provides a provider-independent proof that creation cannot fail.
+        if (orderedCapture)
+        {
+            occupied = $"({occupied}) AND NOT ({CheckExists(definition.Table, definition.Schema, definition.Name)})";
+        }
+
+        var matching = orderedCapture ? "1 = 0" : CheckMatches(definition);
+        var expression = GetStructuredCheckExpression(definition);
+        var safe = expression is not null && IsSafeIntegerCheckPredicate(expression);
+        var columns = new HashSet<string>(StringComparer.Ordinal);
+
+        if (safe)
+        {
+            SafeMigrationSqlExpressionInspector.CollectIdentifiers(expression!, columns);
+        }
+
+        var support = safe ? BuildIntegerCheckColumnProof(definition, columns) : "1 = 1";
+        var canRead = $"COALESCE(HAS_PERMS_BY_NAME({Literal(QualifiedTable(definition.Table, definition.Schema))}, "
+            + "N'OBJECT', N'SELECT'), 0) = 1";
+
+        var unsafeRows = $"EXISTS (SELECT TOP (1) 1 FROM {QualifiedTable(definition.Table, definition.Schema)}"
+            + (safe ? $" WHERE NOT ({CheckExpression(definition)})" : string.Empty) + ")";
+
+        var classificationCode = $"CASE WHEN NOT ({canRead}) THEN N'check_row_data_unproven' "
+            + (orderedCapture ? string.Empty : $"WHEN {matching} OR ({occupied}) THEN NULL ")
+            + $"WHEN NOT ({support}) THEN N'check_column_type_unproven' ELSE NULL END";
+
+        // WHY: A CHECK rejects FALSE, not UNKNOWN. NOT(predicate) finds only
+        // those failures. Rendering alone proves neither nonthrowing evaluation
+        // nor physical operand types, so opaque or unsafe expressions retain
+        // the empty-only proof and every row probe has an outer permission gate.
 
         return Plan(
             $"CASE WHEN NOT {table} THEN N'prerequisite_missing' "
             + $"WHEN {matching} THEN N'matching' WHEN {occupied} THEN N'different' "
-            + $"WHEN {hasRows} THEN N'data_blocked' ELSE N'missing' END",
+            + $"WHEN {unsafeRows} THEN N'data_blocked' ELSE N'missing' END",
             Bit(matching)) with
         {
             RequiresDelayedBinding = true,
+            RequiresLiveDataProof = true,
+            PrerequisiteExpression = Bit(TableAndColumnsExist(definition.Table, definition.Schema,
+                columns.Order(StringComparer.Ordinal).ToArray())),
+            StateEvaluationGuardExpression = Bit(orderedCapture ? $"({canRead}) AND ({support})"
+                : $"({canRead}) AND ({matching} OR ({occupied}) OR ({support}))"),
+            StateEvaluationGuardFailureExpression = "N'unsupported'",
+            ClassificationCodeExpression = classificationCode,
+            PrerequisiteFailureCodeExpression = $"CASE WHEN NOT {table} THEN N'check_prerequisite_missing' "
+                + $"ELSE ({classificationCode}) END",
             PostApplySql = BuildCheckStampSql(definition),
             MatchedObjectNameExpression = $"CASE WHEN {matching} THEN {Literal(definition.Name)} ELSE NULL END",
         };
     }
 
-    private SqlServerSafeMigrationRuntimePlan BuildDropCheck(DropCheckConstraintIntent intent)
+    /// <summary>Validates a replacement predicate without erasing another owner's name occupancy.</summary>
+    /// <param name="intent">The authored CHECK candidate, retaining the opaque empty-only boundary.</param>
+    /// <returns>A guarded row proof requiring an accepted local drop before reuse.</returns>
+    internal SqlServerSafeMigrationRuntimePlan BuildCheckPredicateCapturePlan(
+        EnsureCheckConstraintIntent intent
+    )
+        => BuildEnsureCheck(intent, orderedCapture: true) with
+        {
+            PhysicalTableSupportExpression = BuildPhysicalTableSupportExpression(intent),
+            DefaultValueSupportExpression = BuildDefaultValueSupportExpression(intent),
+        };
+
+    private SqlServerSafeMigrationRuntimePlan BuildDropCheck(
+        DropCheckConstraintIntent intent
+    )
     {
         var occupied = ConstraintNameExists(intent.Table, intent.Schema, intent.Name);
         var checkExists = CheckExists(intent.Table, intent.Schema, intent.Name);
@@ -37,7 +88,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             Bit($"NOT {occupied}"));
     }
 
-    private string CheckMatches(ExpectedCheckConstraintDefinition definition)
+    private string CheckMatches(
+        ExpectedCheckConstraintDefinition definition
+    )
     {
         var fingerprint = ContractFingerprint("check", definition.Schema, definition.Table,
             definition.Name, CheckExpression(definition));
@@ -53,7 +106,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             + "COLLATE Latin1_General_100_BIN2))";
     }
 
-    private string BuildCheckStampSql(ExpectedCheckConstraintDefinition definition)
+    private string BuildCheckStampSql(
+        ExpectedCheckConstraintDefinition definition
+    )
     {
         var fingerprint = ContractFingerprint("check", definition.Schema, definition.Table,
             definition.Name, CheckExpression(definition));
@@ -72,10 +127,12 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             + $"@level2name = {Literal(definition.Name)}";
     }
 
-    private string CheckExpression(ExpectedCheckConstraintDefinition definition)
-        => definition.Expression is { } expression
+    private string CheckExpression(
+        ExpectedCheckConstraintDefinition definition
+    )
+        => definition.Sql ?? (definition.Expression is { } expression
             ? _expressionRenderer.Render(expression)
-            : definition.Sql
+            : null)
                 ?? throw new InvalidOperationException("A check constraint has no expression.");
 
     private string CheckExists(

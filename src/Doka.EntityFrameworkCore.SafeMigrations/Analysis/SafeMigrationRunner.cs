@@ -426,10 +426,28 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
                         originOperation.GetType().FullName ?? originOperation.GetType().Name);
                 }
 
+                if (analysis.ProviderDeferredOriginOrdinal is { } providerOriginOrdinal)
+                {
+                    // WHY: A provider may invalidate row evidence through typed or
+                    // safe DDL rather than SQL. Only a preceding stream position is
+                    // a valid provenance certificate; a bad certificate fails closed.
+                    if (providerOriginOrdinal < 0 || providerOriginOrdinal >= ordinal)
+                    {
+                        throw new InvalidOperationException(
+                            "The provider returned an invalid deferred-validation origin.");
+                    }
+
+                    var originOperation = operations[providerOriginOrdinal];
+
+                    deferredOrigin = new SafeMigrationDeferredOrigin(
+                        migrationIds?[providerOriginOrdinal], providerOriginOrdinal,
+                        originOperation.GetType().FullName ?? originOperation.GetType().Name);
+                }
+
                 if (mode == SafeMigrationReportMode.Preflight
                     && deferredOrigin is not null)
                 {
-                    // WHY: Raw SQL and unconfined writes invalidate earlier live
+                    // WHY: Opaque SQL, provider DDL effects and unconfined writes invalidate earlier live
                     // evidence. Runtime guards inspect the actual ordered state.
                     // A deferred seed write may itself fire triggers, so discard
                     // earlier row proofs without inventing its postconditions.
@@ -439,6 +457,11 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
                         managedDataOrigin = new SafeMigrationDeferredOrigin(
                             migrationIds?[ordinal], ordinal, typeof(SafeMigrationOperation).FullName!);
                         globalDataOrigin = managedDataOrigin;
+                    }
+
+                    else if (analysis.ProviderDeferredOriginOrdinal is not null)
+                    {
+                        preflightProjection!.ObserveDeferredProviderOperation(ordinal);
                     }
 
                     hasDeferredOperations = true;

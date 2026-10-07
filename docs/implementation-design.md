@@ -713,6 +713,26 @@ the preceding invalidation in `DeferredOrigin`. No new report enum or schema
 version is needed; invariant unsupported contracts and known missing owners or
 required columns retain their blocking classifications.
 
+SQL Server uses that existing deferral contract when accepted executable safe
+or typed provider DDL invalidates later row certificates through a visible
+enabled DDL trigger or insufficient metadata visibility to prove absence.
+The provider identifies the invalidating operation; Core records its migration
+ID, ordinal, and CLR type rather than attributing it to raw SQL. The two cases
+retain distinct analysis codes and do not create a new schema, action, or
+permission grant. Fresh runtime validation occurs immediately before the
+affected operation, with independent invariant blockers retained. Metadata-only
+matching and non-executing no-ops do not claim that DDL changed any rows.
+
+A provider-specific deferred structural operation establishes no accepted
+physical postcondition. Core keeps later supported safe operations in a
+conservative runtime-validation boundary, using
+`projected_provider_postcondition_unknown` and the first deferred structural
+operation as their origin. This prevents a deferred key from becoming an
+invented candidate key or a false missing prerequisite for a following foreign
+key. Deferred model-managed writes do not create this structural boundary;
+all live `Unsupported` results, including permission and capability refusals,
+and identifier mismatches retain precedence.
+
 Operation-contract fingerprints include safe intent, expected definitions,
 policy, annotations, and ordering. An ordinary EF operation contributes
 only its CLR type marker and still requires the immutable deployment artifact

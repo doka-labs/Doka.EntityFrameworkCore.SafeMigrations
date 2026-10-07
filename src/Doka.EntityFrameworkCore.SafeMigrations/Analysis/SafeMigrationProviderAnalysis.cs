@@ -108,6 +108,13 @@ public sealed class SafeMigrationProviderAnalysis
     /// <summary>Gets the affected owner or dependency's latest local invalidation ordinal, when known.</summary>
     internal int? ModelManagedLocalOriginOrdinal { get; init; }
 
+    /// <summary>Gets the preceding provider mutation or deferred DDL that invalidated an ordered proof.</summary>
+    /// <remarks>
+    /// WHY: A provider-specific DDL effect is not opaque SQL. Its exact stream ordinal
+    /// lets Core attribute runtime validation without inventing a raw-SQL origin.
+    /// </remarks>
+    internal int? ProviderDeferredOriginOrdinal { get; init; }
+
     /// <summary>Gets whether preceding operations cannot repair this unsupported contract.</summary>
     internal bool IsInvariantUnsupported { get; init; }
 

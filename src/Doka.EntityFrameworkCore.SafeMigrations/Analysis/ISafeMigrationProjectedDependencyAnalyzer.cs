@@ -3,6 +3,12 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// <summary>Revalidates provider dependencies against the accepted ordered migration state.</summary>
 internal interface ISafeMigrationProjectedDependencyAnalyzer
 {
+    /// <summary>Binds subsequent ordered observations to their original migration-stream position.</summary>
+    /// <param name="operationOrdinal">The zero-based ordinal in the complete, not safe-only, stream.</param>
+    void SetCurrentOperationOrdinal(int operationOrdinal)
+    {
+    }
+
     /// <summary>Proves an operation after a provider transition opaque to neutral projection.</summary>
     /// <param name="operation">The operation being assessed.</param>
     /// <param name="liveAnalysis">The immutable catalog assessment.</param>

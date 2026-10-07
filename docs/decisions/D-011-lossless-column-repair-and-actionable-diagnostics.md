@@ -82,10 +82,41 @@ defaults and foreign-key dependencies remain blocked because SafeMigrations
 cannot prove those behavioral and coupled-type contracts from one column
 operation.
 
-The allowlist continues to reject character-family or collation changes,
+The text/Boolean allowlists continue to reject character-family or collation changes,
 unrecognized provider metadata, generated/identity/row-version semantics, and
 unproven dependency shapes. Accepted operations report
 `TableRewritePossible`; data safety does not claim metadata-only or online DDL.
+
+SQL Server additionally admits the six lossless widenings between built-in
+`tinyint`, `smallint`, `int`, and `bigint` for explicit Alter operations. Exact
+source/target facets, preserved identity/default contracts, effective permissions,
+declared row capacity, and ordered physical dependency proofs remain required.
+Unchanged nullability needs no value scan; tightening requires fresh NULL absence.
+Numeric narrowing and unproven physical layouts remain blocked. This is not an
+automatic key/index replacement contract. The complete boundary is recorded in
+[SQL Server behavior](../sqlserver-behavior.md#lossless-integer-alterations-and-check-validation).
+
+The SQL Server ordinary-column contract also requires unencrypted columns
+without a bound legacy stand-alone rule. Type and length equality alone cannot
+make either physical feature a matching NoOp, and neither is removed implicitly.
+This boundary applies to all column matching, not only admitted widenings.
+
+Enabled SQL Server DDL triggers or insufficient database/server metadata
+visibility prevent retaining immutable row proofs after executable DDL.
+Read-only preflight records the DDL origin and uses the existing
+`RuntimeValidationRequired` report contract for affected assessments. It neither
+claims trigger absence under filtered visibility nor requires an automatic
+server grant. The guarded runtime operation validates fresh state immediately
+before its own mutation; independent permission, identity, and support blockers
+remain authoritative. Known trigger risk and visibility uncertainty have
+distinct analysis codes without a new report schema or action.
+Deferred structural operations do not establish physical postconditions.
+Following supported safe operations retain runtime validation, attributed to
+the first deferred structural operation with
+`projected_provider_postcondition_unknown`. No accepted candidate key is
+invented for a later foreign key; deferred model-managed writes alone do not
+activate this structural boundary. All live `Unsupported` results, including
+permission and capability refusals, and identifier mismatches retain precedence.
 
 Report schema version 2 retains the backward-compatible aggregate `Code` and
 adds `AnalysisCode`, `DecisionCode`, bounded typed `Differences`, and
@@ -175,6 +206,16 @@ recovery. D-005 remains authoritative for evidence bounds and privacy.
   allowlists, exact old-definition approval, operation-specific eligibility,
   and ordered projection proof ownership. This does not broaden unsupported
   provider families or change immutable migration source and history.
+- 2026-10-07: Extended the provider-proven allowlist with bounded SQL Server
+  integer widenings, independent physical/permission checks, ordered dependency
+  retirement, and replay/rollback regressions. Native engine qualification
+  remains required; ARM-emulated diagnostics do not discharge that gate.
+- 2026-10-07: Clarified unencrypted/unbound ordinary-column matching and extended
+  existing origin-bearing runtime validation to SQL Server DDL-invalidated row
+  evidence. Distinguish visible enabled triggers from unproven visibility;
+  retain least-privilege execution and independent invariant blockers. Preserve
+  a runtime boundary after deferred structural operations without inventing
+  their physical postconditions.
 
 ### Implementation References
 
@@ -183,6 +224,8 @@ recovery. D-005 remains authoritative for evidence bounds and privacy.
 - [Ordered column projection](../../src/Doka.EntityFrameworkCore.SafeMigrations/Features/Columns/SafeMigrationPreflightProjection.Columns.cs)
 - [MySQL/MariaDB Alter regressions](../../tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Integration/Features/Columns/MySqlSafeMigrationIntegrationTests.Columns.AlterTransitions.cs)
 - [PostgreSQL Alter regressions](../../tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Integration/Features/Columns/PostgreSqlSafeMigrationIntegrationTests.Columns.AlterTransitions.cs)
+- [SQL Server integer analysis](../../src/Doka.EntityFrameworkCore.SafeMigrations.SqlServer/Features/Columns/SqlServerSafeMigrationCatalogSqlBuilder.IntegerWidening.cs)
+- [SQL Server integer regressions](../../tests/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests/Integration/SqlServerSafeMigrationIntegrationTests.IntegerWidening.cs)
 - [Diagnostic evidence](../../src/Doka.EntityFrameworkCore.SafeMigrations/Analysis/SafeMigrationDiagnosticsEvidence.cs)
 - [Report schema version 2](../../schemas/safe-migration-run-report-v2.schema.json)
 - [Failure-code runbook](../runbooks/failure-codes.md)
@@ -200,3 +243,8 @@ recovery. D-005 remains authoritative for evidence bounds and privacy.
 - [PostgreSQL 18 character types](https://www.postgresql.org/docs/18/datatype-character.html) (primary source; retrieved 2026-09-05)
 - [PostgreSQL 18 information-schema columns](https://www.postgresql.org/docs/18/infoschema-columns.html) (primary source; retrieved 2026-09-05)
 - [PostgreSQL 18 ALTER TABLE](https://www.postgresql.org/docs/18/sql-altertable.html) (primary source; retrieved 2026-09-05)
+- [SQL Server integer types](https://learn.microsoft.com/en-us/sql/t-sql/data-types/int-bigint-smallint-and-tinyint-transact-sql?view=sql-server-ver17) (primary source; retrieved 2026-10-07)
+- [SQL Server ALTER TABLE](https://learn.microsoft.com/en-us/sql/t-sql/statements/alter-table-transact-sql?view=sql-server-ver17) (primary source; retrieved 2026-10-07)
+- [SQL Server column metadata](https://learn.microsoft.com/en-us/sql/relational-databases/system-catalog-views/sys-columns-transact-sql?view=sql-server-ver17) (primary source; retrieved 2026-10-07)
+- [SQL Server DDL triggers](https://learn.microsoft.com/en-us/sql/relational-databases/triggers/ddl-triggers?view=sql-server-ver17) (primary source; retrieved 2026-10-07)
+- [SQL Server metadata visibility](https://learn.microsoft.com/en-us/sql/relational-databases/security/metadata-visibility-configuration?view=sql-server-ver17) (primary source; retrieved 2026-10-07)
