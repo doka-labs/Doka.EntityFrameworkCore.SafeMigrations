@@ -287,7 +287,9 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
         Assert.Equal(SafeMigrationAction.ValidateAtRuntime, preflight.Assessments[2].Action);
         Assert.Equal("runtime_validation_required", preflight.Assessments[2].Code);
-        Assert.Equal("projected_model_managed_data_state_unknown", preflight.Assessments[2].AnalysisCode);
+        // WHY: User-trigger presence also invalidates structure after the first DELETE.
+        // The intervening deferred managed write has no certified provider postcondition.
+        Assert.Equal("projected_provider_postcondition_unknown", preflight.Assessments[2].AnalysisCode);
         Assert.NotNull(preflight.Assessments[2].DeferredOrigin);
         Assert.Equal(SafeMigrationObservedState.DataBlocked, Assert.Single(actual.Assessments).ObservedState);
         Assert.IsType<PostgresException>(exception);

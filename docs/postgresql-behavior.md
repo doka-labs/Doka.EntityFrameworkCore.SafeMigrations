@@ -149,6 +149,57 @@ Boolean repair.
 
 ## Analysis consistency
 
+### DDL event-trigger freshness
+
+Event triggers can modify unrelated rows and schema objects before a DDL command
+returns. Preflight captures their session activation once per analysis invocation:
+`O` for origin/local, `R` for replica, `A` for every role, and `D` disabled.
+The optional `event_triggers` setting is honored when exposed by the server.
+A separate catalog-SELECT permission check precedes the protected trigger query;
+inaccessible metadata is uncertainty, not a trigger-absence certificate.
+This costs at most two bounded metadata commands per nonempty analysis, not a
+per-operation query, and retains only risk and ordinal state.
+
+After executable safe or typed DDL with active or unprovable trigger risk,
+later captured row and structural classifications become `ValidateAtRuntime`.
+The analysis code is `projected_event_trigger_state_unknown` or
+`projected_event_trigger_visibility_unknown`, with the actual DDL `DeferredOrigin`.
+The preflight status is `RuntimeValidationRequired` unless an independent blocker
+remains. Initial no-ops, disabled/inactive triggers and provably non-executing
+typed renames retain normal projection. After risk-bearing DDL, even a previously
+matching index or removed table may have changed; neutral shortcuts cannot prove
+otherwise. Unsupported contracts remain blocking. Runtime still reads fresh
+catalog and rows before its own mutation and may reject the actual ordered state.
+The report format, history and transaction contract are unchanged.
+See [event-trigger behavior](https://www.postgresql.org/docs/current/event-trigger-definition.html)
+and [activation modes](https://www.postgresql.org/docs/current/catalog-pg-event-trigger.html).
+
+User DML triggers can also execute unrelated DDL. The same two bounded metadata
+reads capture a global session-active presence flag from `pg_trigger`; no trigger
+body or per-owner dependency graph is retained. A direct owner filter would miss
+triggers reached through FK cascades, partition routing or recursive writes.
+Internal FK triggers alone do not establish this arbitrary-DDL risk.
+
+After executable safe or typed DML with active or unprovable user-trigger risk,
+later physical classifications use `projected_dml_trigger_structure_unknown` or
+`projected_dml_trigger_visibility_unknown`, with the actual DML `DeferredOrigin`.
+Later model-managed row contracts retain `projected_model_managed_data_state_unknown`.
+This includes provider-emitted NULL-backfill UPDATEs inside column ALTER/repair
+baselines: a statement trigger can fire even when no row needs changing.
+Empty typed writes and initial safe no-ops do not invalidate evidence. Unsupported
+contracts, fresh runtime classification and the existing transaction boundary
+remain authoritative. See the [trigger catalog](https://www.postgresql.org/docs/current/catalog-pg-trigger.html).
+
+### Bounded catalog and row probes
+
+Narrowing eligibility builds only the current candidate's required predicates
+inside the bounded statement builder. It no longer retains a full runtime-plan
+array for the entire candidate set, and immutable candidate records keep only
+their source/target identity, operation and ordinal rather than discarded
+narrowing SQL. Result/report memory remains proportional to the operation
+count; SQL construction and database checks still occur. This changes lifetime
+and retained managed memory, not source authority, query shape or data-proof scope.
+
 Catalog analysis omits only builder-certified constant `TRUE` prerequisites.
 Nonconstant prerequisites still complete before row-dependent queries bind.
 Independent diagnostic, narrowing-eligibility and qualified row-probe statements

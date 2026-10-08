@@ -635,6 +635,17 @@ Preflight is a separate API. `ISafeMigrationRunner`:
 - inventories unexpected additive objects without deleting them;
 - emits model and operation-contract fingerprints.
 
+Provider dependency analyzers can qualify captured facts before neutral
+missing-owner, sequence-aware and matching shortcuts. This invocation-local
+hook is necessary for SQL Server DDL triggers, PostgreSQL event triggers and
+user DML triggers which can execute unrelated DDL:
+the initiating command can change unrelated rows and physical dependencies,
+including recreating a dropped owner. Active or unprovable trigger risk after
+executable DDL or DML produces origin-bearing runtime validation, not an accepted
+postcondition. Identity, invariant unsupported contracts, authored-SQL boundaries
+and an earlier deferred structural origin retain precedence. Providers without
+this risk return no override and keep the existing projection path.
+
 The model fingerprint is a versioned, provider-bound SHA-256 envelope over an
 ordinally sorted relational metadata stream. It covers tables, columns, keys,
 foreign keys, indexes, checks, sequences, views, queries, functions, stored
@@ -714,14 +725,24 @@ version is needed; invariant unsupported contracts and known missing owners or
 required columns retain their blocking classifications.
 
 SQL Server uses that existing deferral contract when accepted executable safe
-or typed provider DDL invalidates later row certificates through a visible
+or typed provider DDL invalidates later row or structural certificates through a visible
 enabled DDL trigger or insufficient metadata visibility to prove absence.
 The provider identifies the invalidating operation; Core records its migration
 ID, ordinal, and CLR type rather than attributing it to raw SQL. The two cases
 retain distinct analysis codes and do not create a new schema, action, or
 permission grant. Fresh runtime validation occurs immediately before the
-affected operation, with independent invariant blockers retained. Metadata-only
-matching and non-executing no-ops do not claim that DDL changed any rows.
+affected operation, with independent invariant blockers retained. Initial
+non-executing no-ops do not invalidate evidence, but metadata matching captured
+before trigger-risk DDL does not prove its survival. PostgreSQL session-active
+event triggers use the same preceding-operation provenance and freshness gate.
+
+Enabled user DML triggers also invalidate physical metadata after executable safe
+or typed DML. Both providers retain only a global risk flag, so FK cascades and
+nested writes cannot bypass freshness through an owner-only lookup. PostgreSQL
+shares its two permission-first trigger metadata reads; SQL Server adds a scalar
+to its existing environment read. Empty typed writes, initial safe no-ops and
+unsupported operation contracts retain their prior behavior. Origin-bearing
+runtime validation records the actual DML and infers no physical postcondition.
 
 A provider-specific deferred structural operation establishes no accepted
 physical postcondition. Core keeps later supported safe operations in a

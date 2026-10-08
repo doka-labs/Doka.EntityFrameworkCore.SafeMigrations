@@ -200,7 +200,8 @@ public sealed class SqlServerProjectedIntegerTransitionTests
         var repeated = ordered.Concat(ordered).ToArray();
 
         // Act
-        await analyzer.ReadProjectedColumnTransitionsAsync(connection, null, repeated, true, 73,
+        await analyzer.ReadProjectedColumnTransitionsAsync(connection, null, repeated,
+            repeated.Select(static _ => Different()).ToArray(), true, 73,
             CancellationToken.None);
         var result = analyzer.ValidateProjectedOperation(operations[^1], Different(), new EmptyColumns());
 
@@ -239,7 +240,8 @@ public sealed class SqlServerProjectedIntegerTransitionTests
         }
 
         // Act
-        await analyzer.ReadProjectedColumnTransitionsAsync(connection, null, operations, false, 73,
+        await analyzer.ReadProjectedColumnTransitionsAsync(connection, null, operations,
+            operations.Select(static _ => Different()).ToArray(), false, 73,
             CancellationToken.None);
 
         // Assert
@@ -293,7 +295,8 @@ public sealed class SqlServerProjectedIntegerTransitionTests
         };
 
         // Act
-        await analyzer.ReadProjectedColumnTransitionsAsync(connection, null, operations, true, 73,
+        await analyzer.ReadProjectedColumnTransitionsAsync(connection, null, operations,
+            operations.Select(static _ => Different()).ToArray(), true, 73,
             CancellationToken.None);
         var result = analyzer.ValidateProjectedOperation(operations[candidate], Different(), new EmptyColumns());
 

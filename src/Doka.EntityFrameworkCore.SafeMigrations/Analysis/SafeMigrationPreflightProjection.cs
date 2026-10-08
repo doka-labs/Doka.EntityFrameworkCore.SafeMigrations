@@ -137,6 +137,16 @@ internal sealed partial class SafeMigrationPreflightProjection :
             };
         }
 
+        if (_projectedDependencyAnalyzer?.ValidateCapturedProjection(operation, liveAnalysis, this)
+            is { } capturedAnalysis)
+        {
+            // WHY: Executed DDL or DML may invoke triggers that recreate a dropped
+            // owner or change unrelated dependencies. Neither an earlier tombstone
+            // nor an immutable Matching result proves the post-trigger catalog.
+
+            return capturedAnalysis;
+        }
+
         // WHY: Accepted table removal invalidates every owned object, including
         // provider analyses that still describe the immutable pre-batch catalog.
 

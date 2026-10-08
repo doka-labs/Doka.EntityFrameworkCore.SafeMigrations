@@ -156,7 +156,8 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
         var projection = new SafeMigrationPreflightProjection(
             _analyzer,
             projectedKeyAnalyzer: null,
-            _analyzer);
+            _analyzer,
+            projectedColumnAnalyzer: _analyzer);
 
         var acceptedOperations = new List<MigrationOperation>(_operations.Count);
 

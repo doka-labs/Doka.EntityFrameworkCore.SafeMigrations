@@ -128,6 +128,13 @@ data/prerequisite result uses its planner rejection code.
 | `projected_column_transition_unproven` | The accepted old definition is known, but physical capacity, dependency safety, or current row evidence does not establish the requested conversion. Inspect the ordered source and provider limits; an empty-table proof alone does not establish physical feasibility. |
 | `projected_data_state_unknown` | Earlier data operations or backfill-capable alterations invalidated a projected or live pre-batch row-safety proof. Provider-generated updates can fire triggers on other tables. The public blocked assessment uses `prerequisite_missing`; do not execute the dependent operation without a separately provable post-DML state. |
 | `projected_ddl_trigger_data_unknown` | SQL Server observed an enabled database or server DDL trigger. Accepted executable DDL invalidated later row certificates; the assessment uses `ValidateAtRuntime` with the DDL `DeferredOrigin`, not a claimed observed state or postcondition. The runtime guard checks fresh rows immediately before its operation. |
+| `projected_ddl_trigger_structure_unknown` | SQL Server DDL-trigger effects leave later physical metadata or dependency certificates stale. A dropped index can be replaced by another dependency; runtime must classify the actual ordered catalog. |
+| `projected_ddl_visibility_structure_unknown` | SQL Server cannot certify trigger absence and therefore cannot reuse later structural metadata after executable DDL. Inspect visibility and the DDL origin; no permission grant or bypass is implied. |
+| `projected_event_trigger_state_unknown` | PostgreSQL session-active event triggers can change rows and schema after preceding DDL. Later assessments use `ValidateAtRuntime` with that DDL origin. |
+| `projected_event_trigger_visibility_unknown` | PostgreSQL catalog access cannot establish event-trigger absence. Later captured state after executable DDL requires fresh runtime classification. |
+| `projected_dml_trigger_structure_unknown` | PostgreSQL or SQL Server observed active user DML triggers which can execute unrelated DDL, including through FK cascades. Later physical metadata requires runtime classification with the actual DML origin. |
+| `projected_dml_trigger_data_unknown` | SQL Server DML-trigger effects invalidate a later row-dependent contract. Runtime checks fresh rows and metadata; independently unsupported target-trigger contracts still block. |
+| `projected_dml_trigger_visibility_unknown` | PostgreSQL cannot inspect the user-trigger catalog to prove absence. Executable DML invalidates later physical state; no permission grant or trigger-absence certificate is implied. |
 | `projected_ddl_visibility_data_unknown` | SQL Server cannot prove DDL-trigger absence with the effective database VIEW DEFINITION and server VIEW ANY DEFINITION visibility. After accepted executable DDL, later row-dependent evidence is deferred with its DDL origin. This does not assert that a trigger exists, grant rights, or waive independent blockers. |
 | `projected_provider_postcondition_unknown` | A preceding provider-specific deferred structural operation has no accepted physical postcondition. Later supported safe operations remain `ValidateAtRuntime`, with the first deferred structural operation as `DeferredOrigin`; no table, column, or candidate key is invented. All live `Unsupported` results, including permission and capability refusals, and identifier mismatches remain blocking. Deferred model-managed writes alone do not establish this structural boundary. |
 | `projected_structure_state_unknown` | Projected structure is unknown after an opaque or unresolved mutation. After raw SQL, a later safe assessment instead uses `runtime_validation_required` with the SQL origin; other unresolved transitions remain blocked. |
@@ -150,7 +157,8 @@ deployment approval. A later `projected_missing` result proves only that its
 safe prerequisite follows if the preceding provider operation succeeds; it
 does not waive that independent evidence.
 Typed EF data operations preserve only structural prerequisites for a later
-non-unique index. A data-dependent unique index or additive constraint remains
+non-unique index when no provider user-trigger risk invalidates that structure.
+A data-dependent unique index or additive constraint remains
 blocked even when the live analyzer observed absence before the ordered data
 operation. A later structural provider operation cannot clear that uncertainty.
 If an unrecognized provider operation separates the prerequisite from the safe
@@ -163,8 +171,10 @@ missing prerequisite. Immutable unsupported contracts remain blocked.
 `NonMatching` to inspect them. `ThrowIfBlocked()` permits their report status,
 but cannot approve the raw SQL or promise that runtime guards will pass.
 
-The two `projected_ddl_*_data_unknown` codes retain the same aggregate report
-contract and selections, with the accepted DDL as their origin. Check which
+The `projected_ddl_*_data_unknown`, `projected_ddl_*_structure_unknown`,
+`projected_event_trigger_*_unknown` and `projected_dml_trigger_*_unknown` codes
+retain the same aggregate report contract and selections, with the actual
+preceding DDL or DML as their origin. Check which
 case applies: a known enabled trigger is different from permission-filtered
 metadata. Do not treat an empty server-trigger catalog under limited visibility
 as proof of absence, grant server rights automatically, or skip the runtime

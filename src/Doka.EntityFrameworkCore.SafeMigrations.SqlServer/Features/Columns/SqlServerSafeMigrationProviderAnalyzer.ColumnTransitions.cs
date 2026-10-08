@@ -27,6 +27,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             _ddlRowDependentOperations.Clear();
             _ddlRowEffectRisk = SqlServerDdlRowEffectRisk.None;
             _ddlRowFreshnessInvalidated = false;
+            _hasEnabledDmlTriggers = false;
+            _freshnessInvalidatedByDml = false;
             _ddlRowOriginOrdinal = null;
             _currentProjectedOperationOrdinal = null;
         }
@@ -38,6 +40,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     /// <param name="connection">The metadata-visible analysis connection.</param>
     /// <param name="transaction">The caller's analysis transaction.</param>
     /// <param name="operations">The immutable ordered stream.</param>
+    /// <param name="liveAnalyses">The initial classifications in the same immutable stream order.</param>
     /// <param name="canReadExpressionDependencies">The invocation's proven protected catalog SELECT permission.</param>
     /// <param name="commandTimeout">The active command timeout.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
@@ -46,12 +49,25 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         DbConnection connection,
         DbTransaction? transaction,
         IReadOnlyList<SafeMigrationOperation> operations,
+        IReadOnlyList<SafeMigrationProviderAnalysis> liveAnalyses,
         bool canReadExpressionDependencies,
         int? commandTimeout,
         CancellationToken cancellationToken
     )
     {
-        var candidates = operations.Where(operation => canReadExpressionDependencies
+        if (operations.Count != liveAnalyses.Count)
+        {
+            throw new ArgumentException("Transition capture requires one live classification per operation.",
+                nameof(liveAnalyses));
+        }
+
+        // WHY: A matching target is already widened, so its captured live
+        // source cannot satisfy the authored old integer contract. Such a
+        // certificate is discarded by qualification anyway. Excluding it also
+        // prevents unused replay growth from reserving another column's budget.
+        var candidates = operations.Where((operation, index) => canReadExpressionDependencies
+            && liveAnalyses[index].ObservedState != SafeMigrationObservedState.Matching
+            && !liveAnalyses[index].IsInvariantUnsupported
             && operation.Intent is AlterColumnIntent
             { OldDefinition: not null } column
             && _catalogSqlBuilder.IsSupportedIntegerWidening(column.OldDefinition, column.Definition))

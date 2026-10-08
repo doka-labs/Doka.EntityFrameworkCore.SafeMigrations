@@ -102,7 +102,7 @@ make either physical feature a matching NoOp, and neither is removed implicitly.
 This boundary applies to all column matching, not only admitted widenings.
 
 Enabled SQL Server DDL triggers or insufficient database/server metadata
-visibility prevent retaining immutable row proofs after executable DDL.
+visibility prevent retaining immutable row and physical structure proofs after executable DDL.
 Read-only preflight records the DDL origin and uses the existing
 `RuntimeValidationRequired` report contract for affected assessments. It neither
 claims trigger absence under filtered visibility nor requires an automatic
@@ -110,6 +110,17 @@ server grant. The guarded runtime operation validates fresh state immediately
 before its own mutation; independent permission, identity, and support blockers
 remain authoritative. Known trigger risk and visibility uncertainty have
 distinct analysis codes without a new report schema or action.
+PostgreSQL applies the same freshness boundary for event triggers active in the
+current session or inaccessible trigger metadata. Provider freshness is checked
+before neutral matching and removed-owner shortcuts; the old catalog cannot
+prove that unrelated dependencies survived. No-trigger and initial no-op paths
+retain ordinary evidence. Enabled user DML triggers in both providers can also
+execute unrelated DDL. A global presence flag covers FK cascades and nested
+writes without retaining arbitrary trigger bodies; affected assessments keep
+the actual DML origin. SQL Server's independent model-managed target-trigger
+guard covers SQL and CLR implementations. SQLite rebuild repair requires an unchanged declared
+storage/CLR/generation domain, including `AUTOINCREMENT`; exact old-schema
+matching alone does not certify a lossless affinity conversion.
 Deferred structural operations do not establish physical postconditions.
 Following supported safe operations retain runtime validation, attributed to
 the first deferred structural operation with
@@ -217,7 +228,17 @@ recovery. D-005 remains authoritative for evidence bounds and privacy.
   a runtime boundary after deferred structural operations without inventing
   their physical postconditions.
 
+- 2026-10-08: Require an unchanged SQLite storage/CLR/generation domain for
+  rebuild repairs. Extend PostgreSQL event-trigger and SQL Server DDL-trigger
+  freshness to captured physical metadata before neutral projection shortcuts;
+  include user-DML-trigger effects through FK cascades without owner-only
+  assumptions. Preserve origin-bearing runtime validation and independent
+  unsupported contracts; include CLR implementations in the SQL Server target-trigger guard.
+
 ### Implementation References
+
+- [SQLite lossless rebuild proof](../../src/Doka.EntityFrameworkCore.SafeMigrations.Sqlite/Analysis/SqliteColumnRepairProof.cs)
+- [PostgreSQL event-trigger projection](../../src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/Analysis/PostgreSqlSafeMigrationProviderAnalyzer.EventTriggers.cs)
 
 - [MySQL/MariaDB column analysis](../../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/Features/Columns/MySqlSafeMigrationCatalogSqlBuilder.Columns.cs)
 - [PostgreSQL column analysis](../../src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/Features/Columns/PostgreSqlSafeMigrationCatalogSqlBuilder.Columns.cs)
@@ -231,6 +252,12 @@ recovery. D-005 remains authoritative for evidence bounds and privacy.
 - [Failure-code runbook](../runbooks/failure-codes.md)
 
 ### Sources
+
+- [SQLite type affinity](https://www.sqlite.org/datatype3.html#affinity) (primary source; retrieved 2026-10-08)
+- [PostgreSQL event-trigger behavior](https://www.postgresql.org/docs/18/event-trigger-definition.html) (primary source; retrieved 2026-10-08)
+- [PostgreSQL event-trigger activation](https://www.postgresql.org/docs/18/catalog-pg-event-trigger.html) (primary source; retrieved 2026-10-08)
+- [PostgreSQL DML-trigger catalog](https://www.postgresql.org/docs/18/catalog-pg-trigger.html) (primary source; retrieved 2026-10-08)
+- [SQL Server SQL/CLR trigger catalog](https://learn.microsoft.com/en-us/sql/relational-databases/system-catalog-views/sys-triggers-transact-sql?view=sql-server-ver17) (primary source; retrieved 2026-10-08)
 
 - MySQL 8.4 ALTER TABLE (`https://dev.mysql.com/doc/refman/8.4/en/alter-table.html`; primary source; retrieved 2026-10-06)
 - MariaDB ALTER TABLE (`https://mariadb.com/docs/server/reference/sql-statements/data-definition/alter/alter-table`; primary source; retrieved 2026-10-06)

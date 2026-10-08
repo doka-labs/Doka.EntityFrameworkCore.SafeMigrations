@@ -770,15 +770,29 @@ Direct guarded row postconditions and confined inserts into newly created plain
 tables retain their proven classifications; untouched conflicts still block.
 
 SQL Server also records a DDL origin when an enabled DDL trigger or insufficient
-database/server metadata visibility prevents trusting later row evidence.
+database/server metadata visibility prevents trusting later row or structural evidence.
 Affected assessments use the same runtime-validation contract; lack of server
 visibility is not a trigger-absence proof or an automatic permission grant.
 Runtime validates immediately before the affected operation, not in the
-background. Independent invariant blockers remain blocking; matching and no-op
-assessments alone do not invalidate row evidence. After a structural operation
+background. Independent invariant blockers remain blocking. An initial matching
+no-op emits no DDL and does not invalidate evidence, but metadata captured before
+earlier executable trigger-risk DDL cannot certify a later no-op. After a structural operation
 is deferred, later supported operations retain runtime validation without an
 invented physical postcondition. See
 [SQL Server row-proof freshness](docs/sqlserver-behavior.md#lossless-integer-alterations-and-check-validation).
+
+PostgreSQL applies the same boundary after DDL when an event trigger is active
+for the session, or catalog access cannot prove its absence. Trigger functions
+can change unrelated rows and objects; the initiating object's postcondition
+does not establish global freshness. Disabled or inactive replica-only triggers
+do not discard ordinary proofs. See [PostgreSQL event triggers](docs/postgresql-behavior.md#ddl-event-trigger-freshness).
+
+Both providers also invalidate captured structure after executable DML when a
+user DML trigger can execute unrelated DDL. A global presence flag includes
+indirect FK-cascade targets without retaining trigger bodies or an owner graph.
+The report identifies the actual DML origin. Empty typed writes and initial
+safe no-ops do not activate this boundary; runtime and independent blockers
+remain authoritative.
 
 For focused operator output, serialize a self-describing report view instead
 of copying or mutating the immutable report:

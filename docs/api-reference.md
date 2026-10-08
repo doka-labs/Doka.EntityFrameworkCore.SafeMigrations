@@ -672,7 +672,7 @@ digest.
 | `NoOperations` | No operation was assessed; verify intended target/history separately |
 | `Ready` | Preflight permits the safe sequence subject to external gates; postflight confirms all supplied safe postconditions |
 | `ReadyWithProviderOperations` | Safe operations are accepted, but ordinary EF or provider operations remain unanalyzed and need independent artifact and postcondition review |
-| `RuntimeValidationRequired` | Earlier raw SQL, unconfined data changes, or DDL-related row uncertainty make later states unprovable from a read-only snapshot; review provider-owned operations independently and rely on the ordered runtime guards |
+| `RuntimeValidationRequired` | Earlier raw SQL, unconfined data changes, or DDL-trigger row/structural uncertainty make later states unprovable from a read-only snapshot; review provider-owned operations independently and rely on the ordered runtime guards |
 | `Blocked` | One or more operations reject; do not execute/continue deployment |
 
 `SafeMigrationObservedState.TransitionReady` is used only when a captured
@@ -725,10 +725,24 @@ postconditions. The existing guarded execution remains authoritative.
 SQL Server DDL-trigger risk also uses this contract after accepted executable
 DDL. Analysis codes `projected_ddl_trigger_data_unknown` and
 `projected_ddl_visibility_data_unknown` distinguish a visible enabled trigger
-from insufficient metadata visibility. The origin identifies the DDL, not a
+from insufficient metadata visibility. Their `*_structure_unknown` counterparts
+cover mutable physical dependencies and metadata. The origin identifies the DDL, not a
 hypothetical row change. Runtime validates fresh state immediately before the
 affected operation; no background work or automatic grant is introduced. See
 [SQL Server behavior](sqlserver-behavior.md#lossless-integer-alterations-and-check-validation).
+PostgreSQL uses `projected_event_trigger_state_unknown` or
+`projected_event_trigger_visibility_unknown` after session-active event-trigger
+DDL. Both providers qualify captured evidence before neutral missing-owner and
+matching shortcuts: a trigger can replace an index or recreate a dropped table.
+Initial no-ops do not invalidate evidence; a later captured match is not proof
+of its survival. See [PostgreSQL behavior](postgresql-behavior.md#ddl-event-trigger-freshness).
+Both providers also qualify captured structure after executable DML when a user
+trigger can execute unrelated DDL, including FK-cascade effects. SQL Server uses
+`projected_dml_trigger_structure_unknown` or `projected_dml_trigger_data_unknown`;
+PostgreSQL uses `projected_dml_trigger_structure_unknown` or
+`projected_dml_trigger_visibility_unknown`, retaining its existing model-managed
+row-state code. `DeferredOrigin` identifies the actual DML. Empty typed writes,
+initial safe no-ops and independent unsupported contracts retain precedence.
 After a provider-specific structural deferral, later supported safe assessments
 retain runtime validation with `projected_provider_postcondition_unknown` and
 the first deferred structural operation as their origin. No physical
@@ -739,9 +753,9 @@ identifier mismatches remain blocking.
 Within this structural boundary, later supported immutable `Matching`,
 `Missing`, `Different`, `DataBlocked`, and `PrerequisiteMissing` results are
 deliberately deferred, not treated as current ordered-state evidence. Runtime
-can still reject after classifying the actual state. Before the first structural
-deferral, SQL Server's DDL row-freshness qualifier preserves genuine missing
-prerequisites, `Unsupported`, and unapproved metadata `Different` results.
+can still reject after classifying the actual state. Independent `Unsupported`,
+identity mismatches and invariant contract refusals retain precedence; a supported
+missing or different fact can itself be stale after risk-bearing trigger DDL.
 Already blocked assessments remain `Blocked`; the boundary does not change
 their aggregate precedence. The
 [version 1 view schema](../schemas/safe-migration-report-view-v1.schema.json)

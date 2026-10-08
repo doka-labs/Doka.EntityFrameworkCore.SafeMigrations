@@ -8,6 +8,25 @@ the shared release identity described in [Release process](docs/release-process.
 
 ### Fixed
 
+- Reject unproved SQLite rebuild conversions under `RepairIfSafe`, including
+  lossy affinity/CLR-domain and generation changes. Exact old-definition matching
+  alone is not a lossless certificate; compatible nullability/default repairs
+  retain their data and ownership gates in live and projected analysis.
+- Invalidate PostgreSQL row and physical catalog evidence after executable DDL
+  with session-active event triggers or inaccessible trigger metadata. Attribute
+  runtime validation to the actual preceding DDL; inactive triggers and initial
+  no-ops retain their ordinary proof path.
+- Extend SQL Server DDL-trigger freshness to structural dependencies and
+  metadata before Core matching/removed-owner shortcuts. A trigger-created
+  replacement dependency cannot reuse the accepted drop's stale certificate.
+  Runtime guards and independent invariant/permission blockers remain authoritative.
+- Invalidate PostgreSQL and SQL Server physical metadata after executable DML
+  when user triggers can execute unrelated DDL, including indirectly reached
+  FK-cascade triggers. Preserve the actual DML origin, initial no-ops, empty typed
+  writes and independent unsupported contracts; include provider-emitted column
+  backfills and preserve SQL Server's empty `dbo` schema baseline. SQL Server model-managed target
+  trigger rejection also includes CLR triggers, not only SQL implementations.
+
 - Admit explicit SQL Server built-in integer widenings under `RepairIfSafe`
   with exact source, preserved default/identity, declared-row layout, and ordered
   dependency proofs. Reject numeric narrowing and unproven layouts without DDL.
@@ -51,9 +70,9 @@ the shared release identity described in [Release process](docs/release-process.
   visibility leave later rows unproven. Report affected assessments as
   `ValidateAtRuntime` with the DDL origin, distinguishing known trigger risk
   from visibility uncertainty rather than blocking a least-privilege stream
-  or claiming read-only readiness. Before a structural deferral, preserve genuine
-  missing prerequisites, unsupported contracts, unapproved metadata differences,
-  metadata-only matching, and non-executing no-ops; runtime rechecks remain authoritative.
+  or claiming read-only readiness. Preserve independent unsupported contracts,
+  invariant refusals and initial non-executing no-ops; supported row and structural
+  metadata captured before trigger-risk DDL require fresh runtime classification.
 - Preserve a conservative runtime-validation boundary after provider-specific
   structural deferrals. Later supported safe operations retain the first
   deferred structural origin instead of depending on an invented candidate key
@@ -64,6 +83,14 @@ the shared release identity described in [Release process](docs/release-process.
   their stale batch observations; already blocked assessments stay blocked.
 
 ### Changed
+
+- Skip unused SQL Server source/dependency captures for already matching integer
+  ALTER replays, including their unused row-growth reservations. Nonmatching
+  source and ordered dependency checks remain unchanged.
+- Bound PostgreSQL narrowing eligibility-plan lifetime to the current transport
+  statement and retain compact candidate identities instead of unused rendered
+  SQL. Submitted predicates, result attribution, deduplication, statement limits,
+  data checks and cancellation semantics remain unchanged.
 
 - Avoid evaluating SQL Server runtime repair predicates for matching states,
   non-repair policies, or plans without a safe repair capability. Preserve fresh

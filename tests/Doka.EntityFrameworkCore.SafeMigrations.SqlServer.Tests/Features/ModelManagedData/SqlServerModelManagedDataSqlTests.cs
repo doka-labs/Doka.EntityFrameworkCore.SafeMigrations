@@ -8,6 +8,25 @@ public sealed class SqlServerModelManagedDataSqlTests
     private const string ConnectionString = "Server=127.0.0.1,1433;Database=composition;"
         + "User ID=sa;Password=unused;TrustServerCertificate=True";
 
+    /// <summary>SQL and CLR DML triggers have the same unsupported model-managed side-effect boundary.</summary>
+    [Fact]
+    public void Ensure_TriggerGuardDoesNotExcludeClrTriggers()
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext(ConnectionString);
+        var catalog = CreateCatalog(context);
+        var operation = new SafeMigrationOperation(new EnsureModelManagedDataIntent("roles", ["Id"], ["int"],
+            ["Id"], ["int"], new object?[,] { { 1 } }, null, null), SafeMigrationPolicy.ThrowIfDifferent);
+
+        // Act
+        var plan = catalog.Build(operation);
+
+        // Assert
+        Assert.Contains("FROM sys.triggers tr", plan.StateEvaluationGuardExpression, StringComparison.Ordinal);
+        Assert.Contains("tr.is_disabled = 0)", plan.StateEvaluationGuardExpression, StringComparison.Ordinal);
+        Assert.DoesNotContain("tr.type", plan.StateEvaluationGuardExpression, StringComparison.Ordinal);
+    }
+
     /// <summary>
     /// Requires exact stored value bytes despite case-insensitive database collations.
     /// </summary>

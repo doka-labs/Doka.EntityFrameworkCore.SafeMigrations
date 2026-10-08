@@ -567,16 +567,17 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
             + "+ (SELECT COUNT(*) FROM dbo.ddl_checked_values WHERE Value=1);");
 
         // Assert
-        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal("projected_data_state_unknown", report.Assessments[^1].AnalysisCode);
+        Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, report.Status);
+        AssertDdlDeferredOrigin(report.Assessments[1], "projected_ddl_trigger_structure_unknown", 0,
+            typeof(SafeMigrationOperation), migrationId: null);
         Assert.Equal(tightensNullability && !dynamicTrigger, sourceDependencies > 0);
         Assert.Equal(expectedFailure, Assert.IsType<SqlException>(failure).Number);
         Assert.Equal(2, rows);
     }
 
-    /// <summary>Unproved trigger visibility blocks reused pre-DDL rows without a mandatory execution grant.</summary>
+    /// <summary>Unproved trigger visibility defers reused pre-DDL rows without a mandatory execution grant.</summary>
     [SqlServerLiveFact]
-    public async Task IntegerWidening_UnknownServerDdlVisibilityBlocksPreflightButRuntimeRechecks()
+    public async Task IntegerWidening_UnknownServerDdlVisibilityDefersPreflightAndRuntimeRechecks()
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync();
@@ -613,9 +614,10 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
             + "AND name=N'CK_visibility_values' AND is_disabled=0 AND is_not_trusted=0;");
 
         // Assert
-        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, report.Status);
         Assert.Equal(SafeMigrationAction.Repair, report.Assessments[0].Action);
-        Assert.Equal("projected_data_state_unknown", report.Assessments[1].AnalysisCode);
+        AssertDdlDeferredOrigin(report.Assessments[1], "projected_ddl_visibility_data_unknown", 0,
+            typeof(SafeMigrationOperation), migrationId: null);
         Assert.Equal(1, trusted);
     }
 
@@ -965,8 +967,9 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
             + "AND name=N'CK_refresh_checked' AND is_disabled=0 AND is_not_trusted=0;");
 
         // Assert
-        Assert.Equal(SafeMigrationReportStatus.Blocked, enabled.Status);
-        Assert.Equal("projected_data_state_unknown", enabled.Assessments[^1].AnalysisCode);
+        Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, enabled.Status);
+        AssertDdlDeferredOrigin(enabled.Assessments[1], "projected_ddl_trigger_structure_unknown", 0,
+            typeof(SafeMigrationOperation), migrationId: null);
         Assert.Equal(SafeMigrationReportStatus.Ready, disabled.Status);
         Assert.Equal(SafeMigrationAction.Repair, disabled.Assessments[1].Action);
         Assert.Equal(SafeMigrationAction.Apply, disabled.Assessments[2].Action);
@@ -1007,8 +1010,9 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
             "SELECT COUNT(*) FROM sys.tables WHERE object_id=OBJECT_ID(N'dbo.created_values');");
 
         // Assert
-        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal("projected_data_state_unknown", report.Assessments[^1].AnalysisCode);
+        Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, report.Status);
+        AssertDdlDeferredOrigin(report.Assessments[^1], "projected_ddl_trigger_data_unknown", 0,
+            typeof(CreateTableOperation), migrationId: null);
         Assert.Equal(51003, Assert.IsType<SqlException>(failure).Number);
         Assert.Equal(0, created);
     }

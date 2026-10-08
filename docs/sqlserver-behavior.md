@@ -242,7 +242,7 @@ Intervening unconfined writes invalidate row certificates. Runtime rechecks,
 engine validation, stamping, postflight, and transaction rollback remain
 authoritative; preflight is not a lock against application writes.
 
-Executable DDL can also invalidate row evidence through enabled database or
+Executable DDL can also invalidate row and structural evidence through enabled database or
 server DDL triggers, including extended-property stamping. Analysis captures
 two distinct cases with the existing environment query: a visible enabled DDL
 trigger, and insufficient metadata visibility to prove trigger absence.
@@ -252,10 +252,14 @@ server permission. An empty, permission-filtered trigger catalog is not an
 absence certificate.
 
 After accepted executable safe or typed provider DDL, affected row-dependent
-NULL, CHECK, key, foreign-key, and model-managed data assessments use
+NULL, CHECK, key, foreign-key, model-managed data and structural assessments use
 `ValidateAtRuntime`, with no claimed observed state or postcondition. Their
 analysis code is `projected_ddl_trigger_data_unknown` for a visible enabled
 trigger or `projected_ddl_visibility_data_unknown` for unproven visibility.
+Pure structural uncertainty uses `projected_ddl_trigger_structure_unknown` or
+`projected_ddl_visibility_structure_unknown`. A trigger may create a different
+index after an accepted index drop; retiring the captured old identity does not
+prove that no new dependency blocks a later integer widening.
 `DeferredOrigin` records the preceding DDL operation's migration ID when known,
 stream ordinal, and CLR type. The aggregate preflight status is
 `RuntimeValidationRequired` unless an independent blocker remains. This is
@@ -280,16 +284,18 @@ immutable `Matching`, `Missing`, `Different`, `DataBlocked`, and
 `PrerequisiteMissing` results with runtime validation: those batch observations
 precede an unresolved structural postcondition. This is not approval of drift
 or unsafe rows; runtime classifies their actual ordered state and can reject.
-Before the first structural deferral, SQL Server's DDL row-freshness qualifier
-still preserves genuine missing prerequisites, `Unsupported`, and unapproved
-metadata `Different` results rather than relabeling them as row uncertainty.
+After trigger-risk DDL, supported missing, different and matching metadata may
+also be stale. The provider therefore qualifies captured evidence before Core's
+removed-owner and matching shortcuts, not only after row projection. Independent
+`Unsupported`, identity and invariant permission/capability refusals remain blocking.
 Already blocked assessments remain blockers in the aggregate report.
 
 Missing server metadata visibility does not itself require a grant to run the
 migration; it limits what read-only preflight can prove. Independent operation
 permissions, unsupported contracts, and identifier collisions remain blocking.
-Before a structural deferral, metadata-only target matching and non-executing
-safe no-ops do not discard row evidence. Proven no-DDL typed renames do not
+An initial non-executing safe no-op does not invalidate evidence; metadata-only
+matching captured before an earlier trigger-risk DDL is not a freshness proof.
+Proven no-DDL typed renames do not
 activate this additional trigger-risk boundary, but retain Core's ordinary-provider
 projection rules. Opaque authored SQL keeps its separate recorded-origin runtime-validation
 contract and is not reclassified as typed DDL. Runtime checks and transactional
@@ -297,6 +303,32 @@ rollback remain authoritative. See Microsoft's
 [DDL trigger contract](https://learn.microsoft.com/en-us/sql/relational-databases/triggers/ddl-triggers?view=sql-server-ver17)
 and [metadata visibility](https://learn.microsoft.com/en-us/sql/relational-databases/security/metadata-visibility-configuration?view=sql-server-ver17),
 including [server-trigger catalog permissions](https://learn.microsoft.com/en-us/sql/relational-databases/system-catalog-views/sys-server-triggers-transact-sql?view=sql-server-ver17).
+
+Enabled SQL or CLR DML triggers can likewise execute unrelated DDL. The existing
+environment query captures one global presence bit from the metadata-visible
+database; it adds no roundtrip or retained trigger-body/owner inventory. A global
+witness covers child triggers reached through FK cascades and nested writes.
+Executable typed DML therefore invalidates later physical metadata and dependency
+proofs, using `projected_dml_trigger_structure_unknown` or, for row-dependent
+contracts, `projected_dml_trigger_data_unknown`. The origin is the actual DML
+operation, not hypothetical raw SQL or DDL. Empty typed writes, safe no-ops,
+disabled triggers and an established absence retain their normal path.
+Typed nullable-to-NOT NULL ALTERs with a default emit a backfill UPDATE and
+therefore share the DML boundary, including zero-row statement executions.
+Microsoft's [CREATE TRIGGER introduction](https://learn.microsoft.com/en-us/sql/t-sql/statements/create-trigger-transact-sql?view=sql-server-ver17)
+explicitly states that DML events invoke triggers even when no table rows are
+affected. Its [Optimize DML triggers section](https://learn.microsoft.com/en-us/sql/t-sql/statements/create-trigger-transact-sql?view=sql-server-ver17#optimize-dml-triggers)
+recommends an explicit early return when `ROWCOUNT_BIG() = 0`; without that
+trigger-owned guard, zero affected rows do not prove absence of side effects.
+Certified safe integer tightening suppresses that redundant UPDATE after its
+fresh NULL proof; supported text repairs have no authored default/backfill.
+EF's case-insensitive `dbo` schema ensure emits no DDL and preserves the actual
+earlier origin rather than inventing a new one.
+
+Model-managed writes into a target with an enabled trigger remain independently
+unsupported; that existing guard includes SQL and CLR implementations. Deferral
+does not waive it. See the [trigger catalog](https://learn.microsoft.com/en-us/sql/relational-databases/system-catalog-views/sys-triggers-transact-sql?view=sql-server-ver17)
+and [trigger statement contract](https://learn.microsoft.com/en-us/sql/t-sql/statements/create-trigger-transact-sql?view=sql-server-ver17).
 
 Runtime guards evaluate repair evidence only for a freshly classified
 `Different` state with `RepairIfSafe` and a supported repair capability.
@@ -307,6 +339,12 @@ target postcondition is evaluated afresh. No observation is cached between
 operations.
 This changes neither policy decisions nor prerequisite and postcondition gates,
 and adds no client roundtrip.
+
+Preflight also omits second source/dependency captures for already matching
+integer ALTER replays: an already widened target cannot certify the authored
+old narrower source. Such discarded candidates do not reserve another column's
+row-growth budget. Nonmatching candidates, exact old-source/dependency proofs
+and ordered mutation invalidation still use the existing bounded capture path.
 
 Model-managed inserts with explicit identity values temporarily enable
 `IDENTITY_INSERT`. When the EF migrator encounters an error, cancellation, or

@@ -336,6 +336,7 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
     [InlineData("login")]
     [InlineData("collation")]
     [InlineData("unproven")]
+    [InlineData("dml_triggers")]
     public async Task FreshEnvironment_GatesActualIdentifierProbeReuse(string change)
     {
         // Arrange
@@ -358,6 +359,9 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
                 break;
             case "unproven":
                 connection.LoginSid = null;
+                break;
+            case "dml_triggers":
+                connection.HasEnabledDmlTriggers = true;
                 break;
         }
 
@@ -514,6 +518,8 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         public bool MetadataVisible { get; set; } = true;
         public int? PrincipalId { get; set; } = 1;
         public string? LoginSid { get; set; } = "01";
+        /// <summary>Gets or sets the invocation-local DML-trigger presence returned by the environment probe.</summary>
+        public bool HasEnabledDmlTriggers { get; set; }
         public string Collation { get; set; } = "Latin1_General_100_CI_AS";
         public string DefaultSchema { get; set; } = "dbo";
         public bool IdentifierSafe { get; set; } = true;
@@ -606,10 +612,12 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
                 _result.Columns.Add("login", typeof(string));
                 _result.Columns.Add("ddl_row_effects_unproven", typeof(int));
                 _result.Columns.Add("expression_dependencies_readable", typeof(int));
+                _result.Columns.Add("enabled_dml_triggers", typeof(int));
                 _result.Rows.Add(connection.DefaultSchema, connection.Collation, connection.MetadataVisible ? 1 : 0,
                     connection.DefaultSchema == "dbo" ? 1 : 0,
                     connection.PrincipalId is { } principal ? principal : DBNull.Value,
-                    connection.LoginSid is { } sid ? sid : DBNull.Value, 0, 1);
+                    connection.LoginSid is { } sid ? sid : DBNull.Value, 0, 1,
+                    connection.HasEnabledDmlTriggers ? 1 : 0);
             }
             else if (CommandText.StartsWith("SELECT requested.ordinal,", StringComparison.Ordinal))
             {

@@ -1,7 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 
 internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationProviderAnalyzer,
-    ISafeMigrationIndexPrerequisiteSource, ISafeMigrationProjectedColumnAnalyzer
+    ISafeMigrationIndexPrerequisiteSource, ISafeMigrationProjectedColumnAnalyzer,
+    ISafeMigrationProjectedDependencyAnalyzer, ISafeMigrationProviderOperationProjection
 {
     // PostgreSQL advisory locks are already local to the current database. A
     // fixed signed bigint therefore avoids coercing the database's unsigned OID
@@ -187,6 +188,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(operations);
 
+        ResetProjectedEventTriggerEffects();
+
         if (operations.Count == 0)
         {
             return [];
@@ -204,6 +207,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
         try
         {
             var commandTimeout = context.Database.GetCommandTimeout();
+            await CaptureProjectedEventTriggerEffectsAsync(connection, commandTimeout, cancellationToken);
             var expectedTableConstraints = SafeMigrationExpectedTableConstraints.FromOperations(operations);
             var shortCircuitStates = await FindShortCircuitStatesAsync(
                 connection,
@@ -475,24 +479,19 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                 (operation.Intent as AlterColumnIntent)?.OldDefinition);
 
             identities[ordinal] = identity;
-            candidates.TryAdd(identity, new PostgreSqlDataProbeCandidate(identity, operation, probe, ordinal));
+            // WHY: Row probes consume only the immutable column/length identity.
+            // Keeping the discarded plan's rendered narrowing predicate here
+            // would retain SQL for every candidate beyond the bounded window.
+            candidates.TryAdd(identity, new PostgreSqlDataProbeCandidate(identity, operation, ordinal));
         }
 
         var cache = new Dictionary<PostgreSqlDataProbeIdentity, PostgreSqlDataProbeResult>(candidates.Count);
         if (candidates.Count > 0)
         {
             var values = candidates.Values.ToArray();
-            var transitionPlans = values
-                .Select(candidate => _catalogSqlBuilder.Build(
-                    candidate.Operation,
-                    includeAnalysisEvidence: false,
-                    includeTransitionEvidence: true))
-                .ToArray();
-
             var resolved = await FindRequiredDataProbesAsync(
                 connection,
                 values,
-                transitionPlans,
                 commandTimeout,
                 cancellationToken);
 
@@ -637,11 +636,10 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                     StringComparer.Ordinal.Equals(difference.Facet, "column_nullability")));
     }
 
-    private static async Task<Dictionary<PostgreSqlDataProbeIdentity, PostgreSqlDataProbeResult>>
+    private async Task<Dictionary<PostgreSqlDataProbeIdentity, PostgreSqlDataProbeResult>>
         FindRequiredDataProbesAsync(
         DbConnection connection,
         IReadOnlyList<PostgreSqlDataProbeCandidate> candidates,
-        PostgreSqlSafeMigrationRuntimePlan[] transitionPlans,
         int? commandTimeout,
         CancellationToken cancellationToken
     )
@@ -660,7 +658,13 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                 var selections = new List<string>(count);
                 for (var index = 0; index < count; index++)
                 {
-                    var probe = transitionPlans[offset + index].DataProbe
+                    // WHY: Eligibility needs only this candidate's predicates.
+                    // Holding every full plan until transport finishes retains
+                    // unused SQL proportional to the entire migration stream.
+                    var probe = _catalogSqlBuilder.Build(
+                        candidates[offset + index].Operation,
+                        includeAnalysisEvidence: false,
+                        includeTransitionEvidence: true).DataProbe
                         ?? throw new InvalidOperationException(
                             "The PostgreSQL transition build returned no data-probe plan.");
 
@@ -747,23 +751,21 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
 
                 if (candidates.Length == 1)
                 {
-                    var probe = candidates[0].Probe;
-                    var column = _sqlGenerationHelper.DelimitIdentifier(probe.Column);
+                    var column = _sqlGenerationHelper.DelimitIdentifier(identity.Column);
                     command.CommandText = "SELECT EXISTS(SELECT 1 FROM "
                         + $"{table} WHERE {column} IS NOT NULL AND char_length({column}) "
-                        + $"> {probe.TargetLength.ToString(CultureInfo.InvariantCulture)} LIMIT 1);";
+                        + $"> {identity.TargetLength.ToString(CultureInfo.InvariantCulture)} LIMIT 1);";
                 }
                 else
                 {
                     var selections = new List<string>(candidates.Length);
                     foreach (var candidate in candidates)
                     {
-                        var probe = candidate.Probe;
-                        var column = _sqlGenerationHelper.DelimitIdentifier(probe.Column);
+                        var column = _sqlGenerationHelper.DelimitIdentifier(candidate.Identity.Column);
                         selections.Add(
                             "COALESCE(bool_or("
                             + $"{column} IS NOT NULL AND char_length({column}) "
-                            + $"> {probe.TargetLength.ToString(CultureInfo.InvariantCulture)}), FALSE)");
+                            + $"> {candidate.Identity.TargetLength.ToString(CultureInfo.InvariantCulture)}), FALSE)");
                     }
 
                     command.CommandText = $"SELECT {string.Join(", ", selections)} FROM {table};";
@@ -1697,7 +1699,6 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
     private sealed record PostgreSqlDataProbeCandidate(
         PostgreSqlDataProbeIdentity Identity,
         SafeMigrationOperation Operation,
-        PostgreSqlSafeMigrationDataProbe Probe,
         int Ordinal
     )
     {

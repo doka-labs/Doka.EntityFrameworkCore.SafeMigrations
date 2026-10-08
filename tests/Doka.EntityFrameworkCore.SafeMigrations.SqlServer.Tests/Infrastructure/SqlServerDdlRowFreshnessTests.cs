@@ -50,11 +50,11 @@ public sealed class SqlServerDdlRowFreshnessTests
         }
     }
 
-    /// <summary>Metadata widening survives DDL effects; tightening cannot reuse its pre-DDL NULL proof.</summary>
+    /// <summary>Neither metadata-only widening nor tightening can retain trigger-mutable dependency certificates.</summary>
     [Theory]
-    [InlineData(false, SafeMigrationRepairCapability.Safe)]
+    [InlineData(false, SafeMigrationRepairCapability.None)]
     [InlineData(true, SafeMigrationRepairCapability.None)]
-    public void IntegerWidening_OnlyNullProofDependsOnDdlFreshness(
+    public void IntegerWidening_StructuralProofAlsoDependsOnDdlFreshness(
         bool tightens,
         SafeMigrationRepairCapability expected
     )
@@ -85,15 +85,12 @@ public sealed class SqlServerDdlRowFreshnessTests
 
         // Assert
         Assert.Equal(expected, result.RepairCapability);
-        if (tightens)
-        {
-            Assert.Equal("projected_ddl_visibility_data_unknown", result.Code);
-        }
+        Assert.Equal("projected_ddl_visibility_structure_unknown", result.Code);
     }
 
-    /// <summary>Managed Matching is row state, while a stamped CHECK Matching is a metadata contract.</summary>
+    /// <summary>Managed Matching and metadata Matching are both mutable, with distinct uncertainty diagnostics.</summary>
     [Theory]
-    [InlineData(false, SafeMigrationObservedState.Matching)]
+    [InlineData(false, SafeMigrationObservedState.PrerequisiteMissing)]
     [InlineData(true, SafeMigrationObservedState.PrerequisiteMissing)]
     public void Matching_MetadataAndManagedRowsHaveDifferentFreshnessContracts(
         bool managed,
@@ -124,6 +121,8 @@ public sealed class SqlServerDdlRowFreshnessTests
 
         // Assert
         Assert.Equal(expected, result.ObservedState);
+        Assert.Equal(managed ? "projected_ddl_visibility_data_unknown"
+            : "projected_ddl_visibility_structure_unknown", result.Code);
     }
 
     /// <summary>An unchanged table rename is planner Apply but emits no DDL, so it must retain row proofs.</summary>
@@ -386,14 +385,14 @@ public sealed class SqlServerDdlRowFreshnessTests
             ? "projected_ddl_trigger_data_unknown" : "projected_ddl_visibility_data_unknown", result.Code);
     }
 
-    /// <summary>Row uncertainty never converts independent catalog or policy refusals into deferred approval.</summary>
+    /// <summary>Invariant authoring and permission refusals cannot become deferred approval after risky DDL.</summary>
     /// <param name="state">The independent catalog failure.</param>
     /// <param name="invariant">Whether the provider also certifies invariant rejection.</param>
     [Theory]
     [InlineData(SafeMigrationObservedState.Unsupported, false)]
     [InlineData(SafeMigrationObservedState.Unsupported, true)]
-    [InlineData(SafeMigrationObservedState.PrerequisiteMissing, false)]
-    [InlineData(SafeMigrationObservedState.Different, false)]
+    [InlineData(SafeMigrationObservedState.PrerequisiteMissing, true)]
+    [InlineData(SafeMigrationObservedState.Different, true)]
     public void DdlRowUncertainty_PreservesIndependentBlockers(
         SafeMigrationObservedState state,
         bool invariant

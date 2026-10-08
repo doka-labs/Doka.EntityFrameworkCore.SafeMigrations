@@ -61,7 +61,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
         => analysis.Code is "default_schema_mismatch" or "identifier_collation_unproven";
 
     /// <inheritdoc />
-    public bool PreservesExistingTableState(MigrationOperation operation) => false;
+    public bool PreservesExistingTableState(MigrationOperation operation) => IsZeroCommandSchemaEnsure(operation);
 
     /// <inheritdoc />
     public bool IsSequenceAwareAnalysis(
@@ -115,7 +115,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
 
         var columnAnalysis = QualifyProjectedColumnLayoutOperation(operation, identityAnalysis);
 
-        return QualifyProjectedDdlRowFreshness(operation, columnAnalysis);
+        return QualifyProjectedDdlFreshness(operation, columnAnalysis);
     }
 
     /// <inheritdoc />
@@ -136,6 +136,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
     /// <inheritdoc />
     public void ObserveProviderOperation(MigrationOperation operation)
     {
+        if (IsZeroCommandSchemaEnsure(operation))
+        {
+            // WHY: EF emits no command, so neither captured column/dependency
+            // proofs nor the ordinal of an actual trigger source can change.
+            return;
+        }
+
         _dependencyGraph?.ObserveProviderOperation(operation);
         InvalidateProjectedSeedProofs();
         InvalidateProjectedIdentityProofs();
@@ -143,6 +150,10 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
         ResetProjectedColumnTransitions(retainInvalidatedCheckPredicates: true);
         ObserveProviderDdlRowEffects(operation);
     }
+
+    /// <summary>Matches the provider baseline's exact zero-command default-schema exception.</summary>
+    private static bool IsZeroCommandSchemaEnsure(MigrationOperation operation)
+        => operation is EnsureSchemaOperation schema && StringComparer.OrdinalIgnoreCase.Equals(schema.Name, "dbo");
 
     /// <inheritdoc />
     public void ValidateContext(DbContext context)
@@ -340,6 +351,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
             }
 
             CaptureProjectedDdlRowEffects(environment.DdlRowEffectRisk);
+            CaptureProjectedDmlEffects(environment.HasEnabledDmlTriggers);
 
             var references = SqlServerIdentifierContract.Collect(operations);
             var identifierSafe = await ReadIdentifierContractAsync(
@@ -488,7 +500,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
             CaptureProjectedCheckPredicates(operations, results);
             if (identifierSafe)
             {
-                await ReadProjectedColumnTransitionsAsync(connection, transaction, operations,
+                await ReadProjectedColumnTransitionsAsync(connection, transaction, operations, results,
                     environment.CanReadExpressionDependencies, context.Database.GetCommandTimeout(), cancellationToken);
                 await ReadProjectedCheckReplacementsAsync(connection, transaction, operations, results,
                     context.Database.GetCommandTimeout(), cancellationToken);
@@ -647,10 +659,15 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
             + "WHEN COALESCE(HAS_PERMS_BY_NAME(DB_NAME(), N'DATABASE', N'VIEW DEFINITION'),0)<>1 "
             + "OR COALESCE(HAS_PERMS_BY_NAME(NULL,NULL,N'VIEW ANY DEFINITION'),0)<>1 THEN 2 ELSE 0 END, "
             + "CASE WHEN (" + SqlServerSafeMigrationCatalogSqlBuilder.ExpressionDependencyReadPermission
-            + ") THEN 1 ELSE 0 END;";
+            + ") THEN 1 ELSE 0 END, "
+            // WHY: One invocation-local bit covers SQL/CLR triggers on any
+            // table or view, including indirectly modified cascade targets.
+            // Complete database visibility is already mandatory above.
+            + "CASE WHEN EXISTS(SELECT 1 FROM sys.triggers WHERE parent_class=1 AND is_disabled=0) "
+            + "THEN 1 ELSE 0 END;";
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        if (reader.FieldCount != 8 || !await reader.ReadAsync(cancellationToken)
+        if (reader.FieldCount != 9 || !await reader.ReadAsync(cancellationToken)
             || reader.IsDBNull(0)
             || reader.IsDBNull(1))
         {
@@ -673,6 +690,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
                     _ => SqlServerDdlRowEffectRisk.VisibilityUnproven,
                 },
             CanReadExpressionDependencies = !reader.IsDBNull(7) && reader.GetInt32(7) == 1,
+            HasEnabledDmlTriggers = reader.IsDBNull(8) || reader.GetInt32(8) != 0,
         };
     }
 
@@ -1526,6 +1544,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
 
         /// <summary>Gets whether both database and protected-view dependency-read permissions are proven.</summary>
         public bool CanReadExpressionDependencies { get; init; }
+
+        /// <summary>Gets whether enabled SQL or CLR DML triggers can invalidate unrelated physical metadata.</summary>
+        public bool HasEnabledDmlTriggers { get; init; }
 
         /// <summary>Requires both execution identities before another call can reuse this proof.</summary>
         public bool HasReusableIdentity => DatabasePrincipalId.HasValue && LoginSid is not null;

@@ -2,6 +2,91 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 public sealed partial class SafeMigrationPreflightProjectionTests
 {
+    /// <summary>Provider side effects qualify stale owner tombstones before neutral missing-table shortcuts.</summary>
+    [Fact]
+    public void CapturedProviderFreshnessPrecedesMissingOwnerShortcut()
+    {
+        // Arrange
+        var deferred = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.PrerequisiteMissing,
+            SafeMigrationRepairCapability.None, false, "projected_ddl_structure_unknown")
+        {
+            ProviderDeferredOriginOrdinal = 0,
+        };
+
+        var validator = new DependencyProbe(capturedReplacement: deferred);
+        var projection = new SafeMigrationPreflightProjection(projectedDependencyAnalyzer: validator);
+        var drop = new SafeMigrationOperation(new DropTableIntent("dependency_items"),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var live = Live(SafeMigrationObservedState.Matching);
+        var decision = SafeMigrationDecisionPlanner.Plan(drop.Intent.Kind, live.ObservedState,
+            drop.Policy, live.RepairCapability);
+
+        projection.Observe(drop, live, live, decision);
+        var column = new SafeMigrationOperation(new EnsureColumnIntent("dependency_items",
+            new ExpectedColumnDefinition("Id", typeof(int), false, "int")), SafeMigrationPolicy.ThrowIfDifferent);
+
+        // Act
+        var analysis = projection.Project(column, live);
+
+        // Assert
+        Assert.True(decision.ShouldExecute);
+        Assert.Same(deferred, analysis);
+        Assert.Equal(1, validator.CapturedValidationCount);
+        Assert.Equal(0, validator.ValidationCount);
+        Assert.Equal(0, analysis.ProviderDeferredOriginOrdinal);
+    }
+
+    /// <summary>Captured freshness cannot erase an earlier opaque SQL or invariant boundary.</summary>
+    /// <param name="opaqueSql">Whether authored SQL instead of an invariant result takes precedence.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CapturedProviderFreshnessPreservesPriorIndependentBoundaries(bool opaqueSql)
+    {
+        // Arrange
+        var validator = new DependencyProbe(capturedReplacement: Live(SafeMigrationObservedState.Missing));
+        var projection = new SafeMigrationPreflightProjection(projectedDependencyAnalyzer: validator);
+        var live = Live(SafeMigrationObservedState.Matching);
+        if (opaqueSql)
+        {
+            projection.ObserveProviderPostcondition(new SqlOperation { Sql = "SELECT 1;" });
+        }
+        else
+        {
+            live = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Unsupported,
+                SafeMigrationRepairCapability.None, false, "invariant_unsupported")
+            {
+                IsInvariantUnsupported = true,
+            };
+        }
+
+        // Act
+        var analysis = projection.Project(DependencyTableOperation(), live);
+
+        // Assert
+        Assert.Equal(0, validator.CapturedValidationCount);
+        Assert.Equal(opaqueSql ? SafeMigrationObservedState.PrerequisiteMissing : SafeMigrationObservedState.Unsupported,
+            analysis.ObservedState);
+    }
+
+    /// <summary>No provider freshness override leaves normal shape projection and final validation intact.</summary>
+    [Fact]
+    public void CapturedProviderFreshnessWithoutOverrideRetainsNeutralProjection()
+    {
+        // Arrange
+        var validator = new DependencyProbe();
+        var projection = new SafeMigrationPreflightProjection(projectedDependencyAnalyzer: validator);
+
+        // Act
+        var analysis = projection.Project(DependencyTableOperation(), Live(SafeMigrationObservedState.Missing));
+
+        // Assert
+        Assert.Equal(SafeMigrationObservedState.Missing, analysis.ObservedState);
+        Assert.Equal(1, validator.CapturedValidationCount);
+        Assert.Equal(1, validator.ValidationCount);
+    }
+
     /// <summary>Requires an explicit ordered proof after a provider rename.</summary>
     [Theory]
     [InlineData(false)]
@@ -215,8 +300,11 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
     private sealed class DependencyProbe(
         SafeMigrationProviderAnalysis? replacement = null,
-        SafeMigrationProviderAnalysis? opaqueReplacement = null) : ISafeMigrationProjectedDependencyAnalyzer
+        SafeMigrationProviderAnalysis? opaqueReplacement = null,
+        SafeMigrationProviderAnalysis? capturedReplacement = null) : ISafeMigrationProjectedDependencyAnalyzer
     {
+        public int CapturedValidationCount { get; private set; }
+
         public int OpaqueValidationCount { get; private set; }
 
         public int ValidationCount { get; private set; }
@@ -226,6 +314,16 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         public SafeMigrationObservedState? LastProjectedState { get; private set; }
 
         public MigrationOperation? LastProviderOperation { get; private set; }
+
+        public SafeMigrationProviderAnalysis? ValidateCapturedProjection(
+            SafeMigrationOperation operation,
+            SafeMigrationProviderAnalysis liveAnalysis,
+            ISafeMigrationProjectedColumnSource columns)
+        {
+            CapturedValidationCount++;
+
+            return capturedReplacement;
+        }
 
         public SafeMigrationProviderAnalysis? ValidateOpaqueProviderPostcondition(
             SafeMigrationOperation operation,

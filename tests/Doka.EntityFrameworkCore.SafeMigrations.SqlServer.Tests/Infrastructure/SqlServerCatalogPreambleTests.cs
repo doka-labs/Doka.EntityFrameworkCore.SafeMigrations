@@ -109,6 +109,7 @@ public sealed class SqlServerCatalogPreambleTests
     [InlineData("login")]
     [InlineData("missing_principal")]
     [InlineData("missing_login")]
+    [InlineData("dml_triggers")]
     public void ChangedEnvironment_RequiresANewIdentifierProof(string change)
     {
         // Arrange
@@ -125,6 +126,7 @@ public sealed class SqlServerCatalogPreambleTests
             "login" => preamble.Environment with { LoginSid = "02" },
             "missing_principal" => preamble.Environment with { DatabasePrincipalId = null },
             "missing_login" => preamble.Environment with { LoginSid = null },
+            "dml_triggers" => preamble.Environment with { HasEnabledDmlTriggers = true },
             _ => throw new UnreachableException(),
         };
 

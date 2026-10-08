@@ -116,6 +116,17 @@ facet is supported. SQLite cannot add a STORED generated column through
 `stored_generated_column_add`. A model-owned full rebuild may retain a STORED
 generated column already represented by the terminal model.
 
+An exact old column definition alone does not prove a lossless alteration.
+`RepairIfSafe` rebuilds require the same declared store type, CLR value domain,
+collation, generation and supported intrinsic facets. Only compatible default
+and nullability changes are admitted through this path; tightening still requires
+the existing NULL-data proof. SQLite-owned `AUTOINCREMENT` must remain unchanged
+in both live and ordered projected analysis. Affinity conversions, ordinary-to-generated
+replacements and unproved value-domain changes are rejected before DDL.
+For example, copying `INTEGER` into `REAL` can round integers above the exact
+binary64 domain even though the rebuild and target schema verification succeed.
+See [SQLite type affinity](https://www.sqlite.org/datatype3.html#affinity).
+
 A check constraint that references a column newly added in the same structural
 segment remains fail-closed on a populated table. The catalog cannot evaluate
 the check against a column that has not been materialized yet, and the provider

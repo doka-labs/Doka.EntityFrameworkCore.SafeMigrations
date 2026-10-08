@@ -471,7 +471,8 @@ public sealed class SqlServerTemporaryScopeCleanupTests
             _environment.Columns.Add("login_sid", typeof(string));
             _environment.Columns.Add("ddl_row_effects_unproven", typeof(int));
             _environment.Columns.Add("expression_dependencies_readable", typeof(int));
-            _environment.Rows.Add("dbo", "Latin1_General_100_CI_AS", 1, 1, 1, "0x01", 0, 1);
+            _environment.Columns.Add("enabled_dml_triggers", typeof(int));
+            _environment.Rows.Add("dbo", "Latin1_General_100_CI_AS", 1, 1, 1, "0x01", 0, 1, 0);
 
             return _environment.CreateDataReader();
         }
