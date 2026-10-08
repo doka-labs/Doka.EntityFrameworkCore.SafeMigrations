@@ -237,9 +237,13 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, initial.Status);
-        AssertDdlDeferredOrigin(initial.Assessments[2], "projected_ddl_visibility_data_unknown", 1,
+        // WHY: The first safe table is already deferred after ordinary EF DDL.
+        // Its unproved postcondition, not later descendants, owns their boundary.
+        AssertDdlDeferredOrigin(initial.Assessments[1], "projected_ddl_visibility_structure_unknown", 0,
+            typeof(CreateTableOperation), SqlServerHistoryMigration.MigrationIdentifier);
+        AssertDdlDeferredOrigin(initial.Assessments[2], "projected_provider_postcondition_unknown", 1,
             typeof(SafeMigrationOperation), SqlServerHistoryMigration.MigrationIdentifier);
-        AssertDdlDeferredOrigin(initial.Assessments[3], "projected_provider_postcondition_unknown", 2,
+        AssertDdlDeferredOrigin(initial.Assessments[3], "projected_provider_postcondition_unknown", 1,
             typeof(SafeMigrationOperation), SqlServerHistoryMigration.MigrationIdentifier);
         Assert.Equal(SafeMigrationReportStatus.NoOperations, replay.Status);
         Assert.Equal(1, history);

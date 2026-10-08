@@ -758,6 +758,8 @@ internal static class LargeMigrationStressContract
                 SafeMigrationOperationKind.EnsureIndex,
                 SafeMigrationObservedState.Unsupported,
                 SafeMigrationAction.RejectUnsupported),
+            // WHY: Required addition depends on captured table contents. A managed
+            // write can fire triggers; later cycles cannot reuse DataBlocked.
             Scenario(
                 (builder, _) => builder.EnsureColumn(
                     "sqlserver_stress_target",
@@ -766,7 +768,8 @@ internal static class LargeMigrationStressContract
                 _ => "required_value",
                 SafeMigrationOperationKind.EnsureColumn,
                 SafeMigrationObservedState.DataBlocked,
-                SafeMigrationAction.RejectDataBlocked),
+                SafeMigrationAction.RejectDataBlocked,
+                requiresLiveDataProof: true),
             Scenario(
                 (builder, _) => builder.EnsureColumn(
                     "sqlserver_stress_missing_parent",

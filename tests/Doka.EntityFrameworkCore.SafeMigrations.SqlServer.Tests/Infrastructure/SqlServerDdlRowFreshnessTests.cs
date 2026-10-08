@@ -425,6 +425,78 @@ public sealed class SqlServerDdlRowFreshnessTests
         Assert.Null(result.ProviderDeferredOriginOrdinal);
     }
 
+    /// <summary>The first deferred safe DDL owns later dependencies without losing its ordinary EF origin.</summary>
+    /// <param name="riskValue">The trigger-presence or metadata-visibility uncertainty captured for the stream.</param>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void DeferredInitialTable_PreservesFirstSafeBoundaryForEveryDescendant(
+        int riskValue
+    )
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext(ConnectionString);
+        var analyzer = Analyzer(context);
+        var catalog = Catalog(context);
+        var table = new SafeMigrationOperation(new EnsureTableIntent(new ExpectedTableDefinition("created",
+            [new ExpectedColumnDefinition("Id", typeof(int), false, "int")]),
+            SafeMigrationTableMode.StrictDefinition), SafeMigrationPolicy.ThrowIfDifferent);
+
+        var column = new SafeMigrationOperation(new EnsureColumnIntent("created",
+            new ExpectedColumnDefinition("Caption", typeof(string), false, "nvarchar(80)", maxLength: 80,
+                defaultValue: SafeMigrationDefaultValue.Literal("ready"))), SafeMigrationPolicy.ThrowIfDifferent);
+
+        var check = new SafeMigrationOperation(new EnsureCheckConstraintIntent(
+            new ExpectedCheckConstraintDefinition("CK_created", "created", "[Id]>=0")),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        analyzer.CaptureProjectedDdlRowDependency(table, catalog.Build(table));
+        analyzer.CaptureProjectedDdlRowDependency(column, catalog.Build(column));
+        analyzer.CaptureProjectedDdlRowDependency(check, catalog.Build(check));
+        analyzer.CaptureProjectedDdlRowEffects((SqlServerDdlRowEffectRisk)riskValue);
+        var projection = new SafeMigrationPreflightProjection(
+            providerOperationProjection: analyzer, projectedDependencyAnalyzer: analyzer);
+
+        var create = new CreateTableOperation { Name = "ordinary" };
+
+        // Act
+        projection.CurrentOperationOrdinal = 0;
+        projection.ObserveProviderPostcondition(create);
+        projection.CurrentOperationOrdinal = 1;
+        var tableAnalysis = projection.Project(table, Analysis(SafeMigrationObservedState.Missing));
+
+        if (tableAnalysis.ProviderDeferredOriginOrdinal is not null)
+        {
+            projection.ObserveDeferredProviderOperation(1);
+        }
+
+        projection.CurrentOperationOrdinal = 2;
+        var columnAnalysis = projection.Project(column, Analysis(SafeMigrationObservedState.PrerequisiteMissing));
+
+        if (columnAnalysis.ProviderDeferredOriginOrdinal is not null)
+        {
+            projection.ObserveDeferredProviderOperation(2);
+        }
+
+        projection.CurrentOperationOrdinal = 3;
+        var checkAnalysis = projection.Project(check, Analysis(SafeMigrationObservedState.PrerequisiteMissing));
+
+        // Assert
+        Assert.Equal(riskValue == (int)SqlServerDdlRowEffectRisk.EnabledTrigger
+            ? "projected_ddl_trigger_structure_unknown" : "projected_ddl_visibility_structure_unknown",
+            tableAnalysis.Code);
+        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, tableAnalysis.ObservedState);
+        Assert.Equal(0, tableAnalysis.ProviderDeferredOriginOrdinal);
+        Assert.False(tableAnalysis.IsOpaqueProjectionUnknown);
+        Assert.False(tableAnalysis.RequiresLiveDataProof);
+        Assert.Equal("projected_provider_postcondition_unknown", columnAnalysis.Code);
+        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, columnAnalysis.ObservedState);
+        Assert.Equal(1, columnAnalysis.ProviderDeferredOriginOrdinal);
+        Assert.Equal("projected_provider_postcondition_unknown", checkAnalysis.Code);
+        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, checkAnalysis.ObservedState);
+        Assert.Equal(1, checkAnalysis.ProviderDeferredOriginOrdinal);
+    }
+
     private static SqlServerSafeMigrationProviderAnalyzer Analyzer(
         DbContext context
     )
