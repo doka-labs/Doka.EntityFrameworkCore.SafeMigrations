@@ -53,19 +53,21 @@ when that matrix executes. The exact successful run, not this table, is release
 evidence. See [Support and qualification](docs/support-and-qualification.md).
 
 The initial complete stable delivery is 10.0.0. The versioned installation
-examples below target the prepared five-package 10.4.8 release. Verify the exact
+examples below target the prepared five-package 10.4.9 release. Verify the exact
 package's public availability before installation; source and changelog entries
 alone are not publication evidence. See the [changelog](CHANGELOG.md).
 
-The 10.4.8 patch corrects provider-proven explicit column transitions under
-`RepairIfSafe` and their ordered preflight evidence. Approved transitions
-retain exact source, physical and data-safety checks; intervening mutations
-cannot inherit stale proofs. Rename-destination checks are corrected across
-providers. MySQL/MariaDB additionally preserve exact default identity and safe
-setup-fragment boundaries. Public APIs, dependency ranges, migration source,
-policies, report schemas, and history are unchanged. Existing migrations do
-not need regeneration. Action-only planning also stays allocation-free after
-garbage collection without relying on runtime enum-metadata caches.
+The 10.4.9 patch supports provider-proven SQL Server integer widening and
+populated-table CHECK validation, preserves PostgreSQL column contracts,
+and rejects unproved lossy SQLite repairs. Trigger-affected PostgreSQL and
+SQL Server operations cannot inherit stale row or physical dependency proofs:
+preflight defers supported unproven states to fresh runtime validation while
+independent permission and capability refusals remain blocking. PostgreSQL
+eligibility-plan retention and unnecessary SQL Server transition captures and
+runtime predicates are reduced. Public signatures, dependency ranges,
+migration source, policy selection, report schemas, and history are unchanged.
+Existing migrations do not need regeneration. Earlier correctness and
+MySQL/MariaDB performance improvements remain in place.
 See [Migration authoring](docs/migration-authoring.md)
 and the provider guides for the supported transition contracts.
 
@@ -87,34 +89,34 @@ are not rewritten. See the
 ## Installation
 
 Install one provider package. The core package is included transitively. The
-commands select the intended 10.4.8 release exactly so restore does not move
+commands select the intended 10.4.9 release exactly so restore does not move
 to a different package version implicitly. Use them only after the matching
 release and all five NuGet package pages are public; source or changelog
 entries alone do not establish package availability.
 
 ```bash
-package_version='10.4.8'
+package_version='10.4.9'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.MySql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.4.8'
+package_version='10.4.9'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.4.8'
+package_version='10.4.9'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.Sqlite --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.4.8'
+package_version='10.4.9'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.SqlServer --version "$package_version"
 ```
 
@@ -1054,7 +1056,7 @@ signatures and package content, and creates or verifies an immutable GitHub
 Release with the exact ten package files, checksums, SPDX manifest, and
 `release-provenance.intoto.jsonl`. Candidates are marked prerelease and never
 replace the latest stable release.
-The five-package release contract began with 10.4.6 and is unchanged for 10.4.8;
+The five-package release contract began with 10.4.6 and is unchanged for 10.4.9;
 the historical 10.4.5 release remains the four-package set.
 See [Publication operations](docs/operations/release-publication.md) for the
 step-by-step maintainer guide and current readiness, and

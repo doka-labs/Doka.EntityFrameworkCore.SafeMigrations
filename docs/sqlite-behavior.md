@@ -1,5 +1,12 @@
 # SQLite behavior
 
+Prepared stable 10.4.9 rejects unproved lossy affinity, CLR-domain and generation
+changes under `RepairIfSafe`, even with an exact old-definition match.
+Compatible nullability/default repairs retain their data and ownership gates;
+live, ordered projected and runtime classifications use the same lossless
+contract. Public APIs, dependency ranges, migration source and report schemas
+are unchanged; no migration regeneration is required.
+
 ## Supported deployment shape
 
 `Doka.EntityFrameworkCore.SafeMigrations.Sqlite` composes the bundle-neutral

@@ -2,9 +2,13 @@
 
 The SQL Server adapter is a separate, optional package introduced in 10.4.6.
 Releases 10.4.2 through 10.4.5 contain only Core, MySQL/MariaDB, PostgreSQL,
-and SQLite. Prepared stable 10.4.8 corrects independent rename-destination
-evidence while retaining SQL Server's public API and provider-specific column
-transition contract at the shared package version. Availability of the new
+and SQLite. Prepared stable 10.4.9 admits proven built-in integer widenings
+and simple integer CHECK validation on populated tables. It corrects ordered
+key/FK dependencies, schema-wide name occupancy and permission-first catalog
+checks; DDL/DML trigger effects invalidate row and structural evidence before
+projection shortcuts. Matching integer replays and runtime guards omit unused
+transition captures and repair predicates. Public signatures, dependencies,
+migration source and report schemas remain unchanged. Availability of the new
 patch requires full qualification and verified five-package publication;
 source and API baselines alone are not publication evidence. Selecting another
 provider does not introduce SQL Server runtime dependencies.

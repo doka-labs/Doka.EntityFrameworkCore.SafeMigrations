@@ -1,5 +1,14 @@
 # PostgreSQL behavior
 
+Prepared stable 10.4.9 preserves explicit repair collations and exact ALTER
+source authority. Session-active DDL event triggers and DML triggers, including
+FK-cascade and provider-backfill effects, invalidate ordered row and structural
+proofs before projection shortcuts. Supported unproven states retain their
+mutation origin for fresh runtime validation; independent refusals still block.
+Narrowing eligibility plans are retained only for the current transport
+statement, and fully matching runtime columns skip unused repair/data scopes.
+Public APIs, dependency ranges, migration source and report schemas are unchanged.
+
 ## Operational summary
 
 The PostgreSQL adapter composes Npgsql's EF Core 10 provider. It classifies

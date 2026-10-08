@@ -70,12 +70,18 @@ package and compatible catalog, allocation, roundtrip, and correctness fixes
 for the existing providers. The 10.4.7 patch reduces MariaDB batched
 analysis catalog work and MySQL/MariaDB runtime checks and command dispatches,
 with bounded SQL-generation allocations, without changing public APIs,
-dependency ranges, migration source, policies, reports, or history. Prepared
-stable 10.4.8 corrects approved explicit column transitions and ordered proof
+dependency ranges, migration source, policies, reports, or history. The
+10.4.8 patch corrects approved explicit column transitions and ordered proof
 invalidation, cross-provider rename-destination checks, and MySQL/MariaDB default
 identity and setup compaction. It preserves those compatibility boundaries and
-requires no migration regeneration. Publication still requires the full
-five-package release gate and independent engine evidence.
+requires no migration regeneration. Prepared stable 10.4.9 supports proven
+SQL Server integer widening and CHECK validation, corrects PostgreSQL column
+contracts and trigger-affected ordered evidence, rejects unproved lossy SQLite
+repairs, and reduces unnecessary PostgreSQL/SQL Server captures and retained
+plans. It preserves public signatures, dependencies, migration source, policy
+selection, report schemas and history. Deferred preflight states require fresh
+runtime validation, not an assumption of readiness. Publication still requires
+the full five-package release gate and independent engine evidence.
 These releases follow changed dependency conditions and confirmed correctness
 requirements; they are not deferred initial scope.
 

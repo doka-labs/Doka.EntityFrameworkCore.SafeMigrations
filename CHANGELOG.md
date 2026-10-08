@@ -6,6 +6,21 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
+## [10.4.9] - 2026-10-08
+
+Prepare stable 10.4.9 for all five packages. This patch adds provider-proven
+SQL Server integer widening and populated-table CHECK validation, corrects
+PostgreSQL column contracts and trigger-affected ordered proofs, enforces
+lossless SQLite repairs, and reduces unnecessary PostgreSQL/SQL Server work.
+Public signatures, dependency ranges, migration source, policy selection,
+report schemas, and history remain unchanged; existing migrations do not need
+regeneration. Classification changes and repair boundaries are detailed below.
+
+This entry records source preparation, not publication. Completion requires
+the full qualification matrix, signed `v10.4.9` source identity, all five exact
+NuGet primary and symbol packages, and verified GitHub Release, SBOM,
+provenance, attestation, and public package readback evidence.
+
 ### Fixed
 
 - Reject unproved SQLite rebuild conversions under `RepairIfSafe`, including
@@ -24,9 +39,9 @@ the shared release identity described in [Release process](docs/release-process.
   when user triggers can execute unrelated DDL, including indirectly reached
   FK-cascade triggers. Preserve the actual DML origin, initial no-ops, empty typed
   writes and independent unsupported contracts; include provider-emitted column
-  backfills and preserve SQL Server's empty `dbo` schema baseline. SQL Server model-managed target
-  trigger rejection also includes CLR triggers, not only SQL implementations.
-
+  backfills and preserve SQL Server's empty `dbo` schema baseline. SQL Server
+  model-managed target trigger rejection also includes CLR triggers, not only
+  SQL implementations.
 - Admit explicit SQL Server built-in integer widenings under `RepairIfSafe`
   with exact source, preserved default/identity, declared-row layout, and ordered
   dependency proofs. Reject numeric narrowing and unproven layouts without DDL.
@@ -43,8 +58,8 @@ the shared release identity described in [Release process](docs/release-process.
   principal key and exact compatible column storage can satisfy the ordered
   proof; intervening writes, unknown state, orphan data, and permission refusals
   do not acquire a bypass. Retain schema-wide name occupancy from live objects
-  and earlier accepted tables and PK/UNIQUE/CHECK/FK constraints instead of promoting
-  a conflicting standalone FK to `Missing`.
+  and earlier accepted tables and PK/UNIQUE/CHECK/FK constraints instead of
+  promoting a conflicting standalone FK to `Missing`.
 - Guard protected SQL Server expression-dependency catalog reads with their
   effective database and view permissions before delayed compilation. Missing
   access reports `dependency_catalog_permission` without an unsafe absence proof,
@@ -84,6 +99,14 @@ the shared release identity described in [Release process](docs/release-process.
 
 ### Changed
 
+- Trigger-affected ordered operations can now report
+  `RuntimeValidationRequired` rather than stale readiness or a false prerequisite
+  conflict. Deferred assessments retain `ValidateAtRuntime` and the actual
+  invalidating origin; runtime guards decide after the preceding mutation.
+  Independent permission, capability and invariant refusals still block.
+  Deployment consumers must distinguish deferred validation from both proven
+  readiness and rejection. SQLite affinity/CLR-domain or generation changes
+  without a lossless proof are rejected even when their old definition matches.
 - Skip unused SQL Server source/dependency captures for already matching integer
   ALTER replays, including their unused row-growth reservations. Nonmatching
   source and ordered dependency checks remain unchanged.
@@ -91,7 +114,6 @@ the shared release identity described in [Release process](docs/release-process.
   statement and retain compact candidate identities instead of unused rendered
   SQL. Submitted predicates, result attribution, deduplication, statement limits,
   data checks and cancellation semantics remain unchanged.
-
 - Avoid evaluating SQL Server runtime repair predicates for matching states,
   non-repair policies, or plans without a safe repair capability. Preserve fresh
   classification, prerequisite gates, target postconditions, and transactions.
@@ -1617,7 +1639,9 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.7...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.9...HEAD
+[10.4.9]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.8...v10.4.9
+[10.4.8]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.7...v10.4.8
 [10.4.7]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.6...v10.4.7
 [10.4.6]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.5...v10.4.6
 [10.4.5]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.4...v10.4.5

@@ -65,14 +65,20 @@ A successful release run and exact-version public package readback remain the
 authority for a published API; shipped baseline files record its prepared
 contract, not proof of publication.
 
-Prepared stable 10.4.8 preserves the complete 10.4.6 public API and dependency
-ranges. It corrects internal explicit column-transition proofs and ordered
-projection, rename-destination evidence across providers, and MySQL/MariaDB
-default comparison and setup-fragment handling. The internal MySQL/MariaDB
-performance changes introduced in 10.4.7 remain in place.
-Migration source does not need regeneration; policies, canonical report v3,
-filtered-view v2, and migration histories remain unchanged. No API-baseline
-promotion is required for this patch.
+Prepared stable 10.4.9 preserves the complete 10.4.6 public API and dependency
+ranges. SQL Server admits proven built-in integer widening and simple integer
+CHECK validation on populated tables. PostgreSQL preserves repaired column
+collations and exact ALTER source authority; SQLite requires a lossless storage,
+CLR-domain and generation proof. Trigger-affected ordered row and structural
+evidence is deferred to runtime instead of reused as a stale certificate.
+Existing `ValidateAtRuntime`, `DeferredOrigin` and
+`RuntimeValidationRequired` report members express that boundary; independent
+permission, capability and invariant refusals remain blocking. PostgreSQL plan
+retention and SQL Server captures/runtime predicates omit unnecessary work
+without weakening fresh guards. Earlier MySQL/MariaDB optimizations remain.
+Migration source does not need regeneration; policy selection, canonical
+report v3, filtered-view v2, and migration histories remain unchanged. No
+API-baseline promotion is required for this patch.
 
 ## Packages and registration
 

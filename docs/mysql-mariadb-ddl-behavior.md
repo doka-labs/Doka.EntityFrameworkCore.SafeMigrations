@@ -1,12 +1,14 @@
 # MySQL and MariaDB DDL behavior
 
-Prepared stable 10.4.8 corrects provider-proven explicit column transitions,
-ordered proof invalidation and rename-destination checks, and preserves exact
-default identity and setup-fragment boundaries. It requires neither regenerated
-migrations nor changed server durability settings. The analysis and runtime
-optimizations introduced in 10.4.7 remain in place. Runtime checks continue to
-read the live catalog even when batched analysis uses session-owned catalog
-copies. Policies, postconditions, and recovery boundaries remain unchanged;
+Prepared stable 10.4.9 retains the MySQL/MariaDB column-transition,
+rename-destination, default-identity and setup-fragment fixes from 10.4.8 and
+the analysis/runtime optimizations introduced in 10.4.7. Its Core projection
+changes preserve provider-specific structural deferrals until fresh runtime
+validation; they introduce no MySQL/MariaDB SQL-generation or dependency change.
+Neither regenerated migrations nor changed server durability settings are
+required. Runtime checks continue to read the live catalog even when batched
+analysis uses session-owned catalog copies. Policies, postconditions, and
+recovery boundaries remain unchanged;
 required data scans and DDL can still dominate large-table workloads.
 
 ## Operational summary
