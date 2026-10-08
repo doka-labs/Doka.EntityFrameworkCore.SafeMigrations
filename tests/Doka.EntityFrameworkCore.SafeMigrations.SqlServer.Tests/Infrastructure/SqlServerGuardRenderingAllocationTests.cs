@@ -1,6 +1,6 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
-/// <summary>Compares complete prepared guards with the original rendering shape and allocation work.</summary>
+/// <summary>Compares prepared guards with independent interpolation-based rendering and allocation work.</summary>
 public sealed class SqlServerGuardRenderingAllocationTests
 {
     private const string ConnectionString = "Server=127.0.0.1,1433;Database=guard_rendering;"
@@ -696,7 +696,7 @@ public sealed class SqlServerGuardRenderingAllocationTests
         return new MigrationCommand(command, context, dependencies.Logger);
     }
 
-    /// <summary>Retains the pre-change guard construction, including its action string and scalar wrappers.</summary>
+    /// <summary>Independently renders policy gating using the former action string and scalar wrappers.</summary>
     private static StringBuilder OriginalGuardBody(
         SafeMigrationOperation operation,
         SqlServerSafeMigrationRuntimePlan plan,
@@ -774,13 +774,33 @@ public sealed class SqlServerGuardRenderingAllocationTests
             OriginalScalar(builder, plan.StateExpression, "nvarchar(32)", "@doka_state", "    ",
                 plan.CatalogPreambleSql);
 
-            OriginalScalar(builder, $"COALESCE(({plan.RepairPrecondition}), 0)", "int", "@doka_repair_ok", "    ");
         }
         else
         {
-            builder.Append("    SET @doka_state = (").Append(plan.StateExpression).Append(");\n")
-                .Append("    SET @doka_repair_ok = COALESCE((")
-                .Append(plan.RepairPrecondition).Append("), 0);\n");
+            builder.Append("    SET @doka_state = (").Append(plan.StateExpression).Append(");\n");
+        }
+
+        if (operation.Policy == SafeMigrationPolicy.RepairIfSafe
+            && plan.RepairCapability == SafeMigrationRepairCapability.Safe)
+        {
+            builder.Append("    IF @doka_state = N'different'\n    BEGIN\n");
+            if (plan.RequiresDelayedBinding
+                || plan.CatalogPreambleSql is not null)
+            {
+                OriginalScalar(builder, $"COALESCE(({plan.RepairPrecondition}), 0)", "int",
+                    "@doka_repair_ok", "        ");
+            }
+            else
+            {
+                builder.Append("        SET @doka_repair_ok = COALESCE((")
+                    .Append(plan.RepairPrecondition).Append("), 0);\n");
+            }
+
+            builder.Append("    END\n    ELSE\n    BEGIN\n        SET @doka_repair_ok = 0;\n    END;\n");
+        }
+        else
+        {
+            builder.Append("    SET @doka_repair_ok = 0;\n");
         }
 
         builder.Append("END;\n")

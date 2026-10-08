@@ -18,6 +18,30 @@ internal sealed class SqlServerProjectedCandidateKeys
     )
         => _names[new NameIdentity(table, name)] = new KeyIdentity(table, index);
 
+    /// <summary>Resolves a catalog-bound name to its exact physical backing index.</summary>
+    /// <param name="table">The physical principal table id.</param>
+    /// <param name="name">The authored name already bound with catalog collation.</param>
+    /// <param name="index">The physical index id when the name has an established binding.</param>
+    /// <returns>Whether this name has a proven physical index identity.</returns>
+    public bool TryGetIndex(
+        int table,
+        string name,
+        out int index
+    )
+    {
+        if (_names.TryGetValue(new NameIdentity(table, name), out var identity)
+            && identity.Index > 0)
+        {
+            index = identity.Index;
+
+            return true;
+        }
+
+        index = 0;
+
+        return false;
+    }
+
     /// <summary>Reads bounded principal key metadata using the analysis command's transaction and timeout.</summary>
     /// <param name="command">The reusable analysis command.</param>
     /// <param name="principalTables">Physical principal ids requiring candidate-key proof.</param>

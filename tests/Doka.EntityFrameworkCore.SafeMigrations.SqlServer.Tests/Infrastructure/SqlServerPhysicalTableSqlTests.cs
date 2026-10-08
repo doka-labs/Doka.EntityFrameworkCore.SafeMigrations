@@ -106,7 +106,7 @@ public sealed class SqlServerPhysicalTableSqlTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var plan = CreateCatalog(context).Build(new SafeMigrationOperation(new DropTableIntent("physical_items"),
+        var plan = CreateCatalog(context).Build(new SafeMigrationOperation(new DropIndexIntent("IX_value", "physical_items"),
             SafeMigrationPolicy.ThrowIfDifferent));
 
         // Act
@@ -114,6 +114,7 @@ public sealed class SqlServerPhysicalTableSqlTests
 
         // Assert
         Assert.False(plan.RequiresDelayedBinding);
+        Assert.False(plan.RequiresExpressionDependencyRead);
         Assert.Null(plan.CatalogPreambleSql);
         Assert.StartsWith("SELECT 257,", selection, StringComparison.Ordinal);
         Assert.DoesNotContain("sp_executesql", selection, StringComparison.Ordinal);

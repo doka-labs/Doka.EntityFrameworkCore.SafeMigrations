@@ -65,14 +65,20 @@ A successful release run and exact-version public package readback remain the
 authority for a published API; shipped baseline files record its prepared
 contract, not proof of publication.
 
-Prepared stable 10.4.8 preserves the complete 10.4.6 public API and dependency
-ranges. It corrects internal explicit column-transition proofs and ordered
-projection, rename-destination evidence across providers, and MySQL/MariaDB
-default comparison and setup-fragment handling. The internal MySQL/MariaDB
-performance changes introduced in 10.4.7 remain in place.
-Migration source does not need regeneration; policies, canonical report v3,
-filtered-view v2, and migration histories remain unchanged. No API-baseline
-promotion is required for this patch.
+Prepared stable 10.4.9 preserves the complete 10.4.6 public API and dependency
+ranges. SQL Server admits proven built-in integer widening and simple integer
+CHECK validation on populated tables. PostgreSQL preserves repaired column
+collations and exact ALTER source authority; SQLite requires a lossless storage,
+CLR-domain and generation proof. Trigger-affected ordered row and structural
+evidence is deferred to runtime instead of reused as a stale certificate.
+Existing `ValidateAtRuntime`, `DeferredOrigin` and
+`RuntimeValidationRequired` report members express that boundary; independent
+permission, capability and invariant refusals remain blocking. PostgreSQL plan
+retention and SQL Server captures/runtime predicates omit unnecessary work
+without weakening fresh guards. Earlier MySQL/MariaDB optimizations remain.
+Migration source does not need regeneration; policy selection, canonical
+report v3, filtered-view v2, and migration histories remain unchanged. No
+API-baseline promotion is required for this patch.
 
 ## Packages and registration
 
@@ -432,6 +438,13 @@ target. Narrowing requires a current row proof, and a matching target requires
 no repair scan. Alter never creates a missing source column. A successful
 preflight does not replace execution-time guards or permit truncation.
 
+SQL Server additionally admits the documented lossless built-in integer
+widenings for explicit alterations with exact old-definition, storage, and
+dependency proofs. This is not a general numeric conversion or automatic
+constraint replacement. Its populated-table integer CHECK validation and
+ordered drop/alter/recreate boundaries are described in
+[SQL Server behavior](sqlserver-behavior.md#lossless-integer-alterations-and-check-validation).
+
 The three model-managed-data methods are public targets for generated migration
 source. They always use `ThrowIfDifferent`; they expose no overwrite or repair
 policy. Ensure receives key columns and complete target rows. Update receives
@@ -665,7 +678,7 @@ digest.
 | `NoOperations` | No operation was assessed; verify intended target/history separately |
 | `Ready` | Preflight permits the safe sequence subject to external gates; postflight confirms all supplied safe postconditions |
 | `ReadyWithProviderOperations` | Safe operations are accepted, but ordinary EF or provider operations remain unanalyzed and need independent artifact and postcondition review |
-| `RuntimeValidationRequired` | Earlier raw SQL or unconfined data changes make later states unprovable from a read-only snapshot; review provider-owned SQL independently and rely on the ordered runtime guards |
+| `RuntimeValidationRequired` | Earlier raw SQL, unconfined data changes, or DDL-trigger row/structural uncertainty make later states unprovable from a read-only snapshot; review provider-owned operations independently and rely on the ordered runtime guards |
 | `Blocked` | One or more operations reject; do not execute/continue deployment |
 
 `SafeMigrationObservedState.TransitionReady` is used only when a captured
@@ -715,7 +728,42 @@ For model-managed data, unconfined writes invalidate earlier exact rows and
 dependency evidence. Later unprovable seed assessments carry analysis code
 `projected_model_managed_data_state_unknown`; deferred writes establish no new
 postconditions. The existing guarded execution remains authoritative.
-Independently proven blockers remain `Blocked`. The
+SQL Server DDL-trigger risk also uses this contract after accepted executable
+DDL. Analysis codes `projected_ddl_trigger_data_unknown` and
+`projected_ddl_visibility_data_unknown` distinguish a visible enabled trigger
+from insufficient metadata visibility. Their `*_structure_unknown` counterparts
+cover mutable physical dependencies and metadata. The origin identifies the DDL, not a
+hypothetical row change. Runtime validates fresh state immediately before the
+affected operation; no background work or automatic grant is introduced. See
+[SQL Server behavior](sqlserver-behavior.md#lossless-integer-alterations-and-check-validation).
+PostgreSQL uses `projected_event_trigger_state_unknown` or
+`projected_event_trigger_visibility_unknown` after session-active event-trigger
+DDL. Both providers qualify captured evidence before neutral missing-owner and
+matching shortcuts: a trigger can replace an index or recreate a dropped table.
+Initial no-ops do not invalidate evidence; a later captured match is not proof
+of its survival. See [PostgreSQL behavior](postgresql-behavior.md#ddl-event-trigger-freshness).
+Both providers also qualify captured structure after executable DML when a user
+trigger can execute unrelated DDL, including FK-cascade effects. SQL Server uses
+`projected_dml_trigger_structure_unknown` or `projected_dml_trigger_data_unknown`;
+PostgreSQL uses `projected_dml_trigger_structure_unknown` or
+`projected_dml_trigger_visibility_unknown`, retaining its existing model-managed
+row-state code. `DeferredOrigin` identifies the actual DML. Empty typed writes,
+initial safe no-ops and independent unsupported contracts retain precedence.
+After a provider-specific structural deferral, later supported safe assessments
+retain runtime validation with `projected_provider_postcondition_unknown` and
+the first deferred structural operation as their origin. No physical
+postcondition or candidate key is inferred; deferred model-managed writes alone
+do not activate this structural boundary. All independently captured live
+`Unsupported` results, including permission and capability refusals, and
+identifier mismatches remain blocking.
+Within this structural boundary, later supported immutable `Matching`,
+`Missing`, `Different`, `DataBlocked`, and `PrerequisiteMissing` results are
+deliberately deferred, not treated as current ordered-state evidence. Runtime
+can still reject after classifying the actual state. Independent `Unsupported`,
+identity mismatches and invariant contract refusals retain precedence; a supported
+missing or different fact can itself be stale after risk-bearing trigger DDL.
+Already blocked assessments remain `Blocked`; the boundary does not change
+their aggregate precedence. The
 [version 1 view schema](../schemas/safe-migration-report-view-v1.schema.json)
 remains available for previously persisted views.
 

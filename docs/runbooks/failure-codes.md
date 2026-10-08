@@ -25,6 +25,7 @@ treat all codes below as interchangeable:
 | Blocked postflight | `postcondition_failed` |
 | Blocked preflight with `Unsupported` state | The analyzer's specific unsupported reason, or `classified_unsupported` |
 | Other blocked preflight | The rejecting planner decision code |
+| Deferred preflight safe operation | `runtime_validation_required`; the specific cause remains in `AnalysisCode` and the preceding operation in `DeferredOrigin` |
 | Non-blocked safe operation | The analyzer/projection code, not the accepting planner decision code |
 
 Use report status, observed state, action, and postcondition together. A code
@@ -119,10 +120,25 @@ data/prerequisite result uses its planner rejection code.
 | `projected_column_transition_safe` | Provider-specific evidence proves the exact ordered column transition, including its physical limits and current row-safety requirements. The explicit repair policy still controls execution. |
 | `projected_retained_column_domain_safe` | MySQL/MariaDB proves the ordered transition using an original declared value domain preserved by earlier certified widening, with fresh row evidence and cumulative physical/dependency checks. A model declaration alone is not this proof. |
 | `projected_column_transition` | PostgreSQL classified a projected column transition using its supported type and row-safety contract. Inspect the observed state and repair capability; the code alone does not approve an alteration. |
+| `incoming_foreign_key_key_dependency` | SQL Server proved the exact PK/UNIQUE kind but an incoming FK references its backing index. Only accepted removals of that key's actual references can discharge this immutable conflict. |
+| `projected_incoming_key_references_removed` | Accepted ordered removals discharged the captured backing-key references. Wrong-kind, surviving and unbound projected references are not promoted. |
+| `projected_foreign_key_prerequisites_ready` | SQL Server proved the bounded standalone-FK path from an accepted fresh, initially empty child to an unchanged captured live principal candidate key with exact compatible column storage. The projected state is `Missing`; row mutations, unknown state, and independent permission/support failures are not discharged. Runtime rechecks remain authoritative. |
+| `projected_constraint_name_occupied` | SQL Server found the requested constraint's schema-scoped object name occupied by a live object or an earlier accepted table/PK/UNIQUE/CHECK/FK. Standalone-FK prerequisite promotion cannot erase this `Different` conflict; `ThrowIfDifferent` and `RepairIfSafe` produce `RejectDifferent`, while `ExistenceOnly` retains its deliberate no-op semantics. Inspect the occupant before authoring a reviewed free identity or explicit valid removal. |
+| `column_integer_widening_safe` | SQL Server proved the exact source, integer domain, declared-row storage and surviving dependency contract. Only an explicit repair policy authorizes the alteration. |
 | `projected_column_transition_unproven` | The accepted old definition is known, but physical capacity, dependency safety, or current row evidence does not establish the requested conversion. Inspect the ordered source and provider limits; an empty-table proof alone does not establish physical feasibility. |
 | `projected_data_state_unknown` | Earlier data operations or backfill-capable alterations invalidated a projected or live pre-batch row-safety proof. Provider-generated updates can fire triggers on other tables. The public blocked assessment uses `prerequisite_missing`; do not execute the dependent operation without a separately provable post-DML state. |
+| `projected_ddl_trigger_data_unknown` | SQL Server observed an enabled database or server DDL trigger. Accepted executable DDL invalidated later row certificates; the assessment uses `ValidateAtRuntime` with the DDL `DeferredOrigin`, not a claimed observed state or postcondition. The runtime guard checks fresh rows immediately before its operation. |
+| `projected_ddl_trigger_structure_unknown` | SQL Server DDL-trigger effects leave later physical metadata or dependency certificates stale. A dropped index can be replaced by another dependency; runtime must classify the actual ordered catalog. |
+| `projected_ddl_visibility_structure_unknown` | SQL Server cannot certify trigger absence and therefore cannot reuse later structural metadata after executable DDL. Inspect visibility and the DDL origin; no permission grant or bypass is implied. |
+| `projected_event_trigger_state_unknown` | PostgreSQL session-active event triggers can change rows and schema after preceding DDL. Later assessments use `ValidateAtRuntime` with that DDL origin. |
+| `projected_event_trigger_visibility_unknown` | PostgreSQL catalog access cannot establish event-trigger absence. Later captured state after executable DDL requires fresh runtime classification. |
+| `projected_dml_trigger_structure_unknown` | PostgreSQL or SQL Server observed active user DML triggers which can execute unrelated DDL, including through FK cascades. Later physical metadata requires runtime classification with the actual DML origin. |
+| `projected_dml_trigger_data_unknown` | SQL Server DML-trigger effects invalidate a later row-dependent contract. Runtime checks fresh rows and metadata; independently unsupported target-trigger contracts still block. |
+| `projected_dml_trigger_visibility_unknown` | PostgreSQL cannot inspect the user-trigger catalog to prove absence. Executable DML invalidates later physical state; no permission grant or trigger-absence certificate is implied. |
+| `projected_ddl_visibility_data_unknown` | SQL Server cannot prove DDL-trigger absence with the effective database VIEW DEFINITION and server VIEW ANY DEFINITION visibility. After accepted executable DDL, later row-dependent evidence is deferred with its DDL origin. This does not assert that a trigger exists, grant rights, or waive independent blockers. |
+| `projected_provider_postcondition_unknown` | A preceding provider-specific deferred structural operation has no accepted physical postcondition. Later supported safe operations remain `ValidateAtRuntime`, with the first deferred structural operation as `DeferredOrigin`; no table, column, or candidate key is invented. All live `Unsupported` results, including permission and capability refusals, and identifier mismatches remain blocking. Deferred model-managed writes alone do not establish this structural boundary. |
 | `projected_structure_state_unknown` | Projected structure is unknown after an opaque or unresolved mutation. After raw SQL, a later safe assessment instead uses `runtime_validation_required` with the SQL origin; other unresolved transitions remain blocked. |
-| `runtime_validation_required` | Earlier raw SQL, unconfined writes, or discarded seed-row evidence prevent a read-only classification. The guarded runtime analysis must decide against the actual ordered catalog, rows, and dependencies. |
+| `runtime_validation_required` | Earlier raw SQL, unconfined writes, discarded seed-row evidence, or SQL Server DDL row uncertainty prevent a read-only classification. The guarded runtime analysis must decide against the actual ordered catalog, rows, and dependencies. |
 | `projected_dependency_handoff` | Historical pre-10.4.8 count-only delete handoff; superseded by fresh runtime validation because intervening triggers can invalidate original dependency counts. |
 | `projected_model_managed_data_state_unknown` | Earlier unconfined writes or discarded row evidence prevent read-only seed classification. Inspect `DeferredOrigin`; the existing runtime guard checks actual rows and dependencies in order. |
 | `projected_model_managed_dependency_unmodeled` | An accepted incoming FK is absent from the delete's source-frozen dependency shapes. Preflight rejects the delete before its runtime guard would reject that unmodeled dependency. |
@@ -141,7 +157,8 @@ deployment approval. A later `projected_missing` result proves only that its
 safe prerequisite follows if the preceding provider operation succeeds; it
 does not waive that independent evidence.
 Typed EF data operations preserve only structural prerequisites for a later
-non-unique index. A data-dependent unique index or additive constraint remains
+non-unique index when no provider user-trigger risk invalidates that structure.
+A data-dependent unique index or additive constraint remains
 blocked even when the live analyzer observed absence before the ordered data
 operation. A later structural provider operation cannot clear that uncertainty.
 If an unrecognized provider operation separates the prerequisite from the safe
@@ -153,6 +170,16 @@ missing prerequisite. Immutable unsupported contracts remain blocked.
 `BlockingOnly` excludes the deferred actions; use
 `NonMatching` to inspect them. `ThrowIfBlocked()` permits their report status,
 but cannot approve the raw SQL or promise that runtime guards will pass.
+
+The `projected_ddl_*_data_unknown`, `projected_ddl_*_structure_unknown`,
+`projected_event_trigger_*_unknown` and `projected_dml_trigger_*_unknown` codes
+retain the same aggregate report contract and selections, with the actual
+preceding DDL or DML as their origin. Check which
+case applies: a known enabled trigger is different from permission-filtered
+metadata. Do not treat an empty server-trigger catalog under limited visibility
+as proof of absence, grant server rights automatically, or skip the runtime
+guard. Independent support, identity, and operation-permission refusals remain
+blockers. See [SQL Server behavior](../sqlserver-behavior.md#lossless-integer-alterations-and-check-validation).
 
 An accepted exact-name index drop can project a following ordinary column
 BTREE ensure to `projected_missing`. It cannot override
@@ -302,6 +329,14 @@ code, not a claim that the feature is absent from every version of that engine.
 | `operator_class` | MySQL/MariaDB | PostgreSQL-style index operator classes are not supported. |
 | `virtual_generated_column` | PostgreSQL | The adapter rejects an explicitly virtual computed column. |
 | `catalog_metadata_not_visible` | SQL Server | Catalog visibility cannot prove the target state under the current principal. |
+| `dependency_catalog_permission` | SQL Server | Database VIEW DEFINITION and SELECT on sys.sql_expression_dependencies are not both proven. Restore the reviewed least-privilege access or retain the blocked operation; no rights are granted automatically. |
+| `column_alter_write_permission` | SQL Server | An approved integer/text ALTER lacks effective table UPDATE permission. Authorize the intended row-rewriting DDL explicitly or retain the existing column; an exact matching NoOp needs no UPDATE grant. |
+| `column_alter_read_permission` | SQL Server | A row-bearing text ALTER lacks effective table SELECT permission. Authorize the intended data proof explicitly; both analysis and runtime reject before binding, including an exact matching replay. |
+| `column_widening_storage_unproven` | SQL Server | The conservative old-plus-target row bound or supported storage lineage is not proven. Do not infer feasibility from the target column width alone. |
+| `column_nullability_data_unproven` | SQL Server | Required row SELECT access is not proven for a nullable-to-required alteration. No NULL absence certificate is inferred. |
+| `check_row_data_unproven` | SQL Server | CHECK validation cannot read the required rows under the effective principal. Preserve the blocked operation until the reviewed row-read contract is available. |
+| `check_column_type_unproven` | SQL Server | A predicate operand lacks the ordinary physical integer contract required for the populated-table CHECK allowlist. |
+| `check_prerequisite_missing` | SQL Server | The CHECK table or one of its referenced columns is absent; do not bind the predicate or infer truth from missing metadata. |
 | `default_schema_mismatch` | SQL Server | An unqualified safe operation is ambiguous because the caller's default schema is not `dbo`; specify a schema. |
 | `identifier_collation_unproven` | SQL Server | Catalog identifier equality cannot be established under the active collation contract. |
 | `table_unproven_facet` | SQL Server | A table facet has no bounded catalog-equivalence proof. |

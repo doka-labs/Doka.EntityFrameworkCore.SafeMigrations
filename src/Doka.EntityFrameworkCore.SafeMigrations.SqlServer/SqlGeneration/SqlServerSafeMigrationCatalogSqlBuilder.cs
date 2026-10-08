@@ -3,6 +3,11 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 /// <summary>Builds bounded SQL Server catalog and guarded execution contracts.</summary>
 internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 {
+    /// <summary>Proves both permissions required by the protected expression-dependency view.</summary>
+    internal const string ExpressionDependencyReadPermission =
+        "COALESCE(HAS_PERMS_BY_NAME(DB_NAME(),N'DATABASE',N'VIEW DEFINITION'),0)=1 "
+        + "AND COALESCE(HAS_PERMS_BY_NAME(N'sys.sql_expression_dependencies',N'OBJECT',N'SELECT'),0)=1";
+
     private readonly IRelationalTypeMappingSource _typeMappingSource;
     private readonly ISqlGenerationHelper _sqlGenerationHelper;
     private readonly Func<string, string> _literal;
@@ -88,15 +93,55 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         var defaultSupport = BuildDefaultValueSupportExpression(operation.Intent);
         var columnCollationSupport = BuildColumnCollationSupportExpression(operation.Intent);
         var delayedDefault = defaultSupport is not null && columnCollationSupport is not null;
+        var prerequisite = BuildPrerequisiteExpression(operation.Intent);
+        if (plan.PrerequisiteExpression != "1")
+        {
+            // WHY: A feature can derive additional prerequisites from authored
+            // expressions. Replacing them with the common table gate could bind
+            // a row expression before its physical columns have been proved.
+            prerequisite = Bit($"({prerequisite}) = 1 AND ({plan.PrerequisiteExpression}) = 1");
+        }
 
-        return plan with
+        return QualifyExpressionDependencyRead(plan with
         {
             PhysicalTableSupportExpression = BuildPhysicalTableSupportExpression(operation.Intent),
             DefaultValueSupportExpression = defaultSupport,
             ColumnCollationSupportExpression = columnCollationSupport,
             DefaultValueSupportRequiresDelayedBinding = delayedDefault,
             RequiresDelayedBinding = plan.RequiresDelayedBinding || delayedDefault,
-            PrerequisiteExpression = BuildPrerequisiteExpression(operation.Intent),
+            PrerequisiteExpression = prerequisite,
+        });
+    }
+
+    /// <summary>Keeps a denied dependency-catalog read outside the dynamically compiled classifier.</summary>
+    /// <param name="plan">The feature-owned classifier and its independent admission gates.</param>
+    /// <returns>A delayed permission-qualified plan, or the unchanged unrelated plan.</returns>
+    internal static SqlServerSafeMigrationRuntimePlan QualifyExpressionDependencyRead(
+        SqlServerSafeMigrationRuntimePlan plan
+    )
+    {
+        if (!plan.RequiresExpressionDependencyRead)
+        {
+            return plan;
+        }
+
+        // WHY: VIEW DEFINITION and table SELECT do not grant SELECT on this
+        // system view. A CASE around an inaccessible view still compiles its
+        // reference; the outer permission proof must precede sp_executesql.
+        return plan with
+        {
+            RequiresDelayedBinding = true,
+            StateEvaluationGuardExpression = Bit($"({ExpressionDependencyReadPermission}) "
+                + $"AND ({plan.StateEvaluationGuardExpression})=1"),
+            StateEvaluationGuardFailureExpression = "N'unsupported'",
+            AnalysisOuterStateGuardExpression = plan.AnalysisOuterStateGuardExpression is null ? null
+                : Bit($"({ExpressionDependencyReadPermission}) AND ({plan.AnalysisOuterStateGuardExpression})=1"),
+            PrerequisiteFailureCodeExpression = $"CASE WHEN NOT ({ExpressionDependencyReadPermission}) "
+                + "THEN N'dependency_catalog_permission' "
+                + $"ELSE ({plan.PrerequisiteFailureCodeExpression ?? "CONVERT(nvarchar(128),NULL)"}) END",
+            ClassificationCodeExpression = $"CASE WHEN NOT ({ExpressionDependencyReadPermission}) "
+                + "THEN N'dependency_catalog_permission' "
+                + $"ELSE ({plan.ClassificationCodeExpression ?? "NULL"}) END",
         };
     }
 
@@ -130,7 +175,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 value.Definition.Schema,
                 value.Definition.Columns),
             EnsureCheckConstraintIntent value
-                => TableAndColumnsExist(value.Definition.Table, value.Definition.Schema, []),
+                => TableAndColumnsExist(value.Definition.Table, value.Definition.Schema,
+                    SafeMigrationPrerequisiteColumns.Local(value)),
             EnsureForeignKeyIntent value => ForeignKeyPrerequisites(value.Definition),
             ModelManagedDataIntent value => BuildModelManagedDataPrerequisite(value),
             _ => "1 = 1",

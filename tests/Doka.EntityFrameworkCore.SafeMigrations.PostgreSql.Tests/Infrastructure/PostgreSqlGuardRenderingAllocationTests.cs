@@ -240,7 +240,9 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
         Assert.EndsWith("END\n" + expectedTag + ";", guarded, StringComparison.Ordinal);
         Assert.Equal(2, CountOccurrences(guarded, expectedTag));
         Assert.Equal(1, CountOccurrences(guarded, nullQuery));
-        Assert.Contains("IF doka_nullability_repair_eligible AND NOT COALESCE((TRUE), FALSE) THEN", guarded,
+        Assert.Contains("doka_complete_not_null := COALESCE((TRUE), FALSE);", guarded, StringComparison.Ordinal);
+        Assert.Contains("IF doka_nullability_repair_eligible AND NOT COALESCE((doka_complete_not_null), FALSE) THEN",
+            guarded,
             StringComparison.Ordinal);
         if (hasDataProbe)
         {

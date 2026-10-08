@@ -6,6 +6,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
     ISafeMigrationProviderObjectIdentityNormalizer,
     ISafeMigrationProviderOperationProjection,
     ISafeMigrationProjectedKeyAnalyzer,
+    ISafeMigrationProjectedColumnAnalyzer,
     ISafeMigrationProjectedDependencyAnalyzer,
     IDisposable,
     IAsyncDisposable
@@ -60,7 +61,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
         => analysis.Code is "default_schema_mismatch" or "identifier_collation_unproven";
 
     /// <inheritdoc />
-    public bool PreservesExistingTableState(MigrationOperation operation) => false;
+    public bool PreservesExistingTableState(MigrationOperation operation) => IsZeroCommandSchemaEnsure(operation);
 
     /// <inheritdoc />
     public bool IsSequenceAwareAnalysis(
@@ -103,14 +104,18 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
         ISafeMigrationProjectedColumnSource columns
     )
     {
-        var dependencyAnalysis = _dependencyGraph?.ValidateProjectedOperation(operation, projectedAnalysis, columns)
-            ?? projectedAnalysis;
+        var transitionAnalysis = QualifyProjectedIntegerWidening(operation, projectedAnalysis, columns);
+        transitionAnalysis = QualifyProjectedCheckPredicate(operation, transitionAnalysis);
+        var dependencyAnalysis = _dependencyGraph?.ValidateProjectedOperation(operation, transitionAnalysis, columns)
+            ?? transitionAnalysis;
 
         var seedAnalysis = QualifyProjectedSeedOperation(operation, dependencyAnalysis, columns);
 
         var identityAnalysis = QualifyProjectedIdentityOperation(operation, seedAnalysis);
 
-        return QualifyProjectedColumnLayoutOperation(operation, identityAnalysis);
+        var columnAnalysis = QualifyProjectedColumnLayoutOperation(operation, identityAnalysis);
+
+        return QualifyProjectedDdlFreshness(operation, columnAnalysis);
     }
 
     /// <inheritdoc />
@@ -125,16 +130,30 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
         ObserveProjectedSeedOperation(operation, decision);
         ObserveProjectedIdentityOperation(operation, analysis, decision);
         ObserveProjectedColumnLayoutOperation(operation, analysis, decision);
+        ObserveProjectedColumnTransition(operation, decision);
     }
 
     /// <inheritdoc />
     public void ObserveProviderOperation(MigrationOperation operation)
     {
+        if (IsZeroCommandSchemaEnsure(operation))
+        {
+            // WHY: EF emits no command, so neither captured column/dependency
+            // proofs nor the ordinal of an actual trigger source can change.
+            return;
+        }
+
         _dependencyGraph?.ObserveProviderOperation(operation);
         InvalidateProjectedSeedProofs();
         InvalidateProjectedIdentityProofs();
         ObserveProviderColumnLayoutOperation(operation);
+        ResetProjectedColumnTransitions(retainInvalidatedCheckPredicates: true);
+        ObserveProviderDdlRowEffects(operation);
     }
+
+    /// <summary>Matches the provider baseline's exact zero-command default-schema exception.</summary>
+    private static bool IsZeroCommandSchemaEnsure(MigrationOperation operation)
+        => operation is EnsureSchemaOperation schema && StringComparer.OrdinalIgnoreCase.Equals(schema.Name, "dbo");
 
     /// <inheritdoc />
     public void ValidateContext(DbContext context)
@@ -291,6 +310,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
         ResetProjectedSeedProofs();
         ResetProjectedIdentityProofs();
         ResetProjectedColumnLayouts();
+        ResetProjectedColumnTransitions();
 
         ValidateContext(context);
         ArgumentNullException.ThrowIfNull(operations);
@@ -329,6 +349,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
                     .Select(static _ => Unsupported("catalog_metadata_not_visible"))
                     .ToArray();
             }
+
+            CaptureProjectedDdlRowEffects(environment.DdlRowEffectRisk);
+            CaptureProjectedDmlEffects(environment.HasEnabledDmlTriggers);
 
             var references = SqlServerIdentifierContract.Collect(operations);
             var identifierSafe = await ReadIdentifierContractAsync(
@@ -436,6 +459,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
                         continue;
                     }
 
+                    CaptureProjectedDdlRowDependency(operation, plan);
+
                     if (bindings is not null && bindings.Values.Count > 0)
                     {
                         // WHY: The complete guarded classifier now owns a private dynamic scope.
@@ -472,6 +497,15 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
             }
 
             CaptureIdentitySlotConflicts(operations, results);
+            CaptureProjectedCheckPredicates(operations, results);
+            if (identifierSafe)
+            {
+                await ReadProjectedColumnTransitionsAsync(connection, transaction, operations, results,
+                    environment.CanReadExpressionDependencies, context.Database.GetCommandTimeout(), cancellationToken);
+                await ReadProjectedCheckReplacementsAsync(connection, transaction, operations, results,
+                    context.Database.GetCommandTimeout(), cancellationToken);
+            }
+
             _dependencyGraph?.CaptureRenameTargetPresence(operations, results);
 
             // WHY: Inventory may reuse completed analysis proofs only within the same
@@ -619,10 +653,21 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
             "SELECT SCHEMA_NAME(), CONVERT(nvarchar(128), DATABASEPROPERTYEX(DB_NAME(), 'Collation')), "
             + "HAS_PERMS_BY_NAME(DB_NAME(), N'DATABASE', N'VIEW DEFINITION'), "
             + "CASE WHEN SCHEMA_NAME() COLLATE CATALOG_DEFAULT = N'dbo' COLLATE CATALOG_DEFAULT "
-            + "THEN 1 ELSE 0 END, DATABASE_PRINCIPAL_ID(), CONVERT(varchar(170), SUSER_SID(), 2);";
+            + "THEN 1 ELSE 0 END, DATABASE_PRINCIPAL_ID(), CONVERT(varchar(170), SUSER_SID(), 2), "
+            + "CASE WHEN EXISTS(SELECT 1 FROM sys.triggers WHERE parent_class=0 AND is_disabled=0) "
+            + "OR EXISTS(SELECT 1 FROM sys.server_triggers WHERE is_disabled=0) THEN 1 "
+            + "WHEN COALESCE(HAS_PERMS_BY_NAME(DB_NAME(), N'DATABASE', N'VIEW DEFINITION'),0)<>1 "
+            + "OR COALESCE(HAS_PERMS_BY_NAME(NULL,NULL,N'VIEW ANY DEFINITION'),0)<>1 THEN 2 ELSE 0 END, "
+            + "CASE WHEN (" + SqlServerSafeMigrationCatalogSqlBuilder.ExpressionDependencyReadPermission
+            + ") THEN 1 ELSE 0 END, "
+            // WHY: One invocation-local bit covers SQL/CLR triggers on any
+            // table or view, including indirectly modified cascade targets.
+            // Complete database visibility is already mandatory above.
+            + "CASE WHEN EXISTS(SELECT 1 FROM sys.triggers WHERE parent_class=1 AND is_disabled=0) "
+            + "THEN 1 ELSE 0 END;";
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        if (!await reader.ReadAsync(cancellationToken)
+        if (reader.FieldCount != 9 || !await reader.ReadAsync(cancellationToken)
             || reader.IsDBNull(0)
             || reader.IsDBNull(1))
         {
@@ -635,7 +680,18 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
             !reader.IsDBNull(3) && reader.GetInt32(3) == 1,
             reader.GetString(1),
             reader.IsDBNull(4) ? null : reader.GetInt32(4),
-            reader.IsDBNull(5) ? null : reader.GetString(5));
+            reader.IsDBNull(5) ? null : reader.GetString(5))
+        {
+            DdlRowEffectRisk = reader.IsDBNull(6) ? SqlServerDdlRowEffectRisk.VisibilityUnproven
+                : reader.GetInt32(6) switch
+                {
+                    0 => SqlServerDdlRowEffectRisk.None,
+                    1 => SqlServerDdlRowEffectRisk.EnabledTrigger,
+                    _ => SqlServerDdlRowEffectRisk.VisibilityUnproven,
+                },
+            CanReadExpressionDependencies = !reader.IsDBNull(7) && reader.GetInt32(7) == 1,
+            HasEnabledDmlTriggers = reader.IsDBNull(8) || reader.GetInt32(8) != 0,
+        };
     }
 
     private async Task<bool> ReadIdentifierContractAsync(
@@ -1057,6 +1113,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
         => "@doka_source" + slot.ToString(CultureInfo.InvariantCulture) + "_"
             + index.ToString(CultureInfo.InvariantCulture);
 
+    /// <summary>Preserves independent permission refusals before ordered structure projection can replace a state.</summary>
     private static SafeMigrationProviderAnalysis ReadAnalysis(
         DbDataReader reader,
         SqlServerSafeMigrationRuntimePlan plan
@@ -1072,6 +1129,17 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
                 ? plan.UnsupportedCode ?? "classified_unsupported"
                 : StateCode(state)
             : reader.GetString(4);
+
+        var permissionDenied = code is "dependency_catalog_permission" or "column_alter_write_permission"
+            or "column_alter_read_permission";
+        if (permissionDenied)
+        {
+            // WHY: An absent owner can produce the prerequisite fallback even
+            // when this independent permission gate failed. Accepted creates
+            // and matching columns prove structure, not the caller's rights.
+            state = SafeMigrationObservedState.Unsupported;
+            repair = SafeMigrationRepairCapability.None;
+        }
 
         var evidence = plan.ModelManagedRowEvidenceExpression is null || reader.IsDBNull(5)
             ? null
@@ -1094,10 +1162,12 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
             repair,
             reader.GetInt32(2) == 1,
             code,
-            SafeMigrationOperationalImpact.NotApplicable,
+            state == SafeMigrationObservedState.Different && repair == SafeMigrationRepairCapability.Safe
+                ? plan.RepairOperationalImpact : SafeMigrationOperationalImpact.NotApplicable,
             differences)
         {
-            IsInvariantUnsupported = state == SafeMigrationObservedState.Unsupported
+            RequiresLiveDataProof = plan.RequiresLiveDataProof && state != SafeMigrationObservedState.Matching,
+            IsInvariantUnsupported = permissionDenied || state == SafeMigrationObservedState.Unsupported
                 && (plan.IsStaticallyUnsupported
                     || code == SqlServerSafeMigrationRuntimePlan.PhysicalTableUnsupportedCode
                     || code == SqlServerSafeMigrationRuntimePlan.DefaultValueUnsupportedCode
@@ -1469,6 +1539,15 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
         string? LoginSid
     )
     {
+        /// <summary>Gets the visible trigger or metadata-visibility uncertainty for this invocation.</summary>
+        public SqlServerDdlRowEffectRisk DdlRowEffectRisk { get; init; }
+
+        /// <summary>Gets whether both database and protected-view dependency-read permissions are proven.</summary>
+        public bool CanReadExpressionDependencies { get; init; }
+
+        /// <summary>Gets whether enabled SQL or CLR DML triggers can invalidate unrelated physical metadata.</summary>
+        public bool HasEnabledDmlTriggers { get; init; }
+
         /// <summary>Requires both execution identities before another call can reuse this proof.</summary>
         public bool HasReusableIdentity => DatabasePrincipalId.HasValue && LoginSid is not null;
     }

@@ -23,6 +23,7 @@ public sealed class SafeMigrationProviderAnalysisTests
             RequiresLiveDataProof = existingProof,
             IsOpaqueProjectionUnknown = true,
             IsInvariantUnsupported = true,
+            ProviderDeferredOriginOrdinal = 7,
             IndexPhysicalEnvironment = new SafeMigrationIndexPhysicalEnvironment(3072),
             MatchedObjectName = "physical_index",
             ModelManagedDataEvidence = new SafeMigrationModelManagedDataEvidence(

@@ -1,3 +1,9 @@
+if (args.Length > 0
+    && args[0] == "--column-attribution")
+{
+    return SqlServerColumnAttribution.Run(args);
+}
+
 using var context = new SqlServerGenerationContext();
 
 var generator = context.GetService<IMigrationsSqlGenerator>();

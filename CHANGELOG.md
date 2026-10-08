@@ -6,6 +6,123 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
+## [10.4.9] - 2026-10-08
+
+Prepare stable 10.4.9 for all five packages. This patch adds provider-proven
+SQL Server integer widening and populated-table CHECK validation, corrects
+PostgreSQL column contracts and trigger-affected ordered proofs, enforces
+lossless SQLite repairs, and reduces unnecessary PostgreSQL/SQL Server work.
+Public signatures, dependency ranges, migration source, policy selection,
+report schemas, and history remain unchanged; existing migrations do not need
+regeneration. Classification changes and repair boundaries are detailed below.
+
+This entry records source preparation, not publication. Completion requires
+the full qualification matrix, signed `v10.4.9` source identity, all five exact
+NuGet primary and symbol packages, and verified GitHub Release, SBOM,
+provenance, attestation, and public package readback evidence.
+
+### Fixed
+
+- Reject unproved SQLite rebuild conversions under `RepairIfSafe`, including
+  lossy affinity/CLR-domain and generation changes. Exact old-definition matching
+  alone is not a lossless certificate; compatible nullability/default repairs
+  retain their data and ownership gates in live and projected analysis.
+- Invalidate PostgreSQL row and physical catalog evidence after executable DDL
+  with session-active event triggers or inaccessible trigger metadata. Attribute
+  runtime validation to the actual preceding DDL; inactive triggers and initial
+  no-ops retain their ordinary proof path.
+- Extend SQL Server DDL-trigger freshness to structural dependencies and
+  metadata before Core matching/removed-owner shortcuts. A trigger-created
+  replacement dependency cannot reuse the accepted drop's stale certificate.
+  Runtime guards and independent invariant/permission blockers remain authoritative.
+- Invalidate PostgreSQL and SQL Server physical metadata after executable DML
+  when user triggers can execute unrelated DDL, including indirectly reached
+  FK-cascade triggers. Preserve the actual DML origin, initial no-ops, empty typed
+  writes and independent unsupported contracts; include provider-emitted column
+  backfills and preserve SQL Server's empty `dbo` schema baseline. SQL Server
+  model-managed target trigger rejection also includes CLR triggers, not only
+  SQL implementations.
+- Admit explicit SQL Server built-in integer widenings under `RepairIfSafe`
+  with exact source, preserved default/identity, declared-row layout, and ordered
+  dependency proofs. Reject numeric narrowing and unproven layouts without DDL.
+- Exclude encrypted and legacy-rule-bound SQL Server columns from ordinary
+  column matching. This applies to all column contracts, not only integer
+  widening: an existing encrypted or rule-bound column cannot become a matching
+  NoOp merely because its type and length agree. No encryption or rule is
+  silently removed; affected migrations require an independently reviewed path.
+- Reconcile ordered SQL Server FK-to-key drops against the exact backing-index
+  identity; do not retain a stale key blocker after its accepted FK drop or
+  promote wrong-kind and surviving-reference conflicts.
+- Preserve SQL Server standalone foreign-key prerequisites after accepted
+  creation of a fresh, initially empty child table. A captured unchanged live
+  principal key and exact compatible column storage can satisfy the ordered
+  proof; intervening writes, unknown state, orphan data, and permission refusals
+  do not acquire a bypass. Retain schema-wide name occupancy from live objects
+  and earlier accepted tables and PK/UNIQUE/CHECK/FK constraints instead of
+  promoting a conflicting standalone FK to `Missing`.
+- Guard protected SQL Server expression-dependency catalog reads with their
+  effective database and view permissions before delayed compilation. Missing
+  access reports `dependency_catalog_permission` without an unsafe absence proof,
+  automatic grants, or a raw catalog permission exception.
+- Preserve independent SQL Server permission refusals through ordered projection,
+  including initially absent owners. Require effective UPDATE permission for
+  approved integer/text ALTER mutations; matching NoOps do not require UPDATE.
+- Reject SQL Server text ALTER row classifiers without effective table SELECT
+  before binding, including matching replays. Retain the independent permission
+  refusal through ordered projection instead of leaking a raw provider exception.
+- Validate missing simple integer CHECK constraints on populated SQL Server
+  tables using FALSE-only probes; preserve UNKNOWN semantics, binding gates,
+  provenance, trust, ordered proof invalidation, and runtime rechecks.
+- Preserve qualified PostgreSQL collations in accepted column repairs instead
+  of resetting them during `ALTER TYPE` and failing the target postcondition.
+- Retain explicit PostgreSQL ALTER source authority when parent-only NOT NULL
+  metadata does not prove the queried descendant relation is non-NULL.
+- Keep SQL Server integer ALTER baselines within their captured operation:
+  do not infer extra index rebuilds from the target model or execute a redundant
+  default UPDATE whose zero affected rows would still fire DML triggers.
+- Invalidate SQL Server ordered row certificates after executable safe or typed
+  provider DDL when enabled DDL triggers or insufficient database/server metadata
+  visibility leave later rows unproven. Report affected assessments as
+  `ValidateAtRuntime` with the DDL origin, distinguishing known trigger risk
+  from visibility uncertainty rather than blocking a least-privilege stream
+  or claiming read-only readiness. Preserve independent unsupported contracts,
+  invariant refusals and initial non-executing no-ops; supported row and structural
+  metadata captured before trigger-risk DDL require fresh runtime classification.
+- Preserve a conservative runtime-validation boundary after provider-specific
+  structural deferrals. Later supported safe operations retain the first
+  deferred structural origin instead of depending on an invented candidate key
+  or reporting a false missing prerequisite. All independently captured live
+  `Unsupported` results, including permission and capability refusals, and
+  identifier mismatches remain blocking. Later supported immutable state and
+  data classifications become runtime-validation assessments, not approval of
+  their stale batch observations; already blocked assessments stay blocked.
+
+### Changed
+
+- Trigger-affected ordered operations can now report
+  `RuntimeValidationRequired` rather than stale readiness or a false prerequisite
+  conflict. Deferred assessments retain `ValidateAtRuntime` and the actual
+  invalidating origin; runtime guards decide after the preceding mutation.
+  Independent permission, capability and invariant refusals still block.
+  Deployment consumers must distinguish deferred validation from both proven
+  readiness and rejection. SQLite affinity/CLR-domain or generation changes
+  without a lossless proof are rejected even when their old definition matches.
+- Skip unused SQL Server source/dependency captures for already matching integer
+  ALTER replays, including their unused row-growth reservations. Nonmatching
+  source and ordered dependency checks remain unchanged.
+- Bound PostgreSQL narrowing eligibility-plan lifetime to the current transport
+  statement and retain compact candidate identities instead of unused rendered
+  SQL. Submitted predicates, result attribution, deduplication, statement limits,
+  data checks and cancellation semantics remain unchanged.
+- Avoid evaluating SQL Server runtime repair predicates for matching states,
+  non-repair policies, or plans without a safe repair capability. Preserve fresh
+  classification, prerequisite gates, target postconditions, and transactions.
+- Classify fully matching PostgreSQL proof-bearing columns from fresh target
+  metadata before evaluating unused repair/data scopes, and avoid duplicate
+  explicit-collation OID lookups. Required row scans,
+  permissions, transaction boundaries, locked rechecks, and postconditions remain
+  authoritative; no cross-operation cache or new client roundtrip is introduced.
+
 ## [10.4.8] - 2026-10-06
 
 Prepare stable 10.4.8 for all five packages. This patch corrects explicit
@@ -1522,7 +1639,9 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.7...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.9...HEAD
+[10.4.9]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.8...v10.4.9
+[10.4.8]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.7...v10.4.8
 [10.4.7]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.6...v10.4.7
 [10.4.6]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.5...v10.4.6
 [10.4.5]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.4...v10.4.5

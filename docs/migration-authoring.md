@@ -581,6 +581,15 @@ For a MySQL/MariaDB type-changing default backfill, the literal replacement must
 also fit both the old and target domains under strict conversion. PostgreSQL
 does not backfill existing null rows through this repair path.
 
+For SQL Server integer widenings, use explicit old/target definitions and
+`RepairIfSafe`; preserve identity and default semantics. Drop blocking keys,
+indexes and constraints before changing their columns, then ensure their
+reviewed target definitions. A later drop is not permission to alter early.
+Simple integer CHECKs can validate populated tables without treating SQL
+UNKNOWN as a violation. Other expression families, unproven storage and
+incompatible dependencies remain rejected; see
+[SQL Server boundaries](sqlserver-behavior.md#lossless-integer-alterations-and-check-validation).
+
 Ordered preflight projects accepted safe operations into later safe
 prerequisites. A recognized deterministic postcondition of an ordinary EF
 operation, for example an `AddColumnOperation` followed by an index, can still
@@ -626,6 +635,17 @@ or a uniquely resolved semantic alias. Keep any data transformation before a
 new data-validating constraint explicit: DML between the drop and ensure
 invalidates the pre-batch row proof and blocks the preflight. An unresolved
 physical alias or a changed column/key prerequisite likewise fails closed.
+
+SQL Server additionally invalidates later row certificates when accepted
+executable safe or typed provider DDL can invoke an enabled DDL trigger, or
+trigger absence cannot be proved with the current metadata visibility. Those
+assessments use `ValidateAtRuntime` with their DDL origin instead of claiming
+read-only readiness or rejecting solely because server visibility is missing.
+The existing runtime guard checks the actual ordered rows immediately before
+the affected operation; it can still reject and roll back. No-op DDL does not
+invalidate rows, and independent permission, identity, and support blockers
+remain blocking. See
+[SQL Server row-proof freshness](sqlserver-behavior.md#lossless-integer-alterations-and-check-validation).
 
 The generated `Down` body applies to the entire migration. It throws before any
 destructive DDL because the migration cannot prove which table, column,

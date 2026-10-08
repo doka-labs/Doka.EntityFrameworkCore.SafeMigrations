@@ -2,9 +2,13 @@
 
 The SQL Server adapter is a separate, optional package introduced in 10.4.6.
 Releases 10.4.2 through 10.4.5 contain only Core, MySQL/MariaDB, PostgreSQL,
-and SQLite. Prepared stable 10.4.8 corrects independent rename-destination
-evidence while retaining SQL Server's public API and provider-specific column
-transition contract at the shared package version. Availability of the new
+and SQLite. Prepared stable 10.4.9 admits proven built-in integer widenings
+and simple integer CHECK validation on populated tables. It corrects ordered
+key/FK dependencies, schema-wide name occupancy and permission-first catalog
+checks; DDL/DML trigger effects invalidate row and structural evidence before
+projection shortcuts. Matching integer replays and runtime guards omit unused
+transition captures and repair predicates. Public signatures, dependencies,
+migration source and report schemas remain unchanged. Availability of the new
 patch requires full qualification and verified five-package publication;
 source and API baselines alone are not publication evidence. Selecting another
 provider does not introduce SQL Server runtime dependencies.
@@ -44,6 +48,15 @@ For the relevant catalog surfaces, see [key constraints](https://learn.microsoft
 [indexes and index columns](https://learn.microsoft.com/en-us/sql/relational-databases/system-catalog-views/sys-index-columns-transact-sql?view=sql-server-ver17),
 [foreign keys](https://learn.microsoft.com/en-us/sql/relational-databases/system-catalog-views/sys-foreign-keys-transact-sql?view=sql-server-ver17),
 and [default constraints](https://learn.microsoft.com/en-us/sql/relational-databases/system-catalog-views/sys-default-constraints-transact-sql?view=sql-server-ver17).
+Ordinary column matching also requires `sys.columns.rule_object_id = 0` and
+`encryption_type IS NULL`. An encrypted column or a column bound to a legacy
+stand-alone rule is not equivalent to this unencrypted, unbound contract, even
+when its type, length, nullability, and default agree. This affects all column
+matching, including table convergence and matching replays, not just integer
+widening. SafeMigrations does not remove a rule or change encryption implicitly;
+use an independently reviewed migration path for those physical features. See
+[Microsoft's column metadata](https://learn.microsoft.com/en-us/sql/relational-databases/system-catalog-views/sys-columns-transact-sql?view=sql-server-ver17).
+
 The ordinary-table guard rejects graph node and edge tables as well as other
 unsupported physical engines. Graph edge constraints are not ordinary foreign
 keys: their delete rules can reject a node deletion or cascade into uncaptured
@@ -110,6 +123,30 @@ Row-bearing column plans require `SELECT`, even when a CASE arm would skip
 the row probe for an existing column; without it they fail as `Unsupported`
 before data binding. Column plans without row binding do not require that
 `SELECT` proof.
+Approved text ALTER classifiers report missing table-row `SELECT` as
+`column_alter_read_permission` before their row-bearing scope compiles, including
+an exact matching replay. This independent refusal cannot be replaced by an
+earlier matching column assessment. See Microsoft's
+[SELECT permissions](https://learn.microsoft.com/en-us/sql/t-sql/queries/select-transact-sql?view=sql-server-ver17#permissions).
+
+Dependency-reading drops, renames, and approved ALTER plans additionally require
+database `VIEW DEFINITION` and `SELECT` on `sys.sql_expression_dependencies`.
+Table-row `SELECT` is a separate permission. Missing dependency-catalog access
+is `Unsupported` with `dependency_catalog_permission` before the protected
+classifier compiles; it is never treated as an empty dependency set. No permission
+is granted automatically, and unrelated CHECK/column-creation plans do not acquire
+this requirement. See Microsoft's
+[dependency-catalog permissions](https://learn.microsoft.com/en-us/sql/relational-databases/system-catalog-views/sys-sql-expression-dependencies-transact-sql?view=sql-server-ver17#permissions).
+These permission refusals remain invariant during ordered preflight: an earlier
+matching column or accepted table creation does not establish the missing rights.
+
+Approved integer/text ALTER plans additionally require effective table `UPDATE`
+permission when the physical target differs, because ALTER itself can rewrite
+rows even without a generated UPDATE statement. Missing access is `Unsupported`
+with `column_alter_write_permission` before the mutation. An exact matching
+NoOp does not require this write grant. SafeMigrations does not infer permission
+from empty-table metadata or grant it automatically. See Microsoft's
+[ALTER TABLE permissions](https://learn.microsoft.com/en-us/sql/t-sql/statements/alter-table-transact-sql?view=sql-server-ver17#permissions).
 
 Check and default constraints receive a physical provenance stamp after their
 DDL. The normal EF migrator executes the DDL and stamp transactionally. A
@@ -126,6 +163,192 @@ the same T-SQL variables in the caller. The guard still evaluates its live state
 before mutation and retains nested dynamic name binding, postconditions and the
 caller transaction. This does not add `GO` to runtime commands or another client
 roundtrip. See Microsoft's [dynamic batch scope](https://learn.microsoft.com/en-us/sql/relational-databases/system-stored-procedures/sp-executesql-transact-sql?view=sql-server-ver17).
+
+## Lossless integer alterations and CHECK validation
+
+Explicit `AlterColumnIfDifferent` and generated
+`AlterColumnIfDifferentFromModel` operations under `RepairIfSafe` support
+these built-in integer widenings:
+
+| Source | Targets |
+| --- | --- |
+| `tinyint` / `byte` | `smallint` / `short`, `int` / `int`, `bigint` / `long` |
+| `smallint` / `short` | `int` / `int`, `bigint` / `long` |
+| `int` / `int` | `bigint` / `long` |
+
+Nullable CLR wrappers are accepted. Narrowing, `bit`, aliases, unproven CLR
+overrides, and other numeric conversions remain outside this contract.
+The target domains contain every source value; widening alone needs no data
+scan. This is not a promise of metadata-only DDL or reduced locking. See
+[Microsoft's integer ranges](https://learn.microsoft.com/en-us/sql/t-sql/data-types/int-bigint-smallint-and-tinyint-transact-sql?view=sql-server-ver17)
+and [ALTER COLUMN restrictions](https://learn.microsoft.com/en-us/sql/t-sql/statements/alter-table-transact-sql?view=sql-server-ver16).
+
+Admission requires the exact authored source contract, unchanged identity,
+seed and increment, and unchanged supported DEFAULT semantics. The EF
+baseline can recreate an inline DEFAULT; SafeMigrations stamps the replacement
+before verifying it. This preserves semantics, not the default object's name
+or physical identity. Changing identity or default semantics together with
+the widening is not implicitly approved.
+
+Indexes (including INCLUDE columns), primary/unique keys, either side of a
+foreign key, CHECKs, user statistics, and expression dependencies can block
+the alteration. Author the required drops before ALTER and the desired
+constraints/indexes after it. Ordered preflight recognizes only accepted
+named drops, not the intention to drop later. New dependencies and unproven
+mutations invalidate those certificates. No dependency is silently removed.
+Drop identities are resolved with the database catalog collation, rather than
+approximated with CLR case folding. Only accepted executable drops discharge
+the resolved physical dependency; case-sensitive databases retain distinct names.
+Creating the source table earlier in the stream does not by itself provide the
+live source/storage certificate needed for widening approval. Ordered preflight
+can therefore remain blocked for that newly projected owner. Runtime evaluates
+the physical source and capacity again after the preceding CREATE; absent-object
+permission metadata is not misreported as a denied table UPDATE grant.
+An accepted incoming FK drop can discharge a later PK/UNIQUE drop only when
+the original key kind and exact backing-index reference are proven. Surviving
+references to that key or unbound projected references remain blockers; an FK
+using an independent UNIQUE key is not a blocker for the unrelated key drop.
+
+The storage proof is conservative: it bounds old and target declared rows,
+including offsets and version-tag allowance, against temporary old-plus-new
+capacity. It rejects unproven dropped-column lineage, MAX/LOB payloads,
+partitioning, compression, unsupported table engines, and accelerated database
+recovery storage. It is a declared-row admission bound, not an asserted engine
+rewrite algorithm or complete physical-history certificate. Public column-ID
+metadata does not reveal every retained version from previous ALTERs; error
+511 or 1708 can still require a separately reviewed rebuild. Such an engine
+failure must retain the source and roll back the transaction, not become an
+implicit rebuild or lossless-success claim. Microsoft's
+[ALTER COLUMN history boundary](https://learn.microsoft.com/en-us/sql/t-sql/statements/alter-table-transact-sql?view=sql-server-ver16#alter-column)
+and [error 511 description](https://learn.microsoft.com/en-us/sql/relational-databases/errors-events/mssqlserver-511-database-engine-error?view=sql-server-ver17)
+explain why checking the target row alone is insufficient.
+Nullability tightening additionally requires a fresh absence-of-NULL proof;
+existing NULLs are `DataBlocked`, never an implicit backfill.
+The fully captured ALTER baseline does not infer index rebuilds from the target
+model or emit an otherwise empty DEFAULT backfill UPDATE. Even a zero-row
+UPDATE can fire DML triggers; those side effects are not part of this repair.
+
+Missing CHECK constraints on populated tables can validate direct integer
+comparisons, `AND`/`OR`/`NOT`, and NULL tests over proven ordinary integer
+columns. For example, `[Position] >= 0` and `[Right] > [Left]` qualify.
+Raw text is parsed only for eligibility; its authored constraint contract is
+retained. Arithmetic, functions, casts, qualified row references, and
+unproven physical operand types do not acquire populated-table approval.
+Opaque predicates retain the empty-table boundary.
+
+Validation uses `WHERE NOT (<predicate>)`: CHECK rejects FALSE but accepts
+UNKNOWN. Creation validates existing rows and matching still requires an
+enabled, trusted, non-replication constraint with the correct provenance stamp.
+Missing predicate columns remain prerequisites, and row-binding permissions
+are checked before the probe compiles. See
+[Microsoft's CHECK semantics](https://learn.microsoft.com/en-us/sql/relational-databases/tables/unique-constraints-and-check-constraints?view=sql-server-ver17).
+Intervening unconfined writes invalidate row certificates. Runtime rechecks,
+engine validation, stamping, postflight, and transaction rollback remain
+authoritative; preflight is not a lock against application writes.
+
+Executable DDL can also invalidate row and structural evidence through enabled database or
+server DDL triggers, including extended-property stamping. Analysis captures
+two distinct cases with the existing environment query: a visible enabled DDL
+trigger, and insufficient metadata visibility to prove trigger absence.
+The absence certificate requires effective database `VIEW DEFINITION` and
+server `VIEW ANY DEFINITION`; database ownership alone does not establish the
+server permission. An empty, permission-filtered trigger catalog is not an
+absence certificate.
+
+After accepted executable safe or typed provider DDL, affected row-dependent
+NULL, CHECK, key, foreign-key, model-managed data and structural assessments use
+`ValidateAtRuntime`, with no claimed observed state or postcondition. Their
+analysis code is `projected_ddl_trigger_data_unknown` for a visible enabled
+trigger or `projected_ddl_visibility_data_unknown` for unproven visibility.
+Pure structural uncertainty uses `projected_ddl_trigger_structure_unknown` or
+`projected_ddl_visibility_structure_unknown`. A trigger may create a different
+index after an accepted index drop; retiring the captured old identity does not
+prove that no new dependency blocks a later integer widening.
+`DeferredOrigin` records the preceding DDL operation's migration ID when known,
+stream ordinal, and CLR type. The aggregate preflight status is
+`RuntimeValidationRequired` unless an independent blocker remains. This is
+neither read-only `Ready` nor permission to skip a guard: the existing runtime
+command reads fresh catalog and rows immediately before its own mutation,
+after the preceding DDL has executed. There is no sleep, background validation,
+automatic permission grant, or additional catalog roundtrip.
+
+Deferring a structural operation does not establish its physical postcondition.
+Following supported safe operations therefore retain a conservative runtime
+boundary with analysis code `projected_provider_postcondition_unknown` and an
+origin pointing to the first deferred structural operation. For example, a
+deferred primary-key ensure does not invent a candidate key for a later child
+foreign key; that foreign key is deferred rather than reported as a proven
+missing prerequisite. This structural boundary does not arise merely from a
+deferred model-managed write. All live `Unsupported` results, including
+permission and capability refusals, and identifier mismatches retain precedence
+rather than becoming deferred approval.
+
+Within that structural boundary, Core deliberately replaces later supported
+immutable `Matching`, `Missing`, `Different`, `DataBlocked`, and
+`PrerequisiteMissing` results with runtime validation: those batch observations
+precede an unresolved structural postcondition. This is not approval of drift
+or unsafe rows; runtime classifies their actual ordered state and can reject.
+After trigger-risk DDL, supported missing, different and matching metadata may
+also be stale. The provider therefore qualifies captured evidence before Core's
+removed-owner and matching shortcuts, not only after row projection. Independent
+`Unsupported`, identity and invariant permission/capability refusals remain blocking.
+Already blocked assessments remain blockers in the aggregate report.
+
+Missing server metadata visibility does not itself require a grant to run the
+migration; it limits what read-only preflight can prove. Independent operation
+permissions, unsupported contracts, and identifier collisions remain blocking.
+An initial non-executing safe no-op does not invalidate evidence; metadata-only
+matching captured before an earlier trigger-risk DDL is not a freshness proof.
+Proven no-DDL typed renames do not
+activate this additional trigger-risk boundary, but retain Core's ordinary-provider
+projection rules. Opaque authored SQL keeps its separate recorded-origin runtime-validation
+contract and is not reclassified as typed DDL. Runtime checks and transactional
+rollback remain authoritative. See Microsoft's
+[DDL trigger contract](https://learn.microsoft.com/en-us/sql/relational-databases/triggers/ddl-triggers?view=sql-server-ver17)
+and [metadata visibility](https://learn.microsoft.com/en-us/sql/relational-databases/security/metadata-visibility-configuration?view=sql-server-ver17),
+including [server-trigger catalog permissions](https://learn.microsoft.com/en-us/sql/relational-databases/system-catalog-views/sys-server-triggers-transact-sql?view=sql-server-ver17).
+
+Enabled SQL or CLR DML triggers can likewise execute unrelated DDL. The existing
+environment query captures one global presence bit from the metadata-visible
+database; it adds no roundtrip or retained trigger-body/owner inventory. A global
+witness covers child triggers reached through FK cascades and nested writes.
+Executable typed DML therefore invalidates later physical metadata and dependency
+proofs, using `projected_dml_trigger_structure_unknown` or, for row-dependent
+contracts, `projected_dml_trigger_data_unknown`. The origin is the actual DML
+operation, not hypothetical raw SQL or DDL. Empty typed writes, safe no-ops,
+disabled triggers and an established absence retain their normal path.
+Typed nullable-to-NOT NULL ALTERs with a default emit a backfill UPDATE and
+therefore share the DML boundary, including zero-row statement executions.
+Microsoft's [CREATE TRIGGER introduction](https://learn.microsoft.com/en-us/sql/t-sql/statements/create-trigger-transact-sql?view=sql-server-ver17)
+explicitly states that DML events invoke triggers even when no table rows are
+affected. Its [Optimize DML triggers section](https://learn.microsoft.com/en-us/sql/t-sql/statements/create-trigger-transact-sql?view=sql-server-ver17#optimize-dml-triggers)
+recommends an explicit early return when `ROWCOUNT_BIG() = 0`; without that
+trigger-owned guard, zero affected rows do not prove absence of side effects.
+Certified safe integer tightening suppresses that redundant UPDATE after its
+fresh NULL proof; supported text repairs have no authored default/backfill.
+EF's case-insensitive `dbo` schema ensure emits no DDL and preserves the actual
+earlier origin rather than inventing a new one.
+
+Model-managed writes into a target with an enabled trigger remain independently
+unsupported; that existing guard includes SQL and CLR implementations. Deferral
+does not waive it. See the [trigger catalog](https://learn.microsoft.com/en-us/sql/relational-databases/system-catalog-views/sys-triggers-transact-sql?view=sql-server-ver17)
+and [trigger statement contract](https://learn.microsoft.com/en-us/sql/t-sql/statements/create-trigger-transact-sql?view=sql-server-ver17).
+
+Runtime guards evaluate repair evidence only for a freshly classified
+`Different` state with `RepairIfSafe` and a supported repair capability.
+Matching replay and non-repair policies omit the unused repair evaluation.
+Physical support, layout, collation, default conversion, permissions, and
+prerequisite gates precede the fresh state classifier. After accepted DDL the
+target postcondition is evaluated afresh. No observation is cached between
+operations.
+This changes neither policy decisions nor prerequisite and postcondition gates,
+and adds no client roundtrip.
+
+Preflight also omits second source/dependency captures for already matching
+integer ALTER replays: an already widened target cannot certify the authored
+old narrower source. Such discarded candidates do not reserve another column's
+row-growth budget. Nonmatching candidates, exact old-source/dependency proofs
+and ordered mutation invalidation still use the existing bounded capture path.
 
 Model-managed inserts with explicit identity values temporarily enable
 `IDENTITY_INSERT`. When the EF migrator encounters an error, cancellation, or
@@ -425,6 +648,26 @@ parent; ordered prerequisite restoration cannot waive it. Immutable authored
 arity/width failures are `Unsupported`; an oversized live column shape remains
 `PrerequisiteMissing` unless earlier accepted operations establish compatible
 storage. See [Microsoft's capacity specifications](https://learn.microsoft.com/en-us/sql/sql-server/maximum-capacity-specifications-for-sql-server?view=sql-server-ver17).
+
+A standalone `EnsureForeignKey` after accepted creation of a fresh, initially
+empty child table can use the same bounded physical proof as an inline foreign
+key. The current child columns must be accepted, the captured principal columns
+must retain a valid accepted candidate key, and the principal column identities and
+dependent/principal storage must remain compatible. This does not treat an
+existing child as empty or waive row evidence: intervening DML, unknown state,
+orphans, unsupported definitions, and permission refusals retain their safety
+boundaries. Runtime still checks the actual key, storage, and rows before DDL.
+The successful bounded promotion reports
+`projected_foreign_key_prerequisites_ready` with projected state `Missing`.
+
+This promotion also preserves SQL Server's schema-wide constraint/object
+namespace. A name occupied by a live object or an earlier accepted table,
+primary key, unique constraint, CHECK, or foreign key remains `Different` with
+`projected_constraint_name_occupied`. The planner rejects it as
+`RejectDifferent` under `ThrowIfDifferent` or `RepairIfSafe`; `ExistenceOnly`
+retains its explicit no-op policy. Proving key/storage prerequisites cannot
+turn that conflict into an available FK name. See Microsoft's
+[constraint-name scope](https://learn.microsoft.com/en-us/sql/t-sql/statements/create-table-transact-sql?view=sql-server-ver17#constraint).
 
 Single-path `CASCADE`, `SET NULL`, and `SET DEFAULT` actions are supported
 when storage, candidate-key, and orphan-data prerequisites are proven.

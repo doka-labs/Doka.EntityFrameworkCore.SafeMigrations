@@ -57,6 +57,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         var table = TableExists(intent.Table, intent.Schema);
         var exists = ColumnExists(intent.Table, intent.Schema, intent.Definition.Name);
         var matching = ColumnMatches(intent.Table, intent.Schema, intent.Definition);
+        var matchingProof = Bit(matching);
         var identityAvailable = IdentitySlotIsAvailable(intent);
         var layoutFailure = BuildColumnAdditionLayoutFailureExpression(intent);
         var rowCapacity = BuildColumnAdditionRowCapacityPredicate(intent);
@@ -111,9 +112,10 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             WHEN {matching} THEN N'matching' ELSE N'different' END
             """;
 
-        return Plan(state, Bit(matching)) with
+        return Plan(state, matchingProof) with
         {
             RequiresDelayedBinding = rowBindingRequired,
+            RequiresLiveDataProof = rowBindingRequired,
             ColumnLayoutFailureExpression = layoutFailure,
             ClassificationCodeExpression = classification,
             PrerequisiteFailureCodeExpression = metadataFailure,
@@ -136,7 +138,10 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             $"CASE WHEN NOT {occupied} THEN N'missing' WHEN NOT {table} THEN N'different' "
             + $"WHEN NOT {column} THEN N'missing' WHEN {dependent} THEN N'different' "
             + "ELSE N'matching' END",
-            Bit($"NOT {column}"));
+            Bit($"NOT {column}")) with
+        {
+            RequiresExpressionDependencyRead = true,
+        };
     }
 
     private SqlServerSafeMigrationRuntimePlan BuildRenameColumn(RenameColumnIntent intent)
@@ -158,20 +163,30 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         return Plan(
             $"CASE WHEN NOT {source} THEN N'missing' WHEN {target} OR {dependent} THEN N'different' "
             + "ELSE N'matching' END",
-            Bit($"NOT {source} AND {target}"));
+            Bit($"NOT {source} AND {target}")) with
+        {
+            RequiresExpressionDependencyRead = true,
+        };
     }
 
     private SqlServerSafeMigrationRuntimePlan BuildAlterColumn(AlterColumnIntent intent)
     {
+        if (intent.OldDefinition is not null
+            && IsSupportedIntegerWidening(intent.OldDefinition, intent.Definition))
+        {
+            return BuildIntegerWidening(intent);
+        }
+
         var exists = ColumnExists(intent.Table, intent.Schema, intent.Definition.Name);
         var matching = ColumnMatches(intent.Table, intent.Schema, intent.Definition);
+        var matchingProof = Bit(matching);
         if (intent.OldDefinition is null
             || !IsSupportedTextAlter(intent.OldDefinition, intent.Definition, out var targetLength))
         {
             return Plan(
                 $"CASE WHEN NOT {exists} THEN N'prerequisite_missing' "
                 + $"WHEN {matching} THEN N'matching' ELSE N'different' END",
-                Bit(matching));
+                matchingProof);
         }
 
         var oldMatches = ColumnMatches(intent.Table, intent.Schema, intent.OldDefinition);
@@ -187,6 +202,24 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             + $"WHERE {overflow} OR {nullRows})";
 
         var safeRepair = $"{oldMatches} AND NOT ({dependencies}) AND NOT {unsafeRows}";
+        var canRead = $"COALESCE(HAS_PERMS_BY_NAME({Literal(QualifiedTable(intent.Table, intent.Schema))}, "
+            + "N'OBJECT', N'SELECT'), 0) = 1";
+
+        var canWrite = $"COALESCE(HAS_PERMS_BY_NAME({Literal(QualifiedTable(intent.Table, intent.Schema))}, "
+            + "N'OBJECT', N'UPDATE'), 0) = 1";
+
+        // WHY: ALTER can physically rewrite rows without an emitted UPDATE
+        // statement and then requires UPDATE permission. A proven matching
+        // replay performs no write and must not require that extra grant.
+        var writeGuard = $"CASE WHEN NOT {exists} OR {canWrite} THEN 1 ELSE ({matchingProof}) END";
+        // WHY: CASE does not prevent SQL Server from binding the row-bearing
+        // text classifier. Both analysis and runtime prove SELECT before that
+        // scope, including matching targets; an absent owner proves no denial.
+        var permissionGuard = $"CASE WHEN {exists} AND NOT ({canRead}) THEN 0 ELSE ({writeGuard}) END";
+        var permissionFailure = $"CASE WHEN {exists} AND NOT ({canRead}) "
+            + "THEN N'column_alter_read_permission' "
+            + $"WHEN {exists} AND NOT ({canWrite}) AND NOT ({matching}) "
+            + "THEN N'column_alter_write_permission' ELSE NULL END";
 
         // WHY: SQL Server rejects ALTER COLUMN when a dependent object exists.
         // DATALENGTH proves the stored byte width, including trailing spaces,
@@ -197,10 +230,16 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             + $"WHEN {matching} THEN N'matching' "
             + $"WHEN {oldMatches} AND NOT ({dependencies}) AND {unsafeRows} "
             + "THEN N'data_blocked' ELSE N'different' END",
-            Bit(matching), SafeMigrationRepairCapability.Safe, Bit(safeRepair)) with
+            matchingProof, SafeMigrationRepairCapability.Safe, Bit(safeRepair)) with
         {
             RequiresDelayedBinding = true,
+            RequiresLiveDataProof = true,
+            RequiresExpressionDependencyRead = true,
             MayRequireNullabilityDataProof = !intent.Definition.IsNullable && intent.OldDefinition.IsNullable,
+            StateEvaluationGuardExpression = permissionGuard,
+            StateEvaluationGuardFailureExpression = "N'unsupported'",
+            ClassificationCodeExpression = permissionFailure,
+            PrerequisiteFailureCodeExpression = permissionFailure,
         };
     }
 
@@ -298,6 +337,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             AND c.is_nullable = {(definition.IsNullable ? "1" : "0")} AND c.is_identity = {(isIdentity ? "1" : "0")}
             AND c.is_computed = 0 AND c.is_sparse = 0 AND c.is_column_set = 0 AND c.is_rowguidcol = 0
             AND c.is_filestream = 0 AND c.is_hidden = 0 AND c.generated_always_type = 0
+            AND c.rule_object_id = 0 AND c.encryption_type IS NULL
             AND {DefaultMatches(table, schema, definition)}{identityClause}
             {lengthClause}{precisionClause}{scaleClause}{collationClause})
             """;
@@ -485,7 +525,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         string table,
         string? schema,
         string column,
-        bool allowAutomaticStatistics = false
+        bool allowAutomaticStatistics = false,
+        bool allowInlineDefault = false
     )
     {
         var id = TableId(table, schema);
@@ -500,10 +541,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 + "AND s.auto_created = 0 "
             : string.Empty;
 
+        var defaultDependency = allowInlineDefault ? string.Empty
+            : $"OR EXISTS (SELECT 1 FROM sys.default_constraints dc WHERE dc.parent_object_id = {id} "
+                + $"AND dc.parent_column_id = {columnId}) ";
+
         return $"EXISTS (SELECT 1 FROM sys.tables t WHERE t.object_id = {id} "
             + "AND (t.temporal_type <> 0 OR t.is_filetable = 1)) "
-            + $"OR EXISTS (SELECT 1 FROM sys.default_constraints dc WHERE dc.parent_object_id = {id} "
-            + $"AND dc.parent_column_id = {columnId}) "
+            + defaultDependency
             + $"OR EXISTS (SELECT 1 FROM sys.index_columns ic WHERE ic.object_id = {id} "
             + $"AND ic.column_id = {columnId}) "
             + $"OR EXISTS (SELECT 1 FROM sys.stats_columns sc {statistics}WHERE sc.object_id = {id} "
@@ -512,6 +556,10 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             + $"(fkc.parent_object_id = {id} AND fkc.parent_column_id = {columnId}) "
             + $"OR (fkc.referenced_object_id = {id} AND fkc.referenced_column_id = {columnId})) "
             + $"OR EXISTS (SELECT 1 FROM sys.sql_expression_dependencies d WHERE d.referenced_id = {id} "
-            + $"AND d.referenced_minor_id = {columnId})";
+            + $"AND (d.referenced_minor_id = 0 OR d.referenced_minor_id = {columnId})) "
+            + $"OR EXISTS (SELECT 1 FROM sys.check_constraints cc WHERE cc.parent_object_id = {id} "
+            + $"AND (cc.parent_column_id = 0 OR cc.parent_column_id = {columnId})) "
+            + $"OR EXISTS (SELECT 1 FROM sys.columns computed WHERE computed.object_id = {id} "
+            + "AND computed.is_computed = 1)";
     }
 }

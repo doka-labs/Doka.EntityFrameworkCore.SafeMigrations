@@ -26,7 +26,7 @@ evidence.
 
 The remaining declared dependency graph and .NET 10 release metadata were
 rechecked on 2026-09-21. Bounded package ranges describe compatibility. The
-five package-project lockfiles, unchanged for 10.4.8, identify the dependency
+five package-project lockfiles, unchanged for 10.4.9, identify the dependency
 graph used to compile and qualify the package artifacts in a particular
 revision; they do not constrain a consumer's NuGet resolution or lock the
 engineering projects.
@@ -34,19 +34,20 @@ The SQL Server project supplies the fifth lockfile. Releases 10.4.2 through
 10.4.5 contain four package artifacts; their inventory remains unchanged.
 
 The five-package set began with stable 10.4.6, including the optional SQL Server
-provider. Prepared stable 10.4.8 retains that inventory, the dependency ranges,
+provider. Prepared stable 10.4.9 retains that inventory, the dependency ranges,
 and all public API baselines. Publication still requires the blocking workflow,
 including all three native x86-64 SQL Server cells, and exact public readback
 of all five package IDs. Source preparation alone does not establish availability.
 
-The 10.4.8 changes affect Core ordered projection, provider-proven explicit
-column transitions in MySQL/MariaDB and PostgreSQL, rename-destination evidence
-across providers, and MySQL/MariaDB default identity and setup compaction.
-Action-only planning no longer depends on GC-sensitive enum-metadata caches
-to meet its strict zero-allocation contract.
-SQLite retains its model-owned rebuild contract; SQL Server retains its
-provider-specific column-transition capabilities. No engine, tooling, package,
-or coverage gate is removed. Performance measurements remain informational.
+The 10.4.9 changes affect Core ordered deferral, PostgreSQL column contracts and
+trigger freshness, SQL Server integer widening, CHECK validation and physical
+dependency/permission proofs, and lossless SQLite repair classification.
+Trigger-affected supported states require fresh runtime validation; independent
+unsupported contracts remain blocking. PostgreSQL eligibility-plan lifetime
+and redundant SQL Server captures/runtime predicates are reduced. These are
+bounded path-specific improvements, not a general engine-latency or peak-memory
+guarantee. SQLite retains its model-owned rebuild contract. No engine, tooling,
+package or coverage gate is removed. Performance measurements remain informational.
 The analysis and runtime optimizations introduced in 10.4.7 remain in place;
 see [MySQL and MariaDB behavior](mysql-mariadb-ddl-behavior.md) and
 [D-014](decisions/D-014-mariadb-catalog-snapshot-for-batched-classification.md)

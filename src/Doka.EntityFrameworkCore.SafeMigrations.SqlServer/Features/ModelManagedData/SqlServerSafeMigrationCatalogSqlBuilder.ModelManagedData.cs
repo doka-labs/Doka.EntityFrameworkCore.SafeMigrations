@@ -322,10 +322,11 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     private string BuildModelManagedDataTriggerGuard(ModelManagedDataIntent intent)
     {
         // WHY: DML triggers can mutate rows outside the captured model-managed
-        // contract, including INSTEAD OF triggers that suppress the write.
+        // contract, including SQL/CLR INSTEAD OF triggers that suppress the
+        // write. The implementation language does not reduce side effects.
         return "NOT EXISTS (SELECT 1 FROM sys.triggers tr "
             + $"WHERE tr.parent_id = {TableId(intent.Table, intent.Schema)} "
-            + "AND tr.is_disabled = 0 AND tr.type = 'TR')";
+            + "AND tr.is_disabled = 0)";
     }
 
     private string BuildModelManagedDataWritableColumnGuard(ModelManagedDataIntent intent)

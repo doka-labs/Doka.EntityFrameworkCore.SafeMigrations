@@ -3,7 +3,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite;
 /// <summary>Analyzes SQLite catalog state and ordered migration transitions.</summary>
 internal sealed class SqliteSafeMigrationProviderAnalyzer : ISafeMigrationProviderAnalyzer,
     ISafeMigrationProviderTargetModelAnalyzer, ISafeMigrationProviderObjectIdentityNormalizer,
-    ISafeMigrationProviderOperationProjection
+    ISafeMigrationProviderOperationProjection, ISafeMigrationProjectedColumnAnalyzer
 {
     private static readonly StringComparer s_identifierComparer = SqliteIdentifierComparer.Instance;
 
@@ -28,6 +28,30 @@ internal sealed class SqliteSafeMigrationProviderAnalyzer : ISafeMigrationProvid
 
     /// <inheritdoc />
     public StringComparer IdentifierComparer => s_identifierComparer;
+
+    /// <inheritdoc />
+    public SafeMigrationProviderAnalysis ValidateProjectedAlterColumn(
+        AlterColumnIntent intent,
+        ExpectedColumnDefinition source,
+        SafeMigrationProjectedAlterColumnContext context,
+        SafeMigrationProviderAnalysis liveAnalysis,
+        SafeMigrationProviderAnalysis projectedAnalysis
+    )
+    {
+        // WHY: Core verifies provider-neutral shape, but SQLite owns the
+        // AUTOINCREMENT contract. Accepted creation/ensure evidence must not
+        // authorize a generation change that live analysis would reject.
+        return projectedAnalysis.RepairCapability == SafeMigrationRepairCapability.Safe
+            && !SqliteColumnRepairProof.HasLosslessShape(source, intent.Definition)
+                ? new SafeMigrationProviderAnalysis(
+                    SafeMigrationObservedState.Different,
+                    SafeMigrationRepairCapability.None,
+                    postconditionSatisfied: false,
+                    "projected_different",
+                    SafeMigrationOperationalImpact.NotApplicable,
+                    differences: projectedAnalysis.Differences)
+                : projectedAnalysis;
+    }
 
     /// <inheritdoc />
     public void ValidateContext(
@@ -783,23 +807,23 @@ internal sealed class SqliteSafeMigrationProviderAnalyzer : ISafeMigrationProvid
             return DataBlocked("column_contains_nulls");
         }
 
-        var oldDefinitionMatches = intent.OldDefinition is not null && ColumnMatches(column, intent.OldDefinition);
+        var repairIsLossless = intent.OldDefinition is not null
+            && ColumnMatches(column, intent.OldDefinition)
+            && SqliteColumnRepairProof.HasLosslessShape(intent.OldDefinition, intent.Definition);
 
         return new SafeMigrationProviderAnalysis(
             SafeMigrationObservedState.Different,
-            oldDefinitionMatches ? SafeMigrationRepairCapability.Safe : SafeMigrationRepairCapability.None,
+            repairIsLossless ? SafeMigrationRepairCapability.Safe : SafeMigrationRepairCapability.None,
             postconditionSatisfied: false,
-            oldDefinitionMatches ? "classified_different_repairable" : "classified_different",
-            oldDefinitionMatches
+            repairIsLossless ? "classified_different_repairable" : "classified_different",
+            repairIsLossless
                 ? SafeMigrationOperationalImpact.TableRewritePossible
                 : SafeMigrationOperationalImpact.NotApplicable,
             ColumnDifferences(column, intent.Definition))
         {
             MatchedObjectName = column.Name,
             RequiresLiveDataProof = column.IsNullable && !intent.Definition.IsNullable,
-            CanReuseAfterUnrelatedColumnDrops = oldDefinitionMatches
-                && intent.OldDefinition is not null
-                && SafeMigrationColumnRepairHelper.CanSafelyAlterColumn(intent.OldDefinition, intent.Definition),
+            CanReuseAfterUnrelatedColumnDrops = repairIsLossless,
         };
     }
 

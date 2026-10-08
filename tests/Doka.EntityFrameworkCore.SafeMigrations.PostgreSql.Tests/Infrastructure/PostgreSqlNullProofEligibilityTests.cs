@@ -31,7 +31,8 @@ public sealed class PostgreSqlNullProofEligibilityTests
         Assert.Equal(1, CountOccurrences(command.CommandText, nullProbe));
         Assert.Contains("doka_nullability_blocked := COALESCE((" + nullProbe, command.CommandText,
             StringComparison.Ordinal);
-        Assert.Contains("AND NOT COALESCE((EXISTS", command.CommandText, StringComparison.Ordinal);
+        Assert.Contains("doka_complete_not_null := COALESCE((EXISTS", command.CommandText, StringComparison.Ordinal);
+        Assert.Contains("AND NOT COALESCE((doka_complete_not_null)", command.CommandText, StringComparison.Ordinal);
         Assert.Contains("AND NOT c.relhassubclass", command.CommandText, StringComparison.Ordinal);
         Assert.Contains("not_null_constraint.convalidated", command.CommandText, StringComparison.Ordinal);
         Assert.Contains("pg_catalog.to_jsonb(not_null_constraint)->>'conenforced'", command.CommandText,

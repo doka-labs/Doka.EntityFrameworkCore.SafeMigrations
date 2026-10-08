@@ -257,6 +257,13 @@ owns independent consumer readback.
   dependency ranges, API baselines, migration source, policies, report schemas
   and history. Historical 10.4.7 qualification evidence is not new patch evidence;
   require the full qualification, provenance and public readback gates again.
+- 2026-10-08: Prepare stable 10.4.9 at the same five-package identity for proven
+  SQL Server integer widening/CHECK validation, PostgreSQL column contracts,
+  trigger-aware ordered evidence, lossless SQLite repairs, and bounded
+  PostgreSQL/SQL Server work and retention reductions. Preserve dependency
+  ranges, API baselines, migration source, policy selection, report schemas and
+  history. Local tests, ARM diagnostics and deterministic packing do not replace
+  the full native engine, tooling, coverage, provenance and public readback gates.
 
 ### Implementation References
 

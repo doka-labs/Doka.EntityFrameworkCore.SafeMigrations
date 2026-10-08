@@ -1,5 +1,14 @@
 # PostgreSQL behavior
 
+Prepared stable 10.4.9 preserves explicit repair collations and exact ALTER
+source authority. Session-active DDL event triggers and DML triggers, including
+FK-cascade and provider-backfill effects, invalidate ordered row and structural
+proofs before projection shortcuts. Supported unproven states retain their
+mutation origin for fresh runtime validation; independent refusals still block.
+Narrowing eligibility plans are retained only for the current transport
+statement, and fully matching runtime columns skip unused repair/data scopes.
+Public APIs, dependency ranges, migration source and report schemas are unchanged.
+
 ## Operational summary
 
 The PostgreSQL adapter composes Npgsql's EF Core 10 provider. It classifies
@@ -121,6 +130,14 @@ operations share a character-length scan. Existing null values still block
 nullability tightening; a declared default does not authorize backfilling
 existing PostgreSQL rows through this path.
 
+Qualified column collations are preserved by both the initial ALTER and an
+accepted repair. The repair emits the same schema-qualified `COLLATE` clause
+before verifying the full target contract; otherwise PostgreSQL can reset the
+column to its default collation during `ALTER TYPE`. See PostgreSQL's
+[ALTER TABLE contract](https://www.postgresql.org/docs/18/sql-altertable.html).
+Resolving an explicit collation compares its OID once and treats an absent OID
+as a failed match, never as equality through SQL NULL.
+
 Widening preserves the existing value domain and requires no row-value scan.
 Narrowing groups and deduplicates candidates per table and uses a bounded
 `char_length` existence proof. It returns only whether any value exceeds the
@@ -140,6 +157,57 @@ has no SafeMigrations equivalent of the MySQL/MariaDB `BIT(1) -> TINYINT(1)`
 Boolean repair.
 
 ## Analysis consistency
+
+### DDL event-trigger freshness
+
+Event triggers can modify unrelated rows and schema objects before a DDL command
+returns. Preflight captures their session activation once per analysis invocation:
+`O` for origin/local, `R` for replica, `A` for every role, and `D` disabled.
+The optional `event_triggers` setting is honored when exposed by the server.
+A separate catalog-SELECT permission check precedes the protected trigger query;
+inaccessible metadata is uncertainty, not a trigger-absence certificate.
+This costs at most two bounded metadata commands per nonempty analysis, not a
+per-operation query, and retains only risk and ordinal state.
+
+After executable safe or typed DDL with active or unprovable trigger risk,
+later captured row and structural classifications become `ValidateAtRuntime`.
+The analysis code is `projected_event_trigger_state_unknown` or
+`projected_event_trigger_visibility_unknown`, with the actual DDL `DeferredOrigin`.
+The preflight status is `RuntimeValidationRequired` unless an independent blocker
+remains. Initial no-ops, disabled/inactive triggers and provably non-executing
+typed renames retain normal projection. After risk-bearing DDL, even a previously
+matching index or removed table may have changed; neutral shortcuts cannot prove
+otherwise. Unsupported contracts remain blocking. Runtime still reads fresh
+catalog and rows before its own mutation and may reject the actual ordered state.
+The report format, history and transaction contract are unchanged.
+See [event-trigger behavior](https://www.postgresql.org/docs/current/event-trigger-definition.html)
+and [activation modes](https://www.postgresql.org/docs/current/catalog-pg-event-trigger.html).
+
+User DML triggers can also execute unrelated DDL. The same two bounded metadata
+reads capture a global session-active presence flag from `pg_trigger`; no trigger
+body or per-owner dependency graph is retained. A direct owner filter would miss
+triggers reached through FK cascades, partition routing or recursive writes.
+Internal FK triggers alone do not establish this arbitrary-DDL risk.
+
+After executable safe or typed DML with active or unprovable user-trigger risk,
+later physical classifications use `projected_dml_trigger_structure_unknown` or
+`projected_dml_trigger_visibility_unknown`, with the actual DML `DeferredOrigin`.
+Later model-managed row contracts retain `projected_model_managed_data_state_unknown`.
+This includes provider-emitted NULL-backfill UPDATEs inside column ALTER/repair
+baselines: a statement trigger can fire even when no row needs changing.
+Empty typed writes and initial safe no-ops do not invalidate evidence. Unsupported
+contracts, fresh runtime classification and the existing transaction boundary
+remain authoritative. See the [trigger catalog](https://www.postgresql.org/docs/current/catalog-pg-trigger.html).
+
+### Bounded catalog and row probes
+
+Narrowing eligibility builds only the current candidate's required predicates
+inside the bounded statement builder. It no longer retains a full runtime-plan
+array for the entire candidate set, and immutable candidate records keep only
+their source/target identity, operation and ordinal rather than discarded
+narrowing SQL. Result/report memory remains proportional to the operation
+count; SQL construction and database checks still occur. This changes lifetime
+and retained managed memory, not source authority, query shape or data-proof scope.
 
 Catalog analysis omits only builder-certified constant `TRUE` prerequisites.
 Nonconstant prerequisites still complete before row-dependent queries bind.
@@ -174,6 +242,16 @@ Matching columns do not acquire that repair lock. A dirty unvalidated constraint
 is `DataBlocked`, not `Matching`; a clean one can be validated by the provider's
 `SET NOT NULL` repair. These are structural eligibility checks, not retained
 row proofs or a bound on rows examined.
+
+Proof-bearing column runtime guards first establish the complete target and
+NOT NULL relation contract using fresh metadata. An exact matching replay
+skips unused repair and row-probe evaluation. Parent-only `NO INHERIT` metadata
+does not discharge descendant NULL checks. Explicit ALTER additionally retains
+the exact old-definition authority: a superficially matching parent cannot
+authorize an otherwise unproven transition over descendants. Each locked
+recheck recomputes these operation-local results, and the independent
+postcondition still runs after DDL. These changes reduce repeated catalog work,
+not client roundtrips or the necessary scans for a genuine narrowing.
 
 Guard rendering appends action cases, state-guard branches and canonical
 baseline commands directly into the final operation-owned buffer. Original

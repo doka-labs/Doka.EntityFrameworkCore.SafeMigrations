@@ -3,6 +3,49 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 /// <summary>Checks stress instrumentation against fixed reports independent of production projection.</summary>
 public sealed class LargeMigrationStressExpectationTests
 {
+    /// <summary>
+    /// The SQL Server fixture keeps its original DataBlocked proof only until the first managed write.
+    /// </summary>
+    [Fact]
+    public void SqlServerFixture_AcceptsIndependentTwoCycleDataProofInvalidation()
+    {
+        // Arrange
+        var builder = new MigrationBuilder("Microsoft.EntityFrameworkCore.SqlServer");
+        var expectation = LargeMigrationStressContract.Populate(builder, LargeMigrationStressDialect.SqlServer,
+            operationCount: 18);
+
+        var report = CreateReport(CreateSqlServerGoldenAssessments(), sqlServer: true);
+
+        // Act
+        var exception = Record.Exception(() => expectation.AssertReport(report));
+
+        // Assert
+        Assert.Equal(18, builder.Operations.Count);
+        Assert.Null(exception);
+    }
+
+    /// <summary>The actual SQL Server scenario must reject reuse of DataBlocked after its row proof expires.</summary>
+    [Fact]
+    public void SqlServerFixture_RejectsStaleSecondCycleDataBlocker()
+    {
+        // Arrange
+        var builder = new MigrationBuilder("Microsoft.EntityFrameworkCore.SqlServer");
+        var expectation = LargeMigrationStressContract.Populate(builder, LargeMigrationStressDialect.SqlServer,
+            operationCount: 18);
+
+        var assessments = CreateSqlServerGoldenAssessments();
+        assessments[13] = ProvenAssessment(13, SafeMigrationOperationKind.EnsureColumn, "required_value",
+            SafeMigrationObservedState.DataBlocked, SafeMigrationAction.RejectDataBlocked);
+
+        var report = CreateReport(assessments, sqlServer: true);
+
+        // Act
+        var exception = Record.Exception(() => expectation.AssertReport(report));
+
+        // Assert
+        Assert.IsAssignableFrom<Xunit.Sdk.XunitException>(exception);
+    }
+
     /// <summary>Accepts only the expected uncertainty after the first model-managed ensure.</summary>
     [Fact]
     public void AssertReport_AcceptsIndependentEnsureFirstTwoCycleReport()
@@ -394,6 +437,52 @@ public sealed class LargeMigrationStressExpectationTests
         return assessments;
     }
 
+    /// <summary>Supplies independent SQL Server states before and after the first managed-data write.</summary>
+    private static SafeMigrationAssessment[] CreateSqlServerGoldenAssessments()
+    {
+        // WHY: Fixed states and ordinals independently exercise the real fixture's
+        // flags. Deriving this report from its scenarios would hide a missing flag.
+        return
+        [
+            ProvenAssessment(0, SafeMigrationOperationKind.EnsureColumn, "id",
+                SafeMigrationObservedState.Matching, SafeMigrationAction.NoOp, postconditionSatisfied: true),
+            ProvenAssessment(1, SafeMigrationOperationKind.EnsureTable, "sm_stress_missing_table_000001",
+                SafeMigrationObservedState.Missing, SafeMigrationAction.Apply),
+            ProvenAssessment(2, SafeMigrationOperationKind.EnsureColumn, "id",
+                SafeMigrationObservedState.Different, SafeMigrationAction.RejectDifferent),
+            ProvenAssessment(3, SafeMigrationOperationKind.EnsureIndex, "ix_sqlserver_stress_unsupported",
+                SafeMigrationObservedState.Unsupported, SafeMigrationAction.RejectUnsupported),
+            ProvenAssessment(4, SafeMigrationOperationKind.EnsureColumn, "required_value",
+                SafeMigrationObservedState.DataBlocked, SafeMigrationAction.RejectDataBlocked),
+            ProvenAssessment(5, SafeMigrationOperationKind.EnsureColumn, "value",
+                SafeMigrationObservedState.PrerequisiteMissing, SafeMigrationAction.RejectPrerequisiteMissing),
+            ProvenAssessment(6, SafeMigrationOperationKind.AlterColumn, "caption",
+                SafeMigrationObservedState.Different, SafeMigrationAction.Repair,
+                impact: SafeMigrationOperationalImpact.TableRewritePossible),
+            ProvenAssessment(7, SafeMigrationOperationKind.UpdateModelManagedData, "sqlserver_stress_managed",
+                SafeMigrationObservedState.TransitionReady, SafeMigrationAction.Apply),
+            ProvenAssessment(8, SafeMigrationOperationKind.DropTable, "sqlserver_stress_absent",
+                SafeMigrationObservedState.Missing, SafeMigrationAction.NoOp, postconditionSatisfied: true),
+            ProvenAssessment(9, SafeMigrationOperationKind.EnsureColumn, "id",
+                SafeMigrationObservedState.Matching, SafeMigrationAction.NoOp, postconditionSatisfied: true),
+            ProvenAssessment(10, SafeMigrationOperationKind.EnsureTable, "sm_stress_missing_table_000010",
+                SafeMigrationObservedState.Missing, SafeMigrationAction.Apply),
+            ProvenAssessment(11, SafeMigrationOperationKind.EnsureColumn, "id",
+                SafeMigrationObservedState.Different, SafeMigrationAction.RejectDifferent),
+            ProvenAssessment(12, SafeMigrationOperationKind.EnsureIndex, "ix_sqlserver_stress_unsupported",
+                SafeMigrationObservedState.Unsupported, SafeMigrationAction.RejectUnsupported),
+            ProvenAssessment(13, SafeMigrationOperationKind.EnsureColumn, "required_value",
+                SafeMigrationObservedState.PrerequisiteMissing, SafeMigrationAction.RejectPrerequisiteMissing),
+            ProvenAssessment(14, SafeMigrationOperationKind.EnsureColumn, "value",
+                SafeMigrationObservedState.PrerequisiteMissing, SafeMigrationAction.RejectPrerequisiteMissing),
+            ProvenAssessment(15, SafeMigrationOperationKind.AlterColumn, "caption",
+                SafeMigrationObservedState.Matching, SafeMigrationAction.NoOp, postconditionSatisfied: true),
+            DeferredAssessment(16, SafeMigrationOperationKind.UpdateModelManagedData, "sqlserver_stress_managed", 7),
+            ProvenAssessment(17, SafeMigrationOperationKind.DropTable, "sqlserver_stress_absent",
+                SafeMigrationObservedState.Missing, SafeMigrationAction.NoOp, postconditionSatisfied: true),
+        ];
+    }
+
     private static SafeMigrationAssessment ProvenAssessment(
         int ordinal,
         SafeMigrationOperationKind kind,
@@ -472,16 +561,23 @@ public sealed class LargeMigrationStressExpectationTests
                     ? typeof(AddColumnOperation).FullName!
                     : typeof(SafeMigrationOperation).FullName!));
 
+    /// <summary>Wraps independently fixed assessments in a blocked report for the selected provider fixture.</summary>
+    /// <param name="assessments">The ordered independent test evidence.</param>
+    /// <param name="sqlServer">Whether the report belongs to the SQL Server rather than PostgreSQL fixture.</param>
     private static SafeMigrationRunReport CreateReport(
-        IReadOnlyList<SafeMigrationAssessment> assessments
+        IReadOnlyList<SafeMigrationAssessment> assessments,
+        bool sqlServer = false
     ) => new(
         SafeMigrationReportMode.Preflight,
         SafeMigrationReportStatus.Blocked,
         DateTimeOffset.UnixEpoch,
         "instrumentation-instance",
-        new SafeMigrationProviderEnvironment("npgsql_postgresql", "postgresql", "18.6"),
+        sqlServer
+            ? new SafeMigrationProviderEnvironment("efcore_sqlserver", "sqlserver", "16.0")
+            : new SafeMigrationProviderEnvironment("npgsql_postgresql", "postgresql", "18.6"),
         targetMigrationId: null,
-        $"safe-relational-model:v1:npgsql_postgresql:sha256:{new string('a', 64)}",
+        $"safe-relational-model:v1:{(sqlServer ? "efcore_sqlserver" : "npgsql_postgresql")}:sha256:"
+            + new string('a', 64),
         new string('b', 64),
         assessments);
 }
