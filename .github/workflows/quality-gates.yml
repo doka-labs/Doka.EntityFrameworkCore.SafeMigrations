@@ -110,7 +110,7 @@ jobs:
 
       - name: Upload SQL Server baseline evidence
         if: ${{ always() && inputs.capture-sqlserver-baseline }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sqlserver-baseline-${{ github.run_id }}-${{ github.run_attempt }}
           path: artifacts/performance/sqlserver-baseline.json
@@ -176,7 +176,7 @@ jobs:
 
       - name: Upload core test results
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: core-test-results-${{ github.run_id }}-${{ github.run_attempt }}
           path: '**/TestResults/*.trx'
@@ -190,7 +190,7 @@ jobs:
         run: echo "name=$QUALIFIED_ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Upload qualified packages and evidence
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ inputs.artifact-name }}
           path: |
@@ -293,7 +293,7 @@ jobs:
 
       - name: Upload coverage evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: product-coverage-${{ github.run_id }}-${{ github.run_attempt }}
           path: artifacts/coverage
@@ -373,7 +373,7 @@ jobs:
 
       - name: Upload test and tooling evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ matrix.engine }}-${{ matrix.version }}-evidence-${{ github.run_attempt }}
           path: |
@@ -447,7 +447,7 @@ jobs:
 
       - name: Upload test and tooling evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: postgresql-${{ matrix.version }}-evidence-${{ github.run_attempt }}
           path: |
@@ -499,7 +499,7 @@ jobs:
 
       - name: Upload test and tooling evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sqlite-evidence-${{ github.run_attempt }}
           path: |
@@ -575,7 +575,7 @@ jobs:
 
       - name: Upload test and tooling evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sqlserver-${{ matrix.version }}-evidence-${{ github.run_attempt }}
           path: |
