@@ -35,7 +35,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         bool includeTransitionEvidence = true,
         bool parameterizeValues = true,
         IReadOnlyList<string>? requiredDatabaseQualifiers = null,
-        bool requiresNullFreeBackfill = false
+        bool requiresNullFreeBackfill = false,
+        MySqlTableContractAlternative? nativeTableAlternative = null,
+        string? nativeNullFreeBackfillCondition = null
     )
     {
         ArgumentNullException.ThrowIfNull(operation);
@@ -67,7 +69,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                         value,
                         context.ServerVersion.IsMariaDb,
                         expectedUniqueIndexes,
-                        expectedTableConstraints),
+                        expectedTableConstraints,
+                        nativeTableAlternative),
                     DropTableIntent value => BuildDropTable(value),
                     RenameTableIntent value => BuildRenameTable(value),
                     EnsureColumnIntent value => BuildEnsureColumn(
@@ -85,9 +88,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                         operation.Policy == SafeMigrationPolicy.RepairIfSafe,
                         includeAnalysisEvidence,
                         includeTransitionEvidence,
-                        requiresNullFreeBackfill),
+                        requiresNullFreeBackfill,
+                        nativeNullFreeBackfillCondition),
                     EnsureIndexIntent value => BuildEnsureIndex(value, context.ServerVersion.IsMariaDb),
-                    DropIndexIntent value => BuildDropIndex(value),
+                    DropIndexIntent value => BuildDropIndex(value, context.ServerVersion.IsMariaDb),
                     RenameIndexIntent value => BuildRenameIndex(value),
                     EnsurePrimaryKeyIntent value => BuildEnsurePrimaryKey(value),
                     DropPrimaryKeyIntent value => BuildDropPrimaryKey(value),
@@ -174,7 +178,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             SafeMigrationPrerequisiteColumns.Local(value))}) "
             + $"AND ({TableAndColumnsExist(
                 value.Definition.PrincipalTable,
-                SafeMigrationPrerequisiteColumns.Principal(value))})",
+                SafeMigrationPrerequisiteColumns.Principal(value))}) "
+            + $"AND ({ForeignKeyDataBindingPrerequisites(value.Definition)})",
         ModelManagedDataIntent value => BuildModelManagedDataPrerequisite(value),
         _ => "TRUE",
     };

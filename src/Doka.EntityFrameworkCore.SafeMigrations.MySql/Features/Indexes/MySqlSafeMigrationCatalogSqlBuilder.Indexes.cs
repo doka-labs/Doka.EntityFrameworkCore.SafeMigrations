@@ -231,13 +231,19 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     }
 
     private MySqlSafeMigrationRuntimePlan BuildDropIndex(
-        DropIndexIntent intent
+        DropIndexIntent intent,
+        bool isMariaDb
     )
     {
         var exists = IndexExists(intent.Table, intent.Name);
+
         return Plan(
-            $"CASE WHEN NOT {BaseTableExists(intent.Table)} OR NOT {exists} " + "THEN 'missing' ELSE 'matching' END",
-            $"NOT {exists}");
+            $"CASE WHEN NOT {BaseTableExists(intent.Table)} OR NOT {exists} THEN 'missing' "
+            + $"WHEN {MultiValuedIndexDropRisk(intent, isMariaDb)} THEN 'unsupported' ELSE 'matching' END",
+            $"NOT {exists}") with
+        {
+            UnsupportedCode = "foreign_key_multi_valued_supporting_index",
+        };
     }
 
     private MySqlSafeMigrationRuntimePlan BuildRenameIndex(

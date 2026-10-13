@@ -157,7 +157,8 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
             _analyzer,
             projectedKeyAnalyzer: null,
             _analyzer,
-            projectedColumnAnalyzer: _analyzer);
+            projectedColumnAnalyzer: _analyzer,
+            livePrerequisiteSource: new SqliteLivePrerequisiteSource(snapshot));
 
         var acceptedOperations = new List<MigrationOperation>(_operations.Count);
 
@@ -205,8 +206,7 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
             return 0;
         }
 
-        var commands = _baselineGenerator.Generate(acceptedOperations, _model, _options);
-        var affected = ExecuteCommands(connection, parameterValues, commands);
+        var affected = ExecuteAcceptedOperations(connection, parameterValues, acceptedOperations);
 
         _executionState.Invalidate();
         var postSnapshot = _executionState.GetSnapshot(connection);
@@ -251,6 +251,87 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
         }
 
         return affected;
+    }
+
+    /// <summary>Preserves prerequisite column order when EF folds standalone FKs into new table operations.</summary>
+    private int ExecuteAcceptedOperations(
+        IRelationalConnection connection,
+        IReadOnlyDictionary<string, object?>? parameterValues,
+        List<MigrationOperation> operations)
+    {
+        Dictionary<string, CreateTableOperation>? creators = null;
+        var windowStart = 0;
+        var affected = 0;
+        for (var ordinal = 0; ordinal < operations.Count; ordinal++)
+        {
+            if (operations[ordinal] is CreateTableOperation create)
+            {
+                // WHY: EF's folding selects the first preceding exact table
+                // spelling, not the latest model or projected column state.
+                creators ??= new Dictionary<string, CreateTableOperation>(StringComparer.Ordinal);
+                _ = creators.TryAdd(create.Name, create);
+            }
+            else if (operations[ordinal] is AddForeignKeyOperation foreignKey
+                     && creators?.TryGetValue(foreignKey.Table, out var creator) == true
+                     && !CreatorContainsForeignKeyColumns(creator, foreignKey))
+            {
+                // WHY: EF 10's private rewrite otherwise embeds the FK before
+                // its separately authored ADD column, yielding invalid DDL.
+                // Flush only the baseline-generation window, within this same
+                // owned transaction; final snapshot and integrity checks stay
+                // shared and strict table column contracts remain unchanged.
+                affected += ExecuteAcceptedWindow(
+                    connection, parameterValues, operations, windowStart, ordinal - windowStart);
+                windowStart = ordinal;
+                creators.Clear();
+            }
+        }
+
+        return affected + ExecuteAcceptedWindow(
+            connection, parameterValues, operations, windowStart, operations.Count - windowStart);
+    }
+
+    /// <summary>Executes one baseline window without allocating a slice on the normal unsplit path.</summary>
+    private int ExecuteAcceptedWindow(
+        IRelationalConnection connection,
+        IReadOnlyDictionary<string, object?>? parameterValues,
+        List<MigrationOperation> operations,
+        int start,
+        int count)
+    {
+        IReadOnlyList<MigrationOperation> window = start == 0 && count == operations.Count
+            ? operations : operations.GetRange(start, count);
+
+        var commands = _baselineGenerator.Generate(window, _model, _options);
+
+        return ExecuteCommands(connection, parameterValues, commands);
+    }
+
+    /// <summary>Checks only declared local creator columns, never future ADDs or target-model wishes.</summary>
+    private static bool CreatorContainsForeignKeyColumns(
+        CreateTableOperation creator,
+        AddForeignKeyOperation foreignKey)
+    {
+        for (var ordinal = 0; ordinal < foreignKey.Columns.Length; ordinal++)
+        {
+            var present = false;
+            for (var candidate = 0; candidate < creator.Columns.Count; candidate++)
+            {
+                if (SqliteIdentifierComparer.Instance.Equals(
+                        creator.Columns[candidate].Name, foreignKey.Columns[ordinal]))
+                {
+                    present = true;
+                    break;
+                }
+            }
+
+            if (!present)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /// <inheritdoc />

@@ -18,11 +18,16 @@ internal sealed class MySqlSafeMigrationPlanCapture
         (string? Schema, string Table), SafeMigrationExpectedTableConstraints>? _expectedTableConstraints;
     private IReadOnlyDictionary<
         (string? Schema, string Table), SafeMigrationExpectedTableConstraints>? _generationTableConstraints;
+    private IReadOnlyDictionary<
+        (string? Schema, string Table), SafeMigrationExpectedTableConstraints>? _generationFoldedTableConstraints;
     private IReadOnlyList<string>? _generationDatabaseQualifiers;
     private MySqlExpectedUniqueIndexCatalog? _generationUniqueIndexes;
+    private MySqlExpectedUniqueIndexCatalog? _generationFoldedUniqueIndexes;
     private MySqlExpectedUniqueIndexCatalog? _expectedUniqueIndexes;
     private MySqlBackfillConstraintCatalog? _expectedBackfillConstraints;
     private MySqlBackfillConstraintCatalog? _generationBackfillConstraints;
+    private MySqlBackfillConstraintCatalog? _generationFoldedBackfillConstraints;
+    private bool _generationFoldedTableContractInvalid;
     private MySqlSafeMigrationRuntimePlan?[]? _plans;
     private bool _includeAnalysisEvidence;
     private bool _includeTransitionEvidence;
@@ -78,7 +83,8 @@ internal sealed class MySqlSafeMigrationPlanCapture
     ) => Begin(
         operations,
         expectedUniqueIndexes,
-        SafeMigrationExpectedTableConstraints.FromOperations(operations),
+        SafeMigrationExpectedTableConstraints.FromOperations(operations,
+            expectedUniqueIndexes.NormalizeSchema, expectedUniqueIndexes.TableComparer),
         includeAnalysisEvidence,
         includeTransitionEvidence);
 
@@ -120,7 +126,8 @@ internal sealed class MySqlSafeMigrationPlanCapture
         _plans = new MySqlSafeMigrationRuntimePlan?[_expected.Length];
         _expectedUniqueIndexes = expectedUniqueIndexes;
         _expectedTableConstraints = expectedTableConstraints;
-        _expectedBackfillConstraints = backfillConstraints ?? MySqlBackfillConstraintCatalog.Create(operations);
+        _expectedBackfillConstraints = backfillConstraints ?? MySqlBackfillConstraintCatalog.Create(operations,
+            expectedUniqueIndexes.CurrentDatabase, expectedUniqueIndexes.TableComparer);
         _includeAnalysisEvidence = includeAnalysisEvidence;
         _includeTransitionEvidence = includeTransitionEvidence;
 
@@ -145,6 +152,7 @@ internal sealed class MySqlSafeMigrationPlanCapture
                 "A MySQL SafeMigrations analysis or generation scope is already active.");
         }
 
+        ClearGeneration();
         var safeOperations = operations.OfType<SafeMigrationOperation>().ToArray();
         var databaseQualifiers = MySqlSafeMigrationCatalogSqlBuilder.GetDatabaseQualifiers(operations);
         var guardedDatabase = databaseQualifiers.Length == 1
@@ -154,6 +162,33 @@ internal sealed class MySqlSafeMigrationPlanCapture
             operations,
             schema => MySqlTableIdentity.NormalizeDatabase(schema, guardedDatabase));
         var uniqueIndexes = CreateExpectedUniqueIndexes(safeOperations, guardedDatabase);
+        var hasNativeAlternatives = (safeOperations.Any(static operation =>
+                operation.Intent is EnsureTableIntent { Mode: SafeMigrationTableMode.StrictDefinition })
+            || safeOperations.Any(RequiresAlterBackfillContract))
+            && HasCaseAmbiguousOwners(safeOperations, guardedDatabase);
+
+        if (hasNativeAlternatives)
+        {
+            // WHY: Generation cannot read the server profile. Keep both
+            // owner interpretations and let guarded native SQL select one;
+            // an invalid folded stream must not reject a valid mode-zero one.
+            try
+            {
+                _generationFoldedTableConstraints = SafeMigrationExpectedTableConstraints.FromOperations(
+                    operations, schema => MySqlTableIdentity.NormalizeDatabase(schema, guardedDatabase),
+                    StringComparer.OrdinalIgnoreCase);
+
+                _generationFoldedUniqueIndexes = CreateExpectedUniqueIndexes(safeOperations, guardedDatabase,
+                    StringComparer.OrdinalIgnoreCase);
+            }
+            catch (InvalidOperationException)
+            {
+                _generationFoldedTableContractInvalid = true;
+            }
+
+            _generationFoldedBackfillConstraints = MySqlBackfillConstraintCatalog.Create(safeOperations,
+                guardedDatabase, StringComparer.OrdinalIgnoreCase);
+        }
 
         // WHY: Generation has no connection from which to prove DATABASE().
         // A single candidate may merge with unqualified identities only
@@ -174,13 +209,18 @@ internal sealed class MySqlSafeMigrationPlanCapture
     /// The selected database whose explicit qualifier is equivalent to an unqualified table,
     /// or null when runtime identity normalization is unavailable.
     /// </param>
+    /// <param name="tableComparer">
+    /// Explicitly qualified owner equality; connection-free callers retain exact names.
+    /// </param>
     /// <returns>The expected unique-index definitions keyed by physical table identity.</returns>
     public static MySqlExpectedUniqueIndexCatalog CreateExpectedUniqueIndexes(
         IReadOnlyList<SafeMigrationOperation> operations,
-        string? currentDatabase = null
+        string? currentDatabase = null,
+        StringComparer? tableComparer = null
     )
     {
         ArgumentNullException.ThrowIfNull(operations);
+        var comparer = tableComparer ?? StringComparer.Ordinal;
 
         // Only EnsureTable consumes this cross-operation catalog. Avoid
         // materializing the complete expected schema for unrelated batches.
@@ -188,15 +228,16 @@ internal sealed class MySqlSafeMigrationPlanCapture
         {
             SafeMigrationExpectedIndexTransitions.Validate(
                 operations,
-                schema => MySqlTableIdentity.NormalizeDatabase(schema, currentDatabase));
+                schema => MySqlTableIdentity.NormalizeDatabase(schema, currentDatabase), comparer);
 
-            return new MySqlExpectedUniqueIndexCatalog(s_emptyUniqueIndexCatalog, currentDatabase);
+            return new MySqlExpectedUniqueIndexCatalog(s_emptyUniqueIndexCatalog, currentDatabase, comparer);
         }
 
-        var definitions = new Dictionary<MySqlTableIdentity, IReadOnlyList<ExpectedIndexDefinition>>();
+        var definitions = new Dictionary<MySqlTableIdentity, IReadOnlyList<ExpectedIndexDefinition>>(
+            new MySqlTableIdentityComparer(comparer));
         foreach (var table in SafeMigrationExpectedCatalog.Create(
                      operations,
-                     schema => MySqlTableIdentity.NormalizeDatabase(schema, currentDatabase)))
+                     schema => MySqlTableIdentity.NormalizeDatabase(schema, currentDatabase), comparer))
         {
             if (table.UniqueIndexes.Count == 0)
             {
@@ -218,7 +259,7 @@ internal sealed class MySqlSafeMigrationPlanCapture
             }
         }
 
-        return new MySqlExpectedUniqueIndexCatalog(definitions, currentDatabase);
+        return new MySqlExpectedUniqueIndexCatalog(definitions, currentDatabase, comparer);
     }
 
     /// <summary>Identifies newly admitted alterations whose backfill must honor ordered constraints.</summary>
@@ -243,6 +284,99 @@ internal sealed class MySqlSafeMigrationPlanCapture
     public bool RequiresNullFreeBackfill(SafeMigrationOperation operation) =>
         (IsActive ? _expectedBackfillConstraints : _generationBackfillConstraints)
         ?.RequiresNullFreeRows(operation) == true;
+
+    /// <summary>Gets an additional backfill obligation selected only by the actual runtime owner mode.</summary>
+    internal string? GetGenerationNullFreeBackfillCondition(SafeMigrationOperation operation) =>
+        !IsActive && !RequiresNullFreeBackfill(operation)
+            && _generationFoldedBackfillConstraints?.RequiresNullFreeRows(operation) == true
+                ? "@@lower_case_table_names IN (1, 2)"
+                : null;
+
+    /// <summary>Gets the folded strict-table alternative without assuming the executing server's profile.</summary>
+    internal MySqlTableContractAlternative? GetGenerationTableAlternative(EnsureTableIntent intent)
+    {
+        if (!HasGenerationContract
+            || intent.Mode != SafeMigrationTableMode.StrictDefinition)
+        {
+            return null;
+        }
+
+        if (_generationFoldedTableContractInvalid)
+        {
+            return new MySqlTableContractAlternative(false, s_emptyUniqueIndexes, null);
+        }
+
+        return _generationFoldedTableConstraints is null || _generationFoldedUniqueIndexes is null
+            ? null
+            : new MySqlTableContractAlternative(true,
+                _generationFoldedUniqueIndexes.Get(intent.Definition.Table, intent.Definition.Schema)
+                    ?? s_emptyUniqueIndexes,
+                _generationFoldedTableConstraints.GetValueOrDefault(
+                    (intent.Definition.Schema, intent.Definition.Table)));
+    }
+
+    /// <summary>Detects mixed spellings which can change a strict-table or backfill owner contract.</summary>
+    private static bool HasCaseAmbiguousOwners(
+        IReadOnlyList<SafeMigrationOperation> operations,
+        string? currentDatabase
+    )
+    {
+        var owners = new Dictionary<MySqlTableIdentity, string>(
+            new MySqlTableIdentityComparer(StringComparer.OrdinalIgnoreCase));
+
+        foreach (var operation in operations)
+        {
+            (string? Table, string? Schema) owner = operation.Intent switch
+            {
+                EnsureTableIntent value => (value.Definition.Table, value.Definition.Schema),
+                DropTableIntent value => (value.Table, value.Schema),
+                RenameTableIntent value => (value.Name, value.Schema),
+                EnsureColumnIntent value => (value.Table, value.Schema),
+                AlterColumnIntent value => (value.Table, value.Schema),
+                DropColumnIntent value => (value.Table, value.Schema),
+                RenameColumnIntent value => (value.Table, value.Schema),
+                EnsureIndexIntent value => (value.Definition.Table, value.Definition.Schema),
+                DropIndexIntent value => (value.Table, value.Schema),
+                RenameIndexIntent value => (value.Table, value.Schema),
+                EnsurePrimaryKeyIntent value => (value.Definition.Table, value.Definition.Schema),
+                DropPrimaryKeyIntent value => (value.Table, value.Schema),
+                EnsureUniqueConstraintIntent value => (value.Definition.Table, value.Definition.Schema),
+                DropUniqueConstraintIntent value => (value.Table, value.Schema),
+                EnsureCheckConstraintIntent value => (value.Definition.Table, value.Definition.Schema),
+                DropCheckConstraintIntent value => (value.Table, value.Schema),
+                EnsureForeignKeyIntent value => (value.Definition.Table, value.Definition.Schema),
+                DropForeignKeyIntent value => (value.Table, value.Schema),
+                _ => ((string?)null, (string?)null),
+            };
+
+            if (owner.Table is not null && Add(owner.Table, owner.Schema))
+            {
+                return true;
+            }
+
+            if (operation.Intent is RenameTableIntent rename
+                && Add(rename.NewName ?? rename.Name, rename.NewSchema ?? rename.Schema))
+            {
+                return true;
+            }
+
+        }
+
+        return false;
+
+        bool Add(string table, string? schema)
+        {
+            var identity = MySqlTableIdentity.Create(table, schema, currentDatabase);
+            if (owners.TryGetValue(identity, out var previous))
+            {
+                return !StringComparer.Ordinal.Equals(previous, table);
+            }
+
+            owners.Add(identity, table);
+
+            return false;
+        }
+    }
 
     /// <summary>Gets expected unique-index definitions for a table in the active batch.</summary>
     /// <param name="table">The unqualified MySQL or MariaDB table name.</param>
@@ -406,9 +540,13 @@ internal sealed class MySqlSafeMigrationPlanCapture
     private void ClearGeneration()
     {
         _generationBackfillConstraints = null;
+        _generationFoldedBackfillConstraints = null;
         _generationDatabaseQualifiers = null;
         _generationTableConstraints = null;
+        _generationFoldedTableConstraints = null;
         _generationUniqueIndexes = null;
+        _generationFoldedUniqueIndexes = null;
+        _generationFoldedTableContractInvalid = false;
     }
 
     /// <summary>Owns the lifetime of one active plan capture.</summary>
@@ -467,13 +605,49 @@ internal sealed class MySqlSafeMigrationPlanCapture
 
 internal sealed class MySqlExpectedUniqueIndexCatalog(
     IReadOnlyDictionary<MySqlTableIdentity, IReadOnlyList<ExpectedIndexDefinition>> definitions,
-    string? currentDatabase
+    string? currentDatabase,
+    StringComparer? tableComparer = null
 )
 {
+    /// <summary>Gets owner equality explicitly selected by the capture's proven native profile.</summary>
+    internal StringComparer TableComparer { get; } = tableComparer ?? StringComparer.Ordinal;
+
+    /// <summary>Gets the independently qualified current database, or null when no such proof is available.</summary>
+    internal string? CurrentDatabase => currentDatabase;
+
+    /// <summary>Normalizes only the existing current-database qualifier contract.</summary>
+    internal string? NormalizeSchema(string? schema) => MySqlTableIdentity.NormalizeDatabase(schema, currentDatabase);
+
     public IReadOnlyList<ExpectedIndexDefinition>? Get(
         string table,
         string? schema
     ) => definitions.GetValueOrDefault(MySqlTableIdentity.Create(table, schema, currentDatabase));
+}
+
+/// <summary>Stores the folded interpretation used only behind a native execution-time mode guard.</summary>
+/// <param name="IsValid">Whether the folded ordered stream has a coherent contract.</param>
+/// <param name="UniqueIndexes">Unique indexes declared for the folded physical owner.</param>
+/// <param name="Constraints">Ordered table constraints declared for that owner.</param>
+internal sealed record MySqlTableContractAlternative(
+    bool IsValid,
+    IReadOnlyList<ExpectedIndexDefinition> UniqueIndexes,
+    SafeMigrationExpectedTableConstraints? Constraints
+);
+
+/// <summary>Keeps native table equality separate from the existing exact database qualifier contract.</summary>
+internal sealed class MySqlTableIdentityComparer(StringComparer tableComparer) : IEqualityComparer<MySqlTableIdentity>
+{
+    /// <inheritdoc />
+    public bool Equals(
+        MySqlTableIdentity first,
+        MySqlTableIdentity second
+    ) =>
+        tableComparer.Equals(first.Table, second.Table)
+        && StringComparer.Ordinal.Equals(first.Database, second.Database);
+
+    /// <inheritdoc />
+    public int GetHashCode(MySqlTableIdentity identity) => HashCode.Combine(tableComparer.GetHashCode(identity.Table),
+        identity.Database is null ? 0 : StringComparer.Ordinal.GetHashCode(identity.Database));
 }
 
 internal readonly record struct MySqlTableIdentity(

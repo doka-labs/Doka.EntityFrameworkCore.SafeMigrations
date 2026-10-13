@@ -14,7 +14,12 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
     )
     {
         List<SafeMigrationConstraintIdentityBinding>? bindings = null;
-        if (expected.PrimaryKey is { } primaryKey && table.PrimaryKeyName is { } primaryKeyName)
+        // WHY: Strict table transitions can match a later key shape. That
+        // native symbol belongs to the original authored key only when its
+        // complete physical shape also matches the original definition.
+        if (expected.PrimaryKey is { } primaryKey && table.PrimaryKeyName is { } primaryKeyName
+            && SqliteCatalogEquivalence.KeyMatchesDeclaredColumns(
+                table, table.PrimaryKeyKeys, primaryKey.Columns, requireDefaultSortOrder: true))
         {
             Add(SafeMigrationDatabaseObjectKind.PrimaryKey, primaryKey.Name, primaryKeyName);
         }
@@ -30,7 +35,8 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             var count = 0;
             foreach (var actual in table.UniqueConstraints)
             {
-                if (IdentifiersEqual(definition.Columns, actual.Columns))
+                if (SqliteCatalogEquivalence.KeyMatchesDeclaredColumns(
+                        table, actual.Keys, definition.Columns, requireDefaultSortOrder: true))
                 {
                     Observe(definition.Name, actual.Name, ref exact, ref candidate, ref count);
                 }

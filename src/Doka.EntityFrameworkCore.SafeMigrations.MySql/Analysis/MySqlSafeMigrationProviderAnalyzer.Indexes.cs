@@ -205,6 +205,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
     /// <param name="maximumPayloadBytes">The qualified packet and shared payload bound.</param>
     /// <param name="commandTimeout">The caller's command timeout.</param>
     /// <param name="cancellationToken">The token that cancels construction and reading.</param>
+    /// <param name="identifierComparer">The independently qualified native table-name policy.</param>
     /// <returns>The fully captured requested environments.</returns>
     internal static async Task<IReadOnlyDictionary<string, SafeMigrationIndexPhysicalEnvironment>>
         ReadIndexPhysicalEnvironmentsAsync(
@@ -212,10 +213,12 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             IReadOnlyList<SafeMigrationOperation> operations,
             int maximumPayloadBytes,
             int? commandTimeout,
-            CancellationToken cancellationToken
+            CancellationToken cancellationToken,
+            StringComparer? identifierComparer = null
         )
     {
-        var requestedColumns = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+        var tableComparer = identifierComparer ?? StringComparer.Ordinal;
+        var requestedColumns = new Dictionary<string, HashSet<string>>(tableComparer);
         foreach (var intent in operations.Select(static operation => operation.Intent))
         {
             var table = GetPhysicalKeyTable(intent);
@@ -242,7 +245,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
         if (tables.Length == 0)
         {
-            return new Dictionary<string, SafeMigrationIndexPhysicalEnvironment>(StringComparer.Ordinal);
+            return new Dictionary<string, SafeMigrationIndexPhysicalEnvironment>(tableComparer);
         }
 
         var environmentDefaults = await ReadDefaultIndexPhysicalEnvironmentAsync(
@@ -264,14 +267,14 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         var result = tables.ToDictionary(
             static table => table,
             _ => environmentDefaults.DefaultEnvironment,
-            StringComparer.Ordinal);
+            tableComparer);
 
         var columnShapes = tables.ToDictionary(
             static table => table,
             static _ => new Dictionary<string, SafeMigrationIndexColumnPhysicalShape>(StringComparer.Ordinal),
-            StringComparer.Ordinal);
+            tableComparer);
 
-        var observedTables = new HashSet<string>(StringComparer.Ordinal);
+        var observedTables = new HashSet<string>(tableComparer);
 
         await SafeMigrationCatalogProbeBatch.ReadAsync(
             connection, (tables.Length + SafeMigrationCatalogQueryLimits.MaximumInventoryValues - 1)
@@ -293,22 +296,36 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                     valueBytes += Encoding.UTF8.GetByteCount(tables[offset + index]) + 32;
                 }
 
+                // WHY: Analysis already qualified this invocation's owner mode.
+                // Fold with native SQL only in modes one/two; repeating the
+                // connection-free CASE per owner would inflate packet payloads.
+                var nativeOwner = tableComparer == StringComparer.OrdinalIgnoreCase
+                    ? "CAST(LOWER(t.TABLE_NAME) AS BINARY)"
+                    : "CAST(t.TABLE_NAME AS BINARY)";
+
+                var nativeOwners = tableComparer == StringComparer.OrdinalIgnoreCase
+                    ? string.Join(", ", parameterNames.Select(static parameter => $"LOWER({parameter})"))
+                    : string.Join(", ", parameterNames);
+
                 command.CommandText = "SELECT t.TABLE_NAME, t.ENGINE, t.ROW_FORMAT, "
                     + "c.COLUMN_NAME, c.DATA_TYPE, c.CHARACTER_MAXIMUM_LENGTH, "
                     + "c.CHARACTER_OCTET_LENGTH, c.NUMERIC_PRECISION, "
                     + "c.NUMERIC_SCALE, c.DATETIME_PRECISION "
                     + "FROM INFORMATION_SCHEMA.TABLES t "
                     + "JOIN INFORMATION_SCHEMA.COLUMNS c "
-                    + "ON c.TABLE_SCHEMA = t.TABLE_SCHEMA AND c.TABLE_NAME = t.TABLE_NAME "
+                    + "ON CAST(c.TABLE_SCHEMA AS BINARY) = CAST(t.TABLE_SCHEMA AS BINARY) "
+                    + "AND CAST(c.TABLE_NAME AS BINARY) = CAST(t.TABLE_NAME AS BINARY) "
                     + "WHERE t.TABLE_SCHEMA = DATABASE() "
-                    + $"AND t.TABLE_NAME IN ({string.Join(", ", parameterNames)});";
+                    + "AND CAST(t.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY) "
+                    + $"AND t.TABLE_NAME IN ({string.Join(", ", parameterNames)}) "
+                    + $"AND {nativeOwner} IN ({nativeOwners});";
 
                 return new SafeMigrationCatalogProbeStatement(1, valueBytes, offset);
             },
             async (reader, slot, _, token) =>
             {
                 var permitted = tables.Skip(slot * SafeMigrationCatalogQueryLimits.MaximumInventoryValues)
-                    .Take(SafeMigrationCatalogQueryLimits.MaximumInventoryValues).ToHashSet(StringComparer.Ordinal);
+                    .Take(SafeMigrationCatalogQueryLimits.MaximumInventoryValues).ToHashSet(tableComparer);
 
                 while (await reader.ReadAsync(token))
                 {

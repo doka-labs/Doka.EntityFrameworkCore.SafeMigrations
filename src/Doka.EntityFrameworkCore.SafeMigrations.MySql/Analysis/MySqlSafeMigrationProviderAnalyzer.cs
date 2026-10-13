@@ -10,6 +10,19 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
     private readonly IMigrationsSqlGenerator _sqlGenerator;
     private readonly IRelationalTypeMappingSource _typeMappingSource;
     private string? _currentDatabase;
+    private bool _tableNamesIgnoreCase;
+
+    /// <summary>
+    /// Uses the independently captured native owner policy without folding mode-zero table identities.
+    /// </summary>
+    private StringComparer TableIdentifierComparer => _tableNamesIgnoreCase
+        ? StringComparer.OrdinalIgnoreCase
+        : StringComparer.Ordinal;
+
+    /// <summary>Canonicalizes an owner only after the server proves case-insensitive physical identity.</summary>
+    private string NormalizeTableIdentifier(string identifier) => _tableNamesIgnoreCase
+        ? SafeMigrationModelManagedKeyIdentity.NormalizeOrdinalIgnoreCase(identifier)
+        : identifier;
 
     public MySqlSafeMigrationProviderAnalyzer(
         IMigrationsSqlGenerator sqlGenerator,
@@ -30,7 +43,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
 
     bool ISafeMigrationProjectedKeyAnalyzer.SharesUniqueConstraintAndIndexIdentity => true;
 
-    StringComparer ISafeMigrationProviderObjectIdentityNormalizer.IdentifierComparer => StringComparer.Ordinal;
+    StringComparer ISafeMigrationProviderObjectIdentityNormalizer.IdentifierComparer => TableIdentifierComparer;
 
     StringComparer ISafeMigrationProviderObjectIdentityNormalizer.ColumnIdentifierComparer =>
         StringComparer.OrdinalIgnoreCase;
@@ -44,7 +57,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
 
     string ISafeMigrationProviderObjectIdentityNormalizer.NormalizeIdentifier(
         string identifier
-    ) => identifier;
+    ) => NormalizeTableIdentifier(identifier);
 
     /// <inheritdoc />
     string ISafeMigrationProviderObjectIdentityNormalizer.NormalizeColumnIdentifier(string identifier) =>
@@ -162,6 +175,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
             _projectedRequiredAddCapsByAnalysis?.Clear();
             _renamedSourceAnalyses.Clear();
             _renameTargetConflicts.Clear();
+            ClearLivePrerequisites();
+            _tableNamesIgnoreCase = false;
         }
 
         if (operations.Count == 0)
@@ -189,10 +204,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                 _currentDatabase = await ReadCurrentDatabaseAsync(connection, commandTimeout, cancellationToken);
             }
 
-            var backfillConstraints = inheritedBackfillConstraints
-                ?? MySqlBackfillConstraintCatalog.Create(operations, _currentDatabase);
-
             var maximumPayloadBytes = await GetMaximumPayloadBytesAsync(connection, commandTimeout, cancellationToken);
+            var backfillConstraints = inheritedBackfillConstraints
+                ?? MySqlBackfillConstraintCatalog.Create(operations, _currentDatabase, TableIdentifierComparer);
+
             var physicalKeyOperations = operations
                 .Where(operation => TargetsCurrentDatabase(operation.Intent, _currentDatabase))
                 .ToArray();
@@ -204,7 +219,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                 physicalKeyOperations,
                 maximumPayloadBytes,
                 commandTimeout,
-                cancellationToken);
+                cancellationToken,
+                TableIdentifierComparer);
 
             var alterPhysicalSnapshots = await ReadProjectedAlterPhysicalSnapshotsAsync(
                 connection,
@@ -216,11 +232,11 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
 
             var expectedUniqueIndexes = MySqlSafeMigrationPlanCapture.CreateExpectedUniqueIndexes(
                 operations,
-                _currentDatabase);
+                _currentDatabase, TableIdentifierComparer);
 
             var expectedTableConstraints = SafeMigrationExpectedTableConstraints.FromOperations(
                 operations,
-                schema => MySqlTableIdentity.NormalizeDatabase(schema, _currentDatabase));
+                schema => MySqlTableIdentity.NormalizeDatabase(schema, _currentDatabase), TableIdentifierComparer);
 
             // WHY: MariaDB spills every INFORMATION_SCHEMA subquery of a classification statement to
             // an on-disk temporary table, so the catalog of the connected database is copied once
@@ -562,6 +578,12 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
             AttachProjectedColumnSessionEnvironment(operations, results, columnSessionEnvironment);
             if (captureRenameSources)
             {
+                await CaptureLivePrerequisitesAsync(
+                    context, operations, results, maximumPayloadBytes, commandTimeout, cancellationToken);
+
+                await CaptureMultiValuedIndexDropProofsAsync(
+                    context, operations, results, maximumPayloadBytes, commandTimeout, cancellationToken);
+
                 await CaptureForeignKeyReplacementProofsAsync(
                     context, operations, results, maximumPayloadBytes, commandTimeout, cancellationToken);
             }
@@ -581,6 +603,11 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         catch (Exception exception)
         {
             analysisFailure = exception;
+            if (captureRenameSources)
+            {
+                ClearLivePrerequisites();
+                _tableNamesIgnoreCase = false;
+            }
 
             throw;
         }
@@ -1522,7 +1549,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
             : Convert.ToString(value, CultureInfo.InvariantCulture);
     }
 
-    private static async Task<int> GetMaximumPayloadBytesAsync(
+    private async Task<int> GetMaximumPayloadBytesAsync(
         DbConnection connection,
         int? commandTimeout,
         CancellationToken cancellationToken
@@ -1530,19 +1557,51 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
     {
         await using var command = connection.CreateCommand();
         ApplyCommandTimeout(command, commandTimeout);
-        command.CommandText = "SELECT @@max_allowed_packet;";
-        var raw = await command.ExecuteScalarAsync(cancellationToken)
-            ?? throw new InvalidOperationException("MySQL did not return max_allowed_packet.");
-
-        var maximumPacket = Convert.ToInt64(raw, CultureInfo.InvariantCulture);
+        // WHY: Both values are connection-qualified immutable server facts.
+        // Sharing the required packet probe avoids a new normal-path roundtrip
+        // while preventing metadata readers from guessing owner casing.
+        command.CommandText = "SELECT @@max_allowed_packet, @@lower_case_table_names;";
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var profile = await ReadNativeTransportProfileAsync(reader, cancellationToken);
+        _tableNamesIgnoreCase = profile.OwnerMode != 0;
         try
         {
-            return SafeMigrationCatalogQueryLimits.MySqlMaximumUtf8PayloadBytes(maximumPacket);
+            return SafeMigrationCatalogQueryLimits.MySqlMaximumUtf8PayloadBytes(profile.MaximumPacket);
         }
         catch (ArgumentOutOfRangeException exception)
         {
             throw new InvalidOperationException("MySQL returned an invalid max_allowed_packet value.", exception);
         }
+    }
+
+    /// <summary>
+    /// Rejects malformed native packet/owner profiles instead of minting speculative table equivalence.
+    /// </summary>
+    /// <param name="reader">The exact two-field required native transport result.</param>
+    /// <param name="cancellationToken">The caller's cancellation token for both protocol reads.</param>
+    /// <returns>The exact positive packet ceiling and native table-name mode zero, one or two.</returns>
+    internal static async Task<(long MaximumPacket, int OwnerMode)> ReadNativeTransportProfileAsync(
+        DbDataReader reader,
+        CancellationToken cancellationToken
+    )
+    {
+        if (reader.FieldCount != 2 || !await reader.ReadAsync(cancellationToken)
+            || reader.IsDBNull(0) || reader.IsDBNull(1)
+            || reader.GetValue(0) is not (int or uint or long or ulong)
+            || reader.GetValue(1) is not (sbyte or byte or short or ushort or int or uint or long or ulong))
+        {
+            throw new InvalidOperationException("MySQL did not return its packet and owner-identity profile.");
+        }
+
+        var packet = Convert.ToDecimal(reader.GetValue(0), CultureInfo.InvariantCulture);
+        var ownerMode = Convert.ToDecimal(reader.GetValue(1), CultureInfo.InvariantCulture);
+        if (packet is <= 0 or > long.MaxValue || ownerMode is < 0 or > 2
+            || await reader.ReadAsync(cancellationToken))
+        {
+            throw new InvalidOperationException("MySQL returned an invalid packet or owner-identity profile.");
+        }
+
+        return ((long)packet, (int)ownerMode);
     }
 
     private static async Task ReadAnalysisAsync(

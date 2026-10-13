@@ -8,6 +8,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 /// <param name="IncludeEligible">Whether the live physical shape supports an included column.</param>
 /// <param name="Collation">The live collation, if the type has one.</param>
 /// <param name="UsesDefaultCollation">Whether the live collation equals the database default.</param>
+/// <param name="CheckEligible">Whether native integer CHECK validation supports every live operand facet.</param>
 internal sealed record SqlServerProjectedKeyColumn(
     string StoreType,
     int DeclaredBytes,
@@ -15,7 +16,8 @@ internal sealed record SqlServerProjectedKeyColumn(
     bool KeyEligible,
     bool IncludeEligible,
     string? Collation,
-    bool UsesDefaultCollation
+    bool UsesDefaultCollation,
+    bool CheckEligible = false
 );
 
 /// <summary>Contains one bounded immutable live-table proof for projected keys.</summary>

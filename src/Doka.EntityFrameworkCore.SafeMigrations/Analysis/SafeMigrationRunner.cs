@@ -348,7 +348,8 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
                     _providerAnalyzer as ISafeMigrationProjectedDependencyAnalyzer,
                     _providerAnalyzer as ISafeMigrationIndexPrerequisiteSource,
                     _providerAnalyzer as ISafeMigrationProjectedColumnAnalyzer,
-                    _providerAnalyzer as ISafeMigrationRenamedTableAnalyzer)
+                    _providerAnalyzer as ISafeMigrationRenamedTableAnalyzer,
+                    _providerAnalyzer as ISafeMigrationLivePrerequisiteSource)
                 : null;
 
             var safeOperationOrdinal = 0;

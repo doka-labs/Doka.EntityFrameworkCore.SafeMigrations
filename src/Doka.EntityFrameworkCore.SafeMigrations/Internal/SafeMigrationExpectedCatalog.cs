@@ -59,14 +59,29 @@ internal static partial class SafeMigrationExpectedCatalog
     public static IReadOnlyList<SafeMigrationExpectedTableInventory> Create(
         IReadOnlyList<MigrationOperation> operations,
         Func<string?, string?> normalizeSchema
+    ) => Create(operations, normalizeSchema, StringComparer.Ordinal);
+
+    /// <summary>Projects ordered inventory using explicitly qualified physical table-name equality.</summary>
+    /// <param name="operations">The complete ordered operation stream.</param>
+    /// <param name="normalizeSchema">The provider's existing qualifier normalizer.</param>
+    /// <param name="tableComparer">The verified provider table-name equality; other identifiers remain unchanged.</param>
+    /// <returns>Terminal inventories grouped by the supplied physical owner contract.</returns>
+    public static IReadOnlyList<SafeMigrationExpectedTableInventory> Create(
+        IReadOnlyList<MigrationOperation> operations,
+        Func<string?, string?> normalizeSchema,
+        StringComparer tableComparer
     )
     {
         ArgumentNullException.ThrowIfNull(operations);
         ArgumentNullException.ThrowIfNull(normalizeSchema);
+        ArgumentNullException.ThrowIfNull(tableComparer);
 
-        SafeMigrationExpectedIndexTransitions.Validate(operations, normalizeSchema);
+        SafeMigrationExpectedIndexTransitions.Validate(operations, normalizeSchema, tableComparer);
 
-        var tables = new Dictionary<TableKey, MutableTable>(new TableKeyComparer(normalizeSchema));
+        // WHY: Owner equality must be identical in dependency validation and
+        // inventory projection. Otherwise a table alias can strand an index
+        // declaration without changing the actual physical resource.
+        var tables = new Dictionary<TableKey, MutableTable>(new TableKeyComparer(normalizeSchema, tableComparer));
         foreach (var envelope in operations.OfType<SafeMigrationOperation>())
         {
             Apply(tables, envelope.Intent);
@@ -174,13 +189,14 @@ internal static partial class SafeMigrationExpectedCatalog
     );
 
     private sealed class TableKeyComparer(
-        Func<string?, string?> normalizeSchema
+        Func<string?, string?> normalizeSchema,
+        StringComparer tableComparer
     ) : IEqualityComparer<TableKey>
     {
         public bool Equals(
             TableKey left,
             TableKey right
-        ) => StringComparer.Ordinal.Equals(left.Table, right.Table)
+        ) => tableComparer.Equals(left.Table, right.Table)
             && StringComparer.Ordinal.Equals(
                 normalizeSchema(left.Schema),
                 normalizeSchema(right.Schema));
@@ -188,7 +204,7 @@ internal static partial class SafeMigrationExpectedCatalog
         public int GetHashCode(
             TableKey value
         ) => HashCode.Combine(
-            StringComparer.Ordinal.GetHashCode(value.Table),
+            tableComparer.GetHashCode(value.Table),
             normalizeSchema(value.Schema) is { } schema
                 ? StringComparer.Ordinal.GetHashCode(schema)
                 : 0);

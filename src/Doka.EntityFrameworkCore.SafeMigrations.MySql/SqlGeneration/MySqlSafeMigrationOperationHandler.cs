@@ -102,7 +102,11 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             requiredDatabaseQualifiers: _planCapture.HasGenerationContract
                 ? _planCapture.GenerationDatabaseQualifiers
                 : null,
-            requiresNullFreeBackfill: _planCapture.RequiresNullFreeBackfill(operation));
+            requiresNullFreeBackfill: _planCapture.RequiresNullFreeBackfill(operation),
+            nativeTableAlternative: operation.Intent is EnsureTableIntent nativeTable
+                ? _planCapture.GetGenerationTableAlternative(nativeTable)
+                : null,
+            nativeNullFreeBackfillCondition: _planCapture.GetGenerationNullFreeBackfillCondition(operation));
         if (_planCapture.IsActive)
         {
             _planCapture.Record(context.OperationOrdinal, operation, runtimePlan);

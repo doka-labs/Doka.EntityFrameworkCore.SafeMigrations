@@ -6,6 +6,61 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
+### Fixed
+
+- Complete sparse ordered constraint and index prerequisites from independently
+  captured live metadata. Adding a nullable FK column to a populated existing
+  child no longer requires redundant convergence of its unchanged principal.
+  Preserve actual candidate-key identities, backing-index ownership, endpoint
+  compatibility, accepted-operation ordering and independent row proofs across
+  providers. Mixed old/new key parts retain native uniqueness semantics;
+  defaults, generated values, dropped or replaced keys and invalidated row
+  evidence do not acquire implicit authorization.
+- Remove SQLite's target-model/whole-segment nullable-FK shortcut. Only an
+  already accepted NULL-preserving addition or a current empty-owner proof can
+  qualify existing rows. A future or rejected addition, non-NULL default or
+  generated value cannot satisfy that proof. Native parent-key collations and
+  explicit unique-index equality facets remain independent requirements.
+- Preserve SQLite's strict allowed/required constraint multiplicity and prevent
+  EF from moving a separately appended FK ahead of its required column during
+  baseline generation. Keep original table-column contracts, owned transaction
+  boundaries and final foreign-key validation intact.
+- Qualify PostgreSQL mixed live/projected structured CHECK operand binding
+  without evaluating user functions or application-row expressions. Keep
+  unsupported or unresolved bindings blocked and preserve native postconditions.
+- Qualify PostgreSQL physical index-key types against native access-method and
+  operator-class selection. Reject incompatible inputs such as ordinary Btree
+  keys on `json` before DDL or unique-data probes; preserve supported `jsonb`,
+  domain, array and explicitly bound operator-class contracts. INCLUDE columns
+  and genuinely computed key results are not substituted as physical inputs.
+  Preserve earlier typed EF column operations, ordered index replacements and
+  exact native identifier/cast deparsing without rewriting historical migrations.
+  Route occupied native names through the ordinary metadata classifier; only
+  eligible unoccupied candidates need the additional input fence before data
+  probes. Share identical certificates within that bounded statement to avoid
+  native SQL/JIT multiplication without changing session settings or weakening
+  capability, identity, cancellation or payload checks.
+  Keep UNIQUE conflict classification metadata-only before separately qualified
+  duplicate-row probes, and match unqualified explicit operator classes by
+  their actual visible native identity rather than a hidden same-named class.
+- Preserve source-qualified FK/key evidence through accepted, non-data,
+  unchanged-layout nullability-only `EnsureColumn` repairs after FK removal.
+  Widening, unknown sources, writes and invalidated dependencies do not inherit
+  this certificate, and required-column staging retains its original live proof.
+- Invalidate affected projected index/UNIQUE aliases using the provider's
+  column-member comparer, without folding distinct table or schema owners.
+- Reject unsafe MySQL multi-valued FK supporting indexes and index removal
+  while an affected live FK remains. Preserve native ordinary supporting-index
+  eligibility and automatic-index name collision checks independently of
+  optimizer visibility and unrelated trailing keys.
+- Apply the independently observed MySQL/MariaDB table-case mode consistently
+  to live transition, unique-index and backfill catalogs. Connection-free
+  generation retains exact and folded owner alternatives and selects them only
+  through the native runtime mode; it does not infer a server profile. Preserve
+  mode-zero case-distinct owners, exact database qualifiers and independent
+  column/index identity rules. A later unique declaration cannot be hidden by
+  another spelling of the same native backfill owner.
+
 ## [10.4.10] - 2026-10-13
 
 Prepare stable 10.4.10 for all five packages. This patch corrects ordered

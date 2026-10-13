@@ -603,6 +603,27 @@ replacement indexes, primary keys, and unique constraints are checked against
 the complete physical key width and 16-part limit before DDL. Composite primary
 and unique-key identity is compared from ordinal catalog rows and is therefore
 independent of `group_concat_max_len`.
+Sparse prerequisite projection combines independently captured unchanged live
+members with preceding accepted additions. An unchanged FK principal does not
+need a redundant table/column/key convergence operation. Native endpoint and
+candidate-key compatibility, exact surviving constraint/backing-index identity,
+and row safety remain separate requirements. Newly accepted NULL-preserving
+additions or current empty-owner proof can qualify old rows; existing nullable
+columns, future/rejected additions, non-NULL defaults and generated values
+cannot. Native NULL uniqueness differences remain enforced. See
+[sparse live prerequisites](implementation-design.md#sparse-live-constraint-prerequisites).
+The [diagnostic runbook](runbooks/failure-codes.md#analyzer-and-projection-codes)
+distinguishes dynamic prerequisite requalification from actual operation
+authorization. SQLite native key-semantics diagnostics are difference facets,
+not new top-level analysis or decision codes.
+
+PostgreSQL physical index inputs additionally require a native compatible
+operator class and the independently requested access-method flags before a
+Missing index becomes executable. INCLUDE columns are not key inputs, and
+computed expression results retain their separate contract rather than
+borrowing an operand's type. Unknown bindings remain blocked; qualification
+does not execute user support functions or application-row expressions.
+
 Source-frozen model-managed operations participate in ordered row projection:
 accepted ensures record target rows, accepted updates replace captured source
 state with target state, and accepted deletes record absence. The projection

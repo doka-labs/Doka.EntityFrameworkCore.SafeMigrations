@@ -10,6 +10,7 @@ internal sealed partial class SafeMigrationPreflightProjection :
     private readonly ISafeMigrationIndexPrerequisiteSource? _indexPrerequisiteSource;
     private readonly ISafeMigrationProjectedColumnAnalyzer? _projectedColumnAnalyzer;
     private readonly ISafeMigrationRenamedTableAnalyzer? _renamedTableAnalyzer;
+    private readonly ISafeMigrationLivePrerequisiteSource? _livePrerequisiteSource;
     private readonly Dictionary<TableKey, TableKey> _renamedTableSources;
     private readonly HashSet<TableKey> _projectedForeignKeyOwners;
     private Dictionary<TableKey, HashSet<string>>? _projectedForeignKeyColumns;
@@ -47,6 +48,15 @@ internal sealed partial class SafeMigrationPreflightProjection :
     /// <summary>Gets the revision of globally invalidated row evidence.</summary>
     internal long DataMutationVersion => _providerDataMutationVersion;
 
+    /// <summary>Creates invocation-local ordered evidence without seeding facts from the target model.</summary>
+    /// <param name="providerOperationProjection">Provider-certified ordinary-operation effects.</param>
+    /// <param name="projectedKeyAnalyzer">Independent native key feasibility checks.</param>
+    /// <param name="objectIdentityNormalizer">The active provider's physical identity contract.</param>
+    /// <param name="projectedDependencyAnalyzer">Native dependency and trigger-risk qualification.</param>
+    /// <param name="indexPrerequisiteSource">Source-bound physical index dependencies.</param>
+    /// <param name="projectedColumnAnalyzer">Native column-transition qualification.</param>
+    /// <param name="renamedTableAnalyzer">Source-bound renamed owner evidence.</param>
+    /// <param name="livePrerequisiteSource">Requested immutable live facts for sparse accepted operations.</param>
     public SafeMigrationPreflightProjection(
         ISafeMigrationProviderOperationProjection? providerOperationProjection = null,
         ISafeMigrationProjectedKeyAnalyzer? projectedKeyAnalyzer = null,
@@ -54,7 +64,8 @@ internal sealed partial class SafeMigrationPreflightProjection :
         ISafeMigrationProjectedDependencyAnalyzer? projectedDependencyAnalyzer = null,
         ISafeMigrationIndexPrerequisiteSource? indexPrerequisiteSource = null,
         ISafeMigrationProjectedColumnAnalyzer? projectedColumnAnalyzer = null,
-        ISafeMigrationRenamedTableAnalyzer? renamedTableAnalyzer = null
+        ISafeMigrationRenamedTableAnalyzer? renamedTableAnalyzer = null,
+        ISafeMigrationLivePrerequisiteSource? livePrerequisiteSource = null
     )
     {
         _providerOperationProjection = providerOperationProjection;
@@ -64,6 +75,7 @@ internal sealed partial class SafeMigrationPreflightProjection :
         _indexPrerequisiteSource = indexPrerequisiteSource;
         _projectedColumnAnalyzer = projectedColumnAnalyzer;
         _renamedTableAnalyzer = renamedTableAnalyzer;
+        _livePrerequisiteSource = livePrerequisiteSource;
 
         var tableComparer = new TableKeyComparer(objectIdentityNormalizer);
         var indexComparer = new IndexKeyComparer(objectIdentityNormalizer);
@@ -86,6 +98,10 @@ internal sealed partial class SafeMigrationPreflightProjection :
             new ModelManagedRowKeyComparer(objectIdentityNormalizer));
     }
 
+    /// <summary>Qualifies an immutable live observation against only preceding accepted physical evidence.</summary>
+    /// <param name="operation">The current exact safe operation, not a future target-model proposal.</param>
+    /// <param name="liveAnalysis">The independently captured initial provider observation.</param>
+    /// <returns>The ordered observation, retaining independent unsupported and uncertainty boundaries.</returns>
     public SafeMigrationProviderAnalysis Project(
         SafeMigrationOperation operation,
         SafeMigrationProviderAnalysis liveAnalysis
@@ -137,6 +153,30 @@ internal sealed partial class SafeMigrationPreflightProjection :
             {
                 ProviderDeferredOriginOrdinal = deferredOrdinal,
             };
+        }
+
+        if (liveAnalysis.ObservedState == SafeMigrationObservedState.Unsupported
+            && operation.Intent is EnsureForeignKeyIntent foreignKey
+            && _livePrerequisiteSource?.CanRequalifyLiveForeignKeyPrerequisites(foreignKey, liveAnalysis, this) == true)
+        {
+            // WHY: An exact accepted removal can discharge a dynamic native
+            // capability blocker. It proves neither the reference key nor rows;
+            // continue through the ordinary structural and row-proof gates.
+            liveAnalysis = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.PrerequisiteMissing,
+                SafeMigrationRepairCapability.None, postconditionSatisfied: false,
+                "projected_live_foreign_key_prerequisites_requalified");
+        }
+
+        if (liveAnalysis.ObservedState == SafeMigrationObservedState.Unsupported
+            && operation.Intent is DropIndexIntent dropIndex
+            && _livePrerequisiteSource?.CanRequalifyLiveDropIndexPrerequisites(dropIndex, liveAnalysis, this) == true)
+        {
+            // WHY: Only certified removal of every affected physical dependency
+            // discharges this native index-removal blocker. Presence is a metadata
+            // fact; normal owner, tombstone and provider-risk checks still follow.
+            liveAnalysis = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Matching,
+                SafeMigrationRepairCapability.None, postconditionSatisfied: false,
+                "projected_live_drop_index_prerequisites_requalified");
         }
 
         if (_projectedDependencyAnalyzer?.ValidateCapturedProjection(operation, liveAnalysis, this)
@@ -262,6 +302,13 @@ internal sealed partial class SafeMigrationPreflightProjection :
                 : null;
     }
 
+    /// <summary>
+    /// Records accepted physical effects without minting evidence from rejected or existence-only wishes.
+    /// </summary>
+    /// <param name="operation">The operation whose policy decision has just been made.</param>
+    /// <param name="liveAnalysis">The immutable provider observation used to qualify its native source.</param>
+    /// <param name="analysis">The ordered observation used for this decision.</param>
+    /// <param name="decision">The actual policy outcome; only accepted effects may change later prerequisites.</param>
     public void Observe(
         SafeMigrationOperation operation,
         SafeMigrationProviderAnalysis liveAnalysis,
@@ -296,15 +343,12 @@ internal sealed partial class SafeMigrationPreflightProjection :
             && analysis.ObservedState == SafeMigrationObservedState.Different
             && analysis.RepairCapability == SafeMigrationRepairCapability.Safe
             && !analysis.RepairMutatesData
-            && _projectedColumnAnalyzer is { } columnAnalyzer
+            && _projectedColumnAnalyzer is not null
             && (operation.Intent switch
             {
                 AlterColumnIntent alter => CanReuseColumnProofAfterForeignKeyDrops(
                     alter, liveAnalysis, new TableKey(alter.Table, alter.Schema)),
-                EnsureColumnIntent ensure => CanReuseColumnProofAfterForeignKeyDrops(
-                        ensure, liveAnalysis, new TableKey(ensure.Table, ensure.Schema))
-                    && TryGetAcceptedColumnSource(ensure, out var source)
-                    && columnAnalyzer.PreservesSiblingColumnProofsAfterForeignKeyDrops(ensure, source, liveAnalysis),
+                EnsureColumnIntent => analysis.RepairPreservesIntrinsicColumnLayout,
                 _ => false,
             });
 
@@ -336,7 +380,7 @@ internal sealed partial class SafeMigrationPreflightProjection :
                 Observe(value, decision);
                 break;
             case EnsureColumnIntent value:
-                Observe(value, liveAnalysis, decision, preservesForeignKeyColumnProofs);
+                Observe(value, liveAnalysis, analysis, decision, preservesForeignKeyColumnProofs);
                 break;
             case AlterColumnIntent value:
                 Observe(value, analysis, decision, preservesForeignKeyColumnProofs);
@@ -1210,6 +1254,9 @@ internal sealed partial class SafeMigrationPreflightProjection :
 
         public bool PrimaryKeyWasDropped { get; private set; }
 
+        /// <summary>Gets whether accepted Apply established the current PK's physical lifetime.</summary>
+        public bool PrimaryKeyCreatedByProjection { get; private set; }
+
         public ExpectedPrimaryKeyDefinition? RemovedPrimaryKey { get; private set; }
 
         public ProjectedDefinitionSet<ExpectedUniqueConstraintDefinition> UniqueConstraints { get; } =
@@ -1221,11 +1268,17 @@ internal sealed partial class SafeMigrationPreflightProjection :
         /// <summary>Accepts key shape with separate authored-alias and physical-identity proof.</summary>
         /// <param name="definition">The accepted key shape.</param>
         /// <param name="physicalName">The separately proven physical name, when available.</param>
+        /// <param name="createdByProjection">Whether an accepted Apply created this exact physical lifetime.</param>
         public void AcceptPrimaryKey(
             ExpectedPrimaryKeyDefinition definition,
-            string? physicalName
+            string? physicalName,
+            bool createdByProjection = false
         )
         {
+            PrimaryKeyCreatedByProjection = createdByProjection
+                || (PrimaryKeyCreatedByProjection && PrimaryKey is not null
+                    && SameColumns(PrimaryKey.Columns, definition.Columns, _objectIdentityNormalizer)
+                    && StringComparer.Ordinal.Equals(PrimaryKeyPhysicalName, physicalName));
             PrimaryKey = definition;
             PrimaryKeyPhysicalName = physicalName;
             PrimaryKeyWasDropped = false;
@@ -1238,6 +1291,7 @@ internal sealed partial class SafeMigrationPreflightProjection :
             PrimaryKey = null;
             PrimaryKeyPhysicalName = null;
             PrimaryKeyWasDropped = true;
+            PrimaryKeyCreatedByProjection = false;
         }
 
         /// <summary>Rebinds accepted key owners while preserving physical names and semantic aliases.</summary>
@@ -1329,6 +1383,51 @@ internal sealed partial class SafeMigrationPreflightProjection :
         public bool Any(Func<T, bool> predicate) =>
             _physicalDefinitions.Values.Any(value => predicate(value.Definition))
             || _unboundDefinitions?.Any(predicate) == true;
+
+        /// <summary>Tests accepted shapes with explicit state instead of allocating a per-query closure.</summary>
+        /// <typeparam name="TState">The immutable caller's lookup state.</typeparam>
+        /// <param name="state">The state consumed by the static predicate.</param>
+        /// <param name="predicate">The non-capturing accepted-shape predicate.</param>
+        public bool Any<TState>(TState state, Func<T, TState, bool> predicate)
+        {
+            foreach (var physical in _physicalDefinitions.Values)
+            {
+                if (predicate(physical.Definition, state))
+                {
+                    return true;
+                }
+            }
+
+            if (_unboundDefinitions is not null)
+            {
+                foreach (var definition in _unboundDefinitions)
+                {
+                    if (predicate(definition, state))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>Tests only fresh accepted Apply lifetimes, never matching aliases or shape-only facts.</summary>
+        /// <typeparam name="TState">The immutable caller's lookup state.</typeparam>
+        /// <param name="state">The state consumed by the static predicate.</param>
+        /// <param name="predicate">The non-capturing current-shape predicate.</param>
+        public bool AnyCreated<TState>(TState state, Func<T, TState, bool> predicate)
+        {
+            foreach (var physical in _physicalDefinitions.Values)
+            {
+                if (physical.CreatedByProjection && predicate(physical.Definition, state))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
 
         /// <summary>Retains semantic prerequisite shape without inventing a physical member name.</summary>
         /// <param name="definition">The shape proven by a matching existing-table contract.</param>
@@ -1542,6 +1641,16 @@ internal sealed partial class SafeMigrationPreflightProjection :
             present = _physicalDefinitions.ContainsKey(name);
 
             return present || _missingNames.Contains(name) || _aliases.ContainsKey(name);
+        }
+
+        /// <summary>Reads an accepted exact physical definition without following a logical alias.</summary>
+        /// <param name="name">The independently certified physical key name.</param>
+        /// <param name="definition">The definition of that accepted physical lifetime.</param>
+        public bool TryGetPhysicalDefinition(string name, [NotNullWhen(true)] out T? definition)
+        {
+            definition = _physicalDefinitions.TryGetValue(name, out var physical) ? physical.Definition : null;
+
+            return definition is not null;
         }
 
         /// <summary>Checks whether an accepted physical creation proves the current object's fresh lifetime.</summary>

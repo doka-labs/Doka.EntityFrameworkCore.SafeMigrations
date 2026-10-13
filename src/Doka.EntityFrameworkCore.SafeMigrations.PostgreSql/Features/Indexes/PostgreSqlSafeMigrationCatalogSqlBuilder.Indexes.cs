@@ -9,7 +9,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         : null;
 
     private PostgreSqlSafeMigrationRuntimePlan BuildEnsureIndex(
-        EnsureIndexIntent intent
+        EnsureIndexIntent intent,
+        bool includeRuntimeInputGuard
     )
     {
         var definition = intent.Definition;
@@ -27,20 +28,16 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         // reject any occupied name before CREATE INDEX can raise raw 42P07.
         var namespaceCollision = RelationNameExists(definition.Name, definition.Schema);
 
-        var dataBlocked = definition.Unique ? UniqueIndexDataBlocked(definition) : "FALSE";
+        // WHY: PostgreSQL binds GROUP BY before evaluating CASE. An occupied
+        // but different index can request JSON, whose equality operator is
+        // absent. Read-only analysis first classifies metadata, then submits
+        // bounded row probes only for independently qualified native inputs.
+        var dataBlocked = definition.Unique && includeRuntimeInputGuard
+            ? UniqueIndexDataBlocked(definition) : "FALSE";
         var unsupportedConditions = new List<string>();
         if (definition.NullsDistinct == false)
         {
             unsupportedConditions.Add("current_setting('server_version_num')::integer < 150000");
-        }
-
-        if (definition.Keys.Any(static key => key.SortOrder != SafeMigrationIndexSortOrder.ProviderDefault
-                || key.NullOrder != SafeMigrationIndexNullOrder.ProviderDefault))
-        {
-            var method = definition.Method ?? "btree";
-            unsupportedConditions.Add(
-                "pg_catalog.pg_indexam_has_property((SELECT am.oid FROM pg_catalog.pg_am am "
-                + $"WHERE am.amname = {Literal(method)}), 'can_order') IS NOT TRUE");
         }
 
         var unsupported = unsupportedConditions.Count == 0
@@ -53,7 +50,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             requireExpectedName: false,
             requireIndependentIdentity: true);
 
-        return Plan(
+        var plan = Plan(
             $"CASE WHEN {unsupported} THEN 'unsupported' "
             + $"WHEN NOT {table} THEN 'prerequisite_missing' "
             + $"WHEN {exists} AND {matching} THEN 'matching' "
@@ -72,11 +69,16 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             // Ordered DropIndex -> EnsureIndex projection still needs the
             // duplicate-row proof hidden by an exact-name shape clash. The
             // code carries evidence into Core and never authorizes mutation.
-            ClassificationCodeExpression = definition.Unique
+            ClassificationCodeExpression = definition.Unique && includeRuntimeInputGuard
                 ? $"CASE WHEN {exists} AND NOT ({matching}) AND {dataBlocked} "
                     + "THEN 'index_replacement_data_blocked' ELSE NULL END"
                 : null,
         };
+
+        return includeRuntimeInputGuard
+            ? AddIndexInputRuntimeGuard(plan, definition, satisfied,
+                exists + " OR " + nonCanonicalAlias + " OR " + namespaceCollision)
+            : plan;
     }
 
     private string BuildIndexDiagnosticEvidence(
@@ -229,14 +231,19 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 continue;
             }
 
-            var storedExpression = IndexStoredExpression(key);
-            var storedColumn = key.Column
-                ?? (storedExpression is SafeMigrationSqlIdentifierExpression { Parts.Count: 1 } identifier
-                    ? identifier.Parts[0]
-                    : null);
+            var physicalMember = key.Column is null ? IndexPhysicalMember(key) : null;
+            var storedColumn = key.Column ?? physicalMember?.Name;
 
             if (storedColumn is not null)
             {
+                if (physicalMember is { } member)
+                {
+                    // WHY: Native ComputeIndexAttrs folds an explicitly
+                    // qualified Var into the same physical indkey. Exact
+                    // owner qualification must survive that normalization.
+                    conditions.Add(IndexMemberOwnerPredicate(definition, member));
+                }
+
                 // WHY: Per-column deparsing omits COLLATE decorations; only the physical
                 // catalog identity proves that a key uses its column's default collation.
                 conditions.Add($"i.indkey[{optionIndex}] > 0");
@@ -245,7 +252,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                     + "WHERE key_attribute.attrelid = i.indrelid "
                     + $"AND key_attribute.attnum = i.indkey[{optionIndex}] "
                     + $"AND key_attribute.attname = {Literal(storedColumn)}"
-                    + (key.Collation is null && key.Column is not null
+                    + (key.Collation is null && (key.Column is not null
+                            || key.StructuredExpression is SafeMigrationSqlIdentifierExpression)
                         ? $" AND i.indcollation[{optionIndex}] = key_attribute.attcollation)"
                         : ")"));
             }
@@ -273,7 +281,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                         "collname",
                         key.Collation!));
             }
-            else if (key.Column is null)
+            else if (key.Column is null
+                && key.StructuredExpression is not SafeMigrationSqlIdentifierExpression)
             {
                 conditions.Add(
                     ExpressionIndexDefaultCollationMatches(definition, key, optionIndex));
@@ -426,7 +435,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             + $"WHERE NOT COALESCE({facets}, FALSE))";
     }
 
-    private string UniqueIndexDataBlocked(
+    /// <summary>Builds the duplicate-row predicate after the caller has qualified its native input binding.</summary>
+    /// <param name="definition">The exact requested unique key, predicate and NULL semantics.</param>
+    /// <returns>A read-only Boolean duplicate-row probe.</returns>
+    internal string UniqueIndexDataBlocked(
         ExpectedIndexDefinition definition
     )
     {
@@ -506,6 +518,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             roots.Add(($"({Literal("(")} || {catalogCandidate} || {Literal(")")})", true));
             roots.Add((deparsedCandidate, true));
             roots.Add(($"({Literal("(")} || {deparsedCandidate} || {Literal(")")})", true));
+            if (_expressionRenderer.RenderCatalogIndexCastCandidateSql(storedExpression, Literal) is { } indexCast)
+            {
+                roots.Add((indexCast, true));
+            }
         }
 
         // WHY: pg_get_indexdef with a column position returns only the expression. Collation
@@ -553,7 +569,12 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         }
 
         var name = parts[^1];
-        var namespaceCondition = parts.Length == 1 ? string.Empty : $" AND ns.nspname = {Literal(parts[0])}";
+        // WHY: Same-spelling classes in another schema are not the native
+        // unqualified ResolveOpClass binding. Visibility is checked against
+        // the actual stored OID; explicit schemas retain exact identities.
+        var namespaceCondition = parts.Length == 1
+            ? $" AND pg_catalog.pg_opclass_is_visible({alias}.oid)"
+            : $" AND ns.nspname = {Literal(parts[0])}";
 
         return $"EXISTS (SELECT 1 FROM {catalog} {alias} "
             + $"JOIN pg_catalog.pg_namespace ns ON ns.oid = {alias}.{namespaceColumn} "
@@ -629,21 +650,34 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
     private string ExpressionMatches(
         string catalogExpression,
-        SafeMigrationSqlExpression expected
+        SafeMigrationSqlExpression expected,
+        string? relationOid = null
     )
     {
         var rendered = _expressionRenderer.Render(expected);
         var catalogCandidate = _expressionRenderer.RenderCatalogCandidateSql(expected, Literal);
         var deparsedCandidate = _expressionRenderer.RenderCatalogDeparsedCandidateSql(expected, Literal);
-        var candidates = new[]
+        var nativeCandidate = _expressionRenderer.RenderCatalogNativeDeparsedCandidateSql(
+            expected, Literal, relationOid);
+        IEnumerable<string> candidates = new[]
             {
                 Literal(rendered), Literal($"({rendered})"), catalogCandidate,
                 $"({Literal("(")} || {catalogCandidate} || {Literal(")")})", deparsedCandidate,
                 $"({Literal("(")} || {deparsedCandidate} || {Literal(")")})",
-            }
-            .Distinct(StringComparer.Ordinal)
+            };
+
+        if (nativeCandidate is not null)
+        {
+            // WHY: Simple structured expressions keep the existing six-slot
+            // allocation shape. Only affected native literal/special forms
+            // append their additional exact candidate and outer parentheses.
+            candidates = candidates.Concat([nativeCandidate,
+                $"({Literal("(")} || {nativeCandidate} || {Literal(")")})"]);
+        }
+
+        var predicates = candidates.Distinct(StringComparer.Ordinal)
             .Select(candidate => $"{catalogExpression} = {candidate}");
 
-        return $"({string.Join(" OR ", candidates)})";
+        return $"({string.Join(" OR ", predicates)})";
     }
 }

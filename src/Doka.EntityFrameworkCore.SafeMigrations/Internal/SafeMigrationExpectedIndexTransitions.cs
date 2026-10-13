@@ -12,13 +12,24 @@ internal static class SafeMigrationExpectedIndexTransitions
     public static void Validate(
         IReadOnlyList<MigrationOperation> operations,
         Func<string?, string?> normalizeSchema
+    ) => Validate(operations, normalizeSchema, StringComparer.Ordinal);
+
+    /// <summary>Validates ordered index dependencies with explicit physical table-name equality.</summary>
+    /// <param name="operations">The complete ordered operation stream.</param>
+    /// <param name="normalizeSchema">The provider's existing qualifier normalizer.</param>
+    /// <param name="tableComparer">The verified owner comparer; column and index identity remain unchanged.</param>
+    public static void Validate(
+        IReadOnlyList<MigrationOperation> operations,
+        Func<string?, string?> normalizeSchema,
+        StringComparer tableComparer
     )
     {
         ArgumentNullException.ThrowIfNull(operations);
         ArgumentNullException.ThrowIfNull(normalizeSchema);
+        ArgumentNullException.ThrowIfNull(tableComparer);
 
         var tables = new Dictionary<TableKey, Dictionary<string, ExpectedIndexDefinition>>(
-            new TableKeyComparer(normalizeSchema));
+            new TableKeyComparer(normalizeSchema, tableComparer));
         foreach (var operation in operations.OfType<SafeMigrationOperation>())
         {
             Apply(tables, operation.Intent, normalizeSchema);
@@ -269,13 +280,14 @@ internal static class SafeMigrationExpectedIndexTransitions
     );
 
     private sealed class TableKeyComparer(
-        Func<string?, string?> normalizeSchema
+        Func<string?, string?> normalizeSchema,
+        StringComparer tableComparer
     ) : IEqualityComparer<TableKey>
     {
         public bool Equals(
             TableKey left,
             TableKey right
-        ) => StringComparer.Ordinal.Equals(left.Table, right.Table)
+        ) => tableComparer.Equals(left.Table, right.Table)
             && StringComparer.Ordinal.Equals(
                 normalizeSchema(left.Schema),
                 normalizeSchema(right.Schema));
@@ -283,7 +295,7 @@ internal static class SafeMigrationExpectedIndexTransitions
         public int GetHashCode(
             TableKey value
         ) => HashCode.Combine(
-            StringComparer.Ordinal.GetHashCode(value.Table),
+            tableComparer.GetHashCode(value.Table),
             normalizeSchema(value.Schema) is { } schema
                 ? StringComparer.Ordinal.GetHashCode(schema)
                 : 0);

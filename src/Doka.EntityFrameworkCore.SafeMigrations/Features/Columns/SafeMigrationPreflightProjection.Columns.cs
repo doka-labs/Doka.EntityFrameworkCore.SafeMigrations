@@ -15,9 +15,19 @@ internal sealed partial class SafeMigrationPreflightProjection
             return liveAnalysis;
         }
 
-        if (CanReuseColumnProofAfterForeignKeyDrops(intent, liveAnalysis, key))
+        if (_projectedColumnAnalyzer is { } provider
+            && CanReuseColumnProofAfterForeignKeyDrops(intent, liveAnalysis, key))
         {
-            return liveAnalysis;
+            // WHY: Ensure has no authored old definition. Only an earlier accepted
+            // source plus native nullable-only qualification can preserve physical
+            // endpoint/key proofs through this repair, independently of widening.
+            return liveAnalysis.ObservedState == SafeMigrationObservedState.Different
+                && !liveAnalysis.RepairMutatesData
+                && TryGetAcceptedColumnSource(intent, out var source)
+                && provider.PreservesSiblingColumnProofsAfterForeignKeyDrops(
+                    intent, source, liveAnalysis)
+                    ? liveAnalysis.WithRepairPreservesIntrinsicColumnLayout()
+                    : liveAnalysis;
         }
 
         if (TryGetProjectedColumnDefinition(
@@ -371,6 +381,7 @@ internal sealed partial class SafeMigrationPreflightProjection
     private void Observe(
         EnsureColumnIntent intent,
         SafeMigrationProviderAnalysis liveAnalysis,
+        SafeMigrationProviderAnalysis analysis,
         SafeMigrationDecision decision,
         bool preservesForeignKeyColumnProofs
     )
@@ -397,7 +408,7 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         if (decision.Action is SafeMigrationAction.Apply or SafeMigrationAction.NoOp or SafeMigrationAction.Repair)
         {
-            ObserveAcceptedColumnDefinition(intent.Table, intent.Schema, intent.Definition, liveAnalysis, decision);
+            ObserveAcceptedColumnDefinition(intent.Table, intent.Schema, intent.Definition, analysis, decision);
         }
 
         if (decision.Action is SafeMigrationAction.Apply or SafeMigrationAction.Repair
@@ -408,7 +419,7 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         if (decision.Action is SafeMigrationAction.Apply or SafeMigrationAction.Repair)
         {
-            if (!liveAnalysis.RepairPreservesPhysicalKeys && !preservesForeignKeyColumnProofs)
+            if (!analysis.RepairPreservesPhysicalKeys && !preservesForeignKeyColumnProofs)
             {
                 InvalidateAcceptedIndexesForColumn(intent.Table, intent.Schema, intent.Definition.Name);
             }

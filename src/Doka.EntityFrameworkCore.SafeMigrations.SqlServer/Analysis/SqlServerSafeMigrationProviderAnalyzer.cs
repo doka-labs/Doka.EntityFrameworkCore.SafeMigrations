@@ -8,6 +8,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
     ISafeMigrationProjectedKeyAnalyzer,
     ISafeMigrationProjectedColumnAnalyzer,
     ISafeMigrationProjectedDependencyAnalyzer,
+    ISafeMigrationLivePrerequisiteSource,
     IDisposable,
     IAsyncDisposable
 {
@@ -55,6 +56,23 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
 
     /// <inheritdoc />
     public string? NormalizeSchema(string? schema) => schema ?? "dbo";
+
+    /// <inheritdoc />
+    public bool HasLiveColumn(string table, string? schema, string column)
+        => _dependencyGraph?.HasLiveColumn(table, schema, column) == true
+            || _projectedKeyTables.TryGetValue((schema ?? "dbo", table), out var snapshot)
+                && snapshot.Exists && snapshot.PhysicalSupported && snapshot.Columns.ContainsKey(column);
+
+    /// <inheritdoc />
+    public bool RequiresLiveForeignKeyQualification(EnsureForeignKeyIntent intent)
+        => _dependencyGraph?.RequiresLiveForeignKeyQualification(intent) == true;
+
+    /// <inheritdoc />
+    public IReadOnlyList<SafeMigrationLiveCandidateKey>? GetLiveForeignKeyCandidateKeys(
+        EnsureForeignKeyIntent intent,
+        ISafeMigrationProjectedColumnSource columns
+    )
+        => _dependencyGraph?.GetLiveForeignKeyCandidateKeys(intent, columns);
 
     /// <inheritdoc />
     public bool IsObjectIdentityMismatch(SafeMigrationProviderAnalysis analysis)
@@ -105,7 +123,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
     )
     {
         var transitionAnalysis = QualifyProjectedIntegerWidening(operation, projectedAnalysis, columns);
-        transitionAnalysis = QualifyProjectedCheckPredicate(operation, transitionAnalysis);
+        transitionAnalysis = QualifyProjectedCheckPredicate(operation, transitionAnalysis, columns);
         var dependencyAnalysis = _dependencyGraph?.ValidateProjectedOperation(operation, transitionAnalysis, columns)
             ?? transitionAnalysis;
 
@@ -387,7 +405,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
                         _catalogSqlBuilder.BuildInlineForeignKeyPrerequisite,
                         _catalogSqlBuilder.ColumnStorageEquals,
                         _catalogSqlBuilder.InlineForeignKeyPhysicalWidthIsSupported,
-                        cancellationToken)
+                        cancellationToken,
+                        _catalogSqlBuilder.BuildSparseForeignKeyPrerequisite)
                     : null;
             }
 

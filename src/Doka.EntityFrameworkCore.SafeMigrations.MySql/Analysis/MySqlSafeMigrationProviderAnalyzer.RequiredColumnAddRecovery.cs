@@ -40,12 +40,14 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
         var candidateOperations = candidates.Select(static candidate => candidate.Operation).ToArray();
         var expectedUniqueIndexes = MySqlSafeMigrationPlanCapture.CreateExpectedUniqueIndexes(
-            candidateOperations, _currentDatabase);
+            candidateOperations, _currentDatabase, TableIdentifierComparer);
 
         var expectedTableConstraints = SafeMigrationExpectedTableConstraints.FromOperations(
-            candidateOperations, schema => MySqlTableIdentity.NormalizeDatabase(schema, _currentDatabase));
+            candidateOperations, schema => MySqlTableIdentity.NormalizeDatabase(schema, _currentDatabase),
+            TableIdentifierComparer);
 
-        var backfillConstraints = MySqlBackfillConstraintCatalog.Create(candidateOperations, _currentDatabase);
+        var backfillConstraints = MySqlBackfillConstraintCatalog.Create(candidateOperations, _currentDatabase,
+            TableIdentifierComparer);
         HashSet<int>? recovered = null;
         var offset = 0;
 

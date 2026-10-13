@@ -356,7 +356,29 @@ public sealed class MySqlForeignKeyDropColumnProofTests
             result.ObservedState);
         Assert.Equal(matching ? SafeMigrationRepairCapability.None : SafeMigrationRepairCapability.Safe,
             result.RepairCapability);
-        Assert.Same(live, result);
+        Assert.Equal(live.Code, result.Code);
+        Assert.Equal(live.RequiresLiveDataProof, result.RequiresLiveDataProof);
+        Assert.Equal(live.RepairMutatesData, result.RepairMutatesData);
+        Assert.Equal(live.PostconditionSatisfied, result.PostconditionSatisfied);
+        Assert.Equal(live.OperationalImpact, result.OperationalImpact);
+        Assert.Equal(live.RepairPreservesLiveValueDomain, result.RepairPreservesLiveValueDomain);
+        Assert.Equal(live.RequiredColumnAddResumesOwnedStaging, result.RequiredColumnAddResumesOwnedStaging);
+        Assert.Same(live.IndexPhysicalEnvironment, result.IndexPhysicalEnvironment);
+        Assert.Same(live.Differences, result.Differences);
+        Assert.False(live.RepairPreservesIntrinsicColumnLayout);
+        Assert.False(live.RepairPreservesPhysicalKeys);
+
+        if (matching)
+        {
+            Assert.Same(live, result);
+            Assert.False(result.RepairPreservesIntrinsicColumnLayout);
+        }
+        else
+        {
+            Assert.NotSame(live, result);
+            Assert.True(result.RepairPreservesIntrinsicColumnLayout);
+            Assert.True(result.RepairPreservesPhysicalKeys);
+        }
     }
 
     /// <summary>Only a known same-layout non-data Ensure repair retains sibling column certificates.</summary>

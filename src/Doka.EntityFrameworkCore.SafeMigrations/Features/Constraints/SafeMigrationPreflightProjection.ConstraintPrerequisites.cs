@@ -69,7 +69,7 @@ internal sealed partial class SafeMigrationPreflightProjection
                     definition.PrimaryKey.Name);
 
             prerequisites.AcceptPrimaryKey(definition.PrimaryKey,
-                physicalName);
+                physicalName, createdByProjection: prerequisites.NewlyCreated);
         }
 
         foreach (var constraint in definition.UniqueConstraints)
@@ -238,21 +238,145 @@ internal sealed partial class SafeMigrationPreflightProjection
 
     private bool HasForeignKeyStructuralPrerequisites(
         EnsureForeignKeyIntent intent
-    ) => TryGetConstraintPrerequisites(
-                intent.Definition.Table,
-                intent.Definition.Schema,
-                intent.Definition.Columns,
-                out _)
-            && TryGetConstraintPrerequisites(
-                intent.Definition.PrincipalTable,
-                intent.Definition.PrincipalSchema,
-                intent.Definition.PrincipalColumns,
-                out _)
-            && HasAcceptedCandidateKey(
-                intent.Definition.PrincipalTable,
-                intent.Definition.PrincipalSchema,
-                intent.Definition.PrincipalColumns)
-            && ForeignKeyColumnStorageMatches(intent.Definition);
+    )
+    {
+        var definition = intent.Definition;
+        if (!HasConstraintColumns(definition.Table, definition.Schema, definition.Columns)
+            || !HasConstraintColumns(definition.PrincipalTable, definition.PrincipalSchema,
+                definition.PrincipalColumns))
+        {
+            return false;
+        }
+
+        var acceptedKey = HasAcceptedCandidateKey(definition.PrincipalTable,
+            definition.PrincipalSchema, definition.PrincipalColumns);
+
+        // WHY: A new owner can inherit native defaults absent from its raw
+        // column definitions. An explicit provider certificate requirement
+        // therefore remains authoritative for an accepted new lifetime too;
+        // the default-false contract preserves unrelated projected owners.
+        var requiresLiveQualification = _livePrerequisiteSource?.RequiresLiveForeignKeyQualification(intent) == true;
+
+        if (!requiresLiveQualification && acceptedKey && ForeignKeyColumnStorageMatches(definition))
+        {
+            return true;
+        }
+
+        // WHY: A pending stream need not converge an unchanged live principal.
+        // Only independently captured provider metadata may fill that sparse
+        // contract; Core retains ordered lifetimes and separate row evidence.
+        var liveKeys = _livePrerequisiteSource?.GetLiveForeignKeyCandidateKeys(intent, this);
+        if (liveKeys is null)
+        {
+            return false;
+        }
+
+        // WHY: A matching/no-op shape can describe an unusable native key
+        // (for example SQLite UNIQUE with another equality collation). It cannot
+        // replace a missing native candidate certificate. Only fresh accepted
+        // Apply supplies an independently established new physical key lifetime.
+        if (acceptedKey && (!requiresLiveQualification || HasCreatedCandidateKey(definition)))
+        {
+            return true;
+        }
+
+        for (var ordinal = 0; ordinal < liveKeys.Count; ordinal++)
+        {
+            if (LiveCandidateKeySurvives(definition, liveKeys[ordinal]))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Checks exact surviving native key lifetimes, not names reused by replacements.</summary>
+    private bool LiveCandidateKeySurvives(
+        ExpectedForeignKeyDefinition foreignKey,
+        SafeMigrationLiveCandidateKey candidate
+    )
+    {
+        var owner = new TableKey(foreignKey.PrincipalTable, foreignKey.PrincipalSchema);
+        if (_projectedUnknownPhysicalKeys.Contains(owner)
+            || _droppedPhysicalKeys.Contains(new IndexKey(owner.Table, owner.Schema, candidate.PhysicalName))
+            || (candidate.BackingIndexName is { } backing
+                && _droppedPhysicalKeys.Contains(new IndexKey(owner.Table, owner.Schema, backing))))
+        {
+            return false;
+        }
+
+        if (!_prerequisites.TryGetValue(owner, out var prerequisites))
+        {
+            return true;
+        }
+
+        if (prerequisites.NewlyCreated)
+        {
+            // WHY: A recreated table cannot inherit a key from its previous
+            // live lifetime, even when the authored name happens to match.
+            return false;
+        }
+
+        return candidate.Kind switch
+        {
+            SafeMigrationDatabaseObjectKind.PrimaryKey => !prerequisites.PrimaryKeyWasDropped
+                && (prerequisites.PrimaryKey is null
+                    || SameColumns(prerequisites.PrimaryKey.Columns, foreignKey.PrincipalColumns,
+                        _objectIdentityNormalizer)),
+            SafeMigrationDatabaseObjectKind.UniqueConstraint =>
+                SurvivingLiveUniqueConstraint(prerequisites, candidate.PhysicalName, foreignKey.PrincipalColumns)
+                && SurvivingLiveBackingIndex(prerequisites, candidate.BackingIndexName, foreignKey.PrincipalColumns),
+            SafeMigrationDatabaseObjectKind.Index =>
+                SurvivingLiveBackingIndex(prerequisites, candidate.PhysicalName, foreignKey.PrincipalColumns),
+            _ => false,
+        };
+    }
+
+    /// <summary>Rejects a removed or differently replaced native unique constraint.</summary>
+    private bool SurvivingLiveUniqueConstraint(
+        ProjectedPrerequisites prerequisites,
+        string name,
+        IReadOnlyList<string> columns
+    ) => !prerequisites.UniqueConstraints.TryGetPhysicalState(name, out var present)
+        || (present && prerequisites.UniqueConstraints.TryGetPhysicalDefinition(name, out var definition)
+            && SameColumns(definition.Columns, columns, _objectIdentityNormalizer));
+
+    /// <summary>Rejects a removed or differently replaced backing index, including a constraint-owned index.</summary>
+    private bool SurvivingLiveBackingIndex(
+        ProjectedPrerequisites prerequisites,
+        string? name,
+        IReadOnlyList<string> columns
+    ) => name is null || !prerequisites.Indexes.TryGetPhysicalState(name, out var present)
+        || (present && prerequisites.Indexes.TryGetPhysicalDefinition(name, out var definition)
+            && IsUnfilteredCandidateIndex(definition, columns));
+
+    /// <summary>Recognizes only ordinary complete keys without unproven provider-specific equality semantics.</summary>
+    private bool IsUnfilteredCandidateIndex(ExpectedIndexDefinition index, IReadOnlyList<string> columns)
+    {
+        if (!index.Unique || index.Filter is not null || index.StructuredFilter is not null
+            || index.Keys.Count != columns.Count)
+        {
+            return false;
+        }
+
+        for (var ordinal = 0; ordinal < columns.Count; ordinal++)
+        {
+            var part = index.Keys[ordinal];
+            // WHY: A unique index can use equality different from the parent
+            // column (SQLite COLLATE or a PostgreSQL operator class). Uniqueness
+            // alone is not an FK certificate for those provider-specific keys.
+            if (part.Column is null || part.PrefixLength is not null
+                || part.Collation is not null || part.OperatorClass is not null
+                || !(_objectIdentityNormalizer?.ColumnIdentifierComparer ?? StringComparer.Ordinal)
+                    .Equals(part.Column, columns[ordinal]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     private bool CanReuseMatchingLiveColumnPrerequisites(
         string table,
@@ -303,13 +427,45 @@ internal sealed partial class SafeMigrationPreflightProjection
     )
     {
         if (!_prerequisites.TryGetValue(new TableKey(table, schema), out prerequisites)
-            || !ContainsAllColumns(prerequisites, columns))
+            || !HasConstraintColumns(table, schema, columns))
         {
             prerequisites = null;
             return false;
         }
 
-        return columns.All(column => TryGetProjectedColumnDefinition(table, schema, column, out _));
+        return true;
+    }
+
+    /// <summary>Combines accepted members with independently live untouched members of one surviving owner.</summary>
+    private bool HasConstraintColumns(string table, string? schema, IReadOnlyList<string> columns)
+    {
+        var owner = new TableKey(table, schema);
+        if (_projectedMissingTables.Contains(owner) || IsProjectedTableStructureUnknown(table, schema))
+        {
+            return false;
+        }
+
+        foreach (var column in columns)
+        {
+            if (IsProjectedColumnMissing(table, schema, column) || IsProjectedColumnUnknown(table, schema, column))
+            {
+                return false;
+            }
+
+            if (TryGetProjectedColumnDefinition(table, schema, column, out _))
+            {
+                continue;
+            }
+
+            if ((_prerequisites.TryGetValue(owner, out var prerequisites) && prerequisites.NewlyCreated)
+                || (_projectedChangedColumns.TryGetValue(owner, out var changed) && changed.Contains(column))
+                || _livePrerequisiteSource?.HasLiveColumn(table, schema, column) != true)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private bool ProvesTableEmpty(
@@ -330,7 +486,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         IReadOnlyList<string> columns,
         ProjectedPrerequisites prerequisites
     ) => prerequisites.DataMutationVersion == _providerDataMutationVersion
-        && columns.Any(column => prerequisites.Columns[column] is
+        && columns.Any(column => prerequisites.Columns.TryGetValue(column, out var projected) && projected is
         {
             AddedToExistingTable: true,
             IsNullable: true,
@@ -364,7 +520,34 @@ internal sealed partial class SafeMigrationPreflightProjection
             return false;
         }
 
-        return prerequisites.HasCandidateKey(table, schema, columns);
+        return prerequisites.HasCandidateKey(table, schema, columns)
+            || prerequisites.Indexes.Any((Projection: this, Columns: columns),
+                static (index, state) => state.Projection.IsUnfilteredCandidateIndex(index, state.Columns));
+    }
+
+    /// <summary>Distinguishes newly established physical keys from reused live matching semantics.</summary>
+    private bool HasCreatedCandidateKey(ExpectedForeignKeyDefinition foreignKey)
+    {
+        if (!_prerequisites.TryGetValue(new TableKey(foreignKey.PrincipalTable, foreignKey.PrincipalSchema),
+                out var prerequisites))
+        {
+            return false;
+        }
+
+        var columns = foreignKey.PrincipalColumns;
+        if (prerequisites.PrimaryKeyCreatedByProjection && prerequisites.PrimaryKey is { } primary
+            && SameColumns(primary.Columns, columns, _objectIdentityNormalizer))
+        {
+            return true;
+        }
+
+        var state = (Projection: this, Columns: columns);
+
+        return prerequisites.UniqueConstraints.AnyCreated(state,
+                static (key, value) => SameColumns(key.Columns, value.Columns,
+                    value.Projection._objectIdentityNormalizer))
+            || prerequisites.Indexes.AnyCreated(state,
+                static (key, value) => value.Projection.IsUnfilteredCandidateIndex(key, value.Columns));
     }
 
     private bool ForeignKeyColumnStorageMatches(

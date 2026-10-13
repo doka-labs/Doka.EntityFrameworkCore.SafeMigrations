@@ -333,7 +333,8 @@ internal sealed partial class SafeMigrationPreflightProjection
                         ?? (liveAnalysis.ObservedState == SafeMigrationObservedState.Matching
                             ? liveAnalysis.MatchedObjectName : null);
 
-            prerequisites.AcceptPrimaryKey(intent.Definition, physicalName);
+            prerequisites.AcceptPrimaryKey(intent.Definition, physicalName,
+                createdByProjection: decision.Action == SafeMigrationAction.Apply);
         }
 
         if (decision.Action == SafeMigrationAction.Apply

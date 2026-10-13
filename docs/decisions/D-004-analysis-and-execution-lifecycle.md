@@ -75,11 +75,18 @@ safe operation after preceding SQL executes.
 Existing legacy-convergence tables retain accepted column, candidate-key,
 constraint, and index prerequisites without claiming a complete table image.
 A constraint can replace live `PrerequisiteMissing` with projected `Missing`
-only when every referenced definition is accepted and existing-row safety is
-proven by an empty table or an eligible null-preserving added column. Foreign
-keys additionally require exact principal-key order and compatible physical
-column storage. Provider data operations invalidate earlier row proofs through
-a monotonic mutation version; unknown evidence remains fail-closed.
+only when each member is currently accepted or independently observed unchanged
+native metadata, and existing-row safety is proven by an empty table or an
+eligible null-preserving added column. A bounded internal provider source
+supplements sparse streams without inventing target-model presence or requiring
+redundant principal convergence. Core owns accepted order, physical tombstones,
+backing-index lifetimes and row epochs; the provider owns native endpoint and
+candidate-key compatibility. Foreign keys still require exact principal-key
+order and compatible physical column storage. Changed, recreated or unknown
+owners cannot borrow old live facts. Provider data operations invalidate earlier
+row proofs through a monotonic mutation version; unknown evidence remains
+fail-closed. Static capability, identity, opaque SQL and deferred boundaries
+precede dynamic prerequisite requalification.
 
 Accepted semantic index evidence is removed when a later drop or column
 mutation can invalidate it. MySQL and MariaDB also re-evaluate physical key
@@ -187,7 +194,14 @@ for these boundaries:
 - PostgreSQL rollback/retry in the supported transactional path;
 - Doka cleanup after guard failure and cancellation, plus physical-session
   eviction when cleanup itself fails;
-- postflight rejection when the expected final state was not reached.
+- postflight rejection when the expected final state was not reached;
+- sparse nullable-column/index/FK application against an unchanged live
+  principal, including postflight and idempotent replay without redundant
+  parent convergence;
+- rejection of incompatible native endpoints, retired or replaced reference
+  keys, future or rejected additions, non-NULL defaults and stale row epochs;
+- mode-qualified MySQL/MariaDB transition/backfill ownership and PostgreSQL
+  physical index-input eligibility before dependent row probes.
 
 The deployment runbook additionally requires a tested restore path and
 execution fencing. A script smoke test does not prove cleanup after every
@@ -283,10 +297,18 @@ installations.
   blocked. SQLite no longer treats raw SQL as preserving table state, and raw
   SQL uncertainty takes precedence over sequence-aware live evidence. Guarded
   execution, EF history, and postflight ownership remain unchanged.
+- 2026-10-13: Supplemented sparse ordered prerequisites with bounded native
+  provider facts while retaining separate Core lifetime/row proofs and guarded
+  runtime validation. Related case-qualified owner catalogs and PostgreSQL
+  index-input fences preserve the same lifecycle; qualification evidence is
+  provider-specific, and ARM skips do not establish native SQL Server support.
 
 ### Implementation References
 
 - [Runner and connection ownership](../../src/Doka.EntityFrameworkCore.SafeMigrations/Analysis/SafeMigrationRunner.cs)
+- [Bounded native prerequisite source](../../src/Doka.EntityFrameworkCore.SafeMigrations/Analysis/ISafeMigrationLivePrerequisiteSource.cs)
+- [Ordered sparse prerequisite regressions](../../tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Unit/Features/Lifecycle/SafeMigrationPreflightProjectionTests.LivePrerequisites.cs)
+- [Native prerequisite design](../implementation-design.md#sparse-live-constraint-prerequisites)
 - [MySQL/MariaDB analyzer and analysis lock](../../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/Analysis/MySqlSafeMigrationProviderAnalyzer.cs)
 - [PostgreSQL analyzer and snapshot scope](../../src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/Analysis/PostgreSqlSafeMigrationProviderAnalyzer.cs)
 - [MySQL/MariaDB lifecycle tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Integration/Features/Lifecycle/MySqlSafeMigrationIntegrationTests.Lifecycle.cs)

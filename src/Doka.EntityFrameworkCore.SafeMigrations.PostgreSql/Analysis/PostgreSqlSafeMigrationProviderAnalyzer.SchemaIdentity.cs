@@ -248,7 +248,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     /// <summary>Preserves the identity-first diagnostic from the catalog-only prerequisite phase.</summary>
     private SafeMigrationProviderAnalysis ShortCircuitAnalysis(int ordinal, SafeMigrationObservedState state)
         => new(state, SafeMigrationRepairCapability.None, false,
-            _schemaIdentityMismatchOrdinals.Contains(ordinal) ? SchemaIdentityMismatchCode : ClassificationCode(state));
+            _schemaIdentityMismatchOrdinals.Contains(ordinal) ? SchemaIdentityMismatchCode
+                : _indexInputShortCircuitCodes?.TryGetValue(ordinal, out var code) == true ? code
+                : ClassificationCode(state));
 
     /// <summary>Prevents reuse of initial schema aliases after an executed schema/search-path boundary.</summary>
     private SafeMigrationProviderAnalysis? QualifyProjectedSchemaIdentity(

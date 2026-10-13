@@ -13,13 +13,15 @@ internal sealed class SqliteRebuildArtifactContract
     private readonly IReadOnlyDictionary<string, RemovedTableArtifacts> _removedArtifacts;
     private readonly IReadOnlySet<string> _removedTables;
     private readonly IReadOnlyDictionary<string, RebuildTableContract> _tables;
+    private readonly SqliteTableConstraintTransitions _tableConstraintTransitions;
 
     private SqliteRebuildArtifactContract(
         IReadOnlyDictionary<string, RebuildTableContract> tables,
         IReadOnlyDictionary<string, AddedTableArtifacts> addedArtifacts,
         IReadOnlyDictionary<string, RemovedTableArtifacts> removedArtifacts,
         IReadOnlySet<string> removedTables,
-        IReadOnlyList<MigrationOperation> operations
+        IReadOnlyList<MigrationOperation> operations,
+        IReadOnlyList<MigrationOperation> constraintOperations
     )
     {
         _tables = tables;
@@ -27,12 +29,20 @@ internal sealed class SqliteRebuildArtifactContract
         _operations = operations;
         _removedArtifacts = removedArtifacts;
         _removedTables = removedTables;
+        _tableConstraintTransitions = new SqliteTableConstraintTransitions(constraintOperations);
     }
 
     /// <summary>Creates a rebuild contract from the target model and ordered operations.</summary>
+    /// <param name="model">The model describing rebuild-owned artifacts.</param>
+    /// <param name="operations">The ordered rebuild history, or null for an empty stream.</param>
+    /// <param name="constraintOperations">
+    /// Only the current structural segment, or null to reuse the operation history.
+    /// </param>
+    /// <returns>The immutable rebuild and bounded table-transition contract.</returns>
     public static SqliteRebuildArtifactContract FromModel(
         IModel? model,
-        IReadOnlyList<MigrationOperation>? operations = null
+        IReadOnlyList<MigrationOperation>? operations = null,
+        IReadOnlyList<MigrationOperation>? constraintOperations = null
     )
     {
         var tables = new Dictionary<string, RebuildTableContract>(s_identifierComparer);
@@ -96,7 +106,8 @@ internal sealed class SqliteRebuildArtifactContract
             ReadAddedArtifacts(operationSnapshot),
             ReadRemovedArtifacts(operationSnapshot),
             ReadRemovedTables(operationSnapshot),
-            operationSnapshot);
+            operationSnapshot,
+            constraintOperations ?? operationSnapshot);
     }
 
     /// <summary>Creates a bounded operation-only contract when no target model applies.</summary>
@@ -111,8 +122,15 @@ internal sealed class SqliteRebuildArtifactContract
             new Dictionary<string, AddedTableArtifacts>(s_identifierComparer),
             new Dictionary<string, RemovedTableArtifacts>(s_identifierComparer),
             new HashSet<string>(s_identifierComparer),
+            operationSnapshot,
             operationSnapshot);
     }
+
+    /// <summary>Gets authored table constraints from the current structural window only.</summary>
+    /// <param name="operation">The exact table creator in that window.</param>
+    /// <returns>The bounded transition contract, or null for a non-table operation.</returns>
+    public SafeMigrationExpectedTableConstraints? GetTableConstraintTransitions(SafeMigrationOperation operation)
+        => _tableConstraintTransitions.Find(operation);
 
     /// <summary>Determines whether projected dependents still reference a principal table.</summary>
     public bool HasUnresolvedIncomingForeignKey(
@@ -622,66 +640,6 @@ internal sealed class SqliteRebuildArtifactContract
         return expected.Columns.Keys.Any(column => !actual.Columns.ContainsKey(column)
             && SqliteSqlIdentifierScanner.ReferencesIdentifier(expression, column));
     }
-
-    /// <summary>Determines whether projected nullable columns make a future foreign key safely missing.</summary>
-    public bool CanTreatProjectedForeignKeyAsMissing(
-        SqliteCatalogSnapshot snapshot,
-        ExpectedForeignKeyDefinition definition
-    )
-    {
-        if (!snapshot.Tables.TryGetValue(definition.Table, out var dependent)
-            || !snapshot.Tables.TryGetValue(definition.PrincipalTable, out var principal)
-            || !_tables.TryGetValue(definition.Table, out var expectedDependent)
-            || !_addedArtifacts.TryGetValue(definition.Table, out var added)
-            || definition.PrincipalColumns.Any(column => !principal.Columns.ContainsKey(column))
-            || !HasCandidateKey(principal, definition.PrincipalColumns))
-        {
-            return false;
-        }
-
-        var hasNullPreservingColumn = false;
-        for (var ordinal = 0; ordinal < definition.Columns.Count; ordinal++)
-        {
-            var column = definition.Columns[ordinal];
-            if (dependent.Columns.ContainsKey(column))
-            {
-                continue;
-            }
-
-            if (!added.Columns.Contains(column)
-                || !expectedDependent.Columns.TryGetValue(column, out var expectedColumn))
-            {
-                return false;
-            }
-
-            hasNullPreservingColumn |= expectedColumn.IsNullable;
-        }
-
-        // WHY: Existing rows cannot violate a composite foreign key when at
-        // least one newly materialized component is NULL. Other shapes require
-        // a live post-column data probe and therefore remain fail-closed.
-
-        return hasNullPreservingColumn;
-    }
-
-    private static bool HasCandidateKey(
-        SqliteTableSnapshot table,
-        IReadOnlyList<string> columns
-    ) => SqliteCatalogEquivalence.IdentifiersEqual(table.PrimaryKeyColumns, columns)
-        || table.UniqueConstraints.Any(unique => SqliteCatalogEquivalence.IdentifiersEqual(unique.Columns, columns))
-        || table.Indexes.Any(index => index is { Unique: true, Partial: false }
-            && index
-                .Keys
-                .Where(static key => key.IsKey)
-                .All(static key => key.Column is not null)
-            && SqliteCatalogEquivalence.IdentifiersEqual(
-                index
-                    .Keys
-                    .Where(static key => key.IsKey)
-                    .OrderBy(static key => key.Ordinal)
-                    .Select(static key => key.Column!)
-                    .ToArray(),
-                columns));
 
     private static Dictionary<string, AddedTableArtifacts> ReadAddedArtifacts(
         IReadOnlyList<MigrationOperation> operations

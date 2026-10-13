@@ -14,7 +14,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         EnsureTableIntent intent,
         bool isMariaDb,
         IReadOnlyList<ExpectedIndexDefinition>? expectedUniqueIndexes,
-        SafeMigrationExpectedTableConstraints? expectedTableConstraints
+        SafeMigrationExpectedTableConstraints? expectedTableConstraints,
+        MySqlTableContractAlternative? nativeAlternative
     )
     {
         var definition = intent.Definition;
@@ -36,15 +37,50 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 expectedUniqueIndexes,
                 expectedTableConstraints: null);
 
-        return Plan(
-            $"CASE WHEN NOT {exists} THEN 'missing' "
+        if (nativeAlternative is not null && intent.Mode == SafeMigrationTableMode.StrictDefinition)
+        {
+            // WHY: The generated script has no proven server profile. Never
+            // merge owners in C#; select the independently built contract at
+            // execution, and keep unsupported native modes fail-closed.
+            var foldedMatching = nativeAlternative.IsValid
+                ? BuildTableMatches(definition, isMariaDb, nativeAlternative.UniqueIndexes,
+                    nativeAlternative.Constraints)
+                : "FALSE";
+
+            var foldedPostcondition = nativeAlternative.IsValid
+                ? BuildTableMatches(definition, isMariaDb, nativeAlternative.UniqueIndexes,
+                    expectedTableConstraints: null)
+                : "FALSE";
+
+            matching = SelectNativeTableContract(matching, foldedMatching);
+            executionPostcondition = SelectNativeTableContract(executionPostcondition, foldedPostcondition);
+        }
+
+        var state = $"CASE WHEN NOT {exists} THEN 'missing' "
             + $"WHEN NOT {baseTable} THEN 'unsupported' "
-            + $"WHEN {matching} THEN 'matching' ELSE 'different' END",
-            matching) with
+            + $"WHEN {matching} THEN 'matching' ELSE 'different' END";
+
+        if (nativeAlternative is { IsValid: false })
+        {
+            // An incoherent folded stream cannot be allowed to CREATE first
+            // and discover its invalid dependency later. Mode zero remains
+            // independent and uses its original complete ordered contract.
+            state = $"CASE WHEN @@lower_case_table_names = 0 THEN ({state}) ELSE 'different' END";
+        }
+
+        return Plan(state, matching) with
         {
             ExecutionPostcondition = executionPostcondition,
         };
     }
+
+    /// <summary>Selects exact versus folded contracts only using the executing server's native identity mode.</summary>
+    private static string SelectNativeTableContract(
+        string ordinal,
+        string folded
+    ) =>
+        $"(CASE WHEN @@lower_case_table_names = 0 THEN ({ordinal}) "
+        + $"WHEN @@lower_case_table_names IN (1, 2) THEN ({folded}) ELSE FALSE END)";
 
     private MySqlSafeMigrationRuntimePlan BuildDropTable(
         DropTableIntent intent

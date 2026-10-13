@@ -373,11 +373,16 @@ internal sealed partial class SafeMigrationPreflightProjection
     {
         var key = new TableKey(table, schema);
         var candidateKeyInvalidated = false;
+        // WHY: A provider can keep table owners case-sensitive while folding
+        // column members. Retire every spelling of the changed member without
+        // transferring that invalidation to a distinct physical owner.
+        var columnComparer = _objectIdentityNormalizer?.ColumnIdentifierComparer ?? StringComparer.Ordinal;
+
         if (_prerequisites.TryGetValue(key, out var prerequisites))
         {
             if (prerequisites.Indexes.RemoveWhere(index => index.Keys.Any(indexKey =>
                     indexKey.Column is not null
-                    && IdentifierEquals(_objectIdentityNormalizer, indexKey.Column, column))))
+                    && columnComparer.Equals(indexKey.Column, column))))
             {
                 _projectedUnknownPhysicalKeys.Add(key);
             }
@@ -385,10 +390,7 @@ internal sealed partial class SafeMigrationPreflightProjection
             if (SharesUniqueConstraintAndIndexIdentity)
             {
                 candidateKeyInvalidated = prerequisites.UniqueConstraints.RemoveWhere(constraint =>
-                    constraint.Columns.Any(candidate => IdentifierEquals(
-                        _objectIdentityNormalizer,
-                        candidate,
-                        column)));
+                    constraint.Columns.Any(candidate => columnComparer.Equals(candidate, column)));
                 if (candidateKeyInvalidated)
                 {
                     _projectedUnknownPhysicalKeys.Add(key);
@@ -409,7 +411,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         var names = projectedTable
             .Indexes
             .Where(pair => pair.Value.Keys.Any(indexKey =>
-                indexKey.Column is not null && IdentifierEquals(_objectIdentityNormalizer, indexKey.Column, column)))
+                indexKey.Column is not null && columnComparer.Equals(indexKey.Column, column)))
             .Select(static pair => pair.Key)
             .ToArray();
 

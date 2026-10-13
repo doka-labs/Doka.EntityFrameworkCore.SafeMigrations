@@ -672,6 +672,20 @@ backup/restore path or a forward fix.
 
 ## Read-only preflight and postflight
 
+Sparse ordered operations can combine preceding accepted additions with
+independently captured unchanged live members. Adding a nullable FK column does
+not require redundant convergence of its existing principal. Native reference
+keys, endpoint comparison semantics, surviving physical identities and row
+safety still qualify separately. Defaults, generated values, future or rejected
+additions cannot impersonate an accepted NULL-preserving addition. Runtime
+guards and native constraint creation remain authoritative. See
+[sparse live prerequisites](docs/implementation-design.md#sparse-live-constraint-prerequisites).
+
+PostgreSQL also checks native operator-class and access-method eligibility for
+physical index-key types. An unsupported ordinary Btree key on `json` is
+rejected before DDL or unique-data probes; supported `jsonb` retains its native
+contract. INCLUDE columns and genuinely computed results are separate concerns.
+
 Resolve `ISafeMigrationRunner` from the configured context. Use a pseudonymous
 instance ID, never a host name, database name, credential, or connection
 string.
