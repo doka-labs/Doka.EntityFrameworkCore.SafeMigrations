@@ -7,6 +7,8 @@ public sealed class SafeMigrationProviderAnalysis
     private bool _repairPreservesLiveValueDomain;
     private SafeMigrationIndexPhysicalEnvironment? _indexPhysicalEnvironment;
     private bool? _renameTargetExists;
+    private bool? _renameSourceSupported;
+    private bool? _renameTargetSupported;
     private bool? _renameIntermediateTargetExists;
     private string? _renameApplyUnsupportedCode;
 
@@ -96,6 +98,13 @@ public sealed class SafeMigrationProviderAnalysis
         init => _requiresLiveDataProof = value;
     }
 
+    /// <summary>Gets whether an applicable column add resumes an independently certified staging definition.</summary>
+    /// <remarks>
+    /// WHY: An owned staging column may already contain explicitly supplied values. Its
+    /// completion is not an empty-table certificate for later key or dependency operations.
+    /// </remarks>
+    internal bool RequiredColumnAddResumesOwnedStaging { get; init; }
+
     /// <summary>Gets whether opaque earlier operations prevent read-only state projection.</summary>
     internal bool IsOpaqueProjectionUnknown { get; init; }
 
@@ -114,6 +123,10 @@ public sealed class SafeMigrationProviderAnalysis
     /// lets Core attribute runtime validation without inventing a raw-SQL origin.
     /// </remarks>
     internal int? ProviderDeferredOriginOrdinal { get; init; }
+
+    /// <summary>Gets provider-certified physical bindings for a matching existing-table constraint contract.</summary>
+    /// <remarks>Semantic table matching alone cannot certify authored constraint symbols as physical names.</remarks>
+    internal IReadOnlyList<SafeMigrationConstraintIdentityBinding>? TableConstraintIdentities { get; init; }
 
     /// <summary>Gets whether preceding operations cannot repair this unsupported contract.</summary>
     internal bool IsInvariantUnsupported { get; init; }
@@ -165,6 +178,47 @@ public sealed class SafeMigrationProviderAnalysis
     {
         get => _renameTargetExists;
         init => _renameTargetExists = value;
+    }
+
+    /// <summary>Gets independently captured support for the rename source's physical owner and object kind.</summary>
+    /// <remarks>
+    /// Null means no source certificate; an accepted new physical source has separate lifetime proof.
+    /// </remarks>
+    internal bool? RenameSourceSupported
+    {
+        get => _renameSourceSupported;
+        init => _renameSourceSupported = value;
+    }
+
+    /// <summary>Attaches source-kind support without changing destination or other provider certificates.</summary>
+    /// <param name="supported">Whether the captured existing source is independently eligible for this rename.</param>
+    /// <returns>A copy retaining every other provider observation.</returns>
+    internal SafeMigrationProviderAnalysis WithRenameSourceSupported(bool supported)
+    {
+        var copy = (SafeMigrationProviderAnalysis)MemberwiseClone();
+
+        copy._renameSourceSupported = supported;
+
+        return copy;
+    }
+
+    /// <summary>Gets support for the authored destination contract independently of source lifetime.</summary>
+    internal bool? RenameTargetSupported
+    {
+        get => _renameTargetSupported;
+        init => _renameTargetSupported = value;
+    }
+
+    /// <summary>Attaches destination-contract support without changing source or occupancy evidence.</summary>
+    /// <param name="supported">Whether the provider permits this authored destination.</param>
+    /// <returns>A copy retaining every other provider observation.</returns>
+    internal SafeMigrationProviderAnalysis WithRenameTargetSupported(bool supported)
+    {
+        var copy = (SafeMigrationProviderAnalysis)MemberwiseClone();
+
+        copy._renameTargetSupported = supported;
+
+        return copy;
     }
 
     /// <summary>Gets presence of the source-schema target name used by staged cross-schema renames.</summary>

@@ -607,6 +607,26 @@ without claiming postconditions. Provider DML and data-changing repairs share
 this boundary. This accounts for [cross-table and cascading trigger effects](https://www.postgresql.org/docs/18/trigger-definition.html)
 without parsing or assuming the behavior of user trigger code.
 
+Model-managed row hashes canonicalize key-column labels with the provider's
+column identity, separately from owner/schema normalization and typed key
+values. Reordered composite predicates identify the same row only when each
+label retains its paired typed value. The same boundary governs self-key
+exclusion from collision checks, recorded value lookup and postflight final
+writers. Mathematical data-uniqueness certificates use the canonical candidate
+column set; this does not equate reordered physical index or FK definitions.
+MySQL/MariaDB uses its certified ordinal-ignore-case column contract;
+PostgreSQL and SQL Server retain exact ordinal projection, while SQLite retains
+ASCII-only folding. Invariant Unicode casing alone is not an identity proof:
+rejected rune folds and invalid UTF-16 code units retain their authored form,
+without preventing separately equivalent suffixes from canonicalizing.
+Key labels and their optional canonical-to-authored ordinal permutation are
+captured once per intent, not once per row. Unchanged ordered/single-key input
+reuses its sequence without a permutation; unsorted input has one ordinal
+array and a sort comparer. No zero-allocation claim is made for that path.
+Authored definitions, contract fingerprints and row matrices are not rewritten.
+Exact label lookup inside one validated authored intent remains distinct from
+provider-certified cross-operation physical identity.
+
 An accepted table creation additionally proves that its complete projected
 relation starts empty. A following model-managed ensure may therefore classify
 an otherwise catalog-invisible key as missing when every referenced column is
@@ -646,6 +666,49 @@ postcondition. Identity, invariant unsupported contracts, authored-SQL boundarie
 and an earlier deferred structural origin retain precedence. Providers without
 this risk return no override and keep the existing projection path.
 
+An `ExistenceOnly` no-op on a `Different` object accepts existence, not its
+authored target definition. It records no target structure or provider-owned
+accepted-operation effect and does not overwrite earlier physical evidence.
+A following strict ensure or alteration must still prove the real contract;
+matching semantic aliases retain their independently resolved physical identity.
+The same distinction applies to columns, keys, constraints and indexes, including
+SQLite's ordered structural segment, which must not skip a real mismatch.
+
+Standalone accepted CHECK creation establishes a sparse owner without requiring
+an earlier complete table image. Sparse index drops and renames consult physical
+member states and tombstones, not alias presence or the immutable batch catalog
+alone. A rename requires separately proven source presence and destination
+absence; an untracked destination is not free. Proven source absence remains an
+idempotent no-op even when the destination was also removed. Independent provider
+support and permission refusals remain authoritative.
+Sparse primary-key evidence also separates the accepted physical name from a
+requested semantic alias. Only a provider's explicit name-independent singleton
+contract can normalize drops to `PRIMARY`; other providers retain their real
+backing-key name, and an unproved physical name falls back to exact live-drop
+classification rather than authorizing removal by an alias.
+
+Strict matching of an existing table proves its constraint shapes, not that
+every authored symbol is the corresponding physical name. A provider may attach
+named identity certificates from the same captured catalog; anonymous or ambiguous
+members retain shape-only knowledge. An accepted physical removal invalidates
+unbound shape evidence only in that owner/member family. An unresolved later
+match reports `projected_constraint_identity_unknown` with the actual drop's
+deferred origin for fresh runtime classification, not a stale matching shortcut
+or table-wide loss of unrelated proof. Snapshot bindings cannot resurrect a
+removed physical member.
+
+Column/key member and index-name comparisons use their separately selected
+provider comparers. MySQL/MariaDB case-insensitive column and index members,
+including shared UNIQUE/index aliases, do not fold table or database identities.
+Postflight applies the same family-specific identity rules. Reserved PRIMARY
+creation targets retain their independent immutable rejection.
+
+Model-managed dependency matching uses the provider's column-member comparer
+for each ordered local/principal pair. MySQL/MariaDB therefore accepts a physical
+member whose casing differs without folding its table, schema or ordinal identity.
+An unmatched incoming FK still produces `projected_model_managed_dependency_unmodeled`;
+member equivalence is not permission to cascade, null or default dependent rows.
+
 The model fingerprint is a versioned, provider-bound SHA-256 envelope over an
 ordinally sorted relational metadata stream. It covers tables, columns, keys,
 foreign keys, indexes, checks, sequences, views, queries, functions, stored
@@ -683,6 +746,22 @@ operations never participate in the reduction. Renames still prove source
 absence only, so complete destination verification requires an explicit ensure
 or a separately reviewed final-state contract. Bind the selected contract and
 its fingerprint to the same artifact, model, and target migration as execution.
+The provider identity normalizer established by fresh live analysis applies to
+that resource comparison. A verified current-schema alias on PostgreSQL therefore
+does not create two final writers merely because one operation is qualified;
+distinct explicit schemas remain separate physical resources.
+It does not reconstruct an earlier unqualified owner across later opaque/schema
+operations. Such a historical binding cannot participate in final-writer
+reduction, and `postcondition_identity_unproven` forces its effective condition
+false even when the final catalog lookup appears satisfied. Explicit identities
+and the proven final stable segment retain their ordinary verification path.
+Captured callback risk on a later explicitly qualified operation can likewise
+change the historical path without invalidating that operation's own qualified
+target. Final matching does not prove historical non-execution. The provider
+retains the command-local unqualified path fence and certified command-free
+controls rather than treating every operation as an identity mutation.
+An unrelated named PK drop also cannot supersede the real key through a generic
+singleton identity; name independence requires the provider's explicit contract.
 The [postflight runbook](runbooks/deployment-and-recovery.md#postflight) owns
 these checks. Reports are immutable and can be streamed through a caller-owned
 `Utf8JsonWriter` without reflection or an intermediate DTO graph.
@@ -751,8 +830,10 @@ conservative runtime-validation boundary, using
 operation as their origin. This prevents a deferred key from becoming an
 invented candidate key or a false missing prerequisite for a following foreign
 key. Deferred model-managed writes do not create this structural boundary;
-all live `Unsupported` results, including permission and capability refusals,
-and identifier mismatches retain precedence.
+independent live `Unsupported` results, including permission and capability
+refusals, and invariant identifier mismatches retain precedence. PostgreSQL can
+defer only its provider-certified mutable native-resolution mismatch after an
+established identity-changing origin; this is not a general unsupported waiver.
 
 Operation-contract fingerprints include safe intent, expected definitions,
 policy, annotations, and ordering. An ordinary EF operation contributes
@@ -946,6 +1027,16 @@ new source; existing operations remain provider-owned at runtime.
 because that EF service queries the history table; see the official
 [`IHistoryRepository` API](https://learn.microsoft.com/en-us/dotnet/api/microsoft.entityframeworkcore.migrations.ihistoryrepository?view=efcore-10.0).
 
+The pending resolver also captures one actual migration ID per operation.
+Model-managed duplicate-key validation resets only at these internally
+certified migration boundaries; source transitions in successive migrations
+remain legal. Ordinary SQL/DDL does not reset the ledger inside one migration.
+Standalone `AnalyzeAsync`, `VerifyAsync` and scaffolding provide no such group
+provenance and retain strict single-authored-batch validation. A misaligned
+internal ID sequence rejects before catalog analysis; public options are not
+a boundary override. Grouping changes contract validation, not operation order
+or the proof lifetimes of the full pending-stream projection.
+
 ## EF history and context ownership
 
 SafeMigrations uses normal EF migration execution and history. A successful
@@ -1045,13 +1136,17 @@ and model fingerprint path used by the runner.
 Provider integration tests measure 20 complete pooled runner calls against 100
 expected tables in clean and noisy catalogs. The noisy catalog adds 1,000
 foreign tables with columns and indexes. Each matrix cell persists p50/p95,
-assessment counts, and unexpected-object counts; noisy p95 must remain within
-`2 * clean p95 + 250 ms`, and foreign child objects must not escape the
-server-side expected-table scope.
+assessment counts and unexpected-object counts. The unchanged comparison
+`2 * clean p95 + 250 ms` is informational: JSON records
+`evaluationMode: "informational"` and retains `requirement.passed: false` for an
+overrun instead of failing the integration test. Matching assessments and the
+server-side exclusion of foreign child objects remain mandatory. Invalid
+measurements, execution exceptions and evidence-output failures are not
+converted into timing verdicts or suppressed.
 
-The construction budgets are informational regression and allocation evidence;
-the live measurements are same-runner relative SLO evidence rather than an
-absolute cross-machine throughput claim.
+Construction budgets and live comparisons are informational regression
+evidence. The live measurements retain same-runner relative context, not an
+absolute cross-machine throughput promise or a hardware-dependent CI gate.
 
 ## Verification surfaces
 

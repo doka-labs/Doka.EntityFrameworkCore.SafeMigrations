@@ -1,13 +1,15 @@
 # PostgreSQL behavior
 
-Prepared stable 10.4.9 preserves explicit repair collations and exact ALTER
-source authority. Session-active DDL event triggers and DML triggers, including
-FK-cascade and provider-backfill effects, invalidate ordered row and structural
-proofs before projection shortcuts. Supported unproven states retain their
-mutation origin for fresh runtime validation; independent refusals still block.
-Narrowing eligibility plans are retained only for the current transport
-statement, and fully matching runtime columns skip unused repair/data scopes.
-Public APIs, dependency ranges, migration source and report schemas are unchanged.
+Prepared stable 10.4.10 uses verified current-schema identity consistently
+across analysis, generation and postflight; mutable historical aliases, TEMP
+shadows and changed execution owners cannot fabricate that identity.
+Source-frozen managed deletes fence dependent writers and reclassify under the
+owned lock, requiring physically present enforced FK counterparts. Earlier
+column-contract and trigger-freshness fixes remain: supported unproven states
+need fresh runtime validation, while independent refusals remain blocking.
+Public APIs, dependency ranges, migration source, policy selection, report
+schemas and history are unchanged. Prior bounded plan-lifetime and matching
+fast paths remain; native timing comparisons are informational.
 
 ## Operational summary
 
@@ -16,6 +18,84 @@ SafeMigrations operations through parameterized catalog queries and renders
 guarded operations through the configured Npgsql migrations SQL generator.
 PostgreSQL 14 through 18 are qualified independently; the exact pinned matrix
 in the successful release run is the release evidence.
+
+## Schema identity and search-path boundaries
+
+An unqualified relation and an explicit qualifier equal to the verified
+`current_schema()` can identify the same physical owner. Mixed qualified and
+unqualified owner/principal streams capture that creation schema afresh for
+analysis, ordered transition catalogs and postflight; exact quoted schema/table
+case is retained and `public` is not assumed. Other explicitly qualified schemas
+remain distinct and supported. Invocation reset prevents a later analysis from
+reusing the previous session's schema identity.
+
+An unqualified native binding must resolve either to that current schema or to
+no relation before it can be queried or mutated. A fallback relation elsewhere
+in `search_path`, including a temporary shadow, cannot be analyzed as a missing
+current-schema object and then used as a different owner. That unsafe binding,
+or no effective current schema, is `Unsupported / schema_search_path_mismatch`
+before prerequisite or row queries.
+Runtime rejects `P1002 / doka_sm_unsupported` with that bounded DETAIL before
+mutation or lock acquisition. Qualify the intended owner and referenced tables
+explicitly; do not change search-path order merely to bypass the guard. See
+[PostgreSQL schema/search-path rules](https://www.postgresql.org/docs/18/ddl-schemas.html)
+(primary source; retrieved 2026-10-12).
+
+Creation and consuming-source absence are distinct. `EnsureTable` can create
+its absent current-schema target despite a same-name fallback, because CREATE
+uses the creation schema. A drop/rename whose exact current-schema source is
+absent can retain its nonexecuting no-op instead of touching a fallback. These
+exceptions do not waive an inline principal or surviving owner/reference proof.
+Index drop/rename also proves the actual native source index binding, not just
+the table supplied for ownership checks. A current-present target shadow remains
+an identity conflict.
+
+A command with a nonconstant identity guard captures the initial current schema
+locally and reproves it before protected classification and lock acquisition.
+After native Apply/Repair, it checks schema stability and fresh surviving native
+bindings again before accepting the target postcondition. Names intentionally
+consumed by a drop/rename are excluded from that surviving-binding check; owners
+and destinations are not. A trigger/function changing the path or introducing
+a TEMP shadow rejects `P1005 / doka_sm_postcondition` with DETAIL
+`schema_identity_changed_during_execution`, rolling back the PostgreSQL command's
+transaction. No global setting, additional privilege or client roundtrip is
+introduced by this command-local check.
+
+Connection-free generation does not treat an authored qualifier as proof of
+the active schema. It selects connected table-family transition alternatives
+only when fresh `current_schema()` and native unqualified-owner guards establish
+their identity. Ordinary/provider operations, including raw SQL, partition those
+transition catalogs in analysis and generation; certified mutation-free provider
+operations do not create an artificial boundary. A current-schema alias merge
+which would violate the ordered index/constraint transition contract rejects
+`P1002 / doka_sm_unsupported` with DETAIL `schema_alias_transition_invalid`.
+Correct that transition order rather than selecting another search path to hide
+it. Executed schema changes or trigger-risk effects which can alter effective resolution
+invalidate later unqualified projection evidence with
+`projected_schema_identity_state_unknown` and the preceding operation's origin;
+an initial native-resolution mismatch is mutable after that preceding effect,
+but an invariant unsupported contract never becomes deferrable. Existing trigger
+diagnostics remain for other uncertain states. Fresh guarded runtime validation
+decides afterward. This does not authorize
+arbitrary search-path fallback or reinterpret an explicitly different schema.
+
+Final `current_schema()` is not historical identity evidence. During postflight,
+an earlier unqualified owner or referenced table before later opaque/schema
+operations is not admitted as a final writer or superseded by a guessed alias.
+Captured active or unprovable callback risk on a later explicitly qualified
+operation can establish that same boundary: its owner can remain valid while
+a callback changes the effective path. A final match is not execution history
+and cannot prove that the earlier command was a no-op. Commands with unqualified
+native bindings retain their command-local path fence; certified mutation-free
+commands do not invent a callback boundary.
+The affected historical operation's effective postcondition is false with
+`postcondition_identity_unproven`,
+even if lookup through the final schema reports matching or absence. The final
+stable segment retains proven current-schema alias normalization; explicit
+physical identities remain supported. Use an explicitly qualified, reviewed
+final-state verification contract for an otherwise ambiguous historical stream;
+do not rewrite applied migrations or edit history to make that evidence appear
+known.
 
 ## Model-managed data
 
@@ -37,6 +117,47 @@ is accepted only when every affected model-managed dependent row was removed
 by an earlier accepted operation. One unmatched or concurrently inserted
 dependent row blocks or fails the delete; SafeMigrations never accepts an
 implicit cascade, nulling, or defaulting side effect as convergence.
+
+An executable source-frozen delete acquires `LOCK TABLE ... IN EXCLUSIVE MODE`
+on its exact principal relation, including descendants, and then repeats the
+complete identity, prerequisite, source-row and incoming-dependency classifier
+before DELETE. This fence conflicts with ordinary native FK checks and parent
+writes, but permits ordinary SELECT. It uses the existing principal DELETE
+privilege, not new UPDATE or dependent-table write privileges. Initial no-ops
+and rejected operations do not acquire it. The current migration transaction
+owns the lock until commit or rollback; review the writer wait and maintenance
+window rather than assuming an online or row-only lock. See
+[PostgreSQL LOCK](https://www.postgresql.org/docs/18/sql-lock.html)
+(primary source; retrieved 2026-10-12).
+
+Under Read Committed the second classifier sees newly committed dependencies.
+Repeatable Read and Serializable do not become fresh snapshots because a lock
+was acquired: native FK validation can instead abort when its current-row
+crosscheck finds a dependency absent from the transaction snapshot. Do not
+require every such failure to be `P1003`; a native serialization/FK error remains
+a rollback outcome, not permission to cascade, null or default the new row.
+See [transaction isolation](https://www.postgresql.org/docs/18/transaction-iso.html)
+and the [18.6 native FK crosscheck](https://github.com/postgres/postgres/blob/REL_18_6/src/backend/utils/adt/ri_triggers.c)
+(primary sources; retrieved 2026-10-12).
+
+Each source-frozen incoming relationship must have a matching actual enforced
+native FK counterpart. A missing counterpart is `Unsupported`, even when the
+declared child is currently empty: without native checks its writers do not
+participate in the principal fence. A contract with no declared relationships
+and no native incoming FK retains its ordinary path.
+PostgreSQL 18 `NOT ENFORCED` constraints are not proof, including their
+no-internal-trigger shape; an unknown enforcement verdict also fails closed.
+Older catalogs retain their native enforcement contract without referencing a
+field absent from those versions. See
+[PostgreSQL 18 constraint enforcement metadata](https://www.postgresql.org/docs/18/catalog-pg-constraint.html)
+(primary source; retrieved 2026-10-12).
+
+Incoming native FK checks/actions must also remain enabled. An already disabled
+relevant internal trigger or replica-mode bypass classifies the delete as
+`Unsupported`; no trigger is enabled automatically. This is an application-
+writer fence under enforced native relationships, not protection against an
+administrator changing child-trigger enforcement after classification. Keep
+privileged schema/enforcement changes outside the migration write window.
 
 PostgreSQL triggers can alter or recreate rows. The guarded command therefore
 checks the target state after DML. A trigger-produced mismatch fails the
@@ -287,3 +408,9 @@ inspection before retry. Follow the
 - [PostgreSQL character types](https://www.postgresql.org/docs/18/datatype-character.html)
 - [PostgreSQL information-schema columns](https://www.postgresql.org/docs/18/infoschema-columns.html)
 - [PostgreSQL ALTER TABLE](https://www.postgresql.org/docs/18/sql-altertable.html)
+- [PostgreSQL schema and search-path rules](https://www.postgresql.org/docs/18/ddl-schemas.html),
+  primary source; retrieved 2026-10-12.
+- [PostgreSQL LOCK](https://www.postgresql.org/docs/18/sql-lock.html),
+  primary source; retrieved 2026-10-12.
+- [PostgreSQL 18.6 native FK trigger/crosscheck implementation](https://github.com/postgres/postgres/blob/REL_18_6/src/backend/utils/adt/ri_triggers.c),
+  primary source; retrieved 2026-10-12.

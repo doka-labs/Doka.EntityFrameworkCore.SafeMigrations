@@ -26,7 +26,7 @@ evidence.
 
 The remaining declared dependency graph and .NET 10 release metadata were
 rechecked on 2026-09-21. Bounded package ranges describe compatibility. The
-five package-project lockfiles, unchanged for 10.4.9, identify the dependency
+five package-project lockfiles, unchanged for 10.4.10, identify the dependency
 graph used to compile and qualify the package artifacts in a particular
 revision; they do not constrain a consumer's NuGet resolution or lock the
 engineering projects.
@@ -34,20 +34,23 @@ The SQL Server project supplies the fifth lockfile. Releases 10.4.2 through
 10.4.5 contain four package artifacts; their inventory remains unchanged.
 
 The five-package set began with stable 10.4.6, including the optional SQL Server
-provider. Prepared stable 10.4.9 retains that inventory, the dependency ranges,
+provider. Prepared stable 10.4.10 retains that inventory, the dependency ranges,
 and all public API baselines. Publication still requires the blocking workflow,
 including all three native x86-64 SQL Server cells, and exact public readback
 of all five package IDs. Source preparation alone does not establish availability.
 
-The 10.4.9 changes affect Core ordered deferral, PostgreSQL column contracts and
-trigger freshness, SQL Server integer widening, CHECK validation and physical
-dependency/permission proofs, and lossless SQLite repair classification.
-Trigger-affected supported states require fresh runtime validation; independent
-unsupported contracts remain blocking. PostgreSQL eligibility-plan lifetime
-and redundant SQL Server captures/runtime predicates are reduced. These are
-bounded path-specific improvements, not a general engine-latency or peak-memory
-guarantee. SQLite retains its model-owned rebuild contract. No engine, tooling,
-package or coverage gate is removed. Performance measurements remain informational.
+The 10.4.10 changes correct ordered nullability/backfill and sparse physical
+constraint/index proofs, cross-operation rename evidence and canonical
+model-managed-key identity. MySQL/MariaDB required additions use owned atomic
+stages with forward recovery; PostgreSQL deletes fence dependent writers and
+retain verified schema ownership; SQL Server cleanup requires owned session
+acquisition. Earlier provider repair and trigger-freshness contracts remain.
+These are bounded path-specific changes, not a general engine-latency or
+peak-memory guarantee. SQLite retains its model-owned rebuild contract.
+Engineering dependencies inherit the reviewed Testcontainers 4.16.0 and pinned
+Action updates on `main`; production ranges and package lockfiles are unchanged.
+No engine, tooling, package or coverage gate is removed. Performance measurements
+remain informational; invalid evidence and functional failures remain blocking.
 The analysis and runtime optimizations introduced in 10.4.7 remain in place;
 see [MySQL and MariaDB behavior](mysql-mariadb-ddl-behavior.md) and
 [D-014](decisions/D-014-mariadb-catalog-snapshot-for-batched-classification.md)
@@ -516,11 +519,14 @@ at compile time; no benchmark assembly introduces a cross-provider runtime edge.
 Every server-provider engine cell additionally runs 20 complete pooled
 `SafeMigrationRunner` invocations against 100 expected tables, then repeats them
 after adding 1,000 foreign tables with child objects. The cell stores p50/p95
-JSON evidence and fails unless assessments are unchanged, foreign child rows
-remain excluded by the expected-table scope, and noisy p95 is at most
-`2 * clean p95 + 250 ms`. Each invocation can include multiple database
-roundtrips. This is a same-runner relative SLO; it is not an absolute
-cross-machine latency promise.
+JSON evidence and still fails unless assessments are unchanged and foreign
+child rows remain excluded by the expected-table scope. The unchanged noisy
+p95 comparison `2 * clean p95 + 250 ms` is informational: JSON records
+`evaluationMode: "informational"` and preserves `requirement.passed: false` when
+the measured limit is exceeded. Invalid evidence, execution exceptions and
+artifact failures remain fatal. Each invocation can include multiple database
+roundtrips; same-runner timing context is neither a hardware-dependent CI gate
+nor an absolute cross-machine latency promise.
 
 Every server-provider engine cell also analyzes 100,000 ordered mixed operations whose
 observations cover every state and planner action, including model-managed

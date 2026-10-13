@@ -57,6 +57,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         }
 
         var dependent = ResolveAlterTable(new TableKey(definition.Table, definition.Schema));
+        var columnComparer = _objectIdentityNormalizer?.ColumnIdentifierComparer ?? StringComparer.Ordinal;
 
         foreach (var modeled in intent.ForeignKeys)
         {
@@ -72,11 +73,12 @@ internal sealed partial class SafeMigrationPreflightProjection
 
             // WHY: Runtime guards compare the source-frozen FK columns by
             // ordinal, even when a reordered pair list is semantically similar.
-            // Preflight must not accept a shape that those guards reject.
+            // Column-member identity is independent of table and schema casing;
+            // preserve the owner checks above rather than broadening their comparer.
             for (var column = 0; column < definition.Columns.Count; column++)
             {
-                if (!IdentifierEquals(_objectIdentityNormalizer, definition.Columns[column], modeled.Columns[column])
-                    || !IdentifierEquals(_objectIdentityNormalizer,
+                if (!columnComparer.Equals(definition.Columns[column], modeled.Columns[column])
+                    || !columnComparer.Equals(
                         definition.PrincipalColumns[column], modeled.PrincipalColumns[column]))
                 {
                     matching = false;

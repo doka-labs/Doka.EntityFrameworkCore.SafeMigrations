@@ -6,6 +6,235 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
+## [10.4.10] - 2026-10-13
+
+Prepare stable 10.4.10 for all five packages. This patch corrects ordered
+nullability, backfill, constraint, index and model-managed-data proofs; guards
+concurrent required-column additions and PostgreSQL dependent writes; and
+preserves verified schema and session ownership during execution and recovery.
+Public signatures, dependency ranges, migration source, policy selection,
+report schemas and migration history remain unchanged. Existing migrations do
+not need regeneration. Required intermediate CHECKs remain owned recoverable
+state, not a claim that MySQL/MariaDB DDL is transactional. Performance timing
+comparisons remain informational; correctness and evidence failures still block.
+Source preparation is not publication evidence: the complete qualification
+matrix, signed `v10.4.10` identity, all five exact primary/symbol packages,
+provenance, SBOM and verified public readback remain required.
+
+### Changed
+
+- Set explicit finite 120-second connection/transaction and command budgets on
+  owned SQL Server EF tooling CLI and bundle connections. SqlClient transaction
+  control does not use EF's command timeout. Keep product defaults, fatal errors
+  and CI job limits unchanged; do not retry failed work. Preserve owned server
+  logs and bounded wait diagnostics before failed tooling-container cleanup,
+  with executable positive/negative engineering regressions.
+- Refresh engineering-only Testcontainers to 4.16.0 and pinned GitHub Actions
+  through the reviewed dependency updates on `main`. Production dependency
+  ranges and the five publishable package lockfiles remain unchanged.
+- Keep live pooled-catalog p95 overruns and SQL Server cancellation latency
+  informational in server-provider qualification instead of failing CI on
+  shared-runner timing variation. Preserve all 20 measured calls, unchanged
+  comparisons and false JSON budget verdicts. Deterministic report/scope and
+  cancellation assertions, invalid evidence, execution and artifact failures
+  remain blocking; no comparison limit is raised.
+- Document `projected_required_add_rows_unproven` and its fresh row-proof/backfill
+  remediation. Distinguish engine-bound observed ADD behavior from documented
+  DML and Instant ADD defaults; the proposed atomic-add ADR does not depend on
+  implicit required-ADD behavior and is not promoted by implementation or tests.
+
+### Fixed
+
+- Return native SQL Server `bit` metadata for member-rename destination and
+  index-source probes, including mixed column/index `UNION ALL` statements.
+  Integer CASE values cannot satisfy the strict Boolean evidence reader.
+  Preserve the shared runtime integer renderer, source nullability, owner-local
+  predicates, parameterization and bounded transport; SQL-type-aware unit
+  doubles and native metadata regressions guard against recurrence.
+- Preserve MySQL/MariaDB column proofs after exact accepted foreign-key removals:
+  already matching columns remain no-ops, and source-proven same-layout,
+  value-preserving nullability alterations retain their explicit `RepairIfSafe`
+  path, including NULL-free tightening and multiple alterations on one owner.
+  Unresolved dependencies, intervening mutations and independent blockers remain
+  authoritative; no complete table-convergence operation is required.
+- Prove exact owned MySQL/MariaDB foreign-key replacements against compatible
+  endpoint storage, a complete principal candidate key and orphan-free rows.
+  Accepted FK removals and value-preserving nullable relaxation can retain that
+  bounded certificate; other relevant mutations invalidate it. A surviving
+  matching physical alias remains a no-op. Runtime guards recheck endpoint and
+  column presence, local `SET NULL` nullability, and orphan data; preflight's
+  exact storage/key certificate is not a new global runtime restriction.
+- Admit primary-key replacement from a current empty-table certificate and
+  accepted non-nullable target columns while retaining physical key validation.
+  Populated tables, nullable key parts and stale row evidence do not acquire a
+  replacement or implicit backfill permission.
+- Recognize Doka's exact boolean `RequiresExplicitBackfill` column annotation
+  without changing immutable definitions or fingerprints. A supported required
+  addition without a replacement value uses two atomic InnoDB ALTER stages:
+  nullable ADD with an enforced owned non-null CHECK, then required MODIFY with
+  CHECK removal. This prevents a read-then-add race from inventing row values;
+  populated tables still require an explicit backfill. Same-layout nullable-to-required
+  alterations use a fresh NULL proof or an approved non-null default, never an
+  invented GUID or other synthetic value. Unknown and malformed metadata remains
+  unsupported; dependency ranges are unchanged.
+- Resume an interrupted required-column addition only from its exact nullable
+  target and enforced owned CHECK. Keep that barrier after failure or
+  cancellation; do not hide or drop objects by reserved prefix. Resuming may
+  retain explicit writer values and is not an empty-table proof for later keys
+  or foreign keys. The two ALTERs are not one transaction, and matching targets
+  retain their no-op path.
+- Require strict SQL mode for actual nullable-to-required conversion, including
+  explicit alterations with an approved default UPDATE or type widening/narrowing.
+  An intervening NULL cannot be silently coerced during MODIFY. Matching targets
+  and already-required ordinary comment/default repairs retain their existing
+  path; no SQL mode is changed.
+- Require explicit TIMESTAMP-default semantics for required TIMESTAMP repairs,
+  including approved fixed defaults, without changing the session setting.
+  Missing no-default TIMESTAMP additions remain unsupported, and exact matching
+  columns remain no-ops.
+- Qualify missing required-column additions with authored SQL defaults against
+  InnoDB and strict SQL mode, plus explicit defaults for required TIMESTAMP.
+  A structurally known SQL NULL default cannot populate existing rows; its
+  empty-table native ADD rejects a raced row atomically rather than inventing a
+  value. Matching columns retain their no-op path and independent engine
+  representability limits remain enforced. General SQL defaults are not thereby
+  promoted into structural non-null backfill proofs.
+- Match ENUM/SET domains without folding quoted member case or member order.
+  Native keyword and literal display canonicalization respects quote/escape
+  modes; a different value domain cannot certify matching or owned recovery.
+- Reject non-matching ENUM/SET work when a native backslash-comment scope would
+  reinterpret the authored member domain. Such scopes require
+  NO_BACKSLASH_ESCAPES already enabled; their exact matching no-op remains
+  comparable after cleanup. Standard-only escaped-quote staging instead needs
+  its certified original mode and no opaque native setup. No domain is rewritten
+  and these guards introduce no new mode writes.
+- Compare supported structured TIMESTAMP/DATETIME string defaults against
+  native catalog fractional zero-padding without rounding, truncating or
+  mutating the authored SQL expression. MySQL generated-expression defaults use
+  their separate exact serialized display instead of plain/padded temporal
+  candidates; no arbitrary charset-prefix union is introduced.
+  Double-quoted ENUM/SET members also
+  retain the independent runtime ANSI_QUOTES exclusion, even when their domain
+  needs no backslash decoding.
+- Bind native session-mode cleanup to the certified setup that actually began.
+  Rejection before native setup cannot restore NULL or stale saved state from an
+  earlier operation. Unknown stateful cleanup shapes remain fail-closed, while
+  native commands without cleanup retain their ordinary path.
+- Reject MySQL/MariaDB required-column Ensure repairs and explicit alterations
+  while an owned `ON DELETE SET NULL` or `ON UPDATE SET NULL` FK still references
+  that column, before any default backfill UPDATE or column DDL. An accepted
+  exact FK drop discharges only that dependency; NULL-free rows or an explicit
+  default do not remove the blocker.
+  Nullable Ensure repairs also reject retained PRIMARY membership; already
+  matching columns retain their no-op path.
+- Preserve accepted FK/UNIQUE/CHECK creation, removal and physical-alias facts
+  without requiring a complete projected table image. Repeated drops, including
+  the singleton primary key, retain their tombstones instead of reusing stale
+  live matching. MySQL/MariaDB FK and column member comparisons follow their
+  case-insensitive identity without folding table or database names.
+- Resolve atomic-add recovery owners according to native table-name mode, using
+  byte-exact lookup for mode zero and server-side LOWER for modes one/two.
+  Column, CHECK name/expression and the raw recovery fingerprint remain exact;
+  no foreign database qualifier is admitted by this owner lookup.
+- Capture MySQL/MariaDB column dependencies in tagged parameterized statements
+  with at most 32 distinct requests. Conservative current-database/raw-owner,
+  case-insensitive member and dependency-role deduplication retains each
+  operation's proof lifetime and complete SET NULL/PRIMARY facts. Malformed or
+  incomplete transport cannot publish a partial certificate; runtime guards
+  remain fresh. This bounds redundant transport, not a general speedup claim.
+- Keep existence-only acceptance distinct from physical matching. A different
+  object left unchanged by `ExistenceOnly` cannot install its authored target as
+  column, key, constraint or index evidence for a later strict operation,
+  including SQLite's runtime structural segment. Existing matching aliases and
+  earlier exact physical facts retain their ordinary proof path.
+- Retain standalone accepted CHECK definitions and sparse physical index
+  creation/drop/rename state without requiring a complete projected table.
+  Rename destination absence needs an independent proof; an untracked target is
+  not free, and a proven absent source retains its idempotent no-op semantics.
+  Sparse primary keys retain their real physical name separately from semantic
+  aliases; only explicitly name-independent provider keys use singleton drop
+  identity, and unrelated names cannot remove, tombstone or supersede the
+  accepted key in postflight.
+- Capture named SQLite PK/UNIQUE/CHECK/FK identities from the existing strict
+  table snapshot without inventing symbols for anonymous or ambiguous members.
+  Standalone UNIQUE symbols remain distinct from generated sqlite_autoindex
+  names. A physical removal invalidates only its unbound owner/member-family
+  shape, retaining the drop origin for fresh runtime validation instead of
+  resurrecting an immutable live match or erasing unrelated proof.
+- Apply provider-specific column/key and index-member comparers to ordered
+  matching and postflight, including MySQL/MariaDB shared UNIQUE/index aliases,
+  without folding table/database identities or default/domain literals. Reserved
+  PRIMARY creation targets retain their immutable unsupported result.
+- Compare modeled incoming-FK column pairs with the provider member comparer.
+  MySQL/MariaDB column casing no longer creates a false unmodeled dependency;
+  table/schema identities, member order and delete-side-effect guards are unchanged.
+- Normalize model-managed key-column labels separately from physical owners
+  for projected row hashes, self-key collision exclusion, recorded value lookup
+  and postflight final-writer identity. MySQL/MariaDB case-equivalent labels no
+  longer split one row contract; PostgreSQL/SQL Server ordinal projection and
+  SQLite ASCII-only folding remain unchanged. Unicode casing cannot merge
+  labels rejected by the provider comparer, and typed key values stay exact.
+  Reordered composite predicates retain each column's paired value; mathematical
+  uniqueness proof uses the same column set, not authored key order. Physical
+  index and foreign-key ordinals remain unchanged.
+- Validate repeated model-managed typed keys within each actual pending
+  migration, rather than rejecting legitimate successive migrations as one
+  authored batch. Only internally resolved migration IDs establish boundaries;
+  standalone `AnalyzeAsync`, `VerifyAsync` and scaffolding retain single-batch
+  validation. Ordinary SQL/DDL does not reset that batch's key ledger.
+- Bind certified native SQL-mode snapshot and conditional restore construction
+  to shared statement parts instead of unchecked substring replacement. Unknown
+  provider drift remains fail-closed, and complete nullable staging targets
+  retain all immutable column facets and annotations.
+- Use length-free `CAST(... AS BINARY)` for MySQL/MariaDB byte-exact catalog
+  comparison instead of deprecated unary `BINARY`, preserving trailing-space,
+  Unicode-byte and NULL semantics without adding padding or truncation.
+- Compare column comments byte-exactly across single-column matching, strict
+  tables, atomic-add recovery ownership and digest diagnostics. MariaDB
+  case-only comment drift no longer qualifies as matching or owned recovery;
+  exact comments retain their ordinary no-op and resume paths. The targeted
+  MySQL probe already distinguished that drift before this portable predicate.
+- Bind SQL Server seed-command IDENTITY_INSERT cleanup to a fresh invocation
+  and confirmed ON acquisition. Rejection before ON preserves caller state;
+  interrupted uncertain acquisition quarantines the session instead of issuing
+  speculative OFF. One small managed seed-only bootstrap roundtrip establishes
+  the token; ordinary operations remain unchanged. Existing failure-preservation
+  and recovery deadlines remain in force, and native x64 qualification is still
+  required.
+- Fence executable PostgreSQL model-managed parent deletes with an EXCLUSIVE
+  principal-table lock before repeating the complete source/dependency classifier.
+  Ordinary reads remain possible, existing DELETE privileges suffice, and native
+  FK crosschecks can abort stale transaction-snapshot work instead of committing
+  implicit CASCADE/SET NULL/SET DEFAULT effects. No-ops retain their no-lock path;
+  disabled native FK enforcement is refused, and privileged enforcement changes
+  remain outside the application-writer contract.
+  Every declared incoming relationship needs a matching actual enforced native
+  counterpart; an empty child, missing FK or PostgreSQL 18 NOT ENFORCED/no-trigger
+  shape cannot certify that fence.
+- Normalize PostgreSQL current-schema aliases consistently across ordered
+  analysis, transition catalogs and postflight without assuming `public` or
+  treating one authored qualifier as the active schema. Runtime-selected
+  generation contracts preserve distinct explicit schemas; unsafe unqualified
+  native fallback/temporary shadows fail closed before protected work. Creation
+  targets still use current_schema and consuming-source absence can remain a
+  nonexecuting no-op; independent owner/reference proofs are not waived. Index
+  mutation proves the native source index, not just its declared table. Schema
+  changes and captured callback effects invalidate later unqualified proof with
+  an origin-bearing runtime-validation result rather than reusing stale identity.
+  Postflight cannot guess historical unqualified owners across later opaque/schema
+  or callback-risk boundaries: `postcondition_identity_unproven` retains a failed effective
+  condition instead of a false successful alias lookup or supersession. Explicit
+  identities and the final stable segment retain their verification path.
+- Recheck PostgreSQL command-local schema identity and surviving native bindings
+  after Apply/Repair, before its target postcondition. A callback changing the
+  path or introducing a TEMP shadow fails with
+  `schema_identity_changed_during_execution` and transaction rollback. Consumed
+  drop/rename source names do not need to survive. These in-command checks add no
+  client roundtrip, global setting or privilege.
+- Reject MySQL/MariaDB index renames with an existing source when either endpoint
+  is the reserved `PRIMARY` identity, before native DDL. Missing-source replay
+  remains a no-op and primary-key replacement retains its separate contract.
+
 ## [10.4.9] - 2026-10-08
 
 Prepare stable 10.4.9 for all five packages. This patch adds provider-proven
@@ -1639,7 +1868,8 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.9...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.10...HEAD
+[10.4.10]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.9...v10.4.10
 [10.4.9]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.8...v10.4.9
 [10.4.8]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.7...v10.4.8
 [10.4.7]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.6...v10.4.7

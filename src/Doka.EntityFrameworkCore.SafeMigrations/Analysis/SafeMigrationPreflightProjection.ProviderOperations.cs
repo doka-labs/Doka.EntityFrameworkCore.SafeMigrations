@@ -22,7 +22,8 @@ internal sealed partial class SafeMigrationPreflightProjection
         var prerequisites = new ProjectedPrerequisites(
             newlyCreated: true,
             dataMutationVersion: _providerDataMutationVersion,
-            objectIdentityNormalizer: _objectIdentityNormalizer);
+            objectIdentityNormalizer: _objectIdentityNormalizer,
+            sharesUniqueIndexIdentity: SharesUniqueConstraintAndIndexIdentity);
 
         ExpectedTableDefinition? definition = null;
 
@@ -32,7 +33,8 @@ internal sealed partial class SafeMigrationPreflightProjection
             var table = new ProjectedTable(
                 definition,
                 dataMutationVersion: _providerDataMutationVersion,
-                objectIdentityNormalizer: _objectIdentityNormalizer)
+                objectIdentityNormalizer: _objectIdentityNormalizer,
+                sharesUniqueIndexIdentity: SharesUniqueConstraintAndIndexIdentity)
             {
                 CanReuseCreationCharacterSet = !_creationCharacterSetChanged,
             };
@@ -328,7 +330,8 @@ internal sealed partial class SafeMigrationPreflightProjection
             // observed. A preceding data operation may therefore have changed
             // its rows, even when the structural provider operation is newer.
             dataMutationVersion: 0,
-            objectIdentityNormalizer: _objectIdentityNormalizer);
+            objectIdentityNormalizer: _objectIdentityNormalizer,
+            sharesUniqueIndexIdentity: SharesUniqueConstraintAndIndexIdentity);
         _prerequisites.Add(key, prerequisites);
 
         return prerequisites;
@@ -348,8 +351,8 @@ internal sealed partial class SafeMigrationPreflightProjection
     {
         var key = new TableKey(table, schema);
         var acceptedDefinitionsExist = _prerequisites.TryGetValue(key, out var prerequisites)
-            && (prerequisites.Indexes.HasPhysicalDefinitions
-                || (SharesUniqueConstraintAndIndexIdentity && prerequisites.UniqueConstraints.HasPhysicalDefinitions));
+            && (prerequisites.Indexes.HasAcceptedDefinitions
+                || (SharesUniqueConstraintAndIndexIdentity && prerequisites.UniqueConstraints.HasAcceptedDefinitions));
 
         if (!acceptedDefinitionsExist
             && (!_tables.TryGetValue(key, out var projectedTable) || projectedTable.Indexes.Count == 0))

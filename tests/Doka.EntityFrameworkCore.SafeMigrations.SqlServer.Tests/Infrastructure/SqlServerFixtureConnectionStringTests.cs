@@ -6,6 +6,59 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 public sealed class SqlServerFixtureConnectionStringTests
 {
     /// <summary>
+    /// Preserves caller-owned command and transaction wait budgets in both tooling contexts.
+    /// </summary>
+    /// <param name="legacy">Whether the context uses legacy-convergence scaffolding.</param>
+    /// <param name="connectTimeout">The login and transaction-manager timeout, or null for the driver default.</param>
+    /// <param name="commandTimeout">The command timeout, or null for the driver default.</param>
+    [Theory]
+    [InlineData(false, null, null)]
+    [InlineData(true, null, null)]
+    [InlineData(false, 17, 23)]
+    [InlineData(true, 17, 23)]
+    [InlineData(false, 120, 120)]
+    [InlineData(true, 120, 120)]
+    public void ToolingContexts_PreserveExplicitTimeoutsAndDriverDefaults(
+        bool legacy,
+        int? connectTimeout,
+        int? commandTimeout
+    )
+    {
+        // Arrange
+        var settings = new SqlConnectionStringBuilder
+        {
+            DataSource = "127.0.0.1,1",
+            InitialCatalog = "tooling_timeout_contract",
+            IntegratedSecurity = true,
+            Encrypt = false,
+        };
+
+        if (connectTimeout is { } connectionBudget)
+        {
+            settings.ConnectTimeout = connectionBudget;
+        }
+
+        if (commandTimeout is { } commandBudget)
+        {
+            settings.CommandTimeout = commandBudget;
+        }
+
+        using SqlServerScaffoldingModelDbContext context = legacy
+            ? new SqlServerLegacySafeMigrationScaffoldingDbContext(settings.ConnectionString)
+            : new SqlServerSafeMigrationScaffoldingDbContext(settings.ConnectionString);
+
+        // Act
+        var connection = (SqlConnection)context.Database.GetDbConnection();
+        using var command = connection.CreateCommand();
+
+        // Assert
+        Assert.Equal(connectTimeout ?? 15, connection.ConnectionTimeout);
+        Assert.Equal(commandTimeout ?? 30, command.CommandTimeout);
+        Assert.Null(context.Database.GetCommandTimeout());
+        Assert.Equal(ConnectionState.Closed, connection.State);
+    }
+
+    /// <summary>
     /// Disables pooling even when the root connection string explicitly enables it.
     /// </summary>
     /// <param name="rootPooling">The pooling setting inherited from the root connection string.</param>

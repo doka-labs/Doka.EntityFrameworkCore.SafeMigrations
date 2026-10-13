@@ -1,26 +1,31 @@
 # MySQL and MariaDB DDL behavior
 
-Prepared stable 10.4.9 retains the MySQL/MariaDB column-transition,
-rename-destination, default-identity and setup-fragment fixes from 10.4.8 and
-the analysis/runtime optimizations introduced in 10.4.7. Its Core projection
-changes preserve provider-specific structural deferrals until fresh runtime
-validation; they introduce no MySQL/MariaDB SQL-generation or dependency change.
-Neither regenerated migrations nor changed server durability settings are
-required. Runtime checks continue to read the live catalog even when batched
-analysis uses session-owned catalog copies. Policies, postconditions, and
-recovery boundaries remain unchanged;
-required data scans and DDL can still dominate large-table workloads.
+Prepared stable 10.4.10 preserves exact column proofs after owned FK removals,
+supports data-proven nullability/backfill transitions, and uses two atomic
+InnoDB stages with an owned enforced CHECK for supported required additions.
+Interrupted additions recover only from their exact owned intermediate state;
+the two stages are not one transaction. Strict SQL mode, TIMESTAMP semantics,
+ENUM/SET domains and retained SET NULL/PRIMARY dependencies remain independently
+guarded. Comment matching is byte-exact, and native cleanup is bound to acquired
+setup. Runtime checks remain fresh even when analysis uses session-owned
+catalog copies. Public APIs, dependency ranges, migration source, policies,
+reports and history are unchanged; no server durability setting is modified.
+Earlier bounded analysis/runtime optimizations remain. Required data scans and
+DDL can still dominate large-table workloads; timing comparisons are informational.
 
 ## Operational summary
 
 The `.MySql` package supports both MySQL and MariaDB through
 `Doka.EntityFrameworkCore.MySql`. Its SafeMigrations guard is rerunnable and
-session-local, but MySQL-family DDL is not an atomic migration transaction.
+its decision/assertion state is session-local, but MySQL-family DDL is not an
+atomic migration transaction.
 
-- No stored procedure, permanent guard object, or fixed global helper name is
-  used.
+- No stored procedure, permanent guard table, or fixed global helper name is
+  used. A required-column addition can leave its exact owned intermediate CHECK
+  until forward recovery completes; see [atomic additions](#atomic-required-column-additions).
 - The migration principal does not need `CREATE ROUTINE`.
-- Guard state lives in the current session and temporary database objects.
+- Decision/assertion state lives in the current session and temporary database
+  objects; the intermediate CHECK is deliberately persistent across failures.
 - Prepared SQL contains provider-rendered DDL, not caller-provided SQL text.
 - SafeMigrations declares its user-variable capability through Doka 10.4.0.
   Doka supplies `AllowUserVariables=true` for a provider-owned string only when
@@ -124,8 +129,9 @@ The provider handler emits a plan equivalent to:
 6. select provider-rendered DDL or an inert statement;
 7. `PREPARE` and `EXECUTE` the selected statement;
 8. evaluate and assert the target postcondition;
-9. always deallocate the prepared statement, restore provider session state,
-   clear SafeMigrations variables, and drop the temporary assertion table.
+9. always deallocate the prepared statement, restore an entered certified
+   provider session scope, clear SafeMigrations variables, and drop the temporary
+   assertion table.
 
 For repair-capable `EnsureColumn` plans, a fresh exact column match is checked
 after database identity, prerequisites, and any state-evaluation guard succeed.
@@ -134,6 +140,13 @@ different columns retain their required classification and data checks. This
 is an operation-local runtime check, not reuse of a preflight result or an
 earlier operation's proof. An intervening DDL or DML operation therefore cannot
 inherit a previous match.
+
+Ensure repairs and explicit alterations share fresh nullability-dependency
+guards. A required target cannot retain a local `ON DELETE SET NULL` or
+`ON UPDATE SET NULL` FK, and a nullable target cannot retain PRIMARY membership.
+These predicates qualify repair, not an already matching no-op or the ordinary
+guarded missing-column addition. They run before a repair's backfill UPDATE or
+column DDL; a valid data proof does not remove an incompatible dependency.
 
 Repair-capable plans classify state before evaluating the final repair
 precondition, which is needed only for `Different`. Separate SQL statements
@@ -304,6 +317,18 @@ IGNORE` or `INSERT ... ON DUPLICATE KEY UPDATE`: those forms can hide integrity
 errors or select the first matching unique index without proving that the
 model-managed primary-key row is the intended row.
 
+Ordered projection treats key-column labels with the provider's separate
+case-insensitive column identity. Row hashes, self-key collision exclusion,
+recorded value lookup and postflight final-writer identity therefore agree
+when two operations spell the same physical column differently. Reordering a
+composite predicate is equivalent only when every label retains its paired
+typed value. Table/database identity and typed values remain independent;
+mathematical uniqueness proof uses the same candidate column set, without
+changing physical index/FK member order or their qualification guards.
+Unicode canonicalization retains any fold rejected by the certified comparer;
+it is not an unrestricted invariant-uppercase or row-value transformation.
+The captured authored labels and operation fingerprints are not rewritten.
+
 Model-managed mutation requires a transactional table engine. A
 non-transactional target is `Unsupported` before DML. The normal EF migrator
 owns transaction creation. Doka's handler scope participates in that transaction
@@ -370,6 +395,23 @@ non-null default backfill. An exact target match short-circuits repair probes.
 Analysis keeps operation-specific source eligibility separate from shared
 physical row probes: two operations targeting the same length cannot borrow
 each other's old-definition approval.
+
+An exact accepted foreign-key removal does not by itself change column values
+or storage. Ordered preflight can therefore retain a supported matching column
+proof, or an exact source-proven value-preserving nullability alteration with
+unchanged layout, without first converging the complete table.
+Required-to-nullable relaxation and nullable-to-required tightening with no NULL
+rows can retain that certificate, including several such alterations on
+different columns of the same owner. Only nullability and validated boolean
+backfill review metadata may differ;
+the provider's live source and row certificate remain required. Authored
+`oldDefinition` metadata alone is not a live-source proof. Intervening data or
+opaque operations, changed physical source facets or keys, and unresolved or
+newly accepted FK dependencies cannot reuse that certificate. A default backfill
+UPDATE invalidates row proofs even when other column facets remain unchanged.
+Independent `Unsupported` and `DataBlocked` results remain blocking. Relaxing
+nullability still requires the explicit repair policy and cannot make a retained
+primary-key column nullable.
 
 Type-changing explicit alterations additionally require a conservative InnoDB
 in-page row bound for the captured row format and page size, as well as the
@@ -448,9 +490,9 @@ target with compatible nullability, literal Boolean default, provider metadata,
 and dependencies. It does not add a database check constraint. `BIT(2..64)`, a
 non-Boolean target, and the reverse `TINYINT(1) -> BIT(1)` remain blocked.
 
-Doka's typed metadata contract must recognize every provider annotation and
-prove that Guid storage and value-generation metadata are consistent with the
-complete column shape. Existing `NULL` values block a repair to `NOT NULL`
+SafeMigrations' Doka metadata projection must recognize every captured provider
+annotation and prove that Guid storage and value-generation metadata are
+consistent with the complete column shape. Existing `NULL` values block a repair to `NOT NULL`
 unless a structurally proven non-null default permits Doka's guarded backfill
 before target DDL. Other store-family, collation, generated-value, row-version,
 and unsupported provider-metadata differences remain fail-closed.
@@ -480,6 +522,268 @@ instant or online: a `VARCHAR` widening can cross the one-byte/two-byte encoded
 length boundary, and a string-family transition may copy or rebuild a table,
 rebuild indexes, or wait for a metadata lock. Review table size, row format,
 page size, key limits, server profile, and maintenance window independently.
+
+## Explicit backfill metadata
+
+The exact boolean `Doka:MySql:RequiresExplicitBackfill` annotation is recognized
+as Doka's backfill safety marker, not an unsupported physical column facet.
+Its value remains in the immutable definition, fingerprint and authored
+operation. Unknown annotation names, duplicate markers and non-boolean marker
+values remain unsupported. No dependency-version increase is required.
+
+For a supported missing required column without an approved replacement value,
+SafeMigrations renders a separate nullable add clone with the provider marker
+intact and uses the atomic-add protocol below. The original contract is
+unchanged. A populated table is `DataBlocked`; an already matching column
+remains a no-op on retry. Client-side GUID generation does not prove a backfill
+value for existing rows, and SafeMigrations does not manufacture one.
+
+For a same-layout nullable-to-required alteration without an approved non-null
+default, a fresh operation-local NULL probe must prove that no row needs a
+replacement before the provider-rendered guarded alteration executes. Existing
+NULL values remain blocking. A supported explicit non-null default retains the
+independently approved provider backfill path and its row-proof invalidation;
+the marker does not waive source, dependency, conversion or target-postcondition
+checks.
+
+Every actual nullable-to-required Alter needs `STRICT_TRANS_TABLES` or
+`STRICT_ALL_TABLES`, including same-layout changes, widening/narrowing and an
+approved explicit non-null default UPDATE. That UPDATE remains available under
+its independent proof, but it cannot cover a NULL inserted afterward.
+Permissive MODIFY could coerce that NULL to an implicit value different from
+the approved replacement; strict conversion must reject it. A required-target
+Ensure repair likewise needs strict mode while its live column is nullable.
+Exact matching targets and already-required ordinary comment/default repairs
+do not acquire this conversion requirement. SafeMigrations reads the session
+mode without changing it; the check does not establish a transaction lock or
+prevent a concurrent write.
+
+A required TIMESTAMP Ensure or Alter repair additionally requires
+`@@SESSION.explicit_defaults_for_timestamp = 1`, so native MODIFY cannot acquire
+an implicit current-time default or replace NULL data through legacy temporal
+semantics. This includes an approved fixed default: it does not prevent legacy
+TIMESTAMP handling from replacing a later NULL with the current time.
+Matching remains unaffected. SafeMigrations checks this setting without
+changing it; missing no-default TIMESTAMP additions retain the separate
+unsupported boundary described below.
+
+A missing required target with an authored SQL default keeps the native
+required ADD rather than the no-default two-stage CHECK protocol. That ADD
+requires InnoDB and strict SQL mode; a required TIMESTAMP additionally needs
+`@@SESSION.explicit_defaults_for_timestamp = 1`. The diagnostic for unavailable
+missing-state qualification is `column_required_sql_add_unavailable`.
+The native statement atomically validates its authored default against the
+affected rows. It must reject a NULL or invalid conversion rather than coerce
+an unapproved value; SafeMigrations does not replace the default or change the
+session. Matching existing columns do not acquire these missing-only guards.
+
+A structured SQL literal NULL is not a non-null replacement proof. Where the
+engine can represent that required target, a populated owner is `DataBlocked`
+before ADD. An empty owner still requires the strict InnoDB qualification;
+an intervening row makes the native ADD fail atomically instead of creating a
+column with an invented value. Engine representability remains independent:
+MariaDB rejects required SQL NULL-default contracts rather than borrowing
+MySQL's empty-table representation. Other supported parsed SQL defaults may
+use native ADD validation, but their presence does not prove structural
+non-nullability or authorize a backfill UPDATE. Opaque expressions remain
+unsupported, and dependency/source guards are not waived.
+
+An explicit nullable-to-required alteration and a required-target Ensure repair
+also check active local `ON DELETE SET NULL` and `ON UPDATE SET NULL`
+dependencies before any backfill UPDATE or column DDL.
+The captured physical FK names let ordered preflight discharge an accepted exact
+drop, not assume every FK using the column was removed. A new accepted SET NULL
+FK restores the blocker, and runtime reads the current catalog independently.
+The diagnostic is `column_set_null_dependency`; neither NULL-free rows nor an
+explicit default makes the retained FK compatible with a required column.
+
+Analysis captures column dependencies through tagged parameterized statements
+with at most 32 distinct requests, eight statements per transport batch and the
+existing payload bounds. Only verified current-database aliases, unchanged raw
+table owners, native case-insensitive member identities and the same dependency
+role can share a request. A required
+target's SET NULL facts are not borrowed by a nullable target's PRIMARY role;
+every consumer retains its independently qualified operation-reference lifetime.
+There is no global table/schema case folding or cross-analysis cache.
+
+Each request has an explicit absence sentinel. All physical DELETE/UPDATE SET
+NULL names remain separate complete rows rather than a truncated concatenation
+or first-match shortcut; PRIMARY membership is validated separately. Exact
+five-field width, ordinal, role, strict boolean/integral-zero-or-one and completeness
+checks precede publication. Completed FK sets are immutable across their
+operation-reference consumers. Failed transport, cancellation or malformed rows
+cannot publish a partially captured dependency certificate. Runtime still reads
+the live catalog before its repair. Batching does not skip fresh facts, grant a
+repair or establish a general timing gain.
+
+Conversely, a later FK ensure requesting SET NULL cannot consume a required
+projected local column, including a column made required by an earlier accepted
+Ensure repair. A captured replacement reports
+`projected_foreign_key_set_null_unrepresentable` instead of borrowing stale
+nullable metadata or promoting a previous matching/missing result.
+
+The locked Doka 10.4.2 contract removes synthetic defaults and marks additions
+or nullable-to-required alterations requiring explicit backfill. Its provider
+generator rejects required additions without an explicit default, computed
+expression or server-generated value:
+
+- [Doka 10.4.2 model differ](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/b2408bfbe29517d742734d06d848081cdb9e1de0/src/Doka.EntityFrameworkCore.MySql/Internal/Migrations/MySqlMigrationsModelDiffer.cs)
+- [Doka 10.4.2 column SQL generator](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/b2408bfbe29517d742734d06d848081cdb9e1de0/src/Doka.EntityFrameworkCore.MySql/Internal/Migrations/MySqlMigrationsSqlGenerator.Columns.cs)
+
+## Atomic required-column additions
+
+The [decision record](decisions/D-015-owned-atomic-required-column-additions.md)
+documents the proposed architectural rationale and its confirmation boundaries.
+
+A supported ordinary required-column Ensure with no default uses
+two InnoDB ALTER statements under one logical decision and final postcondition:
+
+1. Add the complete provider-rendered column as nullable and add an enforced
+   `column IS NOT NULL` CHECK in that same ALTER. Existing or raced rows would
+   receive NULL and violate the CHECK, so that ALTER cannot publish a fabricated
+   replacement value.
+2. Modify the exact staged column to its complete required target and remove
+   the owned CHECK in that same ALTER. Explicit values supplied by intervening
+   writers are retained, not replaced.
+
+Each transition is atomic, not the pair. DDL can commit between them. This is
+neither a transaction spanning both ALTERs nor an application write lock.
+SafeMigrations emits no `LOCK TABLES`, needs no additional lock privilege, and
+adds no SQL-mode or CHECK-enforcement writes to this protocol. The original
+native provider setup/cleanup remains within the shared resource scope.
+It requires supported InnoDB, strict conversion and active CHECK enforcement
+before staging or resume.
+An unsupported engine, guard collision, unenforced CHECK or changed column
+shape cannot acquire a fallback that invents row values.
+
+The deterministic CHECK name is `doka_sm_add1_nn_` plus 48 hexadecimal digits,
+fitting the 64-character identifier limit. Its identity is derived from the
+authored owner, target and contract fingerprint. A matching prefix proves no
+ownership and never causes a catalog object to be hidden or removed. Raw
+qualified and omitted owner qualifiers have distinct recovery identities;
+retry the same authored operation rather than rewriting its schema contract.
+Recovery resolves the physical schema/table owner according to
+`@@lower_case_table_names`: mode zero compares bytes exactly, while modes one
+and two use server-side `LOWER` and compare the resulting bytes. Sparse inventory
+recognition uses that same native owner resolution, not a CLR case-folding
+substitute. The column, CHECK name/clause and raw recovery fingerprint remain
+exact. This lookup neither broadens the explicit current-database qualifier
+guard nor borrows ownership from an unrelated object.
+Byte-exact catalog comparisons use length-free `CAST(expression AS BINARY)`
+instead of the deprecated unary `BINARY` form. No cast length, padding or
+truncation is introduced; Unicode bytes, trailing spaces and NULL retain their
+existing comparison contract. See the
+[MySQL cast contract](https://dev.mysql.com/doc/refman/8.4/en/cast-functions.html)
+and [MariaDB cast contract](https://mariadb.com/docs/server/reference/sql-functions/string-functions/cast),
+retrieved 2026-10-12.
+
+Column comments are exact contract values, not case-insensitive identifiers.
+Single-column matching, strict-table matching, nullable staging ownership and
+`column_comment_digest` diagnostics share the same byte-exact predicate. Case,
+Unicode bytes and trailing spaces remain significant; an omitted authored
+comment and an empty native comment remain equivalent. A case-only mismatch
+therefore cannot certify atomic-add recovery; ordinary comment repair still
+requires its existing policy and eligibility.
+The targeted native regressions reproduced false matching and false recovery
+on MariaDB. Their MySQL counterpart already distinguished the same case-only
+drift before the explicit cast; this is not evidence of a MySQL regression or
+a universal native-catalog collation rule. MySQL's
+[INFORMATION_SCHEMA collation guidance](https://dev.mysql.com/doc/refman/8.4/en/charset-collation-information-schema.html)
+describes general comparison behavior and exceptions; the provider's explicit
+predicate avoids inheriting either engine's native metadata equality.
+The source was retrieved 2026-10-13.
+
+| Durable state | Forward handling |
+| --- | --- |
+| Column and owned CHECK absent | Classify fresh prerequisites and stage the addition. |
+| Exact nullable target and exact enforced owned CHECK | Requalify and resume the final ALTER for the same operation. |
+| Exact required target and no owned CHECK | Completed matching no-op. |
+| Required target with the staging CHECK still present | Existing conflict; no resume or automatic artifact removal. |
+| Wrong owner/shape/expression, name collision or unenforced CHECK | No staging/resume certificate; preserve evidence and do not delete a conflicting object. |
+
+Existing conflicting columns remain `Different`: `ThrowIfDifferent` and
+`RepairIfSafe` reject, while `ExistenceOnly` retains its explicit no-op contract
+without resuming or removing the CHECK. A reserved guard-name collision while
+the target column is missing is `Unsupported`, so no policy can create a
+column using someone else's object as its barrier.
+
+Failure or cancellation does not prove which ALTER committed. Re-read the
+durable catalog and retry the same forward operation; cleanup deliberately
+retains the intermediate CHECK. Unexpected-object analysis recognizes only an
+exact staging object bound to one matching pending Ensure and a fresh resume
+predicate, never every object sharing its prefix. A resumed addition can contain
+explicit writer rows. Its `Missing`/`Apply` result therefore does not certify an
+empty table or automatically authorize a subsequent primary or foreign key.
+An accepted column tombstone proves absence, not empty rows. A following
+required ADD still needs its operation-local row and engine/session eligibility;
+it cannot borrow a fresh-table certificate from the dropped column.
+If the ordered required ADD has no current row certificate,
+`projected_required_add_rows_unproven` is `PrerequisiteMissing` and the blocked
+decision is `prerequisite_missing`. Obtain a fresh operation-bound proof or
+author an explicit reviewed backfill; resume recognition and stale table
+lifetimes do not justify treating rows as absent.
+This catalog recognition proves the equivalent staging invariant, not who
+historically created it. A retained local DELETE/UPDATE SET NULL FK is refused
+conservatively as `Unsupported` with `column_set_null_dependency`. Qualified
+engines reject creating that action on the owned CHECK column, so it is not an
+ordinary reachable staging state. The predicate does not authorize removal of
+an anomalous dependency; compatible CASCADE dependencies are not removed.
+
+Between the ALTERs, inserts omitting the new value can fail; after interruption
+that restriction can last until recovery. MariaDB writers can independently
+disable CHECK enforcement in their own sessions, so the barrier is not a
+promise that every writer is blocked. The final strict NOT NULL conversion
+still rejects NULL instead of coercing it, without removing the barrier on
+failure. The additional ALTER and engine-managed locks can add DDL work; review
+the maintenance window rather than treating this as instant or online DDL.
+Migration source, immutable metadata and EF history semantics are unchanged.
+
+The protocol's catalog-only status is materialized once per operation and used
+by classification, repair qualification, NULL-probe eligibility and diagnostics.
+Final postcondition evaluation reads the live catalog independently after DDL;
+the status is not a cross-operation cache. This factoring does not make the
+additional DDL or catalog work free, and no timing improvement is implied.
+
+The no-default protocol requires a supported ordinary intrinsic column shape
+and validated provider metadata; server-generated identity additions keep
+their separate provider contract. ENUM/SET matching canonicalizes keyword and
+native literal display, but preserves decoded member case and order. Backslash
+interpretation follows the active session mode; double-quoted members are not
+accepted as string literals under ANSI_QUOTES, independently of whether the
+member domain needs backslash decoding. An unrecognized or malformed
+domain cannot acquire matching or recovery by folding its literal contents.
+
+If a column comment contains a backslash, Doka's existing native comment scope
+can temporarily enable NO_BACKSLASH_ESCAPES. For table creation, a table or any
+column comment can affect every ENUM/SET column in that statement. When the
+member domain depends on backslash interpretation, non-matching creation or
+repair therefore requires that mode already enabled. Otherwise the diagnostic
+is `column_native_enum_mode_conflict`: the in-scope DDL/postcondition could
+describe another domain than the original session sees after cleanup.
+These eligibility guards neither change the original mode nor rewrite members.
+Exact matching states remain no-ops and must still verify after native cleanup.
+
+The distinct standard-only escaped-quote staging form requires
+NO_BACKSLASH_ESCAPES disabled and no opaque native setup scope. A known Doka
+backslash-comment scope disables that staging protocol and refuses missing
+conversion, while an existing exact target can retain its ordinary no-op.
+An unknown opaque setup paired with a protocol certificate is rejected during
+generation. The original-mode certificate cannot survive an unproved setup's
+reinterpretation; no authored domain is rewritten to force compatibility.
+
+TIMESTAMP additions are excluded because session-dependent implicit defaults
+need a separate full-transition certificate.
+Unsupported missing shapes use `column_atomic_add_unavailable`,
+not an unguarded native ADD. Completed matching states are still comparable.
+See [MariaDB TIMESTAMP automatic values](https://mariadb.com/docs/server/reference/data-types/date-and-time-data-types/timestamp#automatic-values).
+
+MySQL documents enforced-CHECK validation within ALTER and atomic InnoDB DDL;
+MariaDB documents atomic ALTER and independently mutable CHECK enforcement:
+
+- [MySQL 8.4 ALTER TABLE](https://dev.mysql.com/doc/refman/8.4/en/alter-table.html)
+- [MySQL 8.4 atomic DDL](https://dev.mysql.com/doc/refman/8.4/en/atomic-ddl.html)
+- [MariaDB atomic DDL](https://mariadb.com/docs/server/reference/sql-statements/data-definition/atomic-ddl)
+- [MariaDB CHECK-enforcement variable](https://mariadb.com/docs/server/server-management/variables-and-modes/server-system-variables#check_constraint_checks)
 
 ## Index prefixes and physical key limits
 
@@ -524,6 +828,19 @@ physical identity and all of its aliases. Prefix, expression, provider-option,
 and `PRIMARY` definitions are not cross-kind aliases; `PRIMARY` is reserved for
 the primary-key contract. Exact-name collisions are resolved before differently
 named semantic matches.
+Case-insensitive index-member names and typed column/key-member names follow
+their separate provider comparers in ordered projection and postflight,
+including shared UNIQUE/index aliases. Table and database identities retain
+their native owner contract; default/domain literals are not case-folded as
+member names. An ordinary index target named PRIMARY retains its immutable
+unsupported result even after accepted earlier operations.
+An index rename with an existing source rejects either endpoint named `PRIMARY`
+as `Different`, before native DDL, and runtime retains `doka_sm_different`.
+A missing source remains an idempotent no-op; reserved-name refusal does not
+invent source presence. Use the separate primary-key contract for a reviewed
+key replacement, not an ordinary rename. See the
+[MySQL index-rename rules](https://dev.mysql.com/doc/refman/8.4/en/alter-table.html)
+(primary source; retrieved 2026-10-12).
 
 The same physical feasibility gate applies to missing and replacement ordinary
 indexes, primary keys, and unique constraints. It checks the complete key width,
@@ -572,7 +889,25 @@ SafeMigrations parses that value with its bounded typed grammar when capturing
 an EF-generated definition. `CURRENT_TIMESTAMP(6)` is therefore structurally
 rendered and compared instead of being rejected as opaque. Expressions outside
 the grammar remain `opaque_sql_expression`; they are not executed or accepted
-heuristically. Primary contracts:
+heuristically. Parsing alone is not a non-null backfill proof. Required
+SQL-default ADD eligibility, atomic native validation and matching exemptions
+follow [the column contract](#explicit-backfill-metadata).
+
+For a supported uncast structured ISO date-time string default on TIMESTAMP or
+DATETIME, MySQL compares two independent catalog paths. With DEFAULT_GENERATED,
+the expected `_utf8mb4` serialized expression display is matched byte-exactly,
+without padding the expression's literal payload. Without that marker, only
+exact original/plain temporal candidates and target-precision zero-padding
+are eligible. MariaDB keeps its quoted native temporal display path. For
+example, `2001-01-02 03:04:05` can match the plain `timestamp(6)` value
+`2001-01-02 03:04:05.000000`, not a generated-expression default with an
+independently padded or different charset-prefixed payload.
+
+Comparison does not union arbitrary charset introducers, round or truncate
+extra fractional digits, reinterpret a timezone or time-only value, or correct
+an invalid calendar date. The authored expression, default kind and fingerprint
+remain unchanged; display matching is not a new value-conversion or backfill
+permission. Primary contracts:
 
 - [MariaDB JSON data type](https://mariadb.com/docs/server/reference/data-types/string-data-types/json)
   (retrieved 2026-09-01);
@@ -593,17 +928,36 @@ inventory through the same provider comparator.
 
 Ordered preflight resolves a semantic no-op to one physical catalog name before
 retaining it as prerequisite evidence. A later drop invalidates every semantic
-alias bound to that physical object. If multiple physical objects match, the
-current ensure remains a deterministic no-op, but its ambiguous identity is not
-used to authorize a later operation.
+alias bound to that physical object. If multiple physical objects match without
+a resolved binding, the current ensure remains a deterministic no-op, but its
+ambiguous identity is not used to authorize a later operation.
 
 An accepted drop creates an ordered tombstone for the physical object. A later
 ensure for the same definition, including a uniquely bound semantic alias,
-therefore reports `Missing` and `Apply` even though the immutable pre-batch
-catalog result was `Matching`. If data or a required key/column changes between
-those operations, preflight blocks before execution. This matters on both
-engines because their DDL can commit independently of surrounding application
-transactions.
+therefore reports `Missing` and `Apply` when no matching physical object
+survives, even though the immutable pre-batch catalog result was `Matching`.
+A captured surviving matching identity instead retains `Matching` and `NoOp`.
+If data or a required key/column changes between those operations, preflight
+blocks before execution. This matters on both engines because their DDL can
+commit independently of surrounding application transactions.
+
+The same ordered existence facts apply when Core has only accepted column and
+constraint prerequisites rather than a complete table image. Accepted standalone
+FK, unique and check creations can be dropped later in the stream; accepted
+removals remain tombstones for repeated drops and later ensures. A repeated
+primary-key drop also retains the singleton's known absence instead of reusing
+its immutable live match. Physical names and bound aliases remain distinct:
+removing one matching object does not remove another surviving physical object.
+Unknown owners, unbound identities and independent source or data blockers are
+not promoted merely because a prior constraint operation was accepted.
+
+MySQL/MariaDB column and FK member inventories compare those member names
+case-insensitively. A case-only spelling change does not lose an accepted
+column alteration or physical FK removal. This is deliberately narrower than
+table/database identity: those owners retain their existing exact-name and
+verified current-database qualification rules, without global case folding.
+The atomic-add recovery path separately uses the server-mode owner lookup
+described above; it does not change these general projection identities.
 
 Physical constraint namespaces are checked only after local exact and semantic
 matching. MySQL CHECK and foreign-key symbols must be free across the current
@@ -628,13 +982,48 @@ names introduced in MariaDB 12.1 cannot cross-match another table. MySQL
 invisible indexes and MariaDB ignored indexes do not satisfy a visible expected
 index and do not block creation under a different name.
 
+## Ordered constraint replacement
+
+An exact accepted FK drop can precede a replacement with different referential
+actions. For an existing populated table, preflight requires a separately
+captured certificate for that exact replacement: compatible endpoint storage,
+a complete unprefixed unique principal key, and an orphan-free row result.
+The old FK's `Different` classification alone is not this certificate. Only
+the accepted removal and value-preserving nullability transitions retain these
+facts; row mutations or changes to their physical endpoints, columns or
+principal candidate key invalidate them. Independent support and identity
+conflicts remain blocking. If another matching physical FK survives the drop,
+the ensure remains `Matching` with that actual alias identity rather than
+claiming that a new FK must be created.
+
+Runtime rechecks endpoint-table and column presence, orphan data, and every
+affected local column's nullable state before an `ON DELETE SET NULL` or
+`ON UPDATE SET NULL` FK can be created. The exact storage and unprefixed unique
+candidate-key certificate above belongs to this bounded preflight replacement
+path; it is not imposed globally on every runtime FK ensure. The engine still
+enforces its physical FK formation rules, and this guard does not claim to
+translate every physical type/key error into a SafeMigrations category. See the
+[MySQL foreign-key contract](https://dev.mysql.com/doc/refman/8.4/en/create-table-foreign-keys.html)
+and [MariaDB foreign-key contract](https://mariadb.com/docs/server/ha-and-performance/optimization-and-tuning/optimization-and-indexes/foreign-keys).
+
+After an accepted primary-key drop, a current empty-table certificate and
+accepted non-nullable target columns can prove a different replacement key's
+row prerequisites. A successfully guarded required-column addition without a
+default can establish that certificate on an empty table. Ordered writes or
+unknown row state invalidate it, nullable key parts cannot use it, and the
+provider still validates physical key feasibility. This does not authorize
+adding generated identifiers to populated tables or replacing an unproven key.
+
 ## Scoped cleanup in Doka 10.4.0
 
 `RenderStandardOperation` exposes provider-validated `Setup`, `Body`, and
 `Cleanup` fragments. SafeMigrations embeds the exact body as UTF-8 hexadecimal
 prepared SQL and carries provider setup and cleanup into its outer scope; it no
-longer lexes or rewrites provider command text. The scope uses one transaction-
-suppression value across the complete provider-rendered command sequence and
+longer lexes or rewrites ordinary provider command bodies. The specialized
+atomic-add path validates an exact single-column native ALTER before appending
+its owned typed CHECK clause; it does not accept arbitrary caller SQL. The
+scope uses one transaction-suppression value across the complete
+provider-rendered command sequence and
 rejects a sequence with mixed suppression requirements.
 
 For column value generation, `AutoIncrement` is compared against `c.EXTRA`.
@@ -649,16 +1038,39 @@ unsupported until its complete observable database contract is modeled.
 
 Doka attempts cleanup after setup or body failure and after caller
 cancellation. Asynchronous cleanup uses an independent cancellation token.
+Stateful native cleanup requires the certified Doka SQL-mode shape with exactly
+two setup fragments and one restore fragment. Unknown stateful cleanup is
+refused instead of assuming idempotence; native commands without cleanup keep
+their ordinary path.
+
+The handler initializes operation-owned scope state before identity and
+decision guards. After the decision assertion, immediately before native setup,
+it captures the current mode and marks scope entry atomically. Cleanup restores
+only an entered certified scope, then resets its owned bookkeeping. A rejection
+before setup must not restore NULL or a stale saved mode from an earlier
+operation: the conditional restore keeps the current mode when entry did not
+occur. Failure or cancellation after entry retains the restore obligation;
+an actual restore failure still follows Doka's unsafe-connection boundary.
+These wrappers introduce no mode setting beyond the certified native provider
+scope, and they do not move opaque setup ahead of identity or decision guards.
+The certified snapshot and conditional restore are composed from shared native
+SQL parts and bound to the complete expected statement before execution. A
+changed provider statement cannot silently leave entry tracking unset through
+a failed substring replacement; unsupported drift refuses generation. The
+nullable staging target explicitly retains every immutable definition facet
+and provider annotation rather than changing the authored contract.
+
 SafeMigrations cleanup commands are idempotent: the prepared-statement cleanup
 first replaces the named statement with an inert statement before deallocation,
-provider cleanup restores scoped state, and the final guard cleanup nulls
-session variables and drops the temporary table with `IF EXISTS`.
+certified provider cleanup conditionally restores entered scoped state, and
+the final guard cleanup nulls session variables and drops the temporary table
+with `IF EXISTS`.
 
 If any cleanup command fails, Doka attempts the remaining cleanup commands,
 closes the relational and physical connection, clears the matching
 MySqlConnector pool generation, and reports the primary and cleanup failures.
-The full engine matrix verifies failed-body cleanup, cancellation cleanup, and
-physical-session replacement after an injected cleanup failure.
+The required engine matrix must verify failed-body cleanup, cancellation
+cleanup, and physical-session replacement after an injected cleanup failure.
 
 ## Implicit commit and retry
 
@@ -769,6 +1181,8 @@ line is admitted implicitly.
 - [MySQL foreign keys](https://dev.mysql.com/doc/refman/8.4/en/create-table-foreign-keys.html)
 - [MariaDB 12.1 changes](https://mariadb.com/docs/release-notes/community-server/12.1/changes-and-improvements-in-mariadb-12.1)
 - [MySQL INFORMATION_SCHEMA.COLUMNS](https://dev.mysql.com/doc/refman/en/information-schema-columns-table.html)
+- [MySQL INFORMATION_SCHEMA collation guidance](https://dev.mysql.com/doc/refman/8.4/en/charset-collation-information-schema.html)
+  (retrieved 2026-10-13)
 - [MySQL temporary table privileges](https://dev.mysql.com/doc/refman/8.4/en/create-temporary-table.html)
 - [MariaDB SQL statements causing implicit commit](https://mariadb.com/docs/server/reference/sql-statements/transactions/sql-statements-that-cause-an-implicit-commit)
 - [MariaDB ALTER TABLE](https://mariadb.com/docs/server/reference/sql-statements/data-definition/alter/alter-table)

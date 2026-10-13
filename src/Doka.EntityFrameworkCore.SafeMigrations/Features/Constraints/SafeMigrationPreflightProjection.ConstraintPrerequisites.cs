@@ -20,7 +20,15 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         if (definitions.ContainsSemantically(expected))
         {
+            // WHY: An unchanged table-matched shape proves a semantic Ensure
+            // postcondition without proving an authored physical drop target.
+            // Observation binds names only from separate actual identity proof.
             return Analysis(SafeMigrationObservedState.Matching);
+        }
+
+        if (definitions.HasUnprovenMutatedIdentity(liveAnalysis))
+        {
+            return ConstraintIdentityUnknown(definitions.IdentityUnknownOriginOrdinal);
         }
 
         var mutation = definitions.ResolveMutation(name, expected, liveAnalysis);
@@ -28,39 +36,119 @@ internal sealed partial class SafeMigrationPreflightProjection
         return mutation switch
         {
             ProjectedDefinitionMutation.Missing => Analysis(SafeMigrationObservedState.Missing),
-            ProjectedDefinitionMutation.Unknown => StructureStateUnknown(),
+            ProjectedDefinitionMutation.Unknown => definitions.IdentityUnknownOriginOrdinal is { } origin
+                ? ConstraintIdentityUnknown(origin)
+                : StructureStateUnknown(),
             ProjectedDefinitionMutation.None => null,
             _ => throw new InvalidOperationException(
                 $"Unsupported projected definition mutation '{mutation}'."),
         };
     }
 
+    /// <summary>Defers only the member family whose historical physical alias cannot be reconstructed.</summary>
+    /// <param name="origin">The accepted physical removal's complete-stream ordinal, when captured.</param>
+    private static SafeMigrationProviderAnalysis ConstraintIdentityUnknown(int? origin) => new(
+        SafeMigrationObservedState.PrerequisiteMissing,
+        SafeMigrationRepairCapability.None,
+        postconditionSatisfied: false,
+        "projected_constraint_identity_unknown")
+    {
+        ProviderDeferredOriginOrdinal = origin,
+    };
+
     private void CaptureConstraintPrerequisites(
         ProjectedPrerequisites prerequisites,
-        ExpectedTableDefinition definition
+        ExpectedTableDefinition definition,
+        SafeMigrationProviderAnalysis? liveAnalysis = null
     )
     {
-        if (definition.PrimaryKey is not null)
+        if (definition.PrimaryKey is not null && !prerequisites.PrimaryKeyWasDropped)
         {
-            prerequisites.AcceptPrimaryKey(definition.PrimaryKey);
+            var physicalName = GetCapturedPrimaryKeyPhysicalName(definition.PrimaryKey, prerequisites.NewlyCreated)
+                ?? CapturedTableMemberName(liveAnalysis, SafeMigrationDatabaseObjectKind.PrimaryKey,
+                    definition.PrimaryKey.Name);
+
+            prerequisites.AcceptPrimaryKey(definition.PrimaryKey,
+                physicalName);
         }
 
         foreach (var constraint in definition.UniqueConstraints)
         {
-            prerequisites.AcceptUniqueConstraint(constraint, constraint.Name);
+            CaptureTableMember(prerequisites.UniqueConstraints, constraint.Name, constraint,
+                prerequisites.NewlyCreated, SafeMigrationDatabaseObjectKind.UniqueConstraint, liveAnalysis);
         }
 
         foreach (var constraint in definition.CheckConstraints)
         {
-            prerequisites.CheckConstraints.AcceptPhysical(constraint.Name, constraint);
+            CaptureTableMember(prerequisites.CheckConstraints, constraint.Name, constraint,
+                prerequisites.NewlyCreated, SafeMigrationDatabaseObjectKind.CheckConstraint, liveAnalysis);
         }
 
         foreach (var constraint in definition.ForeignKeys)
         {
-            prerequisites.ForeignKeys.AcceptPhysical(constraint.Name, constraint);
+            CaptureTableMember(prerequisites.ForeignKeys, constraint.Name, constraint,
+                prerequisites.NewlyCreated, SafeMigrationDatabaseObjectKind.ForeignKey, liveAnalysis);
         }
 
-        CaptureSharedUniqueKeys(prerequisites, definition);
+        CaptureSharedUniqueKeys(prerequisites, definition, liveAnalysis);
+    }
+
+    /// <summary>Separates semantic table matching from independently certified physical member identity.</summary>
+    private static void CaptureTableMember<T>(
+        ProjectedDefinitionSet<T> definitions,
+        string authoredName,
+        T definition,
+        bool newlyCreated,
+        SafeMigrationDatabaseObjectKind kind,
+        SafeMigrationProviderAnalysis? liveAnalysis
+    )
+        where T : class
+    {
+        if (newlyCreated)
+        {
+            definitions.AcceptPhysical(authoredName, definition, createdByProjection: true);
+
+            return;
+        }
+
+        if (CapturedTableMemberName(liveAnalysis, kind, authoredName) is { } physicalName)
+        {
+            // WHY: A snapshot certificate predates the ordered stream. It may
+            // bind untouched physical members but cannot resurrect a tombstone.
+            if (!definitions.TryGetPhysicalState(physicalName, out var present) || present)
+            {
+                _ = definitions.BindAlias(authoredName, physicalName, definition);
+            }
+
+            return;
+        }
+
+        definitions.AcceptShapeOnly(definition);
+    }
+
+    /// <summary>Reads only matching provider evidence for the exact authored table-member contract.</summary>
+    private static string? CapturedTableMemberName(
+        SafeMigrationProviderAnalysis? analysis,
+        SafeMigrationDatabaseObjectKind kind,
+        string authoredName
+    )
+    {
+        if (analysis is not
+            { ObservedState: SafeMigrationObservedState.Matching, TableConstraintIdentities: { } bindings })
+        {
+            return null;
+        }
+
+        foreach (var binding in bindings)
+        {
+            if (binding.Kind == kind && StringComparer.Ordinal.Equals(binding.AuthoredName, authoredName)
+                && !string.IsNullOrEmpty(binding.PhysicalName))
+            {
+                return binding.PhysicalName;
+            }
+        }
+
+        return null;
     }
 
     private static void ObserveAcceptedDefinition<T>(
@@ -74,7 +162,7 @@ internal sealed partial class SafeMigrationPreflightProjection
     {
         if (decision.Action == SafeMigrationAction.Apply)
         {
-            definitions.AcceptPhysical(name, definition);
+            definitions.AcceptPhysical(name, definition, createdByProjection: true);
             return;
         }
 
@@ -317,7 +405,8 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         for (var index = 0; index < left.Count; index++)
         {
-            if (!IdentifierEquals(objectIdentityNormalizer, left[index], right[index]))
+            if (!(objectIdentityNormalizer?.ColumnIdentifierComparer ?? StringComparer.Ordinal)
+                .Equals(left[index], right[index]))
             {
                 return false;
             }

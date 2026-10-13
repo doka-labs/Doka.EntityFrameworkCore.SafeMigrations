@@ -65,7 +65,7 @@ A successful release run and exact-version public package readback remain the
 authority for a published API; shipped baseline files record its prepared
 contract, not proof of publication.
 
-Prepared stable 10.4.9 preserves the complete 10.4.6 public API and dependency
+The 10.4.9 patch preserves the complete 10.4.6 public API and dependency
 ranges. SQL Server admits proven built-in integer widening and simple integer
 CHECK validation on populated tables. PostgreSQL preserves repaired column
 collations and exact ALTER source authority; SQLite requires a lossless storage,
@@ -79,6 +79,17 @@ without weakening fresh guards. Earlier MySQL/MariaDB optimizations remain.
 Migration source does not need regeneration; policy selection, canonical
 report v3, filtered-view v2, and migration histories remain unchanged. No
 API-baseline promotion is required for this patch.
+
+Prepared stable 10.4.10 retains that API and dependency contract. Ordered
+nullability/backfill, sparse constraint/index and physical-rename proofs no
+longer fabricate authored definitions from existence-only acceptance. Canonical
+managed-key identities preserve column/value ordinals, and only internally
+captured actual pending migration boundaries reset transition validation.
+Owned required-add and PostgreSQL delete guards protect concurrent writes;
+schema/session cleanup consumes verified ownership. No public signature,
+policy selection, fingerprint format, report schema or migration history
+changes; existing migrations do not need regeneration. Native timing overruns
+are informational, not a waiver of functional or evidence validation.
 
 ## Packages and registration
 
@@ -528,6 +539,10 @@ proven repair capability to a `SafeMigrationDecision` without I/O. The public
 state/policy/action enums are closed contracts; invalid enum values reject.
 `ExistenceOnly`, `ThrowIfDifferent`, and `RepairIfSafe` do not change what the
 provider can prove. See the [policy table](../README.md#policies).
+An existence-only no-op on a different definition proves existence only; it
+does not project the requested column, key, constraint or index as physically
+matching for a later strict operation. Earlier exact structural evidence remains
+unchanged, and semantic matching still requires a resolved physical identity.
 
 ## Read-only runner
 
@@ -546,6 +561,14 @@ optionally takes `targetMigrationId` and `expectedModelFingerprint`. The
 caller must generate a non-sensitive ID; validation is not automatic
 pseudonymization. The pending runner resolves the target against migration
 history. Explicit-sequence callers supply the actual sequence themselves.
+
+The pending runner validates repeated model-managed typed keys within each
+actual migration resolved from EF. Successive migrations can transition the
+same key while ordered projection still spans the complete pending stream.
+Only that internal provenance establishes validation groups. `AnalyzeAsync`,
+`VerifyAsync` and scaffolding retain one authored-batch contract: the same typed
+key cannot transition twice in that batch. Ordinary SQL/DDL and
+`targetMigrationId` do not create caller-defined repetition exemptions.
 
 Model comparison uses the configured migrations assembly's snapshot when one
 exists. A missing snapshot does not itself reject analysis: the runner still

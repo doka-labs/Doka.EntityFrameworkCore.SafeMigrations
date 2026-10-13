@@ -26,6 +26,22 @@ internal sealed record PostgreSqlSafeMigrationRuntimePlan(
     public string PrerequisiteExpression { get; init; } = "TRUE";
 
     /// <summary>
+    /// Gets the native owner guard evaluated before any object prerequisite, row query, or lock acquisition.
+    /// </summary>
+    public string ObjectIdentityGuardExpression { get; init; } = "TRUE";
+
+    /// <summary>Gets the native guard for bindings that survive the operation's drop or rename mutation.</summary>
+    public string PostExecutionObjectIdentityGuardExpression { get; init; } = "TRUE";
+
+    /// <summary>
+    /// Gets the stable diagnostic code distinguishing native-owner refusal from a merged-contract conflict.
+    /// </summary>
+    public string ObjectIdentityGuardFailureCodeExpression { get; init; } = "'schema_search_path_mismatch'";
+
+    /// <summary>Gets the parent table fenced before the complete source-frozen delete classifier is rerun.</summary>
+    public string? ModelManagedDeleteLockTable { get; init; }
+
+    /// <summary>
     /// Gets the immediate postcondition for an applied operation when it
     /// differs from the terminal migration contract.
     /// </summary>

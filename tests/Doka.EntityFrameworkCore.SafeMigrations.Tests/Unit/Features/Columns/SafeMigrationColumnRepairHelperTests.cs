@@ -2,6 +2,42 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 public sealed class SafeMigrationColumnRepairHelperTests
 {
+    /// <summary>Preserves unknown/default contracts while refusing one structurally proven NULL replacement.</summary>
+    public static TheoryData<SafeMigrationDefaultValue, bool, bool> MissingAddDefaultCases => new()
+    {
+        { SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal(null)), false, false },
+        { SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal(null)), true, true },
+        { SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal(42)), false, true },
+        { SafeMigrationDefaultValue.Sql("NULL"), false, true },
+        { SafeMigrationDefaultValue.Sql(SafeMigrationSql.Function("NEWID")), false, true },
+        { SafeMigrationDefaultValue.Sql(SafeMigrationSql.Cast(SafeMigrationSql.Literal(null), "int")), false, true },
+        { SafeMigrationDefaultValue.Literal(null), true, true },
+        { SafeMigrationDefaultValue.None, false, false },
+    };
+
+    /// <summary>Only the exact required structured SQL NULL default loses the existing-row additive proof.</summary>
+    /// <param name="defaultValue">The immutable authored default contract.</param>
+    /// <param name="nullable">Whether NULL is valid for the target.</param>
+    /// <param name="expected">Whether the existing provider-neutral additive proof remains valid.</param>
+    [Theory]
+    [MemberData(nameof(MissingAddDefaultCases))]
+    public void MissingAddRejectsOnlyKnownRequiredStructuredSqlNull(
+        SafeMigrationDefaultValue defaultValue,
+        bool nullable,
+        bool expected
+    )
+    {
+        // Arrange
+        var definition = new ExpectedColumnDefinition("value", typeof(int), nullable, "int",
+            defaultValue: defaultValue);
+
+        // Act
+        var safe = SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(definition);
+
+        // Assert
+        Assert.Equal(expected, safe);
+    }
+
     public static TheoryData<SafeMigrationDefaultValue, bool> NonNullDefaultCases => new()
     {
         { SafeMigrationDefaultValue.None, false },

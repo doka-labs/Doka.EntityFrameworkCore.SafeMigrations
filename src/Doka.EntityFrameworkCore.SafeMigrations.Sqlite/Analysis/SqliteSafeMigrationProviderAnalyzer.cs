@@ -1,7 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite;
 
 /// <summary>Analyzes SQLite catalog state and ordered migration transitions.</summary>
-internal sealed class SqliteSafeMigrationProviderAnalyzer : ISafeMigrationProviderAnalyzer,
+internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrationProviderAnalyzer,
     ISafeMigrationProviderTargetModelAnalyzer, ISafeMigrationProviderObjectIdentityNormalizer,
     ISafeMigrationProviderOperationProjection, ISafeMigrationProjectedColumnAnalyzer
 {
@@ -28,6 +28,9 @@ internal sealed class SqliteSafeMigrationProviderAnalyzer : ISafeMigrationProvid
 
     /// <inheritdoc />
     public StringComparer IdentifierComparer => s_identifierComparer;
+
+    /// <inheritdoc />
+    public bool IndexUsesSchemaScopedIdentity => true;
 
     /// <inheritdoc />
     public SafeMigrationProviderAnalysis ValidateProjectedAlterColumn(
@@ -660,7 +663,8 @@ internal sealed class SqliteSafeMigrationProviderAnalyzer : ISafeMigrationProvid
         var matching = TableMatches(snapshot, table, intent.Definition);
 
         return matching
-            ? Matching(postconditionSatisfied: true, matchedObjectName: table.Name)
+            ? Matching(postconditionSatisfied: true, matchedObjectName: table.Name,
+                tableConstraintIdentities: CaptureTableConstraintIdentities(snapshot, table, intent.Definition))
             : Different("table_definition", "matching", "different", matchedObjectName: table.Name);
     }
 
@@ -715,10 +719,8 @@ internal sealed class SqliteSafeMigrationProviderAnalyzer : ISafeMigrationProvid
             true when !targetOccupied => snapshot.LegacyAlterTableEnabled
                 ? Unsupported("legacy_alter_table")
                 : Matching(postconditionSatisfied: false, matchedObjectName: intent.Name),
-            false when targetExists => Missing(postconditionSatisfied: true),
-            _ => sourceExists
-                ? Different("rename_target", "missing", "existing")
-                : Missing(postconditionSatisfied: false)
+            false => Missing(postconditionSatisfied: true),
+            _ => Different("rename_target", "missing", "existing")
         };
 
         // WHY: Missing source also describes an idempotent replay. An earlier
@@ -849,19 +851,22 @@ internal sealed class SqliteSafeMigrationProviderAnalyzer : ISafeMigrationProvid
     {
         if (!snapshot.Tables.TryGetValue(intent.Table, out var table))
         {
-            return PrerequisiteMissing();
+            return Missing(postconditionSatisfied: true).WithRenameTargetExists(false);
         }
 
         var sourceExists = table.Columns.ContainsKey(intent.Name);
         var targetExists = table.Columns.ContainsKey(intent.NewName);
-        return sourceExists switch
+        // WHY: Missing source is an idempotent no-op even when a later writer
+        // removed the destination too. Its postcondition proves source absence,
+        // not a destination definition; occupancy remains independent evidence.
+        var analysis = sourceExists switch
         {
             true when !targetExists => Matching(postconditionSatisfied: false, matchedObjectName: intent.Name),
-            false when targetExists => Missing(postconditionSatisfied: true),
-            _ => sourceExists
-                ? Different("rename_target", "missing", "existing")
-                : Missing(postconditionSatisfied: false)
+            false => Missing(postconditionSatisfied: true),
+            _ => Different("rename_target", "missing", "existing")
         };
+
+        return analysis.WithRenameTargetExists(targetExists);
     }
 
     private SafeMigrationProviderAnalysis AnalyzeEnsureIndex(
@@ -936,26 +941,69 @@ internal sealed class SqliteSafeMigrationProviderAnalyzer : ISafeMigrationProvid
         RenameIndexIntent intent
     )
     {
+        var targetOccupied = IsIndexRenameTargetOccupied(snapshot, intent.NewName);
         if (!snapshot.Tables.TryGetValue(intent.Table, out var table))
         {
-            return PrerequisiteMissing();
+            return Missing(postconditionSatisfied: true).WithRenameTargetExists(targetOccupied);
         }
 
         var source = table.Indexes.FirstOrDefault(value => s_identifierComparer.Equals(value.Name, intent.Name));
-        var target = table.Indexes.FirstOrDefault(value => s_identifierComparer.Equals(value.Name, intent.NewName));
         if (source is not null
-            && target is null)
+            && !targetOccupied)
         {
             return source.Origin == "c"
                 ? Matching(postconditionSatisfied: false, matchedObjectName: source.Name)
-                : Different("index_origin", "created", source.Origin, matchedObjectName: source.Name);
+                    .WithRenameSourceSupported(true)
+                    .WithRenameTargetExists(false)
+                : Different("index_origin", "created", source.Origin, matchedObjectName: source.Name)
+                    .WithRenameSourceSupported(false)
+                    .WithRenameTargetExists(false);
         }
 
-        return source is null && target is not null
+        return (source is null
             ? Missing(postconditionSatisfied: true)
-            : source is null
-                ? Missing(postconditionSatisfied: false)
-                : Different("rename_target", "missing", "existing");
+            : Different("rename_target", "missing", "existing"))
+            // WHY: A later accepted destination drop can remove a collision,
+            // but cannot turn a constraint-backed source into a standalone index.
+            .WithRenameSourceSupported(source?.Origin == "c")
+            .WithRenameTargetExists(targetOccupied);
+    }
+
+    /// <summary>Checks SQLite's schema-wide table, view and index destination namespace.</summary>
+    /// <param name="snapshot">The complete catalog in the current execution transaction.</param>
+    /// <param name="name">The independently captured index destination.</param>
+    /// <returns>Whether native CREATE INDEX cannot acquire the requested name.</returns>
+    private static bool IsIndexRenameTargetOccupied(SqliteCatalogSnapshot snapshot, string name)
+    {
+        if (snapshot.Tables.ContainsKey(name))
+        {
+            return true;
+        }
+
+        // WHY: RenameIndex is implemented as CREATE followed by DROP. Unlike
+        // column members, its target can collide with another table's index or
+        // a view, so an owner-local lookup cannot certify destination absence.
+        foreach (var table in snapshot.Tables.Values)
+        {
+            foreach (var index in table.Indexes)
+            {
+                if (s_identifierComparer.Equals(index.Name, name))
+                {
+                    return true;
+                }
+            }
+        }
+
+        foreach (var schemaObject in snapshot.OtherObjects)
+        {
+            if (schemaObject.Type is "view" or "index"
+                && s_identifierComparer.Equals(schemaObject.Name, name))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static SafeMigrationProviderAnalysis AnalyzeEnsurePrimaryKey(
@@ -1034,7 +1082,7 @@ internal sealed class SqliteSafeMigrationProviderAnalyzer : ISafeMigrationProvid
         if (named is not null)
         {
             return IdentifiersEqual(named.Columns, intent.Definition.Columns)
-                ? Matching(postconditionSatisfied: true, matchedObjectName: named.PhysicalName)
+                ? Matching(postconditionSatisfied: true, matchedObjectName: named.Name)
                 : Different("unique_columns", Join(intent.Definition.Columns), Join(named.Columns));
         }
 
@@ -1043,7 +1091,9 @@ internal sealed class SqliteSafeMigrationProviderAnalyzer : ISafeMigrationProvid
 
         if (semantic is not null)
         {
-            return Matching(postconditionSatisfied: true, matchedObjectName: semantic.PhysicalName);
+            // WHY: A constraint symbol and its sqlite_autoindex are different
+            // resources. DROP CONSTRAINT addresses only the named symbol.
+            return Matching(postconditionSatisfied: true, matchedObjectName: semantic.Name);
         }
 
         return HasDuplicateKey(
@@ -1071,7 +1121,7 @@ internal sealed class SqliteSafeMigrationProviderAnalyzer : ISafeMigrationProvid
 
         return constraint is null
             ? Missing(postconditionSatisfied: true)
-            : Matching(postconditionSatisfied: false, matchedObjectName: constraint.PhysicalName);
+            : Matching(postconditionSatisfied: false, matchedObjectName: constraint.Name);
     }
 
     private SafeMigrationProviderAnalysis AnalyzeEnsureCheck(
@@ -2598,9 +2648,19 @@ internal sealed class SqliteSafeMigrationProviderAnalyzer : ISafeMigrationProvid
         postconditionSatisfied,
         "classified_missing");
 
+    /// <summary>
+    /// Creates matching evidence while keeping physical member names separate from semantic table shape.
+    /// </summary>
+    /// <param name="postconditionSatisfied">Whether the operation's final condition already holds.</param>
+    /// <param name="matchedObjectName">The resolved physical object name, when independently known.</param>
+    /// <param name="tableConstraintIdentities">
+    /// Optional named members certified from the matched immutable table snapshot.
+    /// </param>
+    /// <returns>The immutable matching classification with only the supplied identity proofs.</returns>
     private static SafeMigrationProviderAnalysis Matching(
         bool postconditionSatisfied,
-        string? matchedObjectName = null
+        string? matchedObjectName = null,
+        IReadOnlyList<SafeMigrationConstraintIdentityBinding>? tableConstraintIdentities = null
     ) => new(
         SafeMigrationObservedState.Matching,
         SafeMigrationRepairCapability.None,
@@ -2608,6 +2668,7 @@ internal sealed class SqliteSafeMigrationProviderAnalyzer : ISafeMigrationProvid
         "classified_matching")
     {
         MatchedObjectName = matchedObjectName,
+        TableConstraintIdentities = tableConstraintIdentities,
     };
 
     private static SafeMigrationProviderAnalysis Different(

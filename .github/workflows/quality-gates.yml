@@ -69,6 +69,7 @@ jobs:
           bash eng/tests/test-release-version.sh
           python3 -m unittest eng/tests/test_verify_coverage.py -v
           python3 -m unittest eng/tests/test_verify_sqlserver_trx.py -v
+          python3 -m unittest eng/tests/test_verify_sqlserver_tooling.py -v
 
       - name: Restore repository dependency graph
         run: >-

@@ -37,16 +37,52 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
         // WHY: A rejected retry did not execute SQL and must not attempt
         // recovery against the already-quarantined session.
         ThrowIfConnectionQuarantined();
+        var token = Guid.NewGuid().ToString("N");
+        var scopeOpened = false;
+        var scopeIssued = false;
+        var providerDispatched = false;
+        Exception? originalFailure = null;
 
         try
         {
+            connection.Open();
+            scopeOpened = true;
+
+            using (var command = connection.DbConnection.CreateCommand())
+            {
+                ConfigureScopeCommand(connection, command,
+                    SqlServerSafeMigrationIdentityInsertScope.BuildBootstrapSql(token));
+                scopeIssued = true;
+                command.ExecuteNonQuery();
+            }
+
+            providerDispatched = true;
+
             return OriginalCommand.ExecuteNonQuery(connection, parameterValues);
         }
         catch (Exception exception)
         {
-            RecoverSession(connection, exception);
+            originalFailure = exception;
+            if (scopeIssued && !IsRejectedBootstrap(exception, providerDispatched))
+            {
+                RecoverSession(connection, token, providerDispatched, exception);
+            }
 
             throw;
+        }
+        finally
+        {
+            if (scopeOpened)
+            {
+                try
+                {
+                    connection.Close();
+                }
+                catch when (originalFailure is not null)
+                {
+                    QuarantineSession(originalFailure);
+                }
+            }
         }
     }
 
@@ -58,21 +94,67 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
     )
     {
         ThrowIfConnectionQuarantined();
+        cancellationToken.ThrowIfCancellationRequested();
+        var token = Guid.NewGuid().ToString("N");
+        var scopeOpened = false;
+        var scopeIssued = false;
+        var providerDispatched = false;
+        Exception? originalFailure = null;
 
         try
         {
+            await connection.OpenAsync(cancellationToken);
+            scopeOpened = true;
+
+            // WHY: A generated command is reusable and interceptors can fail
+            // before dispatch. One seed-only bootstrap roundtrip reserves a
+            // fresh invocation. EF's counted Open/Close keeps caller ownership.
+            // If Open/CreateCommand/configuration fails before SQL is issued,
+            // no owned marker or ON exists and recovery must not touch callers.
+            await using (var command = connection.DbConnection.CreateCommand())
+            {
+                ConfigureScopeCommand(connection, command,
+                    SqlServerSafeMigrationIdentityInsertScope.BuildBootstrapSql(token));
+                scopeIssued = true;
+
+                await command.ExecuteNonQueryAsync(cancellationToken);
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            providerDispatched = true;
+
             return await OriginalCommand.ExecuteNonQueryAsync(connection, parameterValues, cancellationToken);
         }
         catch (Exception exception)
         {
-            await RecoverSessionAsync(connection, exception);
+            originalFailure = exception;
+            if (scopeIssued && !IsRejectedBootstrap(exception, providerDispatched))
+            {
+                await RecoverSessionAsync(connection, token, providerDispatched, exception);
+            }
 
             throw;
+        }
+        finally
+        {
+            if (scopeOpened)
+            {
+                try
+                {
+                    await connection.CloseAsync();
+                }
+                catch when (originalFailure is not null)
+                {
+                    QuarantineSession(originalFailure);
+                }
+            }
         }
     }
 
     private void RecoverSession(
         IRelationalConnection connection,
+        string token,
+        bool providerDispatched,
         Exception originalException
     )
     {
@@ -87,13 +169,13 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
             }
 
             command = connection.DbConnection.CreateCommand();
-            ConfigureCleanupCommand(connection, command);
+            ConfigureCleanupCommand(connection, command, token, providerDispatched);
             command.ExecuteNonQuery();
         }
         catch
         {
             QuarantineSession(originalException);
-            recoveryRequired = true;
+            recoveryRequired = providerDispatched;
         }
         finally
         {
@@ -106,7 +188,7 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
                 catch
                 {
                     QuarantineSession(originalException);
-                    recoveryRequired = true;
+                    recoveryRequired = providerDispatched;
                 }
             }
         }
@@ -118,6 +200,7 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
 
         try
         {
+            DiscardPooledSession(connection.DbConnection);
             connection.DbConnection.Close();
             originalException.Data[RecoveryFailureDataKey] = "session_closed";
         }
@@ -139,6 +222,8 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
 
     private async Task RecoverSessionAsync(
         IRelationalConnection connection,
+        string token,
+        bool providerDispatched,
         Exception originalException
     )
     {
@@ -154,7 +239,7 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
             }
 
             command = connection.DbConnection.CreateCommand();
-            ConfigureCleanupCommand(connection, command);
+            ConfigureCleanupCommand(connection, command, token, providerDispatched);
 
             // WHY: SQL Server TRY/CATCH does not catch client attentions.
             // Recovery must outlive the canceled operation's token, but it
@@ -164,7 +249,7 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
         catch
         {
             QuarantineSession(originalException);
-            recoveryRequired = true;
+            recoveryRequired = providerDispatched;
         }
         finally
         {
@@ -177,7 +262,7 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
                 catch
                 {
                     QuarantineSession(originalException);
-                    recoveryRequired = true;
+                    recoveryRequired = providerDispatched;
                 }
             }
         }
@@ -189,6 +274,7 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
 
         try
         {
+            DiscardPooledSession(connection.DbConnection);
             using var closeTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             await connection.DbConnection.CloseAsync().WaitAsync(closeTimeout.Token);
             originalException.Data[RecoveryFailureDataKey] = "session_closed";
@@ -218,14 +304,46 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
         originalException.Data[RecoveryFailureDataKey] = "session_quarantined";
     }
 
+    /// <summary>Recognizes the bootstrap's exact existing-key rejection before any owned marker is written.</summary>
+    private static bool IsRejectedBootstrap(Exception failure, bool providerDispatched)
+        => !providerDispatched && failure is Microsoft.Data.SqlClient.SqlException { Number: 51007 };
+
+    /// <summary>Prevents an uncertain active SqlClient lease from returning to its reusable connection pool.</summary>
+    private static void DiscardPooledSession(DbConnection connection)
+    {
+        if (connection is Microsoft.Data.SqlClient.SqlConnection sqlConnection)
+        {
+            // WHY: Close on a pooled SqlConnection does not physically dispose
+            // the session. ClearPool marks this active lease for discard when
+            // it closes; an uncertain acquired marker cannot await pool reset.
+            Microsoft.Data.SqlClient.SqlConnection.ClearPool(sqlConnection);
+        }
+    }
+
     private void ConfigureCleanupCommand(
         IRelationalConnection connection,
-        DbCommand command
+        DbCommand command,
+        string token,
+        bool providerDispatched
+    )
+    {
+        // WHY: A failed bootstrap cannot have executed its own ON. Its recovery
+        // may remove only an exact ready marker; even observation failure must
+        // quarantine supported reuse without physically closing caller state.
+        ConfigureScopeCommand(connection, command,
+            SqlServerSafeMigrationIdentityInsertScope.BuildRecoverySql(token, _cleanupSql, providerDispatched));
+    }
+
+    /// <summary>Keeps ownership setup and recovery on the borrowed session and current caller transaction.</summary>
+    private static void ConfigureScopeCommand(
+        IRelationalConnection connection,
+        DbCommand command,
+        string sql
     )
     {
         command.Transaction = connection.CurrentTransaction?.GetDbTransaction();
         command.CommandTimeout = 30;
-        command.CommandText = _cleanupSql;
+        command.CommandText = sql;
     }
 }
 

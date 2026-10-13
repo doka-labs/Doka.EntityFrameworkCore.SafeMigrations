@@ -151,7 +151,9 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
         // WHY: A published migration keeps the meaning it had when it was
         // authored. SafeMigrations classifies its own operations and leaves every
         // other operation to the provider; only scaffolding shapes new source.
-        SafeMigrationModelManagedDataContractValidator.Validate(operations);
+        // WHY: Only pending-migration discovery supplies actual authored IDs.
+        // Standalone Analyze/Verify retain the strict one-batch contract.
+        SafeMigrationModelManagedDataContractValidator.Validate(operations, migrationIds);
 
         // Validate the canonical Core model before trusting any catalog result
         // produced for an instance-specific derived DbContext.
@@ -331,7 +333,11 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
                 _providerAnalyzer as ISafeMigrationProviderObjectIdentityNormalizer;
 
             var postflightProjection = mode == SafeMigrationReportMode.Postflight
-                ? new SafeMigrationPostflightProjection(operations, objectIdentityNormalizer)
+                ? new SafeMigrationPostflightProjection(
+                    operations,
+                    objectIdentityNormalizer,
+                    _providerAnalyzer as ISafeMigrationProjectedKeyAnalyzer,
+                    liveAnalyses)
                 : null;
 
             var preflightProjection = mode == SafeMigrationReportMode.Preflight
@@ -492,7 +498,9 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
                     analysis.RepairCapability);
 
                 var postconditionSuperseded = postflightProjection?.IsSuperseded(ordinal) == true;
-                var postconditionSatisfied = analysis.PostconditionSatisfied || postconditionSuperseded;
+                var postflightIdentityUnproven = postflightProjection?.IsIdentityUnproven(ordinal) == true;
+                var postconditionSatisfied = !postflightIdentityUnproven
+                    && (analysis.PostconditionSatisfied || postconditionSuperseded);
 
                 var operationBlocked = mode == SafeMigrationReportMode.Preflight
                     ? decision.Action.RejectsExecution()
@@ -514,7 +522,12 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
                     globalDataOrigin = managedDataOrigin;
                 }
 
-                var assessmentCode = postconditionSuperseded
+                // WHY: Final search-path metadata cannot establish the owner of
+                // an earlier unqualified writer across an opaque schema change.
+                // Neither live absence nor final-writer reduction supplies that proof.
+                var assessmentCode = postflightIdentityUnproven
+                    ? "postcondition_identity_unproven"
+                    : postconditionSuperseded
                     ? "postcondition_superseded"
                     : operationBlocked
                         ? mode == SafeMigrationReportMode.Postflight

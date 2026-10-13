@@ -19,14 +19,25 @@ expect_failure() {
     fi
 }
 
-expect_success 10.4.9
+expect_success 10.4.10
 
-expect_failure v10.4.9
-expect_failure 10.4.9-RC.1
-expect_failure 10.4.9+build.1
-expect_failure 10.4.9-rc.01
-expect_failure 10.4.9--rc
-expect_failure 10.4.9-rc.1
+# Release-note categories belong to one section each, even when several fixes
+# and release-preparation changes are combined in the same patch.
+awk '
+    /^## \[10\.4\.10\] - / { in_release = 1; next }
+    in_release && /^## / { exit }
+    in_release && /^### / && seen[$0]++ {
+        print "Duplicate release-note category: " $0 > "/dev/stderr"
+        exit 1
+    }
+' "$repo_root/CHANGELOG.md"
+
+expect_failure v10.4.10
+expect_failure 10.4.10-RC.1
+expect_failure 10.4.10+build.1
+expect_failure 10.4.10-rc.01
+expect_failure 10.4.10--rc
+expect_failure 10.4.10-rc.1
 expect_failure 10.1.0
 expect_failure 10.2.0
 expect_failure 10.2.1
@@ -43,6 +54,7 @@ expect_failure 10.4.5
 expect_failure 10.4.6
 expect_failure 10.4.7
 expect_failure 10.4.8
+expect_failure 10.4.9
 expect_failure 10.5.0
 
 echo "Release version positive and negative cases passed."

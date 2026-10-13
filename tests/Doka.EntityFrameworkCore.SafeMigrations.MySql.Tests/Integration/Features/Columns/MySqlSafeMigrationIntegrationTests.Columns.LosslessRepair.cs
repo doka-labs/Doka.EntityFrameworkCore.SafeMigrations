@@ -542,6 +542,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task VarcharNarrowing_GroupsCharacterProofsAndPreservesUtf8AndTrailingSpaces()
     {
+        // Arrange
         var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -596,15 +597,56 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 maxLength: 5),
             SafeMigrationPolicy.RepairIfSafe);
 
-        var singleQueryCount = await CountProviderAnalysisQuestionsAsync(
-            context,
-            singleBuilder.Operations);
+        var nullableOperations = builder.Operations.Where(static operation => operation is SafeMigrationOperation
+        {
+            Intent: EnsureColumnIntent { Definition.IsNullable: true },
+        }).ToArray();
 
-        var groupedQueryCount = await CountProviderAnalysisQuestionsAsync(
-            context,
-            builder.Operations);
+        var requiredOperations = builder.Operations.Where(static operation => operation is SafeMigrationOperation
+        {
+            Intent: EnsureColumnIntent { Definition.IsNullable: false },
+        }).ToArray();
 
         var runner = context.GetService<ISafeMigrationRunner>();
+
+        // Act
+        var nullableSingle = await CountProviderAnalysisQueriesAsync(
+            connectionString,
+            singleBuilder.Operations);
+
+        var nullableGroup = await CountProviderAnalysisQueriesAsync(
+            connectionString,
+            nullableOperations);
+
+        var requiredSingle = await CountProviderAnalysisQueriesAsync(
+            connectionString,
+            requiredOperations);
+
+        var mixedGroup = await CountProviderAnalysisQueriesAsync(
+            connectionString,
+            builder.Operations);
+
+        Console.WriteLine(
+            $"narrowing_analysis_counts nullable_single=[q:{nullableSingle.Questions},"
+            + $"row:{nullableSingle.RowProbeStatements},dependency:{nullableSingle.ColumnDependencyStatements},"
+            + $"session:{nullableSingle.RequiredAddSessionStatements},"
+            + $"owner_engine:{nullableSingle.RequiredAddOwnerEngineStatements},"
+            + $"status:{nullableSingle.RequiredAddStatusStatements}]; "
+            + $"nullable_group=[q:{nullableGroup.Questions},row:{nullableGroup.RowProbeStatements},"
+            + $"dependency:{nullableGroup.ColumnDependencyStatements},"
+            + $"session:{nullableGroup.RequiredAddSessionStatements},"
+            + $"owner_engine:{nullableGroup.RequiredAddOwnerEngineStatements},"
+            + $"status:{nullableGroup.RequiredAddStatusStatements}]; "
+            + $"required_single=[q:{requiredSingle.Questions},row:{requiredSingle.RowProbeStatements},"
+            + $"dependency:{requiredSingle.ColumnDependencyStatements},"
+            + $"session:{requiredSingle.RequiredAddSessionStatements},"
+            + $"owner_engine:{requiredSingle.RequiredAddOwnerEngineStatements},"
+            + $"status:{requiredSingle.RequiredAddStatusStatements}]; "
+            + $"mixed_group=[q:{mixedGroup.Questions},row:{mixedGroup.RowProbeStatements},"
+            + $"dependency:{mixedGroup.ColumnDependencyStatements},session:{mixedGroup.RequiredAddSessionStatements},"
+            + $"owner_engine:{mixedGroup.RequiredAddOwnerEngineStatements},"
+            + $"status:{mixedGroup.RequiredAddStatusStatements}]");
+
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -617,22 +659,6 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 context,
                 builder.Operations.Cast<SafeMigrationOperation>().ToArray(),
                 CancellationToken.None);
-
-        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
-        Assert.All(
-            preflight.Assessments,
-            static assessment =>
-            {
-                Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
-                Assert.Equal(SafeMigrationAction.Repair, assessment.Action);
-                Assert.Equal(SafeMigrationOperationalImpact.TableRewritePossible, assessment.OperationalImpact);
-            });
-        Assert.All(providerAnalysis, static analysis => Assert.True(analysis.RequiresLiveDataProof));
-
-        // WHY: The remaining analyzer statements are batched identically, so
-        // equal command counts prove that four columns add only one table scan.
-        Assert.Equal(singleQueryCount, groupedQueryCount);
-        Assert.InRange(groupedQueryCount, 1, 8);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
@@ -648,24 +674,59 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             new SafeMigrationRunOptions("varchar-narrowing-replay"),
             CancellationToken.None);
 
+        var unicodeLength = await ScalarIntAsync(connectionString,
+            "SELECT CHAR_LENGTH(`unicode_value`) FROM `varchar_narrowing` WHERE `id` = 1;");
+        var trailingLength = await ScalarIntAsync(connectionString,
+            "SELECT CHAR_LENGTH(`trailing_value`) FROM `varchar_narrowing` WHERE `id` = 1;");
+        var requiredLength = await ScalarIntAsync(connectionString,
+            "SELECT CHAR_LENGTH(`required_value`) FROM `varchar_narrowing` WHERE `id` = 1;");
+        var retainedNull = await ScalarIntAsync(connectionString,
+            "SELECT `empty_value` IS NULL FROM `varchar_narrowing` WHERE `id` = 1;");
+
+        // Assert
+        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
+        Assert.All(
+            preflight.Assessments,
+            static assessment =>
+            {
+                Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
+                Assert.Equal(SafeMigrationAction.Repair, assessment.Action);
+                Assert.Equal(SafeMigrationOperationalImpact.TableRewritePossible, assessment.OperationalImpact);
+            });
+        Assert.All(providerAnalysis, static analysis => Assert.True(analysis.RequiresLiveDataProof));
+
+        // WHY: Required no-default targets add atomic storage/session facts.
+        // Like-for-like families prove row-scan grouping without hiding that
+        // fixed safety work behind a nullable-only comparison.
+        Assert.Equal(nullableSingle.Questions, nullableGroup.Questions);
+        Assert.Equal(requiredSingle.Questions, mixedGroup.Questions);
+        foreach (var counts in new[] { nullableSingle, nullableGroup, requiredSingle, mixedGroup })
+        {
+            Assert.Equal(1, counts.RowProbeStatements);
+            Assert.Equal(1, counts.ColumnDependencyStatements);
+        }
+
+        foreach (var counts in new[] { nullableSingle, nullableGroup })
+        {
+            Assert.Equal(0, counts.RequiredAddSessionStatements);
+            Assert.Equal(0, counts.RequiredAddOwnerEngineStatements);
+            Assert.Equal(0, counts.RequiredAddStatusStatements);
+        }
+
+        foreach (var counts in new[] { requiredSingle, mixedGroup })
+        {
+            Assert.Equal(1, counts.RequiredAddSessionStatements);
+            Assert.Equal(1, counts.RequiredAddOwnerEngineStatements);
+            Assert.Equal(1, counts.RequiredAddStatusStatements);
+        }
+
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
         Assert.All(postflight.Assessments, static assessment => Assert.True(assessment.PostconditionSatisfied));
         Assert.All(replay.Assessments, static assessment => Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
-        Assert.Equal(
-            5,
-            await ScalarIntAsync(
-                connectionString,
-                "SELECT CHAR_LENGTH(`unicode_value`) FROM `varchar_narrowing` WHERE `id` = 1;"));
-        Assert.Equal(
-            4,
-            await ScalarIntAsync(
-                connectionString,
-                "SELECT CHAR_LENGTH(`trailing_value`) FROM `varchar_narrowing` WHERE `id` = 1;"));
-        Assert.Equal(
-            5,
-            await ScalarIntAsync(
-                connectionString,
-                "SELECT CHAR_LENGTH(`required_value`) FROM `varchar_narrowing` WHERE `id` = 1;"));
+        Assert.Equal(5, unicodeLength);
+        Assert.Equal(4, trailingLength);
+        Assert.Equal(5, requiredLength);
+        Assert.Equal(1, retainedNull);
     }
 
     [Fact]
@@ -1372,11 +1433,20 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 + "AND COLUMN_NAME = 'value';"));
     }
 
-    private static async Task<int> CountProviderAnalysisQuestionsAsync(
-        DbContext context,
+    /// <summary>Measures native server Questions and statement purposes on an isolated analysis connection.</summary>
+    /// <param name="connectionString">The unchanged fixture database containing the physical source rows.</param>
+    /// <param name="operations">The immutable workload analyzed without executing target DDL.</param>
+    /// <returns>The measured native Questions and independently counted safety and row-probe purposes.</returns>
+    private async Task<ProviderAnalysisQueries> CountProviderAnalysisQueriesAsync(
+        string connectionString,
         IReadOnlyList<MigrationOperation> operations
     )
     {
+        await using var context = CreateContext(connectionString);
+        await using var connection = new CatalogClassificationCountingConnection(
+            new MySqlConnection(connectionString), nativeBatch: true);
+
+        context.Database.SetDbConnection(connection);
         var safeOperations = operations
             .Cast<SafeMigrationOperation>()
             .ToArray();
@@ -1389,8 +1459,21 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         var questionsAfter = await ReadSessionQuestionsAsync(context);
 
-        return questionsAfter - questionsBefore;
+        return new ProviderAnalysisQueries(questionsAfter - questionsBefore,
+            connection.NarrowingDataStatementCount + connection.NativeNarrowingStatementCount,
+            connection.RequiredAddSessionStatementCount, connection.RequiredAddOwnerEngineStatementCount,
+            connection.RequiredAddStatusStatementCount, connection.ColumnDependencyStatementCount);
     }
+
+    /// <summary>Retains measured counts only, without storing submitted SQL or provider row values.</summary>
+    private readonly record struct ProviderAnalysisQueries(
+        int Questions,
+        int RowProbeStatements,
+        int RequiredAddSessionStatements,
+        int RequiredAddOwnerEngineStatements,
+        int RequiredAddStatusStatements,
+        int ColumnDependencyStatements
+    );
 
     private static async Task<int> ReadSessionQuestionsAsync(
         DbContext context

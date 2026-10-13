@@ -25,6 +25,28 @@ internal static class SafeMigrationSemanticDefinitionComparers
             SafeMigrationDefinitionEquivalence.UniqueConstraintSemantics,
             UniqueConstraintHash);
 
+    // WHY: Built-in provider comparers are shared so each projected owner needs
+    // neither a comparer allocation nor a capturing equality/hash delegate.
+    private static readonly IEqualityComparer<ExpectedIndexDefinition> s_caseInsensitiveColumnIndex =
+        new ColumnAwareIndexComparer(StringComparer.OrdinalIgnoreCase);
+
+    private static readonly IEqualityComparer<ExpectedUniqueConstraintDefinition> s_caseInsensitiveColumnUnique =
+        new ColumnAwareUniqueComparer(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Gets equality and hashing that share the exact same typed index-column identity contract.</summary>
+    /// <param name="columns">The separately certified column comparer.</param>
+    public static IEqualityComparer<ExpectedIndexDefinition> IndexForColumns(StringComparer columns) =>
+        ReferenceEquals(columns, StringComparer.Ordinal) ? Index
+            : ReferenceEquals(columns, StringComparer.OrdinalIgnoreCase) ? s_caseInsensitiveColumnIndex
+            : new ColumnAwareIndexComparer(columns);
+
+    /// <summary>Gets equality and hashing with one certified typed candidate-key column identity contract.</summary>
+    /// <param name="columns">The separately certified column comparer.</param>
+    public static IEqualityComparer<ExpectedUniqueConstraintDefinition> UniqueForColumns(StringComparer columns) =>
+        ReferenceEquals(columns, StringComparer.Ordinal) ? UniqueConstraint
+            : ReferenceEquals(columns, StringComparer.OrdinalIgnoreCase) ? s_caseInsensitiveColumnUnique
+            : new ColumnAwareUniqueComparer(columns);
+
     private static int CheckConstraintHash(
         ExpectedCheckConstraintDefinition definition
     )
@@ -56,7 +78,9 @@ internal static class SafeMigrationSemanticDefinitionComparers
 
     private static int IndexHash(
         ExpectedIndexDefinition definition
-    )
+    ) => IndexHash(definition, StringComparer.Ordinal);
+
+    private static int IndexHash(ExpectedIndexDefinition definition, StringComparer columns)
     {
         var hash = new HashCode();
 
@@ -69,22 +93,24 @@ internal static class SafeMigrationSemanticDefinitionComparers
         hash.Add(definition.Keys.Count);
         foreach (var key in definition.Keys)
         {
-            AddIndexKey(ref hash, key);
+            AddIndexKey(ref hash, key, columns);
         }
 
-        AddStrings(ref hash, definition.IncludedColumns);
+        AddStrings(ref hash, definition.IncludedColumns, columns);
 
         return hash.ToHashCode();
     }
 
     private static int UniqueConstraintHash(
         ExpectedUniqueConstraintDefinition definition
-    )
+    ) => UniqueConstraintHash(definition, StringComparer.Ordinal);
+
+    private static int UniqueConstraintHash(ExpectedUniqueConstraintDefinition definition, StringComparer columns)
     {
         var hash = new HashCode();
 
         AddIdentity(ref hash, definition.Table, definition.Schema);
-        AddStrings(ref hash, definition.Columns);
+        AddStrings(ref hash, definition.Columns, columns);
 
         return hash.ToHashCode();
     }
@@ -101,10 +127,11 @@ internal static class SafeMigrationSemanticDefinitionComparers
 
     private static void AddIndexKey(
         ref HashCode hash,
-        ExpectedIndexKeyDefinition key
+        ExpectedIndexKeyDefinition key,
+        StringComparer columns
     )
     {
-        hash.Add(key.Column, StringComparer.Ordinal);
+        hash.Add(key.Column, columns);
         hash.Add(key.Expression, StringComparer.Ordinal);
         AddExpression(ref hash, key.StructuredExpression);
         hash.Add((int)key.SortOrder);
@@ -236,14 +263,42 @@ internal static class SafeMigrationSemanticDefinitionComparers
 
     private static void AddStrings(
         ref HashCode hash,
-        IReadOnlyList<string> values
+        IReadOnlyList<string> values,
+        StringComparer? comparer = null
     )
     {
         hash.Add(values.Count);
         foreach (var value in values)
         {
-            hash.Add(value, StringComparer.Ordinal);
+            hash.Add(value, comparer ?? StringComparer.Ordinal);
         }
+    }
+
+    /// <summary>Preserves O(arity) hashing without normalizing or allocating SQL/expression text.</summary>
+    private sealed class ColumnAwareIndexComparer(StringComparer columns) : IEqualityComparer<ExpectedIndexDefinition>
+    {
+        /// <inheritdoc />
+        public bool Equals(ExpectedIndexDefinition? left, ExpectedIndexDefinition? right) =>
+            ReferenceEquals(left, right)
+            || left is not null && right is not null
+                && SafeMigrationDefinitionEquivalence.IndexSemantics(left, right, columns);
+
+        /// <inheritdoc />
+        public int GetHashCode(ExpectedIndexDefinition value) => IndexHash(value, columns);
+    }
+
+    /// <summary>Shares candidate-key member hashing with the same column comparer used by equality.</summary>
+    private sealed class ColumnAwareUniqueComparer(StringComparer columns)
+        : IEqualityComparer<ExpectedUniqueConstraintDefinition>
+    {
+        /// <inheritdoc />
+        public bool Equals(ExpectedUniqueConstraintDefinition? left, ExpectedUniqueConstraintDefinition? right) =>
+            ReferenceEquals(left, right)
+            || left is not null && right is not null
+                && SafeMigrationDefinitionEquivalence.UniqueConstraintSemantics(left, right, columns);
+
+        /// <inheritdoc />
+        public int GetHashCode(ExpectedUniqueConstraintDefinition value) => UniqueConstraintHash(value, columns);
     }
 
     private sealed class SemanticComparer<T>(

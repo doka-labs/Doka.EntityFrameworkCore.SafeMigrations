@@ -180,6 +180,30 @@ public sealed class SqlServerIdentityInsertPauseTests
         Assert.DoesNotContain("WAITFOR", paused, StringComparison.Ordinal);
     }
 
+    /// <summary>Separates confirmed-ownership cancellation from the intentionally uncertain ON-to-marker gap.</summary>
+    /// <param name="beforeConfirmation">Whether to interrupt before the acquired ownership marker.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PauseSql_ConfirmedOwnershipAndAttemptGapAreDistinct(bool beforeConfirmation)
+    {
+        // Arrange
+        const string sql = "EXEC sys.sp_executesql N'SET IDENTITY_INSERT [dbo].[identity_roles] ON; "
+            + "/* doka_sm_identity_acquired */ INSERT INTO dbo.identity_roles (Id) VALUES (7);';";
+
+        // Act
+        var paused = SqlServerIdentityInsertPauseInterceptor.BuildPausedCommand(
+            sql, "ownership_marker", beforeConfirmation);
+        var identityOn = paused.IndexOf("SET IDENTITY_INSERT [dbo].[identity_roles] ON;", StringComparison.Ordinal);
+        var acquired = paused.IndexOf(
+            SqlServerSafeMigrationIdentityInsertScope.AcquiredMarkerComment, StringComparison.Ordinal);
+        var wait = paused.IndexOf("WAITFOR", StringComparison.Ordinal);
+
+        // Assert
+        Assert.True(identityOn >= 0 && identityOn < wait);
+        Assert.Equal(beforeConfirmation, wait < acquired);
+    }
+
     /// <summary>
     /// Rejects an already completed command rather than certifying a timer-only cancellation.
     /// </summary>

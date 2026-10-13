@@ -210,9 +210,28 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
 
         _executionState.Invalidate();
         var postSnapshot = _executionState.GetSnapshot(connection);
+        var postconditions = new List<SafeMigrationProviderAnalysis>(_operations.Count);
+        foreach (var candidate in _operations)
+        {
+            if (candidate is SafeMigrationOperation safeOperation)
+            {
+                postconditions.Add(_analyzer.Analyze(
+                    postSnapshot,
+                    connection.DbConnection,
+                    transaction,
+                    safeOperation,
+                    _rebuildArtifacts));
+            }
+        }
+
+        // WHY: PK alias identity requires the fresh final-catalog proof. Reuse
+        // these classifications for verification instead of querying twice.
         var postflight = new SafeMigrationPostflightProjection(
             _operations,
-            _analyzer);
+            _analyzer,
+            liveAnalyses: postconditions);
+
+        var safeOrdinal = 0;
 
         for (var index = 0; index < _operations.Count; index++)
         {
@@ -221,12 +240,7 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
                 continue;
             }
 
-            var postcondition = _analyzer.Analyze(
-                postSnapshot,
-                connection.DbConnection,
-                transaction,
-                operation,
-                _rebuildArtifacts);
+            var postcondition = postconditions[safeOrdinal++];
 
             if (!postcondition.PostconditionSatisfied && !postflight.IsSuperseded(index))
             {

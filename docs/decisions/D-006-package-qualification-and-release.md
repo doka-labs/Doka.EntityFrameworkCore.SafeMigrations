@@ -264,6 +264,13 @@ owns independent consumer readback.
   ranges, API baselines, migration source, policy selection, report schemas and
   history. Local tests, ARM diagnostics and deterministic packing do not replace
   the full native engine, tooling, coverage, provenance and public readback gates.
+- 2026-10-13: Prepare stable 10.4.10 at the same five-package identity for ordered
+  proof, concurrent required-add/delete, schema-identity and session-recovery
+  fixes. Preserve production dependency ranges, public APIs, migration source,
+  policies, reports and history. Inherit reviewed engineering dependencies on
+  `main`; keep native p95 and cancellation latency informational with unchanged
+  comparisons. Correctness, invalid evidence, execution and artifact failures
+  remain blocking, as do the full hosted/native qualification and readback gates.
 
 ### Implementation References
 

@@ -1,11 +1,13 @@
 # SQLite behavior
 
-Prepared stable 10.4.9 rejects unproved lossy affinity, CLR-domain and generation
-changes under `RepairIfSafe`, even with an exact old-definition match.
-Compatible nullability/default repairs retain their data and ownership gates;
-live, ordered projected and runtime classifications use the same lossless
-contract. Public APIs, dependency ranges, migration source and report schemas
-are unchanged; no migration regeneration is required.
+Prepared stable 10.4.10 distinguishes strict semantic shape from proven named
+constraint and index identity. Sparse physical lifetimes and both rename
+endpoints retain independent evidence, including absent-source no-op
+postconditions; existence-only acceptance cannot install an authored matching
+definition. Canonical managed keys retain column/value ordinals. Earlier
+lossless affinity, CLR-domain and generation repair gates remain unchanged.
+Public APIs, dependency ranges, migration source, policy selection, report
+schemas and history are unchanged; no migration regeneration is required.
 
 ## Supported deployment shape
 
@@ -50,6 +52,15 @@ official SQLite generator so related rebuild steps stay one provider-owned
 unit. SafeMigrations executes structural units inside the caller
 transaction or a local transaction that it commits only after every
 postcondition succeeds.
+
+Existence-only acceptance of a different column, key, constraint or index does
+not install its requested target in the ordered projection. A following strict
+operation retains the real mismatch instead of becoming a projected matching
+no-op. Standalone CHECK ensures and sparse index drop/rename sequences retain
+their accepted physical state and tombstones. Renames do not treat an untracked
+destination as free, and a proven absent source remains an idempotent no-op.
+These rules apply to the runtime structural segment as well as read-only
+preflight; execution cannot bypass a physical mismatch through an earlier no-op.
 
 An accepted column rename on an existing table invalidates dependent schema
 evidence. A later safely additive column with a distinct name may still use
@@ -103,6 +114,22 @@ The boundary is intentionally conservative. SQLite's documented rebuild
 procedure requires recreating every affected index, trigger, and view. Guessing
 at an artifact outside the EF model could lose behavior while producing a
 syntactically valid table.
+
+A strictly matching existing table reuses its captured snapshot to certify
+actual named PK/UNIQUE/CHECK/FK members separately from their authored semantic
+aliases. Exact named matches or a uniquely resolved named witness can bind the
+physical symbol; anonymous or ambiguous witnesses do not invent that identity.
+No additional catalog query is needed for this capture. After a physical drop,
+unbound evidence in that constraint family requires origin-bearing runtime
+validation rather than borrowing the immutable pre-drop match.
+
+A standalone UNIQUE constraint's symbol is not its generated `sqlite_autoindex`
+name. Constraint matching/removal addresses the named symbol; an anonymous
+semantic match does not manufacture a removable constraint name from that
+backing index. Ordinary index and constraint lifetimes remain separate, unlike
+MySQL/MariaDB's explicitly shared physical UNIQUE/index identity.
+See SQLite's [schema-table contract](https://www.sqlite.org/schematab.html)
+(primary source; retrieved 2026-10-13).
 
 Dropping a table with any unresolved external incoming foreign key is also
 rejected, regardless of the current enforcement mode. SQLite performs an
@@ -200,3 +227,5 @@ forward recovery procedure.
   2026-09-19.
 - [SQLite tokenizer requirements](https://www.sqlite.org/draft/tokenreq.html),
   retrieved 2026-09-19.
+- [SQLite schema table and internal constraint indexes](https://www.sqlite.org/schematab.html),
+  retrieved 2026-10-13.

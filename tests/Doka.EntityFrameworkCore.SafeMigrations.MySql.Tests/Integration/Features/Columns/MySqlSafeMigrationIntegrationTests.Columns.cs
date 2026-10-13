@@ -146,6 +146,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 + "AND COLUMN_NAME = 'occurred_at';"));
     }
 
+    /// <summary>Rejects a required SQL NULL default before DDL without replacing the existing NULL value.</summary>
     [Fact]
     public async Task OrdinaryNullableTimestampWithNullSqlBackfill_IsRejectedBeforeDdl()
     {
@@ -182,10 +183,23 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         // Assert
         var providerException = Assert.IsType<MySqlException>(exception);
+        var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(SafeMigrationAction.RejectDataBlocked, Assert.Single(report.Assessments).Action);
-        Assert.Contains("doka_sm_data_blocked", providerException.Message, StringComparison.Ordinal);
+        // WHY: MariaDB cannot represent DEFAULT (NULL) on a required column;
+        // MySQL reaches the separate proof that NULL rows cannot be backfilled.
+        Assert.Equal(Fixture.IsMariaDb ? SafeMigrationAction.RejectUnsupported : SafeMigrationAction.RejectDataBlocked,
+            assessment.Action);
+        Assert.Equal(
+            Fixture.IsMariaDb ? SafeMigrationObservedState.Unsupported : SafeMigrationObservedState.DataBlocked,
+            assessment.ObservedState);
+        Assert.Contains(Fixture.IsMariaDb ? "doka_sm_unsupported" : "doka_sm_data_blocked",
+            providerException.Message, StringComparison.Ordinal);
+        if (Fixture.IsMariaDb)
+        {
+            Assert.Equal("literal_default_catalog_representation", assessment.AnalysisCode);
+        }
+
         Assert.Equal(
             1,
             await ScalarIntAsync(

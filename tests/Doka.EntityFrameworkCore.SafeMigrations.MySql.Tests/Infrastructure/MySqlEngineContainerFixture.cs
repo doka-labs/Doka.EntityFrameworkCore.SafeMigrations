@@ -16,20 +16,39 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
     private readonly string _version;
     private bool _disposed;
 
-    public MySqlEngineContainerFixture()
+    /// <summary>Creates the configured engine without overriding its native table-name mode.</summary>
+    public MySqlEngineContainerFixture() : this(lowerCaseTableNames: null) { }
+
+    /// <summary>Creates a dedicated engine with an optional initialization-only table-name mode.</summary>
+    /// <param name="lowerCaseTableNames">The native owner-name mode, or null to preserve the image default.</param>
+    internal MySqlEngineContainerFixture(int? lowerCaseTableNames)
     {
+        if (lowerCaseTableNames is < 0 or > 2)
+        {
+            throw new ArgumentOutOfRangeException(nameof(lowerCaseTableNames));
+        }
+
         _engine = ReadEnvironment("SAFE_MIGRATIONS_MYSQL_ENGINE", "mariadb");
         _version = ReadEnvironment("SAFE_MIGRATIONS_MYSQL_VERSION", "11.8.8");
 
         var configuredImage = Environment
             .GetEnvironmentVariable("SAFE_MIGRATIONS_MYSQL_IMAGE")
             ?.Trim();
+
         var image = string.IsNullOrWhiteSpace(configuredImage) ? $"{_engine}:{_version}" : configuredImage;
 
         var builder = new MySqlBuilder(image)
             .WithDatabase(BootstrapDatabase)
             .WithUsername(RootUser)
             .WithPassword(RootPassword);
+
+        if (lowerCaseTableNames is { } ownerMode)
+        {
+            // WHY: MySQL fixes this mode when its data directory is initialized.
+            // A dedicated container avoids mutating or reusing the shared fixture.
+            builder = builder.WithCommand("--lower-case-table-names="
+                + ownerMode.ToString(CultureInfo.InvariantCulture));
+        }
 
         if (_engine == "mariadb")
         {

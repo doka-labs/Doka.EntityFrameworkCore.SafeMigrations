@@ -9,9 +9,43 @@ internal static partial class SafeMigrationDefinitionEquivalence
     public static bool Column(
         ExpectedColumnDefinition left,
         ExpectedColumnDefinition right
-    ) => StringComparer.Ordinal.Equals(left.Name, right.Name)
+    ) => Column(left, right, nameComparer: null);
+
+    /// <summary>Compares exact column facets after provider-qualified member identity resolves the lookup.</summary>
+    /// <param name="left">The accepted immutable column definition.</param>
+    /// <param name="right">The authored immutable target definition.</param>
+    /// <param name="nameComparer">The provider's column-member comparer, or null for exact ordinal names.</param>
+    /// <returns>True only when all non-name facets retain complete exact equality.</returns>
+    public static bool Column(
+        ExpectedColumnDefinition left,
+        ExpectedColumnDefinition right,
+        StringComparer? nameComparer
+    ) => left.IsNullable == right.IsNullable
+        && ColumnIntrinsicExceptNullability(left, right, nameComparer)
+        && ProviderAnnotations(left.ProviderAnnotations, right.ProviderAnnotations);
+
+    /// <summary>Compares every column facet except the explicitly reviewed nullability transition.</summary>
+    /// <param name="left">The immutable source column definition.</param>
+    /// <param name="right">The immutable target column definition.</param>
+    /// <returns>True only when all storage, generation, default, comment and provider facets agree.</returns>
+    public static bool ColumnExceptNullability(
+        ExpectedColumnDefinition left,
+        ExpectedColumnDefinition right
+    ) => ColumnIntrinsicExceptNullability(left, right)
+        && ProviderAnnotations(left.ProviderAnnotations, right.ProviderAnnotations);
+
+    /// <summary>Compares provider-neutral column facets except nullability for provider-owned qualification.</summary>
+    /// <param name="left">The immutable source column definition.</param>
+    /// <param name="right">The immutable target column definition.</param>
+    /// <param name="nameComparer">A provider-qualified column comparer, or null for exact ordinal names.</param>
+    /// <returns>True only when every intrinsic storage, generation, default and comment facet agrees.</returns>
+    /// <remarks>The provider must separately validate and compare all of its captured annotations.</remarks>
+    public static bool ColumnIntrinsicExceptNullability(
+        ExpectedColumnDefinition left,
+        ExpectedColumnDefinition right,
+        StringComparer? nameComparer = null
+    ) => (nameComparer ?? StringComparer.Ordinal).Equals(left.Name, right.Name)
         && left.ClrType == right.ClrType
-        && left.IsNullable == right.IsNullable
         && StringComparer.Ordinal.Equals(left.StoreType, right.StoreType)
         && left.IsUnicode == right.IsUnicode
         && left.MaxLength == right.MaxLength
@@ -24,8 +58,7 @@ internal static partial class SafeMigrationDefinitionEquivalence
         && DefaultValue(left.DefaultValue, right.DefaultValue)
         && StringComparer.Ordinal.Equals(left.ComputedColumnSql, right.ComputedColumnSql)
         && SafeMigrationSqlExpressionContract.Equivalent(left.ComputedExpression, right.ComputedExpression)
-        && left.IsStored == right.IsStored
-        && ProviderAnnotations(left.ProviderAnnotations, right.ProviderAnnotations);
+        && left.IsStored == right.IsStored;
 
     // WHY: Foreign-key columns may legitimately differ in nullability and value
     // generation. Referential compatibility depends on their physical storage

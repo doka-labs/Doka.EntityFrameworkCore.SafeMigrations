@@ -57,6 +57,21 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
     /// <summary>Gets dispatched catalog-only narrowing eligibility statements.</summary>
     public int NarrowingEligibilityStatementCount { get; private set; }
 
+    /// <summary>Gets sequential lazy-guard statements carrying an ordinal, state and diagnostic code.</summary>
+    public int StateEvaluationGuardStatementCount { get; private set; }
+
+    /// <summary>Gets captured session fact statements for projected required-column additions.</summary>
+    public int RequiredAddSessionStatementCount { get; private set; }
+
+    /// <summary>Gets native-owner-bound engine fact statements for projected required-column additions.</summary>
+    public int RequiredAddOwnerEngineStatementCount { get; private set; }
+
+    /// <summary>Gets catalog-only atomic required-add status statements.</summary>
+    public int RequiredAddStatusStatementCount { get; private set; }
+
+    /// <summary>Gets bounded source-column dependency statements combining PRIMARY and SET NULL roles.</summary>
+    public int ColumnDependencyStatementCount { get; private set; }
+
     /// <summary>Gets dispatched qualified narrowing row-probe statements.</summary>
     public int NarrowingDataStatementCount { get; private set; }
 
@@ -132,6 +147,33 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
         commandText.Contains("char_length(", StringComparison.OrdinalIgnoreCase)
         && (commandText.StartsWith("SELECT EXISTS(SELECT 1 FROM ", StringComparison.Ordinal)
             || commandText.StartsWith("SELECT COALESCE(", StringComparison.Ordinal));
+
+    /// <summary>Counts fixed safety-fact purposes equally for native batches and sequential readers.</summary>
+    private void CountColumnSafetyFacts(string commandText)
+    {
+        if (commandText.StartsWith("SELECT @@default_storage_engine, @@SESSION.sql_mode, "
+                + "@@SESSION.explicit_defaults_for_timestamp, ", StringComparison.Ordinal))
+        {
+            RequiredAddSessionStatementCount++;
+        }
+        else if (commandText.StartsWith("SELECT source_owner.ordinal, EXISTS (SELECT 1 "
+                     + "FROM INFORMATION_SCHEMA.TABLES physical_owner ", StringComparison.Ordinal)
+                 && commandText.Contains("UPPER(physical_owner.ENGINE) = 'INNODB'", StringComparison.Ordinal))
+        {
+            RequiredAddOwnerEngineStatementCount++;
+        }
+        else if (commandText.Contains(", (CASE WHEN ", StringComparison.Ordinal)
+                 && commandText.Contains("THEN 'complete'", StringComparison.Ordinal)
+                 && commandText.Contains("ELSE 'fresh' END", StringComparison.Ordinal)
+                 && commandText.Contains("ELSE 'staged' END ELSE 'ordinary' END)", StringComparison.Ordinal))
+        {
+            RequiredAddStatusStatementCount++;
+        }
+        else if (commandText.Contains("/* doka_sm_column_dependencies */", StringComparison.Ordinal))
+        {
+            ColumnDependencyStatementCount++;
+        }
+    }
 
     /// <inheritdoc />
     protected override void Dispose(
@@ -371,6 +413,8 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
             DbDataReader reader
         )
         {
+            _owner.CountColumnSafetyFacts(CommandText);
+
             // WHY: Prerequisite, probe, and diagnostic statements have other
             // shapes. PostgreSQL appends NULL-proof eligibility to the nine
             // existing classifier facets; both complete shapes are counted.
@@ -386,7 +430,20 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
             {
                 _owner.PrerequisiteStatementCount++;
             }
-            else if (reader.FieldCount == 3 && CommandText.Contains("ORDER BY 1;", StringComparison.Ordinal))
+            else if (reader.FieldCount == 3 && CommandText.Contains(
+                         "ELSE NULL END, CASE WHEN NOT COALESCE(", StringComparison.Ordinal)
+                     && CommandText.EndsWith("ORDER BY 1;", StringComparison.Ordinal))
+            {
+                // WHY: Lazy diagnostics and narrowing eligibility both return
+                // three fields. Their fixed purpose signatures must not alias.
+                _owner.StateEvaluationGuardStatementCount++;
+            }
+            else if (reader.FieldCount == 3
+                     && CommandText.Contains(", COALESCE((", StringComparison.Ordinal)
+                     && CommandText.Contains("), FALSE), COALESCE((", StringComparison.Ordinal)
+                     && CommandText.Contains(
+                         "narrowing_column.CHARACTER_MAXIMUM_LENGTH", StringComparison.OrdinalIgnoreCase)
+                     && CommandText.EndsWith("ORDER BY 1;", StringComparison.Ordinal))
             {
                 _owner.NarrowingEligibilityStatementCount++;
             }
@@ -534,6 +591,8 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
             var narrowing = 0;
             foreach (var command in _innerBatch.BatchCommands)
             {
+                _owner.CountColumnSafetyFacts(command.CommandText);
+
                 if (IsNarrowingDataStatement(command.CommandText))
                 {
                     narrowing++;

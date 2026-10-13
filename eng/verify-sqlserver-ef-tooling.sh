@@ -21,19 +21,47 @@ case "$work_dir" in
 esac
 
 container_name="safe-migrations-sqlserver-tooling-${RANDOM}-$$"
+container_started=false
+sqlcmd_path=""
+artifacts_dir="$source_root/artifacts/ef-tooling/sqlserver/$version"
 
 cleanup() {
+    local exit_code="$1"
+
     if [[ "$container_name" == safe-migrations-sqlserver-tooling-* ]]; then
+        if [[ "$exit_code" != 0 && "$container_started" == true ]]; then
+            # WHY: The disposable server is otherwise lost on failure. Retain
+            # diagnostics without replacing the original error or retrying work.
+            docker logs "$container_name" >"$artifacts_dir/server.log" 2>&1 || true
+
+            if [[ -n "$sqlcmd_path" ]]; then
+                docker exec "$container_name" "$sqlcmd_path" \
+                    -S localhost -U sa -P 'SafeMigrationsTooling123!' -C -b -l 5 -t 5 \
+                    -Q "SELECT session_id, status, command, wait_type, wait_time, blocking_session_id
+                        FROM sys.dm_exec_requests WHERE session_id <> @@SPID;
+                        SELECT wait_type, waiting_tasks_count, wait_time_ms
+                        FROM sys.dm_os_wait_stats
+                        WHERE wait_type IN (N'WRITELOG', N'PAGEIOLATCH_SH', N'PAGEIOLATCH_EX',
+                            N'IO_COMPLETION', N'ASYNC_IO_COMPLETION');" \
+                    >"$artifacts_dir/server-waits.log" 2>&1 || true
+            fi
+
+            echo "SQL Server $version tooling failed (exit $exit_code); diagnostics: $artifacts_dir" >&2
+        fi
+
         docker rm -f "$container_name" >/dev/null 2>&1 || true
     fi
 
     if [[ "$work_dir" == "$temporary_root"/safemigrations-sqlserver-tooling.* ]]; then
         rm -rf -- "$work_dir"
     fi
+
+    exit "$exit_code"
 }
 
-trap cleanup EXIT
+trap 'cleanup "$?"' EXIT
 
+mkdir -p "$artifacts_dir"
 repository_root="$work_dir/source"
 mkdir -p "$repository_root"
 rsync -a \
@@ -51,8 +79,8 @@ docker run -d --name "$container_name" \
     -e MSSQL_PID=Developer \
     -e MSSQL_SA_PASSWORD='SafeMigrationsTooling123!' \
     -p 127.0.0.1::1433 "$image" >/dev/null
+container_started=true
 
-sqlcmd_path=""
 for candidate in /opt/mssql-tools18/bin/sqlcmd /opt/mssql-tools/bin/sqlcmd; do
     if docker exec "$container_name" test -x "$candidate"; then
         sqlcmd_path="$candidate"
@@ -86,8 +114,13 @@ fi
 port="$(docker port "$container_name" 1433/tcp | head -n 1 | awk -F: '{print $NF}')"
 project='tests/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests.csproj'
 project_directory="$(dirname "$project")"
-artifacts_dir="$source_root/artifacts/ef-tooling/sqlserver/$version"
-mkdir -p "$artifacts_dir"
+
+# WHY: SqlClient uses ConnectTimeout for native transaction-manager requests,
+# including EF history bootstrap commits; CommandTimeout alone cannot cover them.
+# Use the same finite 120-second budget as live test commands, not a timing gate.
+tooling_connection_settings='User ID=sa;Password=SafeMigrationsTooling123!;TrustServerCertificate=True'
+tooling_connection_settings+=';Connect Timeout=120;Command Timeout=120'
+tooling_endpoint="Server=127.0.0.1,$port"
 
 cd "$repository_root"
 dotnet restore "$project" \
@@ -109,7 +142,7 @@ for mode in strict legacy; do
             ;;
     esac
 
-    export SAFE_MIGRATIONS_CONNECTION_STRING="Server=127.0.0.1,$port;Database=tooling_${mode}_cli;User ID=sa;Password=SafeMigrationsTooling123!;TrustServerCertificate=True"
+    export SAFE_MIGRATIONS_CONNECTION_STRING="$tooling_endpoint;Database=tooling_${mode}_cli;$tooling_connection_settings"
     dotnet ef migrations add "$migration_name" \
         --project "$project" \
         --context "$context" \
@@ -163,7 +196,7 @@ for mode in strict legacy; do
             ;;
     esac
 
-    export SAFE_MIGRATIONS_CONNECTION_STRING="Server=127.0.0.1,$port;Database=tooling_${mode}_cli;User ID=sa;Password=SafeMigrationsTooling123!;TrustServerCertificate=True"
+    export SAFE_MIGRATIONS_CONNECTION_STRING="$tooling_endpoint;Database=tooling_${mode}_cli;$tooling_connection_settings"
     dotnet ef migrations script \
         --project "$project" \
         --context "$context" \
@@ -201,7 +234,7 @@ for mode in strict legacy; do
         --no-build \
         --output "$work_dir/sqlserver-$mode-migration-bundle"
 
-    bundle_connection="Server=127.0.0.1,$port;Database=tooling_${mode}_bundle;User ID=sa;Password=SafeMigrationsTooling123!;TrustServerCertificate=True"
+    bundle_connection="$tooling_endpoint;Database=tooling_${mode}_bundle;$tooling_connection_settings"
     "$work_dir/sqlserver-$mode-migration-bundle" --connection "$bundle_connection"
     "$work_dir/sqlserver-$mode-migration-bundle" --connection "$bundle_connection"
 

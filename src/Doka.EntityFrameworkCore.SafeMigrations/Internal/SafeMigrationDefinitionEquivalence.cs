@@ -14,6 +14,29 @@ internal static partial class SafeMigrationDefinitionEquivalence
         IReadOnlyList<string> right
     ) => Sequence(left, right, StringComparer.Ordinal.Equals);
 
+    /// <summary>Compares typed identifier members without applying their casing rules to SQL text or owners.</summary>
+    private static bool Strings(
+        IReadOnlyList<string> left,
+        IReadOnlyList<string> right,
+        StringComparer comparer
+    )
+    {
+        if (left.Count != right.Count)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < left.Count; index++)
+        {
+            if (!comparer.Equals(left[index], right[index]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private static bool Optional<T>(
         T? left,
         T? right,

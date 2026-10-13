@@ -204,9 +204,6 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(
             clean.LastReport.Assessments.Select(static value => value.Code),
             noisy.LastReport.Assessments.Select(static value => value.Code));
-        Assert.True(
-            noisy.P95Milliseconds <= (clean.P95Milliseconds * 2d) + 250d,
-            $"Noisy p95 {noisy.P95Milliseconds:F3} ms exceeded clean p95 {clean.P95Milliseconds:F3} ms.");
     }
 
     private static List<MigrationOperation> BuildMySqlPerformanceOperations(

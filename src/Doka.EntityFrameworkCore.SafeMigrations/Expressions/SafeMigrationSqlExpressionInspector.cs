@@ -131,45 +131,68 @@ internal static class SafeMigrationSqlExpressionInspector
         SafeMigrationSqlExpression expression,
         string source,
         string target
-    ) => expression switch
+    ) => RenameIdentifiers(expression, source, target, StringComparer.Ordinal, columnOnly: false);
+
+    /// <summary>Renames terminal column identifiers while preserving all owner qualifiers.</summary>
+    /// <param name="expression">A column-dependent expression tree to transform.</param>
+    /// <param name="source">The physical column member to replace.</param>
+    /// <param name="target">The replacement column member.</param>
+    /// <param name="columnComparer">The provider-qualified column-member identity comparer.</param>
+    /// <returns>The transformed tree, with opaque fragments left unproven after the rename.</returns>
+    /// <remarks>Use only where terminal identifier parts represent column references.</remarks>
+    internal static SafeMigrationSqlExpression RenameColumnIdentifier(
+        SafeMigrationSqlExpression expression,
+        string source,
+        string target,
+        IEqualityComparer<string> columnComparer
+    ) => RenameIdentifiers(expression, source, target, columnComparer, columnOnly: true);
+
+    /// <summary>Shares expression traversal while retaining the caller's explicit identifier roles.</summary>
+    private static SafeMigrationSqlExpression RenameIdentifiers(
+        SafeMigrationSqlExpression expression,
+        string source,
+        string target,
+        IEqualityComparer<string> comparer,
+        bool columnOnly
+    )
     {
-        SafeMigrationSqlIdentifierExpression value =>
-            new SafeMigrationSqlIdentifierExpression(
-                value.Parts.Select(part => StringComparer.Ordinal.Equals(part, source) ? target : part)),
-        SafeMigrationSqlLiteralExpression => expression,
-        SafeMigrationSqlUnaryExpression value =>
-            new SafeMigrationSqlUnaryExpression(value.Operator, RenameIdentifier(value.Operand, source, target)),
-        SafeMigrationSqlBinaryExpression value =>
-            new SafeMigrationSqlBinaryExpression(
-                RenameIdentifier(value.Left, source, target),
-                value.Operator,
-                RenameIdentifier(value.Right, source, target)),
-        SafeMigrationSqlNullTestExpression value =>
-            new SafeMigrationSqlNullTestExpression(RenameIdentifier(value.Operand, source, target), value.Negated),
-        SafeMigrationSqlBetweenExpression value =>
-            new SafeMigrationSqlBetweenExpression(
-                RenameIdentifier(value.Operand, source, target),
-                RenameIdentifier(value.Lower, source, target),
-                RenameIdentifier(value.Upper, source, target),
-                value.Negated),
-        SafeMigrationSqlInExpression value =>
-            new SafeMigrationSqlInExpression(
-                RenameIdentifier(value.Operand, source, target),
-                value.Values.Select(item => RenameIdentifier(item, source, target)),
-                value.Negated),
-        SafeMigrationSqlFunctionExpression value =>
-            new SafeMigrationSqlFunctionExpression(
-                value.Name,
-                value.Arguments.Select(item => RenameIdentifier(item, source, target))),
-        SafeMigrationSqlCastExpression value =>
-            new SafeMigrationSqlCastExpression(RenameIdentifier(value.Operand, source, target), value.StoreType),
-        SafeMigrationSqlCollateExpression value => new SafeMigrationSqlCollateExpression(
-            RenameIdentifier(value.Operand, source, target),
-            value.Name,
-            value.Schema),
-        SafeMigrationSqlCurrentValueExpression => expression,
-        SafeMigrationSqlProviderFragmentExpression value => SafeMigrationSql.OpaqueAfterRename(value.Sql),
-        SafeMigrationSqlOpaqueExpression value => SafeMigrationSql.OpaqueAfterRename(value.Sql),
-        _ => throw new UnreachableException(),
-    };
+        SafeMigrationSqlExpression RenameChild(SafeMigrationSqlExpression child) =>
+            RenameIdentifiers(child, source, target, comparer, columnOnly);
+
+        // WHY: Column-dependent identifiers end with the column member. Earlier
+        // parts qualify its owner and must not inherit column case semantics.
+        return expression switch
+        {
+            SafeMigrationSqlIdentifierExpression value =>
+                new SafeMigrationSqlIdentifierExpression(value.Parts.Select((part, ordinal) =>
+                    (!columnOnly || ordinal == value.Parts.Count - 1) && comparer.Equals(part, source)
+                        ? target : part)),
+            SafeMigrationSqlLiteralExpression => expression,
+            SafeMigrationSqlUnaryExpression value =>
+                new SafeMigrationSqlUnaryExpression(value.Operator, RenameChild(value.Operand)),
+            SafeMigrationSqlBinaryExpression value =>
+                new SafeMigrationSqlBinaryExpression(RenameChild(value.Left), value.Operator, RenameChild(value.Right)),
+            SafeMigrationSqlNullTestExpression value =>
+                new SafeMigrationSqlNullTestExpression(RenameChild(value.Operand), value.Negated),
+            SafeMigrationSqlBetweenExpression value =>
+                new SafeMigrationSqlBetweenExpression(
+                    RenameChild(value.Operand),
+                    RenameChild(value.Lower),
+                    RenameChild(value.Upper),
+                    value.Negated),
+            SafeMigrationSqlInExpression value =>
+                new SafeMigrationSqlInExpression(RenameChild(value.Operand), value.Values.Select(RenameChild),
+                    value.Negated),
+            SafeMigrationSqlFunctionExpression value =>
+                new SafeMigrationSqlFunctionExpression(value.Name, value.Arguments.Select(RenameChild)),
+            SafeMigrationSqlCastExpression value =>
+                new SafeMigrationSqlCastExpression(RenameChild(value.Operand), value.StoreType),
+            SafeMigrationSqlCollateExpression value =>
+                new SafeMigrationSqlCollateExpression(RenameChild(value.Operand), value.Name, value.Schema),
+            SafeMigrationSqlCurrentValueExpression => expression,
+            SafeMigrationSqlProviderFragmentExpression value => SafeMigrationSql.OpaqueAfterRename(value.Sql),
+            SafeMigrationSqlOpaqueExpression value => SafeMigrationSql.OpaqueAfterRename(value.Sql),
+            _ => throw new UnreachableException(),
+        };
+    }
 }

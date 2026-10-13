@@ -323,7 +323,8 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         _ = builder.CreateIndexIfNotExistsFromModel(
             "ix_mixed_evolution_customer_id",
             "mixed_evolution",
-            "customer_id");
+            "customer_id",
+            schema: "public");
         _ = builder.Sql("UPDATE mixed_evolution SET customer_id = 7;");
         _ = builder.Sql("ALTER TABLE mixed_evolution ALTER COLUMN customer_id DROP DEFAULT;");
         _ = builder.AddForeignKey(

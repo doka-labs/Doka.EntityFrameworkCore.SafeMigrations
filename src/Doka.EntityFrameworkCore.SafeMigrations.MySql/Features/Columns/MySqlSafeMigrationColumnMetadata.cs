@@ -4,11 +4,15 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 /// Projects validated Doka column metadata without depending on provider-private
 /// annotation identities.
 /// </summary>
+/// <param name="GuidFormat">The supported physical GUID format, when declared.</param>
+/// <param name="ValueGenerationStrategy">The supported value-generation strategy, when declared.</param>
 internal readonly record struct MySqlSafeMigrationColumnMetadata(
     DokaMySqlGuidFormat? GuidFormat,
     MySqlValueGenerationStrategy? ValueGenerationStrategy
 )
 {
+    internal const string ExplicitBackfillAnnotation = "Doka:MySql:RequiresExplicitBackfill";
+
     /// <summary>
     /// Attempts to project every captured provider annotation through Doka's
     /// public typed migration-operation metadata contract.
@@ -35,9 +39,26 @@ internal readonly record struct MySqlSafeMigrationColumnMetadata(
             IsNullable = definition.IsNullable,
         };
 
+        var explicitBackfillAnnotationCount = 0;
         foreach (var annotation in definition.ProviderAnnotations)
         {
-            operation[annotation.Name] = annotation.CreateValueSnapshot();
+            var value = annotation.CreateValueSnapshot();
+            if (StringComparer.Ordinal.Equals(annotation.Name, ExplicitBackfillAnnotation))
+            {
+                // WHY: Doka emits this safety marker but its public typed
+                // metadata omits it. Validate the exact boolean contract without
+                // treating this review marker as projected physical metadata.
+                if (value is not bool || explicitBackfillAnnotationCount != 0)
+                {
+                    metadata = default;
+
+                    return false;
+                }
+
+                explicitBackfillAnnotationCount++;
+            }
+
+            operation[annotation.Name] = value;
         }
 
         MySqlMigrationOperationMetadata providerMetadata;
@@ -53,7 +74,8 @@ internal readonly record struct MySqlSafeMigrationColumnMetadata(
         }
 
         var recognizedAnnotationCount = (providerMetadata.GuidFormat is null ? 0 : 1)
-            + (providerMetadata.ValueGenerationStrategy is null ? 0 : 1);
+            + (providerMetadata.ValueGenerationStrategy is null ? 0 : 1)
+            + explicitBackfillAnnotationCount;
 
         if (recognizedAnnotationCount != definition.ProviderAnnotations.Count
             || !Supports(providerMetadata.ValueGenerationStrategy))

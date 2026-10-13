@@ -41,7 +41,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         // WHY: lower_case_table_names changes with server configuration and
         // platform. A binary comparison is the only portable rule that never
         // widens one reviewed database identity into a server-dependent alias.
-        return $"BINARY DATABASE() = BINARY {Literal(qualifier)}";
+        return $"CAST(DATABASE() AS BINARY) = CAST({Literal(qualifier)} AS BINARY)";
     }
 
     internal static string[] GetDatabaseQualifiers(

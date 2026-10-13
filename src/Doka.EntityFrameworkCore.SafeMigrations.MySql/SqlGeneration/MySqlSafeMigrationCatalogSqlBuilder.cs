@@ -75,7 +75,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                         context.ServerVersion.IsMariaDb,
                         operation.Policy == SafeMigrationPolicy.RepairIfSafe,
                         includeAnalysisEvidence,
-                        includeTransitionEvidence),
+                        includeTransitionEvidence,
+                        Supported(context.Features, MySqlMigrationFeature.CheckConstraints)),
                     DropColumnIntent value => BuildDropColumn(value),
                     RenameColumnIntent value => BuildRenameColumn(value),
                     AlterColumnIntent value => BuildAlterColumn(
@@ -118,13 +119,18 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             {
                 plan = plan with
                 {
-                    PrerequisiteExpression = BuildPrerequisiteExpression(operation.Intent),
+                    PrerequisiteExpression = operation.Intent is EnsureColumnIntent column
+                        && RequiresNativeRequiredColumnAddOwnerQualification(column.Definition)
+                        ? plan.PrerequisiteExpression
+                        : BuildPrerequisiteExpression(operation.Intent),
                     RequiresLazyStateEvaluation = RequiresLazyStateEvaluation(
                         operation.Intent,
                         plan.RepairCapability)
                         || plan.RequiresDataProbe
                         || plan.NullabilityDataProbe is not null,
                 };
+
+                plan = ApplyNativeEnumModeQualification(operation.Intent, plan);
             }
 
             // Identity qualification has precedence over feature and catalog

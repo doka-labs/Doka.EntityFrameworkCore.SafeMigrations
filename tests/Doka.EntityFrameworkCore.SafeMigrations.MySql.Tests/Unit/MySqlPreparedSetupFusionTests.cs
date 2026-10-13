@@ -7,6 +7,179 @@ public sealed class MySqlPreparedSetupFusionTests
     private const string ExecuteSql = "EXECUTE doka_sm_statement;";
     private const string DeallocateSql = "DEALLOCATE PREPARE doka_sm_statement;";
     private const string ProviderCleanup = "DO 0; /* provider cleanup */\n";
+    private const string NativeModeSnapshot = "/*! SET @__doka_previous_sql_mode = @@SESSION.sql_mode */;\n";
+    private const string NativeModeMutation = "/*! SET SESSION sql_mode = IF("
+        + "FIND_IN_SET('NO_BACKSLASH_ESCAPES', @@SESSION.sql_mode), @@SESSION.sql_mode, "
+        + "CONCAT_WS(',', NULLIF(@@SESSION.sql_mode, ''), 'NO_BACKSLASH_ESCAPES')) */;\n";
+    private const string NativeModeRestore = "/*! SET SESSION sql_mode = @__doka_previous_sql_mode */;\n";
+
+    /// <summary>Unreached setup cannot restore a stale snapshot; acquisition records a fresh one atomically.</summary>
+    [Fact]
+    public void CertifiedNativeModeCleanupOwnsOnlyReachedFreshSnapshot()
+    {
+        // Arrange
+        using var context = CreateContext();
+        var handler = CreateHandler(context);
+        var operationContext = CreateOperationContext(context, handler, CreateOperation("catalog"), _ =>
+        [
+            MySqlMigrationCommandSpec.CreateScoped([NativeModeSnapshot, NativeModeMutation], "DO 7;",
+                [NativeModeRestore]),
+        ]);
+
+        // Act
+        var result = handler.Generate(operationContext);
+
+        // Assert
+        var command = Assert.Single(result.Commands);
+        var setup = Fragments(command, MySqlMigrationCommandFragmentKind.Setup);
+        var cleanup = Fragments(command, MySqlMigrationCommandFragmentKind.Cleanup);
+        var setupText = string.Concat(setup);
+        var reset = setupText.IndexOf("SET @doka_sm_provider_setup_entered = 0;", StringComparison.Ordinal);
+        var decision = setupText.IndexOf("SELECT 1, 2, 2, 2, 2 WHERE @doka_sm_action", StringComparison.Ordinal);
+        var capture = setupText.IndexOf("/*! SET @__doka_previous_sql_mode", StringComparison.Ordinal);
+
+        Assert.Equal(0, reset);
+        Assert.StartsWith("SET @doka_sm_provider_setup_entered = 0;"
+            + "DROP TEMPORARY TABLE IF EXISTS `__doka_sm_assert`;", setupText, StringComparison.Ordinal);
+        Assert.True(decision > reset);
+        Assert.True(capture > decision);
+        Assert.Contains("/*! SET @__doka_previous_sql_mode = @@SESSION.sql_mode, "
+            + "@doka_sm_provider_setup_entered = 1 */;\n", setup);
+        Assert.Contains(NativeModeMutation, setup);
+        Assert.Equal(1, Count(setupText, "@doka_sm_provider_setup_entered = 1"));
+        Assert.Equal(3, cleanup.Length);
+        Assert.Equal("/*! SET SESSION sql_mode = IF(COALESCE(@doka_sm_provider_setup_entered = 1, FALSE), "
+            + "@__doka_previous_sql_mode, @@SESSION.sql_mode) */;\n", cleanup[1]);
+        Assert.Contains("SET @doka_sm_provider_setup_entered = NULL;", cleanup[2], StringComparison.Ordinal);
+        Assert.True(cleanup[2].IndexOf("@doka_sm_provider_setup_entered = NULL", StringComparison.Ordinal)
+            < cleanup[2].IndexOf("DROP TEMPORARY TABLE", StringComparison.Ordinal));
+    }
+
+    /// <summary>Unknown acquisition, mutation or restoration cannot inherit the native cleanup certificate.</summary>
+    /// <param name="invalidShape">The independently violated exact native scope invariant.</param>
+    [Theory]
+    [InlineData("stale_snapshot")]
+    [InlineData("snapshot_statement")]
+    [InlineData("missing_snapshot")]
+    [InlineData("duplicate_snapshot")]
+    [InlineData("different_mutation")]
+    [InlineData("mutation_statement")]
+    [InlineData("different_restore")]
+    [InlineData("restore_statement")]
+    [InlineData("nonmutating_cleanup_stateful_setup")]
+    public void UncertifiedStatefulNativeCleanupIsRejected(string invalidShape)
+    {
+        // Arrange
+        using var context = CreateContext();
+        var handler = CreateHandler(context);
+        string[] setup = invalidShape switch
+        {
+            "stale_snapshot" => [NativeModeSnapshot.Replace("@@SESSION.sql_mode", "@stale_mode",
+                StringComparison.Ordinal), NativeModeMutation],
+            "snapshot_statement" => [NativeModeSnapshot + "DO 0;", NativeModeMutation],
+            "missing_snapshot" => [NativeModeMutation],
+            "duplicate_snapshot" => [NativeModeSnapshot, NativeModeSnapshot, NativeModeMutation],
+            "different_mutation" => [NativeModeSnapshot, "SET SESSION sql_mode = 'ANSI_QUOTES';"],
+            "mutation_statement" => [NativeModeSnapshot, NativeModeMutation + "DO 0;"],
+            _ => [NativeModeSnapshot, NativeModeMutation],
+        };
+
+        var cleanup = invalidShape switch
+        {
+            "different_restore" => NativeModeRestore.Replace("@__doka_previous_sql_mode", "@stale_mode",
+                StringComparison.Ordinal),
+            "restore_statement" => NativeModeRestore + "SET SESSION sql_mode = '';",
+            "nonmutating_cleanup_stateful_setup" => "DO 0;",
+            _ => NativeModeRestore,
+        };
+
+        var operationContext = CreateOperationContext(context, handler, CreateOperation("catalog"), _ =>
+        [
+            MySqlMigrationCommandSpec.CreateScoped(setup, "DO 7;", [cleanup]),
+        ]);
+
+        // Act
+        var exception = Record.Exception(() => handler.Generate(operationContext));
+
+        // Assert
+        var invalidScope = Assert.IsType<InvalidOperationException>(exception);
+
+        Assert.Contains("cleanup acquisition", invalidScope.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>The public provider rejects missing setup before native fragments can reach the handler.</summary>
+    [Fact]
+    public void PublicNativeScopeRejectsEmptySetup()
+    {
+        // Arrange
+        const string body = "DO 7;";
+
+        // Act
+        var exception = Record.Exception(() => MySqlMigrationCommandSpec.CreateScoped([], body, [NativeModeRestore]));
+
+        // Assert
+        var invalidCollection = Assert.IsType<ArgumentException>(exception);
+
+        Assert.Equal("setupCommands", invalidCollection.ParamName);
+        Assert.Contains("non-empty SQL command collections", invalidCollection.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>Only literal non-mutating cleanup retains the original opaque fixture boundary.</summary>
+    /// <param name="cleanupSql">The exact admitted or refused cleanup fragment.</param>
+    /// <param name="admitted">Whether the fragment is only one literal DO statement with ordinary comments.</param>
+    [Theory]
+    [InlineData("DO 0; /* provider cleanup */\n", true)]
+    [InlineData("DO 12; /* provider cleanup */", true)]
+    [InlineData("do 12; -- provider cleanup\n", true)]
+    [InlineData("DO 12; # provider cleanup\n", true)]
+    [InlineData("DO 0; /* M! SET SESSION sql_mode = '' */", true)]
+    [InlineData("DO 0; /* m!100100 SET SESSION sql_mode = '' */", true)]
+    [InlineData("DO 0; SET SESSION sql_mode = '';", false)]
+    [InlineData("DO 0; /*! SET SESSION sql_mode = '' */;", false)]
+    [InlineData("DO 0; /*M! SET SESSION sql_mode = '' */", false)]
+    [InlineData("DO 0; /*m! SET SESSION sql_mode = '' */", false)]
+    [InlineData("DO 0; /*M!100100 SET SESSION sql_mode = '' */", false)]
+    [InlineData("DO 0; /*m!100100 SET SESSION sql_mode = '' */", false)]
+    [InlineData("DO 0; /*+ hint */", false)]
+    [InlineData("DO SLEEP(1);", false)]
+    [InlineData("DO @value := 1;", false)]
+    [InlineData("DO 0; /* unfinished", false)]
+    [InlineData("DO 0; --not-a-comment\nSET SESSION sql_mode = '';", false)]
+    public void NonMutatingCleanupCertificateRejectsExecutableSuffixes(string cleanupSql, bool admitted)
+    {
+        // Arrange
+        using var context = CreateContext();
+        var handler = CreateHandler(context);
+        var operationContext = CreateOperationContext(context, handler, CreateOperation("catalog"), _ =>
+        [
+            MySqlMigrationCommandSpec.CreateScoped(["DO 11;"], "DO 7;", [cleanupSql]),
+        ]);
+        string[]? generatedCleanup = null;
+        string[]? generatedSetup = null;
+
+        // Act
+        var exception = Record.Exception(() =>
+        {
+            var command = Assert.Single(handler.Generate(operationContext).Commands);
+            generatedCleanup = Fragments(command, MySqlMigrationCommandFragmentKind.Cleanup);
+            generatedSetup = Fragments(command, MySqlMigrationCommandFragmentKind.Setup);
+        });
+
+        // Assert
+        if (admitted)
+        {
+            Assert.Null(exception);
+            Assert.Contains(cleanupSql, Assert.IsType<string[]>(generatedCleanup));
+            Assert.DoesNotContain("@doka_sm_provider_setup_entered",
+                string.Concat(Assert.IsType<string[]>(generatedSetup)),
+                StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.Contains("cleanup acquisition", Assert.IsType<InvalidOperationException>(exception).Message,
+                StringComparison.Ordinal);
+        }
+    }
 
     /// <summary>Exactly 128 original fragments remain admissible without grouping opaque provider setup.</summary>
     /// <param name="scenario">The independent catalog, state, guard or data-probe generation path.</param>
@@ -265,6 +438,9 @@ public sealed class MySqlPreparedSetupFusionTests
             firstCleanup[1], StringComparison.Ordinal);
         Assert.DoesNotContain("@doka_sm_nullability_blocked", firstCleanup[1], StringComparison.Ordinal);
         Assert.Contains("@doka_sm_nullability_blocked = NULL", requiredCleanup[1], StringComparison.Ordinal);
+        Assert.DoesNotContain("@doka_sm_provider_setup_entered", string.Concat(firstCleanup), StringComparison.Ordinal);
+        Assert.DoesNotContain("@doka_sm_provider_setup_entered", string.Concat(requiredCleanup),
+            StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -291,16 +467,19 @@ public sealed class MySqlPreparedSetupFusionTests
         .ToArray();
 
     /// <summary>Creates the real planner paths without synthetic runtime plans.</summary>
+    /// <param name="scenario">The generic catalog, state, guard or length-probe path being admitted.</param>
     private static SafeMigrationOperation CreateOperation(
         string scenario
     )
     {
+        // WHY: These tests admit opaque provider bodies, not atomic ADD
+        // clauses. Declared server-side generation retains the generic
+        // state/guard paths without pretending DO fixtures are native ALTERs.
         var definition = scenario switch
         {
             "catalog" or "qualified" => new ExpectedColumnDefinition(
                 "value", typeof(int), isNullable: true, storeType: "int"),
-            "state" or "guard" => new ExpectedColumnDefinition(
-                "value", typeof(int), isNullable: false, storeType: "int"),
+            "state" or "guard" => CreateServerGeneratedRequiredColumn(),
             "data" => new ExpectedColumnDefinition(
                 "value", typeof(string), isNullable: true, storeType: "varchar(80)", maxLength: 80),
             _ => throw new ArgumentOutOfRangeException(nameof(scenario)),
@@ -310,9 +489,28 @@ public sealed class MySqlPreparedSetupFusionTests
             ? SafeMigrationPolicy.RepairIfSafe
             : SafeMigrationPolicy.ThrowIfDifferent;
 
+        Assert.False(MySqlSafeMigrationCatalogSqlBuilder.CanUseRequiredColumnAddProtocol(definition));
+
         return new SafeMigrationOperation(
             new EnsureColumnIntent("items", definition, schema: scenario == "qualified" ? "application" : null),
             policy);
+    }
+
+    /// <summary>Captures an ordinary intrinsic identity target outside the atomic no-default ADD protocol.</summary>
+    private static ExpectedColumnDefinition CreateServerGeneratedRequiredColumn()
+    {
+        var operation = new AddColumnOperation
+        {
+            Name = "value",
+            Table = "items",
+            ClrType = typeof(int),
+            ColumnType = "int",
+            IsNullable = false,
+        };
+
+        operation["Doka:MySql:ValueGenerationStrategy"] = MySqlValueGenerationStrategy.AutoIncrement;
+
+        return SafeMigrationExpectedDefinitionFactory.From(operation);
     }
 
     /// <summary>Creates the real provider context while replacing only bounded standard-renderer output.</summary>

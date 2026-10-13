@@ -2,7 +2,8 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 
 internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationProviderAnalyzer,
     ISafeMigrationIndexPrerequisiteSource, ISafeMigrationProjectedColumnAnalyzer,
-    ISafeMigrationProjectedDependencyAnalyzer, ISafeMigrationProviderOperationProjection
+    ISafeMigrationProjectedDependencyAnalyzer, ISafeMigrationProviderOperationProjection,
+    ISafeMigrationProviderObjectIdentityNormalizer, ISafeMigrationProviderTargetModelAnalyzer
 {
     // PostgreSQL advisory locks are already local to the current database. A
     // fixed signed bigint therefore avoids coercing the database's unsigned OID
@@ -189,13 +190,14 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
         ArgumentNullException.ThrowIfNull(operations);
 
         ResetProjectedEventTriggerEffects();
+        _currentSchema = null;
+        _schemaIdentityMismatchOrdinals.Clear();
+        _schemaIdentityOriginOrdinal = null;
 
         if (operations.Count == 0)
         {
             return [];
         }
-
-        SafeMigrationExpectedIndexTransitions.Validate(operations);
 
         var connection = context.Database.GetDbConnection();
         var openedHere = connection.State != System.Data.ConnectionState.Open;
@@ -207,13 +209,18 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
         try
         {
             var commandTimeout = context.Database.GetCommandTimeout();
+            await CaptureCurrentSchemaIdentityAsync(connection, operations, commandTimeout, cancellationToken);
             await CaptureProjectedEventTriggerEffectsAsync(connection, commandTimeout, cancellationToken);
-            var expectedTableConstraints = SafeMigrationExpectedTableConstraints.FromOperations(operations);
             var shortCircuitStates = await FindShortCircuitStatesAsync(
                 connection,
                 operations,
                 commandTimeout,
                 cancellationToken);
+
+            var expectedTableConstraints = PostgreSqlSafeMigrationAnalysisConstraintCatalog.Create(
+                _analysisOperationStream ?? operations,
+                _schemaIdentityMismatchOrdinals,
+                _currentSchema);
 
             var dataProbeResults = await ResolveDataProbeResultsAsync(
                 connection,
@@ -234,7 +241,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                 {
                     if (shortCircuitStates[operationOffset + localOrdinal] is { } shortCircuitState)
                     {
-                        results[operationOffset + localOrdinal] = ShortCircuitAnalysis(shortCircuitState);
+                        results[operationOffset + localOrdinal] = ShortCircuitAnalysis(
+                            operationOffset + localOrdinal, shortCircuitState);
                     }
                 }
 
@@ -288,7 +296,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                             var checkpoint = parameters.Capture();
                             var plan = builder.Build(
                                 operation,
-                                GetExpectedTableConstraints(operation, expectedTableConstraints));
+                                expectedTableConstraints.Find(ordinal, operation));
 
                             plans[localOrdinal] = plan;
                             PostgreSqlDataProbeResult? dataProbeResult = plan.DataProbe is null
@@ -318,13 +326,34 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                                 ? plan.RenderClassificationCodeExpression() ?? "NULL"
                                 : plan.RenderClassificationCodeExpression(dataProbeResult!.Value.IsBlocked) ?? "NULL";
 
+                            var postcondition = plan.Postcondition;
+                            if (plan.PrerequisiteExpression == "TRUE" && plan.ObjectIdentityGuardExpression != "TRUE")
+                            {
+                                // WHY: These plans evaluate catalog metadata only. Fold the
+                                // owner proof into their existing classification instead of
+                                // introducing a prerequisite round trip for a pruned constant.
+                                // Plans which read rows retain their earlier identity-first
+                                // prerequisite query before any data probe is submitted.
+                                var rejectedIdentity = "NOT COALESCE((" + plan.ObjectIdentityGuardExpression
+                                    + "), FALSE)";
+
+                                stateExpression = $"CASE WHEN {rejectedIdentity} THEN 'unsupported' "
+                                    + $"ELSE ({stateExpression}) END";
+                                classificationCode = $"CASE WHEN {rejectedIdentity} "
+                                    + $"THEN '{SchemaIdentityMismatchCode}' ELSE ({classificationCode}) END";
+                                postcondition = $"CASE WHEN {rejectedIdentity} THEN FALSE "
+                                    + $"ELSE ({postcondition}) END";
+                                repairPrecondition = $"CASE WHEN {rejectedIdentity} THEN FALSE "
+                                    + $"ELSE ({repairPrecondition}) END";
+                            }
+
                             var rowEvidence = plan.ModelManagedRowEvidenceExpression ?? "NULL";
                             var dependencyCounts = plan.ModelManagedDependencyCountsExpression ?? "NULL";
                             var diagnosticEvidence = plan.DiagnosticEvidenceExpression ?? "NULL";
                             var matchedObjectName = plan.MatchedObjectNameExpression ?? "NULL";
                             var selection = $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, "
                                 + $"({stateExpression})::text, "
-                                + $"COALESCE(({plan.Postcondition}), FALSE), "
+                                + $"COALESCE(({postcondition}), FALSE), "
                                 + $"COALESCE(({repairPrecondition}), FALSE), "
                                 + $"({classificationCode}), "
                                 + $"({rowEvidence}), "
@@ -425,15 +454,6 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
             }
         }
     }
-
-    private static SafeMigrationExpectedTableConstraints? GetExpectedTableConstraints(
-        SafeMigrationOperation operation,
-        IReadOnlyDictionary<
-            (string? Schema, string Table), SafeMigrationExpectedTableConstraints> expectedTableConstraints
-    ) => operation.Intent is EnsureTableIntent table
-        ? expectedTableConstraints.GetValueOrDefault(
-            (table.Definition.Schema, table.Definition.Table))
-        : null;
 
     private async Task<PostgreSqlDataProbeResult?[]> ResolveDataProbeResultsAsync(
         DbConnection connection,
@@ -869,8 +889,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                     var checkpoint = parameters.Capture();
                     var prerequisite = builder.BuildPrerequisiteExpression(operation);
                     // WHY: This exact builder constant needs no live catalog
-                    // proof. Do not infer equivalence from arbitrary SQL text
-                    // or let the optimization bypass later evaluation guards.
+                    // proof before classification, which evaluates metadata
+                    // only for these operations and folds in their native owner
+                    // guard. Row-reading plans keep a nonconstant prerequisite.
                     if (StringComparer.Ordinal.Equals(prerequisite, "TRUE"))
                     {
                         parameters.Rollback(checkpoint);
@@ -879,7 +900,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                         continue;
                     }
 
+                    var identityGuard = builder.BuildObjectIdentityGuard(operation.Intent);
                     var selection = $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, CASE "
+                        + $"WHEN NOT COALESCE(({identityGuard}), FALSE) THEN 'schema_search_path_mismatch' "
                         + $"WHEN NOT COALESCE(({prerequisite}), FALSE) "
                         + "THEN 'prerequisite_missing' "
                         + "ELSE NULL END";
@@ -1061,10 +1084,6 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
         }
     }
 
-    private static SafeMigrationProviderAnalysis ShortCircuitAnalysis(
-        SafeMigrationObservedState state
-    ) => new(state, SafeMigrationRepairCapability.None, false, ClassificationCode(state));
-
     private static async Task ReadAnalysisAsync(
         SafeMigrationCatalogBatch batch,
         SafeMigrationProviderAnalysis[] results,
@@ -1181,7 +1200,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
         SafeMigrationCatalogWorkOrder.ValidateCompletion(consumed, submittedOrdinals);
     }
 
-    private static async Task ReadPrerequisiteBatchAsync(
+    private async Task ReadPrerequisiteBatchAsync(
         SafeMigrationCatalogBatch batch,
         SafeMigrationObservedState?[] states,
         List<int> selectedOrdinals,
@@ -1201,7 +1220,17 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                             "The PostgreSQL SafeMigrations prerequisite classifier returned an invalid ordinal.");
                     }
 
-                    states[resultOrdinal] = reader.IsDBNull(1) ? null : ParseState(reader.GetString(1));
+                    var state = reader.IsDBNull(1) ? null : reader.GetString(1);
+                    if (state == SchemaIdentityMismatchCode)
+                    {
+                        _schemaIdentityMismatchOrdinals.Add(resultOrdinal);
+                        states[resultOrdinal] = SafeMigrationObservedState.Unsupported;
+                    }
+                    else
+                    {
+                        states[resultOrdinal] = state is null ? null : ParseState(state);
+                    }
+
                     rowsRead++;
                 }
             },
@@ -1415,7 +1444,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
             .ToArray();
     }
 
-    private static async Task<string> GetCurrentSchemaAsync(
+    /// <summary>Reads an optional effective default without rejecting explicitly qualified inventory.</summary>
+    private static async Task<string?> GetCurrentSchemaAsync(
         DbConnection connection,
         int? commandTimeout,
         CancellationToken cancellationToken
@@ -1425,8 +1455,13 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
         ApplyCommandTimeout(command, commandTimeout);
         command.CommandText = "SELECT current_schema();";
 
-        return Convert.ToString(await command.ExecuteScalarAsync(cancellationToken), CultureInfo.InvariantCulture)
-            ?? throw new InvalidOperationException("PostgreSQL did not return the current schema.");
+        var value = await command.ExecuteScalarAsync(cancellationToken);
+
+        // WHY: An all-missing search path has no current schema, but explicit
+        // qualified objects remain valid. Preserve absence rather than inventing
+        // an empty identifier or rejecting their semantic-alias inventory.
+        return value is null or DBNull ? null : value as string
+            ?? throw new InvalidOperationException("PostgreSQL returned invalid current-schema identity evidence.");
     }
 
     private static async Task ReadUnexpectedAsync(
@@ -1450,7 +1485,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
             var schema = reader.GetString(1);
             var tableName = reader.GetString(2);
             var objectName = reader.GetString(3);
-            var currentSchema = reader.GetString(4);
+            var currentSchema = reader.IsDBNull(4) ? null : reader.GetString(4);
             if ((kind == SafeMigrationDatabaseObjectKind.Table) != tablesOnly
                 || (tablesOnly
                     ? !permittedSchemas.Contains(schema)
@@ -1727,7 +1762,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
         public SafeMigrationExpectedTableInventory? Find(
             string schema,
             string table,
-            string currentSchema
+            string? currentSchema
         )
         {
             if (_explicit.TryGetValue((schema, table), out var exact))

@@ -86,11 +86,13 @@ internal sealed partial class SafeMigrationPreflightProjection
         }
 
         var states = new SafeMigrationObservedState[intent.RowCount];
+        var keyColumns = SafeMigrationModelManagedKeyIdentity.CanonicalizeColumns(
+            intent.KeyColumns, _objectIdentityNormalizer, out var keyOrdinals);
 
         for (var row = 0; row < intent.RowCount; row++)
         {
             if (_modelManagedRows.TryGetValue(
-                    ModelManagedRowKey.Create(intent, row, _objectIdentityNormalizer),
+                    ModelManagedRowKey.Create(intent, row, keyColumns, keyOrdinals),
                     out var projected))
             {
                 if (TryClassify(intent, row, projected, out states[row]))
@@ -121,7 +123,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         }
 
         if ((state is SafeMigrationObservedState.Missing or SafeMigrationObservedState.TransitionReady)
-            && HasProjectedUniqueCollision(intent))
+            && HasProjectedUniqueCollision(intent, keyColumns, keyOrdinals))
         {
             state = SafeMigrationObservedState.DataBlocked;
         }
@@ -303,7 +305,9 @@ internal sealed partial class SafeMigrationPreflightProjection
     }
 
     private bool HasProjectedUniqueCollision(
-        ModelManagedDataIntent intent
+        ModelManagedDataIntent intent,
+        IReadOnlyList<string> normalizedKeyColumns,
+        int[]? canonicalKeyOrdinals
     )
     {
         var uniqueKeys = intent switch
@@ -327,7 +331,7 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         for (var row = 0; row < intent.RowCount; row++)
         {
-            var currentKey = ModelManagedRowKey.Create(intent, row, _objectIdentityNormalizer);
+            var currentKey = ModelManagedRowKey.Create(intent, row, normalizedKeyColumns, canonicalKeyOrdinals);
 
             foreach (var uniqueKey in uniqueKeys)
             {
@@ -341,7 +345,7 @@ internal sealed partial class SafeMigrationPreflightProjection
                 foreach (var (candidateKey, candidate) in _modelManagedRows)
                 {
                     if (!candidate.Exists
-                        || candidateKey.Equals(currentKey)
+                        || _modelManagedRows.Comparer.Equals(candidateKey, currentKey)
                         || !IdentifierEquals(_objectIdentityNormalizer, candidateKey.Table, intent.Table)
                         || !SameSchema(candidateKey.Schema, intent.Schema))
                     {
@@ -388,9 +392,12 @@ internal sealed partial class SafeMigrationPreflightProjection
             TrackLocalModelManagedOrigin(table);
         }
 
+        var keyColumns = SafeMigrationModelManagedKeyIdentity.CanonicalizeColumns(
+            intent.KeyColumns, _objectIdentityNormalizer, out var keyOrdinals);
+
         for (var row = 0; row < intent.RowCount; row++)
         {
-            var key = ModelManagedRowKey.Create(intent, row, _objectIdentityNormalizer);
+            var key = ModelManagedRowKey.Create(intent, row, keyColumns, keyOrdinals);
 
             if (intent is DeleteModelManagedDataIntent)
             {
@@ -705,10 +712,16 @@ internal sealed partial class SafeMigrationPreflightProjection
         string KeyFingerprint
     )
     {
+        /// <summary>Hashes one row through an immutable, per-intent column/value ordinal mapping.</summary>
+        /// <param name="intent">The authored row matrices and physical owner.</param>
+        /// <param name="row">The matrix row whose typed key is being captured.</param>
+        /// <param name="normalizedKeyColumns">Normalized labels in their authored positions.</param>
+        /// <param name="canonicalKeyOrdinals">Optional canonical-to-authored positions, shared across all rows.</param>
         public static ModelManagedRowKey Create(
             ModelManagedDataIntent intent,
             int row,
-            ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer
+            IReadOnlyList<string> normalizedKeyColumns,
+            int[]? canonicalKeyOrdinals
         )
         {
             using var writer = new CanonicalHashWriter();
@@ -717,8 +730,9 @@ internal sealed partial class SafeMigrationPreflightProjection
 
             for (var column = 0; column < intent.KeyColumns.Count; column++)
             {
-                writer.Add(NormalizeIdentifier(objectIdentityNormalizer, intent.KeyColumns[column]));
-                SafeMigrationModelManagedValue.Write(writer, intent.KeyValues.GetUnsafeValue(row, column));
+                var ordinal = canonicalKeyOrdinals?[column] ?? column;
+                writer.Add(normalizedKeyColumns[ordinal]);
+                SafeMigrationModelManagedValue.Write(writer, intent.KeyValues.GetUnsafeValue(row, ordinal));
             }
 
             return new ModelManagedRowKey(intent.Table, intent.Schema, writer.GetHash());
@@ -774,7 +788,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         public bool Exists { get; } = exists;
 
         public Dictionary<string, object?> Values { get; } =
-            new(new IdentifierComparer(objectIdentityNormalizer));
+            new(new IdentifierComparer(objectIdentityNormalizer, objectIdentityNormalizer?.ColumnIdentifierComparer));
 
         public ProjectedModelManagedRow Copy()
         {

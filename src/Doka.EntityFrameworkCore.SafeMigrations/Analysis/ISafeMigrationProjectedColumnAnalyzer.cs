@@ -3,6 +3,66 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// <summary>Qualifies exact projected column transitions with provider physical rules.</summary>
 internal interface ISafeMigrationProjectedColumnAnalyzer
 {
+    /// <summary>Qualifies a projected Missing column add without changing existing target equality.</summary>
+    /// <param name="intent">The unchanged immutable add contract.</param>
+    /// <param name="context">The accepted owner lifetime and versioned row-proof boundaries.</param>
+    /// <param name="liveAnalysis">The independently captured provider result and session identity.</param>
+    /// <param name="projectedAnalysis">The resolved Missing result before provider qualification.</param>
+    /// <returns>The qualified add result; providers that do not opt in retain existing behavior.</returns>
+    /// <remarks>Core calls this only for Missing, never for known Matching or unresolved owner state.</remarks>
+    SafeMigrationProviderAnalysis ValidateProjectedMissingColumnAdd(
+        EnsureColumnIntent intent,
+        SafeMigrationProjectedMissingColumnContext context,
+        SafeMigrationProviderAnalysis liveAnalysis,
+        SafeMigrationProviderAnalysis projectedAnalysis
+    ) => projectedAnalysis;
+
+    /// <summary>Certifies one exact live column result after accepted foreign-key-only removals.</summary>
+    /// <param name="intent">The unchanged operation contract analyzed against the live source.</param>
+    /// <param name="liveAnalysis">The provider's independently captured source-bound result.</param>
+    /// <returns>True only when this provider's column proof is unaffected by those removals.</returns>
+    /// <remarks>
+    /// Core retains only removals and certified nullability changes, rejecting stale rows, keys and dependencies.
+    /// This opt-in does not certify the table's complete physical shape or replace live source evidence.
+    /// </remarks>
+    bool CanReuseLiveColumnProofAfterForeignKeyDrops(
+        AlterColumnIntent intent,
+        SafeMigrationProviderAnalysis liveAnalysis
+    ) => false;
+
+    /// <summary>Certifies a current source-bound Ensure result after bounded foreign-key removals.</summary>
+    /// <param name="intent">The unchanged target independently analyzed against the live column.</param>
+    /// <param name="liveAnalysis">The provider's captured source, row and repair evidence.</param>
+    /// <returns>True only when the accepted removal history preserves this exact live result.</returns>
+    bool CanReuseLiveColumnProofAfterForeignKeyDrops(
+        EnsureColumnIntent intent,
+        SafeMigrationProviderAnalysis liveAnalysis
+    ) => false;
+
+    /// <summary>Certifies sibling-proof preservation for an independently safe Ensure repair.</summary>
+    /// <param name="intent">The reviewed target backed by current provider evidence.</param>
+    /// <param name="source">The unchanged source retained by an accepted earlier observation.</param>
+    /// <param name="liveAnalysis">The independently captured source-bound repair result.</param>
+    /// <returns>True only for a supported same-layout, non-data nullability change.</returns>
+    bool PreservesSiblingColumnProofsAfterForeignKeyDrops(
+        EnsureColumnIntent intent,
+        ExpectedColumnDefinition source,
+        SafeMigrationProviderAnalysis liveAnalysis
+    ) => false;
+
+    /// <summary>Compares accepted metadata with a provider-qualified physical source.</summary>
+    /// <param name="accepted">The immutable source retained by an accepted earlier observation.</param>
+    /// <param name="source">The declaration independently qualified by the current live provider result.</param>
+    /// <returns>True only when both declarations preserve the provider's exact physical source contract.</returns>
+    /// <remarks>
+    /// Core calls this only after the provider opted into bounded live-proof reuse and all lifetime guards passed.
+    /// The default retains complete annotation equality; overrides must validate any nonphysical metadata difference.
+    /// </remarks>
+    bool AreProjectedColumnSourcesEquivalent(
+        ExpectedColumnDefinition accepted,
+        ExpectedColumnDefinition source
+    ) => SafeMigrationDefinitionEquivalence.Column(accepted, source);
+
     /// <summary>Checks a transition after Core has verified its exact old definition.</summary>
     /// <param name="intent">The reviewed transition.</param>
     /// <param name="source">The exact accepted source column.</param>
@@ -22,6 +82,18 @@ internal interface ISafeMigrationProjectedColumnAnalyzer
         SafeMigrationProviderAnalysis projectedAnalysis
     );
 }
+
+/// <summary>Groups accepted owner and row facts for a Missing column add.</summary>
+/// <param name="TableWasCreated">Whether an accepted operation created the current physical owner.</param>
+/// <param name="ProvesEmpty">Whether a current versioned empty-table proof remains valid.</param>
+/// <param name="HasDataMutation">Whether accepted operations invalidated the captured live row proof.</param>
+/// <param name="ColumnWasDropped">Whether accepted absence invalidates an original owned-staging certificate.</param>
+internal readonly record struct SafeMigrationProjectedMissingColumnContext(
+    bool TableWasCreated,
+    bool ProvesEmpty,
+    bool HasDataMutation,
+    bool ColumnWasDropped
+);
 
 /// <summary>Groups physical provenance and row-proof lifetime for one projected transition.</summary>
 /// <param name="Table">The accepted table view, borrowed only for the synchronous validation callback.</param>

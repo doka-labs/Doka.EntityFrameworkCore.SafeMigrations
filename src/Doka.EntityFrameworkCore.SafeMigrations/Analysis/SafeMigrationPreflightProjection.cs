@@ -34,6 +34,7 @@ internal sealed partial class SafeMigrationPreflightProjection :
     private readonly HashSet<TableKey> _projectedUnknownPhysicalKeys;
     private readonly HashSet<TableKey> _projectedStructurallyModifiedTables;
     private HashSet<TableKey>? _projectedColumnDropOnlyTables;
+    private HashSet<TableKey>? _projectedForeignKeyDropOnlyTables;
     private readonly Dictionary<TableKey, HashSet<string>> _projectedChangedColumns;
     private bool _hasOpaqueProviderPostcondition;
     private bool _hasOpaqueSqlPostcondition;
@@ -95,8 +96,9 @@ internal sealed partial class SafeMigrationPreflightProjection :
 
         if (_objectIdentityNormalizer?.IsObjectIdentityMismatch(liveAnalysis) == true)
         {
-            // WHY: Earlier operations may repair an unsupported physical shape,
-            // but they can never change which database object this operation names.
+            // WHY: Provider-certified identity rejection remains authoritative
+            // while its provider scope is stable. Mutable qualifier scopes are
+            // certified by the provider rather than inferred by neutral projection.
 
             return liveAnalysis;
         }
@@ -277,6 +279,35 @@ internal sealed partial class SafeMigrationPreflightProjection :
             return;
         }
 
+        if (decision.Action == SafeMigrationAction.NoOp
+            && analysis.ObservedState == SafeMigrationObservedState.Different)
+        {
+            // WHY: ExistenceOnly accepts an existing, incompatible object
+            // without changing it. Its authored target is not a physical
+            // postcondition and must not overwrite any earlier exact evidence.
+            // A projected Matching result remains admissible even if the
+            // immutable live observation still describes the old definition.
+
+            return;
+        }
+
+        var preservesForeignKeyColumnProofs = decision.Action == SafeMigrationAction.Repair
+            && liveAnalysis.ObservedState == SafeMigrationObservedState.Different
+            && analysis.ObservedState == SafeMigrationObservedState.Different
+            && analysis.RepairCapability == SafeMigrationRepairCapability.Safe
+            && !analysis.RepairMutatesData
+            && _projectedColumnAnalyzer is { } columnAnalyzer
+            && (operation.Intent switch
+            {
+                AlterColumnIntent alter => CanReuseColumnProofAfterForeignKeyDrops(
+                    alter, liveAnalysis, new TableKey(alter.Table, alter.Schema)),
+                EnsureColumnIntent ensure => CanReuseColumnProofAfterForeignKeyDrops(
+                        ensure, liveAnalysis, new TableKey(ensure.Table, ensure.Schema))
+                    && TryGetAcceptedColumnSource(ensure, out var source)
+                    && columnAnalyzer.PreservesSiblingColumnProofsAfterForeignKeyDrops(ensure, source, liveAnalysis),
+                _ => false,
+            });
+
         _projectedDependencyAnalyzer?.ObserveAcceptedOperation(operation, liveAnalysis, analysis, decision);
 
         if (decision.Action == SafeMigrationAction.Repair
@@ -296,7 +327,7 @@ internal sealed partial class SafeMigrationPreflightProjection :
                 Observe(value, decision);
                 break;
             case EnsureTableIntent value:
-                Observe(value, analysis, decision);
+                Observe(value, liveAnalysis, analysis, decision);
                 break;
             case DropTableIntent value:
                 Observe(value, decision);
@@ -305,10 +336,10 @@ internal sealed partial class SafeMigrationPreflightProjection :
                 Observe(value, decision);
                 break;
             case EnsureColumnIntent value:
-                Observe(value, liveAnalysis, decision);
+                Observe(value, liveAnalysis, decision, preservesForeignKeyColumnProofs);
                 break;
             case AlterColumnIntent value:
-                Observe(value, analysis, decision);
+                Observe(value, analysis, decision, preservesForeignKeyColumnProofs);
                 break;
             case DropColumnIntent value:
                 Observe(value, decision);
@@ -326,7 +357,7 @@ internal sealed partial class SafeMigrationPreflightProjection :
                 Observe(value, decision);
                 break;
             case EnsurePrimaryKeyIntent value:
-                Observe(value, decision);
+                Observe(value, liveAnalysis, analysis, decision);
                 break;
             case DropPrimaryKeyIntent value:
                 Observe(value, decision);
@@ -344,7 +375,7 @@ internal sealed partial class SafeMigrationPreflightProjection :
                 Observe(value, decision);
                 break;
             case EnsureForeignKeyIntent value:
-                Observe(value, liveAnalysis, decision);
+                Observe(value, SelectAcceptedForeignKeyIdentity(value, liveAnalysis, analysis), decision);
                 break;
             case DropForeignKeyIntent value:
                 Observe(value, decision);
@@ -360,7 +391,7 @@ internal sealed partial class SafeMigrationPreflightProjection :
             && operation.Intent is not EnsureTableIntent
             && operation.Intent is not DropTableIntent)
         {
-            MarkProjectedTableStructureChanged(operation.Intent);
+            MarkProjectedTableStructureChanged(operation.Intent, preservesForeignKeyColumnProofs);
         }
     }
 
@@ -497,7 +528,8 @@ internal sealed partial class SafeMigrationPreflightProjection :
         var key = new TableKey(table, schema);
         if (!_projectedColumnStates.TryGetValue(key, out var columns))
         {
-            columns = new Dictionary<string, ProjectedColumnState>(new IdentifierComparer(_objectIdentityNormalizer));
+            columns = new Dictionary<string, ProjectedColumnState>(new IdentifierComparer(
+                _objectIdentityNormalizer, _objectIdentityNormalizer?.ColumnIdentifierComparer));
             _projectedColumnStates.Add(key, columns);
         }
 
@@ -602,14 +634,18 @@ internal sealed partial class SafeMigrationPreflightProjection :
         _projectedUnknownTableStructures.Add(key);
     }
 
-    /// <summary>Invalidates live structure evidence while retaining only a certified sibling-drop history.</summary>
+    /// <summary>Invalidates live structure evidence while retaining bounded removal-only histories.</summary>
     /// <param name="table">The physical table whose accepted structure changed.</param>
     /// <param name="schema">The normalized schema identity.</param>
     /// <param name="safeColumnDrop">Whether this accepted mutation is a safe column drop, not an opaque change.</param>
+    /// <param name="safeForeignKeyDrop">Whether this accepted mutation removes only a safe foreign key.</param>
+    /// <param name="preservesForeignKeyColumnProofs">Whether certified nullability retains sibling proofs.</param>
     private void MarkProjectedTableStructureChanged(
         string table,
         string? schema,
-        bool safeColumnDrop = false
+        bool safeColumnDrop = false,
+        bool safeForeignKeyDrop = false,
+        bool preservesForeignKeyColumnProofs = false
     )
     {
         var key = new TableKey(table, schema);
@@ -627,6 +663,20 @@ internal sealed partial class SafeMigrationPreflightProjection :
         {
             _projectedColumnDropOnlyTables?.Remove(key);
         }
+
+        if (safeForeignKeyDrop
+            && (firstMutation
+                || _projectedForeignKeyDropOnlyTables?.Contains(key) == true))
+        {
+            // WHY: FK removal changes table structure without changing an exact
+            // column's storage or values. Only provider opt-in may reuse that proof.
+            _projectedForeignKeyDropOnlyTables ??= new HashSet<TableKey>(_projectedStructurallyModifiedTables.Comparer);
+            _projectedForeignKeyDropOnlyTables.Add(key);
+        }
+        else if (!preservesForeignKeyColumnProofs)
+        {
+            _projectedForeignKeyDropOnlyTables?.Remove(key);
+        }
     }
 
     private void MarkProjectedColumnChanged(
@@ -638,7 +688,8 @@ internal sealed partial class SafeMigrationPreflightProjection :
         var key = new TableKey(table, schema);
         if (!_projectedChangedColumns.TryGetValue(key, out var columns))
         {
-            columns = new HashSet<string>(new IdentifierComparer(_objectIdentityNormalizer));
+            columns = new HashSet<string>(new IdentifierComparer(
+                _objectIdentityNormalizer, _objectIdentityNormalizer?.ColumnIdentifierComparer));
             _projectedChangedColumns.Add(key, columns);
         }
 
@@ -683,7 +734,8 @@ internal sealed partial class SafeMigrationPreflightProjection :
     }
 
     private void MarkProjectedTableStructureChanged(
-        SafeMigrationIntent intent
+        SafeMigrationIntent intent,
+        bool preservesForeignKeyColumnProofs = false
     )
     {
         switch (intent)
@@ -693,10 +745,12 @@ internal sealed partial class SafeMigrationPreflightProjection :
                 MarkProjectedTableStructureChanged(value.NewName ?? value.Name, value.NewSchema ?? value.Schema);
                 break;
             case EnsureColumnIntent value:
-                MarkProjectedTableStructureChanged(value.Table, value.Schema);
+                MarkProjectedTableStructureChanged(value.Table, value.Schema,
+                    preservesForeignKeyColumnProofs: preservesForeignKeyColumnProofs);
                 break;
             case AlterColumnIntent value:
-                MarkProjectedTableStructureChanged(value.Table, value.Schema);
+                MarkProjectedTableStructureChanged(value.Table, value.Schema,
+                    preservesForeignKeyColumnProofs: preservesForeignKeyColumnProofs);
                 break;
             case DropColumnIntent value:
                 MarkProjectedTableStructureChanged(value.Table, value.Schema, safeColumnDrop: true);
@@ -735,7 +789,7 @@ internal sealed partial class SafeMigrationPreflightProjection :
                 MarkProjectedTableStructureChanged(value.Definition.Table, value.Definition.Schema);
                 break;
             case DropForeignKeyIntent value:
-                MarkProjectedTableStructureChanged(value.Table, value.Schema);
+                MarkProjectedTableStructureChanged(value.Table, value.Schema, safeForeignKeyDrop: true);
                 break;
         }
     }
@@ -846,11 +900,6 @@ internal sealed partial class SafeMigrationPreflightProjection :
         string? schema
     ) => normalizer is null ? schema : normalizer.NormalizeSchema(schema);
 
-    private static string NormalizeIdentifier(
-        ISafeMigrationProviderObjectIdentityNormalizer? normalizer,
-        string identifier
-    ) => normalizer is null ? identifier : normalizer.NormalizeIdentifier(identifier);
-
     private static bool IdentifierEquals(
         ISafeMigrationProviderObjectIdentityNormalizer? normalizer,
         string left,
@@ -935,11 +984,13 @@ internal sealed partial class SafeMigrationPreflightProjection :
     )
     {
         using var writer = new CanonicalHashWriter();
+        var canonicalColumns = SafeMigrationModelManagedKeyIdentity.CanonicalizeColumns(
+            columns, _objectIdentityNormalizer, out var ordinals);
 
-        writer.Add(columns.Count);
-        foreach (var column in columns)
+        writer.Add(canonicalColumns.Count);
+        for (var column = 0; column < canonicalColumns.Count; column++)
         {
-            writer.Add(NormalizeIdentifier(_objectIdentityNormalizer, column));
+            writer.Add(canonicalColumns[ordinals?[column] ?? column]);
         }
 
         return writer.GetHash();
@@ -1072,6 +1123,7 @@ internal sealed partial class SafeMigrationPreflightProjection :
     ) : IEqualityComparer<IndexKey>
     {
         private readonly TableKeyComparer _tableComparer = new(normalizer);
+        private readonly StringComparer _nameComparer = normalizer?.IndexIdentifierComparer ?? StringComparer.Ordinal;
 
         public bool Equals(
             IndexKey left,
@@ -1079,27 +1131,34 @@ internal sealed partial class SafeMigrationPreflightProjection :
         ) => _tableComparer.Equals(
                 new TableKey(left.Table, left.Schema),
                 new TableKey(right.Table, right.Schema))
-            && IdentifierEquals(normalizer, left.Name, right.Name);
+            && _nameComparer.Equals(left.Name, right.Name);
 
         public int GetHashCode(
             IndexKey value
         ) => HashCode.Combine(
             _tableComparer.GetHashCode(new TableKey(value.Table, value.Schema)),
-            IdentifierHashCode(normalizer, value.Name));
+            _nameComparer.GetHashCode(value.Name));
     }
 
-    private sealed class IdentifierComparer(ISafeMigrationProviderObjectIdentityNormalizer? normalizer)
+    private sealed class IdentifierComparer(
+        ISafeMigrationProviderObjectIdentityNormalizer? normalizer,
+        StringComparer? memberComparer = null
+    )
         : IEqualityComparer<string>
     {
+        private readonly StringComparer _comparer = memberComparer
+            ?? normalizer?.IdentifierComparer
+            ?? StringComparer.Ordinal;
+
         public bool Equals(
             string? left,
             string? right
         ) => ReferenceEquals(left, right)
-            || left is not null && right is not null && IdentifierEquals(normalizer, left, right);
+            || left is not null && right is not null && _comparer.Equals(left, right);
 
         public int GetHashCode(
             string value
-        ) => IdentifierHashCode(normalizer, value);
+        ) => _comparer.GetHashCode(value);
     }
 
     private readonly record struct ProjectedColumnState(
@@ -1111,7 +1170,8 @@ internal sealed partial class SafeMigrationPreflightProjection :
     private sealed class ProjectedPrerequisites(
         bool newlyCreated,
         long dataMutationVersion,
-        ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer
+        ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer,
+        bool sharesUniqueIndexIdentity
     )
     {
         private readonly ISafeMigrationProviderObjectIdentityNormalizer? _objectIdentityNormalizer
@@ -1122,7 +1182,7 @@ internal sealed partial class SafeMigrationPreflightProjection :
             objectIdentityNormalizer);
 
         public Dictionary<string, ProjectedColumn> Columns { get; } =
-            new(new IdentifierComparer(objectIdentityNormalizer));
+            new(new IdentifierComparer(objectIdentityNormalizer, objectIdentityNormalizer?.ColumnIdentifierComparer));
 
         public long DataMutationVersion { get; } = dataMutationVersion;
 
@@ -1132,44 +1192,51 @@ internal sealed partial class SafeMigrationPreflightProjection :
 
         public ProjectedDefinitionSet<ExpectedForeignKeyDefinition> ForeignKeys { get; } = new(
             SafeMigrationSemanticDefinitionComparers.ForeignKey,
-            objectIdentityNormalizer);
+            objectIdentityNormalizer,
+            objectIdentityNormalizer?.ForeignKeyIdentifierComparer);
 
         public ProjectedDefinitionSet<ExpectedIndexDefinition> Indexes { get; } = new(
-            SafeMigrationSemanticDefinitionComparers.Index,
-            objectIdentityNormalizer);
+            SafeMigrationSemanticDefinitionComparers.IndexForColumns(
+                objectIdentityNormalizer?.ColumnIdentifierComparer ?? StringComparer.Ordinal),
+            objectIdentityNormalizer,
+            objectIdentityNormalizer?.IndexIdentifierComparer);
 
         public bool NewlyCreated { get; } = newlyCreated;
 
         public ExpectedPrimaryKeyDefinition? PrimaryKey { get; private set; }
+
+        /// <summary>Gets the separately proven physical PK name, or null when only semantic shape is known.</summary>
+        public string? PrimaryKeyPhysicalName { get; private set; }
 
         public bool PrimaryKeyWasDropped { get; private set; }
 
         public ExpectedPrimaryKeyDefinition? RemovedPrimaryKey { get; private set; }
 
         public ProjectedDefinitionSet<ExpectedUniqueConstraintDefinition> UniqueConstraints { get; } =
-            new(SafeMigrationSemanticDefinitionComparers.UniqueConstraint, objectIdentityNormalizer);
+            new(SafeMigrationSemanticDefinitionComparers.UniqueForColumns(
+                    objectIdentityNormalizer?.ColumnIdentifierComparer ?? StringComparer.Ordinal),
+                objectIdentityNormalizer,
+                sharesUniqueIndexIdentity ? objectIdentityNormalizer?.IndexIdentifierComparer : null);
 
+        /// <summary>Accepts key shape with separate authored-alias and physical-identity proof.</summary>
+        /// <param name="definition">The accepted key shape.</param>
+        /// <param name="physicalName">The separately proven physical name, when available.</param>
         public void AcceptPrimaryKey(
-            ExpectedPrimaryKeyDefinition definition
+            ExpectedPrimaryKeyDefinition definition,
+            string? physicalName
         )
         {
             PrimaryKey = definition;
+            PrimaryKeyPhysicalName = physicalName;
             PrimaryKeyWasDropped = false;
             RemovedPrimaryKey = null;
-        }
-
-        public void AcceptUniqueConstraint(
-            ExpectedUniqueConstraintDefinition definition,
-            string physicalName
-        )
-        {
-            UniqueConstraints.AcceptPhysical(physicalName, definition);
         }
 
         public void DropPrimaryKey()
         {
             RemovedPrimaryKey = PrimaryKey;
             PrimaryKey = null;
+            PrimaryKeyPhysicalName = null;
             PrimaryKeyWasDropped = true;
         }
 
@@ -1206,53 +1273,84 @@ internal sealed partial class SafeMigrationPreflightProjection :
                 return true;
             }
 
-            var candidate = new ExpectedUniqueConstraintDefinition(
-                "doka_projected_candidate_key",
-                table,
-                columns,
-                schema);
-
-            return UniqueConstraints.ContainsSemantically(candidate);
+            return UniqueConstraints.Any(constraint =>
+                IdentifierEquals(_objectIdentityNormalizer, constraint.Table, table)
+                && StringComparer.Ordinal.Equals(
+                    NormalizeSchema(_objectIdentityNormalizer, constraint.Schema),
+                    NormalizeSchema(_objectIdentityNormalizer, schema))
+                && SameColumns(constraint.Columns, columns, _objectIdentityNormalizer));
         }
     }
 
     private sealed class ProjectedDefinitionSet<T>(
         IEqualityComparer<T> semanticComparer,
-        ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer
+        ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer,
+        StringComparer? memberComparer = null
     )
         where T : class
     {
-        private readonly IdentifierComparer _identifierComparer = new(objectIdentityNormalizer);
+        private readonly IdentifierComparer _identifierComparer = new(objectIdentityNormalizer, memberComparer);
 
         private readonly Dictionary<string, PhysicalDefinition> _aliases = new(
-            new IdentifierComparer(objectIdentityNormalizer));
+            new IdentifierComparer(objectIdentityNormalizer, memberComparer));
 
-        private readonly HashSet<string> _missingNames = new(new IdentifierComparer(objectIdentityNormalizer));
+        private readonly HashSet<string> _missingNames =
+            new(new IdentifierComparer(objectIdentityNormalizer, memberComparer));
 
         private readonly Dictionary<string, PhysicalDefinition> _physicalDefinitions =
-            new(new IdentifierComparer(objectIdentityNormalizer));
+            new(new IdentifierComparer(objectIdentityNormalizer, memberComparer));
 
         private readonly Dictionary<string, T> _removedDefinitions =
-            new(new IdentifierComparer(objectIdentityNormalizer));
+            new(new IdentifierComparer(objectIdentityNormalizer, memberComparer));
 
         private readonly HashSet<string> _unresolvedMissingNames =
-            new(new IdentifierComparer(objectIdentityNormalizer));
+            new(new IdentifierComparer(objectIdentityNormalizer, memberComparer));
 
         // WHY: A semantic NoOp is an alias for an existing physical object, not
         // another object. Keeping that binding lets one drop invalidate every
         // alias without hiding a distinct physical object with the same shape.
         private readonly Dictionary<T, HashSet<PhysicalDefinition>> _semanticDefinitions = new(semanticComparer);
         private readonly HashSet<T> _mutatedSemanticDefinitions = new(semanticComparer);
+        private HashSet<T>? _unboundDefinitions;
+        private bool _unboundIdentityInvalidated;
 
-        /// <summary>Gets whether any accepted physical objects require column invalidation.</summary>
-        public bool HasPhysicalDefinitions => _physicalDefinitions.Count > 0;
+        /// <summary>Gets the accepted removal ordinal that invalidated unresolved member identities.</summary>
+        public int? IdentityUnknownOriginOrdinal { get; private set; }
 
-        /// <summary>Enumerates accepted definitions without cloning the physical set.</summary>
-        public IEnumerable<T> Definitions => _physicalDefinitions.Values.Select(static value => value.Definition);
+        /// <summary>Gets whether accepted physical or unbound semantic shapes require column invalidation.</summary>
+        public bool HasAcceptedDefinitions => _physicalDefinitions.Count > 0 || _unboundDefinitions?.Count > 0;
 
-        /// <summary>Tests accepted physical definitions without materializing a second collection.</summary>
+        /// <summary>Enumerates physical and unbound semantic prerequisites without cloning either set.</summary>
+        public IEnumerable<T> Definitions => _unboundDefinitions is null
+            ? _physicalDefinitions.Values.Select(static value => value.Definition)
+            : _physicalDefinitions.Values.Select(static value => value.Definition).Concat(_unboundDefinitions);
+
+        /// <summary>Tests accepted prerequisite shapes without materializing a second collection.</summary>
         public bool Any(Func<T, bool> predicate) =>
-            _physicalDefinitions.Values.Any(value => predicate(value.Definition));
+            _physicalDefinitions.Values.Any(value => predicate(value.Definition))
+            || _unboundDefinitions?.Any(predicate) == true;
+
+        /// <summary>Retains semantic prerequisite shape without inventing a physical member name.</summary>
+        /// <param name="definition">The shape proven by a matching existing-table contract.</param>
+        public void AcceptShapeOnly(T definition)
+        {
+            if (_unboundIdentityInvalidated || _semanticDefinitions.ContainsKey(definition))
+            {
+                return;
+            }
+
+            // WHY: Table matching can ignore constraint symbols. Allocate this
+            // separate set only for live shapes that lack physical-name proof.
+            _unboundDefinitions ??= new HashSet<T>(semanticComparer);
+            _unboundDefinitions.Add(definition);
+        }
+
+        /// <summary>Checks whether immutable live shape may describe an unresolved removed physical member.</summary>
+        /// <param name="analysis">The original live analysis.</param>
+        public bool HasUnprovenMutatedIdentity(SafeMigrationProviderAnalysis analysis) =>
+            _unboundIdentityInvalidated
+            && (analysis.ObservedState == SafeMigrationObservedState.Different
+                || analysis is { ObservedState: SafeMigrationObservedState.Matching, MatchedObjectName: null });
 
         /// <summary>Rebinds immutable identities without discarding accepted aliases or removal provenance.</summary>
         public void Rebind(Func<T, T> transform)
@@ -1281,11 +1379,22 @@ internal sealed partial class SafeMigrationPreflightProjection :
             {
                 _mutatedSemanticDefinitions.Add(transform(definition));
             }
+
+            if (_unboundDefinitions is not null)
+            {
+                var unbound = _unboundDefinitions.ToArray();
+                _unboundDefinitions.Clear();
+                foreach (var definition in unbound)
+                {
+                    _unboundDefinitions.Add(transform(definition));
+                }
+            }
         }
 
         public void AcceptPhysical(
             string physicalName,
-            T definition
+            T definition,
+            bool createdByProjection = false
         )
         {
             if (_physicalDefinitions.Remove(physicalName, out var previous))
@@ -1296,7 +1405,7 @@ internal sealed partial class SafeMigrationPreflightProjection :
             RemoveAlias(physicalName);
             RemoveMissingName(physicalName);
 
-            var physical = new PhysicalDefinition(physicalName, definition, _identifierComparer);
+            var physical = new PhysicalDefinition(physicalName, definition, _identifierComparer, createdByProjection);
             physical.Aliases.Add(physicalName);
             _physicalDefinitions.Add(physicalName, physical);
             _aliases[physicalName] = physical;
@@ -1308,6 +1417,7 @@ internal sealed partial class SafeMigrationPreflightProjection :
             }
 
             definitions.Add(physical);
+            _unboundDefinitions?.Remove(definition);
         }
 
         public bool BindAlias(
@@ -1316,6 +1426,14 @@ internal sealed partial class SafeMigrationPreflightProjection :
             T definition
         )
         {
+            if (_missingNames.Contains(physicalName) && !_physicalDefinitions.ContainsKey(physicalName))
+            {
+                // WHY: Immutable native Matching can still name a removed
+                // candidate while a different semantic candidate survives.
+                // Only accepted creation may reintroduce that physical lifetime.
+                return false;
+            }
+
             if (!_physicalDefinitions.TryGetValue(physicalName, out var physical))
             {
                 AcceptPhysical(physicalName, definition);
@@ -1358,12 +1476,114 @@ internal sealed partial class SafeMigrationPreflightProjection :
 
         public bool ContainsSemantically(
             T definition
-        ) => _semanticDefinitions.ContainsKey(definition);
+        ) => _semanticDefinitions.ContainsKey(definition) || _unboundDefinitions?.Contains(definition) == true;
 
-        public void MarkPhysicalMissing(
-            string physicalName
+        /// <summary>Checks exact semantic provenance retained from an accepted physical removal.</summary>
+        /// <param name="expected">The requested semantics, excluding only the logical member name.</param>
+        public bool HasRemovedSemantically(
+            T expected
         )
         {
+            foreach (var removed in _removedDefinitions.Values)
+            {
+                if (semanticComparer.Equals(removed, expected))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>Resolves an exact bound name or a deterministic accepted semantic physical candidate.</summary>
+        /// <param name="name">The requested logical or physical name.</param>
+        /// <param name="expected">The required accepted semantics.</param>
+        /// <param name="physicalName">The actual accepted physical object's name.</param>
+        public bool TryResolvePhysicalName(
+            string name,
+            T expected,
+            [NotNullWhen(true)] out string? physicalName
+        )
+        {
+            if (_aliases.TryGetValue(name, out var exact)
+                && semanticComparer.Equals(exact.Definition, expected))
+            {
+                physicalName = exact.Name;
+
+                return true;
+            }
+
+            physicalName = null;
+
+            if (!_semanticDefinitions.TryGetValue(expected, out var candidates))
+            {
+                return false;
+            }
+
+            foreach (var candidate in candidates)
+            {
+                if (physicalName is null || StringComparer.Ordinal.Compare(candidate.Name, physicalName) < 0)
+                {
+                    physicalName = candidate.Name;
+                }
+            }
+
+            return physicalName is not null;
+        }
+
+        /// <summary>Distinguishes accepted physical presence from tombstones and logical-only aliases.</summary>
+        /// <param name="name">The requested physical name.</param>
+        /// <param name="present">Whether that exact physical object is accepted as present.</param>
+        public bool TryGetPhysicalState(
+            string name,
+            out bool present
+        )
+        {
+            present = _physicalDefinitions.ContainsKey(name);
+
+            return present || _missingNames.Contains(name) || _aliases.ContainsKey(name);
+        }
+
+        /// <summary>Checks whether an accepted physical creation proves the current object's fresh lifetime.</summary>
+        /// <param name="name">The exact physical member name, not a semantic alias.</param>
+        public bool WasCreatedByProjection(string name) =>
+            _physicalDefinitions.TryGetValue(name, out var physical) && physical.CreatedByProjection;
+
+        /// <summary>Records actual known owned index names without allocating an iterator or a name snapshot.</summary>
+        /// <param name="tombstones">The existing physical-key removal set.</param>
+        /// <param name="owner">The physical owner whose lifetime is being removed.</param>
+        public void CaptureIndexTombstones(HashSet<IndexKey> tombstones, TableKey owner)
+        {
+            foreach (var physical in _physicalDefinitions.Values)
+            {
+                tombstones.Add(new IndexKey(owner.Table, owner.Schema, physical.Name));
+            }
+        }
+
+        /// <summary>Allows exact live identity only for physical names untouched by accepted bookkeeping.</summary>
+        /// <param name="name">The requested physical name.</param>
+        /// <param name="physicalName">The immutable provider's resolved physical name.</param>
+        public bool CanReuseExactLivePhysicalName(
+            string name,
+            string physicalName
+        ) => _identifierComparer.Equals(name, physicalName)
+            && !TryGetPhysicalState(physicalName, out _);
+
+        public void MarkPhysicalMissing(
+            string physicalName,
+            int removalOrdinal = -1
+        )
+        {
+            if (_unboundDefinitions?.Count > 0 || _unboundIdentityInvalidated)
+            {
+                // WHY: A literal physical drop cannot identify which unnamed
+                // semantic shape it removed. Invalidate only this member family;
+                // exact physical bindings in the same owner remain authoritative.
+                _unboundDefinitions?.Clear();
+                _unboundIdentityInvalidated = true;
+                IdentityUnknownOriginOrdinal = removalOrdinal >= 0 ? removalOrdinal : IdentityUnknownOriginOrdinal;
+            }
+
             if (RemovePhysical(physicalName, out _))
             {
                 return;
@@ -1413,7 +1633,9 @@ internal sealed partial class SafeMigrationPreflightProjection :
                 _ = RemovePhysical(name, out _);
             }
 
-            return names.Length > 0;
+            var unboundRemoved = _unboundDefinitions?.RemoveWhere(value => predicate(value)) ?? 0;
+
+            return names.Length > 0 || unboundRemoved > 0;
         }
 
         public ProjectedDefinitionMutation ResolveMutation(
@@ -1438,7 +1660,8 @@ internal sealed partial class SafeMigrationPreflightProjection :
                     return ProjectedDefinitionMutation.Missing;
                 }
 
-                return liveAnalysis is { ObservedState: SafeMigrationObservedState.Matching, MatchedObjectName: not null }
+                return liveAnalysis is
+                    { ObservedState: SafeMigrationObservedState.Matching, MatchedObjectName: not null }
                     && _identifierComparer.Equals(liveAnalysis.MatchedObjectName, name)
                         ? ProjectedDefinitionMutation.Missing
                         : ProjectedDefinitionMutation.Unknown;
@@ -1526,7 +1749,8 @@ internal sealed partial class SafeMigrationPreflightProjection :
         private sealed class PhysicalDefinition(
             string name,
             T definition,
-            IEqualityComparer<string> identifierComparer
+            IEqualityComparer<string> identifierComparer,
+            bool createdByProjection
         )
         {
             public HashSet<string> Aliases { get; } = new(identifierComparer);
@@ -1534,6 +1758,9 @@ internal sealed partial class SafeMigrationPreflightProjection :
             public T Definition { get; set; } = definition;
 
             public string Name { get; } = name;
+
+            /// <summary>Gets whether accepted DDL created this lifetime rather than observing a live alias.</summary>
+            public bool CreatedByProjection { get; } = createdByProjection;
         }
     }
 
@@ -1589,7 +1816,8 @@ internal sealed partial class SafeMigrationPreflightProjection :
         public ProjectedTable(
             ExpectedTableDefinition definition,
             long dataMutationVersion,
-            ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer
+            ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer,
+            bool sharesUniqueIndexIdentity
         )
         {
             _objectIdentityNormalizer = objectIdentityNormalizer;
@@ -1603,19 +1831,29 @@ internal sealed partial class SafeMigrationPreflightProjection :
 
             var identifierComparer = new IdentifierComparer(objectIdentityNormalizer);
 
-            Columns = definition.Columns.ToDictionary(static value => value.Name, identifierComparer);
+            Columns = definition.Columns.ToDictionary(
+                static value => value.Name,
+                new IdentifierComparer(objectIdentityNormalizer, objectIdentityNormalizer?.ColumnIdentifierComparer));
+
             PrimaryKey = definition.PrimaryKey;
 
             UniqueConstraints = definition.UniqueConstraints.ToDictionary(
                 static value => value.Name,
-                identifierComparer);
+                new IdentifierComparer(objectIdentityNormalizer,
+                    sharesUniqueIndexIdentity ? objectIdentityNormalizer?.IndexIdentifierComparer : null));
 
             CheckConstraints = definition.CheckConstraints.ToDictionary(
                 static value => value.Name,
                 identifierComparer);
 
-            ForeignKeys = definition.ForeignKeys.ToDictionary(static value => value.Name, identifierComparer);
-            Indexes = new Dictionary<string, ExpectedIndexDefinition>(identifierComparer);
+            ForeignKeys = definition.ForeignKeys.ToDictionary(
+                static value => value.Name,
+                new IdentifierComparer(
+                    objectIdentityNormalizer,
+                    objectIdentityNormalizer?.ForeignKeyIdentifierComparer));
+
+            Indexes = new Dictionary<string, ExpectedIndexDefinition>(
+                new IdentifierComparer(objectIdentityNormalizer, objectIdentityNormalizer?.IndexIdentifierComparer));
             DataMutationVersion = dataMutationVersion;
         }
 
@@ -1680,7 +1918,7 @@ internal sealed partial class SafeMigrationPreflightProjection :
             string source,
             string target
         ) => values
-            .Select(value => IdentifierEquals(_objectIdentityNormalizer, value, source) ? target : value)
+            .Select(value => Columns.Comparer.Equals(value, source) ? target : value)
             .ToArray();
 
         private bool SameIdentity(
@@ -1784,6 +2022,7 @@ internal sealed partial class SafeMigrationPreflightProjection :
             string? table = null,
             string? schema = null,
             IEnumerable<ExpectedIndexKeyDefinition>? keys = null,
+            IReadOnlyList<string>? includedColumns = null,
             string? filter = null,
             SafeMigrationSqlExpression? structuredFilter = null,
             bool replaceFilter = false
@@ -1794,17 +2033,17 @@ internal sealed partial class SafeMigrationPreflightProjection :
             schema ?? value.Schema,
             value.Unique,
             replaceFilter ? filter : filter ?? value.Filter,
-            value.IncludedColumns,
+            includedColumns ?? value.IncludedColumns,
             value.Method,
             value.NullsDistinct,
             replaceFilter ? structuredFilter : structuredFilter ?? value.StructuredFilter);
 
-        private static ExpectedIndexKeyDefinition Copy(
+        private ExpectedIndexKeyDefinition Copy(
             ExpectedIndexKeyDefinition value,
             string source,
             string target
         ) => new(
-            value.Column is not null && StringComparer.Ordinal.Equals(value.Column, source) ? target : value.Column,
+            value.Column is not null && Columns.Comparer.Equals(value.Column, source) ? target : value.Column,
             expression: null,
             value.SortOrder,
             value.NullOrder,
@@ -1815,6 +2054,6 @@ internal sealed partial class SafeMigrationPreflightProjection :
                 ? SafeMigrationSql.OpaqueAfterRename(value.Expression)
                 : value.StructuredExpression is null
                     ? null
-                    : SafeMigrationSqlExpressionInspector.RenameIdentifier(value.StructuredExpression, source, target));
+                    : RenameColumnExpression(value.StructuredExpression, source, target));
     }
 }

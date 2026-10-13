@@ -18,6 +18,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     internal const string TransitionInvariantPlaceholder = "__DOKA_SM_TRANSITION_INVARIANT__";
     internal const string NullabilityDataProbePlaceholder = "__DOKA_SM_NULLABILITY_DATA_PROBE__";
     internal const string ColumnRepairInvariantPlaceholder = "__DOKA_SM_COLUMN_REPAIR_INVARIANT__";
+    internal const string RequiredColumnAddStatusPlaceholder = "__DOKA_SM_REQUIRED_ADD_STATUS__";
     private static readonly SearchValues<char> s_proofTokenStarts = SearchValues.Create("_'\"`");
 
     /// <summary>Gets the captured parameter values in placeholder order.</summary>
@@ -66,6 +67,9 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
 
     /// <summary>Gets the operation-local proof shared by nullability classification and repair.</summary>
     public MySqlSafeMigrationNullabilityDataProbe? NullabilityDataProbe { get; init; }
+
+    /// <summary>Gets the exact owned staging protocol for a required column without a default.</summary>
+    public MySqlSafeMigrationRequiredColumnAddPlan? RequiredColumnAddPlan { get; init; }
 
     /// <summary>Gets whether classification reads live table data.</summary>
     public bool RequiresDataProbe => DataProbe is not null;
@@ -187,6 +191,43 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
             ?? throw new InvalidOperationException("The runtime plan has no classification-code expression."),
         renderValue,
         dataBlocked);
+
+    /// <summary>Renders lazy-guard diagnostics using only facts available before live row probes.</summary>
+    /// <param name="renderValue">The bounded catalog parameter renderer.</param>
+    /// <returns>The catalog-safe code expression, or SQL NULL when any required proof is unavailable.</returns>
+    /// <remarks>Quoted marker-shaped names remain literal; required-add status must already be bound.</remarks>
+    internal string RenderStateEvaluationGuardClassificationCodeExpression(
+        Func<MySqlCatalogParameterValue, string> renderValue
+    )
+    {
+        ArgumentNullException.ThrowIfNull(renderValue);
+        if (ClassificationCodeExpression is null)
+        {
+            return "NULL";
+        }
+
+        var statusBinding = RequiredColumnAddPlan?.StatusBinding;
+        var position = 0;
+        while (FindNextProofMarker(ClassificationCodeExpression.AsSpan(), position) is var marker && marker.Index >= 0)
+        {
+            // WHY: A failed catalog guard can mean the row source is absent.
+            // Diagnostic rendering must not inline its later row probe or
+            // manufacture a Boolean result for an unavailable proof. Checking
+            // first also avoids registering unconsumed payload parameters.
+            if (marker.Kind != 4 || statusBinding is null)
+            {
+                return "NULL";
+            }
+
+            position = marker.Index + marker.Length;
+        }
+
+        var rendered = MySqlCatalogSqlTemplate.Render(ClassificationCodeExpression, ParameterValues,
+            renderValue, CatalogRelations);
+
+        return ReplaceTransitionPlaceholders(rendered, DataProbePlaceholder, TransitionInvariantPlaceholder,
+            NullabilityDataProbePlaceholder, ColumnRepairInvariantPlaceholder, statusBinding);
+    }
 
     /// <summary>Renders bounded catalog-only facet-difference evidence.</summary>
     /// <param name="renderValue">The provider literal renderer.</param>
@@ -327,6 +368,44 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         IReadOnlyList<string> renderedValues
     ) => RenderPreparedTemplate(
         ExecutionPostcondition ?? Postcondition,
+        renderedValues);
+
+    /// <summary>Renders the exact catalog-only ownership proof for an interrupted required-column add.</summary>
+    /// <param name="renderValue">The catalog value renderer.</param>
+    /// <returns>The qualified ownership predicate without a table-row probe.</returns>
+    public string RenderRequiredColumnAddResumeExpression(
+        Func<MySqlCatalogParameterValue, string> renderValue
+    ) => "(" + RenderRequiredColumnAddStatusExpression(renderValue) + ") = 'staged'";
+
+    /// <summary>Renders complete catalog status independently of any previously bound status.</summary>
+    /// <param name="renderValue">The catalog value renderer.</param>
+    /// <returns>The raw catalog-only classifier for one fresh materialization.</returns>
+    public string RenderRequiredColumnAddStatusExpression(
+        Func<MySqlCatalogParameterValue, string> renderValue
+    ) => ValidateRequiredColumnAddStatusExpression(MySqlCatalogSqlTemplate.Render(
+        RequiredColumnAddPlan?.StatusExpression
+            ?? throw new InvalidOperationException("The runtime plan has no required-column add protocol."),
+        ParameterValues, renderValue, CatalogRelations));
+
+    /// <summary>Renders the raw status classifier for prepared operation-local materialization.</summary>
+    /// <param name="renderedValues">The rendered values in captured placeholder order.</param>
+    /// <returns>The raw classifier, never a previously bound variable or literal.</returns>
+    public string RenderPreparedRequiredColumnAddStatusExpression(
+        IReadOnlyList<string> renderedValues
+    ) => ValidateRequiredColumnAddStatusExpression(MySqlCatalogSqlTemplate.RenderPrepared(
+        RequiredColumnAddPlan?.StatusExpression
+            ?? throw new InvalidOperationException("The runtime plan has no required-column add protocol."),
+        renderedValues, CatalogRelations));
+
+    /// <summary>Renders the bound recovery predicate for prepared runtime SQL.</summary>
+    /// <param name="renderedValues">The rendered values in captured placeholder order.</param>
+    /// <returns>The bound predicate, or the raw catalog-only predicate when unbound.</returns>
+    public string RenderPreparedRequiredColumnAddResumeExpression(
+        IReadOnlyList<string> renderedValues
+    ) => RenderPreparedTemplate(
+        RequiredColumnAddPlan is not null
+            ? MySqlSafeMigrationRequiredColumnAddPlan.ResumeExpression
+            : throw new InvalidOperationException("The runtime plan has no required-column add protocol."),
         renderedValues);
 
     /// <summary>Renders the repair precondition with prepared literal values.</summary>
@@ -535,7 +614,8 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         string dataReplacement,
         string transitionReplacement,
         string nullabilityReplacement,
-        string repairInvariantReplacement
+        string repairInvariantReplacement,
+        string? requiredAddStatusReplacement = null
     )
     {
         if (!expression.Contains("__DOKA_SM_", StringComparison.Ordinal))
@@ -554,7 +634,8 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
                 0 => dataReplacement,
                 1 => transitionReplacement,
                 2 => nullabilityReplacement,
-                _ => repairInvariantReplacement,
+                3 => repairInvariantReplacement,
+                _ => requiredAddStatusReplacement ?? RequiredColumnAddStatusPlaceholder,
             };
 
             resultLength = checked(resultLength + replacement.Length - marker.Length);
@@ -572,7 +653,8 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         return string.Create(
             resultLength,
             (Expression: expression, Data: dataReplacement, Transition: transitionReplacement,
-                Nullability: nullabilityReplacement, RepairInvariant: repairInvariantReplacement),
+                Nullability: nullabilityReplacement, RepairInvariant: repairInvariantReplacement,
+                RequiredAddStatus: requiredAddStatusReplacement ?? RequiredColumnAddStatusPlaceholder),
             static (destination, state) =>
             {
                 var source = state.Expression.AsSpan();
@@ -597,7 +679,8 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
                         0 => state.Data,
                         1 => state.Transition,
                         2 => state.Nullability,
-                        _ => state.RepairInvariant,
+                        3 => state.RepairInvariant,
+                        _ => state.RequiredAddStatus,
                     };
 
                     replacement.AsSpan().CopyTo(destination[destinationOffset..]);
@@ -683,6 +766,11 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
             {
                 return (index, 3, ColumnRepairInvariantPlaceholder.Length);
             }
+
+            if (remaining.StartsWith(RequiredColumnAddStatusPlaceholder, StringComparison.Ordinal))
+            {
+                return (index, 4, RequiredColumnAddStatusPlaceholder.Length);
+            }
         }
 
         return (-1, 0, 0);
@@ -692,12 +780,76 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         string template,
         IReadOnlyList<MySqlCatalogParameterValue> values,
         Func<MySqlCatalogParameterValue, string> renderValue
-    ) => MySqlCatalogSqlTemplate.Render(template, values, renderValue, CatalogRelations);
+    )
+    {
+        var rendered = MySqlCatalogSqlTemplate.Render(template, values, renderValue, CatalogRelations);
+        if (!HasRequiredColumnAddStatusMarker(rendered))
+        {
+            return rendered;
+        }
+
+        var protocol = RequiredColumnAddPlan
+            ?? throw new InvalidOperationException("The status marker requires a required-column add protocol.");
+        var status = protocol.StatusBinding ?? "(" + RenderRequiredColumnAddStatusExpression(renderValue) + ")";
+
+        return ReplaceTransitionPlaceholders(rendered, DataProbePlaceholder, TransitionInvariantPlaceholder,
+            NullabilityDataProbePlaceholder, ColumnRepairInvariantPlaceholder, status);
+    }
 
     private string RenderPreparedTemplate(
         string template,
         IReadOnlyList<string> renderedValues
-    ) => MySqlCatalogSqlTemplate.RenderPrepared(template, renderedValues, CatalogRelations);
+    )
+    {
+        var rendered = MySqlCatalogSqlTemplate.RenderPrepared(template, renderedValues, CatalogRelations);
+        if (!HasRequiredColumnAddStatusMarker(rendered))
+        {
+            return rendered;
+        }
+
+        var protocol = RequiredColumnAddPlan
+            ?? throw new InvalidOperationException("The status marker requires a required-column add protocol.");
+        var status = protocol.StatusBinding
+            ?? "(" + RenderPreparedRequiredColumnAddStatusExpression(renderedValues) + ")";
+
+        return ReplaceTransitionPlaceholders(rendered, DataProbePlaceholder, TransitionInvariantPlaceholder,
+            NullabilityDataProbePlaceholder, ColumnRepairInvariantPlaceholder, status);
+    }
+
+    /// <summary>Uses the shared quote-aware scanner before expanding an operation-local catalog status.</summary>
+    private static bool HasRequiredColumnAddStatusMarker(string expression)
+    {
+        if (!expression.Contains(RequiredColumnAddStatusPlaceholder, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var position = 0;
+        while (FindNextProofMarker(expression.AsSpan(), position) is var marker && marker.Index >= 0)
+        {
+            if (marker.Kind == 4)
+            {
+                return true;
+            }
+
+            position = marker.Index + marker.Length;
+        }
+
+        return false;
+    }
+
+    /// <summary>Rejects recursive status templates while preserving tokens inside authored SQL values.</summary>
+    /// <param name="expression">The raw rendered catalog classifier.</param>
+    /// <returns>The nonrecursive classifier.</returns>
+    private static string ValidateRequiredColumnAddStatusExpression(string expression)
+    {
+        if (HasRequiredColumnAddStatusMarker(expression))
+        {
+            throw new InvalidOperationException("A required-column add status cannot depend on its own status marker.");
+        }
+
+        return expression;
+    }
 }
 
 /// <summary>Describes a shared, operation-local nullable-to-required row proof.</summary>

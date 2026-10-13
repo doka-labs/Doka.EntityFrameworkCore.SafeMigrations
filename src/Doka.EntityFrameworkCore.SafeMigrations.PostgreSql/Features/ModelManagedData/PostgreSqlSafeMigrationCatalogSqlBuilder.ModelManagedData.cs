@@ -107,8 +107,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         var found = $"doka_actual.{Delimited(intent.KeyColumns[0])} IS NOT NULL";
         var dependencyExists = DependencyExists(intent, relation);
         var unmodeledDependency = UnmodeledIncomingForeignKey(intent);
+        var unsafeEnforcement = UnsafeIncomingForeignKeyEnforcement(intent);
         var state = "(SELECT CASE "
-            + $"WHEN {unmodeledDependency} THEN 'unsupported' "
+            + $"WHEN ({unmodeledDependency}) OR ({unsafeEnforcement}) THEN 'unsupported' "
             + $"WHEN COALESCE(BOOL_OR(({found}) AND NOT ({sourceMatch})), FALSE) THEN 'different' "
             + $"WHEN {dependencyExists} THEN 'data_blocked' "
             + $"WHEN NOT COALESCE(BOOL_OR({found}), FALSE) THEN 'missing' "
@@ -130,6 +131,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             ModelManagedDependencyCountsExpression = DependencyCounts(intent, relation),
             ModelManagedRowCount = intent.RowCount,
             ModelManagedDependencyCount = intent.ForeignKeys.Count,
+            ModelManagedDeleteLockTable = table,
         };
     }
 
@@ -451,19 +453,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         DeleteModelManagedDataIntent intent
     )
     {
-        var modeledShapes = intent.ForeignKeys.Select(foreignKey =>
-            $"(dependent_namespace.nspname = {SchemaExpression(foreignKey.Schema)} "
-            + $"AND dependent_table.relname = {Literal(foreignKey.Table)} "
-            + "AND ARRAY(SELECT attribute.attname "
-            + "FROM unnest(constraint_row.conkey) WITH ORDINALITY AS key(attnum, ord) "
-            + "JOIN pg_catalog.pg_attribute attribute "
-            + "ON attribute.attrelid = constraint_row.conrelid AND attribute.attnum = key.attnum "
-            + $"ORDER BY key.ord) = {NameArray(foreignKey.Columns)} "
-            + "AND ARRAY(SELECT attribute.attname "
-            + "FROM unnest(constraint_row.confkey) WITH ORDINALITY AS key(attnum, ord) "
-            + "JOIN pg_catalog.pg_attribute attribute "
-            + "ON attribute.attrelid = constraint_row.confrelid AND attribute.attnum = key.attnum "
-            + $"ORDER BY key.ord) = {NameArray(foreignKey.PrincipalColumns)})");
+        var modeledShapes = intent.ForeignKeys.Select(ModelManagedForeignKeyShape);
 
         var modeled = intent.ForeignKeys.Count == 0
             ? "FALSE"
@@ -481,6 +471,70 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             + $"AND constraint_row.confrelid = {QualifiedRegclass(intent.Table, intent.Schema)} "
             + $"AND NOT ({modeled}))";
     }
+
+    /// <summary>Rejects incoming native relationships whose enforcement cannot support the delete fence.</summary>
+    /// <param name="intent">The source-frozen parent delete with its captured dependent relationships.</param>
+    /// <returns>A catalog-only missing-enforcement or native-trigger/session-bypass predicate.</returns>
+    private string UnsafeIncomingForeignKeyEnforcement(
+        DeleteModelManagedDataIntent intent
+    )
+    {
+        var missingModeled = intent.ForeignKeys.Count == 0 ? "FALSE" : string.Join(" OR ",
+            intent.ForeignKeys.Select(foreignKey =>
+                "NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint constraint_row "
+                + "JOIN pg_catalog.pg_class dependent_table ON dependent_table.oid = constraint_row.conrelid "
+                + "JOIN pg_catalog.pg_namespace dependent_namespace "
+                + "ON dependent_namespace.oid = dependent_table.relnamespace "
+                + "WHERE constraint_row.contype = 'f'::\"char\" "
+                + $"AND constraint_row.confrelid = {QualifiedRegclass(intent.Table, intent.Schema)} "
+                + $"AND ({ModelManagedForeignKeyShape(foreignKey)}) "
+                + $"AND ({ModelManagedForeignKeyEnforcementContract()}))"));
+
+        // WHY: Native FK checks supply the parent-lock fence. A missing,
+        // disabled, or NOT ENFORCED counterpart cannot certify an empty child.
+        // JSON keeps older catalogs parseable; an unknown enforcement verdict
+        // on PostgreSQL 18 or newer fails closed. Privileged child-trigger
+        // reconfiguration after qualification is outside the ordinary-writer
+        // fence and must remain an independently coordinated enforcement change.
+
+        return "(EXISTS (SELECT 1 FROM pg_catalog.pg_constraint constraint_row "
+            + "WHERE constraint_row.contype = 'f'::\"char\" "
+            + $"AND constraint_row.confrelid = {QualifiedRegclass(intent.Table, intent.Schema)} "
+            + $"AND (NOT ({ModelManagedForeignKeyEnforcementContract()}) "
+            + "OR pg_catalog.current_setting('session_replication_role') = 'replica' "
+            + "OR EXISTS (SELECT 1 FROM pg_catalog.pg_trigger native_trigger "
+            + "WHERE native_trigger.tgconstraint = constraint_row.oid AND native_trigger.tgisinternal "
+            + "AND native_trigger.tgenabled NOT IN ('O'::\"char\", 'A'::\"char\") "
+            + "AND ((native_trigger.tgrelid = constraint_row.conrelid "
+            + "AND (native_trigger.tgtype & 20) <> 0) "
+            + "OR (native_trigger.tgrelid = constraint_row.confrelid "
+            + "AND (native_trigger.tgtype & 8) <> 0)))))) "
+            + $"OR ({missingModeled})";
+    }
+
+    /// <summary>Compares a captured incoming relationship with the native FK column ordinals.</summary>
+    /// <param name="foreignKey">The exact source-model relationship to compare.</param>
+    /// <returns>The shared native shape predicate used by topology and enforcement qualification.</returns>
+    private string ModelManagedForeignKeyShape(
+        ExpectedModelManagedDataForeignKeyDefinition foreignKey
+    ) => $"(dependent_namespace.nspname = {SchemaExpression(foreignKey.Schema)} "
+        + $"AND dependent_table.relname = {Literal(foreignKey.Table)} "
+        + "AND ARRAY(SELECT attribute.attname "
+        + "FROM unnest(constraint_row.conkey) WITH ORDINALITY AS key(attnum, ord) "
+        + "JOIN pg_catalog.pg_attribute attribute "
+        + "ON attribute.attrelid = constraint_row.conrelid AND attribute.attnum = key.attnum "
+        + $"ORDER BY key.ord) = {NameArray(foreignKey.Columns)} "
+        + "AND ARRAY(SELECT attribute.attname "
+        + "FROM unnest(constraint_row.confkey) WITH ORDINALITY AS key(attnum, ord) "
+        + "JOIN pg_catalog.pg_attribute attribute "
+        + "ON attribute.attrelid = constraint_row.confrelid AND attribute.attnum = key.attnum "
+        + $"ORDER BY key.ord) = {NameArray(foreignKey.PrincipalColumns)})";
+
+    /// <summary>Checks native enforcement without referring to a field absent before PostgreSQL 18.</summary>
+    /// <returns>The version-qualified enforcement proof for the current native constraint alias.</returns>
+    private static string ModelManagedForeignKeyEnforcementContract() =>
+        "COALESCE((pg_catalog.to_jsonb(constraint_row)->>'conenforced')::boolean, "
+        + "pg_catalog.current_setting('server_version_num')::integer < 180000)";
 
     private static int ColumnOrdinal(
         IReadOnlyList<string> columns,

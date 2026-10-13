@@ -2,11 +2,92 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 internal sealed partial class SafeMigrationPreflightProjection
 {
+    bool ISafeMigrationProjectedColumnSource.HasProjectedSetNullForeignKey(
+        string table,
+        string? schema,
+        string column,
+        IEqualityComparer<string> columnComparer
+    )
+    {
+        // WHY: SET NULL concerns only outgoing FKs of the current physical
+        // owner. An old rename source must not alias the owner's new name.
+        var owner = new TableKey(table, schema);
+        var target = ResolveAlterTable(owner);
+        if (_tables.TryGetValue(owner, out var projected))
+        {
+            foreach (var definition in projected.ForeignKeys.Values)
+            {
+                if (RequiresNullableColumn(definition, target, column, columnComparer))
+                {
+                    return true;
+                }
+            }
+        }
+
+        if (_prerequisites.TryGetValue(owner, out var prerequisites))
+        {
+            foreach (var definition in prerequisites.ForeignKeys.Definitions)
+            {
+                if (RequiresNullableColumn(definition, target, column, columnComparer))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Reads local SET NULL dependencies from the accepted graph, including renamed owners.</summary>
+    /// <param name="definition">The accepted FK definition.</param>
+    /// <param name="target">The canonical dependent table.</param>
+    /// <param name="column">The dependent column being made required.</param>
+    /// <param name="columnComparer">The provider's column-only comparison rule.</param>
+    /// <returns>Whether that FK requires the local column to permit NULL.</returns>
+    private bool RequiresNullableColumn(
+        ExpectedForeignKeyDefinition definition,
+        TableKey target,
+        string column,
+        IEqualityComparer<string> columnComparer
+    )
+    {
+        if ((definition.OnDelete != ReferentialAction.SetNull && definition.OnUpdate != ReferentialAction.SetNull)
+            || !_projectedForeignKeyOwners.Comparer.Equals(
+                ResolveAlterTable(new TableKey(definition.Table, definition.Schema)), target))
+        {
+            return false;
+        }
+
+        // WHY: Reuse the accepted graph rather than duplicate its lifecycle in
+        // a provider cache. Fresh tables, inline FKs, aliases, renames and drops
+        // must contribute the same dependency facts to every column transition.
+        foreach (var name in definition.Columns)
+        {
+            if (columnComparer.Equals(name, column))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>Reads accepted FK column dependencies, cached until a relevant identity or FK mutation.</summary>
     /// <param name="intent">The exact projected column transition.</param>
     /// <returns>Whether an accepted incoming or outgoing FK references the column.</returns>
     private bool HasProjectedAlterForeignKeyDependency(
         AlterColumnIntent intent
+    ) => HasProjectedColumnForeignKeyDependency(
+        new TableKey(intent.Table, intent.Schema),
+        intent.Definition.Name);
+
+    /// <summary>Reads the shared cached accepted FK dependencies for one current column identity.</summary>
+    /// <param name="key">The column owner's current table identity.</param>
+    /// <param name="column">The exact column member name.</param>
+    /// <returns>Whether an accepted incoming or outgoing FK references the column.</returns>
+    private bool HasProjectedColumnForeignKeyDependency(
+        TableKey key,
+        string column
     )
     {
         if (_projectedForeignKeyOwners.Count == 0)
@@ -17,7 +98,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         if (_projectedForeignKeyColumns is null)
         {
             // WHY: Only accepted FK owners can contribute dependencies. Cache
-            // their normalized columns until FK identities change, not per Alter.
+            // their normalized columns until FK identities change, not per lookup.
             var columns = new Dictionary<TableKey, HashSet<string>>(new TableKeyComparer(_objectIdentityNormalizer));
             foreach (var owner in _projectedForeignKeyOwners)
             {
@@ -42,8 +123,8 @@ internal sealed partial class SafeMigrationPreflightProjection
         }
 
         return _projectedForeignKeyColumns.TryGetValue(
-                ResolveAlterTable(new TableKey(intent.Table, intent.Schema)), out var referencedColumns)
-            && referencedColumns.Contains(intent.Definition.Name);
+                ResolveAlterTable(key), out var referencedColumns)
+            && referencedColumns.Contains(column);
     }
 
     /// <summary>Adds both FK endpoints under canonical table identities and normalized column names.</summary>
@@ -65,7 +146,10 @@ internal sealed partial class SafeMigrationPreflightProjection
             var canonical = ResolveAlterTable(table);
             if (!dependencies.TryGetValue(canonical, out var names))
             {
-                names = new HashSet<string>(new IdentifierComparer(_objectIdentityNormalizer));
+                names = new HashSet<string>(new IdentifierComparer(
+                    _objectIdentityNormalizer,
+                    _objectIdentityNormalizer?.ColumnIdentifierComparer));
+
                 dependencies.Add(canonical, names);
             }
 

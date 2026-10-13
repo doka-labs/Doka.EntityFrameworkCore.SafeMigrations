@@ -53,21 +53,22 @@ when that matrix executes. The exact successful run, not this table, is release
 evidence. See [Support and qualification](docs/support-and-qualification.md).
 
 The initial complete stable delivery is 10.0.0. The versioned installation
-examples below target the prepared five-package 10.4.9 release. Verify the exact
+examples below target the prepared five-package 10.4.10 release. Verify the exact
 package's public availability before installation; source and changelog entries
 alone are not publication evidence. See the [changelog](CHANGELOG.md).
 
-The 10.4.9 patch supports provider-proven SQL Server integer widening and
-populated-table CHECK validation, preserves PostgreSQL column contracts,
-and rejects unproved lossy SQLite repairs. Trigger-affected PostgreSQL and
-SQL Server operations cannot inherit stale row or physical dependency proofs:
-preflight defers supported unproven states to fresh runtime validation while
-independent permission and capability refusals remain blocking. PostgreSQL
-eligibility-plan retention and unnecessary SQL Server transition captures and
-runtime predicates are reduced. Public signatures, dependency ranges,
-migration source, policy selection, report schemas, and history are unchanged.
-Existing migrations do not need regeneration. Earlier correctness and
-MySQL/MariaDB performance improvements remain in place.
+The 10.4.10 patch preserves exact nullability/backfill proofs after owned FK
+removals and protects supported required-column additions against concurrent
+writes with recoverable owned CHECKs. Sparse constraints, indexes and rename
+endpoints retain their physical identities without inventing matching evidence.
+PostgreSQL guards verified schema ownership and concurrent dependent writes;
+SQL Server identity cleanup requires this command's acquired session state.
+Model-managed keys use consistent column/value identity across actual migration
+boundaries. Hardware-dependent timing comparisons remain informational, while
+correctness and evidence failures still block. Public signatures, dependency
+ranges, migration source, policy selection, report schemas and history are
+unchanged. Existing migrations do not need regeneration. Earlier provider
+repair and bounded performance improvements remain in place.
 See [Migration authoring](docs/migration-authoring.md)
 and the provider guides for the supported transition contracts.
 
@@ -89,34 +90,34 @@ are not rewritten. See the
 ## Installation
 
 Install one provider package. The core package is included transitively. The
-commands select the intended 10.4.9 release exactly so restore does not move
+commands select the intended 10.4.10 release exactly so restore does not move
 to a different package version implicitly. Use them only after the matching
 release and all five NuGet package pages are public; source or changelog
 entries alone do not establish package availability.
 
 ```bash
-package_version='10.4.9'
+package_version='10.4.10'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.MySql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.4.9'
+package_version='10.4.10'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.4.9'
+package_version='10.4.10'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.Sqlite --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.4.9'
+package_version='10.4.10'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.SqlServer --version "$package_version"
 ```
 
@@ -1043,8 +1044,10 @@ Each provider matrix cell also persists a live full-runner latency artifact.
 It measures 20 full-runner invocations after a warmup against 100 expected
 tables before and after adding 1,000 foreign tables with child objects. Each
 invocation may execute multiple database roundtrips. Expected assessments
-must remain identical, foreign child rows must stay outside the scoped child
-inventory, and noisy p95 must remain within `2 * clean p95 + 250 ms`.
+must remain identical, and foreign child rows must stay outside the scoped child
+inventory. The unchanged `2 * clean p95 + 250 ms` comparison is informational:
+timing overruns retain a false JSON budget verdict without failing qualification.
+Invalid measurements, execution and artifact-write failures remain blocking.
 
 Release candidates and stable releases use the same manually dispatched path.
 The workflow qualifies and attests exact bytes from current `main` before it
@@ -1056,7 +1059,7 @@ signatures and package content, and creates or verifies an immutable GitHub
 Release with the exact ten package files, checksums, SPDX manifest, and
 `release-provenance.intoto.jsonl`. Candidates are marked prerelease and never
 replace the latest stable release.
-The five-package release contract began with 10.4.6 and is unchanged for 10.4.9;
+The five-package release contract began with 10.4.6 and is unchanged for 10.4.10;
 the historical 10.4.5 release remains the four-package set.
 See [Publication operations](docs/operations/release-publication.md) for the
 step-by-step maintainer guide and current readiness, and

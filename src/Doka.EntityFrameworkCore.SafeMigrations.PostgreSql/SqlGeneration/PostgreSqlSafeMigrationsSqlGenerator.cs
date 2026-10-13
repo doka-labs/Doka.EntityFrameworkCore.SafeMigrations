@@ -43,8 +43,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         ArgumentNullException.ThrowIfNull(operations);
 
         var commands = new List<MigrationCommand>();
-        SafeMigrationExpectedIndexTransitions.Validate(operations);
-        var expectedTableConstraints = SafeMigrationExpectedTableConstraints.FromOperations(operations);
+        var identityContract = PostgreSqlSafeMigrationGenerationIdentityContract.Create(operations);
 
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
@@ -69,16 +68,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
                 continue;
             }
 
-            var tableConstraints = safeOperation.Intent is EnsureTableIntent tableIntent
-                ? expectedTableConstraints.GetValueOrDefault(
-                    (tableIntent.Definition.Schema, tableIntent.Definition.Table))
-                : null;
-
-            var runtimePlan = _catalogSqlBuilder.Build(
-                safeOperation,
-                tableConstraints,
-                includeAnalysisEvidence: false,
-                includeTransitionEvidence: true);
+            var runtimePlan = identityContract.Build(_catalogSqlBuilder, safeOperation, ordinal);
             var baseline = RenderBaseline(safeOperation, runtimePlan, model, options);
             var repairBaseline = RenderRepairBaseline(safeOperation, runtimePlan, model, options);
 
@@ -261,7 +251,9 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         // immutable SQL text. Build it once without reusing observed evidence.
         var blockedExpression = runtimePlan.DataProbe?.BuildBlockedExpression() ?? string.Empty;
         var proofTable = runtimePlan.DataProbe?.QualifiedTable ?? runtimePlan.NullabilityDataProbe?.QualifiedTable;
-        var evaluationIndentation = proofTable is null ? "    " : "        ";
+        var requiresLockedRecheck = proofTable is not null || runtimePlan.ModelManagedDeleteLockTable is not null;
+        var hasObjectIdentityGuard = !StringComparer.Ordinal.Equals(runtimePlan.ObjectIdentityGuardExpression, "TRUE");
+        var evaluationIndentation = requiresLockedRecheck ? "        " : "    ";
         var evaluationBodyIndentation = evaluationIndentation + "    ";
         var classificationIndentation = proofTable is null
             ? evaluationBodyIndentation
@@ -270,6 +262,10 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         var tag = SelectDollarTag(
             baseline,
             repairBaseline,
+            runtimePlan.ObjectIdentityGuardExpression,
+            runtimePlan.PostExecutionObjectIdentityGuardExpression,
+            runtimePlan.ObjectIdentityGuardFailureCodeExpression,
+            runtimePlan.ModelManagedDeleteLockTable ?? string.Empty,
             runtimePlan.PrerequisiteExpression,
             runtimePlan.StateEvaluationGuardExpression,
             runtimePlan.StateEvaluationGuardFailureExpression ?? string.Empty,
@@ -295,6 +291,9 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             .Append("DO ")
             .Append(tag)
             .Append(declarations)
+            .Append(hasObjectIdentityGuard
+                ? "    doka_identity_schema pg_catalog.name := pg_catalog.current_schema();\n"
+                : string.Empty)
             .Append(proofTable is null
                 ? string.Empty
                 : "    doka_target_matches boolean := FALSE;\n")
@@ -310,12 +309,21 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
                 + "    doka_complete_not_null boolean := FALSE;\n")
             .Append("BEGIN\n");
 
-        if (proofTable is not null)
+        if (requiresLockedRecheck)
         {
-            // WHY: Pass one avoids taking an ACCESS EXCLUSIVE lock for no-op
-            // and rejected operations. Only a planned Repair takes the lock;
-            // pass two then executes this same complete classifier under it.
+            // WHY: Only a planned repair or source-frozen delete acquires its
+            // operation-owned fence. The second pass reruns every prerequisite,
+            // identity, source, and dependency predicate; no live verdict from
+            // before the acquisition can authorize a mutation afterwards.
             builder.Append("    FOR doka_evaluation_pass IN 1..2 LOOP\n");
+        }
+
+        if (hasObjectIdentityGuard)
+        {
+            // WHY: An unqualified alias must resolve to the proven native
+            // owner before row evaluation or locks. A later classifier pass
+            // cannot switch the command-local schema to accept another owner.
+            AppendObjectIdentityGuardSql(builder, runtimePlan, evaluationIndentation);
         }
 
         builder
@@ -435,11 +443,42 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         {
             builder
                 .Append(evaluationIndentation)
-                .Append("EXIT WHEN doka_action <> 'repair' OR doka_evaluation_pass = 2;\n")
+                .Append("EXIT WHEN doka_action <> 'repair' OR doka_evaluation_pass = 2;\n");
+
+            if (hasObjectIdentityGuard)
+            {
+                AppendObjectIdentityGuardSql(builder, runtimePlan, evaluationIndentation);
+            }
+
+            builder
                 .Append(evaluationIndentation)
                 .Append("LOCK TABLE ")
                 .Append(proofTable)
                 .Append(" IN ACCESS EXCLUSIVE MODE;\n")
+                .Append("    END LOOP;\n");
+        }
+        else if (runtimePlan.ModelManagedDeleteLockTable is not null)
+        {
+            // WHY: EXCLUSIVE conflicts with the ROW SHARE held by native FK
+            // checks, parent writes, and incoming FK additions, while ordinary
+            // reads remain permitted. It uses existing DELETE privileges;
+            // FOR UPDATE or locks on dependents would demand extra write rights.
+            // Under transaction-snapshot isolation native RI crosschecks abort
+            // on newly committed children; we never change the caller's level.
+            builder
+                .Append(evaluationIndentation)
+                .Append("EXIT WHEN doka_action <> 'apply' OR doka_evaluation_pass = 2;\n");
+
+            if (hasObjectIdentityGuard)
+            {
+                AppendObjectIdentityGuardSql(builder, runtimePlan, evaluationIndentation);
+            }
+
+            builder
+                .Append(evaluationIndentation)
+                .Append("LOCK TABLE ")
+                .Append(runtimePlan.ModelManagedDeleteLockTable)
+                .Append(" IN EXCLUSIVE MODE;\n")
                 .Append("    END LOOP;\n");
         }
 
@@ -460,8 +499,24 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         builder.Append("        ELSE\n");
         AppendActionSql(builder, repairBaseline, indentation: "            ");
 
+        builder.Append("        END IF;\n");
+        if (hasObjectIdentityGuard)
+        {
+            // WHY: Native baselines can invoke functions or triggers that alter
+            // search_path or introduce a temporary shadow. Recheck surviving
+            // bindings, not names legitimately consumed by DROP or RENAME,
+            // before a postcondition can accidentally certify another object.
+            builder
+                .Append("        IF pg_catalog.current_schema() IS DISTINCT FROM doka_identity_schema ")
+                .Append("OR NOT COALESCE((")
+                .Append(runtimePlan.PostExecutionObjectIdentityGuardExpression)
+                .Append("), FALSE) THEN\n")
+                .Append("            RAISE EXCEPTION USING ERRCODE = 'P1005', MESSAGE = 'doka_sm_postcondition', ")
+                .Append("DETAIL = 'schema_identity_changed_during_execution';\n")
+                .Append("        END IF;\n");
+        }
+
         builder
-            .Append("        END IF;\n")
             .Append("        IF NOT COALESCE((\n")
             .Append("            ")
             .Append(runtimePlan.ExecutionPostcondition ?? runtimePlan.Postcondition)
@@ -475,6 +530,29 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             .Append(';');
 
         return builder.ToString();
+    }
+
+    /// <summary>Reproves the frozen command-local owner before classification or stateful acquisition.</summary>
+    /// <param name="builder">The destination containing the command-local schema declaration.</param>
+    /// <param name="runtimePlan">The native owner predicate and precise failure diagnostic.</param>
+    /// <param name="indentation">The current classifier or lock branch indentation.</param>
+    private static void AppendObjectIdentityGuardSql(
+        StringBuilder builder,
+        PostgreSqlSafeMigrationRuntimePlan runtimePlan,
+        string indentation
+    )
+    {
+        builder
+            .Append(indentation)
+            .Append("IF pg_catalog.current_schema() IS DISTINCT FROM doka_identity_schema OR NOT COALESCE((")
+            .Append(runtimePlan.ObjectIdentityGuardExpression)
+            .Append("), FALSE) THEN\n")
+            .Append(indentation)
+            .Append("    RAISE EXCEPTION USING ERRCODE = 'P1002', MESSAGE = 'doka_sm_unsupported', DETAIL = (")
+            .Append(runtimePlan.ObjectIdentityGuardFailureCodeExpression)
+            .Append(");\n")
+            .Append(indentation)
+            .Append("END IF;\n");
     }
 
     /// <summary>Appends freshly evaluated narrowing evidence using the operation's already-rendered row SQL.</summary>
