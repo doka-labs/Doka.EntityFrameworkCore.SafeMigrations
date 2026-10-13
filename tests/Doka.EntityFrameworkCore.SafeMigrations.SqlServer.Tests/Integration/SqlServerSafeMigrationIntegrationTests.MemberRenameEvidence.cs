@@ -2,6 +2,51 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
 public sealed partial class SqlServerSafeMigrationIntegrationTests
 {
+    /// <summary>Mixed member probes retain bit metadata and nullable source values through native UNION ALL.</summary>
+    [SqlServerLiveFact]
+    public async Task MemberRename_MixedProbeWireTypesRemainBoolean()
+    {
+        // Arrange
+        var connectionString = await CreateDatabaseAsync();
+        await ExecuteSqlAsync(connectionString,
+            "CREATE TABLE dbo.member_rows (id int NOT NULL); "
+            + "CREATE INDEX source_index ON dbo.member_rows (id);");
+
+        await using var context = CreateContext(connectionString);
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+
+        var column = new RenameColumnIntent("id", "member_rows", "missing", "dbo");
+        var index = new RenameIndexIntent("source_index", "member_rows", "missing_index", "dbo");
+        var replay = new RenameColumnIntent("missing", "member_rows", "id", "dbo");
+        await using var connection = new SqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT 0, " + catalog.BuildMemberRenameDestinationExpression(column)
+            + ", CAST(NULL AS bit) UNION ALL SELECT 1, " + catalog.BuildMemberRenameDestinationExpression(index)
+            + ", " + catalog.BuildIndexRenameSourceSupportedExpression(index)
+            + " UNION ALL SELECT 2, " + catalog.BuildMemberRenameDestinationExpression(replay)
+            + ", CAST(NULL AS bit) ORDER BY 1;";
+
+        // Act
+        await using var reader = await command.ExecuteReaderAsync();
+        var targetType = reader.GetFieldType(1);
+        var sourceType = reader.GetFieldType(2);
+        var rows = new List<(int Ordinal, object Target, object Source)>();
+        while (await reader.ReadAsync())
+        {
+            rows.Add((reader.GetInt32(0), reader.GetValue(1), reader.GetValue(2)));
+        }
+
+        // Assert
+        Assert.Equal(typeof(bool), targetType);
+        Assert.Equal(typeof(bool), sourceType);
+        Assert.Equal(3, rows.Count);
+        Assert.Equal((0, (object)false, DBNull.Value), rows[0]);
+        Assert.Equal((1, (object)false, (object)true), rows[1]);
+        Assert.Equal((2, (object)true, DBNull.Value), rows[2]);
+    }
+
     /// <summary>A source created on a brownfield table cannot overwrite an occupied owner-local destination.</summary>
     /// <param name="index">Whether an index rather than a column is renamed.</param>
     /// <param name="sourceExists">Whether the source exists in the immutable catalog.</param>

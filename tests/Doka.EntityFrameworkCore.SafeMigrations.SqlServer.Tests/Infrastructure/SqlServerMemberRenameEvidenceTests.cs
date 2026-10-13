@@ -3,6 +3,79 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 /// <summary>Verifies independently captured SQL Server column/index destination identities.</summary>
 public sealed class SqlServerMemberRenameEvidenceTests
 {
+    /// <summary>Destination predicates expose native bit metadata rather than integer CASE values.</summary>
+    /// <param name="index">Whether the destination belongs to an index rather than a column.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void DestinationExpressionUsesNativeBit(bool index)
+    {
+        // Arrange
+        using var context = Context();
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+
+        SafeMigrationIntent intent = index
+            ? new RenameIndexIntent("source", "items", "target", "MemberScope")
+            : new RenameColumnIntent("source", "items", "target", "MemberScope");
+
+        // Act
+        var expression = catalog.BuildMemberRenameDestinationExpression(intent);
+
+        // Assert
+        Assert.StartsWith("CAST(CASE WHEN ", expression, StringComparison.Ordinal);
+        Assert.EndsWith(" THEN 1 ELSE 0 END AS bit)", expression, StringComparison.Ordinal);
+        Assert.Contains(index ? "sys.indexes" : "sys.columns", expression, StringComparison.Ordinal);
+    }
+
+    /// <summary>Index support uses the same bit type as nullable column-source UNION branches.</summary>
+    [Fact]
+    public void IndexSourceExpressionUsesNativeBit()
+    {
+        // Arrange
+        using var context = Context();
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+
+        var intent = new RenameIndexIntent("source", "items", "target", "MemberScope");
+
+        // Act
+        var expression = catalog.BuildIndexRenameSourceSupportedExpression(intent);
+
+        // Assert
+        Assert.StartsWith("CAST(CASE WHEN ", expression, StringComparison.Ordinal);
+        Assert.EndsWith(" THEN 1 ELSE 0 END AS bit)", expression, StringComparison.Ordinal);
+        Assert.Contains("is_primary_key = 0", expression, StringComparison.Ordinal);
+        Assert.Contains("is_unique_constraint = 0", expression, StringComparison.Ordinal);
+    }
+
+    /// <summary>The transport double cannot certify uncast integer predicates as Boolean evidence.</summary>
+    /// <param name="native">Whether the transport supports native batching.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task UntypedSqlCannotProduceBooleanMockEvidence(bool native)
+    {
+        // Arrange
+        using var context = Context();
+        var analyzer = Analyzer(context);
+        var operations = Operations(4);
+        var analyses = Analyses(4);
+        await using var connection = new CatalogStatementTestConnection(native, (sql, _) => Results(
+            sql.Replace("CAST(CASE WHEN ", "CASE WHEN ", StringComparison.Ordinal)
+                .Replace(" END AS bit)", " END", StringComparison.Ordinal)));
+
+        // Act
+        var exception = await Record.ExceptionAsync(() =>
+            analyzer.PopulateMemberRenameTargetEvidenceAsync(connection, null, operations, analyses,
+                71, CancellationToken.None));
+
+        // Assert
+        Assert.IsType<InvalidOperationException>(exception);
+        Assert.All(analyses, result => Assert.Null(result.RenameTargetExists));
+        Assert.All(analyses, result => Assert.Null(result.RenameSourceSupported));
+    }
+
     /// <summary>Missing-source state retains owner-local destination facts and the caller transaction.</summary>
     /// <param name="native">Whether the transport supports native batching.</param>
     [Theory]
@@ -165,17 +238,32 @@ public sealed class SqlServerMemberRenameEvidenceTests
     private static SafeMigrationProviderAnalysis Live(SafeMigrationObservedState state) =>
         new(state, SafeMigrationRepairCapability.None, false, "test");
 
+    /// <summary>Models the explicit top-level SQL scalar types instead of inventing Boolean results.</summary>
+    /// <param name="sql">The bounded member-probe statement, including its ordering trailer.</param>
+    /// <returns>Controlled values with the declared bit or integer CLR types.</returns>
     private static System.Data.DataTable Results(string sql)
     {
         var table = new System.Data.DataTable();
         table.Columns.Add("ordinal", typeof(int));
         table.Columns.Add("exists", typeof(object));
         table.Columns.Add("source", typeof(object));
-        foreach (System.Text.RegularExpressions.Match match in System.Text.RegularExpressions.Regex.Matches(
-            sql, @"SELECT (\d+),"))
+        var selections = sql[..^SafeMigrationCatalogQueryLimits.Trailer.Length]
+            .Split(SafeMigrationCatalogQueryLimits.Separator, StringSplitOptions.None);
+
+        foreach (var selection in selections)
         {
+            var match = System.Text.RegularExpressions.Regex.Match(selection, @"^SELECT (\d+),");
             var ordinal = int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
-            table.Rows.Add(ordinal, ordinal % 2 != 0, ordinal % 2 != 0 ? false : DBNull.Value);
+            var target = ordinal % 2 != 0;
+            object targetValue = selection.StartsWith($"SELECT {ordinal}, CAST(CASE WHEN ", StringComparison.Ordinal)
+                ? target : target ? 1 : 0;
+
+            // WHY: The original double returned bool even for uncast CASE 0/1,
+            // hiding the native SqlClient int result that failed every live rename.
+            object sourceValue = ordinal % 2 == 0 ? DBNull.Value
+                : selection.EndsWith(" END AS bit)", StringComparison.Ordinal) ? false : 0;
+
+            table.Rows.Add(ordinal, targetValue, sourceValue);
         }
 
         return table;

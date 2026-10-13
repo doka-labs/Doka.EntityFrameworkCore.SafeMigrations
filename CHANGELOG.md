@@ -23,6 +23,12 @@ provenance, SBOM and verified public readback remain required.
 
 ### Changed
 
+- Set explicit finite 120-second connection/transaction and command budgets on
+  owned SQL Server EF tooling CLI and bundle connections. SqlClient transaction
+  control does not use EF's command timeout. Keep product defaults, fatal errors
+  and CI job limits unchanged; do not retry failed work. Preserve owned server
+  logs and bounded wait diagnostics before failed tooling-container cleanup,
+  with executable positive/negative engineering regressions.
 - Refresh engineering-only Testcontainers to 4.16.0 and pinned GitHub Actions
   through the reviewed dependency updates on `main`. Production dependency
   ranges and the five publishable package lockfiles remain unchanged.
@@ -39,6 +45,12 @@ provenance, SBOM and verified public readback remain required.
 
 ### Fixed
 
+- Return native SQL Server `bit` metadata for member-rename destination and
+  index-source probes, including mixed column/index `UNION ALL` statements.
+  Integer CASE values cannot satisfy the strict Boolean evidence reader.
+  Preserve the shared runtime integer renderer, source nullability, owner-local
+  predicates, parameterization and bounded transport; SQL-type-aware unit
+  doubles and native metadata regressions guard against recurrence.
 - Preserve MySQL/MariaDB column proofs after exact accepted foreign-key removals:
   already matching columns remain no-ops, and source-proven same-layout,
   value-preserving nullability alterations retain their explicit `RepairIfSafe`

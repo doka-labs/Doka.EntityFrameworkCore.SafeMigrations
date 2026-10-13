@@ -761,6 +761,22 @@ coverage, SBOM, and public NuGet readback are all
 blocking. A successful build or a skipped ARM64 live test is not a substitute
 for this evidence.
 
+Owned tooling CLI and bundle connections use explicit finite
+`Connect Timeout=120` and `Command Timeout=120` budgets. In the qualified
+[SqlClient 6.1.6 implementation](https://github.com/dotnet/SqlClient/blob/v6.1.6/src/Microsoft.Data.SqlClient/netcore/src/Microsoft/Data/SqlClient/SqlInternalConnectionTds.cs#L1099-L1100),
+native transaction-manager requests, including the commit of EF's history
+bootstrap, use `ConnectTimeout`; changing EF's command timeout alone does not
+cover this path. These are test-harness settings, not product defaults or
+performance thresholds. Failed execution still rejects qualification without
+automatic retry or a higher CI job limit.
+
+Before failed tooling-container cleanup, the harness retains `server.log` and,
+when sqlcmd is available, `server-waits.log` under the existing tooling artifact
+directory. The metadata probe has separate five-second login and command
+budgets and contains no SQL text or row data. Diagnostic failures do not replace
+the original failing exit status. This captures evidence for unexplained server
+delays; it does not establish their cause or replace native x64 qualification.
+
 The SQL Server benchmark report is also retained. Its duration and allocation
 budget overruns are informational, not release blockers; malformed configuration,
 failed execution and missing output still fail qualification.
