@@ -80,7 +80,7 @@ Migration source does not need regeneration; policy selection, canonical
 report v3, filtered-view v2, and migration histories remain unchanged. No
 API-baseline promotion is required for this patch.
 
-Prepared stable 10.4.10 retains that API and dependency contract. Ordered
+The 10.4.10 patch retains that API and dependency contract. Ordered
 nullability/backfill, sparse constraint/index and physical-rename proofs no
 longer fabricate authored definitions from existence-only acceptance. Canonical
 managed-key identities preserve column/value ordinals, and only internally
@@ -90,6 +90,15 @@ schema/session cleanup consumes verified ownership. No public signature,
 policy selection, fingerprint format, report schema or migration history
 changes; existing migrations do not need regeneration. Native timing overruns
 are informational, not a waiver of functional or evidence validation.
+
+Prepared stable 10.4.11 retains the same public APIs, dependency ranges, policies,
+fingerprint formats, canonical report v3, filtered-view v2 and migration history.
+An internal provider channel supplies actual sparse live prerequisites, not
+target-model definitions; ordered projection still owns accepted physical
+lifetimes and independent current row proofs. Related owner-case, supporting-
+index, native CHECK/index-input and SQLite key/capacity fixes do not require
+migration regeneration or API-baseline promotion. Qualification and publication
+remain separate from these prepared contracts.
 
 ## Packages and registration
 

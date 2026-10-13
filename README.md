@@ -14,8 +14,8 @@ SafeMigrations is a fail-closed EF Core 10 migration library for databases whose
 starting schema may differ between application instances. It supports one
 canonical migration sequence across MySQL, MariaDB, PostgreSQL, SQLite, and
 SQL Server without assuming a common legacy migration history or deleting
-unknown objects. Stable 10.4.6 introduced SQL Server as a separate,
-optional provider package; releases 10.4.2 through 10.4.5 contain four packages.
+unknown objects. Each provider is a separate package; install only the adapter
+for the database engine the application uses.
 
 The library classifies each operation against the live catalog as `missing`,
 `matching`, `transition_ready`, `different`, `unsupported`, `data_blocked`, or
@@ -37,7 +37,7 @@ equivalent.
 - `Doka.EntityFrameworkCore.SafeMigrations.Sqlite`: SQLite adapter on the
   bundle-neutral official EF Core SQLite 10 provider core
 - `Doka.EntityFrameworkCore.SafeMigrations.SqlServer`: SQL Server adapter on
-  the official EF Core SQL Server 10 provider (available since 10.4.6)
+  the official EF Core SQL Server 10 provider
 
 The declared release-qualification matrix is:
 
@@ -52,72 +52,38 @@ The CI and release workflows pin the exact patch tags and image digests used
 when that matrix executes. The exact successful run, not this table, is release
 evidence. See [Support and qualification](docs/support-and-qualification.md).
 
-The initial complete stable delivery is 10.0.0. The versioned installation
-examples below target the prepared five-package 10.4.10 release. Verify the exact
-package's public availability before installation; source and changelog entries
-alone are not publication evidence. See the [changelog](CHANGELOG.md).
-
-The 10.4.10 patch preserves exact nullability/backfill proofs after owned FK
-removals and protects supported required-column additions against concurrent
-writes with recoverable owned CHECKs. Sparse constraints, indexes and rename
-endpoints retain their physical identities without inventing matching evidence.
-PostgreSQL guards verified schema ownership and concurrent dependent writes;
-SQL Server identity cleanup requires this command's acquired session state.
-Model-managed keys use consistent column/value identity across actual migration
-boundaries. Hardware-dependent timing comparisons remain informational, while
-correctness and evidence failures still block. Public signatures, dependency
-ranges, migration source, policy selection, report schemas and history are
-unchanged. Existing migrations do not need regeneration. Earlier provider
-repair and bounded performance improvements remain in place.
-See [Migration authoring](docs/migration-authoring.md)
-and the provider guides for the supported transition contracts.
-
-The catalog and runtime performance improvements introduced in 10.4.7 remain
-in place. Runtime guards still read fresh live metadata, including with explicit
-preflight disabled; required data scans and DDL can still dominate large tables.
-See [MySQL and MariaDB behavior](docs/mysql-mariadb-ddl-behavior.md) for resource
-bounds and command-timeout semantics.
-
-The 10.4.4 patch corrected read-only preflight for mixed legacy-convergence and
-strict migration streams containing raw SQL. Unprovable later safe operations
-report `ValidateAtRuntime` with their SQL origin; unchanged runtime guards
-decide after that SQL executes. Proven conflicts remain blocked. Canonical
-reports use schema v3 and filtered views use v2; consumers must handle the new
-action/status values and report versions. Existing migration source and history
-are not rewritten. See the
-[report contract](docs/api-reference.md#reports-serialization-and-failure).
-
 ## Installation
 
 Install one provider package. The core package is included transitively. The
-commands select the intended 10.4.10 release exactly so restore does not move
-to a different package version implicitly. Use them only after the matching
-release and all five NuGet package pages are public; source or changelog
-entries alone do not establish package availability.
+examples target prepared stable 10.4.11 and select that version exactly, so
+restore does not move to another version implicitly. Verify public package
+availability before installation; source preparation is not publication
+evidence. Release changes and compatibility notes belong in the
+[changelog](CHANGELOG.md).
 
 ```bash
-package_version='10.4.10'
+package_version='10.4.11'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.MySql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.4.10'
+package_version='10.4.11'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.4.10'
+package_version='10.4.11'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.Sqlite --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.4.10'
+package_version='10.4.11'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.SqlServer --version "$package_version"
 ```
 
@@ -129,8 +95,7 @@ SQLite or SQLCipher deployment. The connected engine must report SQLite
 3.46.1 or later.
 
 SQL Server is optional: selecting another provider package does not introduce
-SQL Server runtime dependencies. Its first package version is 10.4.6;
-it is not available in the historical 10.4.5 package set.
+SQL Server runtime dependencies.
 
 The [.NET package command](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-package-add)
 documents exact-version selection. Verify release identity and content using
@@ -681,6 +646,9 @@ additions cannot impersonate an accepted NULL-preserving addition. Runtime
 guards and native constraint creation remain authoritative. See
 [sparse live prerequisites](docs/implementation-design.md#sparse-live-constraint-prerequisites).
 
+Runtime guards recheck fresh live metadata and required data proofs when each
+safe operation executes, including when explicit preflight is disabled.
+
 PostgreSQL also checks native operator-class and access-method eligibility for
 physical index-key types. An unsupported ordinary Btree key on `json` is
 rejected before DDL or unique-data probes; supported `jsonb` retains its native
@@ -1022,6 +990,11 @@ budgets live analysis on 1,000 tables carrying indexes and foreign keys. These
 workloads reflect SQLite's in-process catalog and rebuild execution model
 rather than claiming equivalence with the server-provider transport matrix.
 
+Bounded catalog transport does not bound application-row scans or DDL duration.
+Required data scans and DDL can still dominate large-table workloads. See
+[MySQL and MariaDB behavior](docs/mysql-mariadb-ddl-behavior.md) for resource
+bounds and command-timeout semantics.
+
 See [Deployment and recovery](docs/runbooks/deployment-and-recovery.md) and
 [Failure codes](docs/runbooks/failure-codes.md).
 
@@ -1073,8 +1046,6 @@ signatures and package content, and creates or verifies an immutable GitHub
 Release with the exact ten package files, checksums, SPDX manifest, and
 `release-provenance.intoto.jsonl`. Candidates are marked prerelease and never
 replace the latest stable release.
-The five-package release contract began with 10.4.6 and is unchanged for 10.4.10;
-the historical 10.4.5 release remains the four-package set.
 See [Publication operations](docs/operations/release-publication.md) for the
 step-by-step maintainer guide and current readiness, and
 [Release process](docs/release-process.md) for the qualification contract.

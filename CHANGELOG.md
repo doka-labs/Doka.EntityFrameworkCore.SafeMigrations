@@ -6,6 +6,21 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
+## [10.4.11] - 2026-10-14
+
+Prepare stable 10.4.11 for all five packages. This patch combines independently
+captured live prerequisites with accepted ordered column/key lifetimes and
+current row proofs, so valid nullable-column/index/FK streams do not require
+redundant principal convergence. It corrects related native owner, supporting-
+index, CHECK and index-input contracts without rewriting historical migrations.
+Public signatures, production dependency ranges, policy selection, fingerprint
+formats, report schemas and migration history remain compatible. Earlier atomic
+concurrency and recovery guards remain in place. Source preparation is not
+publication evidence: the full hosted/native matrix, coverage, tooling, exact
+five-package primary/symbol set, provenance, SBOM and public readback remain
+required. Timing comparisons remain informational; functional, cancellation,
+invalid-evidence and artifact-write failures still block.
+
 ### Fixed
 
 - Complete sparse ordered constraint and index prerequisites from independently
@@ -1923,7 +1938,8 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.10...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.11...HEAD
+[10.4.11]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.10...v10.4.11
 [10.4.10]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.9...v10.4.10
 [10.4.9]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.8...v10.4.9
 [10.4.8]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.7...v10.4.8

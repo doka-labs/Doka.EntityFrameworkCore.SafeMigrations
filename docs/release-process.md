@@ -16,9 +16,10 @@ SafeMigrations publishes these package IDs at one version:
 - `Doka.EntityFrameworkCore.SafeMigrations.SqlServer`.
 
 Stable 10.4.6 introduced this five-package inventory; releases 10.4.2 through
-10.4.5 retain their historical four-package set. Prepared stable 10.4.10 keeps
-the shared .NET/EF Core 10 identity for ordered proof, concurrency and recovery
-fixes. It preserves production dependency ranges, public signatures, migration
+10.4.5 retain their historical four-package set. Prepared stable 10.4.11 keeps
+the shared .NET/EF Core 10 identity for sparse native prerequisite, physical
+identity and provider-capability fixes. Earlier concurrency and recovery guards
+remain. It preserves production dependency ranges, public signatures, migration
 source, policy selection, report schemas and history. Timing comparisons remain
 informational; functional and evidence failures still block. Selecting another
 provider does not introduce SQL Server runtime dependencies.

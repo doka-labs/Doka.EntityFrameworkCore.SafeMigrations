@@ -26,7 +26,7 @@ evidence.
 
 The remaining declared dependency graph and .NET 10 release metadata were
 rechecked on 2026-09-21. Bounded package ranges describe compatibility. The
-five package-project lockfiles, unchanged for 10.4.10, identify the dependency
+five package-project lockfiles, unchanged for 10.4.11, identify the dependency
 graph used to compile and qualify the package artifacts in a particular
 revision; they do not constrain a consumer's NuGet resolution or lock the
 engineering projects.
@@ -34,12 +34,23 @@ The SQL Server project supplies the fifth lockfile. Releases 10.4.2 through
 10.4.5 contain four package artifacts; their inventory remains unchanged.
 
 The five-package set began with stable 10.4.6, including the optional SQL Server
-provider. Prepared stable 10.4.10 retains that inventory, the dependency ranges,
+provider. Prepared stable 10.4.11 retains that inventory, the dependency ranges,
 and all public API baselines. Publication still requires the blocking workflow,
 including all three native x86-64 SQL Server cells, and exact public readback
 of all five package IDs. Source preparation alone does not establish availability.
 
-The 10.4.10 changes correct ordered nullability/backfill and sparse physical
+The 10.4.11 changes qualify sparse live/projected constraints and indexes from
+actual native metadata, accepted physical lifetimes and current row proofs.
+MySQL/MariaDB carries native owner equality through transition/backfill catalogs
+and guards unsafe FK supporting indexes. PostgreSQL qualifies native CHECK and
+physical index-input bindings before data probes, preserving bounded metadata
+and SQL transport. SQLite retains declared parent-key equality, strict capacity
+and appended-FK order; SQL Server uses compatible live endpoint/key evidence
+under permission-first catalog and independent row checks. Complete source
+qualification remains mandatory; local ARM SQL Server skips do not qualify its
+native x86-64 cells or satisfy the full merged coverage gate.
+
+The earlier 10.4.10 changes correct ordered nullability/backfill and sparse physical
 constraint/index proofs, cross-operation rename evidence and canonical
 model-managed-key identity. MySQL/MariaDB required additions use owned atomic
 stages with forward recovery; PostgreSQL deletes fence dependent writers and

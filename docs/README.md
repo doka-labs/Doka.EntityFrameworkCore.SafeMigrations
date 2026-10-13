@@ -1,9 +1,11 @@
 # Documentation
 
 This is the task-oriented entry point for SafeMigrations documentation. This
-source prepares stable 10.4.10 for all five packages, with exact ordered column,
-constraint/index and managed-key proofs, concurrent required-add/delete guards,
-and verified schema/session ownership through recovery. Public signatures,
+source prepares stable 10.4.11 for all five packages, with independently captured
+sparse live prerequisites, accepted physical lifetimes and current row proofs.
+Native owner/backfill/supporting-index, CHECK/index-input and SQLite key/capacity
+contracts remain separate guards. Earlier concurrent required-add/delete and
+verified schema/session recovery protections remain. Public signatures,
 production dependency ranges, migration source, policy selection, report
 schemas and history remain unchanged. Timing comparisons are informational;
 functional and evidence failures remain blocking. Deferred preflight states

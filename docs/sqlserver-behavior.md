@@ -2,7 +2,14 @@
 
 The SQL Server adapter is a separate, optional package introduced in 10.4.6.
 Releases 10.4.2 through 10.4.5 contain only Core, MySQL/MariaDB, PostgreSQL,
-and SQLite. Prepared stable 10.4.10 binds IDENTITY_INSERT recovery to this
+and SQLite. Prepared stable 10.4.11 qualifies sparse FK endpoints and reference
+keys from compatible native physical evidence rather than requiring redundant
+principal convergence. Accepted lifetimes, name occupancy, permissions and
+current dependent-row proofs remain independent gates; no unproved storage or
+row compatibility is accepted. This source contract still requires native
+qualification on all three supported x86-64 engine versions.
+
+The adapter binds IDENTITY_INSERT recovery to this
 command's acquired ownership nonce and phase. Failure before acquisition
 cannot switch off inherited session state; uncertain acquisition quarantines
 the connection instead of guessing. Physical rename endpoints and canonical

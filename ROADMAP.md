@@ -82,13 +82,22 @@ plans. It preserves public signatures, dependencies, migration source, policy
 selection, report schemas and history. Deferred preflight states require fresh
 runtime validation, not an assumption of readiness. Publication still requires
 the full five-package release gate and independent engine evidence.
-Prepared stable 10.4.10 corrects ordered column, constraint/index and managed-key
+The 10.4.10 patch corrects ordered column, constraint/index and managed-key
 proofs, protects required additions and PostgreSQL deletes against concurrent
 writes, and preserves verified schema and session ownership through recovery.
 It retains the same public APIs, production dependencies, migration source,
 policies, reports and history. Timing comparisons stay informational; invalid
 evidence and functional failures remain blocking. The complete hosted matrix,
 including native x86-64 SQL Server, and public readback remain release gates.
+Prepared stable 10.4.11 adds independently captured sparse live prerequisites
+to accepted ordered physical lifetimes and independent current row proofs.
+It corrects MySQL/MariaDB owner equality and supporting-index/backfill risks,
+PostgreSQL CHECK/index-input qualification and bounded prerequisite SQL, and
+SQLite strict capacity, parent-key equality and appended-FK ordering. SQL Server
+uses compatible live endpoint/key evidence without weakening permission or row
+guards. The same public signatures, dependencies, migrations, policies, reports,
+history and full five-package release gates remain; no general performance or
+publication claim follows from source preparation.
 These releases follow changed dependency conditions and confirmed correctness
 requirements; they are not deferred initial scope.
 
