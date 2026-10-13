@@ -1,11 +1,13 @@
 # SQLite behavior
 
-Prepared stable 10.4.9 rejects unproved lossy affinity, CLR-domain and generation
-changes under `RepairIfSafe`, even with an exact old-definition match.
-Compatible nullability/default repairs retain their data and ownership gates;
-live, ordered projected and runtime classifications use the same lossless
-contract. Public APIs, dependency ranges, migration source and report schemas
-are unchanged; no migration regeneration is required.
+Prepared stable 10.4.10 distinguishes strict semantic shape from proven named
+constraint and index identity. Sparse physical lifetimes and both rename
+endpoints retain independent evidence, including absent-source no-op
+postconditions; existence-only acceptance cannot install an authored matching
+definition. Canonical managed keys retain column/value ordinals. Earlier
+lossless affinity, CLR-domain and generation repair gates remain unchanged.
+Public APIs, dependency ranges, migration source, policy selection, report
+schemas and history are unchanged; no migration regeneration is required.
 
 ## Supported deployment shape
 

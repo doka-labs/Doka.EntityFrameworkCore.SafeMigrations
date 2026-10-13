@@ -6,6 +6,37 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
+## [10.4.10] - 2026-10-13
+
+Prepare stable 10.4.10 for all five packages. This patch corrects ordered
+nullability, backfill, constraint, index and model-managed-data proofs; guards
+concurrent required-column additions and PostgreSQL dependent writes; and
+preserves verified schema and session ownership during execution and recovery.
+Public signatures, dependency ranges, migration source, policy selection,
+report schemas and migration history remain unchanged. Existing migrations do
+not need regeneration. Required intermediate CHECKs remain owned recoverable
+state, not a claim that MySQL/MariaDB DDL is transactional. Performance timing
+comparisons remain informational; correctness and evidence failures still block.
+Source preparation is not publication evidence: the complete qualification
+matrix, signed `v10.4.10` identity, all five exact primary/symbol packages,
+provenance, SBOM and verified public readback remain required.
+
+### Changed
+
+- Refresh engineering-only Testcontainers to 4.16.0 and pinned GitHub Actions
+  through the reviewed dependency updates on `main`. Production dependency
+  ranges and the five publishable package lockfiles remain unchanged.
+- Keep live pooled-catalog p95 overruns and SQL Server cancellation latency
+  informational in server-provider qualification instead of failing CI on
+  shared-runner timing variation. Preserve all 20 measured calls, unchanged
+  comparisons and false JSON budget verdicts. Deterministic report/scope and
+  cancellation assertions, invalid evidence, execution and artifact failures
+  remain blocking; no comparison limit is raised.
+- Document `projected_required_add_rows_unproven` and its fresh row-proof/backfill
+  remediation. Distinguish engine-bound observed ADD behavior from documented
+  DML and Instant ADD defaults; the proposed atomic-add ADR does not depend on
+  implicit required-ADD behavior and is not promoted by implementation or tests.
+
 ### Fixed
 
 - Preserve MySQL/MariaDB column proofs after exact accepted foreign-key removals:
@@ -139,11 +170,6 @@ the shared release identity described in [Release process](docs/release-process.
   authored batch. Only internally resolved migration IDs establish boundaries;
   standalone `AnalyzeAsync`, `VerifyAsync` and scaffolding retain single-batch
   validation. Ordinary SQL/DDL does not reset that batch's key ledger.
-- Keep live pooled-catalog p95 overruns informational in server-provider
-  qualification instead of failing CI on shared-runner timing variation.
-  Preserve all 20 measured calls, the unchanged relative comparison and false
-  JSON budget verdicts. Deterministic report/scope assertions, invalid evidence,
-  execution and artifact failures remain blocking; no comparison limit is raised.
 - Bind certified native SQL-mode snapshot and conditional restore construction
   to shared statement parts instead of unchecked substring replacement. Unknown
   provider drift remains fail-closed, and complete nullable staging targets
@@ -196,13 +222,6 @@ the shared release identity described in [Release process](docs/release-process.
 - Reject MySQL/MariaDB index renames with an existing source when either endpoint
   is the reserved `PRIMARY` identity, before native DDL. Missing-source replay
   remains a no-op and primary-key replacement retains its separate contract.
-
-### Changed
-
-- Document `projected_required_add_rows_unproven` and its fresh row-proof/backfill
-  remediation. Distinguish engine-bound observed ADD behavior from documented
-  DML and Instant ADD defaults; the proposed atomic-add ADR does not depend on
-  implicit required-ADD behavior and is not promoted by implementation or tests.
 
 ## [10.4.9] - 2026-10-08
 
@@ -1837,7 +1856,8 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.9...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.10...HEAD
+[10.4.10]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.9...v10.4.10
 [10.4.9]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.8...v10.4.9
 [10.4.8]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.7...v10.4.8
 [10.4.7]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.6...v10.4.7

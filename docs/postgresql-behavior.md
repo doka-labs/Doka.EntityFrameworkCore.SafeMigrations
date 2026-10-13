@@ -1,13 +1,15 @@
 # PostgreSQL behavior
 
-Prepared stable 10.4.9 preserves explicit repair collations and exact ALTER
-source authority. Session-active DDL event triggers and DML triggers, including
-FK-cascade and provider-backfill effects, invalidate ordered row and structural
-proofs before projection shortcuts. Supported unproven states retain their
-mutation origin for fresh runtime validation; independent refusals still block.
-Narrowing eligibility plans are retained only for the current transport
-statement, and fully matching runtime columns skip unused repair/data scopes.
-Public APIs, dependency ranges, migration source and report schemas are unchanged.
+Prepared stable 10.4.10 uses verified current-schema identity consistently
+across analysis, generation and postflight; mutable historical aliases, TEMP
+shadows and changed execution owners cannot fabricate that identity.
+Source-frozen managed deletes fence dependent writers and reclassify under the
+owned lock, requiring physically present enforced FK counterparts. Earlier
+column-contract and trigger-freshness fixes remain: supported unproven states
+need fresh runtime validation, while independent refusals remain blocking.
+Public APIs, dependency ranges, migration source, policy selection, report
+schemas and history are unchanged. Prior bounded plan-lifetime and matching
+fast paths remain; native timing comparisons are informational.
 
 ## Operational summary
 

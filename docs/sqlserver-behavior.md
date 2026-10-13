@@ -2,16 +2,19 @@
 
 The SQL Server adapter is a separate, optional package introduced in 10.4.6.
 Releases 10.4.2 through 10.4.5 contain only Core, MySQL/MariaDB, PostgreSQL,
-and SQLite. Prepared stable 10.4.9 admits proven built-in integer widenings
-and simple integer CHECK validation on populated tables. It corrects ordered
-key/FK dependencies, schema-wide name occupancy and permission-first catalog
-checks; DDL/DML trigger effects invalidate row and structural evidence before
-projection shortcuts. Matching integer replays and runtime guards omit unused
-transition captures and repair predicates. Public signatures, dependencies,
-migration source and report schemas remain unchanged. Availability of the new
-patch requires full qualification and verified five-package publication;
-source and API baselines alone are not publication evidence. Selecting another
-provider does not introduce SQL Server runtime dependencies.
+and SQLite. Prepared stable 10.4.10 binds IDENTITY_INSERT recovery to this
+command's acquired ownership nonce and phase. Failure before acquisition
+cannot switch off inherited session state; uncertain acquisition quarantines
+the connection instead of guessing. Physical rename endpoints and canonical
+managed-key members retain independent provider identity. Proven integer
+widening, populated-table CHECK validation, permission-first catalog checks
+and trigger-aware freshness from 10.4.9 remain. Public signatures, dependencies,
+migration source, policy selection, report schemas and history are unchanged.
+Native elapsed-time comparisons are informational; functional cancellation,
+ownership and evidence assertions remain blocking. Availability requires full
+qualification and verified five-package publication, not source preparation
+or skipped Apple Silicon tests. Selecting another provider does not introduce
+SQL Server runtime dependencies.
 
 ## Supported engine boundary
 

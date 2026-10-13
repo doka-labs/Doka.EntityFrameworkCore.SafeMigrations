@@ -65,7 +65,7 @@ A successful release run and exact-version public package readback remain the
 authority for a published API; shipped baseline files record its prepared
 contract, not proof of publication.
 
-Prepared stable 10.4.9 preserves the complete 10.4.6 public API and dependency
+The 10.4.9 patch preserves the complete 10.4.6 public API and dependency
 ranges. SQL Server admits proven built-in integer widening and simple integer
 CHECK validation on populated tables. PostgreSQL preserves repaired column
 collations and exact ALTER source authority; SQLite requires a lossless storage,
@@ -79,6 +79,17 @@ without weakening fresh guards. Earlier MySQL/MariaDB optimizations remain.
 Migration source does not need regeneration; policy selection, canonical
 report v3, filtered-view v2, and migration histories remain unchanged. No
 API-baseline promotion is required for this patch.
+
+Prepared stable 10.4.10 retains that API and dependency contract. Ordered
+nullability/backfill, sparse constraint/index and physical-rename proofs no
+longer fabricate authored definitions from existence-only acceptance. Canonical
+managed-key identities preserve column/value ordinals, and only internally
+captured actual pending migration boundaries reset transition validation.
+Owned required-add and PostgreSQL delete guards protect concurrent writes;
+schema/session cleanup consumes verified ownership. No public signature,
+policy selection, fingerprint format, report schema or migration history
+changes; existing migrations do not need regeneration. Native timing overruns
+are informational, not a waiver of functional or evidence validation.
 
 ## Packages and registration
 

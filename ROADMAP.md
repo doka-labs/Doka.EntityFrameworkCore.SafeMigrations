@@ -74,7 +74,7 @@ dependency ranges, migration source, policies, reports, or history. The
 10.4.8 patch corrects approved explicit column transitions and ordered proof
 invalidation, cross-provider rename-destination checks, and MySQL/MariaDB default
 identity and setup compaction. It preserves those compatibility boundaries and
-requires no migration regeneration. Prepared stable 10.4.9 supports proven
+requires no migration regeneration. The 10.4.9 patch supports proven
 SQL Server integer widening and CHECK validation, corrects PostgreSQL column
 contracts and trigger-affected ordered evidence, rejects unproved lossy SQLite
 repairs, and reduces unnecessary PostgreSQL/SQL Server captures and retained
@@ -82,6 +82,13 @@ plans. It preserves public signatures, dependencies, migration source, policy
 selection, report schemas and history. Deferred preflight states require fresh
 runtime validation, not an assumption of readiness. Publication still requires
 the full five-package release gate and independent engine evidence.
+Prepared stable 10.4.10 corrects ordered column, constraint/index and managed-key
+proofs, protects required additions and PostgreSQL deletes against concurrent
+writes, and preserves verified schema and session ownership through recovery.
+It retains the same public APIs, production dependencies, migration source,
+policies, reports and history. Timing comparisons stay informational; invalid
+evidence and functional failures remain blocking. The complete hosted matrix,
+including native x86-64 SQL Server, and public readback remain release gates.
 These releases follow changed dependency conditions and confirmed correctness
 requirements; they are not deferred initial scope.
 

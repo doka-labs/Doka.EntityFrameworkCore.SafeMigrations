@@ -1,13 +1,14 @@
 # Documentation
 
 This is the task-oriented entry point for SafeMigrations documentation. This
-source prepares stable 10.4.9 for all five packages, with proven SQL Server
-integer widening and CHECK validation, PostgreSQL column-contract fixes,
-trigger-aware ordered proof invalidation, lossless SQLite repair gates, and
-PostgreSQL/SQL Server work and retention reductions. Public signatures,
-dependency ranges, migration source, policy selection, report schemas, and
-history remain unchanged. Deferred preflight states require runtime validation;
-unproved lossy conversions and independent permission refusals remain blocked.
+source prepares stable 10.4.10 for all five packages, with exact ordered column,
+constraint/index and managed-key proofs, concurrent required-add/delete guards,
+and verified schema/session ownership through recovery. Public signatures,
+production dependency ranges, migration source, policy selection, report
+schemas and history remain unchanged. Timing comparisons are informational;
+functional and evidence failures remain blocking. Deferred preflight states
+require runtime validation; unproved lossy conversions and independent
+permission refusals remain blocked.
 Package availability and OpenSSF status are established by their linked
 external registries, not by source documentation alone.
 

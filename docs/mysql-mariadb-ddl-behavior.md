@@ -1,15 +1,17 @@
 # MySQL and MariaDB DDL behavior
 
-Prepared stable 10.4.9 retains the MySQL/MariaDB column-transition,
-rename-destination, default-identity and setup-fragment fixes from 10.4.8 and
-the analysis/runtime optimizations introduced in 10.4.7. Its Core projection
-changes preserve provider-specific structural deferrals until fresh runtime
-validation; they introduce no MySQL/MariaDB SQL-generation or dependency change.
-Neither regenerated migrations nor changed server durability settings are
-required. Runtime checks continue to read the live catalog even when batched
-analysis uses session-owned catalog copies. Policies, postconditions, and
-recovery boundaries remain unchanged;
-required data scans and DDL can still dominate large-table workloads.
+Prepared stable 10.4.10 preserves exact column proofs after owned FK removals,
+supports data-proven nullability/backfill transitions, and uses two atomic
+InnoDB stages with an owned enforced CHECK for supported required additions.
+Interrupted additions recover only from their exact owned intermediate state;
+the two stages are not one transaction. Strict SQL mode, TIMESTAMP semantics,
+ENUM/SET domains and retained SET NULL/PRIMARY dependencies remain independently
+guarded. Comment matching is byte-exact, and native cleanup is bound to acquired
+setup. Runtime checks remain fresh even when analysis uses session-owned
+catalog copies. Public APIs, dependency ranges, migration source, policies,
+reports and history are unchanged; no server durability setting is modified.
+Earlier bounded analysis/runtime optimizations remain. Required data scans and
+DDL can still dominate large-table workloads; timing comparisons are informational.
 
 ## Operational summary
 
