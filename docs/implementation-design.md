@@ -1136,13 +1136,17 @@ and model fingerprint path used by the runner.
 Provider integration tests measure 20 complete pooled runner calls against 100
 expected tables in clean and noisy catalogs. The noisy catalog adds 1,000
 foreign tables with columns and indexes. Each matrix cell persists p50/p95,
-assessment counts, and unexpected-object counts; noisy p95 must remain within
-`2 * clean p95 + 250 ms`, and foreign child objects must not escape the
-server-side expected-table scope.
+assessment counts and unexpected-object counts. The unchanged comparison
+`2 * clean p95 + 250 ms` is informational: JSON records
+`evaluationMode: "informational"` and retains `requirement.passed: false` for an
+overrun instead of failing the integration test. Matching assessments and the
+server-side exclusion of foreign child objects remain mandatory. Invalid
+measurements, execution exceptions and evidence-output failures are not
+converted into timing verdicts or suppressed.
 
-The construction budgets are informational regression and allocation evidence;
-the live measurements are same-runner relative SLO evidence rather than an
-absolute cross-machine throughput claim.
+Construction budgets and live comparisons are informational regression
+evidence. The live measurements retain same-runner relative context, not an
+absolute cross-machine throughput promise or a hardware-dependent CI gate.
 
 ## Verification surfaces
 

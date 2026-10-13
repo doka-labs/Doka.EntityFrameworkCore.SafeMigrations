@@ -92,6 +92,13 @@ Invalid configuration, incomplete measurements, execution exceptions, and output
 failures still fail. Omit `--report-only` for an explicitly strict local budget
 comparison; benchmark limits must not be raised merely to make a run pass.
 
+Live pooled-runner p95 comparisons for server providers are also informational.
+Their 20 measured calls and `2 * clean p95 + 250 ms` comparison remain unchanged;
+JSON retains `evaluationMode: "informational"` and an exceeded
+`requirement.passed: false` verdict. Timing overruns do not fail those integration
+tests. Report-state and catalog-scope assertions, invalid measurements,
+execution exceptions and evidence-output failures still fail qualification.
+
 The reusable quality workflow additionally collects Microsoft Cobertura output
 from all five test assemblies, merges product lines conservatively, and runs:
 

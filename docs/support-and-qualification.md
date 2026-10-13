@@ -516,11 +516,14 @@ at compile time; no benchmark assembly introduces a cross-provider runtime edge.
 Every server-provider engine cell additionally runs 20 complete pooled
 `SafeMigrationRunner` invocations against 100 expected tables, then repeats them
 after adding 1,000 foreign tables with child objects. The cell stores p50/p95
-JSON evidence and fails unless assessments are unchanged, foreign child rows
-remain excluded by the expected-table scope, and noisy p95 is at most
-`2 * clean p95 + 250 ms`. Each invocation can include multiple database
-roundtrips. This is a same-runner relative SLO; it is not an absolute
-cross-machine latency promise.
+JSON evidence and still fails unless assessments are unchanged and foreign
+child rows remain excluded by the expected-table scope. The unchanged noisy
+p95 comparison `2 * clean p95 + 250 ms` is informational: JSON records
+`evaluationMode: "informational"` and preserves `requirement.passed: false` when
+the measured limit is exceeded. Invalid evidence, execution exceptions and
+artifact failures remain fatal. Each invocation can include multiple database
+roundtrips; same-runner timing context is neither a hardware-dependent CI gate
+nor an absolute cross-machine latency promise.
 
 Every server-provider engine cell also analyzes 100,000 ordered mixed operations whose
 observations cover every state and planner action, including model-managed

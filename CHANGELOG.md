@@ -139,6 +139,11 @@ the shared release identity described in [Release process](docs/release-process.
   authored batch. Only internally resolved migration IDs establish boundaries;
   standalone `AnalyzeAsync`, `VerifyAsync` and scaffolding retain single-batch
   validation. Ordinary SQL/DDL does not reset that batch's key ledger.
+- Keep live pooled-catalog p95 overruns informational in server-provider
+  qualification instead of failing CI on shared-runner timing variation.
+  Preserve all 20 measured calls, the unchanged relative comparison and false
+  JSON budget verdicts. Deterministic report/scope assertions, invalid evidence,
+  execution and artifact failures remain blocking; no comparison limit is raised.
 - Bind certified native SQL-mode snapshot and conditional restore construction
   to shared statement parts instead of unchecked substring replacement. Unknown
   provider drift remains fail-closed, and complete nullable staging targets
