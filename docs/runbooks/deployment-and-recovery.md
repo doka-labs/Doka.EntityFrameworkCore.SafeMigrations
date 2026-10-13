@@ -41,6 +41,13 @@ deployment output.
    contract fingerprint, and target migration.
 6. Review every assessment and unexpected object.
 
+Use pending-migration discovery when validating successive real migrations
+that transition the same model-managed typed key. Only the resolver's internal
+EF migration IDs establish separate validation groups. An explicit
+`AnalyzeAsync` list is one authored batch; inserting ordinary SQL/DDL or setting
+a target option does not divide its duplicate-key validation. Projection still
+evaluates the complete pending sequence in operation order.
+
 The contract fingerprint binds safe intent, definitions, policy, and order.
 Ordinary EF operations contribute only their CLR type names, not their SQL or
 other properties. Always retain and check the immutable migration artifact
@@ -166,6 +173,13 @@ omit a failed condition merely to obtain a green report. Verification
 operations are read-only inputs to `VerifyAsync`, not an additional migration
 to execute.
 
+`VerifyAsync` retains single-authored-batch model-managed validation. Do not
+flatten several migrations that transition the same typed key into that input.
+Use a separately reviewed final-state contract with the required retained-row
+or removal checks instead; this changes verification input, not published
+migration source, history or runtime execution. A target option cannot create
+per-migration groups for an explicit verification list.
+
 Then verify:
 
 - a safe-only final-state contract returns `Ready`; `ReadyWithProviderOperations`
@@ -202,6 +216,16 @@ Only then release the write fence and mark the instance complete.
 | Model-managed compare-and-swap or postcondition failed | A row, dependent row, trigger result, or constraint changed after the approved source state | Keep writes fenced, inspect the affected key through protected operator tooling, correct the conflict or author a new forward migration, then rerun preflight. Never weaken the operation into an upsert or edit an applied migration. |
 | Narrowing runtime proof or conversion failed | Data or catalog state changed after preflight, or an overlength value remains | Keep writes fenced; inspect values through protected operator tooling, correct data or target length, then rerun preflight. Never enable truncation or retry unchanged. |
 | Data corruption or unbounded destructive effect | State cannot be proven safe | Isolate instance and restore the tested backup/snapshot under incident control. |
+
+PostgreSQL source-frozen parent deletes reclassify under an EXCLUSIVE principal-
+table fence. At transaction-snapshot isolation a newly committed FK row can
+produce a native serialization/FK error instead of a SafeMigrations data-blocked
+code. Complete the failed transaction's rollback before retrying; the lock is
+released at transaction end, not by cancellation alone. Keep native FK checks
+and actions enabled, exclude privileged trigger/enforcement changes, and obtain
+a fresh approved source/dependency state. Do not change referential actions or
+disable their checks to make a retry pass. See
+[the PostgreSQL delete contract](../postgresql-behavior.md#model-managed-data).
 
 An unapplied migration containing raw HasData-derived `InsertData`,
 `UpdateData`, or `DeleteData` calls can be removed and scaffolded again with the

@@ -392,7 +392,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     );
 
     /// <summary>Counts actual CASE and prepared-proof visits without changing the original predicate results.</summary>
-    private sealed class RuntimeMatchingProbeInterceptor : DbCommandInterceptor
+    internal sealed class RuntimeMatchingProbeInterceptor : DbCommandInterceptor
     {
         /// <summary>Gets the number of exact matching branches found in executed setup commands.</summary>
         public int MatchingInstrumentations { get; private set; }
@@ -414,11 +414,27 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             CancellationToken cancellationToken = default
         )
         {
-            var sql = command.CommandText;
+            command.CommandText = InstrumentCommand(command.CommandText);
+
+            return ValueTask.FromResult(result);
+        }
+
+        /// <summary>Instruments admitted setup shapes so unit controls can verify the live observer itself.</summary>
+        /// <param name="commandText">The original setup command or prepared row-proof transport.</param>
+        /// <returns>The command with branch counters nested inside unchanged guarded expressions.</returns>
+        internal string InstrumentCommand(string commandText)
+        {
+            var sql = commandText;
             sql = InstrumentBranch(sql,
                 "SET @doka_sm_state = CASE WHEN @doka_sm_state IS NULL THEN ",
                 " ELSE @doka_sm_state END;", "catalog", out var matchingCount);
-            MatchingInstrumentations += matchingCount;
+            // WHY: Required no-default EnsureColumn now owns its first exact
+            // match inside the guarded status fact. Count the actual catalog
+            // expression there, not the later state assignment reading its result.
+            sql = InstrumentBranch(sql,
+                "SET @doka_sm_add_status = CASE WHEN @doka_sm_state IS NULL THEN (",
+                ") ELSE NULL END;", "catalog", out var requiredAddMatchingCount);
+            MatchingInstrumentations += matchingCount + requiredAddMatchingCount;
 
             sql = InstrumentBranch(sql,
                 "SET @doka_sm_repair_ok = CASE WHEN @doka_sm_state = 'different' THEN ",
@@ -449,9 +465,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                     Convert.ToHexString(Encoding.UTF8.GetBytes(replacement)), StringComparison.Ordinal);
             }
 
-            command.CommandText = sql;
-
-            return ValueTask.FromResult(result);
+            return sql;
         }
 
         /// <summary>Counts an exact test-targeted branch while preserving its original expression.</summary>

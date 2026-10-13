@@ -44,7 +44,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
         if (unsupported is not null)
         {
-            return Unsupported(unsupported);
+            return Unsupported(unsupported) with
+            {
+                ObjectIdentityGuardExpression = BuildObjectIdentityGuard(operation.Intent),
+            };
         }
 
         var plan = operation.Intent switch
@@ -87,7 +90,15 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 "Unknown SafeMigrations intent type."),
         };
 
-        return plan with { PrerequisiteExpression = BuildPrerequisiteExpression(operation) };
+        var identityGuard = BuildObjectIdentityGuard(operation.Intent);
+
+        return plan with
+        {
+            PrerequisiteExpression = BuildPrerequisiteExpression(operation),
+            ObjectIdentityGuardExpression = identityGuard,
+            PostExecutionObjectIdentityGuardExpression = BuildPostExecutionObjectIdentityGuard(
+                operation.Intent, identityGuard),
+        };
     }
 
     /// <summary>Builds only the operation's catalog prerequisite, preserving static unsupported precedence.</summary>

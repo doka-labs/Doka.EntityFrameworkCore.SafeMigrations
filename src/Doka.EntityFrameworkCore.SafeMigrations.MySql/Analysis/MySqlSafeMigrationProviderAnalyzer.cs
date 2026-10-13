@@ -32,9 +32,23 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
 
     StringComparer ISafeMigrationProviderObjectIdentityNormalizer.IdentifierComparer => StringComparer.Ordinal;
 
+    StringComparer ISafeMigrationProviderObjectIdentityNormalizer.ColumnIdentifierComparer =>
+        StringComparer.OrdinalIgnoreCase;
+
+    /// <inheritdoc />
+    StringComparer ISafeMigrationProviderObjectIdentityNormalizer.IndexIdentifierComparer =>
+        StringComparer.OrdinalIgnoreCase;
+
+    StringComparer ISafeMigrationProviderObjectIdentityNormalizer.ForeignKeyIdentifierComparer =>
+        StringComparer.OrdinalIgnoreCase;
+
     string ISafeMigrationProviderObjectIdentityNormalizer.NormalizeIdentifier(
         string identifier
     ) => identifier;
+
+    /// <inheritdoc />
+    string ISafeMigrationProviderObjectIdentityNormalizer.NormalizeColumnIdentifier(string identifier) =>
+        SafeMigrationModelManagedKeyIdentity.NormalizeOrdinalIgnoreCase(identifier);
 
     string? ISafeMigrationProviderObjectIdentityNormalizer.NormalizeSchema(
         string? schema
@@ -142,6 +156,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         if (captureRenameSources)
         {
             _projectedAlterPhysicalSnapshots.Clear();
+            _projectedExplicitTimestampDefaults.Clear();
+            _projectedColumnSessionEnvironments.Clear();
+            _projectedRequiredAddCapsByOperation?.Clear();
+            _projectedRequiredAddCapsByAnalysis?.Clear();
             _renamedSourceAnalyses.Clear();
             _renameTargetConflicts.Clear();
         }
@@ -178,6 +196,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
             var physicalKeyOperations = operations
                 .Where(operation => TargetsCurrentDatabase(operation.Intent, _currentDatabase))
                 .ToArray();
+            var columnSessionEnvironment = await ReadProjectedColumnSessionEnvironmentAsync(connection,
+                physicalKeyOperations, maximumPayloadBytes, commandTimeout, cancellationToken);
 
             var indexEnvironments = await ReadIndexPhysicalEnvironmentsAsync(
                 connection,
@@ -228,7 +248,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                     backfillConstraints);
 
                 AttachIndexPhysicalEnvironments(operationWindow, plans, indexEnvironments);
-                var shortCircuitStates = await FindShortCircuitStatesAsync(
+                var shortCircuitStates = await FindPrerequisiteShortCircuitStatesAsync(
                     connection,
                     plans,
                     maximumPayloadBytes,
@@ -244,6 +264,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                 for (var ordinal = 0; ordinal < operationWindow.Length; ordinal++)
                 {
                     bindable[ordinal] = shortCircuitStates[ordinal] is null
+                        && !plans[ordinal].IsStaticallyUnsupported
                         && !MySqlSafeMigrationCatalogSqlBuilder.HasDatabaseQualifier(
                             operationWindow[ordinal].Intent);
 
@@ -284,6 +305,24 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                         }
                     }
 
+                    await FindRequiredColumnAddFactsAsync(
+                        connection,
+                        plans,
+                        shortCircuitStates,
+                        maximumPayloadBytes,
+                        commandTimeout,
+                        operationOffset,
+                        cancellationToken);
+
+                    await FindStateEvaluationGuardStatesAsync(
+                        connection,
+                        plans,
+                        shortCircuitStates,
+                        maximumPayloadBytes,
+                        commandTimeout,
+                        operationOffset,
+                        cancellationToken);
+
                     var dataProbeResults = await ResolveDataProbeResultsAsync(
                         connection,
                         operationWindow,
@@ -306,7 +345,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                         {
                             results[operationOffset + localOrdinal] = ShortCircuitAnalysis(
                                 shortCircuitState,
-                                plans[localOrdinal]);
+                                plans[localOrdinal],
+                                operationWindow[localOrdinal].Intent);
                         }
                     }
 
@@ -476,6 +516,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                         operationOffset,
                         cancellationToken);
 
+                    CaptureProjectedRequiredAddPlans(operationWindow, plans);
+
                     operationOffset += operationWindow.Length;
                 }
                 catch (Exception exception)
@@ -517,8 +559,19 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
             }
 
             AttachProjectedAlterPhysicalSnapshots(operations, results, alterPhysicalSnapshots);
+            AttachProjectedColumnSessionEnvironment(operations, results, columnSessionEnvironment);
             if (captureRenameSources)
             {
+                await CaptureForeignKeyReplacementProofsAsync(
+                    context, operations, results, maximumPayloadBytes, commandTimeout, cancellationToken);
+            }
+
+            if (captureRenameSources)
+            {
+                await ReadMemberRenameTargetEvidenceAsync(
+                    connection, operations, results, _currentDatabase, maximumPayloadBytes,
+                    commandTimeout, cancellationToken);
+
                 await CaptureRenameSourceAnalysesAsync(
                     context, operations, results, backfillConstraints, cancellationToken);
             }
@@ -964,7 +1017,15 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
             cancellationToken);
     }
 
-    private async Task<MySqlShortCircuitState?[]> FindShortCircuitStatesAsync(
+    /// <summary>Rejects foreign identities and missing prerequisites before snapshot or status acquisition.</summary>
+    /// <param name="connection">The open analysis connection.</param>
+    /// <param name="plans">The immutable plans before any catalog snapshot binding.</param>
+    /// <param name="maximumPayloadBytes">The qualified aggregate transport bound.</param>
+    /// <param name="commandTimeout">The caller's configured command timeout.</param>
+    /// <param name="operationOffset">The original operation window's stream offset.</param>
+    /// <param name="cancellationToken">The caller's cancellation token.</param>
+    /// <returns>The identity and prerequisite rejections that later phases must not query again.</returns>
+    private async Task<MySqlShortCircuitState?[]> FindPrerequisiteShortCircuitStatesAsync(
         DbConnection connection,
         MySqlSafeMigrationRuntimePlan[] plans,
         int maximumPayloadBytes,
@@ -989,15 +1050,6 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         // their own statement so a data probe is never prepared for a missing
         // table.
         await FindPrerequisiteStatesAsync(
-            connection,
-            plans,
-            states,
-            maximumPayloadBytes,
-            commandTimeout,
-            operationOffset,
-            cancellationToken);
-
-        await FindStateEvaluationGuardStatesAsync(
             connection,
             plans,
             states,
@@ -1258,7 +1310,15 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         }
     }
 
-    private async Task FindStateEvaluationGuardStatesAsync(
+    /// <summary>Reads lazy-guard states and their catalog-safe codes within the existing bounded dispatch.</summary>
+    /// <param name="connection">The already-open analysis connection.</param>
+    /// <param name="plans">The plans whose required-add facts were already bound.</param>
+    /// <param name="states">The results retaining earlier qualification or prerequisite failures.</param>
+    /// <param name="maximumPayloadBytes">The qualified per-dispatch catalog payload limit.</param>
+    /// <param name="commandTimeout">The configured command timeout.</param>
+    /// <param name="operationOffset">The complete-stream offset used for oversized-operation diagnostics.</param>
+    /// <param name="cancellationToken">The asynchronous analysis cancellation token.</param>
+    internal async Task FindStateEvaluationGuardStatesAsync(
         DbConnection connection,
         MySqlSafeMigrationRuntimePlan[] plans,
         MySqlShortCircuitState?[] states,
@@ -1319,10 +1379,13 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                     var plan = plans[ordinal];
                     var stateEvaluationGuard = plan.RenderStateEvaluationGuardExpression(parameterizer.Add);
                     var guardFailure = plan.RenderStateEvaluationGuardFailureExpression(parameterizer.Add);
+                    var classificationCode = plan.RenderStateEvaluationGuardClassificationCodeExpression(
+                        parameterizer.Add);
 
                     var selection = $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, CASE "
                         + $"WHEN NOT COALESCE(({stateEvaluationGuard}), FALSE) THEN ({guardFailure}) "
-                        + "ELSE NULL END";
+                        + "ELSE NULL END, CASE WHEN NOT COALESCE("
+                        + $"({stateEvaluationGuard}), FALSE) THEN ({classificationCode}) ELSE NULL END";
 
                     var selectionBytes = Encoding.UTF8.GetByteCount(selection)
                         + (selections.Count == 0 ? 0 : separatorBytes);
@@ -1383,7 +1446,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
 
     private static SafeMigrationProviderAnalysis ShortCircuitAnalysis(
         MySqlShortCircuitState shortCircuit,
-        MySqlSafeMigrationRuntimePlan plan
+        MySqlSafeMigrationRuntimePlan plan,
+        SafeMigrationIntent intent
     ) => new(
         shortCircuit.State,
         SafeMigrationRepairCapability.None,
@@ -1393,7 +1457,53 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         IndexPhysicalEnvironment = plan.IndexPhysicalEnvironment,
         IsInvariantUnsupported = shortCircuit.State == SafeMigrationObservedState.Unsupported
             && plan.IsStaticallyUnsupported,
+        RequiresLiveDataProof = IsFreshRequiredColumnAddMissing(intent, plan, shortCircuit.State, shortCircuit.Code)
+            || IsBlockedRequiredColumnAddRowProof(intent, plan, shortCircuit.State, shortCircuit.Code),
     };
+
+    /// <summary>Marks only fresh unsafe Missing classifications that independently proved no existing rows.</summary>
+    /// <param name="intent">The immutable operation whose guard was evaluated.</param>
+    /// <param name="plan">The enriched plan, including materialized required-add status.</param>
+    /// <param name="state">The provider-classified current state.</param>
+    /// <param name="code">The closed provider code distinguishing fresh addition from owned staging.</param>
+    /// <returns>Whether this Missing result carries a captured empty-row proof, never a staging certificate.</returns>
+    internal static bool IsFreshRequiredColumnAddMissing(
+        SafeMigrationIntent intent,
+        MySqlSafeMigrationRuntimePlan plan,
+        SafeMigrationObservedState state,
+        string? code
+    )
+    {
+        if (state != SafeMigrationObservedState.Missing || intent is not EnsureColumnIntent ensure
+            || SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(ensure.Definition)
+            || StringComparer.Ordinal.Equals(code, "column_atomic_add_resume"))
+        {
+            return false;
+        }
+
+        // WHY: Fresh protocol status and structured SQL NULL's guarded Missing
+        // state require an actual LIMIT-1 row check. Prerequisite absence and
+        // staged rows cannot supply this empty-table certificate.
+        return plan.RequiredColumnAddPlan is { } protocol
+            ? StringComparer.Ordinal.Equals(protocol.StatusBinding, "'fresh'")
+            : ensure.Definition.DefaultValue.Kind == SafeMigrationDefaultValueKind.Sql
+                && ensure.Definition.DefaultValue.StructuredExpression
+                    is SafeMigrationSqlLiteralExpression { Value: null };
+    }
+
+    /// <summary>Marks current blocked add rows as data-dependent without turning them into empty-row proof.</summary>
+    /// <param name="intent">The immutable operation whose row guard was evaluated.</param>
+    /// <param name="plan">The enriched plan carrying fresh protocol status when applicable.</param>
+    /// <param name="state">The provider-classified current state.</param>
+    /// <param name="code">The provider code that separates staging from fresh addition.</param>
+    /// <returns>Whether subsequent DML must invalidate this add's captured negative row result.</returns>
+    internal static bool IsBlockedRequiredColumnAddRowProof(
+        SafeMigrationIntent intent,
+        MySqlSafeMigrationRuntimePlan plan,
+        SafeMigrationObservedState state,
+        string? code
+    ) => state == SafeMigrationObservedState.DataBlocked
+        && IsFreshRequiredColumnAddMissing(intent, plan, SafeMigrationObservedState.Missing, code);
 
     private static async Task<string?> ReadCurrentDatabaseAsync(
         DbConnection connection,
@@ -1534,12 +1644,17 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                                 ? reader.GetString(8)
                                 : null,
                         ModelManagedDataEvidence = evidence,
+                        RequiredColumnAddResumesOwnedStaging = state == SafeMigrationObservedState.Missing
+                            && plan.RequiredColumnAddPlan is not null
+                            && StringComparer.Ordinal.Equals(code, "column_atomic_add_resume"),
                         // WHY: Every VARCHAR transition carries a probe template,
                         // but widening is catalog-only. Only a catalog-confirmed
                         // narrowing or nullable-to-required result becomes stale
                         // after projected DML.
                         RequiresLiveDataProof = dataProbeResults[localOrdinal]?.IsRequired == true
-                            || requiresNullabilityDataProof,
+                            || requiresNullabilityDataProof
+                            || IsFreshRequiredColumnAddMissing(operations[localOrdinal].Intent, plan, state, code)
+                            || IsBlockedRequiredColumnAddRowProof(operations[localOrdinal].Intent, plan, state, code),
                         // WHY: Provider backfill executes UPDATE before MODIFY.
                         // Triggers can change any table, so ordered projection
                         // must invalidate all row proofs after accepted repair.
@@ -1685,19 +1800,20 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                 {
                     var resultOrdinal = reader.GetInt32(0);
                     if (row >= selectedOrdinals.Count
-                        || resultOrdinal != selectedOrdinals[row])
+                        || resultOrdinal != selectedOrdinals[row]
+                        || (uint)resultOrdinal >= (uint)states.Length)
                     {
                         throw new InvalidOperationException(
                             "The MySQL SafeMigrations state-evaluation guard classifier returned an invalid ordinal.");
                     }
 
-                    if (!reader.IsDBNull(1))
+                    if (states[resultOrdinal] is null && !reader.IsDBNull(1))
                     {
                         var state = ParseState(reader.GetString(1));
 
                         states[resultOrdinal] = new MySqlShortCircuitState(
                             state,
-                            $"classified_{StateCode(state)}");
+                            reader.IsDBNull(2) ? $"classified_{StateCode(state)}" : reader.GetString(2));
                     }
 
                     row++;
@@ -1772,8 +1888,15 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                 MySqlServerVersionCompatibilityMode.AllowUnsupported);
 
             var maximumPayloadBytes = await GetMaximumPayloadBytesAsync(connection, commandTimeout, cancellationToken);
+            expected = await CanonicalizeUnexpectedInventoryOwnersAsync(
+                connection, expected, maximumPayloadBytes, commandTimeout, cancellationToken);
+
             var findings = await ReadUnexpectedInventoryAsync(
                 connection, expected, serverVersion.IsMariaDb, maximumPayloadBytes, commandTimeout, cancellationToken);
+
+            findings = await RemoveRequiredColumnAddRecoveryChecksAsync(
+                context, operations, findings, serverVersion.IsMariaDb,
+                maximumPayloadBytes, commandTimeout, cancellationToken);
 
             return await RemoveSemanticAliasesAsync(context, operations, findings, cancellationToken);
         }
@@ -2017,7 +2140,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 
-    private readonly record struct MySqlShortCircuitState(
+    /// <summary>Retains one catalog-proven early classification and its provider diagnostic.</summary>
+    /// <param name="State">The state proven before the main classification query.</param>
+    /// <param name="Code">The exact catalog-qualified code, or the classified-state fallback.</param>
+    internal readonly record struct MySqlShortCircuitState(
         SafeMigrationObservedState State,
         string Code
     );

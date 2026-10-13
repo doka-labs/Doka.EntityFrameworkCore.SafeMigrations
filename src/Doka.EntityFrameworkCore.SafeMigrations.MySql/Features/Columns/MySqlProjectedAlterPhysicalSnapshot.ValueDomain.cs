@@ -14,6 +14,7 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot
     {
         var target = intent.Definition;
         if (!columns.TryGetValue(target.Name, out var original)
+            || source.IsNullable && !target.IsNullable && !environment.StrictSqlMode
             || source.ClrType != typeof(string)
             || target.ClrType != typeof(string)
             || !MySqlSafeMigrationColumnMetadata.CanSafelyConverge(source)

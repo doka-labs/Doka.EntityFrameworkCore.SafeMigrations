@@ -51,7 +51,7 @@ public sealed class MySqlNullabilityDataProofTests
             < command.CommandText.IndexOf("SET @doka_sm_column_repair_eligible", StringComparison.Ordinal));
     }
 
-    /// <summary>Verifies no proof SQL is emitted when nullability repair cannot be requested.</summary>
+    /// <summary>Non-protocol targets emit no NULL repair proof when tightening cannot be requested.</summary>
     /// <param name="nullable">The target column nullability.</param>
     /// <param name="policy">The requested decision policy.</param>
     [Theory]
@@ -60,17 +60,57 @@ public sealed class MySqlNullabilityDataProofTests
     [InlineData(true, SafeMigrationPolicy.ThrowIfDifferent)]
     public void InapplicableNullabilityRepair_EmitsNoNullScan(bool nullable, SafeMigrationPolicy policy)
     {
+        // Arrange
         using var context = CreateContext();
-        var operation = new SafeMigrationOperation(
-            new EnsureColumnIntent("proof_rows", new ExpectedColumnDefinition(
-                "Value", typeof(int), isNullable: nullable, storeType: "int")),
-            policy);
+        // WHY: A required no-default target now needs a NULL proof for exact
+        // staged recovery even without RepairIfSafe. An explicit default
+        // keeps this fixture on its original non-protocol repair-only path.
+        var definition = new ExpectedColumnDefinition("Value", typeof(int), isNullable: nullable, storeType: "int",
+            defaultValue: nullable ? SafeMigrationDefaultValue.None : SafeMigrationDefaultValue.Literal(1));
 
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("proof_rows", definition), policy);
+
+        // Act
         var command = Assert.Single(context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model));
 
+        // Assert
+        Assert.False(MySqlSafeMigrationCatalogSqlBuilder.CanUseRequiredColumnAddProtocol(definition));
         Assert.DoesNotContain(DecodePayloads(command.CommandText), sql => sql.Contains(
             "INTO @doka_sm_nullability_blocked", StringComparison.Ordinal));
         Assert.DoesNotContain("@doka_sm_nullability_blocked = FALSE;", command.CommandText, StringComparison.Ordinal);
+    }
+
+    /// <summary>Staged required ADD recovery uses one NULL proof even when ordinary repair is not allowed.</summary>
+    /// <param name="policy">The independently selected ordinary difference policy.</param>
+    [Theory]
+    [InlineData(SafeMigrationPolicy.ExistenceOnly)]
+    [InlineData(SafeMigrationPolicy.ThrowIfDifferent)]
+    [InlineData(SafeMigrationPolicy.RepairIfSafe)]
+    public void AtomicRequiredAdd_MaterializesStagedNullProofIndependentlyOfRepairPolicy(SafeMigrationPolicy policy)
+    {
+        // Arrange
+        using var context = CreateContext();
+        var definition = new ExpectedColumnDefinition("Value", typeof(int), isNullable: false, storeType: "int");
+        var operation = new SafeMigrationOperation(new EnsureColumnIntent("proof_rows", definition), policy);
+
+        // Act
+        var command = Assert.Single(context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model));
+        var payloads = DecodePayloads(command.CommandText);
+
+        // Assert
+        const string nullScan = "EXISTS (SELECT 1 FROM `proof_rows` WHERE `Value` IS NULL LIMIT 1)";
+        var proof = Assert.Single(payloads, sql => sql.Contains(nullScan, StringComparison.Ordinal));
+
+        Assert.True(MySqlSafeMigrationCatalogSqlBuilder.CanUseRequiredColumnAddProtocol(definition));
+        Assert.EndsWith("INTO @doka_sm_nullability_blocked", proof, StringComparison.Ordinal);
+        Assert.Contains("@doka_sm_add_status", command.CommandText, StringComparison.Ordinal);
+        Assert.Contains("'staged'", command.CommandText, StringComparison.Ordinal);
+        Assert.Contains("WHEN 'missing' THEN 'apply'", command.CommandText, StringComparison.Ordinal);
+        Assert.Contains("@doka_sm_nullability_blocked = FALSE;", command.CommandText, StringComparison.Ordinal);
+        Assert.DoesNotContain(nullScan, command.CommandText, StringComparison.Ordinal);
+        Assert.Equal(policy == SafeMigrationPolicy.RepairIfSafe ? 3 : 2,
+            payloads.Count(static sql => sql.StartsWith("ALTER TABLE ", StringComparison.Ordinal)));
     }
 
     /// <summary>Verifies mixed proof markers are expanded in order and only once into final SQL.</summary>

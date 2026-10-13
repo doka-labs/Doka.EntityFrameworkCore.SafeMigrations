@@ -5,9 +5,11 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 public sealed class MySqlRuntimeAllocationTests(Xunit.Abstractions.ITestOutputHelper output)
 {
     /// <summary>Runtime column generation preserves every command and its exact SQL.</summary>
+    /// <param name="isMariaDb">Whether generation uses the qualified MariaDB catalog contract.</param>
+    /// <param name="expectedSqlHash">The fingerprint including intentional exact-comment matching.</param>
     [Theory]
-    [InlineData(false, "2F3741B301CF5FAB1F738720C341692E951B8168E2FC99A77526083E332C8FBA")]
-    [InlineData(true, "C6233A2E99E6316A8117A741C58CE924718E172226A90280680C59D5B290C8BE")]
+    [InlineData(false, "2566896A918F07CCC657250860EB3A4A9C018EB302EDE826C20EFF82867EE514")]
+    [InlineData(true, "14B1EFB32FFFCB12FAF73C15171C4817FBACB03DC097801373C4B11C0858EC8A")]
     public void PreparedRuntimeColumnGenerationRemainsBounded(bool isMariaDb, string expectedSqlHash)
     {
         // Arrange
@@ -33,6 +35,8 @@ public sealed class MySqlRuntimeAllocationTests(Xunit.Abstractions.ITestOutputHe
             System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(canonicalSql)));
 
         var legacySql = canonicalSql.Replace(
+            "CAST(COALESCE(c.COLUMN_COMMENT, '') AS BINARY)",
+            "COALESCE(c.COLUMN_COMMENT, '')", StringComparison.Ordinal).Replace(
             "(c.COLUMN_DEFAULT IS NULL OR (CAST(c.COLUMN_DEFAULT AS BINARY) = 'NULL' "
                 + "AND LOCATE('DEFAULT_GENERATED', UPPER(COALESCE(c.EXTRA, ''))) > 0))",
             "(c.COLUMN_DEFAULT IS NULL OR UPPER(c.COLUMN_DEFAULT) = 'NULL')", StringComparison.Ordinal);
@@ -46,9 +50,14 @@ public sealed class MySqlRuntimeAllocationTests(Xunit.Abstractions.ITestOutputHe
 
         if (!isMariaDb)
         {
-            // WHY: Restoring only the unsafe NULL-text alternative reproduces
-            // the previous fingerprint, proving no unrelated SQL drift.
+            // WHY: Restoring only the previous comment equality and unsafe
+            // NULL-text alternative proves there is no unrelated SQL drift.
             Assert.Equal("EE6F0215DD906B2FF4E60421E84F8984ACDD1093E6C67438411EC99D789BC0E9", legacyHash);
+        }
+
+        else
+        {
+            Assert.Equal("C6233A2E99E6316A8117A741C58CE924718E172226A90280680C59D5B290C8BE", legacyHash);
         }
 
         // Normalize platform newlines only; allocation changes must preserve

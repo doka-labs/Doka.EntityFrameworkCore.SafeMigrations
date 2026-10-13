@@ -7,13 +7,19 @@ internal sealed class SqlServerIdentityInsertPauseInterceptor
     : Microsoft.EntityFrameworkCore.Diagnostics.DbCommandInterceptor
 {
     private readonly string _resource;
+    private readonly bool _beforeConfirmation;
 
     /// <summary>
     /// Creates a pause associated with a unique application lock in the test database.
     /// </summary>
     public SqlServerIdentityInsertPauseInterceptor(
-        string resource
-    ) => _resource = resource;
+        string resource,
+        bool beforeConfirmation = false
+    )
+    {
+        _resource = resource;
+        _beforeConfirmation = beforeConfirmation;
+    }
 
     /// <inheritdoc />
     public override ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int>>
@@ -24,7 +30,7 @@ internal sealed class SqlServerIdentityInsertPauseInterceptor
             CancellationToken cancellationToken = default
         )
     {
-        command.CommandText = BuildPausedCommand(command.CommandText, _resource);
+        command.CommandText = BuildPausedCommand(command.CommandText, _resource, _beforeConfirmation);
 
         return new ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int>>(result);
     }
@@ -34,7 +40,8 @@ internal sealed class SqlServerIdentityInsertPauseInterceptor
     /// </summary>
     public static string BuildPausedCommand(
         string commandText,
-        string resource
+        string resource,
+        bool beforeConfirmation = false
     )
     {
         const string identityOn = "SET IDENTITY_INSERT [dbo].[identity_roles] ON;";
@@ -49,12 +56,26 @@ internal sealed class SqlServerIdentityInsertPauseInterceptor
             ? SqlServerGuardedSqlTestContract.DecodeScope(commandText)
             : commandText;
 
+        if (!guardedBody.Contains(identityOn, StringComparison.Ordinal))
+        {
+            return commandText;
+        }
+
+        // WHY: Ordinary attention tests must observe confirmed ownership, not
+        // the gap between ON and its session marker. A separate adversarial
+        // mode deliberately interrupts that uncertain acquisition gap.
+        var anchor = !beforeConfirmation
+            && guardedBody.Contains(SqlServerSafeMigrationIdentityInsertScope.AcquiredMarkerComment,
+                StringComparison.Ordinal)
+            ? SqlServerSafeMigrationIdentityInsertScope.AcquiredMarkerComment
+            : identityOn;
+
         // WHY: SqlClient drains an unparameterized async batch's first response under its cancellation lock.
         // NOWAIT starts that synchronous drain, but InfoMessage is deferred until the batch finishes.
         // A session-owned lock proves ON to a separate observer without emitting the early INFO token.
         var pausedBody = guardedBody.Replace(
-            identityOn,
-            identityOn + " DECLARE @doka_identity_ready int; "
+            anchor,
+            anchor + " DECLARE @doka_identity_ready int; "
                 + "EXEC @doka_identity_ready = sys.sp_getapplock @Resource = N''" + nestedResource
                 + "'', @LockMode = N''Exclusive'', @LockOwner = N''Session'', @LockTimeout = 0; "
                 + "IF @doka_identity_ready < 0 THROW 51006, ''identity readiness lock failed'', 1; "

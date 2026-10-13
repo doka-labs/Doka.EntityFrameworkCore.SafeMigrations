@@ -21,21 +21,24 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         SafeMigrationOperation operation,
         SafeMigrationProviderAnalysis liveAnalysis,
         ISafeMigrationProjectedColumnSource columns
-    ) => QualifyProjectedTriggerEffects(operation, liveAnalysis);
+    ) => QualifyProjectedSchemaIdentity(operation, liveAnalysis)
+        ?? QualifyProjectedTriggerEffects(operation, liveAnalysis);
 
     /// <inheritdoc />
     public SafeMigrationProviderAnalysis? ValidateOpaqueProviderPostcondition(
         SafeMigrationOperation operation,
         SafeMigrationProviderAnalysis liveAnalysis,
         ISafeMigrationProjectedColumnSource columns
-    ) => QualifyProjectedTriggerEffects(operation, liveAnalysis);
+    ) => QualifyProjectedSchemaIdentity(operation, liveAnalysis)
+        ?? QualifyProjectedTriggerEffects(operation, liveAnalysis);
 
     /// <inheritdoc />
     public SafeMigrationProviderAnalysis ValidateProjectedOperation(
         SafeMigrationOperation operation,
         SafeMigrationProviderAnalysis projectedAnalysis,
         ISafeMigrationProjectedColumnSource columns
-    ) => QualifyProjectedTriggerEffects(operation, projectedAnalysis) ?? projectedAnalysis;
+    ) => QualifyProjectedSchemaIdentity(operation, projectedAnalysis)
+        ?? QualifyProjectedTriggerEffects(operation, projectedAnalysis) ?? projectedAnalysis;
 
     /// <inheritdoc />
     public void ObserveAcceptedOperation(
@@ -48,6 +51,11 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         if (!decision.ShouldExecute)
         {
             return;
+        }
+
+        if (operation.Intent is EnsureSchemaIntent or DropSchemaIntent)
+        {
+            _schemaIdentityOriginOrdinal ??= _projectedOperationOrdinal;
         }
 
         if (operation.Intent is ModelManagedDataIntent)
@@ -81,6 +89,11 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             return;
         }
 
+        if (operation is SqlOperation or EnsureSchemaOperation or DropSchemaOperation)
+        {
+            _schemaIdentityOriginOrdinal ??= _projectedOperationOrdinal;
+        }
+
         if (operation is InsertDataOperation or UpdateDataOperation or DeleteDataOperation)
         {
             InvalidateProjectedDmlTriggerEffects();
@@ -109,7 +122,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     /// <summary>Recognizes only Npgsql baselines which preserve every captured table-scoped fact.</summary>
     /// <param name="operation">The ordinary provider operation in the ordered stream.</param>
     /// <returns>Whether the complete operation emits no table DDL or row write.</returns>
-    private static bool ProviderOperationPreservesTableState(MigrationOperation operation)
+    internal static bool ProviderOperationPreservesTableState(MigrationOperation operation)
     {
         // WHY: Npgsql 10 omits these zero-row table writes, unchanged renames and public-schema ensure.
         // Empty INSERT may still bump an identity sequence; sequence counters are not

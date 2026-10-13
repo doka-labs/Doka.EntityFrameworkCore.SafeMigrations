@@ -246,9 +246,17 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     {
         var source = IndexExists(intent.Table, intent.Name);
         var target = IndexExists(intent.Table, intent.NewName);
+        // WHY: PRIMARY is an engine-reserved index identity, not an ordinary
+        // renameable member. Preserve missing-source replay, but reject either
+        // reserved endpoint before a native RENAME can fail after earlier DDL.
+        var reservedEndpoint = StringComparer.OrdinalIgnoreCase.Equals(intent.Name, "PRIMARY")
+            || StringComparer.OrdinalIgnoreCase.Equals(intent.NewName, "PRIMARY");
+
+        var reservedGuard = reservedEndpoint ? "WHEN TRUE THEN 'different' " : string.Empty;
 
         return Plan(
             $"CASE WHEN NOT {source} THEN 'missing' "
+            + reservedGuard
             + $"WHEN NOT {BaseTableExists(intent.Table)} THEN 'different' "
             + $"WHEN {target} THEN 'different' ELSE 'matching' END",
             $"NOT {source}");

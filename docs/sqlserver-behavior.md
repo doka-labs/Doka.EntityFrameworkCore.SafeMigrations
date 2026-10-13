@@ -350,14 +350,52 @@ old narrower source. Such discarded candidates do not reserve another column's
 row-growth budget. Nonmatching candidates, exact old-source/dependency proofs
 and ordered mutation invalidation still use the existing bounded capture path.
 
+### Owned identity-insert cleanup
+
 Model-managed inserts with explicit identity values temporarily enable
-`IDENTITY_INSERT`. When the EF migrator encounters an error, cancellation, or
-timeout, its command wrapper attempts cleanup on the same connection and
-current transaction, independently of the cancelled operation's token. Failed
-cleanup or cleanup-command disposal permanently quarantines the scoped
+`IDENTITY_INSERT`. Managed seed-command execution reserves a fresh invocation
+token with one small bootstrap roundtrip in a private mutable `SESSION_CONTEXT`
+key. Ordinary operations do not acquire this scope. Ready, attempted-ON and
+confirmed-ON phases distinguish a rejection before acquisition from a scope
+which must be restored. A stale or caller-owned marker is not overwritten.
+Pre-canceled asynchronous execution does not dispatch acquisition.
+
+A rejection before its own ON clears only the exact ready marker and never
+issues OFF. After confirmed ON, cleanup issues OFF only for the exact invocation
+and target, then releases its marker. An attention between attempted ON and
+confirmed marking leaves acquisition uncertain: recovery quarantines that
+session instead of guessing that an inherited setting may be turned off.
+`51007 / doka_sm_identity_scope_in_use` and
+`51007 / doka_sm_identity_acquisition_unproven` identify these private scope
+conflicts; they are not new public planner decisions.
+Failure before bootstrap dispatch has no acquired scope to recover. Once
+bootstrap was issued but the seed body was never dispatched, recovery can only
+clear its exact ready marker. An observation/cleanup failure at that boundary
+quarantines supported execution in the scoped provider but does not issue OFF
+or physically close/dispose a caller's session. Normal counted EF connection
+borrowing remains separate from physical-session recovery.
+
+This is execution-scope ownership, not a general detector of preexisting
+IDENTITY_INSERT state. Use a dedicated migration session without a caller-owned
+ON setting. SQL Server refuses ON for another table, but successful ON for the
+same table does not prove that it was previously OFF. After successful native
+ON, the existing target OFF completion contract remains unchanged. See the
+[IDENTITY_INSERT contract](https://learn.microsoft.com/en-us/sql/t-sql/statements/set-identity-insert-transact-sql?view=sql-server-ver17)
+and [session-context contract](https://learn.microsoft.com/en-us/sql/relational-databases/system-stored-procedures/sp-set-session-context-transact-sql?view=sql-server-ver17),
+retrieved 2026-10-12. The marker is mutable and cleared with NULL; it is neither
+a permanent setting nor an extra table-permission grant.
+
+When the EF migrator encounters an error, cancellation, or timeout, its command
+wrapper attempts owned cleanup on the same connection and current transaction,
+independently of the cancelled operation's token. After seed-body dispatch,
+failed cleanup or cleanup-command disposal permanently quarantines the scoped
 provider before attempting connection closure, with disposal as the fallback.
 The original exception is retained with a sanitized recovery status; neither
 closure nor disposal is assumed to succeed.
+Before physical closure after failed or uncertain seed recovery, a native
+SqlConnection's matching pool is cleared so the active lease cannot be returned
+for reuse; other application pools are not cleared. Connection closure/disposal
+and scoped refusal remain necessary, not replaced by that pool invalidation.
 
 Every command returned by the enabled SafeMigrations generator checks that
 quarantine before execution, including cached and ordinary-only commands.
@@ -367,10 +405,18 @@ uncertain session is not recovery. This scoped boundary does not intercept
 arbitrary EF queries or separately executed SQL scripts. Script clients must
 restore the session themselves or discard it after an attention or timeout.
 [SQL Server `TRY/CATCH` does not handle client attentions](https://learn.microsoft.com/en-us/sql/t-sql/language-elements/try-catch-transact-sql).
+The explicit script-generation path refuses any preexisting private marker
+before its own ON. A script no-op or earlier rejection leaves a caller's marker
+untouched; an admitted mutation creates its own runtime token and clears it
+after OFF. Script clients do not receive the managed bootstrap/recovery wrapper.
+Executing default generated CommandText directly likewise does not execute that
+wrapper; it is not a substitute for managed session recovery and requires a
+clean dedicated session plus client-owned interruption handling.
 
 Asynchronous recovery uses one 30-second deadline for the returned cleanup
-and command-disposal tasks, then 15 seconds for the returned close task and,
-when needed, another 15 seconds for disposal. These waits cannot preempt a
+and command-disposal tasks. When physical recovery is required after body
+dispatch, it uses 15 seconds for the returned close task and, when needed,
+another 15 seconds for disposal. These waits cannot preempt a
 synchronous provider override that blocks before returning its task, so they
 are not an unconditional wall-clock bound. See the documented
 [CloseAsync](https://learn.microsoft.com/en-us/dotnet/api/system.data.common.dbconnection.closeasync?view=net-10.0#remarks)
@@ -451,10 +497,13 @@ An unchanged table newly created earlier in the same analysis can also use an
 authored-seed proof for a later primary key, unique constraint, or unique
 index. This requires the exact accepted model-managed insert lineage,
 matching captured destination types, and, for unfiltered candidates, seed
-metadata declaring the same ordered candidate key. A supported structured
-filter can establish the filtered candidate proof instead; its identifiers
-must bind to the captured typed columns. SQL Server evaluates typed, collated
-constant rows and checks both the seed identity and candidate key with
+metadata declaring the same certified candidate-key column set. This is a
+data-uniqueness certificate, not physical index-order equivalence; type,
+collation, owner and row-completeness requirements remain unchanged.
+A supported structured filter can establish the filtered candidate proof
+instead; its identifiers must bind to the captured typed columns. SQL Server
+evaluates typed, collated constant rows and checks both the seed identity and
+candidate key with
 `GROUP BY`, so `NULL`, case, and precision-conversion collisions use provider
 equality, not CLR equality. Identical rows from repeated Ensure operations
 are counted once; their hashes only deduplicate exact authored rows and do

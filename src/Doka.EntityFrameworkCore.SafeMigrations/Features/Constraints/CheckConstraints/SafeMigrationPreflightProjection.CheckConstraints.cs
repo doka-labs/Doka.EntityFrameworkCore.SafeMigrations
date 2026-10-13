@@ -77,7 +77,10 @@ internal sealed partial class SafeMigrationPreflightProjection
                 table.CheckConstraints.ContainsKey(intent.Name)
                     ? SafeMigrationObservedState.Matching
                     : SafeMigrationObservedState.Missing)
-            : liveAnalysis;
+            : _prerequisites.TryGetValue(new TableKey(intent.Table, intent.Schema), out var prerequisites)
+                && prerequisites.CheckConstraints.TryGetPhysicalState(intent.Name, out var present)
+                    ? Analysis(present ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Missing)
+                    : liveAnalysis;
 
     private void Observe(
         EnsureCheckConstraintIntent intent,
@@ -85,11 +88,12 @@ internal sealed partial class SafeMigrationPreflightProjection
         SafeMigrationDecision decision
     )
     {
-        if (decision.Action is SafeMigrationAction.Apply or SafeMigrationAction.NoOp
-            && _prerequisites.TryGetValue(
-                new TableKey(intent.Definition.Table, intent.Definition.Schema),
-                out var prerequisites))
+        if (decision.Action is SafeMigrationAction.Apply or SafeMigrationAction.NoOp)
         {
+            // WHY: A standalone accepted CHECK proves its owner exists even
+            // when no earlier table or column operation created a sparse view.
+            var prerequisites = GetOrCreateProviderPrerequisites(intent.Definition.Table, intent.Definition.Schema);
+
             ObserveAcceptedDefinition(
                 prerequisites.CheckConstraints,
                 intent.Definition.Name,
@@ -114,7 +118,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         {
             var prerequisites = GetOrCreateProviderPrerequisites(intent.Table, intent.Schema);
 
-            prerequisites.CheckConstraints.MarkPhysicalMissing(intent.Name);
+            prerequisites.CheckConstraints.MarkPhysicalMissing(intent.Name, CurrentOperationOrdinal);
         }
 
         if (decision.Action == SafeMigrationAction.Apply

@@ -3,6 +3,67 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 /// <summary>Validates physical conversion limits for complete, empty projected tables.</summary>
 internal static class MySqlProjectedColumnTransition
 {
+    /// <summary>Requires captured atomic staging prerequisites without inferring server feature versions.</summary>
+    /// <param name="isInnoDb">Whether the relevant owner engine is InnoDB.</param>
+    /// <param name="strictSqlMode">Whether strict assignment semantics were captured.</param>
+    /// <param name="checksEnforced">Whether the engine session enforces CHECK constraints.</param>
+    /// <param name="supportsCheck">The canonical configured CHECK capability supplied by the runtime plan.</param>
+    /// <returns>Whether required no-default staging retains every captured environmental prerequisite.</returns>
+    internal static bool HasSafeAtomicRequiredColumnAddEnvironment(
+        bool isInnoDb,
+        bool strictSqlMode,
+        bool checksEnforced,
+        bool supportsCheck
+    ) => isInnoDb && strictSqlMode && checksEnforced && supportsCheck;
+
+    /// <summary>Checks a declared member list under the captured native literal-decoding mode.</summary>
+    /// <param name="definition">The exact immutable target, including ordered ENUM/SET member spelling.</param>
+    /// <param name="requiresBackslashEscapes">Whether the canonical protocol requires standard escapes.</param>
+    /// <param name="backslashEscapesEnabled">Whether captured SQL mode decodes backslash escapes.</param>
+    /// <param name="doubleQuotesAreLiteral">Whether captured SQL mode treats double quotes as literals.</param>
+    /// <returns>Whether the declared member list is valid in the captured session.</returns>
+    internal static bool HasSafeRequiredAddLiteralMode(
+        ExpectedColumnDefinition definition,
+        bool requiresBackslashEscapes,
+        bool backslashEscapesEnabled,
+        bool doubleQuotesAreLiteral
+    )
+    {
+        if (requiresBackslashEscapes && !backslashEscapesEnabled)
+        {
+            return false;
+        }
+
+        var storeType = definition.StoreType?.TrimStart();
+        if (storeType is null || (!storeType.StartsWith("enum", StringComparison.OrdinalIgnoreCase)
+                && !storeType.StartsWith("set", StringComparison.OrdinalIgnoreCase)))
+        {
+            return !requiresBackslashEscapes;
+        }
+
+        // WHY: A declaration valid under both backslash modes can still use
+        // double-quoted members, which ANSI_QUOTES interprets as identifiers.
+        return MySqlSafeMigrationCatalogSqlBuilder.BuildEnumSetCatalogDisplay(storeType, backslashEscapesEnabled,
+            out var doubleQuotes) is not null && (!doubleQuotes || doubleQuotesAreLiteral);
+    }
+
+    /// <summary>Qualifies atomic required SQL-default adds without claiming that an expression is non-null.</summary>
+    /// <param name="definition">The immutable reviewed target.</param>
+    /// <param name="mappings">The provider mappings used to resolve temporal type roles.</param>
+    /// <param name="isInnoDb">Whether the relevant existing or creation engine was captured as InnoDB.</param>
+    /// <param name="strictSqlMode">Whether strict assignment semantics were captured.</param>
+    /// <param name="explicitTimestampDefaults">Whether explicit TIMESTAMP assignment semantics were captured.</param>
+    /// <returns>Whether the captured storage/session facts qualify this SQL-default add.</returns>
+    internal static bool HasSafeRequiredSqlDefaultAddEnvironment(
+        ExpectedColumnDefinition definition,
+        IRelationalTypeMappingSource mappings,
+        bool isInnoDb,
+        bool strictSqlMode,
+        bool explicitTimestampDefaults
+    ) => isInnoDb && strictSqlMode
+        && (!MySqlSafeMigrationCatalogSqlBuilder.RequiresExplicitTimestampDefaults(definition,
+                ResolveStoreType(definition, mappings)) || explicitTimestampDefaults);
+
     /// <summary>Checks source-family, row and dependent-key feasibility without live row assumptions.</summary>
     /// <param name="intent">The exact reviewed transition.</param>
     /// <param name="source">The accepted source column.</param>
@@ -33,7 +94,8 @@ internal static class MySqlProjectedColumnTransition
             || source.ClrType != target.ClrType
             || !SupportedFamily(source, target, mappings)
             || !BackfillIsRepresentable(source, target, environment, mappings, canReuseCreationCharacterSet)
-            || RequiresStrictConversion(StoreType(source, mappings), StoreType(target, mappings))
+            || (source.IsNullable && !target.IsNullable
+                || RequiresStrictConversion(ResolveStoreType(source, mappings), ResolveStoreType(target, mappings)))
                 && !environment.StrictSqlMode)
         {
             return false;
@@ -88,8 +150,8 @@ internal static class MySqlProjectedColumnTransition
         IRelationalTypeMappingSource mappings
     )
     {
-        var sourceType = StoreType(source, mappings);
-        var targetType = StoreType(target, mappings);
+        var sourceType = ResolveStoreType(source, mappings);
+        var targetType = ResolveStoreType(target, mappings);
         if (sourceType is null
             || targetType is null)
         {
@@ -167,12 +229,16 @@ internal static class MySqlProjectedColumnTransition
         // runtime, even though its UPDATE would affect no rows. Only captured
         // charset facts can authorize literal encoding; names are not guessed.
         return MySqlSafeMigrationCatalogSqlBuilder.CanRepresentAlterColumnBackfill(
-            source, target, StoreType(source, mappings)!, StoreType(target, mappings)!,
+            source, target, ResolveStoreType(source, mappings)!, ResolveStoreType(target, mappings)!,
             characterSet, environment.StrictSqlMode, environment.SupportsQuotedExpressionDefaults,
             environment.SupportsTextExpressionControlCharacters);
     }
 
-    private static string? StoreType(
+    /// <summary>Resolves the declared physical type using the same mapping contract as projected repair.</summary>
+    /// <param name="definition">The immutable column declaration.</param>
+    /// <param name="mappings">The active provider type mappings.</param>
+    /// <returns>The normalized physical type, or null when no mapping is available.</returns>
+    internal static string? ResolveStoreType(
         ExpectedColumnDefinition definition,
         IRelationalTypeMappingSource mappings
     )

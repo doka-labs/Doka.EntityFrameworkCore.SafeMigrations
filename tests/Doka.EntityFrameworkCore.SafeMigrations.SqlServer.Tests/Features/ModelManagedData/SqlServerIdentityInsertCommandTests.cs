@@ -6,6 +6,333 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 public sealed class SqlServerIdentityInsertCommandTests
 {
     /// <summary>
+    /// Preserves inherited identity state when a guard rejects the command before its own ON.
+    /// </summary>
+    /// <param name="asynchronous">Whether the asynchronous command boundary is exercised.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RejectedBeforeOwnOn_DoesNotDisableInheritedIdentity(bool asynchronous)
+    {
+        // Arrange
+        using var session = new RecoveryConnection { InheritedIdentityInsert = true };
+        var options = new DbContextOptionsBuilder().UseSqlServer(session).Options;
+        using var context = new DbContext(options);
+        var dependencies = context.GetService<MigrationsSqlGeneratorDependencies>();
+        var analyzer = CreateAnalyzer(context);
+        var failure = new InvalidOperationException("guard rejected before own ON");
+        var command = new SqlServerSafeMigrationIdentityInsertCommand(
+            new FailingCommand(dependencies, failure, acquireIdentity: false),
+            "SET IDENTITY_INSERT [dbo].[roles] OFF;", dependencies, analyzer);
+
+        var connection = context.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalConnection>();
+
+        // Act
+        var observed = asynchronous
+            ? await Record.ExceptionAsync(() => command.ExecuteNonQueryAsync(connection))
+            : Record.Exception(() => command.ExecuteNonQuery(connection));
+
+        // Assert
+        Assert.Same(failure, observed);
+        Assert.True(session.InheritedIdentityInsert);
+        Assert.Equal(0, session.IdentityOffCount);
+        Assert.Null(session.IdentityOwner);
+        Assert.Null(Record.Exception(() => analyzer.ValidateContext(context)));
+        Assert.Equal(ConnectionState.Open, session.State);
+    }
+
+    /// <summary>
+    /// Rejects canceled dispatch without consulting or changing a caller-owned marker or identity setting.
+    /// </summary>
+    [Fact]
+    public async Task AlreadyCanceledDispatch_DoesNotBootstrapOrRecoverCallerState()
+    {
+        // Arrange
+        using var session = new RecoveryConnection
+        {
+            InheritedIdentityInsert = true,
+            IdentityOwner = "foreign ownership marker",
+        };
+
+        var options = new DbContextOptionsBuilder().UseSqlServer(session).Options;
+        using var context = new DbContext(options);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var dependencies = context.GetService<MigrationsSqlGeneratorDependencies>();
+        var original = new FailingCommand(dependencies, new InvalidOperationException("must not dispatch"));
+        var command = new SqlServerSafeMigrationIdentityInsertCommand(original,
+            "SET IDENTITY_INSERT [dbo].[roles] OFF;", dependencies, CreateAnalyzer(context));
+
+        var connection = context.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalConnection>();
+
+        // Act
+        var observed = await Record.ExceptionAsync(() => command.ExecuteNonQueryAsync(
+            connection, cancellationToken: cancellation.Token));
+
+        // Assert
+        Assert.IsAssignableFrom<OperationCanceledException>(observed);
+        Assert.Equal(0, original.ExecutionCount);
+        Assert.Empty(session.Commands);
+        Assert.True(session.InheritedIdentityInsert);
+        Assert.Equal("foreign ownership marker", session.IdentityOwner);
+        Assert.Equal(0, session.IdentityOffCount);
+    }
+
+    /// <summary>
+    /// Does not attempt recovery when bootstrap command creation failed before any SQL could be issued.
+    /// </summary>
+    /// <param name="asynchronous">Whether the asynchronous command boundary is exercised.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task BootstrapCreationFailure_DoesNotRecoverOrQuarantineCaller(bool asynchronous)
+    {
+        // Arrange
+        using var session = new RecoveryConnection
+        {
+            InheritedIdentityInsert = true,
+            IdentityOwner = "caller-owned marker",
+            FailBootstrapCommandCreation = true,
+        };
+
+        var options = new DbContextOptionsBuilder().UseSqlServer(session).Options;
+        using var context = new DbContext(options);
+        var dependencies = context.GetService<MigrationsSqlGeneratorDependencies>();
+        var analyzer = CreateAnalyzer(context);
+        var original = new FailingCommand(dependencies, new InvalidOperationException("must not dispatch"));
+        var command = new SqlServerSafeMigrationIdentityInsertCommand(original,
+            "SET IDENTITY_INSERT [dbo].[roles] OFF;", dependencies, analyzer);
+
+        var connection = context.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalConnection>();
+
+        // Act
+        var observed = asynchronous
+            ? await Record.ExceptionAsync(() => command.ExecuteNonQueryAsync(connection))
+            : Record.Exception(() => command.ExecuteNonQuery(connection));
+
+        // Assert
+        Assert.IsType<InvalidOperationException>(observed);
+        Assert.Equal(1, session.CreateCommandCount);
+        Assert.Equal(0, original.ExecutionCount);
+        Assert.Empty(session.Commands);
+        Assert.True(session.InheritedIdentityInsert);
+        Assert.Equal("caller-owned marker", session.IdentityOwner);
+        Assert.Equal(ConnectionState.Open, session.State);
+        Assert.Null(Record.Exception(() => analyzer.ValidateContext(context)));
+    }
+
+    /// <summary>Does not issue cleanup SQL after an open failure that could not have created any owned scope.</summary>
+    /// <param name="asynchronous">Whether the asynchronous command boundary is exercised.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task InitialOpenFailure_DoesNotAttemptIdentityRecovery(bool asynchronous)
+    {
+        // Arrange
+        using var session = new RecoveryConnection { FailOpen = true };
+        session.Close();
+        var options = new DbContextOptionsBuilder().UseSqlServer(session).Options;
+        using var context = new DbContext(options);
+        var dependencies = context.GetService<MigrationsSqlGeneratorDependencies>();
+        var analyzer = CreateAnalyzer(context);
+        var original = new FailingCommand(dependencies, new InvalidOperationException("must not dispatch"));
+        var command = new SqlServerSafeMigrationIdentityInsertCommand(original,
+            "SET IDENTITY_INSERT [dbo].[roles] OFF;", dependencies, analyzer);
+
+        var connection = context.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalConnection>();
+
+        // Act
+        var observed = asynchronous
+            ? await Record.ExceptionAsync(() => command.ExecuteNonQueryAsync(connection))
+            : Record.Exception(() => command.ExecuteNonQuery(connection));
+
+        // Assert
+        Assert.IsType<InvalidOperationException>(observed);
+        Assert.Equal(0, original.ExecutionCount);
+        Assert.Equal(0, session.CreateCommandCount);
+        Assert.Empty(session.Commands);
+        Assert.Equal(ConnectionState.Closed, session.State);
+        Assert.Null(Record.Exception(() => analyzer.ValidateContext(context)));
+    }
+
+    /// <summary>
+    /// Quarantines an uncertain ready marker without closing caller identity state when ON was impossible.
+    /// </summary>
+    /// <param name="asynchronous">Whether the asynchronous command boundary is exercised.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task BootstrapAttentionAndObservationFailure_PreservesCallerSessionWithoutOff(bool asynchronous)
+    {
+        // Arrange
+        using var cancellation = new CancellationTokenSource();
+        var failure = new OperationCanceledException(cancellation.Token);
+        using var session = new RecoveryConnection
+        {
+            InheritedIdentityInsert = true,
+            BootstrapFailure = failure,
+            OnBootstrap = cancellation.Cancel,
+            FailRecoveryObservation = true,
+        };
+
+        var options = new DbContextOptionsBuilder().UseSqlServer(session).Options;
+        using var context = new DbContext(options);
+        var dependencies = context.GetService<MigrationsSqlGeneratorDependencies>();
+        var analyzer = CreateAnalyzer(context);
+        var original = new FailingCommand(dependencies, new InvalidOperationException("must not dispatch"));
+        var command = new SqlServerSafeMigrationIdentityInsertCommand(original,
+            "SET IDENTITY_INSERT [dbo].[roles] OFF;", dependencies, analyzer);
+
+        var connection = context.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalConnection>();
+
+        // Act
+        var observed = asynchronous
+            ? await Record.ExceptionAsync(() => command.ExecuteNonQueryAsync(connection,
+                cancellationToken: cancellation.Token))
+            : Record.Exception(() => command.ExecuteNonQuery(connection));
+
+        // Assert
+        Assert.Same(failure, observed);
+        Assert.Equal(0, original.ExecutionCount);
+        Assert.Equal(0, session.IdentityOffCount);
+        Assert.True(session.InheritedIdentityInsert);
+        Assert.Equal(ConnectionState.Open, session.State);
+        Assert.Equal(0, session.CloseCount);
+        Assert.Equal(0, session.DisposeCount);
+        Assert.Equal("session_quarantined",
+            failure.Data[SqlServerSafeMigrationIdentityInsertCommand.RecoveryFailureDataKey]);
+        Assert.IsType<InvalidOperationException>(Record.Exception(() => analyzer.ValidateContext(context)));
+        Assert.DoesNotContain(Assert.Single(session.Commands,
+            static command => command.Sql.StartsWith("DECLARE", StringComparison.Ordinal)).Sql,
+            "SET IDENTITY_INSERT", StringComparison.Ordinal);
+    }
+
+    /// <summary>Cancels between successful bootstrap and original dispatch using ready-only recovery.</summary>
+    [Fact]
+    public async Task CancellationAfterBootstrapBeforeDispatch_ClearsOnlyReadyMarker()
+    {
+        // Arrange
+        using var cancellation = new CancellationTokenSource();
+        using var session = new RecoveryConnection
+        {
+            InheritedIdentityInsert = true,
+            OnBootstrap = cancellation.Cancel,
+        };
+
+        var options = new DbContextOptionsBuilder().UseSqlServer(session).Options;
+        using var context = new DbContext(options);
+        var dependencies = context.GetService<MigrationsSqlGeneratorDependencies>();
+        var analyzer = CreateAnalyzer(context);
+        var original = new FailingCommand(dependencies, new InvalidOperationException("must not dispatch"));
+        var command = new SqlServerSafeMigrationIdentityInsertCommand(original,
+            "SET IDENTITY_INSERT [dbo].[roles] OFF;", dependencies, analyzer);
+
+        var connection = context.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalConnection>();
+
+        // Act
+        var observed = await Record.ExceptionAsync(() => command.ExecuteNonQueryAsync(connection,
+            cancellationToken: cancellation.Token));
+
+        // Assert
+        Assert.IsAssignableFrom<OperationCanceledException>(observed);
+        Assert.Equal(0, original.ExecutionCount);
+        Assert.Equal(0, session.IdentityOffCount);
+        Assert.True(session.InheritedIdentityInsert);
+        Assert.Null(session.IdentityOwner);
+        Assert.Equal(ConnectionState.Open, session.State);
+        Assert.Null(Record.Exception(() => analyzer.ValidateContext(context)));
+    }
+
+    /// <summary>
+    /// Leaves a foreign or stale scope untouched rather than authorizing cleanup using its marker.
+    /// </summary>
+    /// <param name="asynchronous">Whether the asynchronous command boundary is exercised.</param>
+    /// <param name="marker">The caller-owned marker, including protocol-shaped stale invocation tokens.</param>
+    /// <param name="phase">The stale caller-owned acquisition phase.</param>
+    [Theory]
+    [InlineData(false, "foreign ownership marker", 0)]
+    [InlineData(true, "foreign ownership marker", 0)]
+    [InlineData(false, "0123456789abcdef0123456789abcdef", 0)]
+    [InlineData(true, "0123456789abcdef0123456789abcdef", 0)]
+    [InlineData(false, "0123456789abcdef0123456789abcdef", 1)]
+    [InlineData(true, "0123456789abcdef0123456789abcdef", 2)]
+    public async Task ExistingOwnershipMarker_RejectsWithoutDisablingOrClearingCallerState(
+        bool asynchronous,
+        string marker,
+        int phase
+    )
+    {
+        // Arrange
+        using var session = new RecoveryConnection
+        {
+            InheritedIdentityInsert = true,
+            IdentityOwner = marker,
+            IdentityPhase = phase,
+        };
+
+        var options = new DbContextOptionsBuilder().UseSqlServer(session).Options;
+        using var context = new DbContext(options);
+        var dependencies = context.GetService<MigrationsSqlGeneratorDependencies>();
+        var analyzer = CreateAnalyzer(context);
+        var original = new FailingCommand(dependencies, new InvalidOperationException("must not dispatch"));
+        var command = new SqlServerSafeMigrationIdentityInsertCommand(original,
+            "SET IDENTITY_INSERT [dbo].[roles] OFF;", dependencies, analyzer);
+
+        var connection = context.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalConnection>();
+
+        // Act
+        var observed = asynchronous
+            ? await Record.ExceptionAsync(() => command.ExecuteNonQueryAsync(connection))
+            : Record.Exception(() => command.ExecuteNonQuery(connection));
+
+        // Assert
+        Assert.IsType<InvalidOperationException>(observed);
+        Assert.Equal(0, original.ExecutionCount);
+        Assert.Equal(marker, session.IdentityOwner);
+        Assert.Equal(phase, session.IdentityPhase);
+        Assert.True(session.InheritedIdentityInsert);
+        Assert.Equal(0, session.IdentityOffCount);
+        Assert.Null(Record.Exception(() => analyzer.ValidateContext(context)));
+        Assert.Equal(ConnectionState.Open, session.State);
+    }
+
+    /// <summary>
+    /// Quarantines the attention gap because an attempted ON is not proof of acquired identity state.
+    /// </summary>
+    /// <param name="asynchronous">Whether the asynchronous command boundary is exercised.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AttentionBetweenOnAndConfirmation_QuarantinesWithoutBlindOff(bool asynchronous)
+    {
+        // Arrange
+        using var session = new RecoveryConnection { InheritedIdentityInsert = true };
+        var options = new DbContextOptionsBuilder().UseSqlServer(session).Options;
+        using var context = new DbContext(options);
+        var dependencies = context.GetService<MigrationsSqlGeneratorDependencies>();
+        var analyzer = CreateAnalyzer(context);
+        var failure = new OperationCanceledException("attention interrupted acquisition confirmation");
+        var command = new SqlServerSafeMigrationIdentityInsertCommand(
+            new FailingCommand(dependencies, failure, acquisitionUncertain: true),
+            "SET IDENTITY_INSERT [dbo].[roles] OFF;", dependencies, analyzer);
+
+        var connection = context.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalConnection>();
+
+        // Act
+        var observed = asynchronous
+            ? await Record.ExceptionAsync(() => command.ExecuteNonQueryAsync(connection))
+            : Record.Exception(() => command.ExecuteNonQuery(connection));
+
+        // Assert
+        Assert.Same(failure, observed);
+        Assert.Equal(0, session.IdentityOffCount);
+        Assert.Equal(ConnectionState.Closed, session.State);
+        Assert.Equal("session_closed",
+            failure.Data[SqlServerSafeMigrationIdentityInsertCommand.RecoveryFailureDataKey]);
+        Assert.IsType<InvalidOperationException>(Record.Exception(() => analyzer.ValidateContext(context)));
+    }
+
+    /// <summary>
     /// Recovers a failed migration on the original open connection and preserves its exception.
     /// </summary>
     [Theory]
@@ -46,10 +373,13 @@ public sealed class SqlServerIdentityInsertCommandTests
         Assert.Null(quarantine);
         Assert.Equal(2, originalCommand.ExecutionCount);
         Assert.Equal(ConnectionState.Open, session.State);
-        Assert.Equal(2, session.Commands.Count);
-        Assert.All(session.Commands, cleanup =>
+        Assert.Equal(4, session.Commands.Count);
+        Assert.Equal(2, session.IdentityOffCount);
+        Assert.All(session.Commands.Where(static command =>
+            command.Sql.StartsWith("DECLARE", StringComparison.Ordinal)), cleanup =>
         {
-            Assert.Equal("SET IDENTITY_INSERT [dbo].[roles] OFF;", cleanup.Sql);
+            Assert.Contains("SET IDENTITY_INSERT [dbo].[roles] OFF;", cleanup.Sql, StringComparison.Ordinal);
+            Assert.Contains("SUBSTRING(@doka_identity_scope, 2, 16)", cleanup.Sql, StringComparison.Ordinal);
             Assert.Equal(30, cleanup.Timeout);
         });
 
@@ -69,12 +399,11 @@ public sealed class SqlServerIdentityInsertCommandTests
         using var transaction = session.BeginTransaction();
         using var contextTransaction = context.Database.UseTransaction(transaction);
         using var cancellation = new CancellationTokenSource();
-        cancellation.Cancel();
         var dependencies = context.GetService<MigrationsSqlGeneratorDependencies>();
         var analyzer = CreateAnalyzer(context);
         var failure = new OperationCanceledException(cancellation.Token);
         var command = new SqlServerSafeMigrationIdentityInsertCommand(
-            new FailingCommand(dependencies, failure),
+            new FailingCommand(dependencies, failure, cancelOnExecute: cancellation.Cancel),
             "SET IDENTITY_INSERT [dbo].[roles] OFF;",
             dependencies,
             analyzer);
@@ -88,7 +417,8 @@ public sealed class SqlServerIdentityInsertCommandTests
 
         // Assert
         Assert.Same(failure, exception);
-        var cleanup = Assert.Single(session.Commands);
+        var cleanup = Assert.Single(session.Commands,
+            static command => command.Sql.StartsWith("DECLARE", StringComparison.Ordinal));
         Assert.True(cleanup.Token.CanBeCanceled);
         Assert.False(cleanup.Token.IsCancellationRequested);
         Assert.NotEqual(cancellation.Token, cleanup.Token);
@@ -133,7 +463,7 @@ public sealed class SqlServerIdentityInsertCommandTests
 
         // Assert
         Assert.Same(failure, exception);
-        Assert.Single(session.Commands);
+        Assert.Equal(2, session.Commands.Count);
         Assert.Equal(ConnectionState.Closed, session.State);
         Assert.Equal("session_closed",
             failure.Data[SqlServerSafeMigrationIdentityInsertCommand.RecoveryFailureDataKey]);
@@ -169,7 +499,6 @@ public sealed class SqlServerIdentityInsertCommandTests
         using var transaction = session.BeginTransaction();
         using var contextTransaction = context.Database.UseTransaction(transaction);
         using var cancellation = new CancellationTokenSource();
-        cancellation.Cancel();
         var dependencies = context.GetService<MigrationsSqlGeneratorDependencies>();
         var analyzer = CreateAnalyzer(context);
         var quarantineAtClose = false;
@@ -187,7 +516,7 @@ public sealed class SqlServerIdentityInsertCommandTests
         };
 
         var failure = new OperationCanceledException(cancellation.Token);
-        var originalCommand = new FailingCommand(dependencies, failure);
+        var originalCommand = new FailingCommand(dependencies, failure, cancelOnExecute: cancellation.Cancel);
         var command = new SqlServerSafeMigrationIdentityInsertCommand(
             originalCommand,
             "SET IDENTITY_INSERT [dbo].[roles] OFF;",
@@ -233,7 +562,8 @@ public sealed class SqlServerIdentityInsertCommandTests
             Assert.Contains("requires a new context", Assert.IsType<InvalidOperationException>(rejected).Message,
                 StringComparison.Ordinal));
 
-        var cleanup = Assert.Single(session.Commands);
+        var cleanup = Assert.Single(session.Commands,
+            static command => command.Sql.StartsWith("DECLARE", StringComparison.Ordinal));
 
         Assert.Same(transaction, cleanup.Transaction);
         Assert.Equal(30, cleanup.Timeout);
@@ -248,10 +578,10 @@ public sealed class SqlServerIdentityInsertCommandTests
     }
 
     /// <summary>
-    /// Does not open a replacement session to clean up a connection that already closed.
+    /// Balances the EF-owned open when a command starts with a closed connection.
     /// </summary>
     [Fact]
-    public async Task ClosedConnection_DoesNotOpenANewSessionForRecovery()
+    public async Task ClosedConnection_BalancesCommandOwnedOpenAfterFailure()
     {
         // Arrange
         using var session = new RecoveryConnection();
@@ -274,9 +604,9 @@ public sealed class SqlServerIdentityInsertCommandTests
 
         // Assert
         Assert.Same(failure, exception);
-        Assert.Empty(session.Commands);
+        Assert.Equal(2, session.Commands.Count);
         Assert.Equal(ConnectionState.Closed, session.State);
-        Assert.Equal(0, session.OpenCount);
+        Assert.Equal(1, session.OpenCount);
     }
 
     /// <summary>
@@ -324,7 +654,10 @@ public sealed class SqlServerIdentityInsertCommandTests
 
         public FailingCommand(
             MigrationsSqlGeneratorDependencies dependencies,
-            Exception failure
+            Exception failure,
+            bool acquireIdentity = true,
+            bool acquisitionUncertain = false,
+            Action? cancelOnExecute = null
         )
             : base(
                 dependencies.CommandBuilderFactory.Create().Append("SELECT 1;").Build(),
@@ -332,7 +665,14 @@ public sealed class SqlServerIdentityInsertCommandTests
                 dependencies.Logger)
         {
             _failure = failure;
+            _acquireIdentity = acquireIdentity;
+            _acquisitionUncertain = acquisitionUncertain;
+            _cancelOnExecute = cancelOnExecute;
         }
+
+        private readonly bool _acquireIdentity;
+        private readonly bool _acquisitionUncertain;
+        private readonly Action? _cancelOnExecute;
 
         public int ExecutionCount { get; private set; }
 
@@ -342,6 +682,7 @@ public sealed class SqlServerIdentityInsertCommandTests
         )
         {
             ExecutionCount++;
+            RecordAcquisition(connection);
 
             throw _failure;
         }
@@ -353,8 +694,20 @@ public sealed class SqlServerIdentityInsertCommandTests
         )
         {
             ExecutionCount++;
+            RecordAcquisition(connection);
 
             return Task.FromException<int>(_failure);
+        }
+
+        private void RecordAcquisition(Microsoft.EntityFrameworkCore.Storage.IRelationalConnection connection)
+        {
+            if (_acquireIdentity && connection.DbConnection is RecoveryConnection session)
+            {
+                session.IdentityPhase = _acquisitionUncertain ? 1 : 2;
+                session.InheritedIdentityInsert = true;
+            }
+
+            _cancelOnExecute?.Invoke();
         }
     }
 
@@ -415,6 +768,26 @@ public sealed class SqlServerIdentityInsertCommandTests
 
         public bool FailCleanup { get; init; }
 
+        public bool InheritedIdentityInsert { get; set; }
+
+        public string? IdentityOwner { get; set; }
+
+        public int IdentityPhase { get; set; }
+
+        public int IdentityOffCount { get; set; }
+
+        public bool FailBootstrapCommandCreation { get; init; }
+
+        public bool FailOpen { get; init; }
+
+        public Exception? BootstrapFailure { get; init; }
+
+        public Action? OnBootstrap { get; init; }
+
+        public bool FailRecoveryObservation { get; init; }
+
+        public int CreateCommandCount { get; private set; }
+
         public int CloseFailuresRemaining { get; set; }
 
         public int DisposeFailuresRemaining { get; set; }
@@ -434,6 +807,11 @@ public sealed class SqlServerIdentityInsertCommandTests
         public override void Open()
         {
             OpenCount++;
+            if (FailOpen)
+            {
+                throw new InvalidOperationException("injected connection open failure");
+            }
+
             _state = ConnectionState.Open;
         }
 
@@ -489,7 +867,16 @@ public sealed class SqlServerIdentityInsertCommandTests
         protected override System.Data.Common.DbTransaction BeginDbTransaction(IsolationLevel isolationLevel)
             => new RecoveryTransaction(this, isolationLevel);
 
-        protected override System.Data.Common.DbCommand CreateDbCommand() => new RecoveryCommand(this);
+        protected override System.Data.Common.DbCommand CreateDbCommand()
+        {
+            CreateCommandCount++;
+            if (FailBootstrapCommandCreation && CreateCommandCount == 1)
+            {
+                throw new InvalidOperationException("bootstrap command could not be created");
+            }
+
+            return new RecoveryCommand(this);
+        }
     }
 
     private sealed class RecoveryTransaction : System.Data.Common.DbTransaction
@@ -586,10 +973,54 @@ public sealed class SqlServerIdentityInsertCommandTests
             _connection.Commands.Add(new CleanupTrace(CommandText, CommandTimeout, DbTransaction, cancellationToken));
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (_connection.FailCleanup)
+            if (CommandText.StartsWith("IF SESSION_CONTEXT", StringComparison.Ordinal))
+            {
+                if (_connection.IdentityOwner is not null)
+                {
+                    throw new InvalidOperationException("identity scope already belongs to another invocation");
+                }
+
+                var start = CommandText.IndexOf("@value = 0x00", StringComparison.Ordinal) + "@value = 0x00".Length;
+                _connection.IdentityOwner = CommandText.Substring(start, 32);
+                _connection.IdentityPhase = 0;
+                _connection.OnBootstrap?.Invoke();
+
+                if (_connection.BootstrapFailure is { } failure)
+                {
+                    throw failure;
+                }
+
+                return 0;
+            }
+
+            if (_connection.FailRecoveryObservation)
+            {
+                throw new InvalidOperationException("owned marker observation failed");
+            }
+
+            if (_connection.IdentityOwner is not { } owner
+                || !CommandText.Contains("<> 0x" + owner + " RETURN;", StringComparison.Ordinal))
+            {
+                return 0;
+            }
+
+            if (_connection.IdentityPhase == 1)
+            {
+                throw new InvalidOperationException("identity acquisition is unproven");
+            }
+
+            if (_connection.FailCleanup && _connection.IdentityPhase == 2)
             {
                 throw new InvalidOperationException("cleanup cannot recover this session");
             }
+
+            if (_connection.IdentityPhase == 2)
+            {
+                _connection.IdentityOffCount++;
+                _connection.InheritedIdentityInsert = false;
+            }
+
+            _connection.IdentityOwner = null;
 
             return 0;
         }

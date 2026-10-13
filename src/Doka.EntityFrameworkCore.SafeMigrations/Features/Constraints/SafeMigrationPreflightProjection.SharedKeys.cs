@@ -7,7 +7,8 @@ internal sealed partial class SafeMigrationPreflightProjection
 
     private void CaptureSharedUniqueKeys(
         ProjectedPrerequisites prerequisites,
-        ExpectedTableDefinition definition
+        ExpectedTableDefinition definition,
+        SafeMigrationProviderAnalysis? liveAnalysis = null
     )
     {
         if (!SharesUniqueConstraintAndIndexIdentity)
@@ -17,9 +18,8 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         foreach (var uniqueConstraint in definition.UniqueConstraints)
         {
-            prerequisites.Indexes.AcceptPhysical(
-                uniqueConstraint.Name,
-                AsUniqueIndex(uniqueConstraint));
+            CaptureTableMember(prerequisites.Indexes, uniqueConstraint.Name, AsUniqueIndex(uniqueConstraint),
+                prerequisites.NewlyCreated, SafeMigrationDatabaseObjectKind.UniqueConstraint, liveAnalysis);
         }
     }
 
@@ -119,7 +119,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         // WHY: MySQL exposes UNIQUE constraints as indexes. A physical index
         // drop invalidates that identity even when no earlier Ensure operation
         // populated the cross-kind projection cache.
-        prerequisites.UniqueConstraints.MarkPhysicalMissing(physicalName);
+        prerequisites.UniqueConstraints.MarkPhysicalMissing(physicalName, CurrentOperationOrdinal);
 
         return wasKnownCandidateKey;
     }
@@ -144,7 +144,7 @@ internal sealed partial class SafeMigrationPreflightProjection
     {
         if (SharesUniqueConstraintAndIndexIdentity)
         {
-            prerequisites.Indexes.MarkPhysicalMissing(physicalName);
+            prerequisites.Indexes.MarkPhysicalMissing(physicalName, CurrentOperationOrdinal);
         }
     }
 
@@ -172,8 +172,8 @@ internal sealed partial class SafeMigrationPreflightProjection
             return;
         }
 
-        prerequisites.UniqueConstraints.MarkPhysicalMissing(source);
-        prerequisites.UniqueConstraints.AcceptPhysical(target, renamedConstraint);
+        prerequisites.UniqueConstraints.MarkPhysicalMissing(source, CurrentOperationOrdinal);
+        prerequisites.UniqueConstraints.AcceptPhysical(target, renamedConstraint, createdByProjection: true);
     }
 
     private void RenameSharedUniqueIndex(

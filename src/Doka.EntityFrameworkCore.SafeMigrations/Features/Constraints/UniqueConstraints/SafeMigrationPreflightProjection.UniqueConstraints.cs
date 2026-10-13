@@ -77,16 +77,37 @@ internal sealed partial class SafeMigrationPreflightProjection
             return ValidateProjectedUniqueConstraint(intent, liveAnalysis, result);
         }
 
-        var analysis = AnalyzeDefinition(
-            table.UniqueConstraints,
-            intent.Definition.Name,
-            intent.Definition,
-            SafeMigrationDefinitionEquivalence.UniqueConstraint);
+        var analysis = table.UniqueConstraints.TryGetValue(intent.Definition.Name, out var exact)
+            ? Analysis(ProjectedUniqueConstraintSemantics(exact, intent.Definition)
+                ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Different)
+            : Analysis(SafeMigrationObservedState.Missing);
+
+        if (analysis.ObservedState == SafeMigrationObservedState.Missing)
+        {
+            // WHY: A requested alias does not create a second physical key.
+            // Only current, proven physical shapes can provide this semantic NoOp.
+            foreach (var constraint in table.UniqueConstraints.Values)
+            {
+                if (ProjectedUniqueConstraintSemantics(constraint, intent.Definition))
+                {
+                    analysis = Analysis(SafeMigrationObservedState.Matching);
+
+                    break;
+                }
+            }
+        }
 
         var tableAnalysis = InvalidateDataDependentMissing(table.Table, table.Schema, analysis);
 
         return ValidateProjectedUniqueConstraint(intent, liveAnalysis, tableAnalysis);
     }
+
+    /// <summary>Compares typed key members separately from exact owner/schema and physical symbol identity.</summary>
+    private bool ProjectedUniqueConstraintSemantics(
+        ExpectedUniqueConstraintDefinition left,
+        ExpectedUniqueConstraintDefinition right
+    ) => SafeMigrationDefinitionEquivalence.UniqueConstraintSemantics(left, right,
+        _objectIdentityNormalizer?.ColumnIdentifierComparer ?? StringComparer.Ordinal);
 
     private SafeMigrationProviderAnalysis Project(
         DropUniqueConstraintIntent intent,
@@ -98,7 +119,10 @@ internal sealed partial class SafeMigrationPreflightProjection
                 table.UniqueConstraints.ContainsKey(intent.Name)
                     ? SafeMigrationObservedState.Matching
                     : SafeMigrationObservedState.Missing)
-            : liveAnalysis;
+            : _prerequisites.TryGetValue(new TableKey(intent.Table, intent.Schema), out var prerequisites)
+                && prerequisites.UniqueConstraints.TryGetPhysicalState(intent.Name, out var present)
+                    ? Analysis(present ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Missing)
+                    : liveAnalysis;
 
     private void Observe(
         EnsureUniqueConstraintIntent intent,
@@ -144,7 +168,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         {
             var prerequisites = GetOrCreateProviderPrerequisites(intent.Table, intent.Schema);
 
-            prerequisites.UniqueConstraints.MarkPhysicalMissing(intent.Name);
+            prerequisites.UniqueConstraints.MarkPhysicalMissing(intent.Name, CurrentOperationOrdinal);
             DropSharedUniqueConstraint(prerequisites, intent.Name);
             _droppedPhysicalKeys.Add(new IndexKey(intent.Table, intent.Schema, intent.Name));
             _projectedCandidateKeyMutationTables.Add(new TableKey(intent.Table, intent.Schema));

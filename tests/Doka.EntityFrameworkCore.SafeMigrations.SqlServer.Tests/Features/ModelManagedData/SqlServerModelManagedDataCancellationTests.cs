@@ -65,8 +65,10 @@ public sealed partial class SqlServerModelManagedDataCancellationTests : SqlServ
         builder.EnsureModelManagedDataFromModel(
             "identity_roles", ["Id"], ["int"], ["Id", "Caption"], ["int", "nvarchar(80)"],
             new object?[,] { { 7, "Administrator" } });
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model);
-        var seedCommand = commands.OfType<SqlServerSafeMigrationIdentityInsertCommand>().Single();
+        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model,
+            executeMigrationCommand ? MigrationsSqlGenerationOptions.Default : MigrationsSqlGenerationOptions.Script);
+        var seedCommand = Assert.Single(commands, static command =>
+            command.CommandText.Contains("DECLARE @doka_identity_insert", StringComparison.Ordinal));
         var connection = context.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalConnection>();
 
         foreach (var command in commands.Where(command => !ReferenceEquals(command, seedCommand)))
@@ -163,7 +165,8 @@ public sealed partial class SqlServerModelManagedDataCancellationTests : SqlServ
         var seedCount = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.identity_roles;");
 
         // Assert
-        Assert.Single(commands.OfType<SqlServerSafeMigrationIdentityInsertCommand>());
+        Assert.Equal(executeMigrationCommand ? 1 : 0,
+            commands.OfType<SqlServerSafeMigrationIdentityInsertCommand>().Count());
         Assert.True(markerInitiallyAvailable);
         Assert.Null(readinessFailure);
         Assert.Null(cancelRequestFailure);

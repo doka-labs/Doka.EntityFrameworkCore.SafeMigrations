@@ -36,6 +36,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             + $"WHEN {exists} THEN 'different' "
             + $"WHEN {semanticAlias} THEN 'matching' "
             + $"WHEN {nameCollision} THEN 'different' "
+            + $"WHEN NOT ({ForeignKeySetNullIsRepresentable(definition)}) THEN 'different' "
             + $"WHEN {dataBlocked} THEN 'data_blocked' ELSE 'missing' END",
             satisfied) with
         {

@@ -144,17 +144,26 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         };
     }
 
+    /// <summary>
+    /// Renders the accepted managed-data mutation with the correct client or SQL-only ownership boundary.
+    /// </summary>
+    /// <param name="intent">The immutable validated row contract.</param>
+    /// <param name="scriptIdentityScope">
+    /// Whether existing identity markers must be rejected as foreign script state.
+    /// </param>
+    /// <returns>The provider mutation without weakening the surrounding state and policy guards.</returns>
     internal string BuildModelManagedDataMutationSql(
-        ModelManagedDataIntent intent
+        ModelManagedDataIntent intent,
+        bool scriptIdentityScope = false
     ) => intent switch
     {
-        EnsureModelManagedDataIntent value => BuildEnsureMutation(value),
+        EnsureModelManagedDataIntent value => BuildEnsureMutation(value, scriptIdentityScope),
         UpdateModelManagedDataIntent value => BuildUpdateMutation(value),
         DeleteModelManagedDataIntent value => BuildDeleteMutation(value),
         _ => throw new ArgumentOutOfRangeException(nameof(intent)),
     };
 
-    private string BuildEnsureMutation(EnsureModelManagedDataIntent intent)
+    private string BuildEnsureMutation(EnsureModelManagedDataIntent intent, bool scriptIdentityScope)
     {
         var relation = ExpectedRelation(intent, ("t", intent.Columns, intent.ColumnTypes, intent.Values));
         var table = QualifiedTable(intent.Table, intent.Schema);
@@ -175,11 +184,16 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // session-scoped. TRY/CATCH restores ordinary SQL errors; client
         // attentions require MigrationCommand cleanup or script-client recovery.
 
+        var clearOwnership = $"EXEC sys.sp_set_session_context "
+            + $"@key = N'{SqlServerSafeMigrationIdentityInsertScope.ContextKey}', @value = NULL;";
+
         return $"DECLARE @doka_identity_insert bit = CASE WHEN {hasExplicitIdentity} THEN 1 ELSE 0 END; "
-            + $"IF @doka_identity_insert = 1 SET IDENTITY_INSERT {table} ON; "
+            + SqlServerSafeMigrationIdentityInsertScope.BuildAcquisitionSql(table, scriptIdentityScope)
             + $"BEGIN TRY {mutation}; END TRY "
-            + $"BEGIN CATCH IF @doka_identity_insert = 1 SET IDENTITY_INSERT {table} OFF; THROW; END CATCH; "
-            + $"IF @doka_identity_insert = 1 SET IDENTITY_INSERT {table} OFF";
+            + $"BEGIN CATCH IF @doka_identity_insert = 1 BEGIN SET IDENTITY_INSERT {table} OFF; "
+            + clearOwnership + " END; THROW; END CATCH; "
+            + $"IF @doka_identity_insert = 1 BEGIN SET IDENTITY_INSERT {table} OFF; "
+            + clearOwnership + " END";
     }
 
     private string BuildUpdateMutation(UpdateModelManagedDataIntent intent)

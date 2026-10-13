@@ -34,17 +34,22 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         if (TryGet(intent.Definition.Table, intent.Definition.Schema, out var table))
         {
-            var analysis = AnalyzeDefinition(
-                table.Indexes,
-                intent.Definition.Name,
-                intent.Definition,
-                SafeMigrationDefinitionEquivalence.Index);
+            var analysis = table.Indexes.TryGetValue(intent.Definition.Name, out var exact)
+                ? Analysis(ProjectedIndexSemantics(exact, intent.Definition)
+                    ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Different)
+                : Analysis(SafeMigrationObservedState.Missing);
 
-            if (analysis.ObservedState == SafeMigrationObservedState.Missing
-                && table.Indexes.Values.Any(
-                    index => SafeMigrationDefinitionEquivalence.IndexSemantics(index, intent.Definition)))
+            if (analysis.ObservedState == SafeMigrationObservedState.Missing)
             {
-                analysis = Analysis(SafeMigrationObservedState.Matching);
+                foreach (var index in table.Indexes.Values)
+                {
+                    if (ProjectedIndexSemantics(index, intent.Definition))
+                    {
+                        analysis = Analysis(SafeMigrationObservedState.Matching);
+
+                        break;
+                    }
+                }
             }
 
             if (analysis.ObservedState == SafeMigrationObservedState.Missing
@@ -137,21 +142,103 @@ internal sealed partial class SafeMigrationPreflightProjection
                 table.Indexes.ContainsKey(intent.Name)
                     ? SafeMigrationObservedState.Matching
                     : SafeMigrationObservedState.Missing)
-            : liveAnalysis;
+            : _prerequisites.TryGetValue(new TableKey(intent.Table, intent.Schema), out var prerequisites)
+                && prerequisites.Indexes.TryGetPhysicalState(intent.Name, out var present)
+                    ? Analysis(present ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Missing)
+                    : liveAnalysis;
 
     private SafeMigrationProviderAnalysis Project(
         RenameIndexIntent intent,
         SafeMigrationProviderAnalysis liveAnalysis
-    ) => IsProjectedTableStructureUnknown(intent.Table, intent.Schema)
-        ? StructureStateUnknown()
-        : TryGet(intent.Table, intent.Schema, out var table)
-            ? Analysis(
-                !table.Indexes.ContainsKey(intent.Name)
-                    ? SafeMigrationObservedState.Missing
-                    : table.Indexes.ContainsKey(intent.NewName)
-                        ? SafeMigrationObservedState.Different
-                        : SafeMigrationObservedState.Matching)
-            : liveAnalysis;
+    )
+    {
+        if (IsProjectedTableStructureUnknown(intent.Table, intent.Schema))
+        {
+            return StructureStateUnknown();
+        }
+
+        // WHY: Semantic aliases are not additional physical rename endpoints.
+        // Sparse physical states and tombstones take precedence over the
+        // immutable catalog, without inferring absence from an untracked name.
+        bool? sourceExists = null;
+        bool? targetExists = null;
+        var sourceCreated = false;
+        var schemaScoped = _objectIdentityNormalizer?.IndexUsesSchemaScopedIdentity == true;
+
+        if (TryGet(intent.Table, intent.Schema, out var table))
+        {
+            sourceExists = table.Indexes.ContainsKey(intent.Name);
+            targetExists = table.Indexes.ContainsKey(intent.NewName) ? true : schemaScoped ? null : false;
+            sourceCreated = sourceExists == true;
+        }
+        else if (_prerequisites.TryGetValue(new TableKey(intent.Table, intent.Schema), out var prerequisites))
+        {
+            sourceExists = prerequisites.Indexes.TryGetPhysicalState(intent.Name, out var sourcePresent)
+                ? sourcePresent
+                : null;
+            targetExists = prerequisites.Indexes.TryGetPhysicalState(intent.NewName, out var targetPresent)
+                ? targetPresent
+                : null;
+            sourceCreated = prerequisites.Indexes.WasCreatedByProjection(intent.Name);
+        }
+
+        if (sourceExists == false)
+        {
+            return Analysis(SafeMigrationObservedState.Missing);
+        }
+
+        if (sourceExists is null && liveAnalysis.ObservedState == SafeMigrationObservedState.Missing)
+        {
+            return liveAnalysis;
+        }
+
+        if (liveAnalysis.RenameTargetSupported == false)
+        {
+            // WHY: Creating a new valid source cannot make a reserved or
+            // otherwise unsupported authored destination contract valid.
+
+            return Analysis(SafeMigrationObservedState.Different);
+        }
+
+        if (liveAnalysis.ObservedState == SafeMigrationObservedState.Unsupported)
+        {
+            return liveAnalysis;
+        }
+
+        if (!sourceCreated && liveAnalysis.RenameSourceSupported == false)
+        {
+            return liveAnalysis.ObservedState == SafeMigrationObservedState.Different
+                ? liveAnalysis
+                : Analysis(SafeMigrationObservedState.Different);
+        }
+
+        if (!sourceCreated && liveAnalysis.ObservedState == SafeMigrationObservedState.Different
+            && liveAnalysis.RenameSourceSupported != true)
+        {
+            // WHY: Different can mean wrong source owner/kind, not only an
+            // occupied destination. Dropping a target proves no source eligibility.
+
+            return liveAnalysis;
+        }
+
+        if (schemaScoped)
+        {
+            targetExists = ProjectSchemaScopedIndexDestination(intent);
+        }
+
+        if (sourceCreated && liveAnalysis.ObservedState == SafeMigrationObservedState.Different
+            && liveAnalysis.RenameSourceSupported == false
+            && liveAnalysis.RenameTargetExists == false && targetExists != true)
+        {
+            // WHY: An accepted ordinary creation replaces an old wrong-kind
+            // source. Independent destination absence plus current namespace
+            // checks prove this new lifetime is eligible, not the old object.
+
+            return Analysis(SafeMigrationObservedState.Matching);
+        }
+
+        return AnalyzeSparseMemberRename(sourceExists, targetExists, liveAnalysis);
+    }
 
     private void Observe(
         EnsureIndexIntent intent,
@@ -195,7 +282,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         {
             var prerequisites = GetOrCreateProviderPrerequisites(intent.Table, intent.Schema);
 
-            prerequisites.Indexes.MarkPhysicalMissing(intent.Name);
+            prerequisites.Indexes.MarkPhysicalMissing(intent.Name, CurrentOperationOrdinal);
             if (SharesUniqueConstraintAndIndexIdentity)
             {
                 _ = DropSharedUniqueIndex(prerequisites, intent.Name);
@@ -236,7 +323,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         {
             var renamed = CopyIndex(index, intent.NewName);
 
-            prerequisites.Indexes.AcceptPhysical(intent.NewName, renamed);
+            prerequisites.Indexes.AcceptPhysical(intent.NewName, renamed, createdByProjection: true);
             RenameSharedUniqueIndex(prerequisites, intent.Name, intent.NewName, renamed);
             definitionResolved = true;
         }
@@ -268,7 +355,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         // immutable pre-batch catalog observation.
         GetOrCreateProviderPrerequisites(intent.Table, intent.Schema)
             .Indexes
-            .MarkPhysicalMissing(intent.Name);
+            .MarkPhysicalMissing(intent.Name, CurrentOperationOrdinal);
         SetProjectedTableStructureUnknown(intent.Table, intent.Schema);
     }
 
@@ -432,12 +519,25 @@ internal sealed partial class SafeMigrationPreflightProjection
     {
         var tableKey = new TableKey(definition.Table, definition.Schema);
 
-        return _tables.TryGetValue(tableKey, out var table)
-                && table.Indexes.Values.Any(
-                    index => SafeMigrationDefinitionEquivalence.IndexSemantics(index, definition))
-            || _prerequisites.TryGetValue(tableKey, out var prerequisites)
-                && prerequisites.Indexes.ContainsSemantically(definition);
+        if (_tables.TryGetValue(tableKey, out var table))
+        {
+            foreach (var index in table.Indexes.Values)
+            {
+                if (ProjectedIndexSemantics(index, definition))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return _prerequisites.TryGetValue(tableKey, out var prerequisites)
+            && prerequisites.Indexes.ContainsSemantically(definition);
     }
+
+    /// <summary>Uses typed column identity after the owner dictionary resolves physical index identity.</summary>
+    private bool ProjectedIndexSemantics(ExpectedIndexDefinition left, ExpectedIndexDefinition right) =>
+        SafeMigrationDefinitionEquivalence.IndexSemantics(left, right,
+            _objectIdentityNormalizer?.ColumnIdentifierComparer ?? StringComparer.Ordinal);
 
     private static bool PreservesNullForExistingRows(
         SafeMigrationDefaultValue defaultValue

@@ -51,6 +51,13 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var eligibilityEnd = command.CommandText.IndexOf(eligibilitySuffix, eligibilityStart, StringComparison.Ordinal);
         var eligibilitySql = command.CommandText[eligibilityStart..eligibilityEnd];
 
+        const string statusPrefix = "SET @doka_sm_add_status = CASE WHEN @doka_sm_state IS NULL THEN (";
+        var statusStart = command.CommandText.IndexOf(statusPrefix, StringComparison.Ordinal);
+        Assert.True(statusStart >= 0);
+        var statusEnd = command.CommandText.IndexOf(';', statusStart);
+        Assert.True(statusEnd >= statusStart);
+        var statusSql = command.CommandText[statusStart..(statusEnd + 1)];
+
         // WHY: Expand only the cache references in this generic fixture to retain
         // the former classification/repair double-read behavior. Both paths
         // use the same catalog SQL and unchanged table, excluding DDL rewrite I/O.
@@ -61,9 +68,19 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var connection = context.Database.GetDbConnection();
 
         // Act
+        // WHY: Both proof paths consume the protocol's real catalog status.
+        // Resolve it outside each measured window rather than inventing an
+        // ordinary status or charging catalog setup to only the shared path.
+        await ExecuteNullProofMeasurementSqlAsync(connection, "SET @doka_sm_state = NULL;" + statusSql);
+        var baselineStatus = await ContextScalarIntAsync(context, "SELECT @doka_sm_add_status = 'ordinary';");
         var before = await ReadNullProofHandlerReadsAsync(connection);
         await ExecuteNullProofMeasurementSqlAsync(connection, baselineSql);
         var baselineReads = await ReadNullProofHandlerReadsAsync(connection) - before;
+        var baselineAccepted = await ContextScalarIntAsync(context,
+            "SELECT @doka_sm_state = 'different' AND @doka_sm_repair_ok;");
+
+        await ExecuteNullProofMeasurementSqlAsync(connection, "SET @doka_sm_state = NULL;" + statusSql);
+        var sharedStatus = await ContextScalarIntAsync(context, "SELECT @doka_sm_add_status = 'ordinary';");
         before = await ReadNullProofHandlerReadsAsync(connection);
         await ExecuteNullProofMeasurementSqlAsync(connection,
             "SET @doka_sm_column_repair_eligible = (" + eligibilitySql + ");");
@@ -75,6 +92,9 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             $"NULL-proof row-read evidence: rows={rowCount}, baseline={baselineReads}, shared={sharedReads}");
 
         // Assert
+        Assert.Equal(1, baselineStatus);
+        Assert.Equal(1, sharedStatus);
+        Assert.Equal(1, baselineAccepted);
         Assert.True(baselineReads >= 2L * rowCount);
         Assert.True(sharedReads >= rowCount);
         // WHY: A few fewer catalog reads must not hide a second full data scan.
@@ -83,6 +103,11 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(1, await ContextScalarIntAsync(context,
             "SELECT @doka_sm_state = 'different' AND @doka_sm_repair_ok AND NOT @doka_sm_nullability_blocked;"));
         Assert.Equal(rowCount, await ContextScalarIntAsync(context, "SELECT COUNT(*) FROM `null_read_rows`;"));
+        Assert.Equal(rowCount, await ContextScalarIntAsync(context,
+            "SELECT COUNT(*) FROM `null_read_rows` WHERE `Value` = 7;"));
+        Assert.Equal(1, await ContextScalarIntAsync(context,
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
+            + "AND TABLE_NAME = 'null_read_rows' AND COLUMN_NAME = 'Value' AND IS_NULLABLE = 'YES';"));
     }
 
     /// <summary>Reads the selected session's full-scan counter without retaining SQL or connection details.</summary>

@@ -139,6 +139,7 @@ internal sealed partial class SafeMigrationPreflightProjection
 
     private void Observe(
         EnsureTableIntent intent,
+        SafeMigrationProviderAnalysis liveAnalysis,
         SafeMigrationProviderAnalysis analysis,
         SafeMigrationDecision decision
     )
@@ -166,7 +167,8 @@ internal sealed partial class SafeMigrationPreflightProjection
             var table = new ProjectedTable(
                 intent.Definition,
                 dataMutationVersion: _providerDataMutationVersion,
-                objectIdentityNormalizer: _objectIdentityNormalizer)
+                objectIdentityNormalizer: _objectIdentityNormalizer,
+                sharesUniqueIndexIdentity: SharesUniqueConstraintAndIndexIdentity)
             {
                 CanReuseCreationCharacterSet = !_creationCharacterSetChanged,
             };
@@ -177,7 +179,8 @@ internal sealed partial class SafeMigrationPreflightProjection
             var prerequisites = new ProjectedPrerequisites(
                 newlyCreated: true,
                 dataMutationVersion: _providerDataMutationVersion,
-                objectIdentityNormalizer: _objectIdentityNormalizer);
+                objectIdentityNormalizer: _objectIdentityNormalizer,
+                sharesUniqueIndexIdentity: SharesUniqueConstraintAndIndexIdentity);
 
             foreach (var column in intent.Definition.Columns)
             {
@@ -186,7 +189,7 @@ internal sealed partial class SafeMigrationPreflightProjection
                     addedToExistingTable: false);
             }
 
-            CaptureConstraintPrerequisites(prerequisites, intent.Definition);
+            CaptureConstraintPrerequisites(prerequisites, intent.Definition, liveAnalysis);
 
             _prerequisites[key] = prerequisites;
             return;
@@ -203,10 +206,9 @@ internal sealed partial class SafeMigrationPreflightProjection
                 SetProjectedColumnDefinition(intent.Definition.Table, intent.Definition.Schema, column);
             }
 
-            var prerequisites = new ProjectedPrerequisites(
-                newlyCreated: false,
-                dataMutationVersion: 0,
-                objectIdentityNormalizer: _objectIdentityNormalizer);
+            // WHY: A repeated semantic table NoOp cannot reset physical aliases,
+            // tombstones or row-proof epochs established by preceding operations.
+            var prerequisites = GetOrCreateProviderPrerequisites(intent.Definition.Table, intent.Definition.Schema);
 
             foreach (var column in intent.Definition.Columns)
             {
@@ -215,7 +217,7 @@ internal sealed partial class SafeMigrationPreflightProjection
                     addedToExistingTable: false);
             }
 
-            CaptureConstraintPrerequisites(prerequisites, intent.Definition);
+            CaptureConstraintPrerequisites(prerequisites, intent.Definition, liveAnalysis);
             _prerequisites[key] = prerequisites;
         }
 
@@ -230,7 +232,8 @@ internal sealed partial class SafeMigrationPreflightProjection
                     // WHY: Matching proves that the table exists; it does not
                     // re-establish row-level safety after provider data DML.
                     dataMutationVersion: 0,
-                    objectIdentityNormalizer: _objectIdentityNormalizer));
+                    objectIdentityNormalizer: _objectIdentityNormalizer,
+                    sharesUniqueIndexIdentity: SharesUniqueConstraintAndIndexIdentity));
         }
     }
 
@@ -242,6 +245,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         if (decision.Action == SafeMigrationAction.Apply)
         {
             var key = new TableKey(intent.Table, intent.Schema);
+            CaptureDroppedTableIndexNames(key);
             _tables.Remove(key);
             _renamedTableSources.Remove(key);
             _projectedUnknownPhysicalKeys.Remove(key);

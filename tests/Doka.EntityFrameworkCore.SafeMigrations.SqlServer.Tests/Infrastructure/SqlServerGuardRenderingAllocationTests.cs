@@ -844,6 +844,11 @@ public sealed class SqlServerGuardRenderingAllocationTests
             .Append("        THROW 51005, N'doka_sm_postcondition', 1;\n")
             .Append("    END;\nEND;");
 
+        if (operation.Intent is EnsureModelManagedDataIntent)
+        {
+            builder.Append('\n').Append(SqlServerSafeMigrationIdentityInsertScope.ReadyCompletionSql());
+        }
+
         return builder;
     }
 

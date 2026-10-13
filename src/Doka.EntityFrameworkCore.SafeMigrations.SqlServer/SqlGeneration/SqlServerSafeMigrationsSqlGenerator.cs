@@ -5,9 +5,10 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 /// SafeMigrations commands. Ordinary migration operations remain unchanged.
 /// </summary>
 /// <remarks>
-/// Generated migration commands recover IDENTITY_INSERT after an execution failure.
-/// Consumers executing only the generated SQL text must recover or close their session
-/// after cancellation or timeout; SQL Server TRY/CATCH cannot handle client attentions.
+/// Managed migration commands recover only their own acquired IDENTITY_INSERT state
+/// after an execution failure. SQL-only clients should generate with
+/// <see cref="MigrationsSqlGenerationOptions.Script" /> and must recover or close their
+/// session after cancellation or timeout; SQL Server TRY/CATCH cannot handle client attentions.
 /// Failed session recovery requires a new context for supported migration and catalog
 /// execution. This boundary does not intercept arbitrary EF queries or standalone SQL scripts.
 /// </remarks>
@@ -191,21 +192,20 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
 
             var guarded = new SqlOperation
             {
-                Sql = BuildGuardedSql(safeOperation, plan, baseline, effectiveRepairBaseline),
+                Sql = BuildGuardedSql(safeOperation, plan, baseline, effectiveRepairBaseline,
+                    scriptIdentityScope: (options & MigrationsSqlGenerationOptions.Script) != 0),
             };
 
             var guardedCommands = _baselineGenerator.Generate([guarded], model, options);
             ValidateGuardCommands(guardedCommands);
-            if (safeOperation.Intent is EnsureModelManagedDataIntent data)
+            if (safeOperation.Intent is EnsureModelManagedDataIntent data
+                && (options & MigrationsSqlGenerationOptions.Script) == 0)
             {
                 var table = _sqlGenerationHelper.DelimitIdentifier(data.Table, data.Schema ?? "dbo");
-                var tableLiteral = "N'" + table.Replace("'", "''", StringComparison.Ordinal) + "'";
-                var columns = string.Join(", ", data.Columns.Select(static column =>
-                    "N'" + column.Replace("'", "''", StringComparison.Ordinal) + "'"));
-
-                var cleanupSql = "IF EXISTS (SELECT 1 FROM sys.identity_columns "
-                    + "WHERE object_id = OBJECT_ID(" + tableLiteral + ") AND name IN (" + columns + ")) "
-                    + "SET IDENTITY_INSERT " + table + " OFF;";
+                // WHY: An acquired marker already certifies the original ON.
+                // Re-reading metadata after a failure could hide that fact or
+                // require rights on a rejected command that never acquired ON.
+                var cleanupSql = "SET IDENTITY_INSERT " + table + " OFF;";
 
                 for (var index = 0; index < guardedCommands.Count; index++)
                 {
@@ -389,7 +389,11 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
         if (operation.Intent is ModelManagedDataIntent data)
         {
             return _baselineGenerator.Generate(
-                [new SqlOperation { Sql = _catalogSqlBuilder.BuildModelManagedDataMutationSql(data) }],
+                [new SqlOperation
+                {
+                    Sql = _catalogSqlBuilder.BuildModelManagedDataMutationSql(data,
+                        scriptIdentityScope: (options & MigrationsSqlGenerationOptions.Script) != 0),
+                }],
                 model,
                 options);
         }
@@ -482,12 +486,16 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
     /// <param name="plan">The prepared catalog and execution expressions.</param>
     /// <param name="baseline">The provider commands for an accepted apply action.</param>
     /// <param name="repairBaseline">The provider commands for an accepted repair action.</param>
+    /// <param name="scriptIdentityScope">
+    /// Whether SQL-only execution owns its own marker instead of client bootstrap.
+    /// </param>
     /// <returns>The complete isolated guard with deferred scalar and DDL scopes intact.</returns>
     internal static string BuildGuardedSql(
         SafeMigrationOperation operation,
         SqlServerSafeMigrationRuntimePlan plan,
         IReadOnlyList<MigrationCommand> baseline,
-        IReadOnlyList<MigrationCommand> repairBaseline
+        IReadOnlyList<MigrationCommand> repairBaseline,
+        bool scriptIdentityScope = false
     )
     {
         var builder = new StringBuilder(1024);
@@ -676,6 +684,11 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
         builder.Append("    BEGIN\n")
             .Append("        THROW 51005, N'doka_sm_postcondition', 1;\n")
             .Append("    END;\nEND;");
+
+        if (operation.Intent is EnsureModelManagedDataIntent && !scriptIdentityScope)
+        {
+            builder.Append('\n').Append(SqlServerSafeMigrationIdentityInsertScope.ReadyCompletionSql());
+        }
 
         // WHY: BEGIN/END does not scope T-SQL variables. EF script generation
         // can concatenate operations and separate Generate calls in one batch,

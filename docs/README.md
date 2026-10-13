@@ -21,7 +21,8 @@ external registries, not by source documentation alone.
 | Find public inputs, outputs, and failure boundaries | [API reference](api-reference.md) |
 | Check engines, dependency ranges, qualified boundaries, and evidence | [Support and qualification](support-and-qualification.md) |
 | Understand MySQL/MariaDB session guards and implicit commits | [MySQL and MariaDB DDL](mysql-mariadb-ddl-behavior.md) |
-| Understand PostgreSQL analysis, model-managed data, and transaction behavior | [PostgreSQL behavior](postgresql-behavior.md) |
+| Review owned MySQL/MariaDB required-column staging and recovery | [Atomic additions](mysql-mariadb-ddl-behavior.md#atomic-required-column-additions) and [decision rationale](decisions/D-015-owned-atomic-required-column-additions.md) |
+| Understand PostgreSQL schema identity, seed-delete fences, analysis, and transactions | [PostgreSQL behavior](postgresql-behavior.md) |
 | Understand SQLite rebuilds, tooling, and script boundaries | [SQLite behavior](sqlite-behavior.md) |
 | Understand SQL Server catalog checks, guards, and engine qualification | [SQL Server behavior](sqlserver-behavior.md) |
 | Deploy independently to heterogeneous instances and recover safely | [Deployment and recovery](runbooks/deployment-and-recovery.md) |

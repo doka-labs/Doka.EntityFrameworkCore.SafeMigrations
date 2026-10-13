@@ -83,13 +83,20 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         bool isMariaDb,
         bool repairRequested,
         bool includeAnalysisEvidence,
-        bool includeTransitionEvidence
+        bool includeTransitionEvidence,
+        bool supportsRequiredColumnAddCheck
     )
     {
-        var tableExists = BaseTableExists(intent.Table);
-        var columnExists = ColumnExists(intent.Table, intent.Definition.Name);
-        var matching = BuildColumnMatches(intent.Table, intent.Definition, isMariaDb);
         var unsafeAdd = !SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(intent.Definition);
+        var nativeOwnerQualified = RequiresNativeRequiredColumnAddOwnerQualification(intent.Definition);
+        var tableExists = nativeOwnerQualified
+            ? BuildRequiredColumnAddBaseTableExists(intent.Table)
+            : BaseTableExists(intent.Table);
+        var columnExists = nativeOwnerQualified
+            ? BuildRequiredColumnAddColumnExists(intent.Table, intent.Definition.Name)
+            : ColumnExists(intent.Table, intent.Definition.Name);
+        var matching = BuildColumnMatches(intent.Table, intent.Definition, isMariaDb,
+            requireNativeOwnerIdentity: nativeOwnerQualified);
         var repairCapability = repairRequested
             && MySqlSafeMigrationColumnMetadata.CanSafelyConverge(intent.Definition)
             ? SafeMigrationRepairCapability.Safe
@@ -105,9 +112,46 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             : MySqlColumnRepairTransition.None;
 
         var repairInvariant = repairCapability == SafeMigrationRepairCapability.Safe
-            ? $"({BuildColumnRepairInvariantMatches(intent.Table, intent.Definition, isMariaDb)}) "
+            ? $"({BuildColumnRepairInvariantMatches(intent.Table, intent.Definition, isMariaDb,
+                requireNativeOwnerIdentity: nativeOwnerQualified)}) "
                 + $"OR ({transition.InvariantExpression})"
             : "FALSE";
+
+        if (repairCapability == SafeMigrationRepairCapability.Safe
+            && RequiresExplicitTimestampDefaults(intent.Definition))
+        {
+            // WHY: Native TIMESTAMP MODIFY can replace NULL with current time
+            // when this setting is disabled, even with an approved default.
+            repairInvariant = $"({repairInvariant}) AND @@SESSION.explicit_defaults_for_timestamp = 1";
+        }
+
+        if (_renderValuesInline && repairCapability == SafeMigrationRepairCapability.Safe)
+        {
+            // WHY: Ensure and model convergence share this repair path.
+            // Fresh dependency feasibility qualifies both ordinary and type
+            // repairs, never an exact match or a guarded missing-column add.
+            var dependencyInvariant = intent.Definition.IsNullable
+                ? BuildNoPrimaryKeyColumn(intent.Table, intent.Definition.Name)
+                : BuildNoOutgoingSetNullForeignKey(intent.Table, intent.Definition.Name);
+
+            repairInvariant = $"({repairInvariant}) AND ({dependencyInvariant})";
+        }
+
+        var nullableColumn = repairCapability == SafeMigrationRepairCapability.Safe
+            && !intent.Definition.IsNullable
+                ? nativeOwnerQualified
+                    ? BuildRequiredColumnAddColumnExists(intent.Table, intent.Definition.Name, "c.IS_NULLABLE = 'YES'")
+                    : ColumnWithInvariantExists(intent.Table, intent.Definition.Name, "c.IS_NULLABLE = 'YES'")
+                : null;
+
+        if (nullableColumn is not null)
+        {
+            // WHY: This repair emits MODIFY without a backfill UPDATE. Strict
+            // mode rejects a NULL inserted after the proof instead of coercing
+            // it. Already-required columns need no nullability conversion.
+            repairInvariant = $"({repairInvariant}) AND "
+                + $"(NOT ({nullableColumn}) OR ({StrictSqlModeExpression}))";
+        }
 
         var dataBlocked = unsafeAdd
             ? $"EXISTS (SELECT 1 FROM {Delimited(intent.Table, intent.Schema)} LIMIT 1)"
@@ -115,14 +159,13 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         // WHY: Classification and repair need the same NULL proof. Runtime
         // materializes it once after physical eligibility is established;
         // columns that are already NOT NULL never need a row scan.
-        var nullabilityProbe = repairCapability == SafeMigrationRepairCapability.Safe
-            && !intent.Definition.IsNullable
-                ? new MySqlSafeMigrationNullabilityDataProbe(
-                    ColumnWithInvariantExists(intent.Table, intent.Definition.Name, "c.IS_NULLABLE = 'YES'"),
-                    repairInvariant,
-                    $"EXISTS (SELECT 1 FROM {Delimited(intent.Table, intent.Schema)} WHERE "
-                    + $"{Delimited(intent.Definition.Name)} IS NULL LIMIT 1)")
-                : null;
+        var nullabilityProbe = nullableColumn is not null
+            ? new MySqlSafeMigrationNullabilityDataProbe(
+                nullableColumn,
+                repairInvariant,
+                $"EXISTS (SELECT 1 FROM {Delimited(intent.Table, intent.Schema)} WHERE "
+                + $"{Delimited(intent.Definition.Name)} IS NULL LIMIT 1)")
+            : null;
 
         var hasNull = nullabilityProbe is not null
             ? MySqlSafeMigrationRuntimePlan.NullabilityDataProbePlaceholder
@@ -153,6 +196,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             repairCapability,
             repairPrecondition) with
         {
+            PrerequisiteExpression = tableExists,
             ClassificationCodeExpression = transition.HasDataProbe
                 ? $"CASE WHEN {dataTransitionBlocked} THEN 'varchar_narrowing_value_too_long' ELSE NULL END"
                 : null,
@@ -172,16 +216,74 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         // The data probe for nullability tightening can mention the target
         // column only after the catalog proves that the column exists. Missing
         // remains an applicable state rather than a missing prerequisite.
-        return repairCapability == SafeMigrationRepairCapability.Safe
-            && (!intent.Definition.IsNullable || transition.HasDataProbe)
-                ? plan with
-                {
-                    StateEvaluationGuardExpression = columnExists,
-                    StateEvaluationGuardFailureExpression = unsafeAdd
-                        ? $"CASE WHEN {dataBlocked} THEN 'data_blocked' ELSE 'missing' END"
-                        : "'missing'",
-                }
-                : plan;
+        if (repairCapability == SafeMigrationRepairCapability.Safe
+            && (!intent.Definition.IsNullable || transition.HasDataProbe))
+        {
+            plan = plan with
+            {
+                StateEvaluationGuardExpression = columnExists,
+                StateEvaluationGuardFailureExpression = unsafeAdd
+                    ? $"CASE WHEN {dataBlocked} THEN 'data_blocked' ELSE 'missing' END"
+                    : "'missing'",
+            };
+        }
+
+        if (RequiresRequiredSqlDefaultAddQualification(intent.Definition))
+        {
+            return QualifyRequiredSqlDefaultColumnAdd(intent, plan);
+        }
+
+        return unsafeAdd
+            ? ApplyRequiredColumnAddProtocol(intent, isMariaDb, supportsRequiredColumnAddCheck, plan)
+            : plan;
+    }
+
+    /// <summary>Prevents implicit values from a required SQL default while retaining existing-column paths.</summary>
+    /// <param name="intent">The immutable owner and SQL-default target.</param>
+    /// <param name="plan">The ordinary matching and repair plan.</param>
+    /// <returns>The plan whose missing state requires transactional strict native conversion.</returns>
+    private MySqlSafeMigrationRuntimePlan QualifyRequiredSqlDefaultColumnAdd(
+        EnsureColumnIntent intent,
+        MySqlSafeMigrationRuntimePlan plan
+    )
+    {
+        var tableExists = BuildRequiredColumnAddBaseTableExists(intent.Table);
+        var columnExists = BuildRequiredColumnAddColumnExists(intent.Table, intent.Definition.Name);
+        var qualification = "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES sql_default_table "
+            + "WHERE sql_default_table.TABLE_SCHEMA = DATABASE() "
+            + $"AND sql_default_table.TABLE_NAME = {Literal(intent.Table)} "
+            + $"AND {BuildRequiredColumnAddOwnerMatches("sql_default_table.TABLE_SCHEMA", "DATABASE()")} "
+            + $"AND {BuildRequiredColumnAddOwnerMatches("sql_default_table.TABLE_NAME", Literal(intent.Table))} "
+            + "AND sql_default_table.TABLE_TYPE = 'BASE TABLE' AND UPPER(sql_default_table.ENGINE) = 'INNODB') "
+            + $"AND ({StrictSqlModeExpression})"
+            + (RequiresExplicitTimestampDefaults(intent.Definition)
+                ? " AND @@SESSION.explicit_defaults_for_timestamp = 1"
+                : string.Empty);
+        var ordinaryCode = plan.ClassificationCodeExpression ?? "NULL";
+
+        // WHY: Without repair, the ordinary state has no lazy guard failure.
+        // Installing one here must retain the known-NULL populated-row proof.
+        var ordinaryMissing = plan.StateEvaluationGuardFailureExpression
+            ?? (SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(intent.Definition)
+                ? "'missing'"
+                : $"CASE WHEN EXISTS (SELECT 1 FROM {Delimited(intent.Table, intent.Schema)} LIMIT 1) "
+                    + "THEN 'data_blocked' ELSE 'missing' END");
+
+        // WHY: SQL defaults can evaluate to NULL or require coercion. A strict
+        // InnoDB ADD rejects those rows atomically instead of fabricating data.
+        // The lazy missing branch must enforce the same qualification as state.
+        return plan with
+        {
+            StateExpression = $"CASE WHEN NOT {tableExists} THEN 'prerequisite_missing' "
+                + $"WHEN NOT {columnExists} AND NOT ({qualification}) THEN 'unsupported' "
+                + $"ELSE ({plan.StateExpression}) END",
+            StateEvaluationGuardExpression = columnExists,
+            StateEvaluationGuardFailureExpression = $"CASE WHEN ({qualification}) THEN ({ordinaryMissing}) "
+                + "ELSE 'unsupported' END",
+            ClassificationCodeExpression = $"CASE WHEN {tableExists} AND NOT {columnExists} "
+                + $"AND NOT ({qualification}) THEN 'column_required_sql_add_unavailable' "
+                + $"ELSE ({ordinaryCode}) END",
+        };
     }
 
     private MySqlSafeMigrationRuntimePlan BuildDropColumn(
@@ -253,35 +355,110 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             ? BuildColumnMatches(intent.Table, intent.OldDefinition!, isMariaDb)
             : "FALSE";
 
+        if (repairCapability == SafeMigrationRepairCapability.Safe
+            && RequiresExplicitTimestampDefaults(intent.Definition))
+        {
+            repairPrecondition = $"({repairPrecondition}) AND @@SESSION.explicit_defaults_for_timestamp = 1";
+        }
+
+        if (repairCapability == SafeMigrationRepairCapability.Safe
+            && !intent.OldDefinition!.IsNullable
+            && intent.Definition.IsNullable)
+        {
+            // WHY: MySQL cannot relax a live PRIMARY KEY column. Ordered
+            // removal proofs do not replace this fresh execution-time guard.
+            repairPrecondition = $"({repairPrecondition}) AND "
+                + BuildNoPrimaryKeyColumn(intent.Table, intent.Definition.Name);
+        }
+
+        if (_renderValuesInline
+            && repairCapability == SafeMigrationRepairCapability.Safe
+            && intent.OldDefinition!.IsNullable
+            && !intent.Definition.IsNullable)
+        {
+            // WHY: Captured source and row proofs survive an accepted FK
+            // removal. Runtime must independently reject any still-live
+            // SET NULL action before a tightening or its explicit UPDATE.
+            repairPrecondition = $"({repairPrecondition}) AND "
+                + $"({BuildNoOutgoingSetNullForeignKey(intent.Table, intent.Definition.Name)})";
+        }
+
         var hasProvablyNonNullBackfill =
             SafeMigrationColumnRepairHelper.HasProvablyNonNullDefault(intent.Definition.DefaultValue);
 
-        var nullBlocked =
-            repairCapability == SafeMigrationRepairCapability.Safe
+        var requiresNullFreeTightening = repairCapability == SafeMigrationRepairCapability.Safe
             && intent.OldDefinition!.IsNullable
             && !intent.Definition.IsNullable
-            && !hasProvablyNonNullBackfill
-                ? $"({repairPrecondition}) AND EXISTS (SELECT 1 FROM {Delimited(intent.Table, intent.Schema)} WHERE "
-                + $"{Delimited(intent.Definition.Name)} IS NULL LIMIT 1)"
-                : "FALSE";
+            && !hasProvablyNonNullBackfill;
+
+        if (repairCapability == SafeMigrationRepairCapability.Safe
+            && intent.OldDefinition!.IsNullable
+            && !intent.Definition.IsNullable)
+        {
+            // WHY: A fresh NULL proof is not a lock against later writers.
+            // Even after an approved UPDATE, a raced NULL can be coerced to
+            // an implicit value different from the authored backfill.
+            repairPrecondition = $"({repairPrecondition}) AND ({StrictSqlModeExpression})";
+        }
+
+        var nullabilityProbe = requiresNullFreeTightening
+            ? new MySqlSafeMigrationNullabilityDataProbe(
+                ColumnWithInvariantExists(intent.Table, intent.Definition.Name, "c.IS_NULLABLE = 'YES'"),
+                repairPrecondition,
+                $"EXISTS (SELECT 1 FROM {Delimited(intent.Table, intent.Schema)} WHERE "
+                + $"{Delimited(intent.Definition.Name)} IS NULL LIMIT 1)")
+            : null;
+
+        var classificationInvariant = nullabilityProbe is null
+            ? repairPrecondition
+            : MySqlSafeMigrationRuntimePlan.ColumnRepairInvariantPlaceholder;
+
+        var nullBlocked = nullabilityProbe is not null
+            ? MySqlSafeMigrationRuntimePlan.NullabilityDataProbePlaceholder
+            : "FALSE";
 
         return Plan(
             $"CASE WHEN NOT {BaseTableExists(intent.Table)} OR NOT {columnExists} THEN 'different' "
             + $"WHEN {matching} THEN 'matching' "
-            + $"WHEN {nullBlocked} THEN 'data_blocked' ELSE 'different' END",
+            + $"WHEN ({classificationInvariant}) AND ({nullBlocked}) THEN 'data_blocked' ELSE 'different' END",
             matching,
             repairCapability,
-            repairPrecondition) with
+            $"({classificationInvariant}) AND NOT ({nullBlocked})") with
         {
-            MayRequireNullabilityDataProof = repairCapability == SafeMigrationRepairCapability.Safe
-                && intent.OldDefinition!.IsNullable
-                && !intent.Definition.IsNullable
-                && !hasProvablyNonNullBackfill,
+            NullabilityDataProbe = nullabilityProbe,
+            MayRequireNullabilityDataProof = nullabilityProbe is not null,
             DiagnosticEvidenceExpression = includeAnalysisEvidence
                 ? BuildColumnDiagnosticEvidence(intent.Table, intent.Definition, isMariaDb)
                 : null,
         };
     }
+
+    /// <summary>Rejects live PRIMARY membership before making an existing column nullable.</summary>
+    /// <param name="table">The exact local table identity.</param>
+    /// <param name="column">The exact local column identity.</param>
+    /// <returns>The fresh catalog predicate excluding PRIMARY membership for this column.</returns>
+    private string BuildNoPrimaryKeyColumn(string table, string column) =>
+        "NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS nullable_primary "
+        + "WHERE nullable_primary.TABLE_SCHEMA = DATABASE() "
+        + $"AND nullable_primary.TABLE_NAME = {Literal(table)} "
+        + $"AND nullable_primary.COLUMN_NAME = {Literal(column)} "
+        + "AND nullable_primary.INDEX_NAME = 'PRIMARY')";
+
+    /// <summary>Rejects outgoing actions that require an existing local column to remain nullable.</summary>
+    /// <param name="table">The exact local table identity.</param>
+    /// <param name="column">The exact local column identity.</param>
+    /// <returns>The fresh catalog predicate excluding only DELETE or UPDATE SET NULL actions.</returns>
+    private string BuildNoOutgoingSetNullForeignKey(string table, string column) =>
+        "NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS nullable_fk "
+        + "JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE nullable_fk_column "
+        + "ON nullable_fk_column.CONSTRAINT_SCHEMA = nullable_fk.CONSTRAINT_SCHEMA "
+        + "AND nullable_fk_column.CONSTRAINT_NAME = nullable_fk.CONSTRAINT_NAME "
+        + "AND nullable_fk_column.TABLE_SCHEMA = nullable_fk.CONSTRAINT_SCHEMA "
+        + "AND nullable_fk_column.TABLE_NAME = nullable_fk.TABLE_NAME "
+        + "WHERE nullable_fk.CONSTRAINT_SCHEMA = DATABASE() "
+        + $"AND nullable_fk.TABLE_NAME = {Literal(table)} "
+        + $"AND nullable_fk_column.COLUMN_NAME = {Literal(column)} "
+        + "AND (nullable_fk.DELETE_RULE = 'SET NULL' OR nullable_fk.UPDATE_RULE = 'SET NULL'))";
 
     /// <summary>Combines the shared type proof with an explicit alteration's exact source contract.</summary>
     private MySqlSafeMigrationRuntimePlan BuildAlterColumnTransitionPlan(
@@ -296,6 +473,13 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var sourceMatches = $"({BuildColumnMatches(intent.Table, intent.OldDefinition!, isMariaDb)}) "
             + $"AND ({BuildAlterColumnBackfillInvariant(intent, isMariaDb)}) "
             + $"AND ({BuildAlterColumnInlineRowFits(intent)})";
+
+        if (intent.OldDefinition!.IsNullable && !intent.Definition.IsNullable)
+        {
+            // WHY: An approved UPDATE cannot cover a NULL inserted afterward.
+            // Strict conversion must reject that row rather than invent data.
+            sourceMatches = $"({sourceMatches}) AND ({StrictSqlModeExpression})";
+        }
 
         var dataProbe = transition.DataProbe;
         if (dataProbe?.TransitionInvariantExpression is { } transitionInvariant)
@@ -704,13 +888,31 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             ? characters <= length
             : TryGetTextCapacity(storeType, out var capacity) && (ulong)bytes <= capacity;
 
+    /// <summary>Compares authored comment text without inheriting the catalog's collation or padding rules.</summary>
+    /// <param name="comment">
+    /// The optional authored comment; no comment and an empty native comment are equivalent.
+    /// </param>
+    /// <returns>The exact predicate shared by column, strict-table, staged ownership and diagnostics.</returns>
+    private string ColumnCommentMatches(string? comment)
+    {
+        // WHY: MariaDB metadata equality can fold comment case or trailing
+        // spaces. Comments are contract values, not provider identifiers; the
+        // same byte-exact predicate must govern state and its digest diagnostic.
+        // One binary operand controls the whole comparison, avoiding a second
+        // cast and its repeated SQL text without changing comparison semantics.
+
+        return $"CAST(COALESCE(c.COLUMN_COMMENT, '') AS BINARY) = {Literal(comment ?? string.Empty)}";
+    }
+
     private string BuildColumnMatches(
         string table,
         ExpectedColumnDefinition definition,
         bool isMariaDb,
         int? ordinal = null,
         bool includeRepairableFacets = true,
-        bool requireRepairSafeExtra = false
+        bool requireRepairSafeExtra = false,
+        bool requireExactIdentity = false,
+        bool requireNativeOwnerIdentity = false
     )
     {
         var mapping = _typeMappingSource.FindMapping(
@@ -743,7 +945,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         if (includeRepairableFacets)
         {
             conditions.Add($"c.IS_NULLABLE = {(definition.IsNullable ? "'YES'" : "'NO'")}");
-            conditions.Add($"COALESCE(c.COLUMN_COMMENT, '') = {Literal(definition.Comment ?? string.Empty)}");
+            conditions.Add(ColumnCommentMatches(definition.Comment));
             conditions.Add(
                 BuildDefaultMatches(
                     "c.COLUMN_DEFAULT",
@@ -757,6 +959,17 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         if (requireRepairSafeExtra)
         {
             conditions.Add(OrdinaryColumnExtraMatches());
+        }
+
+        if (requireExactIdentity || requireNativeOwnerIdentity)
+        {
+            conditions.Add(BuildRequiredColumnAddOwnerMatches("c.TABLE_SCHEMA", "DATABASE()"));
+            conditions.Add(BuildRequiredColumnAddOwnerMatches("c.TABLE_NAME", Literal(table)));
+        }
+
+        if (requireExactIdentity)
+        {
+            conditions.Add($"CAST(c.COLUMN_NAME AS BINARY) = CAST({Literal(definition.Name)} AS BINARY)");
         }
 
         if (ordinal is not null)
@@ -806,7 +1019,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             {
                 $"c.COLUMN_NAME = {Literal(column.Name)}",
                 $"c.IS_NULLABLE = {(column.IsNullable ? "'YES'" : "'NO'")}",
-                $"COALESCE(c.COLUMN_COMMENT, '') = {Literal(column.Comment ?? string.Empty)}",
+                ColumnCommentMatches(column.Comment),
             };
 
             conditions.AddRange(BuildColumnStructuralConditions(table, column, isMariaDb, out var collation));
@@ -896,13 +1109,15 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     private string BuildColumnRepairInvariantMatches(
         string table,
         ExpectedColumnDefinition definition,
-        bool isMariaDb
+        bool isMariaDb,
+        bool requireNativeOwnerIdentity = false
     ) => BuildColumnMatches(
         table,
         definition,
         isMariaDb,
         includeRepairableFacets: false,
-        requireRepairSafeExtra: true);
+        requireRepairSafeExtra: true,
+        requireNativeOwnerIdentity: requireNativeOwnerIdentity);
 
     private string BuildColumnDiagnosticEvidence(
         string table,
@@ -985,7 +1200,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                     + "WHEN LOCATE('generated', LOWER(COALESCE(c.EXTRA, ''))) > 0 THEN 'generated' "
                     + "ELSE 'none' END"),
             DiagnosticRecord(
-                $"COALESCE(c.COLUMN_COMMENT, '') <> {Literal(definition.Comment ?? string.Empty)}",
+                $"NOT ({ColumnCommentMatches(definition.Comment)})",
                 "column_comment_digest",
                 $"LOWER(SHA2({Literal(definition.Comment ?? string.Empty)}, 256))",
                 "LOWER(SHA2(COALESCE(c.COLUMN_COMMENT, ''), 256))"),
@@ -1707,6 +1922,15 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         bool isMariaDb
     )
     {
+        var typeExpression = storeType.AsSpan().Trim();
+        var memberStart = typeExpression.IndexOf('(');
+        if (memberStart > 0
+            && (typeExpression[..memberStart].TrimEnd().Equals("enum", StringComparison.OrdinalIgnoreCase)
+                || typeExpression[..memberStart].TrimEnd().Equals("set", StringComparison.OrdinalIgnoreCase)))
+        {
+            return BuildEnumSetStoreTypeMatches(storeType);
+        }
+
         if (isMariaDb
             && StringComparer.OrdinalIgnoreCase.Equals(storeType.Trim(), "json"))
         {
@@ -1791,8 +2015,26 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             && structuredString?.Value is not string)
         {
             var expression = expected.SqlExpression ?? _expressionRenderer.Render(expected.StructuredExpression!);
-            var sqlCandidates = BuildDefaultSqlCandidates(expression)
-                .Select(Literal);
+            IEnumerable<string> sqlCandidateValues = BuildDefaultSqlCandidates(expression);
+            if (expected.StructuredExpression is SafeMigrationSqlLiteralExpression
+                { Value: string temporal, StoreType: null }
+                && BuildTemporalSqlLiteralCatalogValue(mapping.StoreType, temporal) is { } temporalDisplay)
+            {
+                // WHY: Temporal metadata pads declared precision even when
+                // caller-owned SQL has no fraction. Compare that exact display
+                // without changing the default kind or accepting conversion.
+                sqlCandidateValues = sqlCandidateValues.Concat([temporalDisplay, $"'{temporalDisplay}'"])
+                    .Distinct(StringComparer.Ordinal);
+                if (!isMariaDb)
+                {
+                    var temporalLiteralMatches = $"CAST({catalogExpression} AS BINARY) IN "
+                        + $"({string.Join(", ", sqlCandidateValues.Select(Literal))})";
+
+                    return BuildMySqlStringDefaultMatches(catalogExpression, temporal, temporalLiteralMatches);
+                }
+            }
+
+            var sqlCandidates = sqlCandidateValues.Select(Literal);
 
             return $"{catalogExpression} IN ({string.Join(", ", sqlCandidates)})";
         }
@@ -1847,10 +2089,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     /// <summary>Separates MySQL raw literal values from exact serialized expression defaults.</summary>
     /// <param name="catalogExpression">The owning column's default metadata expression.</param>
     /// <param name="value">The exact expected string value.</param>
+    /// <param name="literalMatchExpression">An optional trusted predicate for a normalized temporal literal.</param>
     /// <returns>A binary comparison qualified by the catalog's expression-default marker.</returns>
     private string BuildMySqlStringDefaultMatches(
         string catalogExpression,
-        string value
+        string value,
+        string? literalMatchExpression = null
     )
     {
         // WHY: MySQL serializes an expression literal, then prints its binary
@@ -1861,9 +2105,11 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var expression = "_utf8mb4'" + EscapeMySqlDefaultDisplay(value) + "'";
         var display = EscapeMySqlDefaultDisplay(Encoding.Latin1.GetString(Encoding.UTF8.GetBytes(expression)));
         var generated = "LOCATE('DEFAULT_GENERATED', UPPER(COALESCE(c.EXTRA, ''))) > 0";
+        var expressionLiteral = Literal(display);
+        var literalMatches = literalMatchExpression ?? $"CAST({catalogExpression} AS BINARY) = {Literal(value)}";
 
-        return $"CASE WHEN {generated} THEN CAST({catalogExpression} AS BINARY) = {Literal(display)} "
-            + $"ELSE CAST({catalogExpression} AS BINARY) = {Literal(value)} END";
+        return $"CASE WHEN {generated} THEN CAST({catalogExpression} AS BINARY) = {expressionLiteral} "
+            + $"ELSE {literalMatches} END";
     }
 
     /// <summary>Escapes one serialization layer without normalizing case, Unicode, or quoted payloads.</summary>
@@ -2070,6 +2316,60 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         }
     }
 
+    /// <summary>Builds an exact temporal catalog value for an uncast structured SQL literal.</summary>
+    /// <param name="storeType">The resolved timestamp or datetime target type and precision.</param>
+    /// <param name="value">The caller-owned ISO date-time text without timezone or time-only syntax.</param>
+    /// <returns>The zero-padded value, or null when calendar, domain or precision conversion is unproven.</returns>
+    internal static string? BuildTemporalSqlLiteralCatalogValue(string storeType, string value)
+    {
+        ArgumentNullException.ThrowIfNull(storeType);
+        ArgumentNullException.ThrowIfNull(value);
+
+        var type = storeType.AsSpan().Trim();
+        var open = type.IndexOf('(');
+        var kind = open < 0 ? type : type[..open].TrimEnd();
+        if (!kind.Equals("timestamp", StringComparison.OrdinalIgnoreCase)
+            && !kind.Equals("datetime", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var precision = 0;
+        if (open >= 0
+            && (type[^1] != ')'
+                || !int.TryParse(type[(open + 1)..^1].Trim(), NumberStyles.None,
+                    CultureInfo.InvariantCulture, out precision)
+                || precision is < 0 or > 6))
+        {
+            return null;
+        }
+
+        if (value.Length is < 19 or > 26
+            || !DateTime.TryParseExact(value.AsSpan(0, 19), "yyyy-MM-dd HH:mm:ss",
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
+        {
+            return null;
+        }
+
+        var fractionLength = value.Length > 19 ? value.Length - 20 : 0;
+        if (value.Length > 19 && (value[19] != '.' || fractionLength == 0)
+            || fractionLength > precision)
+        {
+            return null;
+        }
+
+        foreach (var character in value.AsSpan(Math.Min(value.Length, 20)))
+        {
+            if (!char.IsAsciiDigit(character))
+            {
+                return null;
+            }
+        }
+
+        return precision == 0 ? value[..19]
+            : value[..19] + "." + (value.Length > 19 ? value[20..] : string.Empty).PadRight(precision, '0');
+    }
+
     private static void AddTemporalTypedCandidate(
         HashSet<string> candidates,
         string keyword,
@@ -2149,6 +2449,27 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         MySqlServerVersion serverVersion
     )
     {
+        if (!definition.IsNullable && definition.DefaultValue.IsNullLiteral)
+        {
+            return false;
+        }
+
+        if (!definition.IsNullable
+            && serverVersion.IsMariaDb
+            && definition.DefaultValue.Kind == SafeMigrationDefaultValueKind.Sql)
+        {
+            var expression = definition.DefaultValue.StructuredExpression;
+            if (expression is null && definition.DefaultValue.SqlExpression is { } sql)
+            {
+                _ = SafeMigrationSqlExpressionParser.TryParse(sql, out expression);
+            }
+
+            if (expression is SafeMigrationSqlLiteralExpression { Value: null, StoreType: null })
+            {
+                return false;
+            }
+        }
+
         if (definition.DefaultValue.Kind != SafeMigrationDefaultValueKind.Literal)
         {
             return true;

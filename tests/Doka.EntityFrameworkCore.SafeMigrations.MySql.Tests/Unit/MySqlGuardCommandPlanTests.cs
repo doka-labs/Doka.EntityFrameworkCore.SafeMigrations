@@ -2,6 +2,34 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 public sealed class MySqlGuardCommandPlanTests
 {
+    /// <summary>Reserved PRIMARY endpoints cannot reach native rename after a successful source lookup.</summary>
+    /// <param name="source">The authored source index name.</param>
+    /// <param name="target">The authored destination index name.</param>
+    /// <param name="reserved">Whether either endpoint identifies the reserved primary index.</param>
+    [Theory]
+    [InlineData("PRIMARY", "target_index", true)]
+    [InlineData("primary", "target_index", true)]
+    [InlineData("source_index", "PRIMARY", true)]
+    [InlineData("source_index", "Primary", true)]
+    [InlineData("source_index", "target_index", false)]
+    public void IndexRenamePreservesMissingReplayAndRejectsReservedEndpoints(
+        string source,
+        string target,
+        bool reserved
+    )
+    {
+        // Arrange
+        using var context = CreateContext();
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.RenameIndexIfExists(source, "items", target);
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+
+        // Act
+        var sql = Assert.Single(generator.Generate(builder.Operations, context.Model)).CommandText;
+
+        // Assert
+        Assert.Equal(reserved, sql.Contains("THEN 'missing' WHEN TRUE THEN 'different'", StringComparison.Ordinal));
+    }
     /// <summary>Checks catalog scan count stays bounded as composite indexes gain key parts.</summary>
     [Fact]
     public void WideIndexDoesNotAddCatalogScansPerKeyPart()
@@ -139,7 +167,8 @@ public sealed class MySqlGuardCommandPlanTests
             ? plan.RenderPostcondition(parameterizer.Add)
             : plan.RenderStateExpression(parameterizer.Add);
 
-        var tableParameter = command.Parameters.Cast<DbParameter>().Single(parameter => Equals(parameter.Value, "items"));
+        var tableParameter = command.Parameters.Cast<DbParameter>()
+            .Single(parameter => Equals(parameter.Value, "items"));
 
         // Assert
         Assert.Contains(
@@ -218,7 +247,7 @@ public sealed class MySqlGuardCommandPlanTests
                 .Generate([operation], context.Model));
 
         var payloads = DecodeHexPayloads(command.CommandText);
-        var identityGuard = command.CommandText.IndexOf("BINARY DATABASE() = BINARY", StringComparison.Ordinal);
+        var identityGuard = command.CommandText.IndexOf("CAST(DATABASE() AS BINARY) = CAST(", StringComparison.Ordinal);
         var prerequisite = command.CommandText.IndexOf("@doka_sm_prerequisite_ok", StringComparison.Ordinal);
 
         Assert.True(identityGuard >= 0);
@@ -251,7 +280,7 @@ public sealed class MySqlGuardCommandPlanTests
                 .GetService<IMigrationsSqlGenerator>()
                 .Generate([operation], context.Model));
 
-        Assert.DoesNotContain("BINARY DATABASE() = BINARY", command.CommandText, StringComparison.Ordinal);
+        Assert.DoesNotContain("CAST(DATABASE() AS BINARY) = CAST(", command.CommandText, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -283,8 +312,8 @@ public sealed class MySqlGuardCommandPlanTests
             commands,
             command =>
             {
-                Assert.Contains("BINARY DATABASE() = BINARY", command.CommandText, StringComparison.Ordinal);
-                Assert.Contains("BINARY 'foreign'", command.CommandText, StringComparison.Ordinal);
+                Assert.Contains("CAST(DATABASE() AS BINARY) = CAST(", command.CommandText, StringComparison.Ordinal);
+                Assert.Contains("CAST('foreign' AS BINARY)", command.CommandText, StringComparison.Ordinal);
             });
     }
 
@@ -322,14 +351,16 @@ public sealed class MySqlGuardCommandPlanTests
             commands,
             command =>
             {
-                Assert.Contains("BINARY 'first'", command.CommandText, StringComparison.Ordinal);
-                Assert.Contains("BINARY 'second'", command.CommandText, StringComparison.Ordinal);
+                Assert.Contains("CAST('first' AS BINARY)", command.CommandText, StringComparison.Ordinal);
+                Assert.Contains("CAST('second' AS BINARY)", command.CommandText, StringComparison.Ordinal);
             });
     }
 
+    /// <summary>Ordinary generated-column ADD retains the generic single-body guarded transport contract.</summary>
     [Fact]
     public void DataReadingSingleBaselineOperation_HasExactBoundedScopedCommandShape()
     {
+        // Arrange
         var options = new DbContextOptionsBuilder<DbContext>();
         options.UseMySql(
             "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
@@ -340,15 +371,19 @@ public sealed class MySqlGuardCommandPlanTests
         var operation = new SafeMigrationOperation(
             new EnsureColumnIntent(
                 "items",
-                new ExpectedColumnDefinition("value", typeof(int), isNullable: false, storeType: "int")),
+                ServerGeneratedRequiredColumn()),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var commands = context
             .GetService<IMigrationsSqlGenerator>()
             .Generate([operation], context.Model);
 
         var command = Assert.Single(commands);
 
+        // Assert
+        Assert.False(MySqlSafeMigrationCatalogSqlBuilder.CanUseRequiredColumnAddProtocol(
+            Assert.IsType<EnsureColumnIntent>(operation.Intent).Definition));
         Assert.Equal(
             "MySqlScopedMigrationCommand",
             command.GetType()
@@ -395,9 +430,11 @@ public sealed class MySqlGuardCommandPlanTests
         Assert.DoesNotContain("SET @doka_sm_prerequisite_ok = COALESCE", command.CommandText, StringComparison.Ordinal);
     }
 
+    /// <summary>Real native comment setup acquires its cleanup snapshot only after the guarded decision.</summary>
     [Fact]
     public void CommentedBaselineOperation_UsesProviderValidatedSqlModeFragments()
     {
+        // Arrange
         var options = new DbContextOptionsBuilder<DbContext>();
         options.UseMySql(
             "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
@@ -416,12 +453,18 @@ public sealed class MySqlGuardCommandPlanTests
                     comment: "mode\\safe")),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var command = Assert.Single(
             context
                 .GetService<IMigrationsSqlGenerator>()
                 .Generate([operation], context.Model));
 
+        // Assert
         var captureIndex = command.CommandText.IndexOf("@__doka_previous_sql_mode", StringComparison.Ordinal);
+        var resetIndex = command.CommandText.IndexOf("SET @doka_sm_provider_setup_entered = 0;",
+            StringComparison.Ordinal);
+        var decisionIndex = command.CommandText.IndexOf("WHERE @doka_sm_action = 'reject_different'",
+            StringComparison.Ordinal);
         var bodyIndex = command.CommandText.IndexOf(
             "PREPARE doka_sm_statement FROM @doka_sm_sql",
             StringComparison.Ordinal);
@@ -436,6 +479,14 @@ public sealed class MySqlGuardCommandPlanTests
             command.GetType()
                 .Name);
         Assert.True(captureIndex >= 0);
+        Assert.Equal(0, resetIndex);
+        Assert.True(decisionIndex > resetIndex);
+        Assert.True(captureIndex > decisionIndex);
+        Assert.Contains("@__doka_previous_sql_mode = @@SESSION.sql_mode, @doka_sm_provider_setup_entered = 1",
+            command.CommandText, StringComparison.Ordinal);
+        Assert.Contains("SET SESSION sql_mode = IF(COALESCE(@doka_sm_provider_setup_entered = 1, FALSE), "
+            + "@__doka_previous_sql_mode, @@SESSION.sql_mode)", command.CommandText, StringComparison.Ordinal);
+        Assert.Contains("SET @doka_sm_provider_setup_entered = NULL;", command.CommandText, StringComparison.Ordinal);
         Assert.True(bodyIndex > captureIndex);
         Assert.True(cleanupIndex > bodyIndex);
         Assert.True(guardCleanupIndex > cleanupIndex);
@@ -488,9 +539,11 @@ public sealed class MySqlGuardCommandPlanTests
         Assert.Contains(payloads, payload => payload.Contains("MODIFY COLUMN", StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>Generic required-column proof materialization stays behind the prepared prerequisite gate.</summary>
     [Fact]
     public void RepairableRequiredColumn_MaterializesDataProbeOnlyBehindPreparedPrerequisiteGate()
     {
+        // Arrange
         var options = new DbContextOptionsBuilder<DbContext>();
         options.UseMySql(
             "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
@@ -501,9 +554,10 @@ public sealed class MySqlGuardCommandPlanTests
         var operation = new SafeMigrationOperation(
             new EnsureColumnIntent(
                 "items",
-                new ExpectedColumnDefinition("value", typeof(int), isNullable: false, storeType: "int")),
+                ServerGeneratedRequiredColumn()),
             SafeMigrationPolicy.RepairIfSafe);
 
+        // Act
         var command = Assert.Single(
             context
                 .GetService<IMigrationsSqlGenerator>()
@@ -512,6 +566,9 @@ public sealed class MySqlGuardCommandPlanTests
         var payloads = DecodeHexPayloads(command.CommandText);
         const string dataProbe = "EXISTS (SELECT 1 FROM `items` LIMIT 1)";
 
+        // Assert
+        Assert.False(MySqlSafeMigrationCatalogSqlBuilder.CanUseRequiredColumnAddProtocol(
+            Assert.IsType<EnsureColumnIntent>(operation.Intent).Definition));
         Assert.DoesNotContain(dataProbe, command.CommandText, StringComparison.Ordinal);
         Assert.Contains(
             payloads,
@@ -704,6 +761,25 @@ public sealed class MySqlGuardCommandPlanTests
                 Assert.Contains("INFORMATION_SCHEMA.", command.CommandText, StringComparison.Ordinal);
                 Assert.DoesNotContain("__doka_sm_cat_", command.CommandText, StringComparison.Ordinal);
             });
+    }
+
+    /// <summary>Captures a native identity target outside atomic required-column ADD generation.</summary>
+    private static ExpectedColumnDefinition ServerGeneratedRequiredColumn()
+    {
+        // WHY: Generic command-count tests retain their original single-body
+        // and row-guard contract. Atomic staging has separate two-body oracles.
+        var operation = new AddColumnOperation
+        {
+            Name = "value",
+            Table = "items",
+            ClrType = typeof(int),
+            ColumnType = "int",
+            IsNullable = false,
+        };
+
+        operation["Doka:MySql:ValueGenerationStrategy"] = MySqlValueGenerationStrategy.AutoIncrement;
+
+        return SafeMigrationExpectedDefinitionFactory.From(operation);
     }
 
     private static ExpectedColumnDefinition Column(
