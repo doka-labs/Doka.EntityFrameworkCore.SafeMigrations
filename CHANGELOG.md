@@ -13,13 +13,26 @@ captured live prerequisites with accepted ordered column/key lifetimes and
 current row proofs, so valid nullable-column/index/FK streams do not require
 redundant principal convergence. It corrects related native owner, supporting-
 index, CHECK and index-input contracts without rewriting historical migrations.
-Public signatures, production dependency ranges, policy selection, fingerprint
-formats, report schemas and migration history remain compatible. Earlier atomic
-concurrency and recovery guards remain in place. Source preparation is not
-publication evidence: the full hosted/native matrix, coverage, tooling, exact
+Public signatures, policy selection, fingerprint formats, report schemas and
+migration history remain compatible. The SQL Server PKCS dependency minimum
+is raised to its patched version; other production ranges remain unchanged.
+Earlier atomic concurrency and recovery guards remain in place. Source
+preparation is not publication evidence: the full hosted/native matrix, coverage, tooling, exact
 five-package primary/symbol set, provenance, SBOM and public readback remain
 required. Timing comparisons remain informational; functional, cancellation,
 invalid-evidence and artifact-write failures still block.
+
+### Security
+
+- Raise the SQL Server provider's transitive
+  `System.Security.Cryptography.Pkcs` minimum from 9.0.11 to 9.0.21, fixing
+  the publicly disclosed [CVE-2026-70162](https://github.com/dotnet/announcements/issues/454)
+  and [CVE-2026-84008](https://github.com/dotnet/announcements/issues/468).
+  Promote the central pin into the published NuGet dependency contract and
+  verify isolated consumers select the patched package. EF Core and SqlClient
+  versions, migration behavior and other provider runtime graphs are unchanged.
+  This package change does not update an application's installed .NET runtime
+  or SDK; apply Microsoft's platform servicing guidance separately.
 
 ### Fixed
 

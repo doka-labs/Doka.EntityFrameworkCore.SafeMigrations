@@ -106,6 +106,12 @@ for package_id in "${package_ids[@]}"; do
         exit 1
     fi
 
+    if [[ "$package_id" != Doka.EntityFrameworkCore.SafeMigrations.SqlServer ]] \
+        && grep -Fq '<dependency id="System.Security.Cryptography.Pkcs"' <<<"$nuspec_content"; then
+        echo "SQL Server-only PKCS dependency leaked into $nupkg." >&2
+        exit 1
+    fi
+
     if ! cmp -s "$script_dir/../README.md" <(unzip -p "$nupkg" README.md); then
         echo "Packaged README.md differs from the repository contract in $nupkg." >&2
         exit 1
@@ -202,6 +208,15 @@ sqlserver_entries="$(unzip -Z1 \
 grep -Fxq 'buildTransitive/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.props' <<<"$sqlserver_entries"
 grep -Fq '<dependency id="Microsoft.EntityFrameworkCore.SqlServer"' <<<"$sqlserver_nuspec"
 grep -Fq '<dependency id="Doka.EntityFrameworkCore.SafeMigrations"' <<<"$sqlserver_nuspec"
+
+# The published minimum must protect an isolated consumer that cannot see our
+# central pin or lockfile. Do not replace the minimum with an exact package lock.
+if ! grep -Fq '<dependency id="System.Security.Cryptography.Pkcs" version="9.0.21"' \
+    <<<"$sqlserver_nuspec"; then
+    echo "SQL Server package does not publish the patched PKCS minimum 9.0.21." >&2
+    exit 1
+fi
+
 if grep -Eq '<dependency id="(Doka\.EntityFrameworkCore\.MySql|Npgsql\.EntityFrameworkCore\.PostgreSQL|Microsoft\.EntityFrameworkCore\.Sqlite(\.Core)?|Doka\.EntityFrameworkCore\.SafeMigrations\.(MySql|PostgreSql|Sqlite))"' \
     <<<"$sqlserver_nuspec"; then
     echo "SQL Server package resolved a MySQL/MariaDB, PostgreSQL, or SQLite dependency." >&2
