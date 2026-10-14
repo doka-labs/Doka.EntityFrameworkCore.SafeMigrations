@@ -36,6 +36,17 @@ invalid-evidence and artifact-write failures still block.
 
 ### Fixed
 
+- Preserve independently captured MySQL/MariaDB column sources through accepted
+  PRIMARY/FK removal and ordinary nonunique BTREE creation. A same-layout
+  nullable `AlterColumn` or `EnsureColumn` no longer becomes structurally unknown
+  merely because its old composite PRIMARY was removed first. Keep intrinsic
+  column evidence separate from candidate-key and row lifetimes; retained or
+  recreated PRIMARY membership, source drift, writes and opaque changes cannot
+  acquire repair permission. Runtime rechecks the physical key and exact source
+  before DDL. Cover existing/missing supporting indexes, populated owners,
+  interrupted-prefix recovery, reruns and adversarial execution-time changes.
+  Recreated owners derive safety from their new accepted definitions, not the
+  previous owner's captured physical or row certificate.
 - Complete sparse ordered constraint and index prerequisites from independently
   captured live metadata. Adding a nullable FK column to a populated existing
   child no longer requires redundant convergence of its unchanged principal.

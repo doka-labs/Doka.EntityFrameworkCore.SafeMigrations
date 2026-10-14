@@ -428,6 +428,20 @@ an untouched source column, drop-only table history, and current row evidence.
 Other structural changes, opaque operations, recreated tables, and stale proofs
 cannot use that exception; it does not make the immutable snapshot sequence-aware.
 
+MySQL/MariaDB separately retains intrinsic column-source history through accepted
+FK/PRIMARY removals and ordinary nonunique BTREE creation. Provider opt-in is
+default-false; only independently captured matching or safe same-layout
+nullability evidence can survive these key changes. Ensure targets without
+authored old metadata require complete native nullability-only facet evidence,
+not inferred source definitions. The lazy owner-scoped history never clears
+general table/key invalidation and cannot revive after uncertified mutation.
+Candidate-key removal still invalidates dependent FK proofs. Data epochs,
+opaque SQL, owner/column replacement, current dependencies and independent
+provider refusals retain their existing boundaries. Analysis separates intrinsic
+source eligibility from PRIMARY membership; generated runtime SQL rechecks
+the live PRIMARY and exact source before the alteration. Whole-table convergence
+is not required to prove this narrow ordered transition.
+
 Missing MySQL/MariaDB BTREE indexes have an additional physical-achievability
 guard. The catalog plan calculates conservative maximum key bytes from the
 live InnoDB row format and page size, the referenced column metadata, and the

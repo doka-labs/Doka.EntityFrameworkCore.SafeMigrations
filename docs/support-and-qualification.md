@@ -57,7 +57,10 @@ of all five package IDs. Source preparation alone does not establish availabilit
 The 10.4.11 changes qualify sparse live/projected constraints and indexes from
 actual native metadata, accepted physical lifetimes and current row proofs.
 MySQL/MariaDB carries native owner equality through transition/backfill catalogs
-and guards unsafe FK supporting indexes. PostgreSQL qualifies native CHECK and
+and guards unsafe FK supporting indexes. Accepted PRIMARY/FK removal and ordinary
+nonunique BTREE creation preserve independently proven intrinsic column sources,
+not candidate-key or row authorization; execution retains fresh key/source guards.
+PostgreSQL qualifies native CHECK and
 physical index-input bindings before data probes, preserving bounded metadata
 and SQL transport. SQLite retains declared parent-key equality, strict capacity
 and appended-FK order; SQL Server uses compatible live endpoint/key evidence

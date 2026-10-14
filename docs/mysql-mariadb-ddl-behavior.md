@@ -404,8 +404,9 @@ Analysis keeps operation-specific source eligibility separate from shared
 physical row probes: two operations targeting the same length cannot borrow
 each other's old-definition approval.
 
-An exact accepted foreign-key removal does not by itself change column values
-or storage. Ordered preflight can therefore retain a supported matching column
+Accepted foreign-key and PRIMARY removals and ordinary nonunique BTREE creation
+do not by themselves change intrinsic column facets or stored values. Ordered
+preflight can therefore retain a supported matching column
 proof, or an exact source-proven value-preserving nullability alteration with
 unchanged layout, without first converging the complete table.
 Required-to-nullable relaxation and nullable-to-required tightening with no NULL
@@ -414,12 +415,25 @@ different columns of the same owner. Only nullability and validated boolean
 backfill review metadata may differ;
 the provider's live source and row certificate remain required. Authored
 `oldDefinition` metadata alone is not a live-source proof. Intervening data or
-opaque operations, changed physical source facets or keys, and unresolved or
-newly accepted FK dependencies cannot reuse that certificate. A default backfill
-UPDATE invalidates row proofs even when other column facets remain unchanged.
+opaque operations, changed physical source facets, uncertified key changes, and
+unresolved or newly accepted FK dependencies cannot reuse that certificate.
+A default backfill UPDATE invalidates row proofs even when other column facets
+remain unchanged.
 Independent `Unsupported` and `DataBlocked` results remain blocking. Relaxing
 nullability still requires the explicit repair policy and cannot make a retained
-primary-key column nullable.
+primary-key column nullable. Removing a composite PRIMARY first discharges its
+membership requirement, not the original source, row or remaining-FK checks.
+Preflight captures intrinsic eligibility separately from current PRIMARY
+membership; runtime rechecks both against the live schema before DDL. Recreating
+the PRIMARY, changing its owner's lifetime or injecting source drift cannot
+reuse the removal proof. An `EnsureColumn` without authored old metadata must
+have native matching evidence or complete, independently safe nullability-only
+facet evidence; no widening or default change inherits this bounded certificate.
+
+The distinction follows the native separate column, index and constraint
+operations documented in [MariaDB ALTER TABLE](https://mariadb.com/docs/server/reference/sql-statements/data-definition/alter/alter-table)
+and the required PRIMARY nullability contract in
+[MySQL CREATE TABLE](https://dev.mysql.com/doc/refman/8.4/en/create-table.html).
 
 Type-changing explicit alterations additionally require a conservative InnoDB
 in-page row bound for the captured row format and page size, as well as the

@@ -36,6 +36,7 @@ internal sealed partial class SafeMigrationPreflightProjection :
     private readonly HashSet<TableKey> _projectedStructurallyModifiedTables;
     private HashSet<TableKey>? _projectedColumnDropOnlyTables;
     private HashSet<TableKey>? _projectedForeignKeyDropOnlyTables;
+    private HashSet<TableKey>? _projectedIntrinsicColumnSourceTables;
     private readonly Dictionary<TableKey, HashSet<string>> _projectedChangedColumns;
     private bool _hasOpaqueProviderPostcondition;
     private bool _hasOpaqueSqlPostcondition;
@@ -346,7 +347,7 @@ internal sealed partial class SafeMigrationPreflightProjection :
             && _projectedColumnAnalyzer is not null
             && (operation.Intent switch
             {
-                AlterColumnIntent alter => CanReuseColumnProofAfterForeignKeyDrops(
+                AlterColumnIntent alter => CanReuseColumnProofAfterColumnPreservingChanges(
                     alter, liveAnalysis, new TableKey(alter.Table, alter.Schema)),
                 EnsureColumnIntent => analysis.RepairPreservesIntrinsicColumnLayout,
                 _ => false,
@@ -684,12 +685,14 @@ internal sealed partial class SafeMigrationPreflightProjection :
     /// <param name="safeColumnDrop">Whether this accepted mutation is a safe column drop, not an opaque change.</param>
     /// <param name="safeForeignKeyDrop">Whether this accepted mutation removes only a safe foreign key.</param>
     /// <param name="preservesForeignKeyColumnProofs">Whether certified nullability retains sibling proofs.</param>
+    /// <param name="preservesIntrinsicColumnSources">Whether the provider certifies unchanged intrinsic sources.</param>
     private void MarkProjectedTableStructureChanged(
         string table,
         string? schema,
         bool safeColumnDrop = false,
         bool safeForeignKeyDrop = false,
-        bool preservesForeignKeyColumnProofs = false
+        bool preservesForeignKeyColumnProofs = false,
+        bool preservesIntrinsicColumnSources = false
     )
     {
         var key = new TableKey(table, schema);
@@ -705,6 +708,9 @@ internal sealed partial class SafeMigrationPreflightProjection :
         }
         else
         {
+            // WHY: SQLite's drop-only rebuild certificate expires on any other
+            // structural mutation, even a nullability-only repair certified by
+            // the separate FK/intrinsic column-source contracts.
             _projectedColumnDropOnlyTables?.Remove(key);
         }
 
@@ -720,6 +726,22 @@ internal sealed partial class SafeMigrationPreflightProjection :
         else if (!preservesForeignKeyColumnProofs)
         {
             _projectedForeignKeyDropOnlyTables?.Remove(key);
+        }
+
+        if (preservesIntrinsicColumnSources
+            && (firstMutation || _projectedIntrinsicColumnSourceTables?.Contains(key) == true))
+        {
+            // WHY: Removing a PRIMARY or creating an ordinary index can preserve
+            // column storage while invalidating candidate-key proofs. Keep those
+            // lifetimes separate, and never revive a source after opaque mutation.
+            _projectedIntrinsicColumnSourceTables ??= new HashSet<TableKey>(
+                _projectedStructurallyModifiedTables.Comparer);
+
+            _projectedIntrinsicColumnSourceTables.Add(key);
+        }
+        else if (!preservesForeignKeyColumnProofs)
+        {
+            _projectedIntrinsicColumnSourceTables?.Remove(key);
         }
     }
 
@@ -782,6 +804,9 @@ internal sealed partial class SafeMigrationPreflightProjection :
         bool preservesForeignKeyColumnProofs = false
     )
     {
+        var preservesIntrinsicColumnSources =
+            _projectedColumnAnalyzer?.PreservesIntrinsicColumnSources(intent) == true;
+
         switch (intent)
         {
             case RenameTableIntent value:
@@ -803,7 +828,8 @@ internal sealed partial class SafeMigrationPreflightProjection :
                 MarkProjectedTableStructureChanged(value.Table, value.Schema);
                 break;
             case EnsureIndexIntent value:
-                MarkProjectedTableStructureChanged(value.Definition.Table, value.Definition.Schema);
+                MarkProjectedTableStructureChanged(value.Definition.Table, value.Definition.Schema,
+                    preservesIntrinsicColumnSources: preservesIntrinsicColumnSources);
                 break;
             case DropIndexIntent value:
                 MarkProjectedTableStructureChanged(value.Table, value.Schema);
@@ -815,7 +841,8 @@ internal sealed partial class SafeMigrationPreflightProjection :
                 MarkProjectedTableStructureChanged(value.Definition.Table, value.Definition.Schema);
                 break;
             case DropPrimaryKeyIntent value:
-                MarkProjectedTableStructureChanged(value.Table, value.Schema);
+                MarkProjectedTableStructureChanged(value.Table, value.Schema,
+                    preservesIntrinsicColumnSources: preservesIntrinsicColumnSources);
                 break;
             case EnsureUniqueConstraintIntent value:
                 MarkProjectedTableStructureChanged(value.Definition.Table, value.Definition.Schema);
@@ -833,7 +860,8 @@ internal sealed partial class SafeMigrationPreflightProjection :
                 MarkProjectedTableStructureChanged(value.Definition.Table, value.Definition.Schema);
                 break;
             case DropForeignKeyIntent value:
-                MarkProjectedTableStructureChanged(value.Table, value.Schema, safeForeignKeyDrop: true);
+                MarkProjectedTableStructureChanged(value.Table, value.Schema, safeForeignKeyDrop: true,
+                    preservesIntrinsicColumnSources: preservesIntrinsicColumnSources);
                 break;
         }
     }
