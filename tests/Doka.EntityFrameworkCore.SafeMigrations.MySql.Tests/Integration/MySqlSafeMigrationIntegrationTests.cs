@@ -1,47 +1,48 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests : MySqlIntegrationTestBase
+/// <summary>Preserves common helpers and nested EF model identities without inherited runnable tests.</summary>
+public abstract partial class MySqlSafeMigrationIntegrationTests : MySqlIntegrationTestBase
 {
-    public MySqlSafeMigrationIntegrationTests(
+    protected MySqlSafeMigrationIntegrationTests(
         MySqlEngineContainerFixture fixture
     ) : base(fixture) { }
 
-    private static SafeMigrationSqlExpression SqlColumn(
+    protected static SafeMigrationSqlExpression SqlColumn(
         string name
     ) => SafeMigrationSql.Identifier(name);
 
-    private static SafeMigrationSqlExpression SqlBinary(
+    protected static SafeMigrationSqlExpression SqlBinary(
         SafeMigrationSqlExpression left,
         SafeMigrationSqlBinaryOperator @operator,
         SafeMigrationSqlExpression right
     ) => SafeMigrationSql.Binary(left, @operator, right);
 
-    private static SafeMigrationSqlExpression SqlColumnAndColumn(
+    protected static SafeMigrationSqlExpression SqlColumnAndColumn(
         string left,
         SafeMigrationSqlBinaryOperator @operator,
         string right
     ) => SqlBinary(SqlColumn(left), @operator, SqlColumn(right));
 
-    private static SafeMigrationSqlExpression SqlColumnAndInt(
+    protected static SafeMigrationSqlExpression SqlColumnAndInt(
         string column,
         SafeMigrationSqlBinaryOperator @operator,
         int value
     ) => SqlBinary(SqlColumn(column), @operator, SafeMigrationSql.Literal(value));
 
-    private static SafeMigrationSqlExpression SqlFunction(
+    protected static SafeMigrationSqlExpression SqlFunction(
         string name,
         string column
     ) => SafeMigrationSql.Function(name, SqlColumn(column));
 
-    private sealed class UnmappedValue;
+    protected sealed class UnmappedValue;
 
-    private static string MySqlMaximumIdentifier(
+    protected static string MySqlMaximumIdentifier(
         string prefix
     ) => prefix + new string('x', 64 - prefix.Length);
 
     /// <summary>Requires an owned guard diagnostic while preserving its exact native duplicate-key cause.</summary>
     /// <param name="exception">The failure captured from the generated safe migration command.</param>
-    private static MySqlException AssertOwnedGuardFailure(
+    protected static MySqlException AssertOwnedGuardFailure(
         Exception? exception
     )
     {
@@ -59,7 +60,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests : MySqlIntegratio
 
     /// <summary>Requires the owned guard wrapper on the asynchronous provider execution path.</summary>
     /// <param name="action">The generated safe migration command to execute.</param>
-    private static async Task<MySqlException> AssertOwnedGuardFailureAsync(
+    protected static async Task<MySqlException> AssertOwnedGuardFailureAsync(
         Func<Task> action
     )
     {
@@ -70,7 +71,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests : MySqlIntegratio
 
     /// <summary>Requires the owned atomic-add CHECK, not ordinary constraint or MODIFY errors.</summary>
     /// <param name="exception">The failure from the admitted staged required-column migration body.</param>
-    private MySqlException AssertOwnedAtomicCheckFailure(Exception? exception)
+    protected MySqlException AssertOwnedAtomicCheckFailure(Exception? exception)
     {
         var diagnostic = Assert.IsType<SafeMigrationExecutionException>(exception);
         var native = Assert.IsType<MySqlException>(diagnostic.InnerException);
@@ -83,7 +84,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests : MySqlIntegratio
         return native;
     }
 
-    private sealed class ConflictingSafeMigrationHandler : IMySqlMigrationOperationHandler
+    protected sealed class ConflictingSafeMigrationHandler : IMySqlMigrationOperationHandler
     {
         public string HandlerId => "safe_migrations_tests.conflict";
 
@@ -94,9 +95,9 @@ public sealed partial class MySqlSafeMigrationIntegrationTests : MySqlIntegratio
         ) => throw new InvalidOperationException("A conflicting handler must never execute.");
     }
 
-    private sealed class CleanupFailureOperation : MigrationOperation;
+    protected sealed class CleanupFailureOperation : MigrationOperation;
 
-    private sealed class CleanupFailureHandler : IMySqlMigrationOperationHandler
+    protected sealed class CleanupFailureHandler : IMySqlMigrationOperationHandler
     {
         public string HandlerId => "safe_migrations_tests.cleanup_failure";
 
@@ -115,7 +116,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests : MySqlIntegratio
             "cleanup_failure_probe");
     }
 
-    private sealed class SchemaChangingDerivedContext(
+    protected sealed class SchemaChangingDerivedContext(
         string connectionString,
         MySqlServerVersion serverVersion
     ) : SafeMigrationDbContext(connectionString, serverVersion)

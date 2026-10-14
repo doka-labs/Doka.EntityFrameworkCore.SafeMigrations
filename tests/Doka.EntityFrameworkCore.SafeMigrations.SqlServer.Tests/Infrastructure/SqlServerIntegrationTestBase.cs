@@ -4,10 +4,10 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 /// Shares isolated-database operations without sharing mutable test state.
 /// </summary>
 /// <remarks>
-/// Derived classes join <see cref="SqlServerSharedContainer" /> so the whole
-/// assembly shares one container instead of starting one per test class.
+/// WHY: The assembly runner lends its one fixture to independent class collections;
+/// this interface supplies xUnit constructor metadata without transferring ownership.
 /// </remarks>
-public abstract class SqlServerIntegrationTestBase : IAsyncLifetime
+public abstract class SqlServerIntegrationTestBase : IAsyncLifetime, IClassFixture<SqlServerContainerFixture>
 {
     private readonly List<string> _ownedDatabases = [];
 

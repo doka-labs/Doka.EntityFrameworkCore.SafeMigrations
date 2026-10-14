@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
-public sealed partial class SqliteSafeMigrationCatalogIntegrationTests
+/// <summary>Exercises policy evidence with independently owned SQLite state.</summary>
+public sealed class SqliteSafeMigrationPolicyEvidenceIntegrationTests : SqliteSafeMigrationCatalogIntegrationTests
 {
     /// <summary>
     /// An existence-only no-op cannot certify an unapplied column definition for a later strict ensure.

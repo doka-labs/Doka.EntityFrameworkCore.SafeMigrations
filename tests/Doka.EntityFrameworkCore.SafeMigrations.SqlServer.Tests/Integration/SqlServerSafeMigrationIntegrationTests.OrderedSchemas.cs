@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
-public sealed partial class SqlServerSafeMigrationIntegrationTests
+/// <summary>Verifies ordered schemas SQL Server contracts against isolated databases.</summary>
+public sealed class SqlServerSafeMigrationOrderedSchemasIntegrationTests : SqlServerSafeMigrationIntegrationTests
 {
+    /// <summary>Creates the feature suite with the assembly-owned SQL Server fixture.</summary>
+    /// <param name="fixture">The shared fixture providing a database per test.</param>
+    public SqlServerSafeMigrationOrderedSchemasIntegrationTests(
+        SqlServerContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>Only an accepted schema ensure permits a following table in a new schema.</summary>
     [SqlServerLiveTheory]
     [InlineData(false, false)]

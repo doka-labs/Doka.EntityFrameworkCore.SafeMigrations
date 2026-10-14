@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
-public sealed partial class SqlServerSafeMigrationIntegrationTests
+/// <summary>Verifies defaults and checks SQL Server contracts against isolated databases.</summary>
+public sealed class SqlServerSafeMigrationDefaultsAndChecksIntegrationTests : SqlServerSafeMigrationIntegrationTests
 {
+    /// <summary>Creates the feature suite with the assembly-owned SQL Server fixture.</summary>
+    /// <param name="fixture">The shared fixture providing a database per test.</param>
+    public SqlServerSafeMigrationDefaultsAndChecksIntegrationTests(
+        SqlServerContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>Distinguishes absent defaults from both inline and legacy stand-alone bound defaults.</summary>
     /// <param name="defaultKind">The original physical default representation.</param>
     /// <param name="expectedState">The expected exact absence classification.</param>

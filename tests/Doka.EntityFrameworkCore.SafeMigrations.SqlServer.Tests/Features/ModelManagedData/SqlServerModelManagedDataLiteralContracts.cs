@@ -3,7 +3,6 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 /// <summary>
 /// Verifies captured SQL Server payloads remain representable before any mutation.
 /// </summary>
-[Collection(SqlServerSharedContainer.Name)]
 public sealed class SqlServerModelManagedDataLiteralContracts : SqlServerIntegrationTestBase
 {
     /// <summary>

@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
-public sealed partial class SqliteSafeMigrationCatalogIntegrationTests
+/// <summary>Exercises rename source absence with independently owned SQLite state.</summary>
+public sealed class SqliteSafeMigrationRenameSourceAbsenceIntegrationTests : SqliteSafeMigrationCatalogIntegrationTests
 {
     /// <summary>A missing table source satisfies an idempotent rename even without a destination.</summary>
     [Fact]

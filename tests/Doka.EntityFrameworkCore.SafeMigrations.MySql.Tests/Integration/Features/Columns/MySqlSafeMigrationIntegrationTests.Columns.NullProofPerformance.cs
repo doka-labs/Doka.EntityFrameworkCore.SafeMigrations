@@ -1,7 +1,12 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the ColumnsNullProofPerformance migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlColumnsNullProofPerformanceIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlColumnsNullProofPerformanceIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     /// <summary>Measures real row reads for the former duplicate proof and the generated shared proof.</summary>
     /// <remarks>Handler reads, not wall time, guard the regression independently of CI hardware.</remarks>
     /// <param name="rowCount">The number of unindexed, non-NULL values that require a complete proof.</param>
@@ -11,7 +16,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task RuntimeNullProof_SharedProofReducesExaminedRows(int rowCount)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         const string digits = "(SELECT 0 d UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 "
             + "UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 "
             + "UNION ALL SELECT 8 UNION ALL SELECT 9)";
@@ -131,9 +136,13 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         command.CommandText = sql;
         await command.ExecuteNonQueryAsync(CancellationToken.None);
     }
+}
+
+public abstract partial class MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Decodes generated prepared statements for a byte-exact synthetic before/after comparison.</summary>
-    private static List<string> DecodeNullProofMeasurementPayloads(string sql)
+    protected static List<string> DecodeNullProofMeasurementPayloads(string sql)
     {
         const string prefix = "CONVERT(0x";
         const string suffix = " USING utf8mb4)";

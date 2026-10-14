@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the DmlTriggers PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlDmlTriggersIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlDmlTriggersIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>DML trigger functions can execute DDL and invalidate an unrelated captured index match.</summary>
     /// <param name="typedWrite">Whether the source write is an ordinary EF operation.</param>
     /// <param name="writeKind">The DML operation which invokes the fixture trigger.</param>
@@ -15,7 +22,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task EventTriggers_DmlTriggerDdlDefersStructuralMatch(bool typedWrite, string writeKind)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE event_existing_values(id integer NOT NULL, value integer); "
             + "CREATE INDEX ix_event_existing ON event_existing_values(id); "
@@ -63,7 +70,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task EventTriggers_CascadeDmlDefersUnrelatedStructuralMatch()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE event_existing_values(id integer NOT NULL, value integer); "
             + "CREATE INDEX ix_event_existing ON event_existing_values(id); "
@@ -116,7 +123,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task EventTriggers_InactiveDmlRetainsStructuralMatch(string? activation)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE event_existing_values(id integer NOT NULL PRIMARY KEY, value integer); "
             + "INSERT INTO event_existing_values VALUES (1,0); "
@@ -156,7 +163,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task EventTriggers_MatchingManagedWriteRetainsStructuralMatch()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE event_existing_values(id integer NOT NULL, value integer); "
             + "CREATE INDEX ix_event_existing ON event_existing_values(id); "
@@ -202,7 +209,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE event_existing_values(id integer NOT NULL, value integer); "
             + "CREATE INDEX ix_event_existing ON event_existing_values(id); "
@@ -248,7 +255,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task EventTriggers_DmlVisibilityUnknownRequiresRuntimeValidation()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var role = "dml_reader_" + Guid.NewGuid().ToString("N");
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE event_existing_values(id integer NOT NULL, value integer); "
@@ -295,7 +302,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task EventTriggers_EmptyTypedDmlRetainsStructuralMatch(string writeKind)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE event_existing_values(id integer NOT NULL, value integer); "
             + "CREATE INDEX ix_event_existing ON event_existing_values(id); "
@@ -333,7 +340,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task EventTriggers_DisablingDmlBetweenAnalysesClearsCapturedOrigin()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE event_existing_values(id integer NOT NULL, value integer); "
             + "CREATE INDEX ix_event_existing ON event_existing_values(id); "

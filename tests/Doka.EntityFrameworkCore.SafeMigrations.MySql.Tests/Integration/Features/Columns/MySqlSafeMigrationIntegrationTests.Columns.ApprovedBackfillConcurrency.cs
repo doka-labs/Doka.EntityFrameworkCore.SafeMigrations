@@ -1,7 +1,12 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the ColumnsApprovedBackfillConcurrency migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlColumnsApprovedBackfillConcurrencyIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlColumnsApprovedBackfillConcurrencyIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     private const string ApprovedBackfillGuidValue = "00000000-0000-0000-0000-000000000017";
     private const string ApprovedBackfillPreservedGuid = "00000000-0000-0000-0000-000000000023";
 
@@ -14,7 +19,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ApprovedBackfillConcurrencyRejectsPermissiveSessionBeforeUpdate(string storageContract)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ApprovedBackfillFixtureSql(storageContract));
         var operation = ApprovedBackfillOperation(storageContract);
         var observer = new ApprovedBackfillCheckpointInterceptor(injectCheckpoint: false);
@@ -56,7 +61,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ApprovedBackfillConcurrencyStrictSessionAppliesDeclaredValues(string storageContract)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ApprovedBackfillFixtureSql(storageContract));
         var operation = ApprovedBackfillOperation(storageContract);
         var observer = new ApprovedBackfillCheckpointInterceptor(injectCheckpoint: false);
@@ -106,7 +111,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ApprovedBackfillConcurrencyStrictSessionPreservesLateNull(string storageContract)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ApprovedBackfillFixtureSql(storageContract) + ApprovedBackfillGateSql);
         var operation = ApprovedBackfillOperation(storageContract);
         var checkpoint = new ApprovedBackfillCheckpointInterceptor(injectCheckpoint: true);
@@ -175,7 +180,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ApprovedBackfillConcurrencyMatchingTargetDoesNotRequireStrictRepair(string storageContract)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ApprovedBackfillFixtureSql(storageContract, alreadyMatching: true));
         var operation = ApprovedBackfillOperation(storageContract);
         var observer = new ApprovedBackfillCheckpointInterceptor(injectCheckpoint: false);
@@ -373,9 +378,13 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             await Task.Delay(TimeSpan.FromMilliseconds(10), cancellationToken);
         }
     }
+}
+
+public abstract partial class MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Observes or checkpoints only the real approved UPDATE-plus-MODIFY logical body.</summary>
-    private sealed class ApprovedBackfillCheckpointInterceptor : DbCommandInterceptor
+    protected sealed class ApprovedBackfillCheckpointInterceptor : DbCommandInterceptor
     {
         private const string BodyPrefix = "SET @doka_sm_sql = CASE WHEN @doka_sm_action = 'apply' THEN";
         private const string StageEnd = "DEALLOCATE PREPARE doka_sm_statement;";

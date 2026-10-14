@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
-public sealed partial class SqlServerSafeMigrationIntegrationTests
+/// <summary>Verifies foreign key widths SQL Server contracts against isolated databases.</summary>
+public sealed class SqlServerSafeMigrationForeignKeyWidthsIntegrationTests : SqlServerSafeMigrationIntegrationTests
 {
+    /// <summary>Creates the feature suite with the assembly-owned SQL Server fixture.</summary>
+    /// <param name="fixture">The shared fixture providing a database per test.</param>
+    public SqlServerSafeMigrationForeignKeyWidthsIntegrationTests(
+        SqlServerContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>Applies the 900-byte boundary and rejects 901 bytes before orphan reads or ADD CONSTRAINT.</summary>
     [SqlServerLiveTheory]
     [InlineData(900, true)]

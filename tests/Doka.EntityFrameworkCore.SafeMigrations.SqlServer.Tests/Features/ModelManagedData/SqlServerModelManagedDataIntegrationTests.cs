@@ -3,7 +3,6 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 /// <summary>
 /// Exercises SQL Server-specific model-managed data boundaries against an isolated database.
 /// </summary>
-[Collection(SqlServerSharedContainer.Name)]
 public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegrationTestBase
 {
     /// <summary>

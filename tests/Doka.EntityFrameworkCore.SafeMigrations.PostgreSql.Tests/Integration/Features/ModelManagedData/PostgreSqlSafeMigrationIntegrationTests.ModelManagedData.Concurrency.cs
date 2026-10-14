@@ -1,11 +1,18 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the ModelManagedDataConcurrency PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlModelManagedDataConcurrencyIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlModelManagedDataConcurrencyIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     [Fact]
     public async Task ModelManagedUpdateRechecksSourceAndPostconditionAtExecution()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE model_race_roles (id integer NOT NULL PRIMARY KEY, name varchar(64) NOT NULL);"
@@ -58,7 +65,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         string referentialAction
     )
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE model_dependency_roles (id integer NOT NULL PRIMARY KEY, name varchar(64) NOT NULL);"
@@ -101,7 +108,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ModelManagedMutationHonorsCancellationDuringExecution()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE model_cancel_roles (id integer NOT NULL PRIMARY KEY, name varchar(64) NOT NULL);"
@@ -167,4 +174,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
 
         return builder;
     }
+
 }

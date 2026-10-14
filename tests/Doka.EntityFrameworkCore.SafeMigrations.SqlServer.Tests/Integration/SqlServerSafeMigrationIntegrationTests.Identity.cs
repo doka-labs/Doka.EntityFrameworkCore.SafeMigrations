@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
-public sealed partial class SqlServerSafeMigrationIntegrationTests
+/// <summary>Verifies identity SQL Server contracts against isolated databases.</summary>
+public sealed class SqlServerSafeMigrationIdentityIntegrationTests : SqlServerSafeMigrationIntegrationTests
 {
+    /// <summary>Creates the feature suite with the assembly-owned SQL Server fixture.</summary>
+    /// <param name="fixture">The shared fixture providing a database per test.</param>
+    public SqlServerSafeMigrationIdentityIntegrationTests(
+        SqlServerContainerFixture fixture
+    ) : base(fixture) { }
+
     private const string RestrictedLoginPassword = "SafeMigrations_Login_2026!";
 
     /// <summary>

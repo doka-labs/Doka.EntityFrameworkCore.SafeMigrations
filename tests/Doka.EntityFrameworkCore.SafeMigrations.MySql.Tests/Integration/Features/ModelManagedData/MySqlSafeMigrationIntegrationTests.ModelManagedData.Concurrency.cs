@@ -1,11 +1,16 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the ModelManagedDataConcurrency migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlModelManagedDataConcurrencyIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlModelManagedDataConcurrencyIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     [Fact]
     public async Task ModelManagedUpdateRechecksSourceAndPostconditionAtExecution()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `model_race_roles` (`id` int NOT NULL, `name` varchar(64) NOT NULL, "
@@ -64,7 +69,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         string referentialAction
     )
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `model_dependency_roles` (`id` int NOT NULL, `name` varchar(64) NOT NULL, "
@@ -108,7 +113,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ModelManagedMutationHonorsCancellationDuringExecution()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `model_cancel_roles` (`id` int NOT NULL, `name` varchar(64) NOT NULL, "

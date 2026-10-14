@@ -1,7 +1,12 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the CatalogProbes migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlCatalogProbesIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlCatalogProbesIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     /// <summary>Exact builder constants avoid queries without changing sparse prerequisite classifications.</summary>
     /// <param name="nonconstantCount">The number of operations requiring a real prerequisite query.</param>
     [Theory]
@@ -10,7 +15,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task Analyzer_PrunesConstantPrerequisitesButKeepsSparseCatalogProofs(int nonconstantCount)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await using var connection = new CatalogClassificationCountingConnection(new MySqlConnection(connectionString));
         context.Database.SetDbConnection(connection);
@@ -55,7 +60,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task Analyzer_RejectsMalformedSparsePrerequisiteResults(bool missingRows)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await using var connection = new CatalogClassificationCountingConnection(
             new MySqlConnection(connectionString),
@@ -89,7 +94,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task Analyzer_BatchesQualifiedNarrowingProbesAndPreservesReportParity()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var setup = new StringBuilder();
         for (var index = 0; index < 65; index++)
         {

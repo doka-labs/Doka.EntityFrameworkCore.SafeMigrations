@@ -1,11 +1,16 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the ColumnsLosslessRepair migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlColumnsLosslessRepairIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     [Fact]
     public async Task VarcharWidening_RepairsWithoutDataLossAndReplaysAsNoOp()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `varchar_widening` ("
@@ -106,7 +111,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         bool containsData
     )
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var nullability = isNullable ? "NULL" : "NOT NULL";
         var seedSql = containsData
             ? "INSERT INTO `text_family_widening` (`id`, `value`) "
@@ -189,7 +194,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task TextToVarchar_RepairsOnlyAfterTheLiveCharacterProof()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `text_to_varchar` ("
@@ -247,7 +252,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task TextToVarchar_RejectsOverlengthLiveValues()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `text_to_varchar_blocked` ("
@@ -293,7 +298,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task TextToVarchar_RejectsOverlengthTrailingSpaces()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `text_to_varchar_spaces` ("
@@ -351,7 +356,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         SafeMigrationAction expectedAction
     )
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `varchar_to_tinytext` ("
@@ -407,7 +412,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         int expectedPrefixLength
     )
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `text_transition_index` ("
@@ -472,7 +477,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         int targetLength
     )
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `varchar_fk_parent` ("
@@ -543,7 +548,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task VarcharNarrowing_GroupsCharacterProofsAndPreservesUtf8AndTrailingSpaces()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `varchar_narrowing` ("
@@ -734,7 +739,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     {
         const string privateValue = "private-overlength-value";
 
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `varchar_narrowing_blocked` ("
@@ -790,7 +795,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     {
         const string concurrentValue = "arrived-after-preflight";
 
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `varchar_narrowing_race` ("
@@ -845,7 +850,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task VarcharNarrowing_PropagatesProbeCommandTimeoutWithoutMutation()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `varchar_narrowing_timeout` ("
@@ -888,7 +893,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task VarcharNarrowing_PropagatesProbeCancellationWithoutMutation()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `varchar_narrowing_cancellation` ("
@@ -939,7 +944,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task VarcharNarrowing_RejectsRepairWhenStrictSessionModeIsDisabled()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `varchar_narrowing_non_strict` ("
@@ -993,7 +998,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task BooleanBitToTinyInt_PreservesTheCompleteValueDomainAndReplaysAsNoOp()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `boolean_repairs` ("
@@ -1088,7 +1093,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task BooleanRepair_RejectsExpressionDefaultsAndForeignKeyDependencies()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `boolean_default_blocked` (`value` bit(1) NULL DEFAULT (0 + 0)) ENGINE=InnoDB; "
@@ -1160,7 +1165,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         string targetStoreType
     )
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             $"CREATE TABLE `boolean_repair_blocked` (`value` {liveStoreType} NULL) ENGINE=InnoDB;");
@@ -1222,7 +1227,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         string targetStoreType
     )
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             $"CREATE TABLE `string_family_blocked` (`value` {liveStoreType} NULL) ENGINE=InnoDB;");
@@ -1276,7 +1281,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task VarcharRepair_RejectsUnknownStorageEngineAndCollationDrift()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `varchar_engine_blocked` (`value` varchar(10) NULL) "
@@ -1328,7 +1333,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     {
         const int fillerColumnCount = 12;
 
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var fillerColumns = string.Join(
             ", ",
             Enumerable.Range(0, fillerColumnCount).Select(index => $"`f{index}` varchar(5000) NULL"));
@@ -1376,7 +1381,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task BooleanRepair_RechecksCatalogShapeAndNullabilityBeforeMutation()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `boolean_repair_race` ("
@@ -1464,9 +1469,13 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             connection.RequiredAddSessionStatementCount, connection.RequiredAddOwnerEngineStatementCount,
             connection.RequiredAddStatusStatementCount, connection.ColumnDependencyStatementCount);
     }
+}
+
+public abstract partial class MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Retains measured counts only, without storing submitted SQL or provider row values.</summary>
-    private readonly record struct ProviderAnalysisQueries(
+    private protected readonly record struct ProviderAnalysisQueries(
         int Questions,
         int RowProbeStatements,
         int RequiredAddSessionStatements,
@@ -1474,6 +1483,10 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         int RequiredAddStatusStatements,
         int ColumnDependencyStatements
     );
+}
+
+public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSafeMigrationIntegrationTests
+{
 
     private static async Task<int> ReadSessionQuestionsAsync(
         DbContext context

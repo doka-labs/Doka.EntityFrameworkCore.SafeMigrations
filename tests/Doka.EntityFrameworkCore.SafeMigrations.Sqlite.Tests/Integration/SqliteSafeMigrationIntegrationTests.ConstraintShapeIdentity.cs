@@ -1,7 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
-public sealed partial class SqliteSafeMigrationCatalogIntegrationTests
-    : IClassFixture<SqliteConstraintShapeServiceFixture>
+/// <summary>Exercises constraint shape identity with independently owned SQLite state.</summary>
+public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegrationTests
+    : SqliteSafeMigrationCatalogIntegrationTests, IClassFixture<SqliteConstraintShapeServiceFixture>
 {
     private readonly SqliteConstraintShapeServiceFixture _constraintShapeServices;
 
@@ -9,9 +10,10 @@ public sealed partial class SqliteSafeMigrationCatalogIntegrationTests
     /// Shares provider services for the fixed-family constraint models without process-wide cache growth.
     /// </summary>
     /// <param name="constraintShapeServices">The class-owned provider and model caches.</param>
-    public SqliteSafeMigrationCatalogIntegrationTests(SqliteConstraintShapeServiceFixture constraintShapeServices) =>
-        _constraintShapeServices = constraintShapeServices
-            ?? throw new ArgumentNullException(nameof(constraintShapeServices));
+    public SqliteSafeMigrationConstraintShapeIdentityIntegrationTests(
+        SqliteConstraintShapeServiceFixture constraintShapeServices
+    ) => _constraintShapeServices = constraintShapeServices
+        ?? throw new ArgumentNullException(nameof(constraintShapeServices));
 
     /// <summary>
     /// Strict table aliases retain native constraint symbols for no-op and physical replacement decisions.
@@ -465,157 +467,6 @@ public sealed partial class SqliteSafeMigrationCatalogIntegrationTests
                 new SqliteForeignKeyConstraintShapeContext(connection, _constraintShapeServices.Provider),
             _ => throw new ArgumentOutOfRangeException(nameof(kind)),
         };
-
-    /// <summary>Shares only fixture model and registration mechanics, not a mutable model-cache key.</summary>
-    private abstract class SqliteConstraintShapeContext : DbContext
-    {
-        private readonly DbConnection _connection;
-        private readonly IServiceProvider _internalServices;
-
-        /// <summary>Initializes the fixture with its independent open connection.</summary>
-        /// <param name="connection">The test-owned native connection.</param>
-        /// <param name="internalServices">The class-owned shared provider services.</param>
-        protected SqliteConstraintShapeContext(DbConnection connection, IServiceProvider internalServices)
-        {
-            _connection = connection ?? throw new ArgumentNullException(nameof(connection));
-            _internalServices = internalServices ?? throw new ArgumentNullException(nameof(internalServices));
-        }
-
-        /// <summary>Registers each concrete fixture context without additional services or dependencies.</summary>
-        /// <param name="optionsBuilder">The concrete fixture's context options.</param>
-        protected void ConfigureConstraintShapeOptions(DbContextOptionsBuilder optionsBuilder)
-        {
-            optionsBuilder.UseSqlite(_connection);
-            optionsBuilder.UseSqliteSafeMigrations();
-
-            // WHY: Different CLR model types need distinct model cache entries,
-            // not distinct singleton providers. Fixture ownership bounds both
-            // caches without suppressing ManyServiceProvidersCreatedWarning.
-            optionsBuilder.UseInternalServiceProvider(_internalServices);
-        }
-
-        /// <summary>
-        /// Maps the final logical symbol required by the rebuild target, with unchanged column and row contracts.
-        /// </summary>
-        /// <param name="modelBuilder">The fixed concrete type's model.</param>
-        /// <param name="kind">The fixed native constraint family.</param>
-        protected static void ConfigureConstraintShapeModel(ModelBuilder modelBuilder, SafeMigrationOperationKind kind)
-        {
-            modelBuilder.Entity<ConstraintShapeParent>(entity =>
-            {
-                entity.ToTable("shape_parents");
-                entity.HasKey(value => value.Id).HasName("pk_shape_parents");
-                entity.Property(value => value.Id).ValueGeneratedNever();
-            });
-
-            modelBuilder.Entity<ConstraintShapeItem>(entity =>
-            {
-                entity.ToTable("shape_items", table =>
-                {
-                    if (kind == SafeMigrationOperationKind.EnsureCheckConstraint)
-                    {
-                        table.HasCheckConstraint("logical_constraint", "Code > 0");
-                    }
-
-                });
-
-                entity.HasKey(value => value.Id).HasName("pk_shape_items");
-                entity.Property(value => value.Id).ValueGeneratedNever();
-                if (kind == SafeMigrationOperationKind.EnsureUniqueConstraint)
-                {
-                    entity.HasAlternateKey(value => value.Code).HasName("logical_constraint");
-                }
-
-                if (kind == SafeMigrationOperationKind.EnsureForeignKey)
-                {
-                    entity.HasIndex(value => value.ParentId).HasDatabaseName("ix_shape_items_parent");
-                    entity.HasOne<ConstraintShapeParent>().WithMany().HasForeignKey(value => value.ParentId)
-                        .HasConstraintName("logical_constraint").OnDelete(DeleteBehavior.NoAction);
-                }
-
-            });
-        }
-
-        /// <summary>Represents the fixture principal without generated key values.</summary>
-        private sealed class ConstraintShapeParent
-        {
-            /// <summary>Gets or sets the fixture's principal key.</summary>
-            public int Id { get; set; }
-        }
-
-        /// <summary>Represents the stable row copied by each constraint rebuild.</summary>
-        private sealed class ConstraintShapeItem
-        {
-            /// <summary>Gets or sets the stable row key.</summary>
-            public int Id { get; set; }
-
-            /// <summary>Gets or sets the unique/check member.</summary>
-            public int Code { get; set; }
-
-            /// <summary>Gets or sets the existing valid principal reference.</summary>
-            public int ParentId { get; set; }
-        }
-    }
-
-    /// <summary>Provides the fixed UNIQUE rebuild contract.</summary>
-    private sealed class SqliteUniqueConstraintShapeContext : SqliteConstraintShapeContext
-    {
-        /// <summary>Initializes the fixed UNIQUE fixture.</summary>
-        /// <param name="connection">The test-owned native connection.</param>
-        /// <param name="internalServices">The class-owned shared provider services.</param>
-        public SqliteUniqueConstraintShapeContext(DbConnection connection, IServiceProvider internalServices)
-            : base(connection, internalServices)
-        {
-        }
-
-        /// <inheritdoc />
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
-            ConfigureConstraintShapeOptions(optionsBuilder);
-
-        /// <inheritdoc />
-        protected override void OnModelCreating(ModelBuilder modelBuilder) =>
-            ConfigureConstraintShapeModel(modelBuilder, SafeMigrationOperationKind.EnsureUniqueConstraint);
-    }
-
-    /// <summary>Provides the fixed CHECK rebuild contract.</summary>
-    private sealed class SqliteCheckConstraintShapeContext : SqliteConstraintShapeContext
-    {
-        /// <summary>Initializes the fixed CHECK fixture.</summary>
-        /// <param name="connection">The test-owned native connection.</param>
-        /// <param name="internalServices">The class-owned shared provider services.</param>
-        public SqliteCheckConstraintShapeContext(DbConnection connection, IServiceProvider internalServices)
-            : base(connection, internalServices)
-        {
-        }
-
-        /// <inheritdoc />
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
-            ConfigureConstraintShapeOptions(optionsBuilder);
-
-        /// <inheritdoc />
-        protected override void OnModelCreating(ModelBuilder modelBuilder) =>
-            ConfigureConstraintShapeModel(modelBuilder, SafeMigrationOperationKind.EnsureCheckConstraint);
-    }
-
-    /// <summary>Provides the fixed FK rebuild contract.</summary>
-    private sealed class SqliteForeignKeyConstraintShapeContext : SqliteConstraintShapeContext
-    {
-        /// <summary>Initializes the fixed FK fixture.</summary>
-        /// <param name="connection">The test-owned native connection.</param>
-        /// <param name="internalServices">The class-owned shared provider services.</param>
-        public SqliteForeignKeyConstraintShapeContext(DbConnection connection, IServiceProvider internalServices)
-            : base(connection, internalServices)
-        {
-        }
-
-        /// <inheritdoc />
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
-            ConfigureConstraintShapeOptions(optionsBuilder);
-
-        /// <inheritdoc />
-        protected override void OnModelCreating(ModelBuilder modelBuilder) =>
-            ConfigureConstraintShapeModel(modelBuilder, SafeMigrationOperationKind.EnsureForeignKey);
-    }
 }
 
 /// <summary>Owns one provider for independently cached constraint identity and projected-FK CLR models.</summary>

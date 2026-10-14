@@ -1,11 +1,18 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the ColumnsDriftMatrix PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlColumnsDriftMatrixIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlColumnsDriftMatrixIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     [Fact]
     public async Task ObservableColumnFacetDrift_IsRejectedOneFieldAtATime()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE column_facets (a integer NOT NULL, b integer NOT NULL);");
         await using var context = CreateContext(connectionString);
         var canonical = new[]
@@ -164,4 +171,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
         }
     }
+
 }

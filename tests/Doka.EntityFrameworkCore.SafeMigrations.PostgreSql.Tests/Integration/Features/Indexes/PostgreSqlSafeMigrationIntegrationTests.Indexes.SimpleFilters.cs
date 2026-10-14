@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the IndexesSimpleFilters PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlIndexesSimpleFiltersIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlIndexesSimpleFiltersIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>A recognized filter column must exist before analysis accepts a standalone index.</summary>
     /// <param name="filter">The canonical predicate referencing an absent physical column.</param>
     [Theory]
@@ -13,7 +20,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE SCHEMA hierarchy; CREATE TABLE hierarchy.simple_filters (id integer NOT NULL);"
@@ -48,7 +55,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE SCHEMA hierarchy; CREATE TABLE hierarchy.simple_filters (id integer NOT NULL);"
@@ -83,7 +90,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await CreateSimpleFilterTableAsync(connectionString, column);
         await using var context = CreateContext(connectionString);
         var builder = SimpleFilterBuilder(context, filter);
@@ -111,7 +118,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await CreateSimpleFilterTableAsync(connectionString);
         await using var context = CreateContext(connectionString);
         var builder = SimpleFilterBuilder(context, filter);
@@ -139,7 +146,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await CreateSimpleFilterTableAsync(connectionString, column);
         await using var context = CreateContext(connectionString);
         var builder = SimpleFilterBuilder(context, filter);
@@ -169,7 +176,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await CreateSimpleFilterTableAsync(connectionString);
         await using var context = CreateContext(connectionString);
         var builder = SimpleFilterBuilder(context, filter);
@@ -191,7 +198,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task SimpleFilterDriftAnalysisRejectsChangedPredicate()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await CreateSimpleFilterTableAsync(connectionString);
         await using var context = CreateContext(connectionString);
         await ExecuteOperationsAsync(context, SimpleFilterBuilder(context, "parent IS NULL").Operations);
@@ -215,7 +222,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task SimpleFilterDriftExecutionRejectsChangedPredicate()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await CreateSimpleFilterTableAsync(connectionString);
         await using var context = CreateContext(connectionString);
         await ExecuteOperationsAsync(context, SimpleFilterBuilder(context, "parent IS NULL").Operations);
@@ -238,41 +245,4 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 + "WHERE c.relname = 'simple_filter_lookup';"));
     }
 
-    /// <summary>Builds a source-frozen standalone filtered-index operation through the public authoring path.</summary>
-    private static MigrationBuilder SimpleFilterBuilder(
-        DbContext context,
-        string filter,
-        bool unique = false,
-        string name = "simple_filter_lookup"
-    )
-    {
-        var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.CreateCompositeIndexIfNotExistsFromModel(
-            name,
-            "simple_filters",
-            ["id"],
-            schema: "hierarchy",
-            unique: unique,
-            filter: filter);
-
-        return builder;
-    }
-
-    /// <summary>Creates only test-owned schema and mixed null/non-null rows for the predicate boundary.</summary>
-    private static Task CreateSimpleFilterTableAsync(
-        string connectionString,
-        string column = "parent"
-    ) => ExecuteSqlAsync(
-        connectionString,
-        "CREATE SCHEMA hierarchy; CREATE TABLE hierarchy.simple_filters "
-        + $"(id integer NOT NULL, {PostgreSqlIdentifier(column)} integer NULL);"
-        + "INSERT INTO hierarchy.simple_filters VALUES (1, NULL), (2, 1), (3, 2);");
-
-    /// <summary>Counts the independently managed filtered index in the exact test-owned schema.</summary>
-    private static Task<int> SimpleFilterIndexCountAsync(
-        string connectionString
-    ) => ScalarIntAsync(
-        connectionString,
-        "SELECT count(*) FROM pg_catalog.pg_indexes "
-        + "WHERE schemaname = 'hierarchy' AND indexname = 'simple_filter_lookup';");
 }

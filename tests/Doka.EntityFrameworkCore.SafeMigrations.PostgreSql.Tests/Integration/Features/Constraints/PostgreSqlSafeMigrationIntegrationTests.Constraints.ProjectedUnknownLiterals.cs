@@ -1,13 +1,20 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the ConstraintsProjectedUnknownLiterals PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlConstraintsProjectedUnknownLiteralsIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlConstraintsProjectedUnknownLiteralsIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>A failed SMALLINT unknown-input conversion cannot borrow a different native TEXT operator.</summary>
     [Fact]
     public async Task MatchingCheckDoesNotBorrowTextOperatorForOutOfRangeIntegerInput()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE FUNCTION metadata_equal(smallint, text) RETURNS boolean LANGUAGE sql IMMUTABLE "
             + "AS 'SELECT TRUE'; CREATE OPERATOR public.= (LEFTARG = smallint, RIGHTARG = text, "
@@ -59,7 +66,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         bool typedLiteral = false)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE mixed_columns (old_int integer NOT NULL);");
 
         await using var context = CreateContext(connectionString);
@@ -116,4 +123,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             Assert.All(replay.Assessments, static item => Assert.Equal(SafeMigrationAction.NoOp, item.Action));
         }
     }
+
 }

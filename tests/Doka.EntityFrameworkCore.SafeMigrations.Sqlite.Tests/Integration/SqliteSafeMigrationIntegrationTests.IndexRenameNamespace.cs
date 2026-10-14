@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
-public sealed partial class SqliteSafeMigrationCatalogIntegrationTests
+/// <summary>Exercises index rename namespace with independently owned SQLite state.</summary>
+public sealed class SqliteSafeMigrationIndexRenameNamespaceIntegrationTests : SqliteSafeMigrationCatalogIntegrationTests
 {
     /// <summary>A sparse accepted source cannot overwrite SQLite's schema-wide index-name namespace.</summary>
     /// <param name="createOccupant">The index, table or view occupying the destination name.</param>

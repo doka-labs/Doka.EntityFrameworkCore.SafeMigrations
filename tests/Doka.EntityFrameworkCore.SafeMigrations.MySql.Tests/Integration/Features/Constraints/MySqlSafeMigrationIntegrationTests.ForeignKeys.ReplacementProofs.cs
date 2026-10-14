@@ -1,7 +1,12 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the ForeignKeysReplacementProofs migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlForeignKeysReplacementProofsIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     /// <summary>Replacement certificates preserve exact ENUM and SET member domains without reading rows.</summary>
     /// <param name="useSetStorage">Whether the endpoint storage uses SET rather than ENUM.</param>
     /// <param name="matchingDomain">Whether member literal case matches the principal's exact domain.</param>
@@ -16,7 +21,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var keyword = useSetStorage ? "set" : "enum";
         var principalType = keyword + "('Alpha','Beta')";
         var dependentType = keyword + (matchingDomain ? "('Alpha','Beta')" : "('alpha','Beta')");
@@ -68,7 +73,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeyReplacementProofPreservesNullableActionChanges(bool updateAction)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ForeignKeyNullabilityFixture(alreadyNullable: true));
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -108,7 +113,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeyReplacementProofRejectsOrphansOnDifferentRequestedColumn()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ForeignKeyAlternateColumnFixture(orphan: true));
         await using var context = CreateContext(connectionString);
         var operations = AlternateColumnForeignKeyReplacement(context);
@@ -140,7 +145,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeyReplacementProofRechecksOrphansAfterPreflight()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ForeignKeyAlternateColumnFixture(orphan: false));
         await using var context = CreateContext(connectionString);
         var operations = AlternateColumnForeignKeyReplacement(context);
@@ -172,7 +177,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeyReplacementProofRejectsTargetStorageDrift(bool collationDrift)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var alternateType = collationDrift
             ? "char(36) CHARACTER SET ascii COLLATE ascii_bin"
             : "int";
@@ -204,7 +209,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeyReplacementProofRejectsMissingTargetEndpoint(string missingEndpoint)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ForeignKeyNullabilityFixture(alreadyNullable: true));
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -231,7 +236,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeyReplacementProofRejectsRequiredLocalSetNull()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ForeignKeyNullabilityFixture(alreadyNullable: false));
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -260,7 +265,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeyReplacementProofRejectsCaseVariantAcceptedRequiredColumn()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ForeignKeyNullabilityFixture(alreadyNullable: true));
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -310,7 +315,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeyReplacementProofRejectsRemovedPrincipalKey(bool uniqueConstraint)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var fixture = ForeignKeyNullabilityFixture(alreadyNullable: true);
         if (uniqueConstraint)
         {
@@ -355,7 +360,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeyReplacementProofExpiresAfterAcceptedWrite(string writeKind)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ForeignKeyNullabilityFixture(alreadyNullable: true)
             + " CREATE TABLE `proof_mutations` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB;");
         await using var context = CreateContext(connectionString);
@@ -411,7 +416,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeyReplacementProofSupportsCompositePartialNullRows()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, CompositeForeignKeyReplacementFixture());
         await using var context = CreateContext(connectionString);
         var builder = CompositeForeignKeyReplacement(context, reversePrincipalOrder: false);
@@ -444,7 +449,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeyReplacementProofRejectsCompositePrincipalOrderDrift()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, CompositeForeignKeyReplacementFixture());
         await using var context = CreateContext(connectionString);
         var builder = CompositeForeignKeyReplacement(context, reversePrincipalOrder: true);
@@ -465,7 +470,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeyReplacementProofSupportsReusedOperationInstances()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ForeignKeyNullabilityFixture(alreadyNullable: true));
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -503,7 +508,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeyReplacementProofRequiresAcceptedExactRemoval(bool missingDrop)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ForeignKeyNullabilityFixture(alreadyNullable: true));
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -535,7 +540,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeyReplacementProofDoesNotRetainOrphansAfterDependentTableRecreation()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `empty_proof_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `empty_proof_child` (`id` int NOT NULL PRIMARY KEY, "
@@ -587,7 +592,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeyOrdinaryEnsureRetainsDifferentVarcharLengthCompatibility()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `length_proof_parent` (`id` varchar(36) NOT NULL PRIMARY KEY) ENGINE=InnoDB "
             + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
@@ -621,7 +626,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeyReplacementProofRetainsConstraintNameOwnershipBoundary()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ForeignKeyNullabilityFixture(alreadyNullable: true)
             + " CREATE TABLE `other_proof_child` (`id` int NOT NULL PRIMARY KEY, `owner_id` char(36) NULL, "
             + "CONSTRAINT `fk_colliding_target` FOREIGN KEY (`owner_id`) REFERENCES `proof_parent` (`id`)) "
@@ -676,7 +681,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeyReplacementProofRetainsSurvivingSemanticAlias(bool dropFirstAlias)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ForeignKeySemanticAliasFixture(includeSecondAlias: dropFirstAlias));
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -734,7 +739,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeyReplacementProofExpiresPreviouslyAcceptedSemanticAlias(bool uppercaseAliasDrop)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ForeignKeySemanticAliasFixture(includeSecondAlias: false));
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -776,7 +781,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeyReplacementProofSupportsCaseVariantExactRemoval()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ForeignKeyNullabilityFixture(alreadyNullable: true));
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -809,7 +814,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeyReplacementProofAppliesAfterEverySemanticAliasIsRemoved()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ForeignKeySemanticAliasFixture(includeSecondAlias: true));
         await using var context = CreateContext(connectionString);
         var builder = SemanticAliasForeignKeyRemoval(context, includeSecondAlias: true);
@@ -846,7 +851,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeyReplacementProofRechecksRowsAfterSemanticAliasesDisappear()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ForeignKeySemanticAliasFixture(includeSecondAlias: false));
         await using var context = CreateContext(connectionString);
         var builder = SemanticAliasForeignKeyRemoval(context, includeSecondAlias: false);
@@ -879,7 +884,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeyReplacementProofRetainsExactCollisionWithoutAnyRemoval()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ForeignKeySemanticAliasFixture(includeSecondAlias: false));
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -913,7 +918,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeyReplacementProofRecreatesAfterCaseVariantSemanticSourceRemoval()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var fixture = ForeignKeyNullabilityFixture(alreadyNullable: true)
             .Replace("fk_proof_child_parent", "fk_semantic_proof_1", StringComparison.Ordinal)
             .Replace("ON DELETE CASCADE", "ON DELETE SET NULL", StringComparison.Ordinal);
@@ -961,7 +966,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeyReplacementProofDropsAcceptedFkMissingFromOriginalCatalog()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `missing_proof_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `missing_proof_child` (`id` int NOT NULL PRIMARY KEY, `owner_id` int NULL) ENGINE=InnoDB; "
@@ -1007,7 +1012,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeyReplacementProofResolvesNewlyRecreatedPhysicalAlias()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ForeignKeySemanticAliasFixture(includeSecondAlias: true));
         await using var context = CreateContext(connectionString);
         var builder = RecreatedAliasForeignKeyOperations(context, recreatedAction: ReferentialAction.SetNull);
@@ -1060,7 +1065,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeyReplacementProofDoesNotMatchChangedRecreatedPhysicalAlias()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ForeignKeySemanticAliasFixture(includeSecondAlias: true));
         await using var context = CreateContext(connectionString);
         var builder = RecreatedAliasForeignKeyOperations(context, recreatedAction: ReferentialAction.Cascade);

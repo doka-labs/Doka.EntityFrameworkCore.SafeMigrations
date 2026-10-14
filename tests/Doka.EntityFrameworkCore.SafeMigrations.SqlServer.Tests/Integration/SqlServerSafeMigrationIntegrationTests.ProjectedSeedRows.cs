@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
-public sealed partial class SqlServerSafeMigrationIntegrationTests
+/// <summary>Verifies projected seed rows SQL Server contracts against isolated databases.</summary>
+public sealed class SqlServerSafeMigrationProjectedSeedRowsIntegrationTests : SqlServerSafeMigrationIntegrationTests
 {
+    /// <summary>Creates the feature suite with the assembly-owned SQL Server fixture.</summary>
+    /// <param name="fixture">The shared fixture providing a database per test.</param>
+    public SqlServerSafeMigrationProjectedSeedRowsIntegrationTests(
+        SqlServerContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>Qualifies inline unique constraints even when managed metadata omits the physical candidate.</summary>
     [SqlServerLiveTheory]
     [InlineData(false, null, null, SafeMigrationReportStatus.Blocked)]

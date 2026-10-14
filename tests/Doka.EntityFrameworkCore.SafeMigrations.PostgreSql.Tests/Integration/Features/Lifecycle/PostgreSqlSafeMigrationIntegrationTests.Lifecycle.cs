@@ -1,11 +1,18 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the Lifecycle PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlLifecycleIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     [Fact]
     public async Task StrictMismatch_FailsWithStableSqlState()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE accounts (id integer NOT NULL, name character varying(20) NULL);");
@@ -23,7 +30,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task MissingAdapter_FailsClosedDuringGeneration()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString, registerSafeMigrations: false);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists(
@@ -43,7 +50,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task Migrator_MixesStandardAndSafeOperationsAndWritesOneHistoryRow()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE pipeline_state (id integer NOT NULL PRIMARY KEY);");
         await using var context = CreateContext(connectionString);
 
@@ -70,7 +77,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task RuntimeGuardFailureAfterStandardDdl_RollsBackAndRetriesWithoutHistoryDrift()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE VIEW pipeline_state AS SELECT 1 AS id;");
         await using var context = CreateContext(connectionString);
 
@@ -104,7 +111,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ExternalInternalServiceProvider_ResolvesTheComposedAdapterAndRunner()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var services = new ServiceCollection();
         services.AddEntityFrameworkNpgsql();
         services.AddPostgreSqlSafeMigrations();
@@ -136,7 +143,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task MigrationScripts_ExecuteNormalIdempotentAndNoTransactionPaths()
     {
-        var generationConnectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var generationConnectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var generationContext = CreateContext(generationConnectionString);
         var migrator = generationContext.GetService<IMigrator>();
         var scripts = new[]
@@ -149,7 +156,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         foreach (var script in scripts)
         {
             Assert.Contains(CoreConvergenceMigration.MigrationIdentifier, script, StringComparison.Ordinal);
-            var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+            var connectionString = await CreateDatabaseAsync(CancellationToken.None);
             await ExecuteSqlAsync(connectionString, script);
             if (script != scripts[0])
             {
@@ -175,7 +182,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ConcurrentMigrators_SerializePerDatabaseAndRunDifferentDatabasesInParallel()
     {
-        var sharedConnectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var sharedConnectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             sharedConnectionString,
             "CREATE TABLE \"__LegacyMigrationsHistory\" (\"MigrationId\" text NOT NULL); "
@@ -200,8 +207,8 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 sharedConnectionString,
                 "SELECT COUNT(*) FROM \"__LegacyMigrationsHistory\" " + "WHERE \"MigrationId\" = 'legacy-unchanged';"));
 
-        var leftConnectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
-        var rightConnectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var leftConnectionString = await CreateDatabaseAsync(CancellationToken.None);
+        var rightConnectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var left = CreateContext(leftConnectionString);
         await using var right = CreateContext(rightConnectionString);
         await Task.WhenAll(left.Database.MigrateAsync(cancellationToken: CancellationToken.None), right.Database.MigrateAsync(cancellationToken: CancellationToken.None));
@@ -223,7 +230,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task PreflightAndPostflight_AreReadOnlyAndUseRuntimeClassification()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists(
@@ -275,7 +282,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task PendingPreflight_ProjectsACompleteMissingConvergenceTable()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
 
         var report = await context
@@ -304,7 +311,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task PreflightProjectsProviderAddColumnForFollowingSafeIndex()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE mixed_customers (id integer PRIMARY KEY);"
@@ -394,7 +401,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task Preflight_RejectsASchemaChangingDerivedContextAgainstTheMigrationSnapshot()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = new SchemaChangingDerivedContext(connectionString);
 
         await Assert.ThrowsAsync<SafeMigrationModelMismatchException>(() => context
@@ -405,7 +412,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ColumnTableIndexLifecycle_IsIdempotentAcrossEveryOperationFamily()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE lifecycle (id integer NOT NULL, old_name character varying(40) NULL); "
@@ -461,7 +468,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task Preflight_ReportsButDoesNotDeleteUnexpectedLegacyObjects()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE inventory_target (id integer NOT NULL, legacy_column integer NULL); "
@@ -499,7 +506,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task MissingRenameSources_AreIdempotentNoOps()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameTableIfExists("missing_table", "renamed_table");
@@ -518,4 +525,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 + "WHERE n.nspname = current_schema() "
                 + "AND c.relname IN ('missing_table', 'renamed_table');"));
     }
+
 }

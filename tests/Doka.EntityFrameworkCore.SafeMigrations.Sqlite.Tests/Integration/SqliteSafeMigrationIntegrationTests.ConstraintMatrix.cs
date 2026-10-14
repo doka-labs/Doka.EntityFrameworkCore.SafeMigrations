@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
-public sealed partial class SqliteSafeMigrationCatalogIntegrationTests
+/// <summary>Exercises constraint matrix with independently owned SQLite state.</summary>
+public sealed class SqliteSafeMigrationConstraintMatrixIntegrationTests : SqliteSafeMigrationCatalogIntegrationTests
 {
     [Theory]
     [InlineData(SafeMigrationOperationKind.EnsurePrimaryKey, "primary_key_invalid_values")]

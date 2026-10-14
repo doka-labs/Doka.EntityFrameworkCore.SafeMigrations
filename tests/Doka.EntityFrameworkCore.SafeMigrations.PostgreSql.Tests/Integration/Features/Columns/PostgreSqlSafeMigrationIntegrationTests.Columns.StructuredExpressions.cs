@@ -1,11 +1,18 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the ColumnsStructuredExpressions PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlColumnsStructuredExpressionsIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlColumnsStructuredExpressionsIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     [Fact]
     public async Task StructuredAliasCast_ConvergesAndRoundTripsCanonicalCatalogType()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.ConvergeTable(
@@ -53,7 +60,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task StructuredCastTypes_RenderTypedNullsAcceptedByTheServer()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var renderer = new PostgreSqlSafeMigrationSqlExpressionRenderer(
             context.GetService<IRelationalTypeMappingSource>(),
@@ -99,4 +106,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             await ExecuteSqlAsync(connectionString, $"SELECT {expression};");
         }
     }
+
 }

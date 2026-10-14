@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
-public sealed partial class SqlServerSafeMigrationIntegrationTests
+/// <summary>Verifies runtime diagnostics SQL Server contracts against isolated databases.</summary>
+public sealed class SqlServerSafeMigrationRuntimeDiagnosticsIntegrationTests : SqlServerSafeMigrationIntegrationTests
 {
+    /// <summary>Creates the feature suite with the assembly-owned SQL Server fixture.</summary>
+    /// <param name="fixture">The shared fixture providing a database per test.</param>
+    public SqlServerSafeMigrationRuntimeDiagnosticsIntegrationTests(
+        SqlServerContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>Native execution retains each guard number and readable operation context.</summary>
     /// <param name="state">The prepared native classification.</param>
     /// <param name="number">The unchanged native SafeMigrations error number.</param>

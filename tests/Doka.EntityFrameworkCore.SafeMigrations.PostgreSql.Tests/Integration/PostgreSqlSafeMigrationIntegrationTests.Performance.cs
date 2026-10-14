@@ -1,17 +1,24 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the Performance PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlPerformanceIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlPerformanceIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     private const int ExpectedPerformanceTableCount = 100;
+
     private const int ForeignPerformanceTableCount = 1000;
-    private const int PerformanceFixtureCommandTimeoutSeconds = 180;
 
     /// <summary>Checks managed-data deferral in several mixed-stream cycles before costly stress qualification.</summary>
     [Fact]
     public async Task Analyzer_BoundedMixedOperationsRetainExactDeferredContracts()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, BuildLargeMigrationStressCatalog());
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -30,7 +37,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Trait("Category", "LargeScale")]
     public async Task Analyzer_OneHundredThousandMixedOperationsRemainBoundedOrderedAndComplete()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             BuildLargeMigrationStressCatalog());
@@ -51,77 +58,9 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     }
 
     [Fact]
-    [Trait("Category", "LargeScale")]
-    public async Task ModelManagedData_FiftyThousandMixedRowsConvergeAndReplayIdempotently()
-    {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(
-            connectionString,
-            "CREATE TABLE large_model_managed_rows ("
-            + "id integer NOT NULL PRIMARY KEY, managed_value character varying(32) NOT NULL);"
-            + BuildPostgreSqlModelManagedInitialRows());
-
-        await using var context = CreateContext(connectionString);
-        context.Database.SetCommandTimeout(PerformanceFixtureCommandTimeoutSeconds);
-        var builder = new MigrationBuilder(context.Database.ProviderName!);
-        var expectation = ModelManagedDataLargeExecutionContract.Populate(
-            builder,
-            "integer",
-            "character varying(32)");
-
-        var runner = context.GetService<ISafeMigrationRunner>();
-        var commands = context
-            .GetService<IMigrationsSqlGenerator>()
-            .Generate(builder.Operations, context.Model);
-
-        var initial = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(() => runner.AnalyzeAsync(
-                context,
-                builder.Operations,
-                new SafeMigrationRunOptions("large-model-managed-data"),
-                CancellationToken.None));
-
-        var initialExecution = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(() =>
-            ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
-
-        var replayExecution = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(() =>
-            ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
-
-        var replay = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(() => runner.AnalyzeAsync(
-                context,
-                builder.Operations,
-                new SafeMigrationRunOptions("large-model-managed-data-replay"),
-                CancellationToken.None));
-
-        ModelManagedDataLargeExecutionEvidence.Write(
-            "postgresql",
-            Fixture.ServerVersion.ToString(),
-            commands,
-            initial.Measurement,
-            initialExecution,
-            replayExecution,
-            replay.Measurement);
-
-        expectation.AssertInitialReport(initial.Result);
-        expectation.AssertReplayReport(replay.Result);
-        Assert.Equal(
-            expectation.FinalRowCount,
-            await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM large_model_managed_rows;"));
-        Assert.Equal(
-            expectation.FinalRowCount,
-            await ScalarIntAsync(
-                connectionString,
-                "SELECT COUNT(*) FROM large_model_managed_rows WHERE managed_value = 'target';"));
-        Assert.Equal(
-            0,
-            await ScalarIntAsync(
-                connectionString,
-                "SELECT COUNT(*) FROM large_model_managed_rows WHERE id >= 3000000;"));
-    }
-
-    [Fact]
     public async Task Analyzer_AppliesConfiguredCommandTimeoutToCatalogBatches()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE catalog_timeout (id integer NOT NULL); "
@@ -151,7 +90,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task FullRunner_LiveCatalogP95RemainsBoundedWithForeignObjectsAndPooling()
     {
-        var templateConnectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var templateConnectionString = await CreateDatabaseAsync(CancellationToken.None);
         var connectionString = new NpgsqlConnectionStringBuilder(templateConnectionString)
         {
             Pooling = true,
@@ -302,14 +241,4 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 return $"CREATE TABLE \"{table}\" (\"id\" integer NOT NULL{payloadColumn});{indexDdl}";
             }));
 
-    private static string BuildPostgreSqlModelManagedInitialRows() => string.Join(
-        Environment.NewLine,
-        ModelManagedDataLargeExecutionContract
-            .InitialRows()
-            .Chunk(1000)
-            .Select(batch => "INSERT INTO large_model_managed_rows (id, managed_value) VALUES "
-                + string.Join(
-                    ", ",
-                    batch.Select(row => $"({row.Id.ToString(CultureInfo.InvariantCulture)}, '{row.Value}')"))
-                + ";"));
 }

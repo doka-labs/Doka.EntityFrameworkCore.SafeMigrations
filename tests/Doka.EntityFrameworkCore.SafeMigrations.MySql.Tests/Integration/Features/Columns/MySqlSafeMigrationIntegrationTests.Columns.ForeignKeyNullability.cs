@@ -1,7 +1,12 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the ColumnsForeignKeyNullability migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlColumnsForeignKeyNullabilityIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlColumnsForeignKeyNullabilityIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     /// <summary>Each unchanged sibling retains its own proof after several FK removals and relaxations.</summary>
     /// <param name="matchingSibling">Whether the second target already permits NULL.</param>
     [Theory]
@@ -10,7 +15,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeyDropPreservesMultipleSameOwnerNullableColumnProofs(bool matchingSibling)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ForeignKeyNullabilityFixture(alreadyNullable: false)
             + " ALTER TABLE `proof_child` ADD `second_owner_id` char(36) "
             + (matchingSibling ? "NULL;" : "NOT NULL;")
@@ -68,7 +73,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeyDropPreservesNullableColumnProofAndReplacement(bool alreadyNullable)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ForeignKeyNullabilityFixture(alreadyNullable));
         await using var context = CreateContext(connectionString);
         var operations = ForeignKeyNullabilityOperations();
@@ -109,7 +114,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeyReplacementOnExistingNullableColumnUsesFreshProof()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ForeignKeyNullabilityFixture(alreadyNullable: true));
         await using var context = CreateContext(connectionString);
         var operations = ForeignKeyNullabilityOperations().Where(
@@ -129,7 +134,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ExplicitBackfillRequiredGuidAddRejectsPopulatedTable()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `backfill_items` (`value` int NOT NULL); INSERT INTO `backfill_items` VALUES (7);");
         await using var context = CreateContext(connectionString);
@@ -152,7 +157,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ExplicitBackfillRequiredGuidAddAllowsEmptyTableAndMatchingRerun()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE `backfill_items` (`value` int NOT NULL);");
         await using var context = CreateContext(connectionString);
         var operation = ExplicitBackfillGuidAdd();
@@ -215,11 +220,15 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         return builder.Operations;
     }
+}
+
+public abstract partial class MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Creates a populated brownfield FK fixture with explicit compatible character storage.</summary>
     /// <param name="alreadyNullable">Whether the initial child column already permits NULL.</param>
     /// <returns>The isolated test schema and sentinel rows.</returns>
-    private static string ForeignKeyNullabilityFixture(bool alreadyNullable)
+    protected static string ForeignKeyNullabilityFixture(bool alreadyNullable)
         => "CREATE TABLE `proof_parent` (`id` char(36) NOT NULL PRIMARY KEY) ENGINE=InnoDB "
             + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
             + "CREATE TABLE `proof_child` (`id` int NOT NULL PRIMARY KEY, `owner_id` char(36) "

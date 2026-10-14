@@ -1,11 +1,16 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the ConstraintsDriftMatrix migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlConstraintsDriftMatrixIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     [Fact]
     public async Task EquivalentUniqueAndCheckConstraintsWithDifferentNames_AreIdempotentNoOps()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `constraint_identity` ("
@@ -74,7 +79,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task DifferentlyNamedUniqueAndCheckConstraintsWithDifferentShapes_RemainApplicable()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `constraint_nonidentity` ("
@@ -126,7 +131,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             return;
         }
 
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `check_scope_target` (`value` int NOT NULL, "
@@ -166,7 +171,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             return;
         }
 
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `check_enforcement_drift` (`quantity` int NOT NULL, "
@@ -204,7 +209,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             return;
         }
 
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `check_enforcement_identity` (`quantity` int NOT NULL, "
@@ -249,7 +254,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             return;
         }
 
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `namespace_owner_parent` (`id` int NOT NULL, PRIMARY KEY (`id`));"
@@ -315,7 +320,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             return;
         }
 
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `fk_scope_owner_parent` (`id` int NOT NULL, PRIMARY KEY (`id`));"
@@ -389,7 +394,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         int legacyConstraintCount
     )
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var legacyName = new string('l', 64);
         var secondLegacyName = new string('s', 64);
         var expectedName = new string('e', 64);
@@ -443,7 +448,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ExactNameDrift_IsNeverHiddenByEquivalentAliases()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `identity_precedence_parents` (`id` int NOT NULL, PRIMARY KEY (`id`));"
@@ -523,7 +528,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         ReferentialAction onDelete
     )
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `identity_action_parents` (`id` int NOT NULL, PRIMARY KEY (`id`));"
@@ -566,7 +571,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ObservableConstraintFacetDrift_IsRejectedOneFieldAtATime()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `constraint_matrix_parents` ("

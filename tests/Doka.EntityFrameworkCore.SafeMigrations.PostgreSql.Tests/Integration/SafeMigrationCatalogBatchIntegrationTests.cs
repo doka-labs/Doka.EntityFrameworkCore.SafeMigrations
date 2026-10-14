@@ -1,17 +1,15 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed class SafeMigrationCatalogBatchIntegrationTests : IClassFixture<PostgreSqlContainerFixture>
+public sealed class SafeMigrationCatalogBatchIntegrationTests : PostgreSqlIntegrationTestBase
 {
-    private readonly PostgreSqlContainerFixture _fixture;
-
     public SafeMigrationCatalogBatchIntegrationTests(
         PostgreSqlContainerFixture fixture
-    ) => _fixture = fixture;
+    ) : base(fixture) { }
 
     [Fact]
     public async Task ConnectionWithoutBatchSupport_ExecutesCommandsSequentially()
     {
-        var connectionString = await _fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var connection = new NonBatchingDbConnection(new NpgsqlConnection(connectionString));
         await connection.OpenAsync(CancellationToken.None);
         await using var batch = new SafeMigrationCatalogBatch(connection, commandTimeout: 19);
@@ -44,7 +42,7 @@ public sealed class SafeMigrationCatalogBatchIntegrationTests : IClassFixture<Po
     [Fact]
     public async Task ConnectionWithoutBatchSupport_PropagatesCancellation()
     {
-        var connectionString = await _fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var connection = new NonBatchingDbConnection(new NpgsqlConnection(connectionString));
         await connection.OpenAsync(CancellationToken.None);
         await using var batch = new SafeMigrationCatalogBatch(connection, commandTimeout: 19);

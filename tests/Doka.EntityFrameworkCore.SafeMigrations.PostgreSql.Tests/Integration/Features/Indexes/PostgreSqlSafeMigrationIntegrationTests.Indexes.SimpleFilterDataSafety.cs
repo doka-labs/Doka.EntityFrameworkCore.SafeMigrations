@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the IndexesSimpleFilterDataSafety PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlIndexesSimpleFilterDataSafetyIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlIndexesSimpleFilterDataSafetyIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>A partial unique index does not reject duplicate keys outside its canonical predicate.</summary>
     /// <param name="negated">Whether the canonical predicate selects non-null instead of null rows.</param>
     [Theory]
@@ -12,7 +19,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var rows = negated ? "(1, NULL), (1, NULL), (2, 1)" : "(1, 1), (1, 2), (2, NULL)";
         await ExecuteSqlAsync(
             connectionString,
@@ -46,7 +53,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var rows = negated ? "(1, 1), (1, 2), (2, NULL)" : "(1, NULL), (1, NULL), (2, 1)";
         await ExecuteSqlAsync(
             connectionString,
@@ -80,7 +87,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var rows = negated ? "(1, 1), (1, 2), (2, NULL)" : "(1, NULL), (1, NULL), (2, 1)";
         await ExecuteSqlAsync(
             connectionString,
@@ -111,7 +118,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await CreateSimpleFilterTableAsync(connectionString);
         await using var context = CreateContext(connectionString);
         var existing = SimpleFilterBuilder(context, filter, name: "simple_filter_legacy");
@@ -137,7 +144,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task SimpleFilterSemanticAliasExecutionDoesNotCreateAnotherIndex()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await CreateSimpleFilterTableAsync(connectionString);
         await using var context = CreateContext(connectionString);
         var existing = SimpleFilterBuilder(context, "parent IS NOT NULL", name: "simple_filter_legacy");
@@ -162,7 +169,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task SimpleFilterDifferentPredicateAliasRemainsApplicable()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await CreateSimpleFilterTableAsync(connectionString);
         await using var context = CreateContext(connectionString);
         var existing = SimpleFilterBuilder(context, "parent IS NULL", name: "simple_filter_legacy");
@@ -181,4 +188,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         Assert.Equal(SafeMigrationObservedState.Missing, assessment.ObservedState);
         Assert.Equal(SafeMigrationAction.Apply, assessment.Action);
     }
+
 }

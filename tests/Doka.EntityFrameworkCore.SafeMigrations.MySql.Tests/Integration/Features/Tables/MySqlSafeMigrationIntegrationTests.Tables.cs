@@ -1,11 +1,16 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the Tables migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlTablesIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     [Fact]
     public async Task GeneratedCheckConstraint_IsAcceptedByPreflightRuntimeAndPostflight()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists(
@@ -46,7 +51,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task GranularConvergence_CompletesExistingPartialTableAndIsIdempotent()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `module_state` (`id` int NOT NULL, PRIMARY KEY (`id`)); "
@@ -91,7 +96,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ExistenceOnly_AcceptsAnExistingTableContainerWithoutMutatingShapeDrift()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE `existence_shape` (`id` varchar(20) NOT NULL);");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -147,7 +152,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         {
             var table = $"state_matrix_{scenario.Index.ToString(CultureInfo.InvariantCulture)}";
             var index = $"ix_{table}_id";
-            var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+            var connectionString = await CreateDatabaseAsync(CancellationToken.None);
             var columnSql = scenario.Values["column"] switch
             {
                 "missing" => string.Empty,
@@ -258,7 +263,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task StrictTableDefinition_RejectsUnexpectedColumnsAndConstraints()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var definition = new ExpectedTableDefinition(
             "strict_table",
@@ -312,7 +317,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task StrictTableDefinition_NormalizesExpectedUniqueIndexWithoutAcceptingUnknownUniqueKeys()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var options = new DbContextOptionsBuilder<StrictUniqueIndexContext>()
             .UseMySql(connectionString, Fixture.ServerVersion)
             .UseMySqlSafeMigrations<StrictUniqueIndexContext>()
@@ -409,7 +414,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task StrictTableDefinition_DoesNotTradeMissingExpectedUniqueIndexForUnknownShape()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `strict_unique_substitution` ("
@@ -458,7 +463,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task StrictTableDefinition_AllowsPendingStandaloneForeignKeyAndRejectsUnexpectedTransitionShape()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `transition_parents` (`id` int NOT NULL, PRIMARY KEY (`id`)); "
@@ -535,7 +540,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task UnexpectedObjectInventory_DoesNotAliasUniqueConstraintToExpectedNonUniqueIndex()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `non_unique_alias` ("
@@ -576,8 +581,12 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 Name: "ix_non_unique_alias_code",
             });
     }
+}
 
-    private sealed class StrictUniqueIndexContext(
+public abstract partial class MySqlSafeMigrationIntegrationTests
+{
+
+    protected sealed class StrictUniqueIndexContext(
         DbContextOptions<StrictUniqueIndexContext> options
     ) : DbContext(options)
     {
@@ -614,7 +623,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         public string? Email { get; init; }
     }
 
-    private sealed class StandaloneForeignKeyContext(
+    protected sealed class StandaloneForeignKeyContext(
         DbContextOptions<StandaloneForeignKeyContext> options
     ) : DbContext(options)
     {

@@ -1,7 +1,12 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the ColumnsRequiredDefaults migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlColumnsRequiredDefaultsIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlColumnsRequiredDefaultsIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     /// <summary>
     /// Explicit no-default ENUM and SET contracts remain eligible for a guarded empty-table addition.
     /// </summary>
@@ -12,7 +17,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task RequiredDefaultEnumAndSetAddPreservesAbsentDefaultAndMatchingRerun(bool useSetStorage)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `required_default_items` (`key` int NOT NULL PRIMARY KEY) ENGINE=InnoDB;");
         await using var context = CreateContext(connectionString);
@@ -79,7 +84,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task RequiredDefaultStructuredSqlNullPreservesEngineContractAndAuthoredMetadata()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `required_default_items` (`key` int NOT NULL PRIMARY KEY, `value` char(36) NULL) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
@@ -165,7 +170,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `required_default_items` (`key` int NOT NULL PRIMARY KEY, `value` timestamp(6) NULL) "
             + "ENGINE=InnoDB; INSERT INTO `required_default_items` VALUES (1, "
@@ -227,7 +232,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         // WHY: The no-default fixture must be authored under explicit temporal
@@ -269,7 +274,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = 'STRICT_ALL_TABLES'; "
@@ -324,7 +329,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task RequiredDefaultAddStatusTransportRespectsIdentityAndPrerequisitePrecedence(string ownerState)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, AtomicRequiredAddOriginalTableSql());
         await using var observer = new RequiredAddCatalogTransportObserver(connectionString);
         var options = new DbContextOptionsBuilder<SafeMigrationDbContext>()
@@ -389,6 +394,10 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 new ExpectedColumnDefinition("value", typeof(DateTime), true, "timestamp(6)")),
             SafeMigrationPolicy.RepairIfSafe);
     }
+}
+
+public abstract partial class MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>
     /// Counts raw provider statements while retaining native batching and storing no SQL or parameter payloads.
@@ -399,7 +408,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     /// A delegating observer must therefore retain its native DbBatch rather
     /// than mismeasure tracing gaps or change the transport to sequential SQL.
     /// </remarks>
-    private sealed class RequiredAddCatalogTransportObserver : DbConnection
+    protected sealed class RequiredAddCatalogTransportObserver : DbConnection
     {
         private readonly MySqlConnection _inner;
         private string _connectionString;

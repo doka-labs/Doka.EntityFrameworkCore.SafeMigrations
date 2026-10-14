@@ -1,5 +1,6 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
+/// <summary>Owns one configured native engine and retains database/login cleanup ownership until release succeeds.</summary>
 public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
 {
     private const string BootstrapDatabase = "bootstrap";
@@ -8,8 +9,8 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
 
     private static readonly TimeSpan s_startupTimeout = TimeSpan.FromMinutes(3);
 
-    private readonly List<string> _createdDatabases = [];
-    private readonly List<string> _createdUsers = [];
+    private readonly Dictionary<string, string> _createdDatabases = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, HashSet<string>> _createdUsers = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _databaseLifecycleLock = new(1, 1);
     private readonly string _engine;
     private readonly MySqlContainer _container;
@@ -65,6 +66,7 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
         _container = builder.Build();
     }
 
+    /// <summary>Gets the provider version matching the configured native engine.</summary>
     public MySqlServerVersion ServerVersion =>
         _engine switch
         {
@@ -73,10 +75,12 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
             _ => throw new InvalidOperationException($"Unsupported test engine '{_engine}'."),
         };
 
+    /// <summary>Gets whether the configured engine uses MariaDB native contracts.</summary>
     public bool IsMariaDb => _engine == "mariadb";
 
     private string RootConnectionString => BuildConnectionString(BootstrapDatabase, RootUser, RootPassword);
 
+    /// <inheritdoc />
     public async Task InitializeAsync()
     {
         using var startupCancellation = new CancellationTokenSource(s_startupTimeout);
@@ -84,47 +88,27 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
         await _container.StartAsync(startupCancellation.Token);
     }
 
-    public async Task DisposeAsync()
+    /// <inheritdoc />
+    public Task DisposeAsync() => MySqlFixtureLifecycle.DisposeAsync(
+        DropOwnedDatabasesAsync,
+        async () => await _container.DisposeAsync(),
+        Dispose);
+
+    private async Task DropOwnedDatabasesAsync()
     {
-        Exception? cleanupFailure = null;
+        await _databaseLifecycleLock.WaitAsync(CancellationToken.None);
 
         try
         {
-            await _databaseLifecycleLock.WaitAsync(CancellationToken.None);
-
-            try
-            {
-                await DropCreatedDatabasesAsync(CancellationToken.None);
-            }
-            finally
-            {
-                _databaseLifecycleLock.Release();
-            }
-        }
-        catch (Exception exception)
-        {
-            cleanupFailure = exception;
-        }
-
-        try
-        {
-            await _container.DisposeAsync();
-        }
-        catch (Exception exception)
-        {
-            cleanupFailure ??= exception;
+            await DropCreatedDatabasesAsync(CancellationToken.None);
         }
         finally
         {
-            Dispose();
-        }
-
-        if (cleanupFailure is not null)
-        {
-            throw new InvalidOperationException("MySQL test-container cleanup failed.", cleanupFailure);
+            _databaseLifecycleLock.Release();
         }
     }
 
+    /// <inheritdoc />
     public void Dispose()
     {
         if (_disposed)
@@ -136,6 +120,9 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
         _disposed = true;
     }
 
+    /// <summary>Creates a unique database while retaining provisional ownership across native failures.</summary>
+    /// <param name="cancellationToken">Cancels lifecycle admission or native database creation.</param>
+    /// <returns>The exact root lease used by the test to request database release.</returns>
     public async Task<string> CreateDatabaseAsync(
         CancellationToken cancellationToken
     )
@@ -145,17 +132,26 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
         try
         {
             var databaseName = $"sm_{Guid.NewGuid():N}";
+            var connectionString = BuildConnectionString(databaseName, RootUser, RootPassword);
 
             await using var connection = new MySqlConnection(RootConnectionString);
             await connection.OpenAsync(cancellationToken);
 
             await using var command = connection.CreateCommand();
             command.CommandText = $"CREATE DATABASE `{databaseName}`;";
-            await command.ExecuteNonQueryAsync(cancellationToken);
+            await MySqlFixtureLifecycle.CreateDatabaseAsync(
+                () =>
+                {
+                    _createdDatabases.Add(databaseName, connectionString);
+                    _createdUsers.Add(databaseName, new HashSet<string>(StringComparer.Ordinal));
+                },
+                async token =>
+                {
+                    await command.ExecuteNonQueryAsync(token);
+                },
+                cancellationToken);
 
-            _createdDatabases.Add(databaseName);
-
-            return BuildConnectionString(databaseName, RootUser, RootPassword);
+            return connectionString;
         }
         finally
         {
@@ -163,6 +159,10 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
         }
     }
 
+    /// <summary>Creates a unique login restricted to one fixture-owned database.</summary>
+    /// <param name="rootConnectionString">The original root lease issued for the owned database.</param>
+    /// <param name="cancellationToken">Cancels login creation and privilege assignment.</param>
+    /// <returns>The database-scoped login connection string; the fixture retains login cleanup ownership.</returns>
     public async Task<string> CreateLeastPrivilegeConnectionStringAsync(
         string rootConnectionString,
         CancellationToken cancellationToken
@@ -176,16 +176,18 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
 
         try
         {
+            RequireOwnedDatabase(rootConnectionString);
+
             await using var connection = new MySqlConnection(RootConnectionString);
             await connection.OpenAsync(cancellationToken);
 
             await using var command = connection.CreateCommand();
+            // WHY: Even a partial CREATE USER / GRANT failure must retain ownership for safe final cleanup.
+            _createdUsers[database].Add(user);
             command.CommandText = $"CREATE USER `{user}`@'%' IDENTIFIED BY '{password}'; "
                 + "GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, REFERENCES, "
                 + $"DROP, CREATE TEMPORARY TABLES ON `{database}`.* TO `{user}`@'%';";
             await command.ExecuteNonQueryAsync(cancellationToken);
-
-            _createdUsers.Add(user);
 
             return BuildConnectionString(database, user, password);
         }
@@ -193,6 +195,40 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
         {
             _databaseLifecycleLock.Release();
         }
+    }
+
+    /// <summary>Releases only an exact database lease issued by this fixture, retaining failed cleanup for disposal.</summary>
+    /// <param name="connectionString">The original root connection string returned during database creation.</param>
+    /// <param name="cancellationToken">Cancels resource cleanup.</param>
+    public async Task ReleaseDatabaseAsync(string connectionString, CancellationToken cancellationToken)
+    {
+        await _databaseLifecycleLock.WaitAsync(cancellationToken);
+
+        try
+        {
+            var database = RequireOwnedDatabase(connectionString);
+            await using var connection = new MySqlConnection(RootConnectionString);
+            await connection.OpenAsync(cancellationToken);
+            await DropDatabaseAndUsersAsync(connection, database, cancellationToken);
+        }
+        finally
+        {
+            _databaseLifecycleLock.Release();
+        }
+    }
+
+    private string RequireOwnedDatabase(string connectionString)
+    {
+        var database = new MySqlConnectionStringBuilder(connectionString).Database;
+
+        if (!_createdDatabases.TryGetValue(database, out var ownedConnectionString)
+            || !string.Equals(connectionString, ownedConnectionString, StringComparison.Ordinal))
+        {
+            throw new ArgumentException("The database lease was not issued by this MySQL fixture.",
+                nameof(connectionString));
+        }
+
+        return database;
     }
 
     /// <summary>
@@ -236,23 +272,47 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
         await using var connection = new MySqlConnection(RootConnectionString);
         await connection.OpenAsync(cancellationToken);
 
-        foreach (var database in _createdDatabases)
+        List<Exception>? failures = null;
+
+        foreach (var database in _createdDatabases.Keys.ToArray())
         {
-            await using var command = connection.CreateCommand();
-            command.CommandText = $"DROP DATABASE IF EXISTS `{database}`;";
-            await command.ExecuteNonQueryAsync(cancellationToken);
+            try
+            {
+                await DropDatabaseAndUsersAsync(connection, database, cancellationToken);
+            }
+            catch (Exception exception)
+            {
+                (failures ??= []).Add(exception);
+            }
         }
 
-        _createdDatabases.Clear();
+        if (failures is not null)
+        {
+            throw new AggregateException("MySQL owned database cleanup failed.", failures);
+        }
+    }
 
-        foreach (var user in _createdUsers)
+    private async Task DropDatabaseAndUsersAsync(
+        MySqlConnection connection,
+        string database,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var dropDatabase = connection.CreateCommand();
+        dropDatabase.CommandText = $"DROP DATABASE IF EXISTS `{database}`;";
+        await dropDatabase.ExecuteNonQueryAsync(cancellationToken);
+
+        foreach (var user in _createdUsers[database].ToArray())
         {
             await using var command = connection.CreateCommand();
             command.CommandText = $"DROP USER IF EXISTS `{user}`@'%';";
             await command.ExecuteNonQueryAsync(cancellationToken);
+            _createdUsers[database].Remove(user);
         }
 
-        _createdUsers.Clear();
+        // WHY: Ownership is forgotten only after both database and login cleanup succeed, allowing a final retry.
+        _createdUsers.Remove(database);
+        _createdDatabases.Remove(database);
     }
 
     private static string ReadEnvironment(

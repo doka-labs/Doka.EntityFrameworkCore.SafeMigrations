@@ -1,17 +1,30 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the Performance migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlPerformanceIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlPerformanceIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     private const int ExpectedPerformanceTableCount = 100;
     private const int ForeignPerformanceTableCount = 1000;
-    private const int PerformanceFixtureCommandTimeoutSeconds = 180;
+}
+
+public abstract partial class MySqlSafeMigrationIntegrationTests
+{
+    protected const int PerformanceFixtureCommandTimeoutSeconds = 180;
+}
+
+public sealed partial class MySqlPerformanceIntegrationTests : MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Checks managed-data deferral in several mixed-stream cycles before costly stress qualification.</summary>
     [Fact]
     public async Task Analyzer_BoundedMixedOperationsRetainExactDeferredContracts()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, BuildLargeMigrationStressCatalog());
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -30,7 +43,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Trait("Category", "LargeScale")]
     public async Task Analyzer_OneHundredThousandMixedOperationsRemainBoundedOrderedAndComplete()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             BuildLargeMigrationStressCatalog());
@@ -49,12 +62,21 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         expectation.AssertReport(report);
     }
+}
+
+/// <summary>Exercises the ProcessWidePerformance migration contracts in an independent class collection.</summary>
+[Collection(ProcessWideTestGroup.Name)]
+public sealed partial class MySqlProcessWidePerformanceIntegrationTests : MySqlSafeMigrationIntegrationTests
+{
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlProcessWidePerformanceIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
 
     [Fact]
     [Trait("Category", "LargeScale")]
     public async Task ModelManagedData_FiftyThousandMixedRowsConvergeAndReplayIdempotently()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `large_model_managed_rows` ("
@@ -117,11 +139,15 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 connectionString,
                 "SELECT COUNT(*) FROM `large_model_managed_rows` WHERE `id` >= 3000000;"));
     }
+}
+
+public sealed partial class MySqlPerformanceIntegrationTests : MySqlSafeMigrationIntegrationTests
+{
 
     [Fact]
     public async Task Analyzer_AppliesConfiguredCommandTimeoutToCatalogBatches()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `catalog_timeout` (`id` int NOT NULL); "
@@ -153,7 +179,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task FullRunner_LiveCatalogP95RemainsBoundedWithForeignObjectsAndPooling()
     {
-        var templateConnectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var templateConnectionString = await CreateDatabaseAsync(CancellationToken.None);
         var connectionString = new MySqlConnectionStringBuilder(templateConnectionString)
         {
             Pooling = true,
@@ -165,6 +191,8 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         {
             DefaultCommandTimeout = PerformanceFixtureCommandTimeoutSeconds,
         }.ConnectionString;
+        TrackOwnedPool(connectionString);
+        TrackOwnedPool(fixtureConnectionString);
 
         await ExecuteSqlAsync(
             fixtureConnectionString,
@@ -298,6 +326,10 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
                 return $"CREATE TABLE `{table}` (`id` int NOT NULL{payloadColumn}{indexDdl});";
             }));
+}
+
+public sealed partial class MySqlProcessWidePerformanceIntegrationTests : MySqlSafeMigrationIntegrationTests
+{
 
     private static string BuildMySqlModelManagedInitialRows() => string.Join(
         Environment.NewLine,

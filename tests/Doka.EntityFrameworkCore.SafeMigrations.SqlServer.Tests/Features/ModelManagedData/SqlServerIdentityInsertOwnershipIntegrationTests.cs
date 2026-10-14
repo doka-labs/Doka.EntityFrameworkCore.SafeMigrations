@@ -1,7 +1,6 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
 /// <summary>Verifies owned identity recovery against real retained SQL Server sessions.</summary>
-[Collection(SqlServerSharedContainer.Name)]
 public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServerIntegrationTestBase
 {
     /// <summary>Creates the suite with an isolated database for each test.</summary>

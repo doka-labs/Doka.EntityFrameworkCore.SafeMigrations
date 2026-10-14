@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the TablesRenameTargets PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlTablesRenameTargetsIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlTablesRenameTargetsIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>Combines projected source creation with destination occupancy and accepted drops.</summary>
     /// <param name="targetExists">Whether the destination already exists in its own namespace.</param>
     /// <param name="dropTarget">Whether an earlier accepted drop frees that destination.</param>
@@ -24,7 +31,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var targetSchema = explicitSchema ? "rename_scope" : null;
         var qualifiedTarget = explicitSchema ? "rename_scope.target_rows" : "public.target_rows";
         var decoy = explicitSchema ? "public.target_rows" : "rename_scope.target_rows";
@@ -84,7 +91,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE target_rows (value integer); INSERT INTO target_rows VALUES (99); "
             + (crossSchema ? "CREATE SCHEMA rename_scope; CREATE TABLE rename_scope.target_rows (value integer);"
@@ -112,7 +119,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task RenameTarget_ExistingSourceRejectsIntermediateCollisionAtRuntime()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE SCHEMA rename_scope; CREATE TABLE source_rows (value integer); "
             + "INSERT INTO source_rows VALUES (7); CREATE TABLE target_rows (value integer); "
@@ -143,7 +150,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task RenameTarget_AcceptedIntermediateDropAllowsProjectedSource()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE SCHEMA rename_scope; CREATE TABLE target_rows (value integer);");
 
@@ -173,7 +180,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task RenameTarget_ProjectedSourceRejectsViewDestination()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE VIEW target_rows AS SELECT 99 AS value;");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -204,7 +211,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE target_rows (value integer);");
         await using var context = CreateContext(connectionString);
         await using var connection = new CatalogClassificationCountingConnection(
@@ -233,4 +240,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             Assert.Equal(ordinal % 2 == 0 ? ordinal % 4 == 0 : (bool?)null, analyses[ordinal].RenameTargetExists);
         }
     }
+
 }

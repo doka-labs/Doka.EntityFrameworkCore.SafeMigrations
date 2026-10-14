@@ -1,7 +1,12 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the RuntimeDiagnostics migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlRuntimeDiagnosticsIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     /// <summary>Rejects a populated required addition with exact owner, reason and native cause after cleanup.</summary>
     /// <param name="synchronous">Whether to exercise the synchronous rather than asynchronous native scope.</param>
     [Theory]
@@ -10,7 +15,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task RuntimeDiagnosticsRequiredAddIdentifiesExactSecondOperationAfterCleanup(bool synchronous)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `diagnostic_items` (`id` int NOT NULL PRIMARY KEY);"
             + "INSERT INTO `diagnostic_items` VALUES (1);");
@@ -58,7 +63,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task RuntimeDiagnosticsSuccessfulAddAndMatchingReplayPreserveRows(bool populated, bool hasDefault)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE `diagnostic_items` (`id` int NOT NULL PRIMARY KEY);"
             + (populated ? "INSERT INTO `diagnostic_items` VALUES (1);" : string.Empty));
         await using var context = CreateContext(connectionString);
@@ -86,8 +91,8 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task RuntimeDiagnosticsDelegationHasExactlyNativeDispatchCount(bool requiredWithDefault)
     {
         // Arrange
-        var wrappedDatabase = await Fixture.CreateDatabaseAsync(CancellationToken.None);
-        var nativeDatabase = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var wrappedDatabase = await CreateDatabaseAsync(CancellationToken.None);
+        var nativeDatabase = await CreateDatabaseAsync(CancellationToken.None);
         const string setup = "CREATE TABLE `diagnostic_items` (`id` int NOT NULL PRIMARY KEY);"
             + "INSERT INTO `diagnostic_items` VALUES (1);";
         await ExecuteSqlAsync(wrappedDatabase, setup);
@@ -123,7 +128,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task RuntimeDiagnosticsOwnedRejectionRetainsSessionForReviewedRetry()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE `diagnostic_items` (`id` int NOT NULL PRIMARY KEY);"
             + "INSERT INTO `diagnostic_items` VALUES (1);");
         await using var context = CreateContext(connectionString);
@@ -157,7 +162,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task RuntimeDiagnosticsDoNotWrapApplicationDuplicatesInsideOwnedScope(string name)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE `diagnostic_items` (`id` int NOT NULL PRIMARY KEY);"
             + "CREATE TABLE `diagnostic_duplicates` (`value` int NOT NULL, CONSTRAINT `" + name
             + "` UNIQUE (`value`)); INSERT INTO `diagnostic_duplicates` VALUES (1);");
@@ -190,7 +195,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task RuntimeDiagnosticsPreserveIdentityFirstAndMissingOwnerReasons(bool foreignQualifier)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<int>("value", "diagnostic_missing", type: "int", nullable: true,
@@ -217,7 +222,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task RuntimeDiagnosticsRawScriptPublishesFailureContextBeforeNativeError()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE `diagnostic_items` (`id` int NOT NULL PRIMARY KEY);"
             + "INSERT INTO `diagnostic_items` VALUES (1);");
         await using var context = CreateContext(connectionString);
@@ -248,7 +253,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task RuntimeDiagnosticsForeignKeyIdentifiesBothOwnersWithoutLeakingRows(bool orphan)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `diagnostic_parents` (`id` int NOT NULL PRIMARY KEY);"
             + "CREATE TABLE `diagnostic_children` (`id` int NOT NULL PRIMARY KEY, `parent_id` int NULL, "
@@ -283,7 +288,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task RuntimeDiagnosticsPostconditionFailureRetainsFreshOwnerAndCleanup()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE `diagnostic_items` (`id` int NOT NULL PRIMARY KEY);");
         var interceptor = new DiagnosticPostconditionFailureInterceptor();
         await using var context = CreateRuntimeContext(connectionString, interceptor);
@@ -312,7 +317,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task RuntimeDiagnosticsNeverReplaceNativeRecoveryFailure()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE `diagnostic_items` (`id` int NOT NULL PRIMARY KEY);"
             + "INSERT INTO `diagnostic_items` VALUES (1);");
         var interceptor = new RuntimeCleanupFailureInterceptor();
@@ -343,7 +348,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task RuntimeDiagnosticsAtomicRequiredAddCheckRetainsNativeNumberAndDataReason()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE `diagnostic_items` (`id` int NOT NULL PRIMARY KEY);");
         var interceptor = new DiagnosticRequiredAddRaceInterceptor();
         await using var context = CreateRuntimeContext(connectionString, interceptor);
@@ -420,13 +425,17 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         return new DiagnosticScriptResult(documentKind, guard, reason, message, failure);
     }
+}
+
+public abstract partial class MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Retains only test-owned context read before the final script error.</summary>
-    private sealed record DiagnosticScriptResult(string? DocumentKind, string? GuardCode, string? ReasonCode,
+    protected sealed record DiagnosticScriptResult(string? DocumentKind, string? GuardCode, string? ReasonCode,
         string? Message, Exception? Failure);
 
     /// <summary>Forces the owned postcondition branch after real DDL without disrupting earlier setup or cleanup.</summary>
-    private sealed class DiagnosticPostconditionFailureInterceptor : DbCommandInterceptor
+    protected sealed class DiagnosticPostconditionFailureInterceptor : DbCommandInterceptor
     {
         /// <summary>Gets whether the real guarded body, not an unrelated command, received the failure probe.</summary>
         internal bool Injected { get; private set; }
@@ -448,7 +457,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     }
 
     /// <summary>Inserts one test-owned row immediately before the actual admitted required-column body.</summary>
-    private sealed class DiagnosticRequiredAddRaceInterceptor : DbCommandInterceptor
+    protected sealed class DiagnosticRequiredAddRaceInterceptor : DbCommandInterceptor
     {
         /// <summary>Gets whether the real two-stage body received the post-classification row.</summary>
         internal bool Injected { get; private set; }

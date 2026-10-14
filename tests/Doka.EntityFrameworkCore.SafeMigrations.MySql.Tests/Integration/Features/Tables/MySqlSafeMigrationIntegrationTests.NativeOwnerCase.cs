@@ -1,7 +1,12 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the NativeOwnerCase migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlNativeOwnerCaseIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlNativeOwnerCaseIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     /// <summary>Strict table contracts retain standalone declarations for one case-insensitive native owner.</summary>
     /// <param name="kind">Whether the standalone declaration is a unique index or constraint.</param>
     /// <param name="analyze">Whether to exercise live analysis rather than connection-free SQL generation.</param>
@@ -79,7 +84,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task NativeCaseSensitiveStrictTableDoesNotBorrowDistinctOwnerContract(string kind)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `Mixed_Owner` (`id` int NOT NULL PRIMARY KEY, `value` int NULL, "
             + "UNIQUE KEY `uq_unmodeled` (`value`)) ENGINE=InnoDB; "
@@ -231,7 +236,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task NativeCaseZeroMissingOwnerDoesNotBorrowCatalogPresence(bool create)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `Rows` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB;");
 
@@ -278,7 +283,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task NativeCaseZeroBackfillDoesNotBorrowForeignOwnerHazard()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `backfill_owner` (`id` int NOT NULL PRIMARY KEY, `value` varchar(10) NULL) "
             + "ENGINE=InnoDB; INSERT INTO `backfill_owner` VALUES (1,NULL),(2,NULL); "

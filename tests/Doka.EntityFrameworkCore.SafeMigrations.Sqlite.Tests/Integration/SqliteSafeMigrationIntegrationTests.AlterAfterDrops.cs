@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
-public sealed partial class SqliteSafeMigrationCatalogIntegrationTests
+/// <summary>Exercises alter after drops with independently owned SQLite state.</summary>
+public sealed class SqliteSafeMigrationAlterAfterDropsIntegrationTests : SqliteSafeMigrationCatalogIntegrationTests
 {
     /// <summary>Sibling drops retain only a validated same-shape repair of an untouched column.</summary>
     /// <param name="control">The independently checked source or rebuild safety condition.</param>

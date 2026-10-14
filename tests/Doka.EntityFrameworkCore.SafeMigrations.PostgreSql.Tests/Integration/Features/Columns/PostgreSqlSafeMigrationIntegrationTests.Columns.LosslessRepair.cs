@@ -1,11 +1,18 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the ColumnsLosslessRepair PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlColumnsLosslessRepairIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     [Fact]
     public async Task VarcharWidening_RepairsWithoutDataLossAndReplaysAsNoOp()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE varchar_widening ("
@@ -93,7 +100,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         int targetLength
     )
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE varchar_fk_parent ("
@@ -177,7 +184,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task VarcharWidening_TreatsExplicitNoneValueGenerationAsOrdinaryMetadata()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE varchar_none_generation ("
@@ -239,7 +246,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task VarcharNarrowing_UsesCharacterSemanticsAndPreservesTrailingSpaces()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE varchar_narrowing ("
@@ -365,7 +372,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task VarcharNarrowing_FromUnboundedSource_RepairsWhenDataFits()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE varchar_unbounded_repair ("
@@ -439,7 +446,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     {
         const string privateValue = "private-overlength-value";
 
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE varchar_unbounded_blocked ("
@@ -487,7 +494,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     {
         const string privateValue = "private-overlength-value";
 
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE varchar_narrowing_blocked ("
@@ -542,7 +549,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     {
         const string concurrentValue = "arrived-after-preflight";
 
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE varchar_narrowing_race ("
@@ -600,7 +607,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         const string concurrentValue = "committed-while-repair-waited";
         using var testCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(30));
 
-        var connectionString = await Fixture.CreateDatabaseAsync(testCancellation.Token);
+        var connectionString = await CreateDatabaseAsync(testCancellation.Token);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE varchar_narrowing_locked_recheck ("
@@ -673,7 +680,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task VarcharNarrowing_PropagatesProbeCommandTimeoutWithoutMutation()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE varchar_narrowing_timeout ("
@@ -717,7 +724,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task VarcharNarrowing_PropagatesProbeCancellationWithoutMutation()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE varchar_narrowing_cancellation ("
@@ -769,7 +776,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task MySqlBooleanRepresentationTransition_IsExplicitlyNotApplicable()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE boolean_transition (value bit(1) NULL);");
@@ -849,97 +856,4 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         return builder;
     }
 
-    private static async Task WaitForBlockedPostgreSqlNarrowingCommandAsync(
-        string connectionString,
-        string table,
-        CancellationToken cancellationToken
-    )
-    {
-        await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync(cancellationToken);
-
-        for (var attempt = 0; attempt < 100; attempt++)
-        {
-            await using var command = connection.CreateCommand();
-            command.CommandText = "SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_stat_activity "
-                + "WHERE pid <> pg_backend_pid() AND query LIKE @probe AND wait_event_type = 'Lock');";
-
-            // WHY: PostgreSQL truncates the recorded query text to
-            // track_activity_query_size. The target table occurs at the start
-            // of the guarded command and remains a stable lock identifier.
-            command.Parameters.AddWithValue("probe", $"%{table}%");
-
-            var blocked = Convert.ToBoolean(
-                await command.ExecuteScalarAsync(cancellationToken),
-                CultureInfo.InvariantCulture);
-
-            if (blocked)
-            {
-                return;
-            }
-
-            await Task.Delay(TimeSpan.FromMilliseconds(50), cancellationToken);
-        }
-
-        throw new TimeoutException("The PostgreSQL narrowing repair did not reach its blocked table lock.");
-    }
-
-    private sealed class CountingDbConnection(
-        NpgsqlConnection connection
-    ) : DbConnection
-    {
-        private int _commandCount;
-
-        public int CommandCount => Volatile.Read(ref _commandCount);
-
-        [System.Diagnostics.CodeAnalysis.AllowNull]
-        public override string ConnectionString
-        {
-            get => connection.ConnectionString;
-            set => connection.ConnectionString = value ?? string.Empty;
-        }
-
-        public override string Database => connection.Database;
-
-        public override string DataSource => connection.DataSource;
-
-        public override string ServerVersion => connection.ServerVersion;
-
-        public override ConnectionState State => connection.State;
-
-        public override void ChangeDatabase(
-            string databaseName
-        ) => connection.ChangeDatabase(databaseName);
-
-        public override void Close() => connection.Close();
-
-        public override void Open() => connection.Open();
-
-        public override Task OpenAsync(
-            CancellationToken cancellationToken
-        ) => connection.OpenAsync(cancellationToken);
-
-        protected override DbTransaction BeginDbTransaction(
-            IsolationLevel isolationLevel
-        ) => connection.BeginTransaction(isolationLevel);
-
-        protected override DbCommand CreateDbCommand()
-        {
-            _ = Interlocked.Increment(ref _commandCount);
-
-            return connection.CreateCommand();
-        }
-
-        protected override void Dispose(
-            bool disposing
-        )
-        {
-            if (disposing)
-            {
-                connection.Dispose();
-            }
-
-            base.Dispose(disposing);
-        }
-    }
 }

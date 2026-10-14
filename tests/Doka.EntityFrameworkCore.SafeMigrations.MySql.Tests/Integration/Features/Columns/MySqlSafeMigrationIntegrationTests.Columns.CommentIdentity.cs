@@ -1,7 +1,12 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the ColumnsCommentIdentity migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlColumnsCommentIdentityIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlColumnsCommentIdentityIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     /// <summary>Column comment matching preserves case instead of inheriting catalog collation folding.</summary>
     /// <param name="exactComment">Whether the native comment is byte-identical to the target.</param>
     [Theory]
@@ -10,7 +15,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ColumnCommentIdentityDistinguishesCaseOnlyDrift(bool exactComment)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var actualComment = exactComment ? "Alpha" : "alpha";
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `comment_items` (`key` int NOT NULL PRIMARY KEY, "
@@ -62,7 +67,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task StrictTableColumnCommentIdentityRejectsCaseOnlyDrift(bool exactComment)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var actualComment = exactComment ? "Alpha" : "alpha";
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `strict_comment_items` (`key` int NOT NULL PRIMARY KEY, "
@@ -121,7 +126,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task AtomicRequiredAddCommentIdentityRequiresExactStagedContract(bool exactComment)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var operation = CommentIdentityRequiredAddOperation();
         var actualComment = exactComment ? "Alpha" : "alpha";
         await ExecuteSqlAsync(connectionString, AtomicRequiredAddStagedTableSql(operation,

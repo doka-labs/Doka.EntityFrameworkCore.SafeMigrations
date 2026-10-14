@@ -1,11 +1,18 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the LifecycleEdgeCases PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlLifecycleEdgeCasesIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     [Fact]
     public async Task MissingParentTable_IsReportedAsPrerequisiteFailureAcrossChildFamilies()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureColumn(
@@ -54,7 +61,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task LegacyConvergence_CreatesMissingTableWithRequiredColumnsAndRemainsIdempotent()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var definition = new ExpectedTableDefinition(
             "missing_legacy_table",
@@ -110,7 +117,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task MissingReferencedColumns_AreClassifiedBeforeAnyDataProbe()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE column_prerequisite_child (id integer NOT NULL); "
@@ -166,7 +173,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task LegacyConvergence_AddsNullableColumnBeforeUniqueIndexAndRemainsIdempotent()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE legacy_unique_users (id integer NOT NULL); "
@@ -220,7 +227,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task LegacyConvergence_DoesNotProjectUniqueSafetyThroughNonNullDefault()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE legacy_default_users (id integer NOT NULL); "
@@ -269,7 +276,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task Analyzer_ProcessesMoreThanOneBoundedClassificationChunkInGlobalOrder()
     {
         const int operationCount = 513;
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE chunked_analysis (id integer NOT NULL);");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -302,7 +309,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     {
         const int maximumUtf8PayloadBytes = 4 * 1024 * 1024;
         var oversizedComment = new string('\u00e4', (maximumUtf8PayloadBytes / 2) + 1);
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE oversized_analysis (id integer NOT NULL);");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -340,7 +347,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 comment: $"comment_{ordinal}",
                 defaultValue: SafeMigrationDefaultValue.Literal($"default_{ordinal}")))
             .ToArray();
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(
@@ -369,7 +376,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         System.Data.IsolationLevel isolationLevel
     )
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await using var transaction = await context.Database.BeginTransactionAsync(
             isolationLevel,
@@ -388,7 +395,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task Analyzer_RejectsCallerOwnedReadCommittedTransaction()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await using var transaction = await context.Database.BeginTransactionAsync(
             System.Data.IsolationLevel.ReadCommitted,
@@ -405,7 +412,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task Analyzer_RejectsCallerOwnedReadWriteTransaction()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await using var transaction = await context.Database.BeginTransactionAsync(
             System.Data.IsolationLevel.RepeatableRead,
@@ -431,7 +438,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task OpaqueSqlExpression_IsUnsupportedWithStableReasonBeforeTargetDdl()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE opaque_expression (value integer NULL);");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -457,7 +464,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task UnsupportedStructuredCastType_IsRejectedBeforeTargetDdl()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE unsupported_cast_type (value integer NULL);");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -502,7 +509,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task MatchingDerivedContext_UsesTheCanonicalSnapshotAndMigrationHistory()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = new MatchingDerivedContext(connectionString);
         var runner = context.GetService<ISafeMigrationRunner>();
 
@@ -528,7 +535,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task Postflight_BlocksWhenTheExpectedTargetStateWasNotReached()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists(
@@ -555,7 +562,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task Runner_HonorsCancellationBeforeCatalogAccess()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         using var cancellation = new CancellationTokenSource();
         await cancellation.CancelAsync();
@@ -576,7 +583,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task Runner_CancellationDuringCatalogAccessClosesItsOwnedConnection()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var analyzer = new BlockingProviderAnalyzer("npgsql_postgresql");
         var runner = new SafeMigrationRunner(analyzer);
@@ -601,7 +608,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task PendingPreflight_RejectsUnknownAndBackwardTargetsAndReportsCompletedHistory()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var runner = context.GetService<ISafeMigrationRunner>();
 
@@ -639,7 +646,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task RenameTargetCollisions_AreRejectedWithoutMutatingEitherObject()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE rename_source (source_column integer NULL, target_column integer NULL); "
@@ -698,7 +705,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task UnexpectedObjectInventory_CoversEveryConstraintFamilyWithoutMutation()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE inventory_parent (id integer NOT NULL PRIMARY KEY); "
@@ -761,7 +768,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task FourConcurrentMigrators_ProduceOneHistoryRowAndOneCanonicalSchema()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var contexts = Enumerable
             .Range(0, 4)
             .Select(_ => CreateContext(connectionString))
@@ -796,8 +803,6 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 + "AND column_name = 'payload';"));
     }
 
-    private sealed class MatchingDerivedContext(string connectionString) : SafeMigrationDbContext(connectionString);
-
     private static async Task<string> ScalarOnCurrentTransactionAsync(
         DbContext context,
         string sql
@@ -815,47 +820,4 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         return Convert.ToString(result, CultureInfo.InvariantCulture) ?? "<null>";
     }
 
-    private sealed class BlockingProviderAnalyzer(string providerId) : ISafeMigrationProviderAnalyzer
-    {
-        private readonly TaskCompletionSource _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        public string ProviderId { get; } = providerId;
-
-        public Task Started => _started.Task;
-
-        public void ValidateContext(
-            DbContext context
-        )
-        {
-            ArgumentNullException.ThrowIfNull(context);
-        }
-
-        public Task<IAsyncDisposable> AcquireAnalysisScopeAsync(
-            DbContext context,
-            CancellationToken cancellationToken = default
-        ) => throw new InvalidOperationException("Analysis scope acquisition must not be reached.");
-
-        public async Task<SafeMigrationProviderEnvironment> GetEnvironmentAsync(
-            DbContext context,
-            CancellationToken cancellationToken = default
-        )
-        {
-            _started.TrySetResult();
-            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
-
-            throw new InvalidOperationException("The blocking analyzer completed without cancellation.");
-        }
-
-        public Task<IReadOnlyList<SafeMigrationProviderAnalysis>> AnalyzeAsync(
-            DbContext context,
-            IReadOnlyList<SafeMigrationOperation> operations,
-            CancellationToken cancellationToken = default
-        ) => throw new InvalidOperationException("Operation analysis must not be reached.");
-
-        public Task<IReadOnlyList<SafeMigrationUnexpectedObject>> FindUnexpectedObjectsAsync(
-            DbContext context,
-            IReadOnlyList<MigrationOperation> operations,
-            CancellationToken cancellationToken = default
-        ) => throw new InvalidOperationException("Unexpected-object analysis must not be reached.");
-    }
 }

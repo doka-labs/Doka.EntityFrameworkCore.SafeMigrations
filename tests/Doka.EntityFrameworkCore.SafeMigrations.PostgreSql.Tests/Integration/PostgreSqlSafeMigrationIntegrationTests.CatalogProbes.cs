@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the CatalogProbes PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlCatalogProbesIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlCatalogProbesIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>Exact builder constants avoid queries without changing sparse prerequisite classifications.</summary>
     /// <param name="nonconstantCount">The number of operations requiring a real prerequisite query.</param>
     [Theory]
@@ -10,7 +17,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task Analyzer_PrunesConstantPrerequisitesButKeepsSparseCatalogProofs(int nonconstantCount)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await using var connection = new CatalogClassificationCountingConnection(
             new NpgsqlConnection(connectionString));
@@ -56,7 +63,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task Analyzer_RejectsMalformedSparsePrerequisiteResults(bool missingRows)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await using var connection = new CatalogClassificationCountingConnection(
             new NpgsqlConnection(connectionString),
@@ -90,7 +97,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task Analyzer_BatchesQualifiedNarrowingProbesAndPreservesReportParity()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var setup = new System.Text.StringBuilder();
         for (var index = 0; index < 65; index++)
         {
@@ -169,4 +176,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             Assert.Contains(result.Differences, difference => difference.Facet == "column_store_type");
         }
     }
+
 }

@@ -1,7 +1,12 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the CollationIndependence migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlCollationIndependenceIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlCollationIndependenceIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     /// <summary>Generated guards run under a connection collation other than the character-set default.</summary>
     /// <remarks>
     /// WHY: Script and bundle generation renders values inline, and the provider renders a value
@@ -20,7 +25,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task GeneratedGuards_RunUnderAnyUtf8Mb4ConnectionCollation(string collation)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `collation_guard` (`plain` int NOT NULL, "

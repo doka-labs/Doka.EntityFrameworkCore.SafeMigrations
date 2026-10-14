@@ -1,11 +1,16 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the IndexesReplacement migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlIndexesReplacementIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlIndexesReplacementIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     [Fact]
     public async Task ProviderDropThenSafeCreateIndex_ProjectsTheOrderedReplacement()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `provider_index_replacement` (`code` int NOT NULL, "
@@ -43,7 +48,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task SafeDropThenSafeCreateIndex_ProjectsTheOrderedReplacement()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `safe_index_replacement` (`code` int NOT NULL, "
@@ -84,7 +89,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     {
         const string indexName = "ix_annotation_records_tenant_id_code";
         const string tableName = "annotation_records";
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             $"CREATE TABLE `{tableName}` ("
@@ -209,7 +214,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ProviderDropThenUniqueCreate_PreservesDataBlockedClassificationAndExistingIndex()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `blocked_index_replacement` (`code` int NOT NULL, "
@@ -247,7 +252,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ForeignKeySupportIndexWithEquivalentShape_IsAnIdempotentNoOp()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `index_parent` (`id` int NOT NULL, PRIMARY KEY (`id`)); "
@@ -297,7 +302,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task EquivalentUniqueIndexWithForeignKey_IsAnIdempotentNoOp()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `unique_index_parent` (`id` int NOT NULL, PRIMARY KEY (`id`)); "

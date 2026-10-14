@@ -1,11 +1,16 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the Diagnostics migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlDiagnosticsIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlDiagnosticsIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     [Fact]
     public async Task PreflightDiagnostics_DistinguishForeignKeyActionsAndIndexShape()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `diagnostic_principal` ("
@@ -88,7 +93,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         var reversedPrincipalKeys = string.Join(", ", principalColumns.Reverse().Select(column => $"`{column}`"));
         var reversedDependentKeys = string.Join(", ", dependentColumns.Reverse().Select(column => $"`{column}`"));
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
@@ -148,7 +153,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         const string liveDefault = "private-live-default";
         const string targetDefault = "private-target-default";
 
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             $"CREATE TABLE `diagnostic_defaults` (`value` varchar(40) NULL DEFAULT '{liveDefault}');");

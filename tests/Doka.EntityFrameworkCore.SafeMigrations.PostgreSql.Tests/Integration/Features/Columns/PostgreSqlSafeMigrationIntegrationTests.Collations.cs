@@ -1,11 +1,18 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the Collations PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlCollationsIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlCollationsIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     [Fact]
     public async Task StructuredCollationIdentity_ConvergesWithoutSchemaOrDotAmbiguity()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE SCHEMA collation_a; CREATE SCHEMA collation_b; "
@@ -133,4 +140,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             Assert.Single(driftReport.Assessments)
                 .ObservedState);
     }
+
 }

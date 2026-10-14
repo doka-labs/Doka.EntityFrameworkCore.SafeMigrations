@@ -1,11 +1,16 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the ColumnsStructuredExpressions migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlColumnsStructuredExpressionsIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlColumnsStructuredExpressionsIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     [Fact]
     public async Task StructuredIntegerCast_ConvergesRoundTripsAndDetectsSemanticDrift()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var definition = StructuredExpressionTable(multiplier: 2);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -64,7 +69,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task UnsupportedStructuredCastTarget_IsReportedWithoutCreatingTable()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.ConvergeTable(
@@ -111,7 +116,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task NonNullableGeneratedColumn_ConvergesOnMySqlAndFailsClosedOnMariaDb()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.ConvergeTable(
@@ -180,7 +185,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task CommonCastTargets_RenderTypedNullsAcceptedByTheServer()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var renderer = new MySqlSafeMigrationSqlExpressionRenderer(
             context.GetService<IRelationalTypeMappingSource>(),

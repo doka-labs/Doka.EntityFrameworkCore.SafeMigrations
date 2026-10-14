@@ -1,7 +1,12 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the ColumnsAtomicRequiredAddConcurrency migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlColumnsAtomicRequiredAddConcurrencyIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlColumnsAtomicRequiredAddConcurrencyIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     private const string AtomicAddExplicitGuid = "00000000-0000-0000-0000-000000000017";
 
     /// <summary>
@@ -11,7 +16,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task AtomicRequiredAddConcurrencyRejectsRowsArrivingBeforeFirstStage()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, AtomicAddConcurrencyFixtureSql);
         var operation = AtomicRequiredAddOperation();
         var guardName = AtomicRequiredAddGuardName(operation);
@@ -73,7 +78,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task AtomicRequiredAddConcurrencyProtectsOmittedAndExplicitWriterValues(bool useGuidStorage)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, AtomicAddConcurrencyFixtureSql);
         var operation = AtomicRequiredAddOperation(useGuidStorage);
         var guardName = AtomicRequiredAddGuardName(operation);
@@ -129,13 +134,17 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(useGuidStorage ? AtomicAddExplicitGuid : "17", suppliedValue);
         Assert.Equal(1, final.Rows);
     }
+}
+
+public sealed partial class MySqlColumnsAtomicRequiredAddConcurrencyIntegrationTests : MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>A writer-only MariaDB check bypass cannot make final strict DDL invent a value.</summary>
     [AtomicAddMariaDbFact]
     public async Task AtomicRequiredAddConcurrencyPreservesNullAndBarrierAfterWriterCheckBypass()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, AtomicAddConcurrencyFixtureSql);
         var operation = AtomicRequiredAddOperation();
         var guardName = AtomicRequiredAddGuardName(operation);
@@ -197,6 +206,10 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(0, recovered.Guards);
         Assert.Equal(AtomicAddExplicitGuid, preserved);
     }
+}
+
+public sealed partial class MySqlColumnsAtomicRequiredAddConcurrencyIntegrationTests : MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>
     /// Cancellation at a proven staged barrier preserves a writer's supplied value and permits retry.
@@ -205,7 +218,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task AtomicRequiredAddConcurrencyCancellationRetainsBarrierAndWriterValue()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, AtomicAddConcurrencyFixtureSql);
         var operation = AtomicRequiredAddOperation();
         var guardName = AtomicRequiredAddGuardName(operation);
@@ -277,12 +290,16 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         + "INSERT INTO `atomic_add_checkpoint` VALUES (1, 0); "
         + "CREATE TABLE `atomic_add_gate` (`key` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
         + "INSERT INTO `atomic_add_gate` VALUES (1);";
+}
+
+public abstract partial class MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Acquires a real writer-owned row lock before dispatching the migration.</summary>
     /// <param name="writer">The independently opened writer session.</param>
     /// <param name="cancellationToken">The bounded test deadline.</param>
     /// <returns>The transaction retaining the gate until the test deliberately releases it.</returns>
-    private static async Task<MySqlTransaction> AcquireAtomicAddWriterGateAsync(
+    protected static async Task<MySqlTransaction> AcquireAtomicAddWriterGateAsync(
         MySqlConnection writer,
         CancellationToken cancellationToken
     )
@@ -312,6 +329,10 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             throw;
         }
     }
+}
+
+public sealed partial class MySqlColumnsAtomicRequiredAddConcurrencyIntegrationTests : MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Waits for the database-visible checkpoint rather than estimating stage timing.</summary>
     /// <param name="writer">The independent writer session.</param>
@@ -345,13 +366,17 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             await Task.Delay(TimeSpan.FromMilliseconds(10), cancellationToken);
         }
     }
+}
+
+public abstract partial class MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Executes only test-owned writer SQL on its existing independent session.</summary>
     /// <param name="writer">The writer connection that never uses the migration's advisory lock.</param>
     /// <param name="transaction">The writer-owned gate transaction, or null after its commit.</param>
     /// <param name="sql">The bounded anonymous fixture statement.</param>
     /// <param name="cancellationToken">The operation's test deadline.</param>
-    private static async Task ExecuteAtomicAddWriterSqlAsync(
+    protected static async Task ExecuteAtomicAddWriterSqlAsync(
         MySqlConnection writer,
         MySqlTransaction? transaction,
         string sql,
@@ -369,7 +394,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     /// <param name="executionCancellation">The test-owned migration cancellation source.</param>
     /// <param name="gate">The writer transaction retaining the independent row lock.</param>
     /// <param name="gateReleased">Whether the test successfully committed that transaction.</param>
-    private static async Task FinishAtomicAddConcurrentAttemptAsync(
+    protected static async Task FinishAtomicAddConcurrentAttemptAsync(
         Task<Exception?> execution,
         CancellationTokenSource executionCancellation,
         MySqlTransaction gate,
@@ -389,7 +414,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     }
 
     /// <summary>Injects one test-owned gate into the real two-stage body, never into setup or product code.</summary>
-    private sealed class AtomicAddCheckpointInterceptor : DbCommandInterceptor
+    protected sealed class AtomicAddCheckpointInterceptor : DbCommandInterceptor
     {
         private const string BodyPrefix = "SET @doka_sm_sql = CASE WHEN @doka_sm_action = 'apply' "
             + "AND NOT @doka_sm_required_add_resume THEN";
@@ -459,7 +484,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     }
 
     /// <summary>Reports an honest discovery-time skip where the writer-only check toggle does not exist.</summary>
-    private sealed class AtomicAddMariaDbFactAttribute : FactAttribute
+    private protected sealed class AtomicAddMariaDbFactAttribute : FactAttribute
     {
         /// <summary>Uses the same explicit engine selector and MariaDB default as the container fixture.</summary>
         public AtomicAddMariaDbFactAttribute()

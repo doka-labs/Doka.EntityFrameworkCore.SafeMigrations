@@ -1,11 +1,16 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the IndexesDriftMatrix migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlIndexesDriftMatrixIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     [Fact]
     public async Task EquivalentIndexWithDifferentName_IsAnIdempotentNoOp()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `index_identity` (`code` int NOT NULL, `tenant_id` int NOT NULL, "
@@ -57,7 +62,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task DifferentlyNamedIndexWithDifferentShape_RemainsApplicable()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `index_nonidentity` (`code` int NOT NULL, `alternate_code` int NOT NULL, "
@@ -93,7 +98,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task InvisibleOrIgnoredIndexWithExpectedName_IsRejectedBeforeDdl()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var visibility = Fixture.IsMariaDb ? "IGNORED" : "INVISIBLE";
 
         await ExecuteSqlAsync(
@@ -126,7 +131,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task DifferentlyNamedInvisibleOrIgnoredIndex_DoesNotBlockVisibleIndex()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var visibility = Fixture.IsMariaDb ? "IGNORED" : "INVISIBLE";
 
         await ExecuteSqlAsync(
@@ -166,7 +171,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task OverlongUnprefixedIndex_IsRejectedBeforeDdl()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `overlong_index` ("
@@ -204,7 +209,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task OneCharacterOverFullKeyLimit_IsRejectedBeforeDdl()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `one_over_index` ("
@@ -238,7 +243,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task CompositePrefixesAndSingleByteFullKey_ConvergeAtTheExactLimit()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `encoded_width_indexes` ("
@@ -283,7 +288,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task CompositeOverLimitAndScalarPrefix_AreRejectedBeforeDdl()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `invalid_index_shapes` ("
@@ -337,7 +342,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ExactLimitAndExplicitPrefixIndexes_AreAppliedAndIdempotent()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `bounded_indexes` ("
@@ -377,7 +382,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task CompactRowFormat_UsesItsSmallerLimitAndAcceptsExplicitPrefix()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `compact_index_limit` ("
@@ -429,7 +434,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task PrefixBeyondColumnLength_IsRejectedBeforeDdl()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `invalid_prefix` (`value` varchar(80) CHARACTER SET utf8mb4 NOT NULL);");
@@ -463,7 +468,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ObservableIndexFacetDrift_IsRejectedOneFieldAtATime()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `index_facets` ("
@@ -576,7 +581,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task UnsupportedIndexFacetMatrix_FailsClosedBeforeTargetDdl()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE `unsupported_index_facets` (`value` varchar(80) NULL);");
         await using var context = CreateContext(connectionString);
         var definitions = new[]
@@ -638,7 +643,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ExistingFunctionalIndex_IsMatchedAndExpressionDriftIsRejected()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE `functional_drift` (`value` varchar(80) NULL);");
         await using var context = CreateContext(connectionString);
         var canonical = new ExpectedIndexDefinition(

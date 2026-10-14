@@ -1,7 +1,15 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the ColumnAttribution PostgreSQL feature cases independently.</summary>
+[Collection(ProcessWideTestGroup.Name)]
+public sealed class PostgreSqlColumnAttributionIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlColumnAttributionIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     private static readonly System.Text.Json.JsonSerializerOptions s_attributionJsonOptions = new()
     {
         WriteIndented = true,
@@ -13,7 +21,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task ColumnAttribution_PairedPlainAndMixedCatalogRuntimeFixtures()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var results = new List<object>();
         await using var context = CreateContext(connectionString);
         await using var connection = new NpgsqlConnection(connectionString);
@@ -283,4 +291,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             + string.Join(string.Empty, comments) + "INSERT INTO " + PostgreSqlIdentifier(table) + " VALUES ("
             + string.Join(",", columns.Select(_ => "'preserved'")) + ");";
     }
+
 }

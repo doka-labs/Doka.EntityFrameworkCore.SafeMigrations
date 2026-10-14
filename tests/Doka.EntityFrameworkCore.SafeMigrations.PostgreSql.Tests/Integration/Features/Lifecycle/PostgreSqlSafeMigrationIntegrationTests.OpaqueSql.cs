@@ -1,11 +1,18 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the OpaqueSql PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlOpaqueSqlIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlOpaqueSqlIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     [Fact]
     public async Task DataPreparationSql_DefersPreflightAndAllowsGuardedUniqueIndex()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE mixed_records (id integer NOT NULL PRIMARY KEY, code text NOT NULL); "
@@ -38,7 +45,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task DataRegressionSql_DefersPreflightButRuntimeGuardRejectsUniqueIndex()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE mixed_records (id integer NOT NULL PRIMARY KEY, code text NOT NULL); "
@@ -72,7 +79,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task OpaqueSql_DoesNotDeferUnsupportedOperationAnnotation()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         _ = builder.Sql("SELECT 1;");
@@ -90,4 +97,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         Assert.Equal("operation_annotation", preflight.Assessments[1].AnalysisCode);
         Assert.Null(preflight.Assessments[1].DeferredOrigin);
     }
+
 }

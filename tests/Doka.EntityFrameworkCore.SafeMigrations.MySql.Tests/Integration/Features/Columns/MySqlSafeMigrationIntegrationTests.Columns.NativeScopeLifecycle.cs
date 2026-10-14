@@ -1,7 +1,12 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the ColumnsNativeScopeLifecycle migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlColumnsNativeScopeLifecycleIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlColumnsNativeScopeLifecycleIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     /// <summary>
     /// A rejected decision cannot restore an unacquired NULL or stale native SQL-mode snapshot.
     /// </summary>
@@ -12,7 +17,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task NativeCommentScopeRejectedBeforeAcquisitionPreservesCurrentSession(bool leaveStaleSnapshot)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, NativeScopeLifecycleFixtureSql);
         var observer = new NativeScopeLifecycleObserver();
         await using var context = CreateRuntimeContext(connectionString, observer);
@@ -77,7 +82,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task NativeCommentScopeFaultRestoresOnlyAcquiredSession(string faultPoint, string failureMode)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, NativeScopeLifecycleFixtureSql);
         using var cancellation = new CancellationTokenSource();
         var observer = new NativeScopeLifecycleObserver(faultPoint, failureMode, cancellation);
@@ -136,11 +141,12 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task NativeCommentScopeRestoreFailureQuarantinesSession()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var pooledConnectionString = new MySqlConnectionStringBuilder(connectionString)
         {
             Pooling = true,
         }.ConnectionString;
+        TrackOwnedPool(pooledConnectionString);
 
         await ExecuteSqlAsync(pooledConnectionString, NativeScopeLifecycleFixtureSql);
         var observer = new NativeScopeLifecycleObserver(failRestore: true);
@@ -217,11 +223,15 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         return Assert.IsType<SafeMigrationOperation>(Assert.Single(builder.Operations));
     }
+}
+
+public abstract partial class MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Executes test-owned session setup directly without reentering the EF interceptor.</summary>
     /// <param name="connection">The already open migration connection.</param>
     /// <param name="sql">The closed fixture or native fault statement.</param>
-    private static async Task NativeScopeLifecycleSessionSqlAsync(DbConnection connection, string sql)
+    protected static async Task NativeScopeLifecycleSessionSqlAsync(DbConnection connection, string sql)
     {
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
@@ -231,7 +241,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     /// <summary>Captures native state without opening or replacing a closed migration connection.</summary>
     /// <param name="connection">The connection whose existing session must be observed.</param>
     /// <returns>The original open-session evidence, or NULL when cleanup has already closed it.</returns>
-    private static async Task<NativeScopeLifecycleSession?> ReadNativeScopeLifecycleSessionAsync(
+    protected static async Task<NativeScopeLifecycleSession?> ReadNativeScopeLifecycleSessionAsync(
         DbConnection connection
     )
     {
@@ -263,7 +273,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     /// <param name="SavedSqlMode">The provider's potentially unowned earlier snapshot.</param>
     /// <param name="AcquisitionFlagCleared">Whether final cleanup released the owned acquisition flag.</param>
     /// <param name="DecisionVariablesCleared">Whether final cleanup released the owned decision state.</param>
-    private sealed record NativeScopeLifecycleSession(
+    protected sealed record NativeScopeLifecycleSession(
         string SqlMode,
         long ConnectionId,
         string? SavedSqlMode,
@@ -276,7 +286,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     /// <param name="failureMode">The native error or cancellation raised at the chosen boundary.</param>
     /// <param name="cancellation">The caller's token source for deterministic cancellation probes.</param>
     /// <param name="failRestore">Whether the actual native restoration must fail instead of setup.</param>
-    private sealed class NativeScopeLifecycleObserver(
+    protected sealed class NativeScopeLifecycleObserver(
         string? faultPoint = null,
         string? failureMode = null,
         CancellationTokenSource? cancellation = null,

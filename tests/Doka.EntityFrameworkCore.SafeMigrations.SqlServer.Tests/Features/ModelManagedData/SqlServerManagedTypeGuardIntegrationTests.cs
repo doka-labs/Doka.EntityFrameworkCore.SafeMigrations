@@ -1,7 +1,6 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
 /// <summary>Exercises the set-based managed-data metadata guard against isolated live catalogs.</summary>
-[Collection(SqlServerSharedContainer.Name)]
 public sealed class SqlServerManagedTypeGuardIntegrationTests : SqlServerIntegrationTestBase
 {
     /// <summary>Creates the suite with one isolated database per test.</summary>

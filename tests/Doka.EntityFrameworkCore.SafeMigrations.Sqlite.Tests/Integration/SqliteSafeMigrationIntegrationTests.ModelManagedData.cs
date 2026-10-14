@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
-public sealed partial class SqliteSafeMigrationCatalogIntegrationTests
+/// <summary>Exercises model managed data with independently owned SQLite state.</summary>
+public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : SqliteSafeMigrationCatalogIntegrationTests
 {
     [Fact]
     public async Task CompositeKeysUpdatesDeletesAndNullUniqueValuesConvergeInOrder()

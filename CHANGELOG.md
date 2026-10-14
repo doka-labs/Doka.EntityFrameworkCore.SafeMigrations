@@ -31,6 +31,12 @@ the shared release identity described in [Release process](docs/release-process.
   guidance without changing decisions or inferred migration history.
 - Remove row identifiers from SQLite-authored foreign-key integrity diagnostics;
   display only bounded structural ownership and relationship context.
+- Run independent provider test classes against assembly-owned containers and
+  isolated databases instead of serializing large partial suites or starting
+  a server per class. Share runner configuration with Rider and CLI, release
+  test-owned resources promptly, and isolate only process-wide observers and
+  measurements. Preserve test coverage, native platform boundaries and required
+  qualification; elapsed-time comparisons remain informational.
 
 ## [10.4.11] - 2026-10-14
 

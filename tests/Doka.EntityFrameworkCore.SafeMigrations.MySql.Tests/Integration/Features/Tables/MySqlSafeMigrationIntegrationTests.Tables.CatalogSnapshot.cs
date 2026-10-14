@@ -1,7 +1,12 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the TablesCatalogSnapshot migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlTablesCatalogSnapshotIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlTablesCatalogSnapshotIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     /// <summary>Checks classification stops spilling one temporary table per catalog subquery.</summary>
     /// <remarks>
     /// WHY: MariaDB cannot keep an INFORMATION_SCHEMA materialisation in its HEAP engine because
@@ -19,7 +24,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     {
         // Arrange
         const int tables = 32;
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var fixtureSql = new StringBuilder();
         for (var table = 0; table < tables; table++)
         {
@@ -78,7 +83,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task Analyzer_ReachesTheSameVerdictsWithAndWithoutTheSnapshot()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `verdict_parent` (`id` int NOT NULL,"
@@ -132,7 +137,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task Analyzer_MixedQualifierWindowKeepsEligibleSnapshotAndQualifiedLiveVerdicts()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `snapshot_padding` (`id` int NOT NULL, `code` int NOT NULL);"
@@ -208,9 +213,13 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         return [.. builder.Operations.Cast<SafeMigrationOperation>()];
     }
+}
+
+public abstract partial class MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Adds real, unresolved operations so snapshot eligibility cannot disappear unnoticed.</summary>
-    private static void AddSnapshotPadding(
+    protected static void AddSnapshotPadding(
         MigrationBuilder builder,
         string? schema = null,
         int count = 32
@@ -228,7 +237,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     }
 
     /// <summary>Checks engine-specific activation without depending on load-sensitive timings.</summary>
-    private void AssertSnapshotWasUsed(
+    protected void AssertSnapshotWasUsed(
         SnapshotClassification result
     )
     {
@@ -248,7 +257,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     /// <param name="table">The table name.</param>
     /// <param name="schema">The optional database qualifier.</param>
     /// <returns>The expected definition.</returns>
-    private static ExpectedTableDefinition ExpectedSnapshotTable(
+    protected static ExpectedTableDefinition ExpectedSnapshotTable(
         string table,
         string? schema = null
     ) => new(
@@ -263,7 +272,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     /// <param name="connectionString">The fixture database.</param>
     /// <param name="operations">The operations to classify.</param>
     /// <returns>The observed state per operation.</returns>
-    private async Task<SnapshotClassification> ClassifySnapshotAsync(
+    protected async Task<SnapshotClassification> ClassifySnapshotAsync(
         string connectionString,
         SafeMigrationOperation[] operations
     )
@@ -281,10 +290,14 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     }
 
     /// <summary>Retains only states and counters, never real catalog or row contents.</summary>
-    private sealed record SnapshotClassification(
+    protected sealed record SnapshotClassification(
         SafeMigrationObservedState[] States,
         int SnapshotCreates,
         int SnapshotClassifiers);
+}
+
+public sealed partial class MySqlTablesCatalogSnapshotIntegrationTests : MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Reads a status counter from the connection the analyzer used.</summary>
     /// <param name="context">The context whose connection is inspected.</param>

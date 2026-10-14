@@ -1,7 +1,12 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the ColumnsNullProofEligibility migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlColumnsNullProofEligibilityIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlColumnsNullProofEligibilityIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     /// <summary>Proves required physical columns exclude inline row SQL for matching and facet-only drift.</summary>
     /// <param name="varchar">Whether the target uses varchar rather than datetime(6).</param>
     /// <param name="drift">Whether the comment and default need repair.</param>
@@ -16,7 +21,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var storeType = varchar ? "varchar(800)" : "datetime(6)";
         var value = varchar ? "'preserved'" : "'2026-01-02 03:04:05.123456'";
         var comment = drift ? "legacy" : "canonical";
@@ -70,7 +75,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var storeType = varchar ? "varchar(800)" : "datetime(6)";
         var value = containsNull ? "NULL" : varchar ? "'preserved'" : "'2026-01-02 03:04:05.123456'";
         await ExecuteSqlAsync(connectionString,
@@ -120,7 +125,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task NullProofEligibility_DatetimeRowsRecheckedAfterPreflightDml()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `eligibility_rows` (`id` int PRIMARY KEY, `value` datetime(6) NULL COMMENT 'canonical'); "
             + "INSERT INTO `eligibility_rows` VALUES (1, '2026-01-02 03:04:05.123456');");
@@ -145,9 +150,13 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(SafeMigrationObservedState.DataBlocked, Assert.Single(repeatedAnalysis).ObservedState);
         Assert.Equal(1, insertedNullRows);
     }
+}
+
+public abstract partial class MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Captures exactly the provider-generated physical proof predicates for one bounded operation.</summary>
-    private static MySqlSafeMigrationRuntimePlan CaptureMySqlNullEligibilityPlan(
+    private protected static MySqlSafeMigrationRuntimePlan CaptureMySqlNullEligibilityPlan(
         DbContext context,
         SafeMigrationOperation operation
     )
@@ -158,6 +167,10 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         return Assert.Single(lease.Complete());
     }
+}
+
+public sealed partial class MySqlColumnsNullProofEligibilityIntegrationTests : MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Creates a generic required varchar(800) or datetime(6) contract.</summary>
     private static SafeMigrationOperation BuildMySqlNullEligibilityOperation(

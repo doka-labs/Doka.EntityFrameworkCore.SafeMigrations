@@ -1,7 +1,15 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
-public sealed partial class SqlServerSafeMigrationIntegrationTests
+/// <summary>Verifies projected live prerequisites SQL Server contracts against isolated databases.</summary>
+public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationTests
+    : SqlServerSafeMigrationIntegrationTests
 {
+    /// <summary>Creates the feature suite with the assembly-owned SQL Server fixture.</summary>
+    /// <param name="fixture">The shared fixture providing a database per test.</param>
+    public SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationTests(
+        SqlServerContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>
     /// An empty owner cannot make a computed dependent operand eligible under the native FK contract.
     /// </summary>

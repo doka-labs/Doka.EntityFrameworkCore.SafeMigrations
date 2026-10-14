@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the RuntimeDiagnostics PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlRuntimeDiagnosticsIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlRuntimeDiagnosticsIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>Native clients receive actionable MESSAGE text even when Npgsql redacts all Detail fields.</summary>
     /// <param name="state">The prepared runtime classification used by the native guard.</param>
     /// <param name="sqlState">The unchanged SafeMigrations SQLSTATE.</param>
@@ -16,7 +23,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         string guardCode)
     {
         // Arrange
-        var rawConnectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var rawConnectionString = await CreateDatabaseAsync(CancellationToken.None);
         var connectionString = new NpgsqlConnectionStringBuilder(rawConnectionString)
         {
             IncludeErrorDetail = false,
@@ -48,7 +55,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task NativeOwnerFailureCodeRemainsVisibleWithRedactedDetail()
     {
         // Arrange
-        var rawConnectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var rawConnectionString = await CreateDatabaseAsync(CancellationToken.None);
         var connectionString = new NpgsqlConnectionStringBuilder(rawConnectionString)
         {
             IncludeErrorDetail = false,
@@ -80,7 +87,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task NativeMessageEscapingIsIndependentOfStringSettings()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var operation = new SafeMigrationOperation(new DropTableIntent("owner'\\n$other$\n\u20AC"),
             SafeMigrationPolicy.ThrowIfDifferent);
         var plan = new PostgreSqlSafeMigrationRuntimePlan("'different'", "FALSE",
@@ -110,7 +117,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task NativeDelimiterCounterprobeRetainsOwnedSqlState(string placement)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var operation = PostgreSqlRuntimeDiagnosticTests.HostileDelimiterOperation(placement);
         var plan = new PostgreSqlSafeMigrationRuntimePlan("'different'", "TRUE",
             SafeMigrationRepairCapability.None, "FALSE");
@@ -132,7 +139,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task OrdinaryNativeErrorIsNotReclassifiedAsSafeMigrationGuard()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE native_error (id integer PRIMARY KEY); "
             + "INSERT INTO native_error VALUES (1);");
         await using var context = CreateContext(connectionString);
@@ -153,7 +160,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task RuntimeDiagnosticsPreserveCreateAndMatchingReplay()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE diagnostic_tags (id integer PRIMARY KEY); "
             + "INSERT INTO diagnostic_tags VALUES (1);");
         await using var context = CreateContext(connectionString);
@@ -170,4 +177,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         // Assert
         Assert.Equal(1, activeRows);
     }
+
 }

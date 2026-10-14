@@ -411,34 +411,6 @@ public sealed class SafeMigrationDiagnosticMessagesTests
         Assert.Equal("preserved-prefix" + expected, destination.ToString());
     }
 
-    /// <summary>Constant explanations do not depend on collectible enum metadata caches after GC.</summary>
-    [Fact]
-    public void ExplanationLookupDoesNotAllocateAfterGarbageCollection()
-    {
-        // Arrange
-        var intent = RequiredColumnOperation().Intent;
-        var checksum = SafeMigrationDiagnosticMessages.GetExplanation(intent,
-            SafeMigrationObservedState.DataBlocked, "required_column_backfill_missing", "data_blocked").Reason.Length;
-
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        var before = GC.GetAllocatedBytesForCurrentThread();
-
-        // Act
-        for (var index = 0; index < 1000; index++)
-        {
-            checksum += SafeMigrationDiagnosticMessages.GetExplanation(intent,
-                SafeMigrationObservedState.DataBlocked,
-                "required_column_backfill_missing", "data_blocked").Reason.Length;
-        }
-
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-
-        // Assert
-        Assert.True(checksum > 0);
-        Assert.Equal(0, allocated);
-    }
-
     /// <summary>Plain ASCII labels reuse their original reference; escaped labels remain bounded.</summary>
     /// <param name="source">The synthetic identifier.</param>
     /// <param name="expected">The bounded escaped representation.</param>

@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the ModelManagedDataDeleteFence PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlModelManagedDataDeleteFenceIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>Rejects a dependency committed while the generated delete waits for its own fence.</summary>
     /// <param name="referentialAction">The native incoming foreign-key delete action.</param>
     /// <param name="isolationLevel">The caller-owned transaction isolation preserved by execution.</param>
@@ -685,7 +692,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         bool? enforced = null
     )
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var foreignKey = referentialAction is null ? string.Empty
             : ", CONSTRAINT fk_model_fence_users_role FOREIGN KEY (role_id) "
             + "REFERENCES model_fence_roles (id) ON DELETE " + referentialAction
@@ -760,4 +767,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             await Task.Delay(TimeSpan.FromMilliseconds(10), timeout.Token);
         }
     }
+
 }

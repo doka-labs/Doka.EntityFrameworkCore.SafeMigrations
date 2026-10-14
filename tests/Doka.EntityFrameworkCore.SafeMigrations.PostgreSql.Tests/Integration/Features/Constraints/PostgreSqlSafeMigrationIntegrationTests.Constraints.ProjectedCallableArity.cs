@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the ConstraintsProjectedCallableArity PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlConstraintsProjectedCallableArityIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlConstraintsProjectedCallableArityIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>Native callable limits cannot be bypassed by expanded variadic metadata signatures.</summary>
     /// <param name="variadic">Whether the actual callable uses a variadic INTEGER input array.</param>
     /// <param name="overLimit">Whether the authored arguments exceed the actual native preset limit.</param>
@@ -12,7 +19,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task EmptyMixedCheckHonorsNativeFunctionArgumentLimit(bool variadic, bool overLimit)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var limit = await ScalarIntAsync(connectionString, "SELECT current_setting('max_function_args')::integer;");
         var count = limit + (overLimit ? 1 : 0);
         var signature = variadic ? "VARIADIC integer[]" : string.Join(", ", Enumerable.Repeat("integer", limit));
@@ -92,4 +99,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, report.Assessments[1].Action);
         }
     }
+
 }

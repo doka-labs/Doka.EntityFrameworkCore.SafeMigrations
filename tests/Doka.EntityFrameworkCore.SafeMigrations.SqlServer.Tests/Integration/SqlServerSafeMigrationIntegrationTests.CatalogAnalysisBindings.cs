@@ -1,7 +1,15 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
-public sealed partial class SqlServerSafeMigrationIntegrationTests
+/// <summary>Verifies catalog analysis bindings SQL Server contracts against isolated databases.</summary>
+public sealed class SqlServerSafeMigrationCatalogAnalysisBindingsIntegrationTests
+    : SqlServerSafeMigrationIntegrationTests
 {
+    /// <summary>Creates the feature suite with the assembly-owned SQL Server fixture.</summary>
+    /// <param name="fixture">The shared fixture providing a database per test.</param>
+    public SqlServerSafeMigrationCatalogAnalysisBindingsIntegrationTests(
+        SqlServerContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>Same-session impersonation cannot retain the preceding full-visibility inventory proof.</summary>
     [SqlServerLiveFact]
     public async Task CatalogPreamble_ImpersonatedPrincipalRequiresFreshInventoryEvidence()

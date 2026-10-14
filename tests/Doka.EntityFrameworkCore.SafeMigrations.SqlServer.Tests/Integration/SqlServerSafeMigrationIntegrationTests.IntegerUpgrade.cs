@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
-public sealed partial class SqlServerSafeMigrationIntegrationTests
+/// <summary>Verifies integer upgrade SQL Server contracts against isolated databases.</summary>
+public sealed class SqlServerSafeMigrationIntegerUpgradeIntegrationTests : SqlServerSafeMigrationIntegrationTests
 {
+    /// <summary>Creates the feature suite with the assembly-owned SQL Server fixture.</summary>
+    /// <param name="fixture">The shared fixture providing a database per test.</param>
+    public SqlServerSafeMigrationIntegerUpgradeIntegrationTests(
+        SqlServerContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>Executes an ordered EF migration, preserving history, values, defaults, and trusted checks.</summary>
     [SqlServerLiveFact]
     public async Task IntegerUpgrade_OrderedPreflightEfMigrationAndHistoryReplay()

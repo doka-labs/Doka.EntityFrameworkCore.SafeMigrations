@@ -1,7 +1,15 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
-public sealed partial class SqlServerSafeMigrationIntegrationTests
+/// <summary>Verifies default value representability SQL Server contracts against isolated databases.</summary>
+public sealed class SqlServerSafeMigrationDefaultValueRepresentabilityIntegrationTests
+    : SqlServerSafeMigrationIntegrationTests
 {
+    /// <summary>Creates the feature suite with the assembly-owned SQL Server fixture.</summary>
+    /// <param name="fixture">The shared fixture providing a database per test.</param>
+    public SqlServerSafeMigrationDefaultValueRepresentabilityIntegrationTests(
+        SqlServerContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>Stops an unrepresentable immutable datetime default before column or table DDL.</summary>
     [SqlServerLiveTheory]
     [InlineData(false, false)]
@@ -458,19 +466,5 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
             Assert.Equal(1, columns);
             Assert.Equal(0, events);
         }
-    }
-
-    private static SafeMigrationOperation TemporalDefaultOperation(
-        ExpectedColumnDefinition definition,
-        bool inlineTable
-    )
-    {
-        SafeMigrationIntent intent = inlineTable
-            ? new EnsureTableIntent(new ExpectedTableDefinition("new_default_items",
-                [new ExpectedColumnDefinition("Id", typeof(int), false, "int"), definition]),
-                SafeMigrationTableMode.StrictDefinition)
-            : new EnsureColumnIntent("default_items", definition);
-
-        return new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent);
     }
 }

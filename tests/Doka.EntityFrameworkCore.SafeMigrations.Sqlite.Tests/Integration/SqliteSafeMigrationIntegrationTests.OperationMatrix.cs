@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
-public sealed partial class SqliteSafeMigrationCatalogIntegrationTests
+/// <summary>Exercises operation matrix with independently owned SQLite state.</summary>
+public sealed class SqliteSafeMigrationOperationMatrixIntegrationTests : SqliteSafeMigrationCatalogIntegrationTests
 {
     [Fact]
     public async Task ExistingTableDropRenameAndIndependentAdd_ApplyInOneStructuralBatch()

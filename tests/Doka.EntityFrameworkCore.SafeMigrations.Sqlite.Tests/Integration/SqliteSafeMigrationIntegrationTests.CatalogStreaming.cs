@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
-public sealed partial class SqliteSafeMigrationCatalogIntegrationTests
+/// <summary>Exercises catalog streaming with independently owned SQLite state.</summary>
+public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : SqliteSafeMigrationCatalogIntegrationTests
 {
     /// <summary>Snapshot commands are constant for empty, unindexed, and heavily indexed main schemas.</summary>
     [Theory]

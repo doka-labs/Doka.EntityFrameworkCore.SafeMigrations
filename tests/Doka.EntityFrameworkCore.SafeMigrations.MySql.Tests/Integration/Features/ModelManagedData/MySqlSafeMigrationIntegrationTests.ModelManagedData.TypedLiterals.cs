@@ -1,7 +1,12 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the ModelManagedDataTypedLiterals migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlModelManagedDataTypedLiteralsIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlModelManagedDataTypedLiteralsIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     [Theory]
     [InlineData(SafeMigrationScaffoldingMode.Strict, DokaMySqlGuidFormat.Char36)]
     [InlineData(SafeMigrationScaffoldingMode.Strict, DokaMySqlGuidFormat.Binary16)]
@@ -12,7 +17,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         DokaMySqlGuidFormat guidFormat
     )
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var storeType = GuidStoreType(guidFormat);
         var maximumLength = guidFormat == DokaMySqlGuidFormat.Binary16 ? 16 : 36;

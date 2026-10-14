@@ -1,6 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
-public sealed partial class SqliteSafeMigrationCatalogIntegrationTests
+/// <summary>Exercises model managed data side effects with independently owned SQLite state.</summary>
+public sealed partial class SqliteSafeMigrationModelManagedDataSideEffectsIntegrationTests
+    : SqliteSafeMigrationCatalogIntegrationTests
 {
     /// <summary>A confined later insert cannot replace the actual global uncertainty origin.</summary>
     [Fact]

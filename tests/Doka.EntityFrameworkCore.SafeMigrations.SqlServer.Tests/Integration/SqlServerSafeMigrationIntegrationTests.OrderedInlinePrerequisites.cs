@@ -1,7 +1,15 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
-public sealed partial class SqlServerSafeMigrationIntegrationTests
+/// <summary>Verifies ordered inline prerequisites SQL Server contracts against isolated databases.</summary>
+public sealed class SqlServerSafeMigrationOrderedInlinePrerequisitesIntegrationTests
+    : SqlServerSafeMigrationIntegrationTests
 {
+    /// <summary>Creates the feature suite with the assembly-owned SQL Server fixture.</summary>
+    /// <param name="fixture">The shared fixture providing a database per test.</param>
+    public SqlServerSafeMigrationOrderedInlinePrerequisitesIntegrationTests(
+        SqlServerContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>A live inline proof cannot survive removal of its table or only candidate key.</summary>
     [SqlServerLiveTheory]
     [InlineData("table")]

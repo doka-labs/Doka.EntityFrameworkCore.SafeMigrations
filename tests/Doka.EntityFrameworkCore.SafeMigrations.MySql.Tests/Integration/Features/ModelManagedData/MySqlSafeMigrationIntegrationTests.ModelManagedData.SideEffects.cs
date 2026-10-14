@@ -1,7 +1,12 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the ModelManagedDataSideEffects migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlModelManagedDataSideEffectsIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlModelManagedDataSideEffectsIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     /// <summary>
     /// Requires runtime validation when a managed write can invalidate the immutable live row snapshot.
     /// </summary>
@@ -16,7 +21,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task SideEffects_ManagedWriteTriggerInvalidatesLiveMatchingRow(string writeKind)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
@@ -86,7 +91,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task SideEffects_ExecutedManagedInsertReplayProvesSameRow()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
@@ -132,7 +137,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task SideEffects_NewlyCreatedPlainTableRemainsReady()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
 
@@ -176,7 +181,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task SideEffects_TwoChildDeletesThenParentRemainExecutableWithRuntimeValidation()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
@@ -228,7 +233,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task SideEffects_InterveningTriggerRecreationRejectsParentDelete()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,

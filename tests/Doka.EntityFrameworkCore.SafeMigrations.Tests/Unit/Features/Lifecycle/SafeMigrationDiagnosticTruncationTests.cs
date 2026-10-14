@@ -237,30 +237,6 @@ public sealed class SafeMigrationDiagnosticTruncationTests
         Assert.Contains("no full rollback is implied", message, StringComparison.Ordinal);
     }
 
-    /// <summary>Boundary selection performs no allocations, including after a garbage collection.</summary>
-    [Fact]
-    public void DisplayBoundarySelectionDoesNotAllocate()
-    {
-        // Arrange
-        var builder = new StringBuilder(new string('x', 1020) + "\\u20AC");
-        var checksum = SafeMigrationDiagnosticMessages.GetDisplayPrefixLength(builder, 0, 1024);
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        var before = GC.GetAllocatedBytesForCurrentThread();
-
-        // Act
-        for (var index = 0; index < 10_000; index++)
-        {
-            checksum += SafeMigrationDiagnosticMessages.GetDisplayPrefixLength(builder, 0, 1024);
-        }
-
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-
-        // Assert
-        Assert.Equal(10_001 * 1020, checksum);
-        Assert.Equal(0, allocated);
-    }
-
     /// <summary>The independent test oracle rejects the exact malformed units that motivated this fix.</summary>
     /// <param name="display">The deliberately incomplete or invalid display escape.</param>
     [Theory]

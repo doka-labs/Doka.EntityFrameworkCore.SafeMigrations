@@ -1,6 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
-public sealed partial class SqliteSafeMigrationCatalogIntegrationTests
+/// <summary>Exercises native candidate key semantics with independently owned SQLite state.</summary>
+public sealed class SqliteSafeMigrationNativeCandidateKeySemanticsIntegrationTests
+    : SqliteSafeMigrationCatalogIntegrationTests
 {
     /// <summary>Standalone key matching respects the native column-default equality and sort semantics.</summary>
     /// <param name="kind">The native constraint family being ensured.</param>

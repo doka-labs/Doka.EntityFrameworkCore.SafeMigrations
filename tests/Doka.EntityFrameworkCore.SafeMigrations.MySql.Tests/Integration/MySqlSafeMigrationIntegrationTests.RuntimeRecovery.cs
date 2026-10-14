@@ -1,12 +1,20 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+public abstract partial class MySqlSafeMigrationIntegrationTests
 {
-    private const string RuntimeGuardVariablesClearedSql = "SELECT @doka_sm_state IS NULL "
+    protected const string RuntimeGuardVariablesClearedSql = "SELECT @doka_sm_state IS NULL "
         + "AND @doka_sm_action IS NULL AND @doka_sm_repair_ok IS NULL AND @doka_sm_prerequisite_ok IS NULL "
         + "AND @doka_sm_sql IS NULL AND @doka_sm_post_ok IS NULL AND @doka_sm_data_probe_required IS NULL "
         + "AND @doka_sm_data_blocked IS NULL AND @doka_sm_transition_eligible IS NULL "
         + "AND @doka_sm_nullability_blocked IS NULL AND @doka_sm_column_repair_eligible IS NULL;";
+}
+
+/// <summary>Exercises the RuntimeRecovery migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlRuntimeRecoveryIntegrationTests : MySqlSafeMigrationIntegrationTests
+{
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlRuntimeRecoveryIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
 
     /// <summary>
     /// Verifies first-error behavior and acquired-resource cleanup inside real compacted setup groups.
@@ -20,7 +28,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         string failureMode
     )
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `runtime_records_probe` (`Id` int NOT NULL, PRIMARY KEY (`Id`)); "
@@ -106,7 +114,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         bool failSetup
     )
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `runtime_sync_rows` (`Id` int NOT NULL, PRIMARY KEY (`Id`)); "
@@ -154,7 +162,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task RuntimeSynchronousPreparedScope_PreservesDataCleanupAndRecovery(string failureMode)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `runtime_sync_rows` (`Id` int NOT NULL, PRIMARY KEY (`Id`)); "
@@ -225,11 +233,12 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task RuntimeCleanupFailure_StillClearsGuardResourcesAndEvictsSession()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var pooledConnectionString = new MySqlConnectionStringBuilder(connectionString)
         {
             Pooling = true,
         }.ConnectionString;
+        TrackOwnedPool(pooledConnectionString);
 
         var observer = new RuntimeCleanupFailureInterceptor();
         await using var context = CreateRuntimeContext(pooledConnectionString, observer);
@@ -258,9 +267,13 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.NotEqual(originalSession, result.ReplacementSession);
         Assert.Equal(1, result.TargetTables);
     }
+}
+
+public abstract partial class MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Captures proof before recovery can overwrite leaked guard resources.</summary>
-    private static async Task<RuntimeCleanupProof> ReadRuntimeCleanupProofAsync(
+    protected static async Task<RuntimeCleanupProof> ReadRuntimeCleanupProofAsync(
         DbConnection connection
     )
     {
@@ -294,6 +307,10 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             return exception.Number;
         }
     }
+}
+
+public sealed partial class MySqlRuntimeRecoveryIntegrationTests : MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Executes a real synchronous scope and inspects resources before retry.</summary>
     private static RuntimeSynchronousRecovery ExecuteRuntimeSynchronousRecovery(
@@ -383,9 +400,13 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         return new RuntimeCleanupFailure(exception, state, session, tables);
     }
+}
+
+public abstract partial class MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Injects an earlier cleanup failure and inspects later guard cleanup before forced close.</summary>
-    private sealed class RuntimeCleanupFailureInterceptor : DbCommandInterceptor
+    protected sealed class RuntimeCleanupFailureInterceptor : DbCommandInterceptor
     {
         /// <summary>Gets whether the generated prepared cleanup was actually reached.</summary>
         public bool Injected { get; private set; }
@@ -434,14 +455,14 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     }
 
     /// <summary>Carries direct evidence that every guarded scope resource was released.</summary>
-    private sealed record RuntimeCleanupProof(
+    protected sealed record RuntimeCleanupProof(
         int VariablesCleared,
         int TemporaryTableError,
         int PreparedStatementError
     );
 
     /// <summary>Carries synchronous error, cleanup, ordered retry, and durable schema/data evidence.</summary>
-    private sealed record RuntimeSynchronousRecovery(
+    protected sealed record RuntimeSynchronousRecovery(
         Exception? Exception,
         long BodiesBeforeRecovery,
         RuntimeCleanupProof Cleanup,
@@ -453,7 +474,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     );
 
     /// <summary>Carries cleanup-failure quarantine and replacement-session evidence.</summary>
-    private sealed record RuntimeCleanupFailure(
+    protected sealed record RuntimeCleanupFailure(
         Exception? Exception,
         ConnectionState FailedConnectionState,
         int ReplacementSession,

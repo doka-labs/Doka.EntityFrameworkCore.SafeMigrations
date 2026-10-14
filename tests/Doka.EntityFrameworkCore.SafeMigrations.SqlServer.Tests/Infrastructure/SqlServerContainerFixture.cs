@@ -11,7 +11,11 @@ public sealed class SqlServerContainerFixture : IAsyncLifetime, IDisposable
 
     private readonly List<string> _databases = [];
     private readonly SemaphoreSlim _databaseLifecycleLock = new(1, 1);
-    private readonly MsSqlContainer _container;
+    private readonly MsSqlContainer? _container;
+    private readonly string? _rootConnectionString;
+    private readonly Func<string, CancellationToken, Task>? _createDatabaseAsync;
+    private readonly Func<string, CancellationToken, Task>? _dropDatabaseAsync;
+    private readonly Func<Task>? _disposeContainerAsync;
     private bool _disposed;
 
     /// <summary>
@@ -27,13 +31,36 @@ public sealed class SqlServerContainerFixture : IAsyncLifetime, IDisposable
             .Build();
     }
 
+    /// <summary>Exercises actual fixture ownership and cleanup with resource-free server callbacks.</summary>
+    /// <param name="rootConnectionString">The server connection settings validated before database creation.</param>
+    /// <param name="createDatabaseAsync">The callback simulating database creation and its acknowledgement.</param>
+    /// <param name="dropDatabaseAsync">The callback confirming an owned database is absent.</param>
+    /// <param name="disposeContainerAsync">The callback disposing the simulated container.</param>
+    internal SqlServerContainerFixture(
+        string rootConnectionString,
+        Func<string, CancellationToken, Task> createDatabaseAsync,
+        Func<string, CancellationToken, Task> dropDatabaseAsync,
+        Func<Task> disposeContainerAsync
+    )
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(rootConnectionString);
+        ArgumentNullException.ThrowIfNull(createDatabaseAsync);
+        ArgumentNullException.ThrowIfNull(dropDatabaseAsync);
+        ArgumentNullException.ThrowIfNull(disposeContainerAsync);
+
+        _rootConnectionString = rootConnectionString;
+        _createDatabaseAsync = createDatabaseAsync;
+        _dropDatabaseAsync = dropDatabaseAsync;
+        _disposeContainerAsync = disposeContainerAsync;
+    }
+
     /// <summary>
     /// Starts the SQL Server instance before the first live test.
     /// </summary>
     public async Task InitializeAsync()
     {
         // WHY: xUnit may construct a class fixture even when every live test is skipped.
-        if (RuntimeInformation.OSArchitecture != Architecture.X64)
+        if (_container is null || RuntimeInformation.OSArchitecture != Architecture.X64)
         {
             return;
         }
@@ -48,14 +75,14 @@ public sealed class SqlServerContainerFixture : IAsyncLifetime, IDisposable
     /// </summary>
     public async Task DisposeAsync()
     {
-        if (RuntimeInformation.OSArchitecture != Architecture.X64)
+        if (_container is not null && RuntimeInformation.OSArchitecture != Architecture.X64)
         {
             Dispose();
 
             return;
         }
 
-        Exception? cleanupFailure = null;
+        var cleanupFailures = new List<Exception>();
 
         try
         {
@@ -72,24 +99,37 @@ public sealed class SqlServerContainerFixture : IAsyncLifetime, IDisposable
         }
         catch (Exception exception)
         {
-            cleanupFailure = exception;
+            cleanupFailures.Add(exception);
         }
 
         try
         {
-            await _container.DisposeAsync();
+            if (_disposeContainerAsync is { } disposeContainerAsync)
+            {
+                await disposeContainerAsync();
+            }
+            else if (_container is { } container)
+            {
+                await container.DisposeAsync();
+            }
         }
         catch (Exception exception)
         {
-            cleanupFailure ??= exception;
+            // WHY: A database cleanup failure must not hide an independent
+            // container disposal failure encountered while completing teardown.
+            cleanupFailures.Add(exception);
         }
         finally
         {
             Dispose();
         }
 
-        if (cleanupFailure is not null)
+        if (cleanupFailures.Count != 0)
         {
+            var cleanupFailure = cleanupFailures.Count == 1
+                ? cleanupFailures[0]
+                : new AggregateException(cleanupFailures);
+
             throw new InvalidOperationException("SQL Server test-container cleanup failed.", cleanupFailure);
         }
     }
@@ -115,7 +155,7 @@ public sealed class SqlServerContainerFixture : IAsyncLifetime, IDisposable
         CancellationToken cancellationToken = default
     )
     {
-        if (RuntimeInformation.OSArchitecture != Architecture.X64)
+        if (_container is not null && RuntimeInformation.OSArchitecture != Architecture.X64)
         {
             throw new PlatformNotSupportedException("SQL Server Linux containers require an x86-64 host.");
         }
@@ -125,17 +165,27 @@ public sealed class SqlServerContainerFixture : IAsyncLifetime, IDisposable
         try
         {
             var database = $"sm_{Guid.NewGuid():N}";
+            var connectionString = BuildTestConnectionString(RootConnectionString, database);
 
-            await using var connection = new SqlConnection(RootConnectionString);
-            await connection.OpenAsync(cancellationToken);
-
-            await using var command = connection.CreateCommand();
-            command.CommandText = $"CREATE DATABASE [{database}];";
-            await command.ExecuteNonQueryAsync(cancellationToken);
-
+            // WHY: CREATE can commit even when its acknowledgement is lost or
+            // cancelled. Provisional ownership permits guarded cleanup either way.
             _databases.Add(database);
 
-            return BuildTestConnectionString(_container.GetConnectionString(), database);
+            if (_createDatabaseAsync is { } createDatabaseAsync)
+            {
+                await createDatabaseAsync(database, cancellationToken);
+            }
+            else
+            {
+                await using var connection = new SqlConnection(RootConnectionString);
+                await connection.OpenAsync(cancellationToken);
+
+                await using var command = connection.CreateCommand();
+                command.CommandText = $"CREATE DATABASE [{database}];";
+                await command.ExecuteNonQueryAsync(cancellationToken);
+            }
+
+            return connectionString;
         }
         finally
         {
@@ -160,7 +210,7 @@ public sealed class SqlServerContainerFixture : IAsyncLifetime, IDisposable
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
 
-        if (RuntimeInformation.OSArchitecture != Architecture.X64 || _disposed)
+        if ((_container is not null && RuntimeInformation.OSArchitecture != Architecture.X64) || _disposed)
         {
             return;
         }
@@ -171,13 +221,8 @@ public sealed class SqlServerContainerFixture : IAsyncLifetime, IDisposable
 
         try
         {
-            await ReleaseOwnedDatabaseAsync(_databases, database, async (ownedDatabase, token) =>
-            {
-                await using var connection = new SqlConnection(RootConnectionString);
-                await connection.OpenAsync(token);
-
-                await DropDatabaseAsync(connection, ownedDatabase, token);
-            }, cancellationToken);
+            await ReleaseOwnedDatabaseAsync(_databases, database, _dropDatabaseAsync ?? DropDatabaseCoreAsync,
+                cancellationToken);
         }
         finally
         {
@@ -206,7 +251,9 @@ public sealed class SqlServerContainerFixture : IAsyncLifetime, IDisposable
         TrustServerCertificate = true,
     }.ConnectionString;
 
-    private string RootConnectionString => new SqlConnectionStringBuilder(_container.GetConnectionString())
+    private string RootConnectionString => new SqlConnectionStringBuilder(_rootConnectionString
+        ?? _container?.GetConnectionString()
+        ?? throw new InvalidOperationException("The SQL Server fixture has no connection string."))
     {
         InitialCatalog = "master",
         Pooling = false,
@@ -222,11 +269,29 @@ public sealed class SqlServerContainerFixture : IAsyncLifetime, IDisposable
             return;
         }
 
+        if (_dropDatabaseAsync is { } dropDatabaseAsync)
+        {
+            await DropOwnedDatabasesAsync(_databases, dropDatabaseAsync, cancellationToken);
+
+            return;
+        }
+
         await using var connection = new SqlConnection(RootConnectionString);
         await connection.OpenAsync(cancellationToken);
 
         await DropOwnedDatabasesAsync(_databases,
             (database, token) => DropDatabaseAsync(connection, database, token), cancellationToken);
+    }
+
+    private async Task DropDatabaseCoreAsync(
+        string database,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var connection = new SqlConnection(RootConnectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        await DropDatabaseAsync(connection, database, cancellationToken);
     }
 
     /// <summary>

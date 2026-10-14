@@ -1,12 +1,17 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the CatalogPacking migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlCatalogPackingIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlCatalogPackingIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     /// <summary>Prerequisite failures between live operations do not fragment bounded classification.</summary>
     [Fact]
     public async Task Analyzer_PacksAcrossShortCircuitGapsAndCaptureBoundariesWithoutMixingResults()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE `catalog_packing` (`id` int NOT NULL);");
         await using var context = CreateContext(connectionString);
         await using var connection = new CatalogClassificationCountingConnection(new MySqlConnection(connectionString));
@@ -61,7 +66,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         bool missingRows
     )
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE `catalog_ownership` (`id` int NOT NULL);");
         await using var context = CreateContext(connectionString);
         await using var connection = new CatalogClassificationCountingConnection(

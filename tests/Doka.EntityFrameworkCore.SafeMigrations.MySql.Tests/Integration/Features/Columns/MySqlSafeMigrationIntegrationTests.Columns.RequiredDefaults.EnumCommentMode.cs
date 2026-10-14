@@ -1,7 +1,12 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the ColumnsRequiredDefaultsEnumCommentMode migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlColumnsRequiredDefaultsEnumCommentModeIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlColumnsRequiredDefaultsEnumCommentModeIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     private const string EnumCommentTargetComment = @"comment\path";
 
     /// <summary>
@@ -20,7 +25,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, AtomicRequiredAddOriginalTableSql("enum_comment_items"));
 
         // WHY: MySqlConnector's string-parameter escaping must match the
@@ -111,7 +116,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task RequiredDefaultEnumCommentMatchingStandardTargetRemainsNoOp(bool useSetStorage)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = 'STRICT_ALL_TABLES'; "
@@ -157,7 +162,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task RequiredDefaultEnumCommentStandardRepairRejectsBeforeDomainOrCommentChange(bool useSetStorage)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = 'STRICT_ALL_TABLES'; "
@@ -205,7 +210,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task RequiredDefaultEnumCommentStandardOnlyMatchingTargetRemainsNoOp(bool useSetStorage)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = 'STRICT_ALL_TABLES'; "
@@ -256,7 +261,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task RequiredDefaultEnumCommentStandardOnlyMissingTargetRejectsBeforeNativeScope(bool useSetStorage)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, AtomicRequiredAddOriginalTableSql("enum_comment_items"));
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
@@ -337,11 +342,15 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             + "INSERT INTO `enum_comment_items` (`key`, `value`) VALUES (1, "
             + AtomicRequiredAddLiteral(@"slash\tail") + ");";
     }
+}
+
+public abstract partial class MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Reads the caller's retained native session mode before and after actual scoped execution.</summary>
     /// <param name="context">The already-open migration context.</param>
     /// <returns>The server's exact mode text without normalizing or changing it.</returns>
-    private static async Task<string> RequiredDefaultsEnumCommentSessionModeAsync(DbContext context)
+    protected static async Task<string> RequiredDefaultsEnumCommentSessionModeAsync(DbContext context)
     {
         await using var command = context.Database.GetDbConnection().CreateCommand();
         command.CommandText = "SELECT @@SESSION.sql_mode;";
@@ -349,6 +358,10 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         return Convert.ToString(await command.ExecuteScalarAsync(CancellationToken.None),
             CultureInfo.InvariantCulture) ?? "<null>";
     }
+}
+
+public sealed partial class MySqlColumnsRequiredDefaultsEnumCommentModeIntegrationTests : MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Reads the complete physical domain display without case folding or mode reinterpretation.</summary>
     /// <param name="connectionString">The isolated test owner.</param>

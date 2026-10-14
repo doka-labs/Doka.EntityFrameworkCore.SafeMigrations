@@ -1,7 +1,12 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the BinaryCatalogComparisons migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlBinaryCatalogComparisonsIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlBinaryCatalogComparisonsIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     /// <summary>Length-free binary casts retain case, byte, trailing-space and NULL comparison semantics.</summary>
     /// <param name="first">The first native string value or SQL NULL.</param>
     /// <param name="second">The second native string value or SQL NULL.</param>
@@ -19,7 +24,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task BinaryCatalogCastPreservesByteIdentity(string? first, string? second, int? expected)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var connection = new MySqlConnection(connectionString);
         await connection.OpenAsync(CancellationToken.None);
         await using var command = connection.CreateCommand();

@@ -1,6 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 /// <summary>Compares one-column identity metadata using deterministic retained-object allocation evidence.</summary>
+// WHY: Forced collections must not interrupt allocation windows in other parallel test classes.
+[Collection(ProcessWideTestGroup.Name)]
 public sealed class SafeMigrationOperationIdentityAllocationTests
 {
     /// <summary>Production one-column identities retain less metadata than an array plus read-only wrapper.</summary>

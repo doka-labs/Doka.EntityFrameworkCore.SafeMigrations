@@ -1,7 +1,12 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the ColumnsPrimaryKeyRemoval migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlColumnsPrimaryKeyRemovalIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlColumnsPrimaryKeyRemovalIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     /// <summary>Ordered native key removal preserves an independently proven nullable column transition.</summary>
     /// <param name="supportingIndexExists">Whether the independent FK index already exists.</param>
     /// <param name="useEnsure">Whether the target has no authored old definition.</param>
@@ -13,7 +18,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task PrimaryKeyRemovalPreservesNullableColumnProof(bool supportingIndexExists, bool useEnsure)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, PrimaryKeyRemovalFixture(supportingIndexExists));
         await using var context = CreateContext(connectionString);
         var operations = PrimaryKeyRemovalOperations(useEnsure);
@@ -71,7 +76,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task PrimaryKeyRemovalInterruptedPrefixCanResumeNullableAlter()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, PrimaryKeyRemovalFixture(supportingIndexExists: true));
         await using var context = CreateContext(connectionString);
         var operations = PrimaryKeyRemovalOperations();
@@ -103,7 +108,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task PrimaryKeyRemovalNativeControlPreservesColumnValues()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, PrimaryKeyRemovalFixture(supportingIndexExists: true));
 
         // Act
@@ -122,11 +127,15 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(1, retained);
         Assert.Equal("YES", nullable);
     }
+}
+
+public abstract partial class MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Declares the physical removal prefix and exact metadata-preserving nullable alteration.</summary>
     /// <param name="useEnsure">Whether to capture native target evidence without an authored old source.</param>
     /// <returns>The neutral ordered operation stream, without fabricated table convergence.</returns>
-    private static List<MigrationOperation> PrimaryKeyRemovalOperations(bool useEnsure = false)
+    protected static List<MigrationOperation> PrimaryKeyRemovalOperations(bool useEnsure = false)
     {
         var builder = new MigrationBuilder("Doka.EntityFrameworkCore.MySql");
         builder.DropForeignKeyIfExists("fk_key_items_user", "key_items");
@@ -164,7 +173,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     /// </summary>
     /// <param name="supportingIndexExists">Whether to create the independent question index explicitly.</param>
     /// <returns>The isolated schema and deterministic sentinel values.</returns>
-    private static string PrimaryKeyRemovalFixture(bool supportingIndexExists)
+    protected static string PrimaryKeyRemovalFixture(bool supportingIndexExists)
         => "CREATE TABLE `key_questions` (`id` char(36) NOT NULL PRIMARY KEY) ENGINE=InnoDB "
             + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
             + "CREATE TABLE `key_users` (`id` char(36) NOT NULL PRIMARY KEY) ENGINE=InnoDB "
