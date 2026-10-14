@@ -689,7 +689,7 @@ public sealed class MySqlForeignKeyDropColumnProofTests
         Assert.Equal(SafeMigrationRepairCapability.None, result.RepairCapability);
     }
 
-    /// <summary>Only accepted FK removals preserve the exact source lifetime; other history stays closed.</summary>
+    /// <summary>Uncertified changes invalidate exact source lifetime and later removals cannot revive it.</summary>
     /// <param name="mutation">The earlier mutation that invalidates the captured certificate.</param>
     /// <param name="beforeDrop">Whether the invalidating mutation preceded the accepted FK drop.</param>
     [Theory]
@@ -701,7 +701,6 @@ public sealed class MySqlForeignKeyDropColumnProofTests
     [InlineData("column-drop", false)]
     [InlineData("column-alter", false)]
     [InlineData("column-rename", false)]
-    [InlineData("key-drop", false)]
     [InlineData("index-drop", false)]
     [InlineData("foreign-key-add", false)]
     [InlineData("incoming-foreign-key", false)]

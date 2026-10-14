@@ -8,7 +8,7 @@ internal sealed partial class SafeMigrationPreflightProjection
     )
     {
         var key = new TableKey(intent.Table, intent.Schema);
-        if (_projectedForeignKeyDropOnlyTables?.Contains(key) == true
+        if (HasColumnPreservingHistory(key)
             && liveAnalysis.ObservedState is SafeMigrationObservedState.DataBlocked
                 or SafeMigrationObservedState.Unsupported)
         {
@@ -16,16 +16,18 @@ internal sealed partial class SafeMigrationPreflightProjection
         }
 
         if (_projectedColumnAnalyzer is { } provider
-            && CanReuseColumnProofAfterForeignKeyDrops(intent, liveAnalysis, key))
+            && CanReuseColumnProofAfterColumnPreservingChanges(intent, liveAnalysis, key))
         {
-            // WHY: Ensure has no authored old definition. Only an earlier accepted
-            // source plus native nullable-only qualification can preserve physical
-            // endpoint/key proofs through this repair, independently of widening.
+            // WHY: Ensure has no authored old definition. Complete native
+            // nullable-only evidence after key changes, or an accepted exact
+            // source after FK-only drops, can preserve layout without widening.
             return liveAnalysis.ObservedState == SafeMigrationObservedState.Different
                 && !liveAnalysis.RepairMutatesData
-                && TryGetAcceptedColumnSource(intent, out var source)
-                && provider.PreservesSiblingColumnProofsAfterForeignKeyDrops(
-                    intent, source, liveAnalysis)
+                && ((_projectedIntrinsicColumnSourceTables?.Contains(key) == true
+                        && _projectedForeignKeyDropOnlyTables?.Contains(key) != true
+                        && provider.CanReuseLiveColumnProofAfterKeyChanges(intent, liveAnalysis))
+                    || (TryGetAcceptedColumnSource(intent, out var source)
+                        && provider.PreservesSiblingColumnProofsAfterForeignKeyDrops(intent, source, liveAnalysis)))
                     ? liveAnalysis.WithRepairPreservesIntrinsicColumnLayout()
                     : liveAnalysis;
         }
@@ -71,6 +73,18 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         if (!TryGet(intent.Table, intent.Schema, out var table))
         {
+            if (_projectedIntrinsicColumnSourceTables?.Contains(key) == true
+                && _projectedForeignKeyDropOnlyTables?.Contains(key) != true
+                && (liveAnalysis.ObservedState == SafeMigrationObservedState.Matching
+                    || (liveAnalysis.ObservedState == SafeMigrationObservedState.Different
+                        && liveAnalysis.RepairCapability == SafeMigrationRepairCapability.Safe)))
+            {
+                // WHY: A declined key-change certificate cannot fall through to
+                // generic Ensure repair. Its earlier physical width/key proof
+                // may be stale even though adding the nullable target is safe.
+                return StructureStateUnknown();
+            }
+
             var unprojectedAnalysis = SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(intent.Definition)
                 ? liveAnalysis
                 : InvalidateDataDependentMissing(intent.Table, intent.Schema, liveAnalysis);
@@ -135,7 +149,7 @@ internal sealed partial class SafeMigrationPreflightProjection
     )
     {
         var key = new TableKey(intent.Table, intent.Schema);
-        if (_projectedForeignKeyDropOnlyTables?.Contains(key) == true
+        if (HasColumnPreservingHistory(key)
             && liveAnalysis.ObservedState is SafeMigrationObservedState.DataBlocked
                 or SafeMigrationObservedState.Unsupported)
         {
@@ -144,7 +158,7 @@ internal sealed partial class SafeMigrationPreflightProjection
             return liveAnalysis;
         }
 
-        if (CanReuseColumnProofAfterForeignKeyDrops(intent, liveAnalysis, key))
+        if (CanReuseColumnProofAfterColumnPreservingChanges(intent, liveAnalysis, key))
         {
             return liveAnalysis;
         }
@@ -214,33 +228,42 @@ internal sealed partial class SafeMigrationPreflightProjection
     }
 
     /// <summary>Checks the lifetime before asking the provider to reuse one exact column certificate.</summary>
-    private bool CanReuseColumnProofAfterForeignKeyDrops(
+    private bool CanReuseColumnProofAfterColumnPreservingChanges(
         AlterColumnIntent intent,
         SafeMigrationProviderAnalysis liveAnalysis,
         TableKey key
     ) => _projectedColumnAnalyzer is { } provider
-        && HasCurrentColumnProofAfterForeignKeyDrops(key, intent.Definition.Name, liveAnalysis)
-        && provider.CanReuseLiveColumnProofAfterForeignKeyDrops(intent, liveAnalysis)
+        && HasCurrentColumnProofAfterColumnPreservingChanges(key, intent.Definition.Name, liveAnalysis)
+        && (_projectedForeignKeyDropOnlyTables?.Contains(key) == true
+            ? provider.CanReuseLiveColumnProofAfterForeignKeyDrops(intent, liveAnalysis)
+            : provider.CanReuseLiveColumnProofAfterKeyChanges(intent, liveAnalysis))
         && (!TryGetProjectedColumnDefinition(intent.Table, intent.Schema, intent.Definition.Name, out var actual)
             || provider.AreProjectedColumnSourcesEquivalent(actual,
                 liveAnalysis.ObservedState == SafeMigrationObservedState.Matching
                     ? intent.Definition : intent.OldDefinition ?? intent.Definition));
 
     /// <summary>Consumes captured Ensure evidence without inventing an authored source definition.</summary>
-    private bool CanReuseColumnProofAfterForeignKeyDrops(
+    private bool CanReuseColumnProofAfterColumnPreservingChanges(
         EnsureColumnIntent intent,
         SafeMigrationProviderAnalysis liveAnalysis,
         TableKey key
     ) => _projectedColumnAnalyzer is { } provider
-        && HasCurrentColumnProofAfterForeignKeyDrops(key, intent.Definition.Name, liveAnalysis)
-        && provider.CanReuseLiveColumnProofAfterForeignKeyDrops(intent, liveAnalysis);
+        && HasCurrentColumnProofAfterColumnPreservingChanges(key, intent.Definition.Name, liveAnalysis)
+        && (_projectedForeignKeyDropOnlyTables?.Contains(key) == true
+            ? provider.CanReuseLiveColumnProofAfterForeignKeyDrops(intent, liveAnalysis)
+            : provider.CanReuseLiveColumnProofAfterKeyChanges(intent, liveAnalysis));
+
+    /// <summary>Separates intrinsic column provenance from complete table and candidate-key evidence.</summary>
+    private bool HasColumnPreservingHistory(TableKey key) =>
+        _projectedForeignKeyDropOnlyTables?.Contains(key) == true
+        || _projectedIntrinsicColumnSourceTables?.Contains(key) == true;
 
     /// <summary>Checks shared column-proof lifetimes without changing table or schema identity.</summary>
-    private bool HasCurrentColumnProofAfterForeignKeyDrops(
+    private bool HasCurrentColumnProofAfterColumnPreservingChanges(
         TableKey key,
         string column,
         SafeMigrationProviderAnalysis liveAnalysis
-    ) => _projectedForeignKeyDropOnlyTables?.Contains(key) == true
+    ) => HasColumnPreservingHistory(key)
         && (liveAnalysis.ObservedState == SafeMigrationObservedState.Matching
             || (liveAnalysis.ObservedState == SafeMigrationObservedState.Different
                 && liveAnalysis.RepairCapability == SafeMigrationRepairCapability.Safe))
@@ -620,7 +643,10 @@ internal sealed partial class SafeMigrationPreflightProjection
         }
 
         var analysis = Analysis(SafeMigrationObservedState.Different, repair);
-        var canReuseLiveProof = !_projectedStructurallyModifiedTables.Contains(key)
+        // WHY: Matching authored metadata on a recreated owner is new structural
+        // evidence, not the original owner's captured physical or row certificate.
+        var canReuseLiveProof = prerequisites?.NewlyCreated != true
+            && !_projectedStructurallyModifiedTables.Contains(key)
             && !IsProjectedTableStructureUnknown(intent.Table, intent.Schema)
             && (!liveAnalysis.RequiresLiveDataProof || !dataChanged);
 

@@ -362,12 +362,14 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             repairPrecondition = $"({repairPrecondition}) AND @@SESSION.explicit_defaults_for_timestamp = 1";
         }
 
-        if (repairCapability == SafeMigrationRepairCapability.Safe
+        if (_renderValuesInline
+            && repairCapability == SafeMigrationRepairCapability.Safe
             && !intent.OldDefinition!.IsNullable
             && intent.Definition.IsNullable)
         {
-            // WHY: MySQL cannot relax a live PRIMARY KEY column. Ordered
-            // removal proofs do not replace this fresh execution-time guard.
+            // WHY: Analysis captures intrinsic source eligibility independently
+            // of an ordered PRIMARY removal. MySQL cannot relax a still-live
+            // PRIMARY column, so execution retains this fresh dependency guard.
             repairPrecondition = $"({repairPrecondition}) AND "
                 + BuildNoPrimaryKeyColumn(intent.Table, intent.Definition.Name);
         }

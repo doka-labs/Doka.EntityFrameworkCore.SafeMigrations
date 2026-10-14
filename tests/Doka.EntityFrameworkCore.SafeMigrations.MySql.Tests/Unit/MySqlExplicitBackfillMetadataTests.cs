@@ -407,6 +407,37 @@ public sealed class MySqlExplicitBackfillMetadataTests
         Assert.Equal(!nullable, command.CommandText.Contains(StrictSqlModeCondition, StringComparison.Ordinal));
     }
 
+    /// <summary>Captures intrinsic nullable eligibility independently of removable live PRIMARY membership.</summary>
+    [Fact]
+    public void CapturedNullableRelaxationOmitsRuntimePrimaryDependencyGuard()
+    {
+        // Arrange
+        using var context = CreateContext();
+        var source = BackfillColumn(true);
+        var target = BackfillColumn(true);
+        target.IsNullable = true;
+        var operation = new SafeMigrationOperation(
+            new AlterColumnIntent(target.Table, SafeMigrationExpectedDefinitionFactory.From(target),
+                SafeMigrationExpectedDefinitionFactory.From(source)), SafeMigrationPolicy.RepairIfSafe);
+        var capture = context.GetService<MySqlSafeMigrationPlanCapture>();
+        using var lease = capture.Begin([operation]);
+        using var command = new MySqlCommand();
+        var parameterizer = new MySqlCatalogQueryParameterizer(
+            command, context.GetService<IRelationalTypeMappingSource>());
+
+        // Act
+        _ = context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model);
+        var plan = Assert.Single(lease.Complete());
+        var repair = plan.RenderRepairPrecondition(parameterizer.Add);
+
+        // Assert
+        Assert.Equal(SafeMigrationRepairCapability.Safe, plan.RepairCapability);
+        Assert.Contains("INFORMATION_SCHEMA.COLUMNS", repair, StringComparison.Ordinal);
+        Assert.DoesNotContain("nullable_primary", repair, StringComparison.Ordinal);
+        Assert.DoesNotContain("nullable_fk", repair, StringComparison.Ordinal);
+        Assert.DoesNotContain(StrictSqlModeCondition, repair, StringComparison.Ordinal);
+    }
+
     /// <summary>Rejects a still-live PRIMARY KEY before attempting a pure nullable relaxation.</summary>
     [Fact]
     public void NullableRelaxationRetainsFreshPrimaryKeyGuard()

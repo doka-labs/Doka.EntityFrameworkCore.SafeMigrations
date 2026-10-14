@@ -11,7 +11,21 @@ with roll-forward disabled. SafeMigrations supports EF Core 10 only.
 | MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` `[10.4.2,10.5.0)` |
 | PostgreSQL | `Npgsql.EntityFrameworkCore.PostgreSQL` `[10.0.3,11.0.0)` |
 | SQLite | EF Core SQLite Core `[10.0.12,10.1.0)`; application-owned native bundle |
-| SQL Server (available since 10.4.6) | `Microsoft.EntityFrameworkCore.SqlServer` `[10.0.12,10.1.0)` |
+| SQL Server (available since 10.4.6) | `Microsoft.EntityFrameworkCore.SqlServer` `[10.0.12,10.1.0)`; `System.Security.Cryptography.Pkcs` minimum `9.0.21` |
+
+The SQL Server provider centrally pins its existing transitive PKCS dependency
+to the patched 9.0.21 minimum. NuGet promotes that minimum into the published
+package, so consumers do not need the repository's central configuration or
+lockfile. The other four packages do not acquire that dependency. This fixes
+the package versions identified by Microsoft's published
+[PKCS decode advisory](https://github.com/dotnet/announcements/issues/454) and
+[signature-check advisory](https://github.com/dotnet/announcements/issues/468),
+verified on 2026-10-14, without changing EF Core or SqlClient versions.
+The consumer owns runtime/SDK servicing and redeployment; a NuGet dependency
+update does not update an installed or self-contained .NET runtime.
+The minimum is not an exact version lock or a claim that every higher major
+version is patched. Consumers selecting PKCS 10.x must use 10.0.13 or later
+for these advisories; NuGet audit remains enabled for the actual resolved graph.
 
 The MySQL/MariaDB package requires Doka 10.4.2 or a compatible later 10.4 patch
 release and rejects the next minor line. This boundary avoids an exact
@@ -26,23 +40,27 @@ evidence.
 
 The remaining declared dependency graph and .NET 10 release metadata were
 rechecked on 2026-09-21. Bounded package ranges describe compatibility. The
-five package-project lockfiles, unchanged for 10.4.11, identify the dependency
-graph used to compile and qualify the package artifacts in a particular
-revision; they do not constrain a consumer's NuGet resolution or lock the
+five package-project lockfiles identify the dependency graph used to compile
+and qualify the package artifacts in a particular revision; they do not
+constrain a consumer's NuGet resolution or lock the
 engineering projects.
 The SQL Server project supplies the fifth lockfile. Releases 10.4.2 through
 10.4.5 contain four package artifacts; their inventory remains unchanged.
 
 The five-package set began with stable 10.4.6, including the optional SQL Server
-provider. Prepared stable 10.4.11 retains that inventory, the dependency ranges,
-and all public API baselines. Publication still requires the blocking workflow,
-including all three native x86-64 SQL Server cells, and exact public readback
+provider. Prepared stable 10.4.11 retains that inventory, the EF/provider ranges
+and all public API baselines, while raising the SQL Server PKCS minimum to
+9.0.21. Publication still requires the blocking workflow, including all three
+native x86-64 SQL Server cells, and exact public readback
 of all five package IDs. Source preparation alone does not establish availability.
 
 The 10.4.11 changes qualify sparse live/projected constraints and indexes from
 actual native metadata, accepted physical lifetimes and current row proofs.
 MySQL/MariaDB carries native owner equality through transition/backfill catalogs
-and guards unsafe FK supporting indexes. PostgreSQL qualifies native CHECK and
+and guards unsafe FK supporting indexes. Accepted PRIMARY/FK removal and ordinary
+nonunique BTREE creation preserve independently proven intrinsic column sources,
+not candidate-key or row authorization; execution retains fresh key/source guards.
+PostgreSQL qualifies native CHECK and
 physical index-input bindings before data probes, preserving bounded metadata
 and SQL transport. SQLite retains declared parent-key equality, strict capacity
 and appended-FK order; SQL Server uses compatible live endpoint/key evidence
@@ -59,7 +77,8 @@ acquisition. Earlier provider repair and trigger-freshness contracts remain.
 These are bounded path-specific changes, not a general engine-latency or
 peak-memory guarantee. SQLite retains its model-owned rebuild contract.
 Engineering dependencies inherit the reviewed Testcontainers 4.16.0 and pinned
-Action updates on `main`; production ranges and package lockfiles are unchanged.
+Action updates on `main`. Apart from the SQL Server PKCS floor above,
+production ranges and package lockfiles are unchanged.
 No engine, tooling, package or coverage gate is removed. Performance measurements
 remain informational; invalid evidence and functional failures remain blocking.
 The analysis and runtime optimizations introduced in 10.4.7 remain in place;

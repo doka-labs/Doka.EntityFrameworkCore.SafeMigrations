@@ -95,6 +95,66 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         return projectedAnalysis;
     }
 
+    /// <inheritdoc />
+    bool ISafeMigrationProjectedColumnAnalyzer.PreservesIntrinsicColumnSources(SafeMigrationIntent intent)
+    {
+        // WHY: Native PRIMARY/FK removal and ordinary nonunique BTREE creation
+        // preserve column values and intrinsic facets. Constraint creation,
+        // functional/unique indexes and arbitrary DDL carry no such certificate.
+
+        return intent is DropPrimaryKeyIntent or DropForeignKeyIntent
+            || (intent is EnsureIndexIntent { Definition: var index }
+                && !index.Unique
+                && (index.Method is null || StringComparer.OrdinalIgnoreCase.Equals(index.Method, "BTREE"))
+                && index.Filter is null && index.StructuredFilter is null
+                && index.IncludedColumns.Count == 0
+                && index.Keys.All(static key => key.Column is not null && key.Collation is null
+                    && key.OperatorClass is null && key.PrefixLength is null
+                    && key.NullOrder == SafeMigrationIndexNullOrder.ProviderDefault));
+    }
+
+    /// <inheritdoc />
+    bool ISafeMigrationProjectedColumnAnalyzer.CanReuseLiveColumnProofAfterKeyChanges(
+        AlterColumnIntent intent,
+        SafeMigrationProviderAnalysis liveAnalysis
+    ) => !liveAnalysis.RepairMutatesData
+        && ((ISafeMigrationProjectedColumnAnalyzer)this).CanReuseLiveColumnProofAfterForeignKeyDrops(
+            intent, liveAnalysis);
+
+    /// <inheritdoc />
+    bool ISafeMigrationProjectedColumnAnalyzer.CanReuseLiveColumnProofAfterKeyChanges(
+        EnsureColumnIntent intent,
+        SafeMigrationProviderAnalysis liveAnalysis
+    )
+    {
+        if (liveAnalysis.ObservedState == SafeMigrationObservedState.Matching)
+        {
+            return liveAnalysis.PostconditionSatisfied && SupportsRetainedColumnProof(intent.Definition);
+        }
+
+        if (liveAnalysis.ObservedState != SafeMigrationObservedState.Different
+            || liveAnalysis.RepairCapability != SafeMigrationRepairCapability.Safe
+            || liveAnalysis.RepairMutatesData
+            || !SupportsRetainedColumnProof(intent.Definition)
+            || liveAnalysis.Differences.Count == 0)
+        {
+            return false;
+        }
+
+        // WHY: Ensure has no authored source. Complete native facet evidence must
+        // prove a nullability-only change; an earlier widening certificate can
+        // become invalid when a new physical index constrains the column width.
+        foreach (var difference in liveAnalysis.Differences)
+        {
+            if (!StringComparer.Ordinal.Equals(difference.Facet, "column_nullability"))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     bool ISafeMigrationProjectedColumnAnalyzer.CanReuseLiveColumnProofAfterForeignKeyDrops(
         EnsureColumnIntent intent,
         SafeMigrationProviderAnalysis liveAnalysis

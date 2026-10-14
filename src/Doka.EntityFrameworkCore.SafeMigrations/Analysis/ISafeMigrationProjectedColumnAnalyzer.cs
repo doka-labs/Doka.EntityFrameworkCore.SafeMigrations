@@ -3,6 +3,34 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// <summary>Qualifies exact projected column transitions with provider physical rules.</summary>
 internal interface ISafeMigrationProjectedColumnAnalyzer
 {
+    /// <summary>Certifies an accepted structural mutation that preserves existing intrinsic column sources.</summary>
+    /// <param name="intent">The unchanged, accepted mutation contract.</param>
+    /// <returns>True only for provider-qualified metadata changes, never a complete key or row proof.</returns>
+    /// <remarks>
+    /// Core applies this result only to <see cref="EnsureIndexIntent"/>, <see cref="DropPrimaryKeyIntent"/>
+    /// and <see cref="DropForeignKeyIntent"/>. Other intent kinds cannot opt into source preservation
+    /// through this callback; their separate projection contracts remain authoritative.
+    /// </remarks>
+    bool PreservesIntrinsicColumnSources(SafeMigrationIntent intent) => false;
+
+    /// <summary>Certifies an exact live Alter result after accepted column-preserving key changes.</summary>
+    /// <param name="intent">The independently analyzed source and target contract.</param>
+    /// <param name="liveAnalysis">The captured intrinsic source and session evidence.</param>
+    /// <returns>True only when the transition is independent of the changed physical key layout.</returns>
+    bool CanReuseLiveColumnProofAfterKeyChanges(
+        AlterColumnIntent intent,
+        SafeMigrationProviderAnalysis liveAnalysis
+    ) => false;
+
+    /// <summary>Certifies an Ensure result without inventing old metadata after accepted key changes.</summary>
+    /// <param name="intent">The independently analyzed immutable target.</param>
+    /// <param name="liveAnalysis">The complete captured native facet and repair evidence.</param>
+    /// <returns>True only for independently proven matching or intrinsic-layout-preserving results.</returns>
+    bool CanReuseLiveColumnProofAfterKeyChanges(
+        EnsureColumnIntent intent,
+        SafeMigrationProviderAnalysis liveAnalysis
+    ) => false;
+
     /// <summary>Qualifies a projected Missing column add without changing existing target equality.</summary>
     /// <param name="intent">The unchanged immutable add contract.</param>
     /// <param name="context">The accepted owner lifetime and versioned row-proof boundaries.</param>

@@ -91,13 +91,14 @@ policy selection, fingerprint format, report schema or migration history
 changes; existing migrations do not need regeneration. Native timing overruns
 are informational, not a waiver of functional or evidence validation.
 
-Prepared stable 10.4.11 retains the same public APIs, dependency ranges, policies,
+Prepared stable 10.4.11 retains the same public APIs, EF/provider ranges, policies,
 fingerprint formats, canonical report v3, filtered-view v2 and migration history.
 An internal provider channel supplies actual sparse live prerequisites, not
 target-model definitions; ordered projection still owns accepted physical
 lifetimes and independent current row proofs. Related owner-case, supporting-
-index, native CHECK/index-input and SQLite key/capacity fixes do not require
-migration regeneration or API-baseline promotion. Qualification and publication
+index, PRIMARY-removal column-source, native CHECK/index-input and SQLite
+key/capacity fixes do not require migration regeneration or API-baseline promotion.
+The SQL Server PKCS minimum is 9.0.21. Qualification and publication
 remain separate from these prepared contracts.
 
 ## Packages and registration

@@ -322,6 +322,11 @@ verify_consumer() {
             grep -Fq 'Doka.EntityFrameworkCore.SafeMigrations.SqlServer/' "$assets_file"
             grep -Fq 'Microsoft.EntityFrameworkCore.SqlServer/' "$assets_file"
 
+            # This consumer has no repository central pin; the package itself
+            # must select the patched dependency in every tooling profile.
+            jq -e '.libraries["System.Security.Cryptography.Pkcs/9.0.21"].type == "package"' \
+                "$assets_file" >/dev/null
+
             if grep -Fq 'Doka.EntityFrameworkCore.SafeMigrations.MySql/' "$assets_file" \
                 || grep -Fq 'Doka.EntityFrameworkCore.MySql/' "$assets_file" \
                 || grep -Fq 'Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/' "$assets_file" \
