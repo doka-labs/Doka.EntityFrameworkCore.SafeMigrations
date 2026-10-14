@@ -33,7 +33,9 @@ public sealed partial class MySqlProviderAnalysisCleanupTests
         return builder.Operations.Cast<SafeMigrationOperation>().ToArray();
     }
 
-    /// <summary>Injects lifecycle faults while delegating catalog responses to the shared deterministic transport.</summary>
+    /// <summary>
+    /// Injects lifecycle faults while delegating catalog responses to the shared deterministic transport.
+    /// </summary>
     private sealed class AnalysisConnection : DbConnection
     {
         private readonly CatalogStatementTestConnection _inner;
@@ -46,9 +48,7 @@ public sealed partial class MySqlProviderAnalysisCleanupTests
         {
             _inner = new CatalogStatementTestConnection(native: false, ReadClassification)
             {
-                Scalar = static sql => sql == "SELECT @@max_allowed_packet;"
-                    ? 64L * 1024 * 1024
-                    : throw new InvalidOperationException("Unexpected scalar query."),
+                Scalar = static _ => throw new InvalidOperationException("Unexpected scalar query."),
             };
 
             if (!initiallyOpen)
@@ -149,6 +149,16 @@ public sealed partial class MySqlProviderAnalysisCleanupTests
             IReadOnlyList<DbParameter> parameters
         )
         {
+            if (sql == "SELECT @@max_allowed_packet, @@lower_case_table_names;")
+            {
+                var profile = new DataTable { Locale = CultureInfo.InvariantCulture };
+                profile.Columns.Add("packet", typeof(long));
+                profile.Columns.Add("owner_mode", typeof(int));
+                profile.Rows.Add(64L * 1024 * 1024, 0);
+
+                return profile;
+            }
+
             // WHY: A single DropTable plan needs only a classification row; unexpected additional
             // catalog phases must fail rather than accidentally satisfy the cleanup regression.
             Assert.StartsWith("SELECT 0, (CASE ", sql, StringComparison.Ordinal);

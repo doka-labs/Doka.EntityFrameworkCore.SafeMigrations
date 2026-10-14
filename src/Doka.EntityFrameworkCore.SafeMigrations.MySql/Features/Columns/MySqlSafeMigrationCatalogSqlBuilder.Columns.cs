@@ -322,7 +322,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         bool repairRequested,
         bool includeAnalysisEvidence,
         bool includeTransitionEvidence,
-        bool requiresNullFreeBackfill
+        bool requiresNullFreeBackfill,
+        string? nativeNullFreeBackfillCondition
     )
     {
         var columnExists = ColumnExists(intent.Table, intent.Definition.Name);
@@ -347,7 +348,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             {
                 return BuildAlterColumnTransitionPlan(
                     intent, isMariaDb, matching, transition, includeAnalysisEvidence,
-                    requiresNullFreeBackfill);
+                    requiresNullFreeBackfill, nativeNullFreeBackfillCondition);
             }
         }
 
@@ -467,7 +468,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         string matching,
         MySqlColumnRepairTransition transition,
         bool includeAnalysisEvidence,
-        bool expectedBackfillConstraint
+        bool expectedBackfillConstraint,
+        string? nativeNullFreeBackfillCondition
     )
     {
         var sourceMatches = $"({BuildColumnMatches(intent.Table, intent.OldDefinition!, isMariaDb)}) "
@@ -500,9 +502,19 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             // WHY: A fitting replacement can still collide with a unique key
             // or violate a CHECK. Those contracts permit this transition only
             // when no row needs the UPDATE; unconstrained backfills avoid it.
-            nullableColumn = expectedBackfillConstraint
-                ? nullableColumn
-                : $"({nullableColumn}) AND ({BuildConstrainedBackfillExists(intent)})";
+            if (!expectedBackfillConstraint)
+            {
+                var constrained = BuildConstrainedBackfillExists(intent);
+                if (nativeNullFreeBackfillCondition is not null)
+                {
+                    // A differently spelled declaration is a hazard only
+                    // under the actual folded native owner profile.
+                    constrained = $"({constrained}) OR ({nativeNullFreeBackfillCondition})";
+                }
+
+                nullableColumn = $"({nullableColumn}) AND ({constrained})";
+            }
+
         }
 
         var nullabilityProbe = intent.OldDefinition!.IsNullable

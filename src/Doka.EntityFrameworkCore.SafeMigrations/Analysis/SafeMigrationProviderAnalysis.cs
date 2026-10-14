@@ -173,6 +173,27 @@ public sealed class SafeMigrationProviderAnalysis
         return copy;
     }
 
+    /// <summary>Gets whether a current nullable-only repair preserves the column's intrinsic physical layout.</summary>
+    /// <remarks>
+    /// This is narrower than key or value-domain preservation. Core certifies an accepted unchanged source,
+    /// current row and dependency lifetimes, and a provider-qualified non-data nullability transition.
+    /// </remarks>
+    internal bool RepairPreservesIntrinsicColumnLayout { get; private set; }
+
+    /// <summary>Retains exact native endpoint and key layout after bounded nullable-only qualification.</summary>
+    /// <returns>A separate analysis retaining all source evidence and both physical preservation certificates.</returns>
+    internal SafeMigrationProviderAnalysis WithRepairPreservesIntrinsicColumnLayout()
+    {
+        var copy = (SafeMigrationProviderAnalysis)MemberwiseClone();
+
+        // WHY: Widening can preserve values and keys while changing native FK compatibility.
+        // This separate certificate must not grant generic row, NULL or empty-table evidence.
+        copy.RepairPreservesIntrinsicColumnLayout = true;
+        copy.RepairPreservesPhysicalKeys = true;
+
+        return copy;
+    }
+
     /// <summary>Gets independent destination presence for a rename, including when its source is absent.</summary>
     internal bool? RenameTargetExists
     {

@@ -618,7 +618,7 @@ public sealed partial class SqliteSafeMigrationCatalogIntegrationTests
     }
 }
 
-/// <summary>Owns one provider for the constraint identity matrix's three independently cached CLR models.</summary>
+/// <summary>Owns one provider for independently cached constraint identity and projected-FK CLR models.</summary>
 public sealed class SqliteConstraintShapeServiceFixture : IDisposable
 {
     /// <summary>Builds bounded shared provider services without entering EF's process-wide singleton cache.</summary>

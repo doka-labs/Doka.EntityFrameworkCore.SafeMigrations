@@ -7,6 +7,159 @@ public sealed class SqlServerForeignKeyWidthSqlTests
         "Server=127.0.0.1,1433;Database=fk_width;"
         + "User ID=sa;Password=unused;TrustServerCertificate=True";
 
+    /// <summary>Authored storage cannot bypass the runtime FK contract's rejection of computed operands.</summary>
+    /// <param name="sparse">Whether the definition is captured as one independently projected operand.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ForeignKeyAuthoredComputedOperand_RemainsUnqualified(
+        bool sparse
+    )
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext(ConnectionString);
+        var catalog = CreateCatalog(context);
+        var table = new ExpectedTableDefinition("sparse_child",
+            [new ExpectedColumnDefinition("ParentId", typeof(int), true, "int", computedColumnSql: "1",
+                isStored: true)]);
+
+        var foreign = new ExpectedForeignKeyDefinition("FK_sparse", "sparse_child", ["ParentId"],
+            "sparse_parent", ["Id"]);
+
+        // Act
+        var sql = sparse ? catalog.BuildSparseForeignKeyPrerequisite(table, foreign, 0)
+            : catalog.BuildInlineForeignKeyPrerequisite(table, foreign);
+
+        // Assert
+        if (sparse)
+        {
+            Assert.EndsWith(" AND 1 = 0", sql, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.Equal("1 = 0", sql);
+        }
+    }
+
+    /// <summary>Untouched dependent metadata retains the same computed-operand exclusion as runtime.</summary>
+    [Fact]
+    public void SparseLiveOperandCapture_RetainsNativeComputedGuard()
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext(ConnectionString);
+        var foreign = new ExpectedForeignKeyDefinition("FK_sparse", "sparse_child", ["ParentId"],
+            "sparse_parent", ["Id"]);
+
+        // Act
+        var sql = CreateCatalog(context).BuildSparseForeignKeyPrerequisite(null, foreign, 0);
+
+        // Assert
+        Assert.Contains("dc.is_computed = 0", sql, StringComparison.Ordinal);
+    }
+
+    /// <summary>An absent child is only a hypothesis; present owners retain their native physical guard.</summary>
+    [Fact]
+    public void SparseOperandCapture_ConditionsMissingOwnerWithoutReadingDependentRows()
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext(ConnectionString);
+        var catalog = CreateCatalog(context);
+        var table = new ExpectedTableDefinition("sparse_child",
+            [new ExpectedColumnDefinition("ParentId", typeof(int), true, "int")]);
+
+        var foreign = new ExpectedForeignKeyDefinition("FK_sparse", "sparse_child", ["ParentId"],
+            "sparse_parent", ["Id"]);
+
+        // Act
+        var sql = catalog.BuildSparseForeignKeyPrerequisite(table, foreign, 0);
+
+        // Assert
+        Assert.Contains("(NOT EXISTS", sql, StringComparison.Ordinal);
+        Assert.Contains(" OR (CASE", sql, StringComparison.Ordinal);
+        Assert.Contains("is_memory_optimized", sql, StringComparison.Ordinal);
+        Assert.Contains("SUM(CONVERT(bigint, c.max_length)) <= 900", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("FROM [dbo].[sparse_child]", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("sys.indexes", sql, StringComparison.Ordinal);
+    }
+
+    /// <summary>Captures mixed endpoints using native facets without referring to absent dependent data.</summary>
+    [Fact]
+    public void SparseForeignKey_ProvesMixedStorageAndWidthWithoutRowOrCandidateKeyQueries()
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext(ConnectionString);
+        var catalog = CreateCatalog(context);
+        var table = new ExpectedTableDefinition("sparse_child",
+            [new ExpectedColumnDefinition("ParentId", typeof(int), true, "int")]);
+
+        var foreign = new ExpectedForeignKeyDefinition("FK_sparse", "sparse_child", ["TenantId", "ParentId"],
+            "sparse_parent", ["TenantId", "Id"]);
+
+        // Act
+        var sql = catalog.BuildSparseForeignKeyPrerequisite(table, foreign);
+
+        // Assert
+        Assert.Contains("SUM(CONVERT(bigint, c.max_length)) <= 900", sql, StringComparison.Ordinal);
+        Assert.Contains("dc.system_type_id = pc.system_type_id", sql, StringComparison.Ordinal);
+        Assert.Contains("dc.user_type_id = pc.user_type_id", sql, StringComparison.Ordinal);
+        Assert.Contains("dc.precision = pc.precision", sql, StringComparison.Ordinal);
+        Assert.Contains("dc.scale = pc.scale", sql, StringComparison.Ordinal);
+        Assert.Contains("ISNULL(dc.collation_name, N'') = ISNULL(pc.collation_name, N'')", sql,
+            StringComparison.Ordinal);
+        Assert.Contains("c.name = N'Id'", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("FROM [dbo].[sparse_child]", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("sys.indexes", sql, StringComparison.Ordinal);
+    }
+
+    /// <summary>A projected character operand resolves inherited or explicit collation.</summary>
+    /// <param name="explicitCollation">Whether the authored dependent overrides the database default.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SparseForeignKey_CapturesEffectiveCharacterCollation(
+        bool explicitCollation
+    )
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext(ConnectionString);
+        var column = new ExpectedColumnDefinition("ParentId", typeof(string), true, "char(36)",
+            collation: explicitCollation ? new SafeMigrationCollationIdentifier("Latin1_General_100_BIN2") : null);
+
+        var table = new ExpectedTableDefinition("sparse_child", [column]);
+        var foreign = new ExpectedForeignKeyDefinition("FK_sparse", "sparse_child", ["ParentId"],
+            "sparse_parent", ["Id"]);
+
+        // Act
+        var sql = CreateCatalog(context).BuildSparseForeignKeyPrerequisite(table, foreign);
+
+        // Assert
+        Assert.Contains(explicitCollation ? "c.collation_name = N'Latin1_General_100_BIN2'"
+            : "c.collation_name = CONVERT(sysname, DATABASEPROPERTYEX(DB_NAME(), 'Collation'))", sql,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>A sparse self-reference uses native principal metadata rather than an invented inline key.</summary>
+    [Fact]
+    public void SparseSelfReference_UsesExistingPrincipalColumnMetadata()
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext(ConnectionString);
+        var table = new ExpectedTableDefinition("sparse_self",
+            [new ExpectedColumnDefinition("ParentId", typeof(int), true, "int")]);
+
+        var foreign = new ExpectedForeignKeyDefinition("FK_sparse_self", "sparse_self", ["ParentId"],
+            "sparse_self", ["Id"]);
+
+        // Act
+        var sql = CreateCatalog(context).BuildSparseForeignKeyPrerequisite(table, foreign);
+
+        // Assert
+        Assert.NotEqual("1 = 0", sql);
+        Assert.Contains("c.name = N'Id'", sql, StringComparison.Ordinal);
+        Assert.Contains("ty.name = N'int'", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("sys.indexes", sql, StringComparison.Ordinal);
+    }
+
     /// <summary>Checks both physical sides of standalone FKs before the orphan probe can bind.</summary>
     [Fact]
     public void StandaloneForeignKey_PrerequisiteChecksBothDeclaredWidths()

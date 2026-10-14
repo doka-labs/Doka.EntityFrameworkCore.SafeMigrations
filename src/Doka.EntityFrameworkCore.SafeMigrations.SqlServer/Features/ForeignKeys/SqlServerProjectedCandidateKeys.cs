@@ -5,6 +5,7 @@ internal sealed class SqlServerProjectedCandidateKeys
 {
     private readonly Dictionary<int, Dictionary<int, List<KeyColumn>>> _keys = [];
     private readonly Dictionary<NameIdentity, KeyIdentity> _names = [];
+    private readonly Dictionary<KeyIdentity, SafeMigrationLiveCandidateKey> _liveIdentities = [];
     private int _nextKeyId = -1;
 
     /// <summary>Binds a requested catalog name to its physical backing index.</summary>
@@ -60,7 +61,7 @@ internal sealed class SqlServerProjectedCandidateKeys
             // WHY: Constraint and index names refer to the same backing index.
             // Keeping that identity makes either accepted DROP remove all aliases,
             // while an independent equivalent key remains valid FK evidence.
-            command.CommandText = "SELECT i.object_id, i.index_id, i.name, kc.name, c.name, c.column_id "
+            command.CommandText = "SELECT i.object_id, i.index_id, i.name, kc.name, c.name, c.column_id, kc.type "
                 + "FROM sys.indexes i JOIN sys.index_columns ic "
                 + "ON ic.object_id = i.object_id AND ic.index_id = i.index_id "
                 + "JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id "
@@ -85,12 +86,64 @@ internal sealed class SqlServerProjectedCandidateKeys
 
                 columns.Add(new KeyColumn(reader.GetString(4), reader.GetInt32(5)));
                 BindName(table, reader.GetString(2), index);
+                var kind = reader.IsDBNull(6) ? SafeMigrationDatabaseObjectKind.Index
+                    : reader.GetString(6).TrimEnd() == "PK" ? SafeMigrationDatabaseObjectKind.PrimaryKey
+                    : SafeMigrationDatabaseObjectKind.UniqueConstraint;
+
+                _liveIdentities[new KeyIdentity(table, index)] = new SafeMigrationLiveCandidateKey(kind,
+                    reader.IsDBNull(3) ? reader.GetString(2) : reader.GetString(3),
+                    reader.IsDBNull(3) ? null : reader.GetString(2));
                 if (!reader.IsDBNull(3))
                 {
                     BindName(table, reader.GetString(3), index);
                 }
             }
         }
+    }
+
+    /// <summary>Returns only surviving native keys, retaining constraint ownership of each backing index.</summary>
+    /// <param name="table">The captured physical owner.</param>
+    /// <param name="columns">The requested ordered native column names.</param>
+    /// <param name="columnIds">The resolved native column identities in the same order.</param>
+    /// <returns>Native candidates; projected replacements are deliberately not live certificates.</returns>
+    public IReadOnlyList<SafeMigrationLiveCandidateKey> GetLiveCandidates(
+        int table,
+        IReadOnlyList<string> columns,
+        ReadOnlySpan<int> columnIds
+    )
+    {
+        if (!_keys.TryGetValue(table, out var keys))
+        {
+            return [];
+        }
+
+        List<SafeMigrationLiveCandidateKey>? result = null;
+        foreach (var pair in keys)
+        {
+            if (pair.Value.Count != columns.Count || columnIds.Length != columns.Count
+                || !_liveIdentities.TryGetValue(new KeyIdentity(table, pair.Key), out var identity))
+            {
+                continue;
+            }
+
+            var matching = true;
+            for (var ordinal = 0; ordinal < columns.Count; ordinal++)
+            {
+                if (pair.Value[ordinal].Id <= 0 || pair.Value[ordinal].Id != columnIds[ordinal])
+                {
+                    matching = false;
+                    break;
+                }
+            }
+
+            if (matching)
+            {
+                result ??= [];
+                result.Add(identity);
+            }
+        }
+
+        return result is null ? [] : result;
     }
 
     /// <summary>Matches live columns by their resolved physical ids and new columns by exact authored names.</summary>

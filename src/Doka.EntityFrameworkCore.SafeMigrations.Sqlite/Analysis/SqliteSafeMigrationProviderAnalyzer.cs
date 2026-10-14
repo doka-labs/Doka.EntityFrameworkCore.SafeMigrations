@@ -3,7 +3,8 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite;
 /// <summary>Analyzes SQLite catalog state and ordered migration transitions.</summary>
 internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrationProviderAnalyzer,
     ISafeMigrationProviderTargetModelAnalyzer, ISafeMigrationProviderObjectIdentityNormalizer,
-    ISafeMigrationProviderOperationProjection, ISafeMigrationProjectedColumnAnalyzer
+    ISafeMigrationProviderOperationProjection, ISafeMigrationProjectedColumnAnalyzer,
+    ISafeMigrationLivePrerequisiteSource
 {
     private static readonly StringComparer s_identifierComparer = SqliteIdentifierComparer.Instance;
 
@@ -168,12 +169,18 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
 
         cancellationToken.ThrowIfCancellationRequested();
 
+        _livePrerequisiteSource = null;
         var connection = context.Database.GetDbConnection();
         var transaction = context.Database.CurrentTransaction?.GetDbTransaction();
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction);
+        var results = Analyze(context, operations, targetModels, snapshot, cancellationToken);
 
-        return Task.FromResult<IReadOnlyList<SafeMigrationProviderAnalysis>>(
-            Analyze(context, operations, targetModels, snapshot, cancellationToken));
+        // WHY: Publish only complete immutable capture, never partially analyzed
+        // model wishes. Runner projection consumes these facts after analysis;
+        // runtime batches inject their own transaction-owned current snapshot.
+        _livePrerequisiteSource = new SqliteLivePrerequisiteSource(snapshot);
+
+        return Task.FromResult<IReadOnlyList<SafeMigrationProviderAnalysis>>(results);
     }
 
     /// <summary>Analyzes one bounded operation window against its caller-owned immutable catalog capture.</summary>
@@ -217,7 +224,14 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
                     index++;
                 }
 
-                var contract = SqliteRebuildArtifactContract.FromModel(initializedModel, cumulativeOperations);
+                var segment = new MigrationOperation[index - segmentStart];
+                for (var ordinal = 0; ordinal < segment.Length; ordinal++)
+                {
+                    segment[ordinal] = operations[segmentStart + ordinal];
+                }
+
+                var contract = SqliteRebuildArtifactContract.FromModel(
+                    initializedModel, cumulativeOperations, segment);
                 for (var ordinal = segmentStart; ordinal < index; ordinal++)
                 {
                     if (operations[ordinal] is SafeMigrationOperation)
@@ -555,7 +569,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
         {
             EnsureSchemaIntent value => AnalyzeEnsureSchema(value),
             DropSchemaIntent => InvariantUnsupported("schema_operations"),
-            EnsureTableIntent value => AnalyzeEnsureTable(snapshot, value),
+            EnsureTableIntent value => AnalyzeEnsureTable(snapshot, value, operation, rebuildArtifacts),
             DropTableIntent value => AnalyzeDropTable(snapshot, value, operation, rebuildArtifacts),
             RenameTableIntent value => AnalyzeRenameTable(snapshot, value),
             EnsureColumnIntent value => AnalyzeEnsureColumn(snapshot, connection, transaction, value),
@@ -576,8 +590,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
                 snapshot,
                 connection,
                 transaction,
-                value,
-                rebuildArtifacts),
+                value),
             DropForeignKeyIntent value => AnalyzeDropForeignKey(snapshot, value),
             ModelManagedDataIntent value => AnalyzeModelManagedData(snapshot, connection, transaction, value),
             _ => InvariantUnsupported("operation_kind"),
@@ -641,7 +654,9 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
 
     private SafeMigrationProviderAnalysis AnalyzeEnsureTable(
         SqliteCatalogSnapshot snapshot,
-        EnsureTableIntent intent
+        EnsureTableIntent intent,
+        SafeMigrationOperation operation,
+        SqliteRebuildArtifactContract rebuildArtifacts
     )
     {
         var unsupported = TableUnsupportedFeature(intent.Definition);
@@ -660,7 +675,8 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
             return Matching(postconditionSatisfied: true, matchedObjectName: table.Name);
         }
 
-        var matching = TableMatches(snapshot, table, intent.Definition);
+        var matching = TableMatches(
+            snapshot, table, intent.Definition, rebuildArtifacts.GetTableConstraintTransitions(operation));
 
         return matching
             ? Matching(postconditionSatisfied: true, matchedObjectName: table.Name,
@@ -1021,7 +1037,13 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
 
         if (IdentifiersEqual(table.PrimaryKeyColumns, intent.Definition.Columns))
         {
-            return Matching(postconditionSatisfied: true, matchedObjectName: table.PrimaryKeyName);
+            // WHY: Same column names do not imply the equality or sort shape
+            // emitted by a plain authored key. A false NoOp also lends an
+            // invalid candidate-key certificate to subsequent FK projection.
+            return SqliteCatalogEquivalence.KeyMatchesDeclaredColumns(
+                table, table.PrimaryKeyKeys, intent.Definition.Columns, requireDefaultSortOrder: true)
+                ? Matching(postconditionSatisfied: true, matchedObjectName: table.PrimaryKeyName)
+                : Different("primary_key_key_semantics", "declared_column_collations_ascending", "different");
         }
 
         if (table.PrimaryKeyColumns.Count > 0)
@@ -1081,19 +1103,34 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
 
         if (named is not null)
         {
-            return IdentifiersEqual(named.Columns, intent.Definition.Columns)
+            if (!IdentifiersEqual(named.Columns, intent.Definition.Columns))
+            {
+                return Different("unique_columns", Join(intent.Definition.Columns), Join(named.Columns));
+            }
+
+            return SqliteCatalogEquivalence.KeyMatchesDeclaredColumns(
+                table, named.Keys, intent.Definition.Columns, requireDefaultSortOrder: true)
                 ? Matching(postconditionSatisfied: true, matchedObjectName: named.Name)
-                : Different("unique_columns", Join(intent.Definition.Columns), Join(named.Columns));
+                : Different("unique_key_semantics", "declared_column_collations_ascending", "different");
         }
 
         var semantic = table.UniqueConstraints.FirstOrDefault(value =>
-            IdentifiersEqual(value.Columns, intent.Definition.Columns));
+            SqliteCatalogEquivalence.KeyMatchesDeclaredColumns(
+                table, value.Keys, intent.Definition.Columns, requireDefaultSortOrder: true));
 
         if (semantic is not null)
         {
             // WHY: A constraint symbol and its sqlite_autoindex are different
             // resources. DROP CONSTRAINT addresses only the named symbol.
             return Matching(postconditionSatisfied: true, matchedObjectName: semantic.Name);
+        }
+
+        if (table.UniqueConstraints.Any(value => IdentifiersEqual(value.Columns, intent.Definition.Columns)))
+        {
+            // WHY: An alias must not treat a different native key equality as
+            // the plain column-default unique contract simply because columns
+            // have the same spelling. Preserve live drift, never fake absence.
+            return Different("unique_key_semantics", "declared_column_collations_ascending", "different");
         }
 
         return HasDuplicateKey(
@@ -1193,8 +1230,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
         SqliteCatalogSnapshot snapshot,
         DbConnection connection,
         DbTransaction? transaction,
-        EnsureForeignKeyIntent intent,
-        SqliteRebuildArtifactContract rebuildArtifacts
+        EnsureForeignKeyIntent intent
     )
     {
         if (!snapshot.Tables.TryGetValue(intent.Definition.Table, out var table)
@@ -1206,9 +1242,10 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
         if (intent.Definition.Columns.Any(column => !table.Columns.ContainsKey(column))
             || intent.Definition.PrincipalColumns.Any(column => !principalTable.Columns.ContainsKey(column)))
         {
-            return rebuildArtifacts.CanTreatProjectedForeignKeyAsMissing(snapshot, intent.Definition)
-                ? Missing(postconditionSatisfied: false)
-                : PrerequisiteMissing();
+            // WHY: The immutable snapshot cannot prove a missing column's row
+            // values. Only Core's ordered accepted ADD certificate can establish
+            // NULL preservation; target-model nullability or a future ADD cannot.
+            return PrerequisiteMissing();
         }
 
         var named = table.ForeignKeys.FirstOrDefault(value =>
@@ -1363,7 +1400,8 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
     private bool TableMatches(
         SqliteCatalogSnapshot snapshot,
         SqliteTableSnapshot table,
-        ExpectedTableDefinition expected
+        ExpectedTableDefinition expected,
+        SafeMigrationExpectedTableConstraints? transitions
     )
     {
         if (expected.Comment is not null
@@ -1374,42 +1412,47 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
             return false;
         }
 
-        if ((expected.PrimaryKey is null) != (table.PrimaryKeyColumns.Count == 0)
-            || (expected.PrimaryKey is not null
-                && !IdentifiersEqual(expected.PrimaryKey.Columns, table.PrimaryKeyColumns))
-            || expected.UniqueConstraints.Count != table.UniqueConstraints.Count
-            || expected.UniqueConstraints.Any(definition => !table.UniqueConstraints.Any(actual =>
-                IdentifiersEqual(definition.Columns, actual.Columns)))
-            || expected.ForeignKeys.Count != table.ForeignKeys.Count
-            || expected.ForeignKeys.Any(definition => !table.ForeignKeys.Any(actual =>
-                SqliteCatalogEquivalence.ForeignKeyMatches(
-                    snapshot,
-                    actual,
-                    definition.PrincipalTable,
-                    definition.Columns,
-                    definition.PrincipalColumns,
-                    definition.OnUpdate,
-                    definition.OnDelete))))
+        var primaryKeys = transitions?.AllowedPrimaryKeys
+            ?? (expected.PrimaryKey is null ? [] : [expected.PrimaryKey]);
+
+        var primaryKeyMayBeAbsent = transitions?.PrimaryKeyMayBeAbsent ?? expected.PrimaryKey is null;
+        var allowedUnique = transitions?.AllowedUniqueConstraints ?? expected.UniqueConstraints;
+        var requiredUnique = transitions?.RequiredUniqueConstraints ?? expected.UniqueConstraints;
+        var allowedChecks = transitions?.AllowedCheckConstraints ?? expected.CheckConstraints;
+        var requiredChecks = transitions?.RequiredCheckConstraints ?? expected.CheckConstraints;
+        var allowedForeignKeys = transitions?.AllowedForeignKeys ?? expected.ForeignKeys;
+        var requiredForeignKeys = transitions?.RequiredForeignKeys ?? expected.ForeignKeys;
+
+        // WHY: EF can append standalone constraints to a strict creator.
+        // Only authored transitional shapes are optional here; untouched
+        // constraints and every column remain exact. Standalone final-writer
+        // postconditions independently require the terminal constraint.
+        if ((table.PrimaryKeyColumns.Count == 0
+                ? !primaryKeyMayBeAbsent
+                : !primaryKeys.Any(definition => SqliteCatalogEquivalence.KeyMatchesDeclaredColumns(
+                    table, table.PrimaryKeyKeys, definition.Columns, requireDefaultSortOrder: true)))
+            || !SqliteConstraintShapeCapacity.Matches(
+                table.UniqueConstraints, allowedUnique, requiredUnique, UniqueMatches, coalesceRequiredShapes: true)
+            || !SqliteConstraintShapeCapacity.Matches(
+                table.ForeignKeys, allowedForeignKeys, requiredForeignKeys, ForeignKeyMatches)
+            || !SqliteConstraintShapeCapacity.Matches(table.Checks, allowedChecks, requiredChecks, CheckMatches))
         {
             return false;
-        }
-
-        if (expected.CheckConstraints.Count != table.Checks.Count)
-        {
-            return false;
-        }
-
-        foreach (var check in expected.CheckConstraints)
-        {
-            var expectedSql = RenderCheck(check);
-            if (expectedSql is null
-                || !table.Checks.Any(actual => SqlEquivalent(actual.Expression, expectedSql)))
-            {
-                return false;
-            }
         }
 
         return true;
+
+        bool UniqueMatches(SqliteUniqueSnapshot actual, ExpectedUniqueConstraintDefinition definition)
+            => SqliteCatalogEquivalence.KeyMatchesDeclaredColumns(
+                table, actual.Keys, definition.Columns, requireDefaultSortOrder: true);
+
+        bool ForeignKeyMatches(SqliteForeignKeySnapshot actual, ExpectedForeignKeyDefinition definition)
+            => SqliteCatalogEquivalence.ForeignKeyMatches(
+                snapshot, actual, definition.PrincipalTable, definition.Columns, definition.PrincipalColumns,
+                definition.OnUpdate, definition.OnDelete);
+
+        bool CheckMatches(SqliteCheckSnapshot actual, ExpectedCheckConstraintDefinition definition)
+            => RenderCheck(definition) is { } sql && SqlEquivalent(actual.Expression, sql);
     }
 
     private string? TableUnsupportedFeature(

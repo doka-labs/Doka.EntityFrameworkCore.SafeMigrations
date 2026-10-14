@@ -1,6 +1,14 @@
 # SQLite behavior
 
-Prepared stable 10.4.10 distinguishes strict semantic shape from proven named
+Prepared stable 10.4.11 combines actual live column/key facts with accepted
+ordered physical lifetimes. Only current NULL-preserving additions or proven
+empty owners can certify dependent rows; target-model nullability, future adds,
+non-NULL defaults and generation do not. Native parent-key declared collations
+and key semantics remain independent requirements. Strict constraint capacity
+preserves allowed-slot injectivity and required-shape multiplicity, and separately
+appended FKs retain their prerequisite order and owned rebuild integrity.
+
+The adapter distinguishes strict semantic shape from proven named
 constraint and index identity. Sparse physical lifetimes and both rename
 endpoints retain independent evidence, including absent-source no-op
 postconditions; existence-only acceptance cannot install an authored matching

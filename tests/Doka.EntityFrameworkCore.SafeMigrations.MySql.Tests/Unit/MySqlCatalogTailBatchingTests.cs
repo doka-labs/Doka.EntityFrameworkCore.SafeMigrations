@@ -3,6 +3,37 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 /// <summary>Verifies immutable 512-table MySQL physical and inventory statement transport contracts.</summary>
 public sealed class MySqlCatalogTailBatchingTests
 {
+    /// <summary>
+    /// Live physical capture consumes its qualified owner mode without repeated runtime-mode branches.
+    /// </summary>
+    /// <param name="fold">Whether the native profile folds table owners.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PhysicalOwner_ConsumesQualifiedNativeMode(bool fold)
+    {
+        // Arrange
+        await using var connection = new CatalogStatementTestConnection(true, PhysicalResults);
+        var comparer = fold ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+
+        // Act
+        var result = await MySqlSafeMigrationProviderAnalyzer.ReadIndexPhysicalEnvironmentsAsync(
+            connection, PhysicalOperations(1), 4 * 1024 * 1024, 71, CancellationToken.None, comparer);
+
+        // Assert
+        Assert.Single(result);
+        var statement = connection.Submissions[1].Sql;
+        Assert.Contains(fold
+                ? "CAST(LOWER(t.TABLE_NAME) AS BINARY) IN (LOWER(@table_0))"
+                : "CAST(t.TABLE_NAME AS BINARY) IN (@table_0)",
+            statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("@@lower_case_table_names", statement, StringComparison.Ordinal);
+        Assert.Contains("CAST(c.TABLE_NAME AS BINARY) = CAST(t.TABLE_NAME AS BINARY)",
+            statement, StringComparison.Ordinal);
+        Assert.Contains("CAST(t.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)",
+            statement, StringComparison.Ordinal);
+    }
+
     /// <summary>The environment result preserves engine-qualified default capabilities without extra queries.</summary>
     /// <param name="version">The actual server version string returned by VERSION().</param>
     /// <param name="sqlMode">The observed session mode.</param>

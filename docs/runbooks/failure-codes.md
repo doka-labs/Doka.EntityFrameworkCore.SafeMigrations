@@ -52,6 +52,50 @@ returns a separate `SafeMigrationDecision.Code`.
 `RejectPrerequisiteMissing` are the corresponding `SafeMigrationAction`
 values.
 
+For a sparse `ADD nullable column -> CREATE index -> ADD foreign key` stream,
+an unchanged live principal need not be converged again. Projection combines
+requested native metadata with preceding accepted operations. A remaining
+`prerequisite_missing` can mean an absent member, unusable reference key,
+incompatible endpoint or invalidated physical lifetime; it does not mean
+nullable rows are orphans. Check the provider metadata, operation order and
+actual captured column/default contract. A target model, future addition or
+matching key shape alone is not native prerequisite evidence. See
+[sparse live prerequisites](../implementation-design.md#sparse-live-constraint-prerequisites).
+
+`structured_check_operand_type` rejects a PostgreSQL CHECK whose structured
+operand types are independently incompatible. `projected_check_binding_unproven`
+keeps an unresolved sparse binding blocked; a present column does not prove
+that every expression or overload is valid. Inspect the declared operand types
+and exact structured expression, not application values or function results.
+This includes uncertified variadic binding/postcondition forms and ordinary
+calls beyond the native reported argument limit; it does not label them as
+violating application rows.
+
+`index_input_operator_class` rejects a PostgreSQL physical index-key input
+whose native type/operator-class or requested access-method flags are
+incompatible. For example, an ordinary default Btree key on `json` is not
+supported, while `jsonb` has a native default class. This is not a row violation.
+`index_input_binding_unproven` keeps unresolved current native key inputs
+blocked. Inspect the actual accepted column type, method and explicit class;
+do not substitute an INCLUDE column or a computed expression's operand type
+for its result type. An operator-class certificate does not evaluate user
+support functions or guarantee that every application value is comparable.
+
+`foreign_key_multi_valued_supporting_index` rejects a MySQL FK with unsafe
+multi-valued child-index coverage. Native successful creation is not proof of
+working referential integrity. Explicitly remove the actual affected FK before
+removing that index, then validate any replacement FK against current rows.
+Matching aliases and index removal do not certify old-row integrity.
+
+`projected_foreign_key_supporting_index_name_collision` means a MySQL/MariaDB
+FK would need an automatic child index whose name is occupied by an incompatible
+index in the accepted owner lifetime. The projected result is `Different` with
+no repair capability. `ThrowIfDifferent` and `RepairIfSafe` reject it;
+`ExistenceOnly` retains its deliberately weaker no-op contract. Inspect the
+actual supporting-index prefix and occupant, then author an explicit valid
+removal or a reviewed free identity. Do not assume dropping an FK removes its
+index or that an equivalent no-op alias frees the physical name.
+
 `varchar_narrowing_value_too_long` is an `AnalysisCode` for a specific
 `DataBlocked` result. At least one non-null value exceeds the target character
 length. The report deliberately contains no value, key, or fragment. Correct
@@ -140,6 +184,8 @@ data/prerequisite result uses its planner rejection code.
 | `projected_missing` | Preflight projection observes absence after applying earlier accepted operations virtually. |
 | `projected_matching` | Preflight projection observes a match after earlier accepted operations virtually. |
 | `projected_different` | Preflight projection observes a conflict between ordered operations. |
+| `projected_live_foreign_key_prerequisites_requalified` | An exact accepted physical removal discharged a dynamic native FK blocker. Structural compatibility, surviving reference keys and current rows still require independent proof; the code alone does not authorize creation. |
+| `projected_live_drop_index_prerequisites_requalified` | Exact accepted dependency removals discharged a dynamic native index-drop blocker and captured index presence was requalified. Normal owner, tombstone, provider-risk and runtime checks remain authoritative. |
 | `projected_column_transition_safe` | Provider-specific evidence proves the exact ordered column transition, including its physical limits and current row-safety requirements. The explicit repair policy still controls execution. |
 | `projected_retained_column_domain_safe` | MySQL/MariaDB proves the ordered transition using an original declared value domain preserved by earlier certified widening, with fresh row evidence and cumulative physical/dependency checks. A model declaration alone is not this proof. |
 | `projected_column_transition` | PostgreSQL classified a projected column transition using its supported type and row-safety contract. Inspect the observed state and repair capability; the code alone does not approve an alteration. |
@@ -182,6 +228,16 @@ data/prerequisite result uses its planner rejection code.
 | `postcondition_superseded` | A later safe operation is the final writer for the same exact catalog resource. The earlier ordered assessment remains visible and has a satisfied effective postcondition; provider-owned operations can never produce this code. |
 | `postcondition_identity_unproven` | PostgreSQL postflight cannot establish an earlier unqualified owner or referenced table across a later opaque/schema or captured callback-risk boundary from final current-schema metadata. Its effective postcondition is false and it cannot supply final-writer supersession, even when live lookup reports matching/absence. Preserve applied source/history; obtain an explicitly qualified, reviewed final-state verification contract rather than guessing the historical owner. |
 | `provider_owned_not_analyzed` | Ordinary EF/provider operation is present and is not classified as safe. A recognized deterministic table/column postcondition may be projected conditionally into a later safe prerequisite. Typed insert/update/delete-data operations retain those structural facts but invalidate data-safety proofs; the provider operation itself remains unanalyzed. |
+
+For SQLite, `primary_key_key_semantics` and `unique_key_semantics` are values in
+`Differences[].Facet`, not independent `AnalysisCode` or `DecisionCode` values.
+Their analysis remains `classified_different`; the policy selects the actual
+decision. Expected `declared_column_collations_ascending` versus actual
+`different` means the native key's equality or sort semantics do not match the
+declared-column contract. Inspect the native key columns, declared collations
+and directions before authoring a transition. A key with a different collation
+is not interchangeable merely because its column names match, and `NOCASE`
+cannot silently certify another FK candidate-key equality contract.
 
 `projected_structure_state_unknown` also covers an object removal or rename whose
 physical identity could not be resolved. The live catalog snapshot predates that

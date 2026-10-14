@@ -29,11 +29,19 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         _valueLiteral = valueLiteral ?? RenderValueLiteral;
     }
 
+    /// <summary>Builds the exact provider plan, separating native runtime barriers from captured analysis evidence.</summary>
+    /// <param name="operation">The immutable safe operation.</param>
+    /// <param name="expectedTableConstraints">The ordered table constraint contract when required.</param>
+    /// <param name="includeAnalysisEvidence">Whether to retain analysis-only diagnostic facts.</param>
+    /// <param name="includeTransitionEvidence">Whether to retain analysis-only column-transition facts.</param>
+    /// <param name="includeRuntimeIndexInputGuard">Whether native execution must fence index input/data planning.</param>
+    /// <returns>The finite native plan with its actual independent prerequisites and postconditions.</returns>
     public PostgreSqlSafeMigrationRuntimePlan Build(
         SafeMigrationOperation operation,
         SafeMigrationExpectedTableConstraints? expectedTableConstraints = null,
         bool includeAnalysisEvidence = false,
-        bool includeTransitionEvidence = false
+        bool includeTransitionEvidence = false,
+        bool includeRuntimeIndexInputGuard = true
     )
     {
         ArgumentNullException.ThrowIfNull(operation);
@@ -69,7 +77,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 operation.Policy == SafeMigrationPolicy.RepairIfSafe,
                 includeAnalysisEvidence,
                 includeTransitionEvidence),
-            EnsureIndexIntent value => BuildEnsureIndex(value),
+            EnsureIndexIntent value => BuildEnsureIndex(value, includeRuntimeIndexInputGuard),
             DropIndexIntent value => BuildDropIndex(value),
             RenameIndexIntent value => BuildRenameIndex(value),
             EnsurePrimaryKeyIntent value => BuildEnsurePrimaryKey(value),
@@ -187,7 +195,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             + $"= {columns.Count.ToString(CultureInfo.InvariantCulture)})";
     }
 
-    private string? GetUnsupportedFeature(
+    /// <summary>Returns a catalog-independent unsupported contract without querying type or object presence.</summary>
+    /// <param name="intent">The exact authored operation contract.</param>
+    /// <returns>The existing stable unsupported code, or null for a provider-supported definition.</returns>
+    internal string? GetUnsupportedFeature(
         SafeMigrationIntent intent
     ) => GetUnsupportedSqlExpressionFeature(intent)
         ?? GetUnsupportedColumnFeature(intent) ?? GetUnsupportedIndexFeature(intent);

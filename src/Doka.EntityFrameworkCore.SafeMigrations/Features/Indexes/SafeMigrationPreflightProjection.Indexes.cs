@@ -415,16 +415,23 @@ internal sealed partial class SafeMigrationPreflightProjection
         // operation added a nullable, non-computed key without a non-null
         // default. Every old row then receives NULL, so existing rows cannot
         // collide while providers retain their ordinary NULL-distinct rules.
-        return intent.Definition.Keys
-            .Where(static key => key.Column is not null)
-            .Select(key => prerequisites.Columns[key.Column!])
-            .Any(static column => column is
+        foreach (var key in intent.Definition.Keys)
+        {
+            if (key.Column is { } column
+                && prerequisites.Columns.TryGetValue(column, out var projected)
+                && projected is
+                {
+                    AddedToExistingTable: true,
+                    IsNullable: true,
+                    PreservesNullForExistingRows: true,
+                    IsComputed: false,
+                })
             {
-                AddedToExistingTable: true,
-                IsNullable: true,
-                PreservesNullForExistingRows: true,
-                IsComputed: false,
-            });
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private bool IsProjectedIndexReplacement(

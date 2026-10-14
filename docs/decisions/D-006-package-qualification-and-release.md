@@ -271,6 +271,13 @@ owns independent consumer readback.
   `main`; keep native p95 and cancellation latency informational with unchanged
   comparisons. Correctness, invalid evidence, execution and artifact failures
   remain blocking, as do the full hosted/native qualification and readback gates.
+- 2026-10-14: Prepare stable 10.4.11 at the same five-package identity for sparse
+  live/ordered prerequisites, native owner/supporting-index/backfill contracts,
+  PostgreSQL CHECK/index-input qualification and SQLite key/capacity/order fixes.
+  Retain public signatures, production dependency ranges, migration source,
+  policies, fingerprint formats, reports and history. Keep native SQL Server
+  x86-64, full coverage/tooling, exact packages, provenance, SBOM and public
+  readback mandatory; local source preparation does not establish publication.
 
 ### Implementation References
 

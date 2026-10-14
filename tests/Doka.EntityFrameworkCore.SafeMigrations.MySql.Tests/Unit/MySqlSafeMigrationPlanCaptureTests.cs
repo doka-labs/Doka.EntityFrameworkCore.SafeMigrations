@@ -364,6 +364,168 @@ public sealed class MySqlSafeMigrationPlanCaptureTests
         Assert.Empty(capture.GetExpectedUniqueIndexes("users"));
     }
 
+    /// <summary>Offline generation builds an alternative only when strict owner spellings actually differ.</summary>
+    /// <param name="mixedOwner">Whether the standalone index uses a native-equivalent alternate owner name.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void GenerationNativeAlternativesAreDemandDriven(bool mixedOwner)
+    {
+        // Arrange
+        var capture = new MySqlSafeMigrationPlanCapture();
+        var builder = new MigrationBuilder("Provider");
+        builder.EnsureTable(new ExpectedTableDefinition("rows",
+                [new ExpectedColumnDefinition("id", typeof(int), false, "int")]),
+            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+
+        builder.CreateIndexIfNotExists("ux_id", mixedOwner ? "ROWS" : "rows", ["id"], unique: true);
+        var intent = (EnsureTableIntent)((SafeMigrationOperation)builder.Operations[0]).Intent;
+
+        // Act
+        using var lease = capture.BeginGeneration(builder.Operations);
+        var alternative = capture.GetGenerationTableAlternative(intent);
+        var ordinal = capture.GetGenerationUniqueIndexes("rows");
+
+        // Assert
+        if (mixedOwner)
+        {
+            Assert.Empty(ordinal);
+            var folded = Assert.IsType<MySqlTableContractAlternative>(alternative);
+            Assert.True(folded.IsValid);
+            Assert.Equal("ux_id", Assert.Single(folded.UniqueIndexes).Name);
+        }
+        else
+        {
+            Assert.Null(alternative);
+            Assert.Equal("ux_id", Assert.Single(ordinal).Name);
+        }
+
+    }
+
+    /// <summary>A live capture uses the explicitly qualified owner comparer consistently for both catalogs.</summary>
+    [Fact]
+    public void QualifiedCaptureSharesNativeOwnerContractsWithoutForeignSchemaBorrowing()
+    {
+        // Arrange
+        var capture = new MySqlSafeMigrationPlanCapture();
+        var builder = new MigrationBuilder("Provider");
+        builder.EnsureTable(new ExpectedTableDefinition("rows",
+                [new ExpectedColumnDefinition("id", typeof(int), false, "int")]),
+            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+
+        builder.CreateIndexIfNotExists("ux_id", "ROWS", ["id"], schema: "selected", unique: true);
+        builder.AddUniqueConstraintIfNotExists("uq_id", "RoWs", ["id"], schema: "selected");
+        var operations = builder.Operations.Cast<SafeMigrationOperation>().ToArray();
+        var intent = (EnsureTableIntent)operations[0].Intent;
+        var catalog = MySqlSafeMigrationPlanCapture.CreateExpectedUniqueIndexes(operations,
+            "selected", StringComparer.OrdinalIgnoreCase);
+
+        // Act
+        using var lease = capture.Begin(operations, catalog);
+        var indexes = capture.GetExpectedUniqueIndexes("rOwS");
+        var constraints = capture.GetExpectedTableConstraints(intent);
+        var foreignIndexes = capture.GetExpectedUniqueIndexes("rows", "foreign");
+
+        // Assert
+        Assert.Equal("ux_id", Assert.Single(indexes).Name);
+        Assert.Equal("uq_id", Assert.Single(Assert.IsType<SafeMigrationExpectedTableConstraints>(constraints)
+            .AllowedUniqueConstraints).Name);
+        Assert.Empty(foreignIndexes);
+    }
+
+    /// <summary>An invalid folded dependency cannot prevent generation for independent mode-zero owners.</summary>
+    [Fact]
+    public void InvalidFoldedOwnerContractDoesNotAbortOrdinalGeneration()
+    {
+        // Arrange
+        var capture = new MySqlSafeMigrationPlanCapture();
+        var builder = new MigrationBuilder("Provider");
+        foreach (var name in new[] { "rows", "ROWS" })
+        {
+            builder.EnsureTable(new ExpectedTableDefinition(name,
+                    [new ExpectedColumnDefinition("id", typeof(int), false, "int"),
+                        new ExpectedColumnDefinition("value", typeof(int), true, "int")]),
+                SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+        }
+
+        builder.CreateIndexIfNotExists("ix_value", "ROWS", ["value"]);
+        builder.DropColumnIfExists("value", "rows");
+        var intent = (EnsureTableIntent)((SafeMigrationOperation)builder.Operations[0]).Intent;
+
+        // Act
+        using var lease = capture.BeginGeneration(builder.Operations);
+        var alternative = capture.GetGenerationTableAlternative(intent);
+
+        // Assert
+        Assert.False(Assert.IsType<MySqlTableContractAlternative>(alternative).IsValid);
+        Assert.True(capture.HasGenerationContract);
+    }
+
+    /// <summary>
+    /// Folded alternatives and invalid-branch evidence cannot leak into another generation invocation.
+    /// </summary>
+    [Fact]
+    public void CompletedGenerationDoesNotReuseFoldedContract()
+    {
+        // Arrange
+        var capture = new MySqlSafeMigrationPlanCapture();
+        var previous = new MigrationBuilder("Provider");
+        foreach (var table in new[] { "rows", "ROWS" })
+        {
+            previous.EnsureTable(new ExpectedTableDefinition(table,
+                    [new ExpectedColumnDefinition("id", typeof(int), false, "int"),
+                        new ExpectedColumnDefinition("value", typeof(int), true, "int")]),
+                SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+        }
+
+        previous.CreateIndexIfNotExists("ix_value", "ROWS", ["value"]);
+        previous.DropColumnIfExists("value", "rows");
+        capture.BeginGeneration(previous.Operations).Dispose();
+        var next = new MigrationBuilder("Provider");
+        next.EnsureTable(new ExpectedTableDefinition("next_rows",
+                [new ExpectedColumnDefinition("id", typeof(int), false, "int")]),
+            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+
+        var intent = (EnsureTableIntent)((SafeMigrationOperation)next.Operations[0]).Intent;
+
+        // Act
+        using var lease = capture.BeginGeneration(next.Operations);
+        var alternative = capture.GetGenerationTableAlternative(intent);
+
+        // Assert
+        Assert.Null(alternative);
+        Assert.True(capture.HasGenerationContract);
+    }
+
+    /// <summary>Only the native folded branch inherits a differently spelled future backfill hazard.</summary>
+    /// <param name="mixedOwner">Whether the future unique declaration uses a native-equivalent owner alias.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void GenerationBackfillHazardRequiresNativeModeWhenOwnerSpellingDiffers(bool mixedOwner)
+    {
+        // Arrange
+        var capture = new MySqlSafeMigrationPlanCapture();
+        var operation = new SafeMigrationOperation(new AlterColumnIntent("rows",
+                new ExpectedColumnDefinition("value", typeof(string), false, "varchar(20)",
+                    defaultValue: SafeMigrationDefaultValue.Literal("x")),
+                new ExpectedColumnDefinition("value", typeof(string), true, "varchar(10)")),
+            SafeMigrationPolicy.RepairIfSafe);
+
+        var builder = new MigrationBuilder("Provider");
+        builder.Operations.Add(operation);
+        builder.CreateIndexIfNotExists("ux_value", mixedOwner ? "ROWS" : "rows", ["value"], unique: true);
+
+        // Act
+        using var lease = capture.BeginGeneration(builder.Operations);
+        var ordinal = capture.RequiresNullFreeBackfill(operation);
+        var condition = capture.GetGenerationNullFreeBackfillCondition(operation);
+
+        // Assert
+        Assert.Equal(!mixedOwner, ordinal);
+        Assert.Equal(mixedOwner ? "@@lower_case_table_names IN (1, 2)" : null, condition);
+    }
+
     private static SafeMigrationOperation Operation(
         string name
     ) => new(new EnsureSchemaIntent(name), SafeMigrationPolicy.ThrowIfDifferent);

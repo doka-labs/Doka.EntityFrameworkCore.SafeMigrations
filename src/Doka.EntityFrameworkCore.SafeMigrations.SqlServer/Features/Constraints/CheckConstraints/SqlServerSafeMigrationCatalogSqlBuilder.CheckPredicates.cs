@@ -60,6 +60,14 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     )
         => IsSafeIntegerCheckPredicate(expression, 0);
 
+    /// <summary>Qualifies an accepted authored operand against the native integer CHECK contract.</summary>
+    /// <param name="definition">The accepted projected physical column definition.</param>
+    /// <returns>Whether comparison is nonthrowing under the same scalar family as live catalog validation.</returns>
+    internal bool IsSupportedIntegerCheckColumn(ExpectedColumnDefinition definition)
+        => definition.ComputedColumnSql is null && definition.ComputedExpression is null
+            && TryGetColumnType(definition, out var type)
+            && type.Name is "tinyint" or "smallint" or "int" or "bigint";
+
     private static bool IsSafeIntegerCheckPredicate(
         SafeMigrationSqlExpression expression,
         int depth

@@ -964,9 +964,9 @@ drift; semantic aliases remain matching without destructive replacement.
 Primary-key and check creation require an empty-table proof when their live
 analysis could not inspect projected columns. Unique constraints and foreign
 keys can alternatively rely on a newly added nullable, non-computed column that
-preserves `NULL` for existing rows. A projected foreign key also requires an
-accepted primary or unique principal key in the exact declared order and equal
-physical storage facets for every dependent/principal column pair. Provider
+preserves `NULL` for existing rows. A projected foreign key also requires a
+complete native reference key in the exact declared order and provider-compatible
+endpoint storage and comparison semantics. Provider
 data operations invalidate the row proof in O(1) through the existing monotonic
 mutation version. Semantic hash indexes keep lookup proportional to definition
 arity and retain collision-safe equality checks. Each accepted no-op alias is
@@ -974,6 +974,211 @@ bound to its uniquely resolved physical catalog object. A drop or rename
 invalidates all aliases bound to that identity, while distinct physical objects
 with equal semantics remain independent. Ambiguous or unresolved identities are
 not retained as prerequisite evidence.
+
+### Sparse live constraint prerequisites
+
+A pending stream need not repeat an unchanged principal table, column or key
+as convergence operations. An internal provider source supplies independently
+captured requested live columns and FK endpoint/key metadata; Core combines
+those facts with earlier accepted operations. The target model alone never
+establishes physical presence. Accepted additions and alterations supersede
+their old storage facts. Missing, unknown, renamed-unproven and recreated owner
+lifetimes cannot borrow historical columns or keys.
+
+Candidate certificates retain actual primary/unique constraint identities,
+independent unique-index identities and separate owned backing-index names.
+Removing either representation invalidates its certificate. A same-name
+replacement must have the accepted current column shape; another untouched
+equivalent native key may survive independently. Partial, expression, prefixed
+or provider-specific equality keys do not become ordinary FK candidates merely
+because they are unique. Captured native owner/endpoint qualification precedes
+raw projected-definition equality, including inherited effective collations.
+A newly created owner cannot suppress an explicit provider requirement to
+qualify its captured effective defaults. Only actually accepted native-default
+creation facts may supply that certificate; other fully projected owner
+contracts retain the provider's default-false qualification behavior.
+A matching/no-op key shape cannot override missing native candidate evidence;
+an independently accepted Apply may establish a new ordinary candidate key.
+
+Each storage certificate is consumed against the exact currently accepted
+column definition, not the last authored proposal. A later rejected alteration
+or an existence-only no-op cannot replace an earlier accepted type with its
+unapplied target. Composite operand alternatives are captured independently;
+their combinations are not expanded into a Cartesian product.
+
+PostgreSQL CHECK promotion additionally resolves the requested structured
+operand types from native column, operator, function and implicit-cast metadata.
+Provably incompatible operands are `structured_check_operand_type`; unresolved
+binding remains `projected_check_binding_unproven`. Metadata inspection never
+executes a user function or an application-row expression. Native deparse
+candidates preserve the structured tree and use owning relation/type evidence
+for proven builtin literal conversions; they do not strip arbitrary casts.
+Ordinary callable arity respects the server's reported `max_function_args`;
+special expression forms do not inherit that limit. An unresolved overload,
+domain, polymorphic input or uncertified variadic binding/postcondition shape
+cannot authorize newly sparse CHECK promotion. Independently matching and
+fully authored CHECK paths retain their existing contracts.
+
+PostgreSQL physical index keys and structured identifier aliases resolve the
+actual accepted native input type, access method and default or explicit
+operator class. Default selection uses native domain reduction, exact matches
+and directional binary-compatible preferred-type rules; it is not a builtin
+type allowlist or a search-path filter on all defaults. Explicit operator-class
+selection retains its native method, namespace and visibility requirements.
+Requested ordering, uniqueness, multiple-key and INCLUDE capabilities use
+source-pinned builtin handler identities without invoking extension handlers.
+Unsupported input selection is `index_input_operator_class`; an unresolved
+binding remains `index_input_binding_unproven`. These checks run before missing
+index DDL and before a unique-data query can bind an unavailable equality
+operator. Independently matching objects retain their ordinary classification.
+INCLUDE is not an operator-class input. A genuinely computed key retains its
+separate expression-result contract; the operand column OID is never used as
+its result type. Selecting a native operator class is not a claim that every
+value or user comparator will succeed, and metadata qualification evaluates
+neither application expressions nor user support/cast functions.
+Earlier ordinary EF add/alter/create column declarations use the existing
+immutable column factory only to request native type alternatives. A complete
+identity-matched stream and Core's current accepted definition remain necessary
+to consume them; future declarations, unknown facets and target-model presence
+are not physical proof. No EF operation is normalized or rewritten here.
+An earlier typed owner/index drop can require input capture for an initially
+Matching index that becomes executable again. Clean Matching streams retain
+their no-additional-capture fast path. Native physical identifier aliases and
+root identifier CAST deparsing retain exact owner, operand and target identity;
+the index-specific CAST candidate does not change CHECK expression matching.
+
+Read-only UNIQUE index classification is metadata-only. Independently Missing
+or Different candidates receive bounded duplicate-row probes only after their
+actual live physical inputs and method have native binding evidence. A type
+certificate permits binding, not row authorization. Duplicate Missing becomes
+DataBlocked; Different retains its conflict and the existing replacement-data
+diagnostic for ordered drops. An incompatible requested `json` input behind an
+occupied identity cannot force an early `GROUP BY` binding error. Matching
+remains without an additional row probe. Unqualified explicit operator-class
+identity also requires visibility of the actual stored OID; a hidden same-named
+class cannot impersonate the visible requested class.
+
+Preflight first checks identity, physical owner/member prerequisites and cheap
+native name occupancy. An occupied identity retains ordinary classification
+without an additional input query. Only present-member, unoccupied-name
+candidates reach the bounded metadata fence before any data probe. Its private
+routing marker is not an assessment code or permission to create an index;
+independent semantic aliases and native type capability remain authoritative.
+
+The second-stage statement shares identical native input proofs within that
+statement only. A demand-driven MATERIALIZED SELECT certificate avoids
+replicating the large native binding expression in every UNION branch. Runtime
+CASE laziness alone is not a planning/JIT fence. The certificate preserves the
+false/unknown-input decisions; each index's independent-name, semantic-alias
+and occupied-identity decisions stay outside the shared proof. It never becomes
+a cross-statement cache or a row certificate. Its prefix, parameters and
+UTF-8 payload participate in the existing dispatch bounds and rollback. All
+system catalog relations remain explicitly qualified. Independent expression
+matching can still bind a zero-row owner subquery; generated CTE names therefore
+reserve actual unqualified index-owner names from the stream, including later
+owners. This syntax reservation does not certify an owner's physical presence
+or lend future operations to projection. No session JIT setting changes.
+
+After accepted FK removals, an earlier accepted exact column source can
+qualify a provider-certified non-data nullability-only `EnsureColumn` repair.
+A separate intrinsic-layout certificate preserves the current physical keys
+and native endpoint layout, not a generic widening, NULL or empty-row proof.
+Core still checks source, row epoch, dependency and physical-owner lifetimes.
+Its accepted projection consumes the qualified result while required-column
+staging and empty-owner provenance remain bound to the original live result.
+Uncertified column repairs invalidate every affected physical index/UNIQUE
+alias using column-member identity; owner and schema identity remain separate.
+
+The additional metadata phase targets relevant sparse prerequisite failures
+and preceding owned namespace mutations, deduplicates requested facts and
+retains parameter/UTF-8, cancellation
+and timeout bounds. SQL Server reuses its dependency and physical-key captures;
+SQLite reuses its immutable catalog snapshot. No application rows are bound
+through missing columns, no integrity checks are disabled and no complete
+database or target-model graph is seeded into projection.
+
+These facts prove structure, not rows. Existing-row authorization still needs
+a current independent empty-owner certificate or an earlier accepted nullable,
+non-generated addition whose actual default preserves NULL for old rows.
+Existing nullable columns, later or rejected additions, non-NULL defaults,
+generated values and invalidated row epochs do not supply that proof. Mixed
+old/new key parts use each provider's native NULL/uniqueness rules; SQL Server
+does not inherit PostgreSQL or MySQL/MariaDB NULL-distinct behavior. SQLite
+uses the parent's affinity and declared comparison collation rather than
+requiring child storage to equal the parent. Runtime guards and native FK/key
+creation remain authoritative if data changes after preflight.
+
+An accepted new owner can use independently captured metadata for an unchanged
+live principal without pretending that the new table existed in the initial
+snapshot. Creation-default facts belong to that accepted physical lifetime;
+they are not inferred from the target model or borrowed across opaque changes.
+
+SQLite strict table matching uses the existing allowed/required constraint
+transition contract for EF's separately appended constraints. The contract is
+bounded by structural segments and table lifetimes, and it does not lend future
+constraints to prerequisite projection. Original columns and untouched keys or
+checks remain mandatory; each final standalone constraint is verified
+independently. This is not permission to ignore an extra column or unauthored
+constraint under a strict table contract.
+
+SQLite optional transition constraints consume distinct allowed shape slots;
+an extra duplicate FK or CHECK cannot impersonate another future constraint.
+Required unique constraints retain SQLite's native coalesced-index semantics.
+When EF would fold a later FK into an earlier CREATE before its separately
+added column exists, only the baseline generation window is split. The owned
+transaction, final snapshot and foreign-key validation remain shared.
+
+MySQL/MariaDB captures `lower_case_table_names` with its existing native
+transport profile. Live owner grouping, constraint transitions, unique-index
+inventories and complete-stream backfill hazards use that verified table
+comparer. Mode zero retains case-distinct owners; columns and index names retain
+their separate native comparison rules. Existing exact database-qualifier
+guards are unchanged. Physical catalog joins cannot borrow a case-distinct
+owner merely because the metadata view's comparison collation matches it.
+Connection-free SQL generation does not guess the profile. Only a stream with
+case-ambiguous relevant owners builds an additional folded interpretation;
+native SQL selects exact mode-zero or folded mode-one/two contracts. An invalid
+folded dependency is rejected in that branch without rejecting an independent
+valid mode-zero stream. A folded future unique declaration also preserves the
+NULL-free backfill obligation before any default writes. Ordinary unambiguous
+streams keep the existing single-contract generation path.
+
+MySQL child supporting-index evidence distinguishes its native ordered prefix
+from optimizer visibility and unrelated trailing keys. It also checks the
+auto-created index namespace rather than assuming that dropping an FK removes
+its supporting index. A multi-valued supporting index cannot authorize FK
+integrity, even if native FK creation succeeds. An ordinary index already
+present before creation can produce a working native relationship, but the
+snapshot does not certify which coexisting index backed an older FK. The guard
+therefore conservatively rejects relevant multi-valued coverage rather than
+claiming that every coexisting ordinary-index relationship is broken. Such a
+live relationship is
+`foreign_key_multi_valued_supporting_index`; removing the index while a live FK
+still depends on it is also rejected. Removing a compatible ordinary sibling
+can switch native enforcement to that MVI and is likewise guarded. Unrelated
+or incomplete/reordered prefixes do not acquire that dependency. Explicitly
+remove the actual affected FK
+first, then remove the unsafe index and revalidate any replacement FK. An
+equivalent no-op alias or index removal alone does not prove old rows valid.
+Dynamic metadata blockers can be requalified only after certified accepted
+physical removals; static, identity, opaque-SQL and deferred boundaries still
+win, and FK requalification still requires current structure and row proof.
+
+Native contracts: [MariaDB foreign keys](https://mariadb.com/docs/server/ha-and-performance/optimization-and-tuning/optimization-and-indexes/foreign-keys),
+[MySQL identifier case rules](https://dev.mysql.com/doc/refman/8.4/en/identifier-case-sensitivity.html),
+[MariaDB identifier case rules](https://mariadb.com/docs/server/reference/sql-structure/sql-language-structure/identifier-case-sensitivity),
+[MySQL multi-valued index restrictions](https://dev.mysql.com/doc/refman/8.4/en/create-index.html#create-index-multi-valued),
+[PostgreSQL column additions](https://www.postgresql.org/docs/17/ddl-alter.html#DDL-ALTER-ADDING-A-COLUMN)
+and [reference keys](https://www.postgresql.org/docs/17/ddl-constraints.html#DDL-CONSTRAINTS-FK),
+[PostgreSQL overload resolution](https://www.postgresql.org/docs/18/typeconv-func.html),
+[reported PostgreSQL argument limits](https://www.postgresql.org/docs/18/runtime-config-preset.html),
+[PostgreSQL index operator classes](https://www.postgresql.org/docs/18/indexes-opclass.html),
+[PostgreSQL shared SELECT CTEs](https://www.postgresql.org/docs/18/queries-with.html),
+[native PostgreSQL index selection](https://github.com/postgres/postgres/blob/REL_18_6/src/backend/commands/indexcmds.c),
+[native PostgreSQL binary coercion](https://github.com/postgres/postgres/blob/REL_18_6/src/backend/parser/parse_coerce.c),
+[SQL Server uniqueness](https://learn.microsoft.com/en-us/sql/relational-databases/tables/unique-constraints-and-check-constraints?view=sql-server-ver17),
+and [SQLite parent keys and NULLs](https://www.sqlite.org/foreignkeys.html).
+Reviewed on 2026-10-13; native qualification evidence remains engine-specific.
 
 Provider analyzers intentionally materialize one bounded result set against the
 initial catalog. The ordered projection therefore owns all later temporal

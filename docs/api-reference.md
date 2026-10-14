@@ -80,7 +80,7 @@ Migration source does not need regeneration; policy selection, canonical
 report v3, filtered-view v2, and migration histories remain unchanged. No
 API-baseline promotion is required for this patch.
 
-Prepared stable 10.4.10 retains that API and dependency contract. Ordered
+The 10.4.10 patch retains that API and dependency contract. Ordered
 nullability/backfill, sparse constraint/index and physical-rename proofs no
 longer fabricate authored definitions from existence-only acceptance. Canonical
 managed-key identities preserve column/value ordinals, and only internally
@@ -90,6 +90,15 @@ schema/session cleanup consumes verified ownership. No public signature,
 policy selection, fingerprint format, report schema or migration history
 changes; existing migrations do not need regeneration. Native timing overruns
 are informational, not a waiver of functional or evidence validation.
+
+Prepared stable 10.4.11 retains the same public APIs, dependency ranges, policies,
+fingerprint formats, canonical report v3, filtered-view v2 and migration history.
+An internal provider channel supplies actual sparse live prerequisites, not
+target-model definitions; ordered projection still owns accepted physical
+lifetimes and independent current row proofs. Related owner-case, supporting-
+index, native CHECK/index-input and SQLite key/capacity fixes do not require
+migration regeneration or API-baseline promotion. Qualification and publication
+remain separate from these prepared contracts.
 
 ## Packages and registration
 
@@ -603,6 +612,27 @@ replacement indexes, primary keys, and unique constraints are checked against
 the complete physical key width and 16-part limit before DDL. Composite primary
 and unique-key identity is compared from ordinal catalog rows and is therefore
 independent of `group_concat_max_len`.
+Sparse prerequisite projection combines independently captured unchanged live
+members with preceding accepted additions. An unchanged FK principal does not
+need a redundant table/column/key convergence operation. Native endpoint and
+candidate-key compatibility, exact surviving constraint/backing-index identity,
+and row safety remain separate requirements. Newly accepted NULL-preserving
+additions or current empty-owner proof can qualify old rows; existing nullable
+columns, future/rejected additions, non-NULL defaults and generated values
+cannot. Native NULL uniqueness differences remain enforced. See
+[sparse live prerequisites](implementation-design.md#sparse-live-constraint-prerequisites).
+The [diagnostic runbook](runbooks/failure-codes.md#analyzer-and-projection-codes)
+distinguishes dynamic prerequisite requalification from actual operation
+authorization. SQLite native key-semantics diagnostics are difference facets,
+not new top-level analysis or decision codes.
+
+PostgreSQL physical index inputs additionally require a native compatible
+operator class and the independently requested access-method flags before a
+Missing index becomes executable. INCLUDE columns are not key inputs, and
+computed expression results retain their separate contract rather than
+borrowing an operand's type. Unknown bindings remain blocked; qualification
+does not execute user support functions or application-row expressions.
+
 Source-frozen model-managed operations participate in ordered row projection:
 accepted ensures record target rows, accepted updates replace captured source
 state with target state, and accepted deletes record absence. The projection

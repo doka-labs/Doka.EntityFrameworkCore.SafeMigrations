@@ -100,7 +100,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         ExpectedForeignKeyDefinition foreignKey
     )
     {
-        if (!InlineKeyWidthIsSupported(table, foreignKey.Columns, 900))
+        if (!AuthoredForeignKeyOperandsAreEligible(table, foreignKey)
+            || !InlineKeyWidthIsSupported(table, foreignKey.Columns, 900))
         {
             return false;
         }
@@ -126,13 +127,25 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         ExpectedTableDefinition table,
         ExpectedForeignKeyDefinition foreignKey
     )
+        => BuildInlineForeignKeyPrerequisite(table, foreignKey, requireCandidateKey: true);
+
+    /// <summary>Shares physical operands with independently captured composite candidate keys.</summary>
+    private string BuildInlineForeignKeyPrerequisite(
+        ExpectedTableDefinition table,
+        ExpectedForeignKeyDefinition foreignKey,
+        bool requireCandidateKey
+    )
     {
-        if (!InlineForeignKeyPhysicalWidthIsSupported(table, foreignKey))
+        if (requireCandidateKey ? !InlineForeignKeyPhysicalWidthIsSupported(table, foreignKey)
+            : !AuthoredForeignKeyOperandsAreEligible(table, foreignKey)
+                || !InlineKeyWidthIsSupported(table, foreignKey.Columns, 900))
         {
             return "1 = 0";
         }
 
-        if (foreignKey.PrincipalTable == table.Table
+        // WHY: A sparse self-reference has an existing native principal key.
+        // Only a newly authored table can supply an inline self-key contract.
+        if (requireCandidateKey && foreignKey.PrincipalTable == table.Table
             && (foreignKey.PrincipalSchema ?? "dbo") == (table.Schema ?? "dbo"))
         {
             var hasKey = table.PrimaryKey?.Columns.SequenceEqual(foreignKey.PrincipalColumns) == true
@@ -147,10 +160,11 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         }
 
         var principal = TableId(foreignKey.PrincipalTable, foreignKey.PrincipalSchema);
-        var values = string.Join(", ", foreignKey.PrincipalColumns.Select((column, ordinal) =>
-            $"({ordinal + 1}, {Literal(column)})"));
+        var values = requireCandidateKey
+            ? string.Join(", ", foreignKey.PrincipalColumns.Select((column, ordinal) =>
+                $"({ordinal + 1}, {Literal(column)})")) : null;
 
-        var targetKey = "EXISTS (SELECT 1 FROM sys.indexes i "
+        var targetKey = requireCandidateKey ? "EXISTS (SELECT 1 FROM sys.indexes i "
             + $"WHERE i.object_id = {principal} AND i.is_unique = 1 AND i.is_disabled = 0 "
             + "AND i.is_hypothetical = 0 AND i.has_filter = 0 "
             + $"AND (SELECT COUNT(*) FROM sys.index_columns ic WHERE ic.object_id = i.object_id "
@@ -159,7 +173,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             + "WHERE NOT EXISTS (SELECT 1 FROM sys.index_columns ic "
             + "JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id "
             + "WHERE ic.object_id = i.object_id AND ic.index_id = i.index_id "
-            + "AND ic.key_ordinal = expected.ordinal AND c.name = expected.principal)))";
+            + "AND ic.key_ordinal = expected.ordinal AND c.name = expected.principal)))" : "1 = 1";
 
         var predicates = new List<string>(foreignKey.Columns.Count + 3)
         {
@@ -210,6 +224,120 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 + $"WHERE c.object_id = {principal} AND c.name = {Literal(foreignKey.PrincipalColumns[ordinal])} "
                 + "AND " + string.Join(" AND ", conditions) + ")");
         }
+
+        return string.Join(" AND ", predicates);
+    }
+
+    /// <summary>Preserves the native FK contract's computed-operand exclusion for authored endpoints.</summary>
+    /// <param name="table">The authored dependent definition.</param>
+    /// <param name="foreignKey">The dependent and optional self-principal operand names.</param>
+    /// <returns>Whether every authored FK operand can use the native physical key contract.</returns>
+    private static bool AuthoredForeignKeyOperandsAreEligible(
+        ExpectedTableDefinition table,
+        ExpectedForeignKeyDefinition foreignKey
+    )
+    {
+        var self = foreignKey.PrincipalTable == table.Table
+            && (foreignKey.PrincipalSchema ?? "dbo") == (table.Schema ?? "dbo");
+
+        foreach (var column in table.Columns)
+        {
+            if ((column.ComputedColumnSql is not null || column.ComputedExpression is not null)
+                && (foreignKey.Columns.Contains(column.Name)
+                    || self && foreignKey.PrincipalColumns.Contains(column.Name)))
+            {
+                // WHY: Runtime IndexKeysWithinLimit explicitly excludes
+                // computed FK operands. An empty row set or declared scalar
+                // type cannot turn that physical rejection into readiness.
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>Qualifies new dependent operands alongside unchanged live operands without row scans.</summary>
+    /// <param name="table">Only earlier authored dependent columns, not a manufactured table contract.</param>
+    /// <param name="foreignKey">The exact mixed endpoint request.</param>
+    /// <returns>A bounded catalog-only physical compatibility predicate.</returns>
+    internal string BuildSparseForeignKeyPrerequisite(
+        ExpectedTableDefinition table,
+        ExpectedForeignKeyDefinition foreignKey
+    )
+        => BuildSparseForeignKeyPrerequisite(table, foreignKey, operandOrdinal: null);
+
+    /// <summary>Captures one independent operand without combining alternative authored FK shapes.</summary>
+    /// <param name="table">The single authored dependent operand, or null for an untouched live operand.</param>
+    /// <param name="foreignKey">The complete endpoint request retaining aggregate key-width validation.</param>
+    /// <param name="operandOrdinal">The paired dependent/principal operand to qualify.</param>
+    /// <returns>A bounded metadata-only predicate for this exact alternative.</returns>
+    internal string BuildSparseForeignKeyPrerequisite(
+        ExpectedTableDefinition? table,
+        ExpectedForeignKeyDefinition foreignKey,
+        int operandOrdinal
+    )
+        => BuildSparseForeignKeyPrerequisite(table, foreignKey, (int?)operandOrdinal);
+
+    /// <summary>Shares complete owner/key-width checks with full or independent sparse storage qualification.</summary>
+    private string BuildSparseForeignKeyPrerequisite(
+        ExpectedTableDefinition? table,
+        ExpectedForeignKeyDefinition foreignKey,
+        int? operandOrdinal
+    )
+    {
+        if (foreignKey.Columns.Count > 32 || operandOrdinal is < 0
+            || operandOrdinal >= foreignKey.Columns.Count)
+        {
+            return "1 = 0";
+        }
+
+        var dependent = TableId(foreignKey.Table, foreignKey.Schema);
+        var principal = TableId(foreignKey.PrincipalTable, foreignKey.PrincipalSchema);
+        var dependentExists = TableExists(foreignKey.Table, foreignKey.Schema);
+        var dependentSupported = $"({BuildPhysicalTableSupportExpression(foreignKey.Table, foreignKey.Schema)}) = 1";
+        var predicates = new List<string>(foreignKey.Columns.Count + 5)
+        {
+            operandOrdinal is null ? dependentExists : $"(NOT {dependentExists} OR {dependentSupported})",
+            TableAndColumnsExist(foreignKey.PrincipalTable, foreignKey.PrincipalSchema, foreignKey.PrincipalColumns),
+            operandOrdinal is null ? dependentSupported : "1 = 1",
+            $"({BuildPhysicalTableSupportExpression(foreignKey.PrincipalTable, foreignKey.PrincipalSchema)}) = 1",
+            IndexKeysWithinLimit(foreignKey.PrincipalTable, foreignKey.PrincipalSchema,
+                foreignKey.PrincipalColumns, 900),
+        };
+
+        var start = operandOrdinal ?? 0;
+        var end = operandOrdinal is { } single ? single + 1 : foreignKey.Columns.Count;
+        for (var ordinal = start; ordinal < end; ordinal++)
+        {
+            var name = foreignKey.Columns[ordinal];
+            if (table is not null && table.Columns.Any(column => column.Name == name))
+            {
+                var pair = new ExpectedForeignKeyDefinition(foreignKey.Name, foreignKey.Table, [name],
+                    foreignKey.PrincipalTable, [foreignKey.PrincipalColumns[ordinal]], foreignKey.Schema,
+                    foreignKey.PrincipalSchema, onUpdate: foreignKey.OnUpdate, onDelete: foreignKey.OnDelete);
+
+                // WHY: Native candidate keys are independently captured and
+                // checked after ordered drops/replacements. Requiring one in
+                // each one-column storage pair would reject composite keys.
+                predicates.Add(BuildInlineForeignKeyPrerequisite(table, pair, requireCandidateKey: false));
+            }
+            else
+            {
+                predicates.Add("EXISTS (SELECT 1 FROM sys.columns dc JOIN sys.columns pc ON pc.object_id = "
+                    + $"{principal} AND pc.name = {Literal(foreignKey.PrincipalColumns[ordinal])} "
+                    + $"WHERE dc.object_id = {dependent} AND dc.name = {Literal(name)} "
+                    + "AND dc.is_computed = 0 "
+                    + "AND dc.system_type_id = pc.system_type_id AND dc.user_type_id = pc.user_type_id "
+                    + "AND dc.max_length = pc.max_length AND dc.precision = pc.precision AND dc.scale = pc.scale "
+                    + "AND ISNULL(dc.collation_name, N'') = ISNULL(pc.collation_name, N''))");
+            }
+        }
+
+        // WHY: Exact pairwise physical equality transfers the principal's
+        // aggregate 900-byte proof to the dependent, including live columns.
+        // No query binds a newly added column or reads dependent data early.
+        // An initially missing owner is merely a hypothesis: the graph later
+        // requires its accepted CREATE and Core's current empty lifetime.
 
         return string.Join(" AND ", predicates);
     }

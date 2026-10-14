@@ -1096,6 +1096,9 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     private static string ForeignKeyAlternateColumnFixture(bool orphan)
         => ForeignKeyNullabilityFixture(alreadyNullable: true)
             + " ALTER TABLE `proof_child` ADD `alternate_owner_id` char(36) NULL; "
+            // WHY: These tests isolate orphan-row authorization, not the
+            // retained symbol's incompatible automatic-index namespace.
+            + "CREATE INDEX `ix_alternate_owner` ON `proof_child` (`alternate_owner_id`); "
             + "UPDATE `proof_child` SET `alternate_owner_id` = "
             + (orphan ? "'00000000-0000-0000-0000-000000000999';" : "'00000000-0000-0000-0000-000000000001';");
 

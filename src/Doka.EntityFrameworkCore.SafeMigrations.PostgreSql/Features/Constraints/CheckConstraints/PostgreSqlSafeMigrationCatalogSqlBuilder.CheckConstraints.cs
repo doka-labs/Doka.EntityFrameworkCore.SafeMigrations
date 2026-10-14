@@ -79,7 +79,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     private string ExpectedCheckExpressionMatches(
         ExpectedCheckConstraintDefinition definition
     ) => definition.Expression is not null
-        ? ExpressionMatches("pg_catalog.pg_get_expr(co.conbin, co.conrelid)", definition.Expression)
+        ? ExpressionMatches("pg_catalog.pg_get_expr(co.conbin, co.conrelid)", definition.Expression,
+            relationOid: "co.conrelid")
         : ExpressionMatches("pg_catalog.pg_get_expr(co.conbin, co.conrelid)", definition.Sql!);
 
     /// <summary>Verifies every required check constraint of one table through three catalog scans.</summary>

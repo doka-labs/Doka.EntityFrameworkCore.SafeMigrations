@@ -104,9 +104,51 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
     private SafeMigrationProviderAnalysis QualifyProjectedCheckPredicate(
         SafeMigrationOperation operation,
-        SafeMigrationProviderAnalysis analysis
+        SafeMigrationProviderAnalysis analysis,
+        ISafeMigrationProjectedColumnSource columns
     )
     {
+        if (operation.Intent is EnsureCheckConstraintIntent candidate
+            && analysis.ObservedState == SafeMigrationObservedState.Missing
+            && _projectedKeyTables.TryGetValue((candidate.Definition.Schema ?? "dbo", candidate.Definition.Table),
+                out var snapshot)
+            && SqlServerSafeMigrationCatalogSqlBuilder.GetStructuredCheckExpression(candidate.Definition)
+                is { } expression
+            && SqlServerSafeMigrationCatalogSqlBuilder.IsSafeIntegerCheckPredicate(expression))
+        {
+            var operands = new HashSet<string>(StringComparer.Ordinal);
+            SafeMigrationSqlExpressionInspector.CollectIdentifiers(expression, operands);
+            foreach (var name in operands)
+            {
+                var supported = columns.TryGetProjectedColumn(candidate.Definition.Table,
+                    candidate.Definition.Schema, name, out var definition)
+                    ? _catalogSqlBuilder.IsSupportedIntegerCheckColumn(definition)
+                    : snapshot.Columns.TryGetValue(name, out var live) && live.CheckEligible;
+
+                if (snapshot.Columns.TryGetValue(name, out var captured))
+                {
+                    var recreated = _projectedColumnLayouts.TryGetValue(
+                        (candidate.Definition.Schema ?? "dbo", candidate.Definition.Table), out var layout)
+                        && layout is not null && layout.Bindings.TryGetValue(name, out var identity) && identity < 0;
+
+                    // WHY: Matching authored facets do not erase hidden live
+                    // operand flags. Only an accepted new physical allocation
+                    // may replace the original catalog's unsupported shape.
+                    supported &= recreated || captured.CheckEligible;
+                }
+
+                if (!supported)
+                {
+                    // WHY: A current empty-row certificate discharges data
+                    // validation, not the provider's scalar/physical contract.
+                    // Existing unsupported operands must not be hidden by a
+                    // newly added column that initially blocked SQL binding.
+                    return new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Unsupported,
+                        SafeMigrationRepairCapability.None, false, "check_column_type_unproven");
+                }
+            }
+        }
+
         if (operation.Intent is not EnsureCheckConstraintIntent check
             || analysis.IsInvariantUnsupported || analysis.ObservedState == SafeMigrationObservedState.Matching
             || !_checkPredicateProofs.TryGetValue(operation, out var proof))

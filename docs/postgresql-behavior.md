@@ -1,6 +1,14 @@
 # PostgreSQL behavior
 
-Prepared stable 10.4.10 uses verified current-schema identity consistently
+Prepared stable 10.4.11 qualifies sparse live/projected endpoint and candidate-key
+prerequisites, structured CHECK bindings and native physical index-input types.
+Unresolved operator-class or access-method compatibility remains unsupported;
+ordinary Btree keys on `json` are rejected before DDL or duplicate-row probes.
+Eligible requests retain native identity and current row guards. Bounded
+two-stage prerequisite routing avoids unnecessary proof/JIT multiplication
+without changing session settings or invoking user functions.
+
+The adapter uses verified current-schema identity consistently
 across analysis, generation and postflight; mutable historical aliases, TEMP
 shadows and changed execution owners cannot fabricate that identity.
 Source-frozen managed deletes fence dependent writers and reclassify under the

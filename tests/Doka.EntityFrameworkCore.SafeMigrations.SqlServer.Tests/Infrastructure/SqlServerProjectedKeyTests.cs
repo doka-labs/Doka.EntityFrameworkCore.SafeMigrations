@@ -6,6 +6,47 @@ public sealed class SqlServerProjectedKeyTests
     private const string ConnectionString = "Server=127.0.0.1,1433;Database=projected_keys;"
         + "User ID=sa;Password=unused;TrustServerCertificate=True";
 
+    /// <summary>Mixed live/new NULL uniqueness needs a native row proof or a filter excluding every new NULL.</summary>
+    /// <param name="filtered">Whether the index excludes the newly added NULL operand.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SparseCompositeUniqueKey_DoesNotInventDuplicateOrUniquenessProof(
+        bool filtered
+    )
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext(ConnectionString);
+        var source = new ProjectedSource(new ExpectedColumnDefinition("Code", typeof(int), true, "int"),
+            new SafeMigrationProjectedTableState(false, false, false, false));
+
+        var snapshot = new SqlServerProjectedKeyTable(true, 2, null,
+            new Dictionary<string, SqlServerProjectedKeyColumn>(StringComparer.Ordinal)
+            {
+                ["TenantId"] = new("int", 4, false, true, true, null, true),
+            });
+
+        var intent = new EnsureIndexIntent(new ExpectedIndexDefinition("IX_sparse", "keys",
+            [new ExpectedIndexKeyDefinition("TenantId"), new ExpectedIndexKeyDefinition("Code")], unique: true,
+            structuredFilter: filtered ? new SafeMigrationSqlNullTestExpression(
+                new SafeMigrationSqlIdentifierExpression(["Code"]), negated: true) : null));
+
+        var live = Analysis(SafeMigrationObservedState.PrerequisiteMissing);
+        var projected = Analysis(SafeMigrationObservedState.Missing);
+
+        // Act
+        var analysis = SqlServerProjectedKeyShape.Validate(intent, source, live, projected, snapshot,
+            context.GetService<IRelationalTypeMappingSource>());
+
+        // Assert
+        Assert.Equal(filtered ? SafeMigrationObservedState.Missing : SafeMigrationObservedState.PrerequisiteMissing,
+            analysis.ObservedState);
+        if (!filtered)
+        {
+            Assert.Equal("projected_key_data_state_unknown", analysis.Code);
+        }
+    }
+
     /// <summary>Uses the projected target width instead of a stale live key width.</summary>
     [Theory]
     [InlineData(true, 450, SafeMigrationObservedState.Missing)]

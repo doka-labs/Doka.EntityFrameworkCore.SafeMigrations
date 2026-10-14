@@ -1,6 +1,14 @@
 # MySQL and MariaDB DDL behavior
 
-Prepared stable 10.4.10 preserves exact column proofs after owned FK removals,
+Prepared stable 10.4.11 qualifies sparse mixed column/index/FK prerequisites
+against independently captured native endpoints, key/backing identities and
+accepted physical lifetimes. Native table-case equality is shared by live
+transition/backfill catalogs; connection-free generation selects exact/folded
+alternatives only under verified runtime guards. Unsafe multi-valued FK support
+and automatic-index name collisions remain blocking. Current row safety is not
+inferred from target-model nullability or a future operation.
+
+The adapter preserves exact column proofs after owned FK removals,
 supports data-proven nullability/backfill transitions, and uses two atomic
 InnoDB stages with an owned enforced CHECK for supported required additions.
 Interrupted additions recover only from their exact owned intermediate state;

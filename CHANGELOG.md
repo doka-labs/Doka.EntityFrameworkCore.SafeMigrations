@@ -6,6 +6,76 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
+## [10.4.11] - 2026-10-14
+
+Prepare stable 10.4.11 for all five packages. This patch combines independently
+captured live prerequisites with accepted ordered column/key lifetimes and
+current row proofs, so valid nullable-column/index/FK streams do not require
+redundant principal convergence. It corrects related native owner, supporting-
+index, CHECK and index-input contracts without rewriting historical migrations.
+Public signatures, production dependency ranges, policy selection, fingerprint
+formats, report schemas and migration history remain compatible. Earlier atomic
+concurrency and recovery guards remain in place. Source preparation is not
+publication evidence: the full hosted/native matrix, coverage, tooling, exact
+five-package primary/symbol set, provenance, SBOM and public readback remain
+required. Timing comparisons remain informational; functional, cancellation,
+invalid-evidence and artifact-write failures still block.
+
+### Fixed
+
+- Complete sparse ordered constraint and index prerequisites from independently
+  captured live metadata. Adding a nullable FK column to a populated existing
+  child no longer requires redundant convergence of its unchanged principal.
+  Preserve actual candidate-key identities, backing-index ownership, endpoint
+  compatibility, accepted-operation ordering and independent row proofs across
+  providers. Mixed old/new key parts retain native uniqueness semantics;
+  defaults, generated values, dropped or replaced keys and invalidated row
+  evidence do not acquire implicit authorization.
+- Remove SQLite's target-model/whole-segment nullable-FK shortcut. Only an
+  already accepted NULL-preserving addition or a current empty-owner proof can
+  qualify existing rows. A future or rejected addition, non-NULL default or
+  generated value cannot satisfy that proof. Native parent-key collations and
+  explicit unique-index equality facets remain independent requirements.
+- Preserve SQLite's strict allowed/required constraint multiplicity and prevent
+  EF from moving a separately appended FK ahead of its required column during
+  baseline generation. Keep original table-column contracts, owned transaction
+  boundaries and final foreign-key validation intact.
+- Qualify PostgreSQL mixed live/projected structured CHECK operand binding
+  without evaluating user functions or application-row expressions. Keep
+  unsupported or unresolved bindings blocked and preserve native postconditions.
+- Qualify PostgreSQL physical index-key types against native access-method and
+  operator-class selection. Reject incompatible inputs such as ordinary Btree
+  keys on `json` before DDL or unique-data probes; preserve supported `jsonb`,
+  domain, array and explicitly bound operator-class contracts. INCLUDE columns
+  and genuinely computed key results are not substituted as physical inputs.
+  Preserve earlier typed EF column operations, ordered index replacements and
+  exact native identifier/cast deparsing without rewriting historical migrations.
+  Route occupied native names through the ordinary metadata classifier; only
+  eligible unoccupied candidates need the additional input fence before data
+  probes. Share identical certificates within that bounded statement to avoid
+  native SQL/JIT multiplication without changing session settings or weakening
+  capability, identity, cancellation or payload checks.
+  Keep UNIQUE conflict classification metadata-only before separately qualified
+  duplicate-row probes, and match unqualified explicit operator classes by
+  their actual visible native identity rather than a hidden same-named class.
+- Preserve source-qualified FK/key evidence through accepted, non-data,
+  unchanged-layout nullability-only `EnsureColumn` repairs after FK removal.
+  Widening, unknown sources, writes and invalidated dependencies do not inherit
+  this certificate, and required-column staging retains its original live proof.
+- Invalidate affected projected index/UNIQUE aliases using the provider's
+  column-member comparer, without folding distinct table or schema owners.
+- Reject unsafe MySQL multi-valued FK supporting indexes and index removal
+  while an affected live FK remains. Preserve native ordinary supporting-index
+  eligibility and automatic-index name collision checks independently of
+  optimizer visibility and unrelated trailing keys.
+- Apply the independently observed MySQL/MariaDB table-case mode consistently
+  to live transition, unique-index and backfill catalogs. Connection-free
+  generation retains exact and folded owner alternatives and selects them only
+  through the native runtime mode; it does not infer a server profile. Preserve
+  mode-zero case-distinct owners, exact database qualifiers and independent
+  column/index identity rules. A later unique declaration cannot be hidden by
+  another spelling of the same native backfill owner.
+
 ## [10.4.10] - 2026-10-13
 
 Prepare stable 10.4.10 for all five packages. This patch corrects ordered
@@ -1868,7 +1938,8 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.10...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.11...HEAD
+[10.4.11]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.10...v10.4.11
 [10.4.10]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.9...v10.4.10
 [10.4.9]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.8...v10.4.9
 [10.4.8]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.7...v10.4.8

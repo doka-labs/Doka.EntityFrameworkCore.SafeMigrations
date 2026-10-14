@@ -11,6 +11,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var exists = ConstraintExists(definition.Table, definition.Name, "FOREIGN KEY");
         var matching = ForeignKeyMatches(definition, requireExpectedName: true);
         var semanticAlias = ForeignKeyMatches(definition, requireExpectedName: false);
+        var nativeIndexRisk = ForeignKeyMultiValuedIndexRisk(definition, serverVersion.IsMariaDb);
         // MySQL and MariaDB before 12.1 allocate FK symbols in the database
         // namespace. MariaDB 12.1 deliberately changed that boundary to the
         // owning table, so a same-name FK on another table is then harmless.
@@ -22,7 +23,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             : "FALSE";
 
         var dataBlocked = ForeignKeyDataBlocked(definition);
-        var satisfied = $"({matching}) OR (NOT ({exists}) AND ({semanticAlias}))";
+        var satisfied = $"NOT ({nativeIndexRisk}) AND (({matching}) OR (NOT ({exists}) AND ({semanticAlias})))";
         var semanticCandidates = ForeignKeyMatchQuery(
             definition,
             $"rc.CONSTRAINT_NAME <> {Literal(definition.Name)}");
@@ -30,16 +31,19 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         return Plan(
             $"CASE WHEN NOT {BaseTableExists(definition.Table)} "
             + $"OR NOT {BaseTableExists(definition.PrincipalTable)} THEN 'prerequisite_missing' "
+            + $"WHEN {nativeIndexRisk} THEN 'unsupported' "
             // An exact-name collision remains authoritative. A second object
             // must never hide drift on the identity owned by this operation.
             + $"WHEN {exists} AND {matching} THEN 'matching' "
             + $"WHEN {exists} THEN 'different' "
             + $"WHEN {semanticAlias} THEN 'matching' "
             + $"WHEN {nameCollision} THEN 'different' "
+            + $"WHEN {ForeignKeyAutoIndexNameCollision(definition, serverVersion.IsMariaDb)} THEN 'different' "
             + $"WHEN NOT ({ForeignKeySetNullIsRepresentable(definition)}) THEN 'different' "
             + $"WHEN {dataBlocked} THEN 'data_blocked' ELSE 'missing' END",
             satisfied) with
         {
+            UnsupportedCode = "foreign_key_multi_valued_supporting_index",
             DiagnosticEvidenceExpression = BuildForeignKeyDiagnosticEvidence(definition),
             MatchedObjectNameExpression = ResolveMatchingObjectName(
                 matching,

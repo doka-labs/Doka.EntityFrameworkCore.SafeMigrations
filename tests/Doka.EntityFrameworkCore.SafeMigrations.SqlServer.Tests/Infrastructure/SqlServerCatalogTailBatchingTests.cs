@@ -3,6 +3,87 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 /// <summary>Verifies complete SQL Server metadata chunks and owned inventory transport boundaries.</summary>
 public sealed class SqlServerCatalogTailBatchingTests
 {
+    /// <summary>A proven empty owner cannot authorize physically unsupported live CHECK operands.</summary>
+    /// <param name="liveType">The independently captured live operand storage.</param>
+    /// <param name="eligible">Whether every native operand facet passed integer CHECK admission.</param>
+    /// <param name="matchingDefinition">Whether matching authored facets are retained for the live operand.</param>
+    /// <param name="expected">Whether the provider's complete projected CHECK remains supported.</param>
+    [Theory]
+    [InlineData("int", true, false, SafeMigrationObservedState.Missing)]
+    [InlineData("int", false, false, SafeMigrationObservedState.Unsupported)]
+    [InlineData("int", false, true, SafeMigrationObservedState.Unsupported)]
+    [InlineData("varchar", false, false, SafeMigrationObservedState.Unsupported)]
+    [InlineData("bit", false, false, SafeMigrationObservedState.Unsupported)]
+    public async Task SparseCheck_RequiresNativeIntegerOperandSupport(
+        string liveType,
+        bool eligible,
+        bool matchingDefinition,
+        SafeMigrationObservedState expected
+    )
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext("Server=localhost;Database=catalog;Integrated Security=true;");
+        var analyzer = Analyzer(context);
+        await using var connection = new CatalogStatementTestConnection(false, (sql, parameters) =>
+        {
+            var rows = MetadataResults(sql, parameters);
+            if (sql.StartsWith("SELECT requested.ordinal", StringComparison.Ordinal))
+            {
+                foreach (var row in rows.Rows.Cast<DataRow>().ToArray())
+                {
+                    if (Equals(row[1], "Code"))
+                    {
+                        rows.Rows.Remove(row);
+                    }
+                    else
+                    {
+                        row[2] = liveType;
+                        row[9] = eligible ? 1 : 0;
+                    }
+                }
+            }
+
+            return rows;
+        });
+
+        var add = new SafeMigrationOperation(new EnsureColumnIntent("sparse_check",
+            new ExpectedColumnDefinition("Code", typeof(int), false, "int")), SafeMigrationPolicy.ThrowIfDifferent);
+
+        var check = new SafeMigrationOperation(new EnsureCheckConstraintIntent(new ExpectedCheckConstraintDefinition(
+            "CK_sparse", "sparse_check", "[Code] > 0 AND [Value] > 0")), SafeMigrationPolicy.ThrowIfDifferent);
+
+        await analyzer.ReadProjectedKeySnapshotAsync(connection, null, [add, check], 71, CancellationToken.None);
+        var projection = new SafeMigrationPreflightProjection(providerOperationProjection: analyzer,
+            projectedDependencyAnalyzer: analyzer, livePrerequisiteSource: analyzer);
+
+        var missing = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Missing,
+            SafeMigrationRepairCapability.None, false, "classified_missing");
+
+        var live = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.PrerequisiteMissing,
+            SafeMigrationRepairCapability.None, false, "check_column_type_unproven");
+
+        projection.Observe(add, missing, missing, SafeMigrationDecisionPlanner.Plan(add.Intent.Kind,
+            missing.ObservedState, add.Policy, missing.RepairCapability));
+
+        if (matchingDefinition)
+        {
+            var matching = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Matching,
+                SafeMigrationRepairCapability.None, true, "classified_matching");
+
+            var operand = new SafeMigrationOperation(new EnsureColumnIntent("sparse_check",
+                new ExpectedColumnDefinition("Value", typeof(int), true, "int")), SafeMigrationPolicy.ThrowIfDifferent);
+
+            projection.Observe(operand, matching, matching, SafeMigrationDecisionPlanner.Plan(operand.Intent.Kind,
+                matching.ObservedState, operand.Policy, matching.RepairCapability));
+        }
+
+        // Act
+        var analysis = projection.Project(check, live);
+
+        // Assert
+        Assert.Equal(expected, analysis.ObservedState);
+    }
+
     /// <summary>Headers retain 32-table statements while requested bindings retain 512-value statements.</summary>
     /// <param name="native">Whether the connection exposes native batching.</param>
     /// <param name="keys">Whether key snapshots, rather than column allocations, are captured.</param>
@@ -336,13 +417,13 @@ public sealed class SqlServerCatalogTailBatchingTests
         if (sql.StartsWith("SELECT requested.ordinal", StringComparison.Ordinal))
         {
             var rows = Table(typeof(int), typeof(string), typeof(string), typeof(int), typeof(bool), typeof(int),
-                typeof(int), typeof(string), typeof(int));
+                typeof(int), typeof(string), typeof(int), typeof(int));
 
             foreach (System.Text.RegularExpressions.Match match in System.Text.RegularExpressions.Regex.Matches(sql,
                          @"\((\d+), OBJECT_ID\(N'[^']*', N'U'\), N'((?:[^']|'')*)'\)"))
             {
                 rows.Rows.Add(int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture),
-                    Unquote(match.Groups[2].Value), "int", 4, true, 1, 1, DBNull.Value, 1);
+                    Unquote(match.Groups[2].Value), "int", 4, true, 1, 1, DBNull.Value, 1, 1);
             }
 
             return rows;

@@ -79,12 +79,25 @@ internal sealed class SafeMigrationExpectedTableConstraints
         FromOperations(
             IReadOnlyList<MigrationOperation> operations,
             Func<string?, string?> normalizeSchema
+        ) => FromOperations(operations, normalizeSchema, StringComparer.Ordinal);
+
+    /// <summary>Projects transitions with the provider's physical table-name equality.</summary>
+    /// <param name="operations">The operations generated for one bounded migration direction.</param>
+    /// <param name="normalizeSchema">The provider qualifier normalizer.</param>
+    /// <param name="tableComparer">The provider's physical table-name comparer.</param>
+    /// <returns>Constraint contracts keyed by normalized physical table identity.</returns>
+    public static IReadOnlyDictionary<(string? Schema, string Table), SafeMigrationExpectedTableConstraints>
+        FromOperations(
+            IReadOnlyList<MigrationOperation> operations,
+            Func<string?, string?> normalizeSchema,
+            StringComparer tableComparer
         )
     {
         ArgumentNullException.ThrowIfNull(operations);
         ArgumentNullException.ThrowIfNull(normalizeSchema);
+        ArgumentNullException.ThrowIfNull(tableComparer);
 
-        var comparer = new TableIdentityComparer(normalizeSchema);
+        var comparer = new TableIdentityComparer(normalizeSchema, tableComparer);
         var tables = new Dictionary<(string? Schema, string Table), MutableConstraints>(comparer);
 
         // WHY: EF splits cyclic and provider-ordered constraints out of
@@ -925,13 +938,14 @@ internal sealed class SafeMigrationExpectedTableConstraints
     }
 
     private sealed class TableIdentityComparer(
-        Func<string?, string?> normalizeSchema
+        Func<string?, string?> normalizeSchema,
+        StringComparer tableComparer
     ) : IEqualityComparer<(string? Schema, string Table)>
     {
         public bool Equals(
             (string? Schema, string Table) left,
             (string? Schema, string Table) right
-        ) => StringComparer.Ordinal.Equals(left.Table, right.Table)
+        ) => tableComparer.Equals(left.Table, right.Table)
             && StringComparer.Ordinal.Equals(
                 normalizeSchema(left.Schema),
                 normalizeSchema(right.Schema));
@@ -939,7 +953,7 @@ internal sealed class SafeMigrationExpectedTableConstraints
         public int GetHashCode(
             (string? Schema, string Table) value
         ) => HashCode.Combine(
-            StringComparer.Ordinal.GetHashCode(value.Table),
+            tableComparer.GetHashCode(value.Table),
             normalizeSchema(value.Schema) is { } schema
                 ? StringComparer.Ordinal.GetHashCode(schema)
                 : 0);

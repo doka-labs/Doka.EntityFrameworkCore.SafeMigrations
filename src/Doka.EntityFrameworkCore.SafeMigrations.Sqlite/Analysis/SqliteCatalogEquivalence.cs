@@ -50,4 +50,43 @@ internal static class SqliteCatalogEquivalence
 
         return true;
     }
+
+    /// <summary>Proves a complete physical key with its columns' declared equality semantics.</summary>
+    /// <param name="table">The native owner containing declared column collations.</param>
+    /// <param name="keys">The ordered physical key parts, including any auxiliary non-key parts.</param>
+    /// <param name="columns">The complete requested column-key order.</param>
+    /// <param name="requireDefaultSortOrder">Whether a plain constraint also requires ascending key parts.</param>
+    /// <returns>Whether the captured native key satisfies the complete requested semantics.</returns>
+    public static bool KeyMatchesDeclaredColumns(
+        SqliteTableSnapshot table,
+        IReadOnlyList<SqliteIndexKeySnapshot> keys,
+        IReadOnlyList<string> columns,
+        bool requireDefaultSortOrder = false)
+    {
+        var ordinal = 0;
+        foreach (var key in keys)
+        {
+            if (!key.IsKey)
+            {
+                continue;
+            }
+
+            if (ordinal >= columns.Count || key.Ordinal != ordinal
+                || key.Column is null || key.Expression is not null
+                || (requireDefaultSortOrder && key.Descending)
+                || !s_identifierComparer.Equals(key.Column, columns[ordinal])
+                || !table.Columns.TryGetValue(key.Column, out var column)
+                || !s_identifierComparer.Equals(key.Collation, column.Collation ?? "BINARY"))
+            {
+                return false;
+            }
+
+            ordinal++;
+        }
+
+        // WHY: A descending unique key can be a native FK parent, whereas a
+        // plain authored PK/unique constraint has default ascending shape.
+        // Both require the native column-declared equality and complete key.
+        return ordinal == columns.Count;
+    }
 }

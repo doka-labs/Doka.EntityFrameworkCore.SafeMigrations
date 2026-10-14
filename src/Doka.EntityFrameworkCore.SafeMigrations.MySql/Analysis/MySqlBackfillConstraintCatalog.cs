@@ -43,10 +43,12 @@ internal sealed class MySqlBackfillConstraintCatalog(HashSet<SafeMigrationOperat
     /// <summary>Builds a conservative union of declarations across exact table and column rename aliases.</summary>
     /// <param name="operations">The complete safe-operation stream, including later drops.</param>
     /// <param name="currentDatabase">The selected database used to normalize equivalent qualifiers.</param>
+    /// <param name="tableComparer">The verified owner equality, or exact identity for connection-free capture.</param>
     /// <returns>Constraint participation for relevant type-alter backfills only.</returns>
     internal static MySqlBackfillConstraintCatalog Create(
         IReadOnlyList<SafeMigrationOperation> operations,
-        string? currentDatabase = null
+        string? currentDatabase = null,
+        StringComparer? tableComparer = null
     )
     {
         if (!operations.Any(MySqlSafeMigrationPlanCapture.RequiresAlterBackfillContract))
@@ -54,7 +56,8 @@ internal sealed class MySqlBackfillConstraintCatalog(HashSet<SafeMigrationOperat
             return s_empty;
         }
 
-        var tables = new Aliases<MySqlTableIdentity>(EqualityComparer<MySqlTableIdentity>.Default);
+        var tables = new Aliases<MySqlTableIdentity>(new MySqlTableIdentityComparer(
+            tableComparer ?? StringComparer.Ordinal));
         var hazards = new Dictionary<int, TableHazards>();
         foreach (var operation in operations)
         {

@@ -5,9 +5,10 @@ untagged `main` commit first, then waits at the protected `nuget` environment.
 Only after that wait begins does the operator create the signed tag and approve
 publication. Run every command separately and stop on the first failure.
 
-The current source prepares 10.4.10 for all five package IDs. This maintenance
-patch retains the inventory introduced in 10.4.6 and corrects ordered proofs,
-concurrent required-add/delete guards, schema identity and session recovery.
+The current source prepares 10.4.11 for all five package IDs. This maintenance
+patch retains the inventory introduced in 10.4.6 and corrects sparse native
+prerequisites, physical identity and provider capability checks. Earlier
+concurrent required-add/delete guards, schema identity and recovery remain.
 Public signatures, production dependency ranges, migration source, policies,
 report schemas and history are unchanged. Timing evidence is informational;
 functional and evidence failures remain blocking. Do not publish a subset or

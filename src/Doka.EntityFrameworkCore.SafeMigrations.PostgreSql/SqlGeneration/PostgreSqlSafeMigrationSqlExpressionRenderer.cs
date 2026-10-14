@@ -99,6 +99,58 @@ internal sealed class PostgreSqlSafeMigrationSqlExpressionRenderer
         return writer.BuildSqlExpression();
     }
 
+    /// <summary>Preserves the native index-only pretty form of a cast over one physical identifier.</summary>
+    /// <param name="expression">The explicitly authored stored expression.</param>
+    /// <param name="literal">The SQL literal encoder for candidate text.</param>
+    /// <returns>The exact pretty index candidate, or null outside this independently proven shape.</returns>
+    internal string? RenderCatalogIndexCastCandidateSql(
+        SafeMigrationSqlExpression expression,
+        Func<string, string> literal)
+    {
+        ArgumentNullException.ThrowIfNull(expression);
+        ArgumentNullException.ThrowIfNull(literal);
+        if (expression is not SafeMigrationSqlCastExpression
+            { Operand: SafeMigrationSqlIdentifierExpression { Parts.Count: 1 } member } cast)
+        {
+            return null;
+        }
+
+        // WHY: pg_get_indexdef(position, pretty=true) stores (member::type),
+        // whereas pg_get_expr retains (member)::type. Only this native index
+        // shape gets another candidate; CHECK rendering and SQL are unchanged.
+        return literal("(") + " || " + RenderCatalogCandidateSql(member, literal)
+            + " || " + literal("::" + FindCanonicalStoreType(cast.StoreType) + ")");
+    }
+
+    /// <summary>Builds a native literal candidate without rewriting identifiers or SQL fragments.</summary>
+    /// <param name="expression">The same explicitly structured expression rendered for DDL.</param>
+    /// <param name="literal">The SQL literal encoder for candidate text.</param>
+    /// <param name="relationOid">The native owning relation expression, or null without column type context.</param>
+    /// <returns>A native candidate, or null when the ordinary candidate already carries the relevant forms.</returns>
+    public string? RenderCatalogNativeDeparsedCandidateSql(
+        SafeMigrationSqlExpression expression,
+        Func<string, string> literal,
+        string? relationOid = null
+    )
+    {
+        ArgumentNullException.ThrowIfNull(expression);
+        ArgumentNullException.ThrowIfNull(literal);
+        if (!RequiresNativeDeparsedVariant(expression))
+        {
+            return null;
+        }
+
+        var writer = new CatalogExpressionTextWriter(literal,
+            parenthesizeCollations: false, nativeLiteralForms: true, relationOid: relationOid);
+
+        // WHY: The normal deparser keeps parentheses around Boolean comparison
+        // operands. The pretty arithmetic candidate deliberately flattens those;
+        // native literal/special forms must also retain this original tree shape.
+        Append(writer, expression, catalogShape: true);
+
+        return writer.BuildSqlExpression();
+    }
+
     private void AppendDeparsed(
         IExpressionTextWriter writer,
         SafeMigrationSqlExpression expression
@@ -159,7 +211,8 @@ internal sealed class PostgreSqlSafeMigrationSqlExpressionRenderer
     private void Append(
         IExpressionTextWriter writer,
         SafeMigrationSqlExpression expression,
-        bool catalogShape
+        bool catalogShape,
+        bool functionArgument = false
     )
     {
         switch (expression)
@@ -177,20 +230,55 @@ internal sealed class PostgreSqlSafeMigrationSqlExpressionRenderer
 
                 break;
             case SafeMigrationSqlLiteralExpression value:
-                AppendLiteral(writer, value.Value, value.StoreType);
+                if (writer.NativeLiteralForms && value.StoreType is not null
+                    && TryAppendNativeIntegerConstant(writer,
+                        new SafeMigrationSqlCastExpression(value, value.StoreType),
+                        FindCanonicalStoreType(value.StoreType)))
+                {
+                    break;
+                }
+
+                AppendLiteral(writer, value.Value, value.StoreType
+                    ?? (writer.NativeLiteralForms && value.Value is string ? "text" : null));
                 break;
             case SafeMigrationSqlUnaryExpression value:
-                writer.Append(value.Operator == SafeMigrationSqlUnaryOperator.Not ? "(NOT " : "(-");
+                writer.Append(value.Operator == SafeMigrationSqlUnaryOperator.Not ? "(NOT "
+                    : writer.NativeLiteralForms ? "(- " : "(-");
                 Append(writer, value.Operand, catalogShape);
                 writer.Append(')');
                 break;
             case SafeMigrationSqlBinaryExpression value:
+                if (writer.NativeLiteralForms
+                    && value.Operator is SafeMigrationSqlBinaryOperator.And or SafeMigrationSqlBinaryOperator.Or)
+                {
+                    // WHY: Native parsing flattens equal Boolean operators
+                    // into one n-ary node. Preserve unlike nested operators;
+                    // this is structured tree rendering, not a SQL text rewrite.
+                    writer.Append('(');
+                    AppendNativeBooleanOperands(writer, value, value.Operator, catalogShape);
+                    writer.Append(')');
+
+                    break;
+                }
+
                 writer.Append('(');
-                Append(writer, value.Left, catalogShape);
+                if (value.Left is not SafeMigrationSqlLiteralExpression leftLiteral
+                    || value.Right is not SafeMigrationSqlIdentifierExpression rightColumn
+                    || !writer.TryAppendNativeUnknownIntegerLiteral(leftLiteral, rightColumn))
+                {
+                    Append(writer, value.Left, catalogShape);
+                }
+
                 writer.Append(' ');
                 writer.Append(BinaryOperator(value.Operator));
                 writer.Append(' ');
-                Append(writer, value.Right, catalogShape);
+                if (value.Right is not SafeMigrationSqlLiteralExpression rightLiteral
+                    || value.Left is not SafeMigrationSqlIdentifierExpression leftColumn
+                    || !writer.TryAppendNativeUnknownIntegerLiteral(rightLiteral, leftColumn))
+                {
+                    Append(writer, value.Right, catalogShape);
+                }
+
                 writer.Append(')');
                 break;
             case SafeMigrationSqlNullTestExpression value:
@@ -224,12 +312,38 @@ internal sealed class PostgreSqlSafeMigrationSqlExpressionRenderer
 
                 break;
             case SafeMigrationSqlInExpression value:
+                if (catalogShape && writer.NativeLiteralForms && value.Values.Count == 1)
+                {
+                    // WHY: PostgreSQL represents a singleton IN as scalar
+                    // equality, not an ANY array. Only the additional native
+                    // catalog candidate uses this exact structured form.
+                    Append(writer, new SafeMigrationSqlBinaryExpression(value.Operand,
+                        value.Negated ? SafeMigrationSqlBinaryOperator.NotEqual : SafeMigrationSqlBinaryOperator.Equal,
+                        value.Values[0]), catalogShape);
+
+                    break;
+                }
+
                 writer.Append('(');
                 if (catalogShape)
                 {
                     Append(writer, value.Operand, catalogShape);
                     writer.Append(value.Negated ? " <> ALL (ARRAY[" : " = ANY (ARRAY[");
-                    AppendList(writer, value.Values, catalogShape);
+                    for (var index = 0; index < value.Values.Count; index++)
+                    {
+                        if (index > 0)
+                        {
+                            writer.Append(", ");
+                        }
+
+                        if (value.Values[index] is not SafeMigrationSqlLiteralExpression literal
+                            || value.Operand is not SafeMigrationSqlIdentifierExpression column
+                            || !writer.TryAppendNativeUnknownIntegerLiteral(literal, column))
+                        {
+                            Append(writer, value.Values[index], catalogShape);
+                        }
+                    }
+
                     writer.Append("]))");
                 }
                 else
@@ -242,13 +356,23 @@ internal sealed class PostgreSqlSafeMigrationSqlExpressionRenderer
 
                 break;
             case SafeMigrationSqlFunctionExpression value:
-                writer.Append(value.Name.ToLowerInvariant());
+                writer.Append(writer.NativeLiteralForms && IsNativeSpecialForm(value.Name)
+                    ? value.Name.ToUpperInvariant() : value.Name.ToLowerInvariant());
                 writer.Append('(');
-                AppendList(writer, value.Arguments, catalogShape);
+                if (!writer.TryAppendNativeLowerOperand(value))
+                {
+                    AppendList(writer, value.Arguments, catalogShape, functionArgument: true);
+                }
+
                 writer.Append(')');
                 break;
             case SafeMigrationSqlCastExpression value:
                 var castType = FindCanonicalStoreType(value.StoreType);
+                if (writer.NativeLiteralForms && TryAppendNativeIntegerConstant(writer, value, castType))
+                {
+                    break;
+                }
+
                 if (catalogShape)
                 {
                     writer.Append('(');
@@ -267,7 +391,10 @@ internal sealed class PostgreSqlSafeMigrationSqlExpressionRenderer
 
                 break;
             case SafeMigrationSqlCollateExpression value:
-                if (writer.ParenthesizeCollations)
+                var collateParentheses = writer.ParenthesizeCollations
+                    || writer.NativeLiteralForms && !functionArgument;
+
+                if (collateParentheses)
                 {
                     writer.Append('(');
                 }
@@ -275,7 +402,7 @@ internal sealed class PostgreSqlSafeMigrationSqlExpressionRenderer
                 Append(writer, value.Operand, catalogShape);
                 writer.Append(" COLLATE ");
                 writer.AppendCollation(value.Name, value.Schema);
-                if (writer.ParenthesizeCollations)
+                if (collateParentheses)
                 {
                     writer.Append(')');
                 }
@@ -300,6 +427,161 @@ internal sealed class PostgreSqlSafeMigrationSqlExpressionRenderer
             default:
                 throw new UnreachableException();
         }
+    }
+
+    /// <summary>Recognizes structured forms which differ from the ordinary catalog candidate.</summary>
+    private static bool RequiresNativeDeparsedVariant(SafeMigrationSqlExpression expression)
+        => expression switch
+        {
+            SafeMigrationSqlLiteralExpression { Value: string } => true,
+            SafeMigrationSqlLiteralExpression { StoreType: { } type, Value: not null }
+                => TryGetIntegerLiteralSource(type, out var source) && source.Length > 0,
+            SafeMigrationSqlUnaryExpression value => value.Operator == SafeMigrationSqlUnaryOperator.Negate
+                || RequiresNativeDeparsedVariant(value.Operand),
+            SafeMigrationSqlBinaryExpression value => HasFlattenedBooleanOperands(value)
+                || RequiresNativeDeparsedVariant(value.Left)
+                || RequiresNativeDeparsedVariant(value.Right),
+            SafeMigrationSqlNullTestExpression value => RequiresNativeDeparsedVariant(value.Operand),
+            SafeMigrationSqlBetweenExpression value => RequiresNativeDeparsedVariant(value.Operand)
+                || RequiresNativeDeparsedVariant(value.Lower) || RequiresNativeDeparsedVariant(value.Upper),
+            SafeMigrationSqlInExpression value => RequiresNativeDeparsedVariant(value.Operand)
+                || value.Values.Any(RequiresNativeDeparsedVariant),
+            SafeMigrationSqlFunctionExpression value => IsNativeSpecialForm(value.Name)
+                || value.Arguments.Any(RequiresNativeDeparsedVariant),
+            SafeMigrationSqlCastExpression value => value.Operand is SafeMigrationSqlLiteralExpression
+                || RequiresNativeDeparsedVariant(value.Operand),
+            SafeMigrationSqlCollateExpression value => RequiresNativeDeparsedVariant(value.Operand),
+            _ => false,
+        };
+
+    /// <summary>Preserves uppercase native SQL special forms without touching ordinary function names.</summary>
+    private static bool IsNativeSpecialForm(string name)
+        => name.Equals("COALESCE", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("NULLIF", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("GREATEST", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("LEAST", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Requests the native variant only when a binary Boolean tree has an n-ary stored form.</summary>
+    private static bool HasFlattenedBooleanOperands(SafeMigrationSqlBinaryExpression value)
+        => value.Operator is SafeMigrationSqlBinaryOperator.And or SafeMigrationSqlBinaryOperator.Or
+            && (value.Left is SafeMigrationSqlBinaryExpression left && left.Operator == value.Operator
+                || value.Right is SafeMigrationSqlBinaryExpression right && right.Operator == value.Operator);
+
+    /// <summary>Flattens only identical Boolean operators, retaining precedence-changing structured subtrees.</summary>
+    private void AppendNativeBooleanOperands(
+        IExpressionTextWriter writer,
+        SafeMigrationSqlExpression expression,
+        SafeMigrationSqlBinaryOperator operation,
+        bool catalogShape)
+    {
+        if (expression is SafeMigrationSqlBinaryExpression binary && binary.Operator == operation)
+        {
+            AppendNativeBooleanOperands(writer, binary.Left, operation, catalogShape);
+            writer.Append(' ');
+            writer.Append(BinaryOperator(operation));
+            writer.Append(' ');
+            AppendNativeBooleanOperands(writer, binary.Right, operation, catalogShape);
+
+            return;
+        }
+
+        Append(writer, expression, catalogShape);
+    }
+
+    /// <summary>Represents only validated builtin integer literal casts as the native constant deparser does.</summary>
+    private void AppendNativeIntegerConstant(IExpressionTextWriter writer, long value, string target)
+    {
+        var text = value.ToString(CultureInfo.InvariantCulture);
+        if (target == "integer")
+        {
+            writer.Append(text);
+        }
+        else
+        {
+            AppendLiteral(writer, text, target);
+        }
+    }
+
+    /// <summary>Folds no functions, arithmetic, operand casts or potentially lossy numeric conversion.</summary>
+    private bool TryAppendNativeIntegerConstant(
+        IExpressionTextWriter writer,
+        SafeMigrationSqlCastExpression expression,
+        string target
+    )
+    {
+        if (!TryGetNativeIntegerLiteralValue(expression, target, out var integer))
+        {
+            return false;
+        }
+
+        // WHY: PostgreSQL folds builtin integer input constants in its parsed
+        // expression tree. Only these checked integral conversions are represented;
+        // arbitrary CASTs, SQL functions and opaque payloads are never evaluated.
+        AppendNativeIntegerConstant(writer, integer, target);
+
+        return true;
+    }
+
+    /// <summary>Shares builtin integer literal proof between deparse rendering and sparse binding.</summary>
+    /// <param name="expression">The explicitly authored constant CAST.</param>
+    /// <param name="target">The canonical builtin integer target.</param>
+    /// <param name="integer">The exact value only when ASCII input syntax and native range are proven.</param>
+    /// <returns>Whether no native input function needs to be invoked to establish the literal conversion.</returns>
+    internal static bool TryGetNativeIntegerLiteralValue(
+        SafeMigrationSqlCastExpression expression,
+        string target,
+        out long integer
+    )
+    {
+        integer = 0;
+        if (target is not ("smallint" or "integer" or "bigint")
+            || expression.Operand is not SafeMigrationSqlLiteralExpression { Value: { } raw } literal
+            || !TryGetIntegerLiteralSource(literal.StoreType, out var source))
+        {
+            return false;
+        }
+
+        var text = raw switch
+        {
+            string value => value,
+            byte or sbyte or short or ushort or int or uint or long or ulong
+                => Convert.ToString(raw, CultureInfo.InvariantCulture)!,
+            _ => null,
+        };
+
+        if (text is null || text.Any(static character => character is not (>= '0' and <= '9')
+                and not ('+' or '-' or ' ' or '\t' or '\n' or '\r' or '\v' or '\f'))
+            || !long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out integer)
+            || target == "smallint" && integer is < short.MinValue or > short.MaxValue
+            || target == "integer" && integer is < int.MinValue or > int.MaxValue)
+        {
+            return false;
+        }
+
+        if (source == "smallint" && integer is < short.MinValue or > short.MaxValue
+            || source == "integer" && integer is < int.MinValue or > int.MaxValue)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>Limits literal folding to uncast, unbounded TEXT or exact native integer inputs.</summary>
+    private static bool TryGetIntegerLiteralSource(string? storeType, out string source)
+    {
+        source = storeType?.Trim().ToLowerInvariant() switch
+        {
+            null or "text" => string.Empty,
+            "smallint" or "int2" => "smallint",
+            "int" or "integer" or "int4" => "integer",
+            "bigint" or "int8" => "bigint",
+            _ => "unsupported",
+        };
+
+        // WHY: A VARCHAR typmod can truncate before CAST. Its source input
+        // is not interchangeable with an unbounded TEXT/integer literal.
+        return source != "unsupported";
     }
 
     private void AppendLiteral(
@@ -542,7 +824,8 @@ internal sealed class PostgreSqlSafeMigrationSqlExpressionRenderer
     private void AppendList(
         IExpressionTextWriter writer,
         IReadOnlyList<SafeMigrationSqlExpression> values,
-        bool catalogShape
+        bool catalogShape,
+        bool functionArgument = false
     )
     {
         for (var index = 0; index < values.Count; index++)
@@ -552,7 +835,7 @@ internal sealed class PostgreSqlSafeMigrationSqlExpressionRenderer
                 writer.Append(", ");
             }
 
-            Append(writer, values[index], catalogShape);
+            Append(writer, values[index], catalogShape, functionArgument);
         }
     }
 
@@ -623,6 +906,24 @@ internal sealed class PostgreSqlSafeMigrationSqlExpressionRenderer
         /// <summary>Whether collation nodes keep authored parentheses rather than PostgreSQL's pretty form.</summary>
         bool ParenthesizeCollations { get; }
 
+        /// <summary>Whether this catalog candidate uses native literal and SQL special-form spelling.</summary>
+        bool NativeLiteralForms { get; }
+
+        /// <summary>Appends a proven unknown integer input under a native relation-column type.</summary>
+        /// <param name="literal">The uncast literal retaining its original value.</param>
+        /// <param name="column">The directly compared structured column identifier.</param>
+        /// <returns>Whether a context-scoped native candidate was appended.</returns>
+        bool TryAppendNativeUnknownIntegerLiteral(
+            SafeMigrationSqlLiteralExpression literal,
+            SafeMigrationSqlIdentifierExpression column);
+
+        /// <summary>
+        /// Appends only a native builtin LOWER operand whose VARCHAR conversion is independently resolved.
+        /// </summary>
+        /// <param name="function">The structured single-argument function call.</param>
+        /// <returns>Whether the owning native type and builtin signature qualify this exact operand variant.</returns>
+        bool TryAppendNativeLowerOperand(SafeMigrationSqlFunctionExpression function);
+
         void Append(
             char value
         );
@@ -651,6 +952,17 @@ internal sealed class PostgreSqlSafeMigrationSqlExpressionRenderer
 
         /// <inheritdoc />
         public bool ParenthesizeCollations => true;
+
+        /// <inheritdoc />
+        public bool NativeLiteralForms => false;
+
+        /// <inheritdoc />
+        public bool TryAppendNativeUnknownIntegerLiteral(
+            SafeMigrationSqlLiteralExpression literal,
+            SafeMigrationSqlIdentifierExpression column) => false;
+
+        /// <inheritdoc />
+        public bool TryAppendNativeLowerOperand(SafeMigrationSqlFunctionExpression function) => false;
 
         public DelimitedExpressionTextWriter(
             ISqlGenerationHelper sqlGenerationHelper
@@ -685,19 +997,115 @@ internal sealed class PostgreSqlSafeMigrationSqlExpressionRenderer
         private readonly List<string> _parts = [];
         private readonly Func<string, string> _literal;
         private readonly StringBuilder _text = new();
+        private readonly string? _relationOid;
 
         /// <inheritdoc />
         public bool ParenthesizeCollations { get; }
 
+        /// <inheritdoc />
+        public bool NativeLiteralForms { get; }
+
         public CatalogExpressionTextWriter(
             Func<string, string> literal,
-            bool parenthesizeCollations = true
+            bool parenthesizeCollations = true,
+            bool nativeLiteralForms = false,
+            string? relationOid = null
         )
         {
             _literal = literal;
             // WHY: The pretty deparser drops parentheses around COLLATE inside function arguments.
             // Keep both bounded catalog candidates; execution always retains authored parentheses.
             ParenthesizeCollations = parenthesizeCollations;
+            NativeLiteralForms = nativeLiteralForms;
+            _relationOid = relationOid;
+        }
+
+        /// <inheritdoc />
+        public bool TryAppendNativeUnknownIntegerLiteral(
+            SafeMigrationSqlLiteralExpression literal,
+            SafeMigrationSqlIdentifierExpression column
+        )
+        {
+            if (!NativeLiteralForms || _relationOid is null
+                || literal is not { Value: string value, StoreType: null })
+            {
+                return false;
+            }
+
+            var cast = new SafeMigrationSqlCastExpression(literal, "bigint");
+            if (!TryGetNativeIntegerLiteralValue(cast, "bigint", out var integer))
+            {
+                return false;
+            }
+
+            var text = integer.ToString(CultureInfo.InvariantCulture);
+            var target = "(SELECT a.atttypid FROM pg_catalog.pg_attribute a WHERE a.attrelid = "
+                + _relationOid + " AND a.attname = " + _literal(column.Parts[^1])
+                + " AND a.attnum > 0 AND NOT a.attisdropped)";
+
+            var arms = new StringBuilder("CASE ").Append(target);
+            if (integer is >= int.MinValue and <= int.MaxValue)
+            {
+                arms.Append(" WHEN 23 THEN ").Append(_literal(text));
+            }
+
+            if (integer is >= short.MinValue and <= short.MaxValue)
+            {
+                arms.Append(" WHEN 21 THEN ").Append(_literal("'" + text + "'::smallint"));
+            }
+
+            arms.Append(" WHEN 20 THEN ").Append(_literal("'" + text + "'::bigint"));
+            arms.Append(" WHEN 25 THEN ").Append(_literal("'" + value.Replace("'", "''", StringComparison.Ordinal)
+                + "'::text")).Append(" ELSE NULL END");
+
+            // WHY: An unknown '1' is folded differently for INTEGER and TEXT.
+            // The native owning attribute OID selects the exact representation;
+            // no generic cast stripping, user input function or app-row scan is used.
+            FlushText();
+            _parts.Add("(" + arms + ")");
+
+            return true;
+        }
+
+        /// <inheritdoc />
+        public bool TryAppendNativeLowerOperand(SafeMigrationSqlFunctionExpression function)
+        {
+            if (!NativeLiteralForms || _relationOid is null
+                || !function.Name.Equals("LOWER", StringComparison.OrdinalIgnoreCase)
+                || function.Arguments.Count != 1
+                || function.Arguments[0] is not SafeMigrationSqlIdentifierExpression column)
+            {
+                return false;
+            }
+
+            var identifier = string.Join(" || '.' || ", column.Parts
+                .Select(part => "pg_catalog.quote_ident(" + _literal(part) + ")"));
+
+            var nativeBuiltin = "EXISTS (SELECT 1 FROM pg_catalog.pg_proc p "
+                + "JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace "
+                + "WHERE n.nspname = 'pg_catalog' AND p.proname = 'lower' "
+                + "AND p.pronargs = 1 AND p.proargtypes[0] = 25 AND p.prorettype = 25 "
+                + "AND pg_catalog.pg_function_is_visible(p.oid))";
+
+            var competingOverload = "EXISTS (SELECT 1 FROM pg_catalog.pg_proc p "
+                + "WHERE p.proname = 'lower' AND p.pronargs >= 1 "
+                + "AND p.pronargs - p.pronargdefaults <= 1 "
+                + "AND p.proargtypes[0] IN (1043, 2283, 5077) "
+                + "AND pg_catalog.pg_function_is_visible(p.oid))";
+
+            var varchar = "EXISTS (SELECT 1 FROM pg_catalog.pg_attribute a WHERE a.attrelid = "
+                + _relationOid + " AND a.attname = " + _literal(column.Parts[^1])
+                + " AND a.attnum > 0 AND NOT a.attisdropped AND a.atttypid = 1043)";
+
+            // WHY: Native LOWER(VARCHAR) records its implicit TEXT conversion.
+            // Use the actual owning attribute and visible builtin signature;
+            // a custom exact or scalar-polymorphic overload must not acquire this candidate.
+            FlushText();
+            _parts.Add("(CASE WHEN " + varchar + " AND " + nativeBuiltin + " AND NOT "
+                + competingOverload + " THEN '(' || " + identifier + " || ')::text' ELSE "
+                + identifier + " END)");
+
+            return true;
         }
 
         public void Append(

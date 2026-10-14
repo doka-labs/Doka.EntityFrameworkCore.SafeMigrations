@@ -88,6 +88,10 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 EnsureIndexIntent value => (value.Definition.Schema ?? "dbo", value.Definition.Table),
                 EnsurePrimaryKeyIntent value => (value.Definition.Schema ?? "dbo", value.Definition.Table),
                 EnsureUniqueConstraintIntent value => (value.Definition.Schema ?? "dbo", value.Definition.Table),
+                EnsureCheckConstraintIntent value when
+                    SqlServerSafeMigrationCatalogSqlBuilder.GetStructuredCheckExpression(value.Definition) is { } check
+                    && SqlServerSafeMigrationCatalogSqlBuilder.IsSafeIntegerCheckPredicate(check)
+                    => (value.Definition.Schema ?? "dbo", value.Definition.Table),
                 _ => ((string, string)?)null,
             };
 
@@ -133,6 +137,15 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     break;
                 case EnsureUniqueConstraintIntent value:
                     columns.UnionWith(value.Definition.Columns);
+                    break;
+                case EnsureCheckConstraintIntent value:
+                    var expression = SqlServerSafeMigrationCatalogSqlBuilder.GetStructuredCheckExpression(
+                        value.Definition)!;
+
+                    // WHY: Reuse this bounded requested-column snapshot for
+                    // mixed live/projected CHECK operands. Opaque predicates
+                    // do not become metadata certificates or row proofs.
+                    SafeMigrationSqlExpressionInspector.CollectIdentifiers(expression, columns);
                     break;
             }
         }
@@ -238,7 +251,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     shapes.Add(name, new SqlServerProjectedKeyColumn(
                         reader.GetString(2), reader.GetInt32(3), reader.GetBoolean(4),
                         reader.GetInt32(5) == 1, reader.GetInt32(6) == 1,
-                        reader.IsDBNull(7) ? null : reader.GetString(7), reader.GetInt32(8) == 1));
+                        reader.IsDBNull(7) ? null : reader.GetString(7), reader.GetInt32(8) == 1,
+                        reader.GetInt32(9) == 1));
                 }
             },
             cancellationToken, transaction, SqlServerCatalogParameterBindings.MaximumParameters);
@@ -322,7 +336,11 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             + "THEN 1 ELSE 0 END, CASE WHEN c.is_computed = 0 AND ty.is_user_defined = 0 "
             + "AND ty.name NOT IN (N'text', N'ntext', N'image') THEN 1 ELSE 0 END, c.collation_name, "
             + "CASE WHEN c.collation_name = CONVERT(nvarchar(128), DATABASEPROPERTYEX(DB_NAME(), N'Collation')) "
-            + "THEN 1 ELSE 0 END FROM (VALUES " + string.Join(", ", requested)
+            + "THEN 1 ELSE 0 END, CASE WHEN ty.is_user_defined=0 AND ty.is_assembly_type=0 "
+            + "AND ty.name IN (N'tinyint',N'smallint',N'int',N'bigint') "
+            + "AND c.is_computed=0 AND c.is_sparse=0 AND c.is_column_set=0 AND c.is_hidden=0 "
+            + "AND c.generated_always_type=0 AND c.encryption_type IS NULL THEN 1 ELSE 0 END "
+            + "FROM (VALUES " + string.Join(", ", requested)
             + ") requested(ordinal, object_id, name) JOIN sys.columns c ON c.object_id = requested.object_id "
             + "AND c.name COLLATE CATALOG_DEFAULT = requested.name COLLATE CATALOG_DEFAULT "
             + "JOIN sys.types ty ON ty.user_type_id = c.user_type_id;";

@@ -38,7 +38,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         SafeMigrationProviderAnalysis projectedAnalysis,
         ISafeMigrationProjectedColumnSource columns
     ) => QualifyProjectedSchemaIdentity(operation, projectedAnalysis)
-        ?? QualifyProjectedTriggerEffects(operation, projectedAnalysis) ?? projectedAnalysis;
+        ?? QualifyProjectedTriggerEffects(operation, projectedAnalysis)
+        ?? QualifyProjectedCheckTypes(operation, projectedAnalysis, columns)
+        ?? QualifyProjectedIndexTypes(operation, projectedAnalysis, columns) ?? projectedAnalysis;
 
     /// <inheritdoc />
     public void ObserveAcceptedOperation(
@@ -52,6 +54,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         {
             return;
         }
+
+        ObserveAcceptedLiveConstraintName(operation, decision);
 
         if (operation.Intent is EnsureSchemaIntent or DropSchemaIntent)
         {
