@@ -102,7 +102,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(1242, Assert.IsType<MySqlException>(sentinelException).Number);
         if (containsNull)
         {
-            Assert.Contains("doka_sm_data_blocked", Assert.IsType<MySqlException>(runtimeException).Message,
+            Assert.Contains("doka_sm_data_blocked", AssertOwnedGuardFailure(runtimeException).Message,
                 StringComparison.Ordinal);
         }
         else
@@ -140,7 +140,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Different, Assert.Single(preflight).ObservedState);
-        Assert.Contains("doka_sm_data_blocked", Assert.IsType<MySqlException>(runtimeException).Message,
+        Assert.Contains("doka_sm_data_blocked", AssertOwnedGuardFailure(runtimeException).Message,
             StringComparison.Ordinal);
         Assert.Equal(SafeMigrationObservedState.DataBlocked, Assert.Single(repeatedAnalysis).ObservedState);
         Assert.Equal(1, insertedNullRows);

@@ -2,6 +2,14 @@
 
 ## Support contract
 
+Unreleased actionable diagnostics add canonical report schema 4, selected view
+schema 3 and contextual owned runtime errors. Older schema files remain packaged.
+Dependency ranges, target framework and migration decisions are unchanged.
+MySQL/MariaDB callers must account for the owned-guard outer exception type;
+see [diagnostic compatibility](diagnostics.md#runtime-provider-differences).
+Native qualification still requires the complete blocking matrix; ARM SQL Server
+skips and offline SQL-shape tests are not substitutes for its x64 cells.
+
 All publishable projects target `net10.0`. The repository pins SDK 10.0.401
 with roll-forward disabled. SafeMigrations supports EF Core 10 only.
 

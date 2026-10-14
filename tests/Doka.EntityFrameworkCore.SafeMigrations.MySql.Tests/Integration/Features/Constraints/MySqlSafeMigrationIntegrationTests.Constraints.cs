@@ -138,7 +138,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         foreach (var operation in builder.Operations)
         {
             var exception =
-                await Assert.ThrowsAsync<MySqlException>(() => ExecuteOperationsAsync(context, [operation]));
+                await AssertOwnedGuardFailureAsync(() => ExecuteOperationsAsync(context, [operation]));
 
             Assert.Contains("doka_sm_different", exception.Message, StringComparison.OrdinalIgnoreCase);
         }
@@ -187,7 +187,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         foreach (var operation in builder.Operations)
         {
             var exception =
-                await Assert.ThrowsAsync<MySqlException>(() => ExecuteOperationsAsync(context, [operation]));
+                await AssertOwnedGuardFailureAsync(() => ExecuteOperationsAsync(context, [operation]));
 
             Assert.Contains("doka_sm_data_blocked", exception.Message, StringComparison.OrdinalIgnoreCase);
         }

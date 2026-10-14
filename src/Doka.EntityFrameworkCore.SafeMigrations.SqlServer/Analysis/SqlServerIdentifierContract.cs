@@ -20,6 +20,17 @@ internal static class SqlServerIdentifierContract
 {
     internal const string ResultVariable = "@doka_identity_safe";
 
+    // WHY: The stream-level collision guard has no single operation owner.
+    // Explain only its proven boundary rather than attributing a rejection to
+    // whichever valid operation happens to appear first in the stream.
+    private const string IdentifierFailureMessage = "doka_sm_unsupported: SafeMigrations rejected the "
+        + "migration identifier contract; owner=<unavailable>; reason=Invalid or catalog-colliding identifiers "
+        + "could not be admitted; next=Use valid, unambiguous identifiers under the active catalog collation.";
+
+    private const string ScratchScopeFailureMessage = "doka_sm_unsupported: SafeMigrations could not acquire "
+        + "its identifier-check scope; owner=<unavailable>; reason=The intended temporary scope already exists; "
+        + "next=Retry with a clean context and connection without caller-owned scratch state.";
+
     /// <summary>Collects distinct identifiers from an immutable safe operation stream.</summary>
     /// <param name="operations">The ordered operation stream.</param>
     /// <returns>The scoped names required by catalog and generated-command guards.</returns>
@@ -188,7 +199,7 @@ internal static class SqlServerIdentifierContract
         temporaryTable = "#doka_sm_identifiers_" + Guid.NewGuid().ToString("N");
         var commands = new List<string>();
         commands.Add($"IF OBJECT_ID(N'tempdb..{temporaryTable}') IS NOT NULL "
-            + "THROW 51002, N'doka_sm_unsupported', 1; "
+            + "THROW 51002, N'" + ScratchScopeFailureMessage + "', 1; "
             + $"CREATE TABLE {temporaryTable} (scope tinyint NOT NULL, "
             + "schema_name nvarchar(128) COLLATE CATALOG_DEFAULT NOT NULL, "
             + "table_name nvarchar(128) COLLATE CATALOG_DEFAULT NOT NULL, "
@@ -294,7 +305,7 @@ internal static class SqlServerIdentifierContract
             : "DECLARE " + ResultVariable + " int = " + (safe.Value ? "1" : "0") + "; ";
 
         return declaration + (throwOnCollision
-            ? "IF " + ResultVariable + " <> 1 THROW 51002, N'doka_sm_unsupported', 1;"
+            ? "IF " + ResultVariable + " <> 1 THROW 51002, N'" + IdentifierFailureMessage + "', 1;"
             : "SELECT " + ResultVariable + ";");
     }
 

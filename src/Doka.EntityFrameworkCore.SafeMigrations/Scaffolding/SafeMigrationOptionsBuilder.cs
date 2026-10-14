@@ -33,10 +33,13 @@ public sealed class SafeMigrationOptionsBuilder
     {
         if (!Enum.IsDefined(mode))
         {
-            throw new ArgumentOutOfRangeException(nameof(mode));
+            throw new ArgumentOutOfRangeException(
+                nameof(mode),
+                "Select Strict or LegacyConvergence through UseScaffoldingMode.");
         }
 
         Mode = mode;
+
         return this;
     }
 
@@ -60,10 +63,14 @@ public sealed class SafeMigrationOptionsBuilder
     {
         if (policy is not (SafeMigrationPolicy.ThrowIfDifferent or SafeMigrationPolicy.RepairIfSafe))
         {
-            throw new ArgumentOutOfRangeException(nameof(policy));
+            throw new ArgumentOutOfRangeException(
+                nameof(policy),
+                "Select ThrowIfDifferent or RepairIfSafe through UseLegacyConvergencePolicy; "
+                + "ExistenceOnly cannot preserve the convergence contract.");
         }
 
         LegacyConvergencePolicy = policy;
+
         return this;
     }
 
@@ -91,7 +98,8 @@ public sealed class SafeMigrationOptionsBuilder
             && Mode != SafeMigrationScaffoldingMode.LegacyConvergence)
         {
             throw new InvalidOperationException(
-                "A non-default legacy-convergence policy requires LegacyConvergence scaffolding mode.");
+                "A non-default legacy-convergence policy requires LegacyConvergence scaffolding mode. "
+                + "Select UseScaffoldingMode(LegacyConvergence), or retain ThrowIfDifferent for strict scaffolding.");
         }
     }
 }

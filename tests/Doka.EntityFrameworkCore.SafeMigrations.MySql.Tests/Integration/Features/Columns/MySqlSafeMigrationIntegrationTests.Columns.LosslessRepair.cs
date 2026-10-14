@@ -824,7 +824,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             connectionString,
             $"INSERT INTO `varchar_narrowing_race` (`id`, `value`) VALUES (2, '{concurrentValue}');");
 
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
         Assert.Contains("doka_sm_data_blocked", exception.Message, StringComparison.OrdinalIgnoreCase);
@@ -1420,7 +1420,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             connectionString,
             "ALTER TABLE `boolean_repair_race` MODIFY COLUMN `value` bit(2) NULL;");
 
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, tightening.Operations, CancellationToken.None));
 
         Assert.Contains("doka_sm_different", exception.Message, StringComparison.OrdinalIgnoreCase);

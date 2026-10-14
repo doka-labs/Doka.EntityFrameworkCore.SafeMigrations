@@ -184,7 +184,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             "projected_structure_state_unknown",
             preflight.Assessments[1].AnalysisCode);
 
-        var providerFailure = Assert.IsType<MySqlException>(failure);
+        var providerFailure = AssertOwnedGuardFailure(failure);
         Assert.Contains(expectedFailureCode, providerFailure.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(expectedIndexCount, indexCount);
     }

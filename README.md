@@ -714,7 +714,7 @@ binds each contract's fingerprint to the same deployment artifact and target.
 
 Reports include provider and engine identity, model and operation-contract
 SHA-256 fingerprints, ordered assessments, preserved unexpected objects, and
-stable codes. The current report schema v3 retains separate provider
+stable codes. The current report schema v4 retains separate provider
 `AnalysisCode` and policy `DecisionCode`, bounded typed facet differences, and
 the known `OperationalImpact`. Detailed evidence remains in the report, never
 in metric labels, and model-managed values remain redacted. A blocked preflight
@@ -729,9 +729,10 @@ properties are not captured by this fingerprint. Newly scaffolded
 strict source. Retain the immutable artifact digest and independent review for
 every provider-owned operation.
 Serialize with `SafeMigrationReportJson`; the package includes the current
-[`safe-migration-run-report-v3` schema](schemas/safe-migration-run-report-v3.schema.json).
+[`safe-migration-run-report-v4` schema](schemas/safe-migration-run-report-v4.schema.json).
 The [version 1](schemas/safe-migration-run-report-v1.schema.json) and
-[version 2](schemas/safe-migration-run-report-v2.schema.json) schemas remain
+[version 2](schemas/safe-migration-run-report-v2.schema.json) and
+[version 3](schemas/safe-migration-run-report-v3.schema.json) schemas remain
 available for readers of previously persisted reports.
 
 When pending migrations contain raw SQL followed by safe operations, read-only
@@ -793,12 +794,19 @@ assessments, and `BlockingOnly` includes only the assessments that block the
 current preflight or postflight phase. The view retains source identity and
 total/included counts, preserves assessment order, and never includes
 unexpected objects in `BlockingOnly`. It uses the distinct packaged
-[`safe-migration-report-view-v2` schema](schemas/safe-migration-report-view-v2.schema.json);
-the existing one-argument serializer remains the canonical complete report v3.
-The [version 1 view schema](schemas/safe-migration-report-view-v1.schema.json)
-remains available for previously persisted views. `NonMatching` retains deferred
+[`safe-migration-report-view-v3` schema](schemas/safe-migration-report-view-v3.schema.json);
+the existing one-argument serializer remains the canonical complete report v4.
+The [version 1](schemas/safe-migration-report-view-v1.schema.json) and
+[version 2](schemas/safe-migration-report-view-v2.schema.json) view schemas
+remain available for previously persisted views. `NonMatching` retains deferred
 assessments and their origins; `BlockingOnly` does not present them as proven
 blockers.
+
+The unreleased diagnostics feature adds explicit table/schema and relationship
+identity to assessments, readable explanations and a built-in bounded text
+summary via `SafeMigrationReportText`. Runtime diagnostics also work without
+preflight. See [errors and readable reports](docs/diagnostics.md) for usage,
+provider differences and compatibility with the published 10.4.11 baseline.
 
 Do not encode a preflight-only operation inside `Migration.Up`. EF would record
 the migration as applied after successful command execution even when the

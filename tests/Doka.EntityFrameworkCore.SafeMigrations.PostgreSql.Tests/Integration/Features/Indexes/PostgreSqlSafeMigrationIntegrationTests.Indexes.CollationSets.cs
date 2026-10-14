@@ -163,7 +163,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         // Assert
         var postgres = Assert.IsType<PostgresException>(exception);
         Assert.Equal("P1001", postgres.SqlState);
-        Assert.Equal("doka_sm_different", postgres.MessageText);
+        Assert.StartsWith("doka_sm_different:", postgres.MessageText, StringComparison.Ordinal);
         Assert.Equal(1, await MixedCollationIndexCountAsync(connectionString));
         Assert.Equal(
             "C",
@@ -399,7 +399,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         {
             var postgres = Assert.IsType<PostgresException>(exception);
             Assert.Equal("P1001", postgres.SqlState);
-            Assert.Equal("doka_sm_different", postgres.MessageText);
+            Assert.StartsWith("doka_sm_different:", postgres.MessageText, StringComparison.Ordinal);
         }
 
         Assert.Equal(1, await MixedCollationIndexCountAsync(connectionString));

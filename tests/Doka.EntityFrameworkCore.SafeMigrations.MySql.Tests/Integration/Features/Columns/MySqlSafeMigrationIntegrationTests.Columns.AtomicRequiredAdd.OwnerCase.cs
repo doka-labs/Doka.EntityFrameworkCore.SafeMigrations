@@ -208,7 +208,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 Assert.IsType<InvalidOperationException>(inventoryFailure).Message, StringComparison.Ordinal);
             Assert.Equal(SafeMigrationReportStatus.Blocked, aliasReport.Status);
             Assert.Equal(SafeMigrationAction.RejectDifferent, Assert.Single(aliasReport.Assessments).Action);
-            Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(aliasFailure).Message,
+            Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(aliasFailure).Message,
                 StringComparison.Ordinal);
             Assert.Equal(new AtomicRequiredAddState(1, 1, 1, 0), state);
         }
@@ -260,7 +260,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             item => item.ObjectKind == SafeMigrationDatabaseObjectKind.CheckConstraint && item.Name == originalGuard);
         Assert.Equal(SafeMigrationReportStatus.Blocked, otherReport.Status);
         Assert.Equal(SafeMigrationAction.RejectDifferent, Assert.Single(otherReport.Assessments).Action);
-        Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(otherFailure).Message,
+        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(otherFailure).Message,
             StringComparison.Ordinal);
         Assert.Equal(new AtomicRequiredAddState(1, 1, 1, 0), originalState);
         Assert.Equal(new AtomicRequiredAddState(1, 1, 0, 0), otherState);

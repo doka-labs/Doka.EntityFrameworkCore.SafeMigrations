@@ -103,7 +103,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(SafeMigrationObservedState.DataBlocked, analysis.ObservedState);
         Assert.Equal("varchar_narrowing_value_too_long", analysis.Code);
         Assert.True(analysis.RequiresLiveDataProof);
-        Assert.Contains("doka_sm_data_blocked", Assert.IsType<MySqlException>(failure).Message,
+        Assert.Contains("doka_sm_data_blocked", AssertOwnedGuardFailure(failure).Message,
             StringComparison.Ordinal);
         Assert.Equal(1, preserved);
     }
@@ -212,7 +212,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var analysis = Assert.Single(analysisResults);
         Assert.Equal(SafeMigrationRepairCapability.None, analysis.RepairCapability);
         Assert.False(analysis.RequiresLiveDataProof);
-        Assert.IsType<MySqlException>(failure);
+        AssertOwnedGuardFailure(failure);
         Assert.Equal(0, visits.LengthRows);
         Assert.Equal(0, visits.NullRows);
         Assert.Equal(blocker == "missing" ? 0 : 1, columns);
@@ -370,7 +370,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         }
         else
         {
-            Assert.Contains("doka_sm_data_blocked", Assert.IsType<MySqlException>(failure).Message,
+            Assert.Contains("doka_sm_data_blocked", AssertOwnedGuardFailure(failure).Message,
                 StringComparison.Ordinal);
         }
 
@@ -416,7 +416,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(SafeMigrationRepairCapability.Safe, before.RepairCapability);
         Assert.True(before.RequiresLiveDataProof);
         Assert.Contains(disableStrictMode ? "doka_sm_different" : "doka_sm_data_blocked",
-            Assert.IsType<MySqlException>(failure).Message, StringComparison.Ordinal);
+            AssertOwnedGuardFailure(failure).Message, StringComparison.Ordinal);
         Assert.Equal(20, length);
         Assert.Equal(disableStrictMode ? 1 : 2, rows);
     }
@@ -476,7 +476,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var analysis = Assert.Single(analysisResults);
         Assert.Equal(SafeMigrationRepairCapability.None, analysis.RepairCapability);
         Assert.False(analysis.RequiresLiveDataProof);
-        Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(failure).Message,
+        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
             StringComparison.Ordinal);
         Assert.Equal(1, nulls);
     }
@@ -528,7 +528,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.True(analysis.RequiresLiveDataProof);
         if (containsNull)
         {
-            Assert.Contains("doka_sm_data_blocked", Assert.IsType<MySqlException>(failure).Message,
+            Assert.Contains("doka_sm_data_blocked", AssertOwnedGuardFailure(failure).Message,
                 StringComparison.Ordinal);
         }
         else
@@ -606,7 +606,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             analyses[1].RepairCapability);
         if (containsNull)
         {
-            Assert.Contains("doka_sm_data_blocked", Assert.IsType<MySqlException>(failure).Message,
+            Assert.Contains("doka_sm_data_blocked", AssertOwnedGuardFailure(failure).Message,
                 StringComparison.Ordinal);
         }
         else
@@ -673,7 +673,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             sourceAnalysis.RepairCapability);
         if (containsNull)
         {
-            Assert.Contains("doka_sm_data_blocked", Assert.IsType<MySqlException>(failure).Message,
+            Assert.Contains("doka_sm_data_blocked", AssertOwnedGuardFailure(failure).Message,
                 StringComparison.Ordinal);
         }
         else
@@ -749,7 +749,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(!supplementary, analysis.RepairMutatesData);
         if (supplementary)
         {
-            Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(failure).Message,
+            Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
                 StringComparison.Ordinal);
         }
         else
@@ -799,7 +799,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         }
         else
         {
-            Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(failure).Message,
+            Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
                 StringComparison.Ordinal);
         }
 
@@ -927,9 +927,9 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var after = Assert.Single(afterResults);
         if (blocked)
         {
-            Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(firstFailure).Message,
+            Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(firstFailure).Message,
                 StringComparison.Ordinal);
-            Assert.IsType<MySqlException>(secondFailure);
+            AssertOwnedGuardFailure(secondFailure);
             Assert.Equal(SafeMigrationRepairCapability.None, before.RepairCapability);
             Assert.Equal(SafeMigrationRepairCapability.None, after.RepairCapability);
             Assert.Equal(0, preserved);
@@ -1006,7 +1006,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             Assert.Single(analyses).RepairCapability);
         if (blocked)
         {
-            Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(failure).Message,
+            Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
                 StringComparison.Ordinal);
         }
         else
@@ -1049,7 +1049,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var analysis = Assert.Single(analysisResults);
         Assert.Equal(SafeMigrationRepairCapability.None, analysis.RepairCapability);
         Assert.False(analysis.RequiresLiveDataProof);
-        Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(failure).Message,
+        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
             StringComparison.Ordinal);
         Assert.Equal(0, connection.NarrowingDataStatementCount);
         Assert.Equal(200, length);
@@ -1093,7 +1093,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var analysis = Assert.Single(analysisResults);
         Assert.Equal(SafeMigrationRepairCapability.None, analysis.RepairCapability);
         Assert.False(analysis.RequiresLiveDataProof);
-        Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(failure).Message,
+        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
             StringComparison.Ordinal);
         Assert.Contains("Row size too large", Assert.IsType<MySqlException>(directFailure).Message,
             StringComparison.Ordinal);

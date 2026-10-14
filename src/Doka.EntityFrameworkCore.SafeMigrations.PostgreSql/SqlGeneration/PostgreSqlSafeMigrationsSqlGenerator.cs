@@ -86,10 +86,12 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
                 || effectiveRepairBaseline.Any(static command => command.TransactionSuppressed))
             {
                 throw new NotSupportedException(
-                    "A transaction-suppressed PostgreSQL baseline cannot be guarded inside a DO block.");
+                    SafeMigrationDiagnosticMessages.FormatRuntime(safeOperation,
+                        "doka_sm_unsupported", ordinal, "baseline_transaction_suppressed"));
             }
 
-            var guardedSql = BuildGuardedSql(safeOperation, runtimePlan, baseline, effectiveRepairBaseline);
+            var guardedSql = BuildGuardedSqlAtOrdinal(safeOperation, runtimePlan, baseline, effectiveRepairBaseline,
+                ordinal);
             var sqlOperation = new SqlOperation { Sql = guardedSql };
             commands.AddRange(_baselineGenerator.Generate([sqlOperation], model, options));
         }
@@ -218,7 +220,11 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
                 fixedLength: definition.IsFixedLength,
                 precision: definition.Precision,
                 scale: definition.Scale)
-            ?? throw new NotSupportedException($"PostgreSQL has no type mapping for column '{definition.Name}'.");
+            ?? throw new NotSupportedException("PostgreSQL has no type mapping for owner="
+                + SafeMigrationDiagnosticMessages.BoundForDisplay(schema ?? "<unqualified>") + "."
+                + SafeMigrationDiagnosticMessages.BoundForDisplay(table) + " column="
+                + SafeMigrationDiagnosticMessages.BoundForDisplay(definition.Name)
+                + "; next=Choose a supported explicit storage type and verify the model mapping.");
 
         var storeType = definition.StoreType ?? mapping.StoreType;
 
@@ -238,6 +244,15 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         PostgreSqlSafeMigrationRuntimePlan runtimePlan,
         IReadOnlyList<MigrationCommand> baseline,
         IReadOnlyList<MigrationCommand> repairBaseline
+    ) => BuildGuardedSqlAtOrdinal(operation, runtimePlan, baseline, repairBaseline, null);
+
+    /// <summary>Renders native diagnostics with the known stream ordinal without inventing migration context.</summary>
+    private static string BuildGuardedSqlAtOrdinal(
+        SafeMigrationOperation operation,
+        PostgreSqlSafeMigrationRuntimePlan runtimePlan,
+        IReadOnlyList<MigrationCommand> baseline,
+        IReadOnlyList<MigrationCommand> repairBaseline,
+        int? ordinal
     )
     {
         const string dataBlockedExpression = "doka_data_blocked";
@@ -259,9 +274,11 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             ? evaluationBodyIndentation
             : evaluationBodyIndentation + "    ";
 
+        var diagnostic = new PostgreSqlSafeMigrationRuntimeDiagnostic(operation, ordinal);
         var tag = SelectDollarTag(
             baseline,
             repairBaseline,
+            diagnostic.DelimiterContent,
             runtimePlan.ObjectIdentityGuardExpression,
             runtimePlan.PostExecutionObjectIdentityGuardExpression,
             runtimePlan.ObjectIdentityGuardFailureCodeExpression,
@@ -293,6 +310,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             .Append(declarations)
             .Append(hasObjectIdentityGuard
                 ? "    doka_identity_schema pg_catalog.name := pg_catalog.current_schema();\n"
+                + "    doka_identity_failure text;\n"
                 : string.Empty)
             .Append(proofTable is null
                 ? string.Empty
@@ -323,7 +341,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             // WHY: An unqualified alias must resolve to the proven native
             // owner before row evaluation or locks. A later classifier pass
             // cannot switch the command-local schema to accept another owner.
-            AppendObjectIdentityGuardSql(builder, runtimePlan, evaluationIndentation);
+            AppendObjectIdentityGuardSql(builder, runtimePlan, diagnostic, evaluationIndentation);
         }
 
         builder
@@ -447,7 +465,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
 
             if (hasObjectIdentityGuard)
             {
-                AppendObjectIdentityGuardSql(builder, runtimePlan, evaluationIndentation);
+                AppendObjectIdentityGuardSql(builder, runtimePlan, diagnostic, evaluationIndentation);
             }
 
             builder
@@ -471,7 +489,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
 
             if (hasObjectIdentityGuard)
             {
-                AppendObjectIdentityGuardSql(builder, runtimePlan, evaluationIndentation);
+                AppendObjectIdentityGuardSql(builder, runtimePlan, diagnostic, evaluationIndentation);
             }
 
             builder
@@ -484,14 +502,19 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
 
         builder
             .Append("    IF doka_action = 'reject_different' THEN\n")
-            .Append("        RAISE EXCEPTION USING ERRCODE = 'P1001', MESSAGE = 'doka_sm_different';\n")
-            .Append("    ELSIF doka_action = 'reject_unsupported' THEN\n")
-            .Append("        RAISE EXCEPTION USING ERRCODE = 'P1002', MESSAGE = 'doka_sm_unsupported';\n")
-            .Append("    ELSIF doka_action = 'reject_data_blocked' THEN\n")
-            .Append("        RAISE EXCEPTION USING ERRCODE = 'P1003', MESSAGE = 'doka_sm_data_blocked';\n")
-            .Append("    ELSIF doka_action = 'reject_prerequisite_missing' THEN\n")
-            .Append("        RAISE EXCEPTION USING ERRCODE = 'P1004', MESSAGE = 'doka_sm_prerequisite_missing';\n")
-            .Append("    ELSIF doka_action IN ('apply', 'repair') THEN\n")
+            .Append("        RAISE EXCEPTION USING ERRCODE = 'P1001', MESSAGE = ");
+
+        diagnostic.AppendMessage(builder, "doka_sm_different");
+        builder.Append(";\n    ELSIF doka_action = 'reject_unsupported' THEN\n")
+            .Append("        RAISE EXCEPTION USING ERRCODE = 'P1002', MESSAGE = ");
+        diagnostic.AppendMessage(builder, "doka_sm_unsupported", runtimePlan.UnsupportedCode);
+        builder.Append(";\n    ELSIF doka_action = 'reject_data_blocked' THEN\n")
+            .Append("        RAISE EXCEPTION USING ERRCODE = 'P1003', MESSAGE = ");
+        diagnostic.AppendMessage(builder, "doka_sm_data_blocked");
+        builder.Append(";\n    ELSIF doka_action = 'reject_prerequisite_missing' THEN\n")
+            .Append("        RAISE EXCEPTION USING ERRCODE = 'P1004', MESSAGE = ");
+        diagnostic.AppendMessage(builder, "doka_sm_prerequisite_missing");
+        builder.Append(";\n    ELSIF doka_action IN ('apply', 'repair') THEN\n")
             .Append("        IF doka_action = 'apply' THEN\n");
 
         AppendActionSql(builder, baseline, indentation: "            ");
@@ -511,8 +534,10 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
                 .Append("OR NOT COALESCE((")
                 .Append(runtimePlan.PostExecutionObjectIdentityGuardExpression)
                 .Append("), FALSE) THEN\n")
-                .Append("            RAISE EXCEPTION USING ERRCODE = 'P1005', MESSAGE = 'doka_sm_postcondition', ")
-                .Append("DETAIL = 'schema_identity_changed_during_execution';\n")
+                .Append("            RAISE EXCEPTION USING ERRCODE = 'P1005', MESSAGE = ");
+
+            diagnostic.AppendMessage(builder, "doka_sm_postcondition", "schema_identity_changed_during_execution");
+            builder.Append(", DETAIL = 'schema_identity_changed_during_execution';\n")
                 .Append("        END IF;\n");
         }
 
@@ -522,8 +547,10 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             .Append(runtimePlan.ExecutionPostcondition ?? runtimePlan.Postcondition)
             .Append('\n')
             .Append("        ), FALSE) THEN\n")
-            .Append("            RAISE EXCEPTION USING ERRCODE = 'P1005', MESSAGE = 'doka_sm_postcondition';\n")
-            .Append("        END IF;\n")
+            .Append("            RAISE EXCEPTION USING ERRCODE = 'P1005', MESSAGE = ");
+
+        diagnostic.AppendMessage(builder, "doka_sm_postcondition");
+        builder.Append(";\n        END IF;\n")
             .Append("    END IF;\n")
             .Append("END\n")
             .Append(tag)
@@ -535,10 +562,12 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
     /// <summary>Reproves the frozen command-local owner before classification or stateful acquisition.</summary>
     /// <param name="builder">The destination containing the command-local schema declaration.</param>
     /// <param name="runtimePlan">The native owner predicate and precise failure diagnostic.</param>
+    /// <param name="diagnostic">The cached, payload-free authored identity formatter.</param>
     /// <param name="indentation">The current classifier or lock branch indentation.</param>
     private static void AppendObjectIdentityGuardSql(
         StringBuilder builder,
         PostgreSqlSafeMigrationRuntimePlan runtimePlan,
+        PostgreSqlSafeMigrationRuntimeDiagnostic diagnostic,
         string indentation
     )
     {
@@ -548,9 +577,18 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             .Append(runtimePlan.ObjectIdentityGuardExpression)
             .Append("), FALSE) THEN\n")
             .Append(indentation)
-            .Append("    RAISE EXCEPTION USING ERRCODE = 'P1002', MESSAGE = 'doka_sm_unsupported', DETAIL = (")
+            .Append("    doka_identity_failure := (")
             .Append(runtimePlan.ObjectIdentityGuardFailureCodeExpression)
             .Append(");\n")
+            .Append(indentation)
+            .Append("    RAISE EXCEPTION USING ERRCODE = 'P1002', MESSAGE = ");
+
+        // WHY: Npgsql hides Detail by default. Keep the exact code there, but
+        // also expose it in bounded MessageText without evaluating its catalog
+        // expression twice or enabling disclosure of unrelated error details.
+        diagnostic.AppendMessage(builder, "doka_sm_unsupported", maximumLength: 1960);
+        builder.Append(" || E'; provider_code=' || pg_catalog.left(doka_identity_failure, 64), ")
+            .Append("DETAIL = doka_identity_failure;\n")
             .Append(indentation)
             .Append("END IF;\n");
     }

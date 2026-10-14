@@ -151,19 +151,22 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     /// <param name="scriptIdentityScope">
     /// Whether existing identity markers must be rejected as foreign script state.
     /// </param>
+    /// <param name="scopeInUseMessage">An optional bounded diagnostic from the exact authored operation.</param>
     /// <returns>The provider mutation without weakening the surrounding state and policy guards.</returns>
     internal string BuildModelManagedDataMutationSql(
         ModelManagedDataIntent intent,
-        bool scriptIdentityScope = false
+        bool scriptIdentityScope = false,
+        string? scopeInUseMessage = null
     ) => intent switch
     {
-        EnsureModelManagedDataIntent value => BuildEnsureMutation(value, scriptIdentityScope),
+        EnsureModelManagedDataIntent value => BuildEnsureMutation(value, scriptIdentityScope, scopeInUseMessage),
         UpdateModelManagedDataIntent value => BuildUpdateMutation(value),
         DeleteModelManagedDataIntent value => BuildDeleteMutation(value),
         _ => throw new ArgumentOutOfRangeException(nameof(intent)),
     };
 
-    private string BuildEnsureMutation(EnsureModelManagedDataIntent intent, bool scriptIdentityScope)
+    private string BuildEnsureMutation(EnsureModelManagedDataIntent intent, bool scriptIdentityScope,
+        string? scopeInUseMessage)
     {
         var relation = ExpectedRelation(intent, ("t", intent.Columns, intent.ColumnTypes, intent.Values));
         var table = QualifiedTable(intent.Table, intent.Schema);
@@ -188,7 +191,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             + $"@key = N'{SqlServerSafeMigrationIdentityInsertScope.ContextKey}', @value = NULL;";
 
         return $"DECLARE @doka_identity_insert bit = CASE WHEN {hasExplicitIdentity} THEN 1 ELSE 0 END; "
-            + SqlServerSafeMigrationIdentityInsertScope.BuildAcquisitionSql(table, scriptIdentityScope)
+            + SqlServerSafeMigrationIdentityInsertScope.BuildAcquisitionSql(table, scriptIdentityScope, scopeInUseMessage)
             + $"BEGIN TRY {mutation}; END TRY "
             + $"BEGIN CATCH IF @doka_identity_insert = 1 BEGIN SET IDENTITY_INSERT {table} OFF; "
             + clearOwnership + " END; THROW; END CATCH; "

@@ -136,7 +136,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 builder.Operations,
                 new SafeMigrationRunOptions("row-version-without-update"),
                 CancellationToken.None);
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);

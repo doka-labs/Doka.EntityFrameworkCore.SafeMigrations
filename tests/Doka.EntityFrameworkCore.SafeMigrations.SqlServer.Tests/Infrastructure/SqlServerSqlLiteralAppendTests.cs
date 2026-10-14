@@ -92,7 +92,7 @@ public sealed class SqlServerSqlLiteralAppendTests
         Assert.Contains(expectedState, guard, StringComparison.Ordinal);
         Assert.DoesNotContain("@doka_value = @doka_repair_ok OUTPUT", guard, StringComparison.Ordinal);
         Assert.Contains(expectedPostcondition, guard, StringComparison.Ordinal);
-        Assert.Contains("THROW 51005, N'doka_sm_postcondition'", guard, StringComparison.Ordinal);
+        Assert.Contains("THROW 51005, N'doka_sm_postcondition:", guard, StringComparison.Ordinal);
     }
 
     /// <summary>Rejects an absent output builder before attempting literal rendering.</summary>

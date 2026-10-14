@@ -127,7 +127,11 @@ public static partial class SafeMigrationModelFingerprint
                 break;
             default:
                 throw new NotSupportedException(
-                    $"The {context} value type '{value.GetType().FullName}' is not supported by model fingerprint format {Version}.");
+                    $"The {SafeMigrationDiagnosticMessages.BoundForDisplay(context)} value type "
+                    + $"'{DisplayAnnotationType(value)}' is not supported by model "
+                    + $"fingerprint format {Version}. Use a supported deterministic annotation representation, "
+                    + "or a provider contract that can represent this metadata; "
+                    + "the annotation value was not included.");
         }
     }
 
@@ -199,6 +203,13 @@ public static partial class SafeMigrationModelFingerprint
             + ":"
             + formattable.ToString(null, CultureInfo.InvariantCulture),
         _ => throw new NotSupportedException(
-            $"The {context} dictionary key type '{key.GetType().FullName}' is not supported by model fingerprint format {Version}."),
+            $"The {SafeMigrationDiagnosticMessages.BoundForDisplay(context)} dictionary key type "
+            + $"'{DisplayAnnotationType(key)}' is not supported by model "
+            + $"fingerprint format {Version}. Use supported deterministic key types; the key value was not included."),
     };
+
+    /// <summary>Formats type metadata without invoking an annotation object's string conversion.</summary>
+    private static string DisplayAnnotationType(
+        object value
+    ) => SafeMigrationDiagnosticMessages.BoundForDisplay(value.GetType().FullName ?? value.GetType().Name);
 }

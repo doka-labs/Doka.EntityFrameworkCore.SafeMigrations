@@ -111,8 +111,8 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(SafeMigrationObservedState.Different, analysis.ObservedState);
         Assert.Equal(SafeMigrationRepairCapability.None, analysis.RepairCapability);
         Assert.False(analysis.RequiresLiveDataProof);
-        Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(failure).Message, StringComparison.Ordinal);
-        Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(replayFailure).Message,
+        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message, StringComparison.Ordinal);
+        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(replayFailure).Message,
             StringComparison.Ordinal);
         Assert.Equal(width, unchangedWidth);
         Assert.Equal("4E554C4C", value);
@@ -198,10 +198,10 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         {
             Assert.Null(creationFailure);
             Assert.Equal(SafeMigrationObservedState.Different, Assert.Single(results).ObservedState);
-            Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(failure).Message,
+            Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
                 StringComparison.Ordinal);
 
-            Assert.IsType<MySqlException>(replayFailure);
+            AssertOwnedGuardFailure(replayFailure);
             Assert.Equal(1, required);
         }
 

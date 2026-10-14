@@ -92,7 +92,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         else
         {
             Assert.Equal("column_native_enum_mode_conflict", assessment.AnalysisCode);
-            Assert.Contains("doka_sm_unsupported", Assert.IsType<MySqlException>(failure).Message,
+            Assert.Contains("doka_sm_unsupported", AssertOwnedGuardFailure(failure).Message,
                 StringComparison.Ordinal);
             Assert.Equal(new AtomicRequiredAddState(0, 0, 0, 0), state);
         }
@@ -185,7 +185,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationAction.RejectUnsupported, Assert.Single(report.Assessments).Action);
         Assert.Equal("column_native_enum_mode_conflict", Assert.Single(report.Assessments).AnalysisCode);
-        Assert.Contains("doka_sm_unsupported", Assert.IsType<MySqlException>(failure).Message,
+        Assert.Contains("doka_sm_unsupported", AssertOwnedGuardFailure(failure).Message,
             StringComparison.Ordinal);
         Assert.Equal((useSetStorage ? "set" : "enum") + @"('slash\\tail')", physicalType);
         Assert.Equal(Convert.ToHexString(Encoding.UTF8.GetBytes("legacy")), commentHex);
@@ -278,7 +278,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationAction.RejectUnsupported, Assert.Single(report.Assessments).Action);
-        Assert.Contains("doka_sm_unsupported", Assert.IsType<MySqlException>(failure).Message,
+        Assert.Contains("doka_sm_unsupported", AssertOwnedGuardFailure(failure).Message,
             StringComparison.Ordinal);
         Assert.Equal(new AtomicRequiredAddState(0, 0, 0, 0), state);
         Assert.Equal(originalMode, finalMode);

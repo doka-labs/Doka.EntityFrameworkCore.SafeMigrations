@@ -68,7 +68,7 @@ public sealed class SafeMigrationReportSelectionTests
         var root = document.RootElement;
         var sourceReport = root.GetProperty("sourceReport");
 
-        Assert.Equal(2, root.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(3, root.GetProperty("schemaVersion").GetInt32());
         Assert.Equal("safe_migration_report_view", root.GetProperty("documentKind").GetString());
         Assert.Equal("complete", root.GetProperty("selection").GetString());
         Assert.Equal(report.SchemaVersion, sourceReport.GetProperty("schemaVersion").GetInt32());

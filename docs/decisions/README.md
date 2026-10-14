@@ -36,6 +36,7 @@ record the implemented ownership and lossless-repair contracts selected on
 | [D-013](D-013-sqlite-provider-and-atomic-rebuilds.md) | SQLite provider composition and atomic model-owned rebuilds |
 | [D-014](D-014-mariadb-catalog-snapshot-for-batched-classification.md) | Optional MariaDB session-local catalog snapshots for bounded analysis |
 | [D-015](D-015-owned-atomic-required-column-additions.md) | Owned atomic MySQL/MariaDB required-column staging and forward recovery |
+| [D-016](D-016-actionable-diagnostics-and-operation-identity.md) | Shared structural diagnostic identity and provider-owned error transport |
 
 ## Authoring and review
 

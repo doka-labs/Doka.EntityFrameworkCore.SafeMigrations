@@ -96,10 +96,12 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
     /// <param name="baseline">The atomic native stages with their separately admitted ordinary repair body.</param>
     /// <param name="runtimePlan">The final target postcondition, including owned CHECK absence.</param>
     /// <param name="renderedParameterValues">The already rendered operation-local provider literals.</param>
+    /// <param name="postconditionSuffix">The same correlated assertion and optional script result used by ordinary bodies.</param>
     private static string BuildRequiredColumnAddBody(
         RequiredColumnAddBaseline baseline,
         MySqlSafeMigrationRuntimePlan runtimePlan,
-        IReadOnlyList<string> renderedParameterValues
+        IReadOnlyList<string> renderedParameterValues,
+        string postconditionSuffix
     )
     {
         // WHY: This path previously materialized two hex assignments and the
@@ -123,7 +125,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
             Environment.NewLine,
             PostconditionBodyPrefix,
             runtimePlan.RenderPreparedExecutionPostcondition(renderedParameterValues),
-            PostconditionBodySuffix).ToSql();
+            postconditionSuffix).ToSql();
     }
 
     /// <summary>Admits only a native single-column ALTER before appending one owned atomic CHECK clause.</summary>

@@ -173,6 +173,10 @@ public sealed class SafeMigrationAssessment
     /// <param name="operationalImpact">The provider-proven execution-impact classification.</param>
     /// <param name="differences">The bounded typed facet differences.</param>
     /// <param name="deferredOrigin">The preceding proof-invalidating operation requiring runtime validation.</param>
+    /// <param name="identity">The authored database identity, or null when the owner is unknown.</param>
+    /// <param name="migrationId">The owning migration ID, or null for an ad-hoc stream.</param>
+    /// <param name="policy">The authored safe-operation policy when known.</param>
+    /// <param name="explanation">The explanation derived from established operation evidence.</param>
     internal SafeMigrationAssessment(
         int ordinal,
         string operationType,
@@ -187,7 +191,11 @@ public sealed class SafeMigrationAssessment
         string decisionCode,
         SafeMigrationOperationalImpact operationalImpact,
         IEnumerable<SafeMigrationFacetDifference>? differences,
-        SafeMigrationDeferredOrigin? deferredOrigin
+        SafeMigrationDeferredOrigin? deferredOrigin,
+        SafeMigrationOperationIdentity? identity = null,
+        string? migrationId = null,
+        SafeMigrationPolicy? policy = null,
+        SafeMigrationDiagnosticExplanation? explanation = null
     )
     {
         ArgumentOutOfRangeException.ThrowIfNegative(ordinal);
@@ -217,6 +225,17 @@ public sealed class SafeMigrationAssessment
         if (!Enum.IsDefined(operationalImpact))
         {
             throw new ArgumentOutOfRangeException(nameof(operationalImpact));
+        }
+
+        if (migrationId is not null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(migrationId);
+        }
+
+        if (policy is not (null or SafeMigrationPolicy.ExistenceOnly
+            or SafeMigrationPolicy.ThrowIfDifferent or SafeMigrationPolicy.RepairIfSafe))
+        {
+            throw new ArgumentOutOfRangeException(nameof(policy));
         }
 
         if ((action == SafeMigrationAction.ValidateAtRuntime) != (deferredOrigin is not null))
@@ -254,6 +273,15 @@ public sealed class SafeMigrationAssessment
         OperationalImpact = operationalImpact;
         Differences = Array.AsReadOnly(differenceSnapshot);
         DeferredOrigin = deferredOrigin;
+        Identity = identity;
+        MigrationId = migrationId;
+        Policy = policy;
+
+        // WHY: Existing public constructors do not contain an owner or the
+        // full intent. Preserve that honest unknown state instead of deriving
+        // an owner or a precise cause from an unqualified object name.
+        Explanation = explanation ?? SafeMigrationDiagnosticMessages.GetExplanation(
+            operationKind, observedState, analysisCode, decisionCode);
     }
 
     /// <summary>Gets the zero-based operation ordinal.</summary>
@@ -297,13 +325,26 @@ public sealed class SafeMigrationAssessment
 
     /// <summary>Gets the proof-invalidating operation requiring a later runtime decision, if any.</summary>
     public SafeMigrationDeferredOrigin? DeferredOrigin { get; }
+
+    /// <summary>Gets the authored database identity, or null when it was not captured.</summary>
+    /// <remarks>A null schema on a known identity means the provider default, not an unknown owner.</remarks>
+    public SafeMigrationOperationIdentity? Identity { get; }
+
+    /// <summary>Gets the evidence-based explanation and safe next step.</summary>
+    public SafeMigrationDiagnosticExplanation Explanation { get; }
+
+    /// <summary>Gets the migration containing this operation, or null for an ad-hoc stream.</summary>
+    public string? MigrationId { get; }
+
+    /// <summary>Gets the authored safe-operation policy when known.</summary>
+    public SafeMigrationPolicy? Policy { get; }
 }
 
 /// <summary>Contains an immutable preflight or postflight report.</summary>
 public sealed class SafeMigrationRunReport
 {
     /// <summary>Gets the current machine-readable report schema version.</summary>
-    public const int CurrentSchemaVersion = 3;
+    public const int CurrentSchemaVersion = 4;
 
     /// <summary>Initializes a run report and snapshots its assessments.</summary>
     /// <param name="mode">Whether this is a preflight analysis or postflight verification.</param>

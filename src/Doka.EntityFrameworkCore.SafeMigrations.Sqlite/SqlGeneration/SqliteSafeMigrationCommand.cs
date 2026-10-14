@@ -8,6 +8,7 @@ internal sealed class SqliteSafeMigrationCommand : MigrationCommand
     private readonly SqliteRebuildArtifactContract _rebuildArtifacts;
     private readonly SafeMigrationOperation _operation;
     private readonly IReadOnlyList<MigrationCommand> _applyCommands;
+    private readonly int _operationOrdinal;
 
     /// <summary>Initializes a guarded SQLite migration command.</summary>
     public SqliteSafeMigrationCommand(
@@ -18,7 +19,8 @@ internal sealed class SqliteSafeMigrationCommand : MigrationCommand
         SqliteRebuildArtifactContract rebuildArtifacts,
         IRelationalCommand placeholder,
         DbContext context,
-        IRelationalCommandDiagnosticsLogger logger
+        IRelationalCommandDiagnosticsLogger logger,
+        int operationOrdinal
     ) : base(placeholder, context, logger, transactionSuppressed: false)
     {
         _operation = operation;
@@ -26,6 +28,7 @@ internal sealed class SqliteSafeMigrationCommand : MigrationCommand
         _analyzer = analyzer;
         _executionState = executionState;
         _rebuildArtifacts = rebuildArtifacts;
+        _operationOrdinal = operationOrdinal;
     }
 
     /// <inheritdoc />
@@ -107,8 +110,8 @@ internal sealed class SqliteSafeMigrationCommand : MigrationCommand
         if (!postcondition.PostconditionSatisfied)
         {
             throw new InvalidOperationException(
-                $"SQLite SafeMigrations postcondition failed for {_operation.Intent.Kind} "
-                + $"'{_operation.Intent.ObjectName}' with analysis code '{postcondition.Code}'.");
+                SafeMigrationDiagnosticMessages.FormatPostcondition(
+                    _operation, postcondition, _operationOrdinal));
         }
 
         return affected;
@@ -494,6 +497,5 @@ internal sealed class SqliteSafeMigrationCommand : MigrationCommand
         SafeMigrationProviderAnalysis analysis,
         SafeMigrationDecision decision
     ) => new(
-        $"SQLite SafeMigrations blocked {_operation.Intent.Kind} '{_operation.Intent.ObjectName}': "
-        + $"analysis={analysis.Code}, decision={decision.Code}.");
+        SqliteSafeMigrationDiagnosticMessages.FormatBlocked(_operation, analysis, decision, _operationOrdinal));
 }

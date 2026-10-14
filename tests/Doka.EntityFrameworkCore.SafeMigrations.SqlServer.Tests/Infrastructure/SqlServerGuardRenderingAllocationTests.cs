@@ -39,7 +39,7 @@ public sealed class SqlServerGuardRenderingAllocationTests
         Assert.Equal(expected, actual);
         Assert.Equal(reference, SqlServerGuardedSqlTestContract.DecodeScope(actual));
         Assert.Contains("EXEC sys.sp_executesql", reference, StringComparison.Ordinal);
-        Assert.Contains("THROW 51005, N'doka_sm_postcondition'", reference, StringComparison.Ordinal);
+        Assert.Contains("THROW 51005, N'doka_sm_postcondition:", reference, StringComparison.Ordinal);
         Assert.All(baseline.Concat(repair), static command => Assert.False(command.TransactionSuppressed));
     }
 
@@ -54,11 +54,13 @@ public sealed class SqlServerGuardRenderingAllocationTests
             context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
         var plan = catalog.Build(operation);
-        var mutation = catalog.BuildModelManagedDataMutationSql((ModelManagedDataIntent)operation.Intent);
+        var mutation = catalog.BuildModelManagedDataMutationSql((ModelManagedDataIntent)operation.Intent,
+            scopeInUseMessage: SafeMigrationDiagnosticMessages.FormatRuntime(operation,
+                "doka_sm_identity_scope_in_use", 0));
         var baseline = context.GetService<ISqlServerSafeMigrationsBaselineGenerator>()
             .Generate([new SqlOperation { Sql = mutation }], context.Model);
 
-        var expected = OriginalGuardBody(operation, plan, baseline, []).ToString();
+        var expected = OriginalGuardBody(operation, plan, baseline, [], 0).ToString();
 
         // Act
         var actual = SqlServerGuardedSqlTestContract.GenerateBody(context, operation);
@@ -701,10 +703,12 @@ public sealed class SqlServerGuardRenderingAllocationTests
         SafeMigrationOperation operation,
         SqlServerSafeMigrationRuntimePlan plan,
         IReadOnlyList<MigrationCommand> baseline,
-        IReadOnlyList<MigrationCommand> repair
+        IReadOnlyList<MigrationCommand> repair,
+        int? ordinal = null
     )
     {
         var actionCase = OriginalActionCase(operation, plan.RepairCapability);
+        var diagnostic = new SqlServerSafeMigrationRuntimeDiagnostic(operation, ordinal);
         var builder = new StringBuilder(1024);
         if (operation.Intent is EnsureModelManagedDataIntent)
         {
@@ -714,24 +718,40 @@ public sealed class SqlServerGuardRenderingAllocationTests
 
         builder.Append("IF COALESCE(")
             .Append("HAS_PERMS_BY_NAME(DB_NAME(), N'DATABASE', N'VIEW DEFINITION')")
-            .Append(", 0) <> 1\nBEGIN\n    THROW 51002, N'doka_sm_unsupported', 1;\nEND;\n");
+            .Append(", 0) <> 1\nBEGIN\n    ");
+        diagnostic.AppendThrow(builder, 51002, "doka_sm_unsupported", "catalog_metadata_not_visible");
+        builder.Append("\nEND;\n");
 
         if (plan.PhysicalTableSupportExpression is { } physical)
         {
             builder.Append("IF COALESCE((").Append(physical)
-                .Append("), 0) <> 1\nBEGIN\n    THROW 51002, N'doka_sm_unsupported', 1;\nEND;\n");
+                .Append("), 0) <> 1\nBEGIN\n    ");
+            diagnostic.AppendThrow(builder, 51002, "doka_sm_unsupported",
+                SqlServerSafeMigrationRuntimePlan.PhysicalTableUnsupportedCode);
+            builder.Append("\nEND;\n");
         }
 
         if (plan.ColumnLayoutFailureExpression is { } layout)
         {
-            builder.Append("IF (").Append(layout)
-                .Append(") IS NOT NULL\nBEGIN\n    THROW 51002, N'doka_sm_unsupported', 1;\nEND;\n");
+            builder.Append("DECLARE @doka_layout_failure nvarchar(64) = (").Append(layout)
+                .Append(");\nIF @doka_layout_failure IS NOT NULL\nBEGIN\n")
+                .Append("    DECLARE @doka_layout_message nvarchar(2048) = CASE @doka_layout_failure\n")
+                .Append("        WHEN N'column_limit' THEN ");
+            diagnostic.AppendLiteral(builder, "doka_sm_unsupported", "column_limit");
+            builder.Append("\n        WHEN N'column_fixed_row_limit' THEN ");
+            diagnostic.AppendLiteral(builder, "doka_sm_unsupported", "column_fixed_row_limit");
+            builder.Append("\n        ELSE ");
+            diagnostic.AppendLiteral(builder, "doka_sm_unsupported", "column_layout_unproven");
+            builder.Append(" END;\n    THROW 51002, @doka_layout_message, 1;\nEND;\n");
         }
 
         if (plan.ColumnCollationSupportExpression is { } collation)
         {
             builder.Append("IF COALESCE((").Append(collation)
-                .Append("), 0) <> 1\nBEGIN\n    THROW 51002, N'doka_sm_unsupported', 1;\nEND;\n");
+                .Append("), 0) <> 1\nBEGIN\n    ");
+            diagnostic.AppendThrow(builder, 51002, "doka_sm_unsupported",
+                SqlServerSafeMigrationRuntimePlan.ColumnCollationUnsupportedCode);
+            builder.Append("\nEND;\n");
         }
 
         if (plan.DefaultValueSupportExpression is { } defaultValue)
@@ -744,19 +764,26 @@ public sealed class SqlServerGuardRenderingAllocationTests
             }
 
             builder.Append("IF COALESCE((").Append(defaultValue)
-                .Append("), 0) <> 1\nBEGIN\n    THROW 51002, N'doka_sm_unsupported', 1;\nEND;\n");
+                .Append("), 0) <> 1\nBEGIN\n    ");
+            diagnostic.AppendThrow(builder, 51002, "doka_sm_unsupported",
+                SqlServerSafeMigrationRuntimePlan.DefaultValueUnsupportedCode);
+            builder.Append("\nEND;\n");
         }
 
         if (plan.IndexFilterSupportExpression is { } filter)
         {
             builder.Append("IF COALESCE((").Append(filter)
-                .Append("), 0) <> 1\nBEGIN\n    THROW 51002, N'doka_sm_unsupported', 1;\nEND;\n");
+                .Append("), 0) <> 1\nBEGIN\n    ");
+            diagnostic.AppendThrow(builder, 51002, "doka_sm_unsupported",
+                SqlServerSafeMigrationRuntimePlan.IndexFilterUnsupportedCode);
+            builder.Append("\nEND;\n");
         }
 
         // WHY: Both fixture intents have a null schema, so their original guard
         // requires the dbo admission boundary before evaluating prepared state.
-        builder.Append("IF COALESCE(SCHEMA_NAME(), N'') <> N'dbo'\nBEGIN\n")
-            .Append("    THROW 51004, N'doka_sm_prerequisite_missing', 1;\nEND;\n")
+        builder.Append("IF COALESCE(SCHEMA_NAME(), N'') <> N'dbo'\nBEGIN\n    ");
+        diagnostic.AppendThrow(builder, 51004, "doka_sm_prerequisite_missing", "default_schema_mismatch");
+        builder.Append("\nEND;\n")
             .Append("DECLARE @doka_state nvarchar(32);\n")
             .Append("DECLARE @doka_action nvarchar(32);\n")
             .Append("DECLARE @doka_repair_ok int;\n")
@@ -805,15 +832,15 @@ public sealed class SqlServerGuardRenderingAllocationTests
 
         builder.Append("END;\n")
             .Append("SET @doka_action = ").Append(actionCase).Append(";\n")
-            .Append("IF @doka_action = N'reject_different'\nBEGIN\n")
-            .Append("    THROW 51001, N'doka_sm_different', 1;\nEND;\n")
-            .Append("IF @doka_action = N'reject_unsupported'\nBEGIN\n")
-            .Append("    THROW 51002, N'doka_sm_unsupported', 1;\nEND;\n")
-            .Append("IF @doka_action = N'reject_data_blocked'\nBEGIN\n")
-            .Append("    THROW 51003, N'doka_sm_data_blocked', 1;\nEND;\n")
-            .Append("IF @doka_action = N'reject_prerequisite_missing'\nBEGIN\n")
-            .Append("    THROW 51004, N'doka_sm_prerequisite_missing', 1;\nEND;\n")
-            .Append("IF @doka_action = N'apply'\nBEGIN\n");
+            .Append("IF @doka_action = N'reject_different'\nBEGIN\n    ");
+        diagnostic.AppendThrow(builder, 51001, "doka_sm_different");
+        builder.Append("\nEND;\nIF @doka_action = N'reject_unsupported'\nBEGIN\n    ");
+        diagnostic.AppendThrow(builder, 51002, "doka_sm_unsupported", plan.UnsupportedCode);
+        builder.Append("\nEND;\nIF @doka_action = N'reject_data_blocked'\nBEGIN\n    ");
+        diagnostic.AppendThrow(builder, 51003, "doka_sm_data_blocked");
+        builder.Append("\nEND;\nIF @doka_action = N'reject_prerequisite_missing'\nBEGIN\n    ");
+        diagnostic.AppendThrow(builder, 51004, "doka_sm_prerequisite_missing");
+        builder.Append("\nEND;\nIF @doka_action = N'apply'\nBEGIN\n");
 
         OriginalCommands(builder, baseline);
         builder.Append("END\nELSE IF @doka_action = N'repair'\nBEGIN\n");
@@ -840,9 +867,9 @@ public sealed class SqlServerGuardRenderingAllocationTests
                 .Append("), 0) <> 1\n");
         }
 
-        builder.Append("    BEGIN\n")
-            .Append("        THROW 51005, N'doka_sm_postcondition', 1;\n")
-            .Append("    END;\nEND;");
+        builder.Append("    BEGIN\n        ");
+        diagnostic.AppendThrow(builder, 51005, "doka_sm_postcondition");
+        builder.Append("\n    END;\nEND;");
 
         if (operation.Intent is EnsureModelManagedDataIntent)
         {

@@ -147,7 +147,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("check-table-scope"));
 
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations));
 
         var assessment = Assert.Single(report.Assessments);
@@ -185,7 +185,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("check-enforcement-drift"));
 
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations));
 
         var assessment = Assert.Single(report.Assessments);
@@ -292,7 +292,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         foreach (var operation in builder.Operations)
         {
-            var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+            var exception = await AssertOwnedGuardFailureAsync(() =>
                 ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
             Assert.Contains("doka_sm_different", exception.Message, StringComparison.OrdinalIgnoreCase);
@@ -343,7 +343,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         if (Fixture.ServerVersion.Version < new Version(12, 1))
         {
-            var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+            var exception = await AssertOwnedGuardFailureAsync(() =>
                 ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
             Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
@@ -500,7 +500,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         foreach (var operation in builder.Operations)
         {
-            var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+            var exception = await AssertOwnedGuardFailureAsync(() =>
                 ExecuteOperationsAsync(context, [operation]));
 
             Assert.Contains("doka_sm_different", exception.Message, StringComparison.OrdinalIgnoreCase);

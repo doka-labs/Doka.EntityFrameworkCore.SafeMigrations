@@ -162,7 +162,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             new SafeMigrationRunOptions("model-data-unmodeled-dependency"),
             CancellationToken.None);
 
-        _ = await Assert.ThrowsAsync<MySqlException>(() =>
+        _ = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, unmodeledDependency.Operations, CancellationToken.None));
 
         Assert.Equal(SafeMigrationObservedState.DataBlocked, Assert.Single(uniqueReport.Assessments).ObservedState);
@@ -368,7 +368,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             new SafeMigrationRunOptions("model-data-drift"),
             CancellationToken.None);
 
-        _ = await Assert.ThrowsAsync<MySqlException>(() =>
+        _ = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, drift.Operations, CancellationToken.None));
 
         Assert.Equal(SafeMigrationReportStatus.Ready, ensurePreflight.Status);

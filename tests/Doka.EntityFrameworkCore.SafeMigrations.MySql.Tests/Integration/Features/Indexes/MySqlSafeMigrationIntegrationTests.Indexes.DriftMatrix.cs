@@ -112,7 +112,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("index-visibility-drift"));
 
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations));
 
         var assessment = Assert.Single(report.Assessments);
@@ -181,7 +181,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("overlong-index"));
 
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations));
 
         var assessment = Assert.Single(report.Assessments);
@@ -218,7 +218,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("one-over-index"));
 
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations));
 
         var assessment = Assert.Single(report.Assessments);
@@ -316,7 +316,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 .GetService<ISafeMigrationRunner>()
                 .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("invalid-index-shape"));
 
-            var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+            var exception = await AssertOwnedGuardFailureAsync(() =>
                 ExecuteOperationsAsync(context, builder.Operations));
 
             var assessment = Assert.Single(report.Assessments);
@@ -391,7 +391,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, fullKey.Operations, new SafeMigrationRunOptions("compact-full-key"));
 
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, fullKey.Operations));
 
         Assert.Equal(

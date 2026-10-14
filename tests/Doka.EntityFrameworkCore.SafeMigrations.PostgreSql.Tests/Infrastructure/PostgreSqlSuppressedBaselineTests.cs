@@ -51,6 +51,9 @@ public sealed class PostgreSqlSuppressedBaselineTests
         Assert.Contains("SELECT '$doka_safe_migration$';", guard, StringComparison.Ordinal);
     }
 
+    /// <summary>Rejects a transaction-suppressed safe baseline with authored owner and corrective guidance.</summary>
+    /// <param name="hasPrecedingUnsuppressedCommand">Whether the rejected baseline also contains ordinary commands.</param>
+    /// <param name="options">The EF Core generation flags to preserve.</param>
     [Theory]
     [InlineData(false, MigrationsSqlGenerationOptions.Default)]
     [InlineData(true, MigrationsSqlGenerationOptions.Default)]
@@ -61,6 +64,7 @@ public sealed class PostgreSqlSuppressedBaselineTests
         MigrationsSqlGenerationOptions options
     )
     {
+        // Arrange
         using var context = CreateContext();
         var baseline = context.GetService<RecordingBaselineGenerator>();
         var generator = context.GetService<IMigrationsSqlGenerator>();
@@ -69,14 +73,18 @@ public sealed class PostgreSqlSuppressedBaselineTests
             ? [baseline.CreateCommand(AddColumnSql, false), baseline.CreateCommand(CommentColumnSql, true)]
             : [baseline.CreateCommand(AddColumnSql, true)];
 
+        // Act
         var exception = Assert.Throws<NotSupportedException>(() => generator.Generate(
             migrationBuilder.Operations,
             context.Model,
             options));
 
-        Assert.Equal(
-            "A transaction-suppressed PostgreSQL baseline cannot be guarded inside a DO block.",
-            exception.Message);
+        // Assert
+        Assert.StartsWith("doka_sm_unsupported:", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("transaction-suppressed", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("items", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("value", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("next=", exception.Message, StringComparison.Ordinal);
         var call = AssertRejectedBeforeGuardDelegation(baseline, context.Model, options);
         var operation = Assert.IsType<AddColumnOperation>(Assert.Single(call.Operations));
 
@@ -90,6 +98,8 @@ public sealed class PostgreSqlSuppressedBaselineTests
         }
     }
 
+    /// <summary>Retains qualified-collation baseline rejection without losing the affected column identity.</summary>
+    /// <param name="options">The EF Core generation flags to preserve.</param>
     [Theory]
     [InlineData(MigrationsSqlGenerationOptions.Default)]
     [InlineData(MigrationsSqlGenerationOptions.NoTransactions)]
@@ -97,6 +107,7 @@ public sealed class PostgreSqlSuppressedBaselineTests
         MigrationsSqlGenerationOptions options
     )
     {
+        // Arrange
         const string addTextColumnSql = "ALTER TABLE \"items\" ADD COLUMN \"value\" text;";
         const string collationSql =
             "ALTER TABLE \"items\" ALTER COLUMN \"value\" TYPE text COLLATE \"pg_catalog\".\"C\";";
@@ -119,14 +130,18 @@ public sealed class PostgreSqlSuppressedBaselineTests
             baseline.CreateCommand(addTextColumnSql, false), baseline.CreateCommand(collationSql, true),
         ];
 
+        // Act
         var exception = Assert.Throws<NotSupportedException>(() => generator.Generate(
             migrationBuilder.Operations,
             context.Model,
             options));
 
-        Assert.Equal(
-            "A transaction-suppressed PostgreSQL baseline cannot be guarded inside a DO block.",
-            exception.Message);
+        // Assert
+        Assert.StartsWith("doka_sm_unsupported:", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("transaction-suppressed", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("items", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("value", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("next=", exception.Message, StringComparison.Ordinal);
         var call = AssertRejectedBeforeGuardDelegation(baseline, context.Model, options);
 
         Assert.Equal(2, call.Operations.Count);

@@ -383,7 +383,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             "ALTER TABLE `strict_unique_index` "
             + "ADD CONSTRAINT `uq_strict_unique_index_unknown` UNIQUE (`id`, `email`);");
 
-        var runtimeException = await Assert.ThrowsAsync<MySqlException>(() =>
+        var runtimeException = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations));
 
         var drift = await runner.AnalyzeAsync(

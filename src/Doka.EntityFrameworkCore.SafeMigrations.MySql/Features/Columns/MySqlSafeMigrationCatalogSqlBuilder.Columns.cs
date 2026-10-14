@@ -20,52 +20,89 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             _ => [],
         };
 
-        if (definitions.Any(definition => !CanMap(definition)))
+        // WHY: Preserve feature-wide failure precedence across every column.
+        // Indexed passes remove capturing Any delegates without changing which
+        // failure wins when different columns violate different contracts.
+        for (var index = 0; index < definitions.Count; index++)
         {
-            return "column_type_mapping";
+            if (!CanMap(definitions[index]))
+            {
+                return "column_type_mapping";
+            }
+
         }
 
-        if (definitions.Any(static definition => definition.Collation?.Schema is not null))
+        for (var index = 0; index < definitions.Count; index++)
         {
-            return "schema_qualified_collation";
+            if (definitions[index].Collation?.Schema is not null)
+            {
+                return "schema_qualified_collation";
+            }
+
         }
 
-        if (definitions.Any(definition => !CanRepresentLiteralDefault(definition, serverVersion)))
+        for (var index = 0; index < definitions.Count; index++)
         {
-            return "literal_default_catalog_representation";
+            if (!CanRepresentLiteralDefault(definitions[index], serverVersion))
+            {
+                return "literal_default_catalog_representation";
+            }
+
         }
 
-        if (definitions.Any(HasUnsupportedProviderColumnAnnotation))
+        for (var index = 0; index < definitions.Count; index++)
         {
-            return "provider_column_annotation";
+            if (HasUnsupportedProviderColumnAnnotation(definitions[index]))
+            {
+                return "provider_column_annotation";
+            }
+
         }
 
-        if (definitions.Any(definition =>
-                (definition.ComputedColumnSql is not null || definition.ComputedExpression is not null)
+        for (var index = 0; index < definitions.Count; index++)
+        {
+            var definition = definitions[index];
+            if ((definition.ComputedColumnSql is not null || definition.ComputedExpression is not null)
                 && !Supported(
                     features,
                     definition.IsStored == true
                         ? MySqlMigrationFeature.StoredGeneratedColumns
-                        : MySqlMigrationFeature.VirtualGeneratedColumns)))
-        {
-            return "generated_column";
+                        : MySqlMigrationFeature.VirtualGeneratedColumns))
+            {
+                return "generated_column";
+            }
+
         }
 
-        if (isMariaDb
-            && definitions.Any(static definition => !definition.IsNullable
-                && (definition.ComputedColumnSql is not null || definition.ComputedExpression is not null)))
+        if (isMariaDb)
         {
             // MariaDB's generated-column grammar has no NOT NULL facet and
             // reports the resulting column as nullable even when incoming DDL
             // contains that clause. Reject the unrepresentable contract before
             // target DDL instead of accepting a guaranteed postcondition fault.
-            return "generated_column_nullability";
+            for (var index = 0; index < definitions.Count; index++)
+            {
+                var definition = definitions[index];
+                if (!definition.IsNullable
+                    && (definition.ComputedColumnSql is not null || definition.ComputedExpression is not null))
+                {
+                    return "generated_column_nullability";
+                }
+
+            }
+
         }
 
-        return definitions.Any(static definition => definition.DefaultValue.Kind == SafeMigrationDefaultValueKind.Sql)
-            && !Supported(features, MySqlMigrationFeature.ExpressionDefaults)
-                ? "expression_default"
-                : null;
+        for (var index = 0; index < definitions.Count; index++)
+        {
+            if (definitions[index].DefaultValue.Kind == SafeMigrationDefaultValueKind.Sql)
+            {
+                return !Supported(features, MySqlMigrationFeature.ExpressionDefaults) ? "expression_default" : null;
+            }
+
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -948,52 +985,105 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             && StringComparer.OrdinalIgnoreCase.Equals(storeType.Trim(), "json");
         var collationContract = BuildCollationContract(table, definition.Collation, mariaDbJsonAlias);
 
-        var conditions = new List<string>
-        {
+        ReadOnlySpan<string> conditions =
+        [
             BuildStoreTypeMatches(storeType, isMariaDb),
             collationContract.MatchExpression,
             BuildComputedMatches(definition, isMariaDb),
             BuildValueGenerationMatches(definition, temporalRowVersion),
-        };
-
-        if (includeRepairableFacets)
-        {
-            conditions.Add($"c.IS_NULLABLE = {(definition.IsNullable ? "'YES'" : "'NO'")}");
-            conditions.Add(ColumnCommentMatches(definition.Comment));
-            conditions.Add(
-                BuildDefaultMatches(
+            includeRepairableFacets
+                ? definition.IsNullable ? "c.IS_NULLABLE = 'YES'" : "c.IS_NULLABLE = 'NO'" : string.Empty,
+            includeRepairableFacets ? ColumnCommentMatches(definition.Comment) : string.Empty,
+            includeRepairableFacets ? BuildDefaultMatches(
                     "c.COLUMN_DEFAULT",
                     definition.DefaultValue,
                     definition.IsNullable,
                     mapping,
                     isMariaDb,
-                    temporalRowVersion));
-        }
+                    temporalRowVersion) : string.Empty,
+            requireRepairSafeExtra ? OrdinaryColumnExtraMatches() : string.Empty,
+            requireExactIdentity || requireNativeOwnerIdentity
+                ? BuildRequiredColumnAddOwnerMatches("c.TABLE_SCHEMA", "DATABASE()") : string.Empty,
+            requireExactIdentity || requireNativeOwnerIdentity
+                ? BuildRequiredColumnAddOwnerMatches("c.TABLE_NAME", Literal(table)) : string.Empty,
+            requireExactIdentity ? $"CAST(c.COLUMN_NAME AS BINARY) = CAST({Literal(definition.Name)} AS BINARY)" : string.Empty,
+            ordinal is not null ? $"c.ORDINAL_POSITION = {ordinal.Value.ToString(CultureInfo.InvariantCulture)}" : string.Empty,
+        ];
 
-        if (requireRepairSafeExtra)
+        return ComposeColumnMatch(Literal(table), Literal(definition.Name), conditions);
+    }
+
+    private const string ColumnMatchPrefix = "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS c "
+        + "WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = ";
+    private const string ColumnMatchNamePrefix = " AND c.COLUMN_NAME = ";
+
+    /// <summary>Writes all predicate pieces once without a joined intermediate or a condition-list backing array.</summary>
+    /// <param name="tableLiteral">The already provider-rendered owner literal.</param>
+    /// <param name="nameLiteral">The already provider-rendered column literal.</param>
+    /// <param name="conditions">The ordered facets, with empty optional slots omitted from SQL.</param>
+    /// <returns>The exact existence predicate, materialized in one final string.</returns>
+    internal static string ComposeColumnMatch(string tableLiteral, string nameLiteral, ReadOnlySpan<string> conditions)
+    {
+        // WHY: Borrowed pieces cannot escape the synchronous string.Create
+        // callback. Emit directly into the final predicate rather than joining
+        // every facet first and copying that intermediate into another string.
+        var length = checked(ColumnMatchPrefix.Length + tableLiteral.Length + ColumnMatchNamePrefix.Length
+            + nameLiteral.Length + 1);
+
+        foreach (var condition in conditions)
         {
-            conditions.Add(OrdinaryColumnExtraMatches());
+            if (condition.Length > 0)
+            {
+                length = checked(length + 5 + condition.Length);
+            }
+
         }
 
-        if (requireExactIdentity || requireNativeOwnerIdentity)
-        {
-            conditions.Add(BuildRequiredColumnAddOwnerMatches("c.TABLE_SCHEMA", "DATABASE()"));
-            conditions.Add(BuildRequiredColumnAddOwnerMatches("c.TABLE_NAME", Literal(table)));
-        }
+        return string.Create(length, new ColumnMatchComposition(tableLiteral, nameLiteral, conditions),
+            static (destination, state) =>
+            {
+                var offset = 0;
+                AppendColumnMatchPiece(ColumnMatchPrefix, destination, ref offset);
+                AppendColumnMatchPiece(state.TableLiteral, destination, ref offset);
+                AppendColumnMatchPiece(ColumnMatchNamePrefix, destination, ref offset);
+                AppendColumnMatchPiece(state.NameLiteral, destination, ref offset);
+                foreach (var condition in state.Conditions)
+                {
+                    if (condition.Length > 0)
+                    {
+                        AppendColumnMatchPiece(" AND ", destination, ref offset);
+                        AppendColumnMatchPiece(condition, destination, ref offset);
+                    }
 
-        if (requireExactIdentity)
-        {
-            conditions.Add($"CAST(c.COLUMN_NAME AS BINARY) = CAST({Literal(definition.Name)} AS BINARY)");
-        }
+                }
 
-        if (ordinal is not null)
-        {
-            conditions.Add($"c.ORDINAL_POSITION = {ordinal.Value.ToString(CultureInfo.InvariantCulture)}");
-        }
+                destination[offset++] = ')';
+                if (offset != destination.Length)
+                {
+                    throw new InvalidOperationException("The MySQL column predicate did not fill its destination.");
+                }
+            });
+    }
 
-        return $"EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS c "
-            + $"WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = {Literal(table)} "
-            + $"AND c.COLUMN_NAME = {Literal(definition.Name)} AND {string.Join(" AND ", conditions)})";
+    /// <summary>Copies a validated immutable piece into its exactly allocated destination.</summary>
+    private static void AppendColumnMatchPiece(string value, Span<char> destination, ref int offset)
+    {
+        value.AsSpan().CopyTo(destination[offset..]);
+        offset += value.Length;
+    }
+
+    /// <summary>Retains borrowed predicate pieces only across the synchronous string.Create callback.</summary>
+    private readonly ref struct ColumnMatchComposition(string tableLiteral, string nameLiteral,
+        ReadOnlySpan<string> conditions)
+    {
+        /// <summary>Gets the already rendered owner literal without another mapping call.</summary>
+        internal string TableLiteral { get; } = tableLiteral;
+
+        /// <summary>Gets the already rendered column literal without changing placeholder order.</summary>
+        internal string NameLiteral { get; } = nameLiteral;
+
+        /// <summary>Gets immutable borrowed facets whose lifetime ends with synchronous emission.</summary>
+        internal ReadOnlySpan<string> Conditions { get; } = conditions;
     }
 
     /// <summary>Verifies every expected column of a table definition through one catalog probe.</summary>

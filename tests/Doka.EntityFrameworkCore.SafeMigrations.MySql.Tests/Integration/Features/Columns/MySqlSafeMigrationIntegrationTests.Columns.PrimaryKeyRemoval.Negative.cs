@@ -27,7 +27,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationAction.RejectDifferent, Assert.Single(report.Assessments).Action);
-        Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(failure).Message,
+        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
             StringComparison.OrdinalIgnoreCase);
         Assert.Equal(1, retained);
         Assert.Equal(1, primaryMembership);
@@ -65,7 +65,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.True(report.Assessments[^1].Action is SafeMigrationAction.RejectDifferent
             or SafeMigrationAction.RejectPrerequisiteMissing);
-        Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(failure).Message,
+        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
             StringComparison.OrdinalIgnoreCase);
         Assert.Equal(1, retained);
         Assert.Equal(0, primaryMembership);
@@ -100,7 +100,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.True(report.Assessments[^1].Action is SafeMigrationAction.RejectDifferent
             or SafeMigrationAction.RejectPrerequisiteMissing);
-        Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(failure).Message,
+        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
             StringComparison.OrdinalIgnoreCase);
         Assert.Equal(1, retained);
         Assert.Equal(1, primaryMembership);
@@ -139,7 +139,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.Equal(SafeMigrationAction.Repair, preflight.Assessments[3].Action);
-        Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(failure).Message,
+        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
             StringComparison.OrdinalIgnoreCase);
         Assert.Equal(1, retained);
         Assert.Equal(mutation == "primary" ? 1 : 0, primaryMembership);
@@ -177,7 +177,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationAction.RejectDifferent, report.Assessments[1].Action);
-        Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(failure).Message,
+        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
             StringComparison.OrdinalIgnoreCase);
         Assert.Equal(1, retained);
         Assert.Equal(1, primaryMembership);
@@ -209,7 +209,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         // Assert
         Assert.Equal(SafeMigrationAction.ValidateAtRuntime, report.Assessments[^1].Action);
-        Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(failure).Message,
+        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
             StringComparison.OrdinalIgnoreCase);
         Assert.Equal(1, retained);
         Assert.Equal(1, primaryMembership);

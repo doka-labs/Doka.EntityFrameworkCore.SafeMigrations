@@ -3,7 +3,11 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// <summary>Writes the versioned SafeMigrations report JSON contract.</summary>
 public static class SafeMigrationReportJson
 {
-    private const int CurrentReportViewSchemaVersion = 2;
+    private const int CurrentReportViewSchemaVersion = 3;
+
+    private const int MaximumIdentityFieldLength = 1024;
+
+    private const int MaximumIdentityColumnCount = 16;
 
     private const int MaximumInitialBufferSize = 16 * 1024 * 1024;
 
@@ -228,7 +232,7 @@ public static class SafeMigrationReportJson
         return new ReportSelectionCounts(assessmentCount, unexpectedObjectCount);
     }
 
-    private static bool ShouldIncludeAssessment(
+    internal static bool ShouldIncludeAssessment(
         SafeMigrationReportMode mode,
         SafeMigrationAssessment assessment,
         SafeMigrationReportSelection selection
@@ -243,7 +247,7 @@ public static class SafeMigrationReportJson
         _ => throw new ArgumentOutOfRangeException(nameof(selection)),
     };
 
-    private static bool IsBlockingAssessment(
+    internal static bool IsBlockingAssessment(
         SafeMigrationReportMode mode,
         SafeMigrationAssessment assessment
     ) => mode switch
@@ -255,7 +259,7 @@ public static class SafeMigrationReportJson
         _ => throw new ArgumentOutOfRangeException(nameof(mode)),
     };
 
-    private static void ValidateBlockingSelection(
+    internal static void ValidateBlockingSelection(
         SafeMigrationRunReport report,
         SafeMigrationReportSelection selection,
         int includedAssessmentCount
@@ -273,7 +277,7 @@ public static class SafeMigrationReportJson
         }
     }
 
-    private static string SelectionCode(
+    internal static string SelectionCode(
         SafeMigrationReportSelection selection
     ) => selection switch
     {
@@ -312,6 +316,7 @@ public static class SafeMigrationReportJson
             "operationKind",
             assessment.OperationKind is null ? null : OperationKindCode(assessment.OperationKind.Value));
         WriteNullableString(writer, "objectName", assessment.ObjectName);
+        WriteDiagnosticContext(writer, assessment);
         WriteNullableString(
             writer,
             "observedState",
@@ -359,6 +364,109 @@ public static class SafeMigrationReportJson
         writer.WriteEndObject();
     }
 
+    /// <summary>Writes bounded authored context without copying the operation or its data payload.</summary>
+    private static void WriteDiagnosticContext(
+        Utf8JsonWriter writer,
+        SafeMigrationAssessment assessment
+    )
+    {
+        var truncated = false;
+        var identity = assessment.Identity;
+        writer.WriteBoolean("identityKnown", identity is not null);
+        WriteIdentityString(writer, "identityObjectName", identity?.ObjectName, ref truncated);
+        WriteIdentityString(writer, "schema", identity?.Schema, ref truncated);
+        WriteIdentityString(writer, "table", identity?.Table, ref truncated);
+        WriteIdentityColumns(writer, "columns", identity?.Columns, ref truncated);
+        WriteIdentityString(writer, "principalSchema", identity?.PrincipalSchema, ref truncated);
+        WriteIdentityString(writer, "principalTable", identity?.PrincipalTable, ref truncated);
+        WriteIdentityColumns(writer, "principalColumns", identity?.PrincipalColumns, ref truncated);
+        WriteIdentityString(writer, "newSchema", identity?.NewSchema, ref truncated);
+        WriteIdentityString(writer, "newTable", identity?.NewTable, ref truncated);
+        WriteIdentityString(writer, "newObjectName", identity?.NewObjectName, ref truncated);
+        WriteIdentityString(writer, "migrationId", assessment.MigrationId, ref truncated);
+        WriteNullableString(writer, "policy", assessment.Policy is { } policy ? PolicyCode(policy) : null);
+        writer.WriteString("reasonCode", assessment.Explanation.ReasonCode);
+        writer.WriteString("reason", assessment.Explanation.Reason);
+        WriteNullableString(writer, "nextStep", assessment.Explanation.NextStep);
+        writer.WriteBoolean("diagnosticContextTruncated", truncated);
+    }
+
+    /// <summary>Writes an authored identifier with an explicit diagnostic-only resource bound.</summary>
+    private static void WriteIdentityString(
+        Utf8JsonWriter writer,
+        string propertyName,
+        string? value,
+        ref bool truncated
+    )
+    {
+        if (value is null)
+        {
+            writer.WriteNull(propertyName);
+
+            return;
+        }
+
+        if (value.Length <= MaximumIdentityFieldLength)
+        {
+            writer.WriteString(propertyName, value);
+
+            return;
+        }
+
+        var contentLength = MaximumIdentityFieldLength - 3;
+        if (char.IsHighSurrogate(value[contentLength - 1]) && char.IsLowSurrogate(value[contentLength]))
+        {
+            contentLength--;
+        }
+
+        // WHY: The original objectName machine field remains exact. Additional
+        // diagnostic context is bounded independently, retains real Unicode
+        // identifiers, and advertises truncation instead of inventing identity.
+        writer.WriteString(propertyName, string.Concat(value.AsSpan(0, contentLength), "..."));
+        truncated = true;
+    }
+
+    /// <summary>Writes a bounded composite-key endpoint without a filtered list allocation.</summary>
+    private static void WriteIdentityColumns(
+        Utf8JsonWriter writer,
+        string propertyName,
+        IReadOnlyList<string>? columns,
+        ref bool truncated
+    )
+    {
+        if (columns is null)
+        {
+            writer.WriteNull(propertyName);
+
+            return;
+        }
+
+        writer.WriteStartArray(propertyName);
+        var count = Math.Min(columns.Count, MaximumIdentityColumnCount);
+        for (var index = 0; index < count; index++)
+        {
+            var value = columns[index];
+            if (value.Length <= MaximumIdentityFieldLength)
+            {
+                writer.WriteStringValue(value);
+
+                continue;
+            }
+
+            var contentLength = MaximumIdentityFieldLength - 3;
+            if (char.IsHighSurrogate(value[contentLength - 1]) && char.IsLowSurrogate(value[contentLength]))
+            {
+                contentLength--;
+            }
+
+            writer.WriteStringValue(string.Concat(value.AsSpan(0, contentLength), "..."));
+            truncated = true;
+        }
+
+        truncated |= columns.Count > count;
+        writer.WriteEndArray();
+    }
+
     private static void WriteUnexpectedObject(
         Utf8JsonWriter writer,
         SafeMigrationUnexpectedObject value
@@ -391,7 +499,7 @@ public static class SafeMigrationReportJson
         }
     }
 
-    private static string ModeCode(
+    internal static string ModeCode(
         SafeMigrationReportMode value
     ) => value switch
     {
@@ -400,7 +508,7 @@ public static class SafeMigrationReportJson
         _ => throw new ArgumentOutOfRangeException(nameof(value)),
     };
 
-    private static string StatusCode(
+    internal static string StatusCode(
         SafeMigrationReportStatus value
     ) => value switch
     {
@@ -412,7 +520,7 @@ public static class SafeMigrationReportJson
         _ => throw new ArgumentOutOfRangeException(nameof(value)),
     };
 
-    private static string OperationKindCode(
+    internal static string OperationKindCode(
         SafeMigrationOperationKind value
     ) => value switch
     {
@@ -456,7 +564,7 @@ public static class SafeMigrationReportJson
         _ => throw new ArgumentOutOfRangeException(nameof(value)),
     };
 
-    private static string ActionCode(
+    internal static string ActionCode(
         SafeMigrationAction value
     ) => value switch
     {
@@ -493,6 +601,17 @@ public static class SafeMigrationReportJson
         SafeMigrationOperationalImpact.TableRewritePossible => "table_rewrite_possible",
         SafeMigrationOperationalImpact.Unknown => "unknown",
         _ => throw new ArgumentOutOfRangeException(nameof(value)),
+    };
+
+    /// <summary>Formats a defined policy without turning display text into a machine contract.</summary>
+    private static string PolicyCode(
+        SafeMigrationPolicy policy
+    ) => policy switch
+    {
+        SafeMigrationPolicy.ThrowIfDifferent => "throw_if_different",
+        SafeMigrationPolicy.RepairIfSafe => "repair_if_safe",
+        SafeMigrationPolicy.ExistenceOnly => "existence_only",
+        _ => throw new ArgumentOutOfRangeException(nameof(policy)),
     };
 
     private readonly record struct ReportSelectionCounts(

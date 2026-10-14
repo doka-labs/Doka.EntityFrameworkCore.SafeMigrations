@@ -39,7 +39,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationAction.RejectDifferent, Assert.Single(report.Assessments).Action);
-        Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(failure).Message,
+        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
             StringComparison.OrdinalIgnoreCase);
         Assert.False(observer.BodyWasObserved);
         Assert.Equal(1, originalNulls);

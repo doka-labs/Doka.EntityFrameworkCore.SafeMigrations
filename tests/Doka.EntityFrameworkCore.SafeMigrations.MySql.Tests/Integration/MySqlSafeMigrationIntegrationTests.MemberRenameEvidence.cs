@@ -75,7 +75,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             report.Assessments[^1].Action);
         if (targetExists)
         {
-            Assert.IsType<MySqlException>(failure);
+            AssertOwnedGuardFailure(failure);
         }
         else
         {
@@ -291,7 +291,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             report.Assessments[^1].Action);
         if (reservedTarget)
         {
-            Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(failure).Message,
+            Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
                 StringComparison.Ordinal);
         }
         else

@@ -122,7 +122,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             Assert.Single(report.Assessments).Action);
         if (Fixture.IsMariaDb)
         {
-            Assert.Contains("doka_sm_unsupported", Assert.IsType<MySqlException>(exception).Message,
+            Assert.Contains("doka_sm_unsupported", AssertOwnedGuardFailure(exception).Message,
                 StringComparison.Ordinal);
         }
         else
@@ -202,7 +202,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         }
         else
         {
-            Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(exception).Message,
+            Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(exception).Message,
                 StringComparison.Ordinal);
         }
 
@@ -305,7 +305,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         }
         else
         {
-            Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(exception).Message,
+            Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(exception).Message,
                 StringComparison.Ordinal);
         }
 

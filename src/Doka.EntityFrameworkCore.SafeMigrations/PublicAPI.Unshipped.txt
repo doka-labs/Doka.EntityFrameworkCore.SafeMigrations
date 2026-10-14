@@ -1,1 +1,42 @@
 #nullable enable
+*REMOVED*const Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationRunReport.CurrentSchemaVersion = 3 -> int
+const Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationRunReport.CurrentSchemaVersion = 4 -> int
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAssessment.Explanation.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDiagnosticExplanation
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAssessment.Identity.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperationIdentity?
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAssessment.MigrationId.get -> string?
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAssessment.Policy.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationPolicy?
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDiagnosticExplanation
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDiagnosticExplanation.NextStep.get -> string!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDiagnosticExplanation.Reason.get -> string!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDiagnosticExplanation.ReasonCode.get -> string!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDiagnosticExplanation.SafeMigrationDiagnosticExplanation() -> void
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDiagnosticMessages
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationExecutionException
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationExecutionException.GuardCode.get -> string!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationExecutionException.Identity.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperationIdentity!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationExecutionException.OperationOrdinal.get -> int?
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationExecutionException.Policy.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationPolicy
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationExecutionException.ReasonCode.get -> string!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationExecutionException.SafeMigrationExecutionException(Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperation! operation, string! guardCode, int? operationOrdinal, System.Exception! innerException, string? diagnosticReasonCode = null) -> void
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperationIdentity
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperationIdentity.Columns.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperationIdentity.NewObjectName.get -> string?
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperationIdentity.NewSchema.get -> string?
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperationIdentity.NewTable.get -> string?
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperationIdentity.ObjectName.get -> string!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperationIdentity.OperationKind.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperationKind?
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperationIdentity.PrincipalColumns.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperationIdentity.PrincipalSchema.get -> string?
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperationIdentity.PrincipalTable.get -> string?
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperationIdentity.Schema.get -> string?
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperationIdentity.Table.get -> string?
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationReportText
+static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDiagnosticMessages.FormatAssessment(Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAssessment! assessment) -> string!
+static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDiagnosticMessages.FormatIdentity(Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperationIdentity! identity) -> string!
+static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDiagnosticMessages.FormatRuntimeFromAnalysis(Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperation! operation, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationProviderAnalysis! analysis, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDecision! decision, int? operationOrdinal = null) -> string!
+static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDiagnosticMessages.FormatRuntime(Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperation! operation, string! guardCode, int? operationOrdinal = null, string? diagnosticReasonCode = null) -> string!
+static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDiagnosticMessages.GetExplanation(Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationIntent? intent, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationObservedState? state, string! analysisCode, string! decisionCode) -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDiagnosticExplanation
+static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDiagnosticMessages.GetExplanation(Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperationKind? kind, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationObservedState? state, string! analysisCode, string! decisionCode) -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDiagnosticExplanation
+static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperationIdentity.Create(Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationIntent! intent) -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperationIdentity!
+static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationReportText.Format(Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationRunReport! report, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationReportSelection selection = Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationReportSelection.BlockingOnly) -> string!
+static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationReportText.Write(System.IO.TextWriter! writer, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationRunReport! report, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationReportSelection selection = Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationReportSelection.BlockingOnly) -> void

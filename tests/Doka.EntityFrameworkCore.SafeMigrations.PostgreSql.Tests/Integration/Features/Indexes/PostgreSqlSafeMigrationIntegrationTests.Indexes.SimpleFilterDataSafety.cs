@@ -96,7 +96,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         // Assert
         var postgres = Assert.IsType<PostgresException>(exception);
         Assert.Equal("P1003", postgres.SqlState);
-        Assert.Equal("doka_sm_data_blocked", postgres.MessageText);
+        Assert.StartsWith("doka_sm_data_blocked:", postgres.MessageText, StringComparison.Ordinal);
         Assert.Equal(0, await SimpleFilterIndexCountAsync(connectionString));
         Assert.Equal(3, await ScalarIntAsync(connectionString, "SELECT count(*) FROM hierarchy.simple_filters;"));
     }

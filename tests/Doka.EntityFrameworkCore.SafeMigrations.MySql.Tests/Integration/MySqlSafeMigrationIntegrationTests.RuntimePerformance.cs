@@ -161,7 +161,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         var result = await RejectAndRecoverRuntimeDataAsync(context, connectionString, table, violation);
 
-        var exception = Assert.IsType<MySqlException>(result.Exception);
+        var exception = AssertOwnedGuardFailure(result.Exception);
         Assert.Equal(1062, exception.Number);
         Assert.Contains("doka_sm_data_blocked", exception.Message, StringComparison.Ordinal);
         Assert.Equal(0, result.TargetConstraintBeforeRecovery);
@@ -195,7 +195,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         var result = await RejectAndRecoverFreshRuntimeDataAsync(context);
 
-        var exception = Assert.IsType<MySqlException>(result.Exception);
+        var exception = AssertOwnedGuardFailure(result.Exception);
         Assert.Contains("doka_sm_data_blocked", exception.Message, StringComparison.Ordinal);
         Assert.Equal(0, result.TargetConstraintBeforeRecovery);
         Assert.Equal(1, result.HistoryBeforeRecovery);

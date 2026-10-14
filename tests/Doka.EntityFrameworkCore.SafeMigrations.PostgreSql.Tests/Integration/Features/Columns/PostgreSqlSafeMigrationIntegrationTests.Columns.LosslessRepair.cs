@@ -579,7 +579,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
         Assert.Equal("P1003", exception.SqlState);
-        Assert.Equal("doka_sm_data_blocked", exception.MessageText);
+        Assert.StartsWith("doka_sm_data_blocked:", exception.MessageText, StringComparison.Ordinal);
         Assert.Equal(
             40,
             await ScalarIntAsync(
@@ -654,7 +654,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         var exception = await Assert.ThrowsAsync<PostgresException>(() => execution);
 
         Assert.Equal("P1003", exception.SqlState);
-        Assert.Equal("doka_sm_data_blocked", exception.MessageText);
+        Assert.StartsWith("doka_sm_data_blocked:", exception.MessageText, StringComparison.Ordinal);
         Assert.Equal(
             40,
             await ScalarIntAsync(

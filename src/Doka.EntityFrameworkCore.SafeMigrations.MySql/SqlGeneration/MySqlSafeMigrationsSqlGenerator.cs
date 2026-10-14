@@ -8,10 +8,12 @@ internal sealed class MySqlSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
 {
     private readonly IMigrationsSqlGenerator _providerGenerator;
     private readonly MySqlSafeMigrationPlanCapture _planCapture;
+    private readonly MigrationsSqlGeneratorDependencies? _dependencies;
 
     public MySqlSafeMigrationsSqlGenerator(
         IMigrationsSqlGenerator providerGenerator,
-        MySqlSafeMigrationPlanCapture planCapture
+        MySqlSafeMigrationPlanCapture planCapture,
+        MigrationsSqlGeneratorDependencies? dependencies = null
     )
     {
         ArgumentNullException.ThrowIfNull(providerGenerator);
@@ -19,6 +21,7 @@ internal sealed class MySqlSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
 
         _providerGenerator = providerGenerator;
         _planCapture = planCapture;
+        _dependencies = dependencies;
     }
 
     public IReadOnlyList<MigrationCommand> Generate(
@@ -36,7 +39,34 @@ internal sealed class MySqlSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
         }
 
         using var generation = _planCapture.BeginGeneration(operations);
+        var commands = _providerGenerator.Generate(operations, model, options);
+        if ((options & MigrationsSqlGenerationOptions.Script) != 0)
+        {
+            return commands;
+        }
 
-        return _providerGenerator.Generate(operations, model, options);
+        MigrationCommand[]? decorated = null;
+        IRelationalCommand? metadataCommand = null;
+        for (var index = 0; index < commands.Count; index++)
+        {
+            var command = commands[index];
+            var diagnostic = _planCapture.FindRuntimeDiagnostic(command.CommandText);
+            if (diagnostic is null)
+            {
+                continue;
+            }
+
+            var dependencies = _dependencies ?? throw new InvalidOperationException(
+                "MySQL runtime diagnostics require the registered EF migrations command services.");
+
+            // WHY: The native scoped command remains the execution owner.
+            // A shared empty base command avoids duplicating every SQL payload.
+            decorated ??= commands.ToArray();
+            metadataCommand ??= dependencies.CommandBuilderFactory.Create().Build();
+            decorated[index] = new MySqlSafeMigrationDiagnosticCommand(command, diagnostic, dependencies,
+                metadataCommand);
+        }
+
+        return decorated ?? commands;
     }
 }

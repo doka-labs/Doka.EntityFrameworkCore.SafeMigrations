@@ -48,9 +48,9 @@ public sealed partial class SqliteSafeMigrationCatalogIntegrationTests
 
         var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
 
-        Assert.Contains("postcondition failed for EnsureTable",
-            Assert.IsType<InvalidOperationException>(exception).Message,
-            StringComparison.Ordinal);
+        var postconditionFailure = Assert.IsType<InvalidOperationException>(exception);
+        Assert.StartsWith("doka_sm_postcondition:", postconditionFailure.Message, StringComparison.Ordinal);
+        Assert.Contains("constraint_children", postconditionFailure.Message, StringComparison.Ordinal);
         Assert.Equal(0, await ScalarIntAsync(connection,
             "SELECT COUNT(*) FROM sqlite_schema WHERE type = 'table' AND name = 'constraint_children';"));
         Assert.Equal(1, await ScalarIntAsync(connection,

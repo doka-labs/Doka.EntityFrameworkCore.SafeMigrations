@@ -334,7 +334,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         preflight.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, operations.Take(2).ToArray(), CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "UPDATE `live_child` SET `parent_id` = 999 WHERE `id` = 1;");
-        var exception = await Assert.ThrowsAsync<MySqlException>(async () =>
+        var exception = await AssertOwnedGuardFailureAsync(async () =>
             await ExecuteOperationsAsync(context, [operations[2]], CancellationToken.None));
 
         var final = await runner.AnalyzeAsync(context, [operations[2]],
@@ -840,7 +840,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
         Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, preflight.Assessments[2].Action);
-        Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(exception).Message,
+        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(exception).Message,
             StringComparison.Ordinal);
         Assert.DoesNotContain("Duplicate key name", exception.Message, StringComparison.Ordinal);
     }
@@ -1008,7 +1008,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         }
         else
         {
-            Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(exception).Message,
+            Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(exception).Message,
                 StringComparison.Ordinal);
         }
     }
@@ -1128,7 +1128,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         if (!supported)
         {
             Assert.Equal("foreign_key_multi_valued_supporting_index", preflight.Assessments[0].AnalysisCode);
-            Assert.Contains("doka_sm_unsupported", Assert.IsType<MySqlException>(managedFailure).Message,
+            Assert.Contains("doka_sm_unsupported", AssertOwnedGuardFailure(managedFailure).Message,
                 StringComparison.Ordinal);
         }
         else if (cascade)
@@ -1237,7 +1237,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         {
             Assert.Equal("foreign_key_multi_valued_supporting_index", preflight.Assessments[0].AnalysisCode);
             Assert.False(final.Assessments[0].PostconditionSatisfied);
-            Assert.Contains("doka_sm_unsupported", Assert.IsType<MySqlException>(failure).Message,
+            Assert.Contains("doka_sm_unsupported", AssertOwnedGuardFailure(failure).Message,
                 StringComparison.Ordinal);
         }
 
@@ -1373,7 +1373,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         else
         {
             Assert.Equal(SafeMigrationAction.RejectUnsupported, preflight.Assessments[0].Action);
-            Assert.Contains("doka_sm_unsupported", Assert.IsType<MySqlException>(failure).Message,
+            Assert.Contains("doka_sm_unsupported", AssertOwnedGuardFailure(failure).Message,
                 StringComparison.Ordinal);
             Assert.Equal(1, await ScalarIntAsync(connectionString,
                 "SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS "

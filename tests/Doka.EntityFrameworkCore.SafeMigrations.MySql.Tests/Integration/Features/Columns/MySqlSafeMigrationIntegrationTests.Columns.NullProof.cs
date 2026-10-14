@@ -159,7 +159,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var sessionAfter = await ContextScalarIntAsync(context, "SELECT CONNECTION_ID();");
 
         // Assert
-        var providerException = Assert.IsType<MySqlException>(exception);
+        var providerException = AssertOwnedGuardFailure(exception);
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -335,7 +335,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         if (blocked)
         {
-            var providerException = Assert.IsType<MySqlException>(exception);
+            var providerException = AssertOwnedGuardFailure(exception);
 
             Assert.Contains("doka_sm_data_blocked", providerException.Message, StringComparison.Ordinal);
         }
@@ -422,7 +422,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var sessionAfter = await ContextScalarIntAsync(context, "SELECT CONNECTION_ID();");
 
         // Assert
-        var providerException = Assert.IsType<MySqlException>(exception);
+        var providerException = AssertOwnedGuardFailure(exception);
 
         Assert.Contains("doka_sm_data_blocked", providerException.Message, StringComparison.Ordinal);
         Assert.Equal(1, cleaned);
@@ -484,7 +484,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var cleaned = await ContextScalarIntAsync(context, NullProofVariablesClearedSql);
 
         // Assert
-        var providerException = Assert.IsType<MySqlException>(exception);
+        var providerException = AssertOwnedGuardFailure(exception);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationObservedState.Different, Assert.Single(report.Assessments).ObservedState);
@@ -545,7 +545,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var cleaned = await ContextScalarIntAsync(context, NullProofVariablesClearedSql);
 
         // Assert
-        var providerException = Assert.IsType<MySqlException>(exception);
+        var providerException = AssertOwnedGuardFailure(exception);
         var assessment = Assert.Single(report.Assessments);
 
         Assert.NotEqual(database, qualifier);

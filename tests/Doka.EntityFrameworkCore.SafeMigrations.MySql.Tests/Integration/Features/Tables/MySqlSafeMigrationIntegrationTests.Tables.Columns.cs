@@ -65,7 +65,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         }
         else
         {
-            var rejection = Assert.IsType<MySqlException>(runtimeException);
+            var rejection = AssertOwnedGuardFailure(runtimeException);
             Assert.Contains("doka_sm_different", rejection.Message, StringComparison.OrdinalIgnoreCase);
         }
     }
@@ -145,7 +145,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         }
         else
         {
-            var rejection = Assert.IsType<MySqlException>(runtimeException);
+            var rejection = AssertOwnedGuardFailure(runtimeException);
             Assert.Contains("doka_sm_different", rejection.Message, StringComparison.OrdinalIgnoreCase);
         }
     }

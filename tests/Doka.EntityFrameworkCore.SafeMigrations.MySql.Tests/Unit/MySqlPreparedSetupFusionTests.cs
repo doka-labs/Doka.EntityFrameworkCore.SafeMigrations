@@ -34,13 +34,16 @@ public sealed class MySqlPreparedSetupFusionTests
         var setup = Fragments(command, MySqlMigrationCommandFragmentKind.Setup);
         var cleanup = Fragments(command, MySqlMigrationCommandFragmentKind.Cleanup);
         var setupText = string.Concat(setup);
-        var reset = setupText.IndexOf("SET @doka_sm_provider_setup_entered = 0;", StringComparison.Ordinal);
-        var decision = setupText.IndexOf("SELECT 1, 2, 2, 2, 2 WHERE @doka_sm_action", StringComparison.Ordinal);
-        var capture = setupText.IndexOf("/*! SET @__doka_previous_sql_mode", StringComparison.Ordinal);
+        Assert.True(MySqlSafeMigrationRuntimeDiagnostic.TryReadMarker(setupText, out _, out _));
+        var markerEnd = setupText.IndexOf("*/", StringComparison.Ordinal) + 2;
+        var scopedSetup = setupText.AsSpan(markerEnd);
+        var reset = scopedSetup.IndexOf("SET @doka_sm_provider_setup_entered = 0;", StringComparison.Ordinal);
+        var decision = scopedSetup.IndexOf("WHERE @doka_sm_action = 'reject_different'", StringComparison.Ordinal);
+        var capture = scopedSetup.IndexOf("/*! SET @__doka_previous_sql_mode", StringComparison.Ordinal);
 
         Assert.Equal(0, reset);
-        Assert.StartsWith("SET @doka_sm_provider_setup_entered = 0;"
-            + "DROP TEMPORARY TABLE IF EXISTS `__doka_sm_assert`;", setupText, StringComparison.Ordinal);
+        Assert.True(scopedSetup.StartsWith("SET @doka_sm_provider_setup_entered = 0;"
+            + "DROP TEMPORARY TABLE IF EXISTS `__doka_sm_assert`;", StringComparison.Ordinal));
         Assert.True(decision > reset);
         Assert.True(capture > decision);
         Assert.Contains("/*! SET @__doka_previous_sql_mode = @@SESSION.sql_mode, "

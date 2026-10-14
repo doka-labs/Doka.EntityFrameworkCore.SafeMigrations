@@ -1,5 +1,10 @@
 # SQLite behavior
 
+Unreleased managed diagnostics identify the affected owner and proven cause
+without exposing `foreign_key_check` row identifiers or changing rollback.
+See [diagnostics](diagnostics.md#runtime-provider-differences) for readable reports;
+guarded SQL scripts remain explicitly unsupported.
+
 Prepared stable 10.4.11 combines actual live column/key facts with accepted
 ordered physical lifetimes. Only current NULL-preserving additions or proven
 empty owners can certify dependent rows; target-model nullability, future adds,

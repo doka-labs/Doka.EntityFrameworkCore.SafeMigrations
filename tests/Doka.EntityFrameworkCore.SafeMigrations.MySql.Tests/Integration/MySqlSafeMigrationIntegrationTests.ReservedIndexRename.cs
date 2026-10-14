@@ -42,7 +42,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         if (reserved)
         {
-            var exception = Assert.IsType<MySqlException>(failure);
+            var exception = AssertOwnedGuardFailure(failure);
             Assert.Contains("doka_sm_different", exception.Message, StringComparison.Ordinal);
         }
         else

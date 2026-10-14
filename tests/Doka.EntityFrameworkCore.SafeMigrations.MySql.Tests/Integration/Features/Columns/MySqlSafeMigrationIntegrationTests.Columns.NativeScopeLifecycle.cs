@@ -45,7 +45,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             "SELECT COUNT(*) FROM `native_scope_items` WHERE `key` = 1;");
 
         // Assert
-        Assert.Contains("doka_sm_unsupported", Assert.IsType<MySqlException>(exception).Message,
+        Assert.Contains("doka_sm_unsupported", AssertOwnedGuardFailure(exception).Message,
             StringComparison.Ordinal);
         Assert.NotNull(before);
         Assert.NotNull(after);

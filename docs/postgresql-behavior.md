@@ -1,5 +1,10 @@
 # PostgreSQL behavior
 
+Unreleased runtime diagnostics put essential owner/reason context into native
+guard messages without enabling error-detail disclosure or changing SQLSTATE.
+See [diagnostics](diagnostics.md#runtime-provider-differences) for bounded text,
+privacy and report-schema compatibility.
+
 Prepared stable 10.4.11 qualifies sparse live/projected endpoint and candidate-key
 prerequisites, structured CHECK bindings and native physical index-input types.
 Unresolved operator-class or access-method compatibility remains unsupported;

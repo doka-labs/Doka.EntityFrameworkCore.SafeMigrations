@@ -12,7 +12,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         builder.CreateIndexIfNotExists("ix_events_filtered", "events", ["id"], filter: "id > 0");
 
         var exception =
-            await Assert.ThrowsAsync<MySqlException>(() => ExecuteOperationsAsync(context, builder.Operations));
+            await AssertOwnedGuardFailureAsync(() => ExecuteOperationsAsync(context, builder.Operations));
 
         Assert.Contains("doka_sm_unsupported", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(

@@ -64,7 +64,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             context,
             builder.Operations,
             new SafeMigrationRunOptions("current-database-drop-schema"));
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations));
 
         var assessment = Assert.Single(report.Assessments);
@@ -97,7 +97,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             context,
             builder.Operations,
             new SafeMigrationRunOptions("foreign-database-drop-schema"));
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations));
 
         // Assert
@@ -422,9 +422,9 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                     operations,
                     new SafeMigrationRunOptions("foreign-database-isolation"));
 
-            var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+            var exception = await AssertOwnedGuardFailureAsync(() =>
                 ExecuteOperationsAsync(context, operations));
-            var dataException = await Assert.ThrowsAsync<MySqlException>(() =>
+            var dataException = await AssertOwnedGuardFailureAsync(() =>
                 ExecuteOperationsAsync(context, data.Operations));
 
             Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -480,7 +480,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             foreignDatabase);
 
         // Act
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations));
 
         // Assert
@@ -565,7 +565,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 Assert.Equal(SafeMigrationAction.RejectUnsupported, assessment.Action);
             });
 
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, [builder.Operations[2]]));
 
         Assert.Contains("doka_sm_unsupported", exception.Message, StringComparison.OrdinalIgnoreCase);

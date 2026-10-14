@@ -12,7 +12,9 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 internal sealed class SafeMigrationCSharpMigrationOperationGenerator : CSharpMigrationOperationGenerator
 {
     private const string LegacyRollbackMessage = "A legacy-convergence migration cannot be rolled back safely "
-        + "because SafeMigrations cannot prove which database objects predated the migration.";
+        + "because SafeMigrations cannot prove which database objects predated the migration. "
+        + "Use an explicitly reviewed forward recovery migration or a verified backup recovery procedure "
+        + "instead of the generated Down operation.";
 
     private readonly SafeMigrationScaffoldingConfiguration _configuration;
     private readonly ISafeMigrationCreateIndexScaffoldingProjector? _createIndexProjector;
@@ -38,7 +40,8 @@ internal sealed class SafeMigrationCSharpMigrationOperationGenerator : CSharpMig
         if (projectorSnapshot.Length > 1)
         {
             throw new InvalidOperationException(
-                "SafeMigrations requires exactly one create-index metadata projector per active provider.");
+                "SafeMigrations requires exactly one create-index metadata projector per active provider. "
+                + "Remove duplicate provider or custom projector registrations from the design-time service provider.");
         }
 
         _configuration = configuration;
@@ -48,7 +51,8 @@ internal sealed class SafeMigrationCSharpMigrationOperationGenerator : CSharpMig
         if (adapterSnapshot.Length > 1)
         {
             throw new InvalidOperationException(
-                "SafeMigrations requires at most one provider operation adapter per active provider.");
+                "SafeMigrations requires at most one provider operation adapter per active provider. "
+                + "Remove duplicate provider or custom adapter registrations from the design-time service provider.");
         }
 
         _providerOperationAdapter = adapterSnapshot.SingleOrDefault();
@@ -123,7 +127,9 @@ internal sealed class SafeMigrationCSharpMigrationOperationGenerator : CSharpMig
         {
             SafeMigrationScaffoldingMode.Strict => ".CreateTableIfNotExists(",
             SafeMigrationScaffoldingMode.LegacyConvergence => ".ConvergeTableFromModel(",
-            _ => throw new InvalidOperationException("The SafeMigrations scaffolding mode is invalid."),
+            _ => throw new InvalidOperationException(
+                "The SafeMigrations scaffolding mode is invalid. Select Strict or LegacyConvergence "
+                + "through UseScaffoldingMode before generating migrations."),
         };
 
         ValidateCheckConstraints(operation);
@@ -430,14 +436,16 @@ internal sealed class SafeMigrationCSharpMigrationOperationGenerator : CSharpMig
         if (string.IsNullOrWhiteSpace(operation.PrincipalTable))
         {
             throw new InvalidOperationException(
-                $"Foreign key '{operation.Name}' does not identify its principal table. "
+                $"Foreign key '{SafeMigrationDiagnosticMessages.BoundForDisplay(operation.Name)}' "
+                + "does not identify its principal table. "
                 + "SafeMigrations stopped instead of generating an incomplete constraint contract.");
         }
 
         if (operation.PrincipalColumns is not { Length: > 0 } principalColumns)
         {
             throw new InvalidOperationException(
-                $"Foreign key '{operation.Name}' does not identify its principal columns. "
+                $"Foreign key '{SafeMigrationDiagnosticMessages.BoundForDisplay(operation.Name)}' "
+                + "does not identify its principal columns. "
                 + "SafeMigrations stopped instead of generating an incomplete constraint contract.");
         }
 
@@ -446,7 +454,8 @@ internal sealed class SafeMigrationCSharpMigrationOperationGenerator : CSharpMig
         if (operation.Columns.Length != principalColumns.Length)
         {
             throw new InvalidOperationException(
-                $"Foreign key '{operation.Name}' has different dependent and principal column counts. "
+                $"Foreign key '{SafeMigrationDiagnosticMessages.BoundForDisplay(operation.Name)}' "
+                + "has different dependent and principal column counts. "
                 + "SafeMigrations stopped before generating source.");
         }
 
@@ -920,7 +929,9 @@ internal sealed class SafeMigrationCSharpMigrationOperationGenerator : CSharpMig
         {
             SafeMigrationPolicy.ThrowIfDifferent => nameof(SafeMigrationPolicy.ThrowIfDifferent),
             SafeMigrationPolicy.RepairIfSafe => nameof(SafeMigrationPolicy.RepairIfSafe),
-            _ => throw new InvalidOperationException("The legacy-convergence policy is invalid."),
+            _ => throw new InvalidOperationException(
+                "The legacy-convergence policy is invalid. Select ThrowIfDifferent or RepairIfSafe "
+                + "through UseLegacyConvergencePolicy before generating migrations."),
         };
 
         // Freeze the policy into generated source. Runtime option changes must
@@ -1099,7 +1110,8 @@ internal sealed class SafeMigrationCSharpMigrationOperationGenerator : CSharpMig
         }
 
         throw new InvalidOperationException(
-            $"Check constraint '{name}' uses SQL that SafeMigrations cannot compare structurally "
+            $"Check constraint '{SafeMigrationDiagnosticMessages.BoundForDisplay(name)}' uses SQL "
+            + "that SafeMigrations cannot compare structurally "
             + $"('{failureCode}'). Replace the generated operation with an explicit "
             + $"ExpectedCheckConstraintDefinition.FromExpression definition before applying the migration.");
     }
@@ -1117,8 +1129,12 @@ internal sealed class SafeMigrationCSharpMigrationOperationGenerator : CSharpMig
         // WHY: Standalone constraint definitions have no provider-annotation
         // contract. Silently discarding metadata here could change physical DDL.
         throw new InvalidOperationException(
-            $"Standalone constraint operation '{operation.GetType().Name}' contains unsupported annotation "
-            + $"'{annotation.Name}'. SafeMigrations stopped instead of generating a lossy constraint contract.");
+            "Standalone constraint operation "
+            + $"'{SafeMigrationDiagnosticMessages.BoundForDisplay(operation.GetType().Name)}' "
+            + "contains unsupported annotation "
+            + $"'{SafeMigrationDiagnosticMessages.BoundForDisplay(annotation.Name)}'. "
+            + "SafeMigrations stopped instead of generating a lossy constraint contract. "
+            + "Use a provider-certified contract that preserves the metadata before applying this constraint.");
     }
 
     private static void ValidateConstraintIdentity(
@@ -1131,6 +1147,7 @@ internal sealed class SafeMigrationCSharpMigrationOperationGenerator : CSharpMig
         {
             throw new InvalidOperationException(
                 $"Standalone constraint operation '{operation}' has an incomplete object identity. "
+                + "Set the constraint name and owning table explicitly; "
                 + "SafeMigrations stopped before generating source.");
         }
     }
@@ -1144,8 +1161,9 @@ internal sealed class SafeMigrationCSharpMigrationOperationGenerator : CSharpMig
         if (columns.Count == 0 || columns.Any(string.IsNullOrWhiteSpace))
         {
             throw new InvalidOperationException(
-                $"Constraint '{name}' has an incomplete {role}-column contract. "
-                + "SafeMigrations stopped before generating source.");
+                $"Constraint '{SafeMigrationDiagnosticMessages.BoundForDisplay(name)}' "
+                + $"has an incomplete {role}-column contract. "
+                + "Supply the complete ordered, non-empty column vector before generating source.");
         }
     }
 
@@ -1161,8 +1179,9 @@ internal sealed class SafeMigrationCSharpMigrationOperationGenerator : CSharpMig
         }
 
         throw new InvalidOperationException(
-            $"Foreign key '{name}' has an undefined {role} referential action '{(int)action}'. "
-            + "SafeMigrations stopped before generating source.");
+            $"Foreign key '{SafeMigrationDiagnosticMessages.BoundForDisplay(name)}' "
+            + $"has an undefined {role} referential action '{(int)action}'. "
+            + "Select a defined ReferentialAction before generating source.");
     }
 
     /// <inheritdoc />

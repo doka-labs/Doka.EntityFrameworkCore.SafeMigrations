@@ -306,7 +306,9 @@ public sealed class SqlServerIdentifierCollisionAllocationTests
         bool safe
     ) => "DECLARE @doka_identity_safe int = " + (safe ? "1" : "0") + "; "
         + (throwOnCollision
-            ? "IF @doka_identity_safe <> 1 THROW 51002, N'doka_sm_unsupported', 1;"
+            ? "IF @doka_identity_safe <> 1 THROW 51002, N'doka_sm_unsupported: SafeMigrations rejected the "
+            + "migration identifier contract; owner=<unavailable>; reason=Invalid or catalog-colliding identifiers "
+            + "could not be admitted; next=Use valid, unambiguous identifiers under the active catalog collation.', 1;"
             : "SELECT @doka_identity_safe;");
 
     /// <summary>Renders one complete original reference row without relying on production SQL helpers.</summary>

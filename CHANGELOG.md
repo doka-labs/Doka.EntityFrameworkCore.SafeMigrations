@@ -6,6 +6,32 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
+### Added
+
+- Add shared, bounded operation identity and human-readable diagnostics across
+  SafeMigrations failures. Include authored schema/table/member, FK principal,
+  rename endpoints, known operation/migration context, established reason and
+  corrective guidance without new data scans or automatic preflight.
+- Add assessment owner identity and explanations to canonical report schema 4
+  and filtered view schema 3; retain older packaged schemas and existing code,
+  fingerprint, objectName, ordering and selection semantics. Add streaming
+  `SafeMigrationReportText` summaries with explicit total and omitted counts.
+
+### Changed
+
+- Translate only positively correlated MySQL/MariaDB owned runtime assertions
+  into `SafeMigrationExecutionException`, preserving the exact native cause
+  after Doka cleanup. Consumers catching those assertions as `MySqlException`
+  must handle the new typed failure. Ordinary native errors, cancellation and
+  provider recovery failures remain unchanged. Generated scripts emit bounded
+  diagnostic results before their native assertion.
+- Enrich PostgreSQL, SQL Server and SQLite guard messages while retaining
+  native guard identities, SQLSTATEs/error numbers, scope ownership and rollback
+  contracts. Improve setup, scaffolding, model-contract and internal-invariant
+  guidance without changing decisions or inferred migration history.
+- Remove row identifiers from SQLite-authored foreign-key integrity diagnostics;
+  display only bounded structural ownership and relationship context.
+
 ## [10.4.11] - 2026-10-14
 
 Prepare stable 10.4.11 for all five packages. This patch combines independently

@@ -117,7 +117,8 @@ internal sealed class SafeMigrationCSharpMigrationsGenerator : IMigrationsCodeGe
         {
             throw new InvalidOperationException(
                 $"SafeMigrations {direction} operations are missing the design-time services guard. "
-                + "The model differ and migrations code generator must be registered together.");
+                + "The model differ and migrations code generator must be registered together. "
+                + "Register the active provider's SafeMigrations design-time services before scaffolding.");
         }
 
         var result = new MigrationOperation[operations.Count - 1];
@@ -126,7 +127,8 @@ internal sealed class SafeMigrationCSharpMigrationsGenerator : IMigrationsCodeGe
             if (operations[ordinal] is SafeMigrationDesignTimeServicesRequiredOperation)
             {
                 throw new InvalidOperationException(
-                    $"SafeMigrations {direction} operations contain more than one design-time services guard.");
+                    $"SafeMigrations {direction} operations contain more than one design-time services guard. "
+                    + "Remove duplicate model-differ decoration or design-time service registrations.");
             }
 
             result[ordinal - 1] = operations[ordinal];
@@ -187,7 +189,8 @@ internal sealed class SafeMigrationCSharpMigrationsGenerator : IMigrationsCodeGe
             {
                 throw new InvalidOperationException(
                     "The EF Core C# migrations generator emitted more than one SafeMigrations namespace "
-                    + "directive. SafeMigrations stopped instead of preserving ambiguous generated source.");
+                    + "directive. SafeMigrations stopped instead of preserving ambiguous generated source. "
+                    + "Check custom generator replacements and duplicate design-time service registration.");
             }
 
             return source;
@@ -199,7 +202,8 @@ internal sealed class SafeMigrationCSharpMigrationsGenerator : IMigrationsCodeGe
         {
             throw new InvalidOperationException(
                 "The EF Core C# migrations generator omitted its migrations namespace directive. "
-                + "SafeMigrations stopped instead of emitting source with an unresolved extension method.");
+                + "SafeMigrations stopped instead of emitting source with an unresolved extension method. "
+                + "Use a compatible provider C# generator and check custom generator replacements.");
         }
 
         return source.Insert(anchorIndex, string.Concat(directive, newline));
@@ -267,7 +271,8 @@ internal sealed class SafeMigrationCSharpMigrationsGenerator : IMigrationsCodeGe
         {
             throw new InvalidOperationException(
                 "The EF Core C# migrations generator emitted an unexpected namespace shape. "
-                + "SafeMigrations stopped instead of generating analyzer-incompatible migration code.");
+                + "SafeMigrations stopped instead of generating analyzer-incompatible migration code. "
+                + "Use a compatible provider C# generator and check custom generator replacements.");
         }
 
         var bodyStart = headerIndex + blockHeader.Length;
@@ -299,7 +304,8 @@ internal sealed class SafeMigrationCSharpMigrationsGenerator : IMigrationsCodeGe
                 if (!line.StartsWith("    ", StringComparison.Ordinal))
                 {
                     throw new InvalidOperationException(
-                        "The EF Core C# migrations generator emitted an unexpected namespace indentation shape.");
+                        "The EF Core C# migrations generator emitted an unexpected namespace indentation shape. "
+                        + "Use a compatible provider C# generator and check custom generator replacements.");
                 }
 
                 result.Append(line[4..]);

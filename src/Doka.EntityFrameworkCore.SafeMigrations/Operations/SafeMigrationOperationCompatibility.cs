@@ -85,9 +85,22 @@ internal static class SafeMigrationOperationCompatibility
     {
         ArgumentNullException.ThrowIfNull(operation);
 
+        // WHY: Reuse identifier-only capture without normalizing an unsupported
+        // operation or evaluating its SQL, annotations, defaults or row values.
+        var identity = SafeMigrationRunner.CaptureProviderIdentity(operation);
+        var owner = identity is null
+            ? "Owner: <unavailable>. "
+            : $"Owner: {SafeMigrationDiagnosticMessages.FormatIdentity(identity)}. ";
+
+        var operationType = SafeMigrationDiagnosticMessages.BoundForDisplay(
+            operation.GetType().FullName ?? operation.GetType().Name);
+
         return new NotSupportedException(
-            $"Migration operation '{operation.GetType().FullName}' has no complete SafeMigrations contract. "
-            + "SafeMigrations stopped scaffolding before publishing unsupported migration source.");
+            $"Migration operation '{operationType}' has no complete SafeMigrations contract. "
+            + owner
+            + "SafeMigrations stopped scaffolding before publishing unsupported migration source. "
+            + "Use a supported explicit operation contract or an active provider-certified adapter; "
+            + "do not discard provider metadata merely to make the operation pass.");
     }
 
     private static bool TryNormalizeCoreOperation(

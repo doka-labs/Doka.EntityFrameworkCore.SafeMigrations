@@ -62,7 +62,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         // Assert
         var postgres = Assert.IsType<PostgresException>(exception);
         Assert.Equal("P1004", postgres.SqlState);
-        Assert.Equal("doka_sm_prerequisite_missing", postgres.MessageText);
+        Assert.StartsWith("doka_sm_prerequisite_missing:", postgres.MessageText, StringComparison.Ordinal);
         Assert.Equal(0, await SimpleFilterIndexCountAsync(connectionString));
         Assert.Equal(1, await ScalarIntAsync(connectionString, "SELECT count(*) FROM hierarchy.simple_filters;"));
     }
@@ -227,7 +227,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         // Assert
         var postgres = Assert.IsType<PostgresException>(exception);
         Assert.Equal("P1001", postgres.SqlState);
-        Assert.Equal("doka_sm_different", postgres.MessageText);
+        Assert.StartsWith("doka_sm_different:", postgres.MessageText, StringComparison.Ordinal);
         Assert.Equal(1, await SimpleFilterIndexCountAsync(connectionString));
         Assert.Equal(
             "(parent IS NULL)",

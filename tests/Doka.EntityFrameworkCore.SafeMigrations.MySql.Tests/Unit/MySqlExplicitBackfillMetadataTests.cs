@@ -115,7 +115,8 @@ public sealed class MySqlExplicitBackfillMetadataTests
         Assert.True(payloads.IndexOf(add) < payloads.IndexOf(finish));
         Assert.DoesNotContain("DEFAULT", add, StringComparison.Ordinal);
         Assert.DoesNotContain(payloads, sql => sql.StartsWith("UPDATE ", StringComparison.Ordinal));
-        Assert.Equal(first, second);
+        Assert.Equal(MySqlRuntimeSqlCanonicalizer.NormalizeOwnedCorrelation(first),
+            MySqlRuntimeSqlCanonicalizer.NormalizeOwnedCorrelation(second));
         Assert.True(Assert.IsType<bool>(authored["Doka:MySql:RequiresExplicitBackfill"]));
         Assert.True(Assert.IsType<bool>(Assert.Single(definition.ProviderAnnotations,
             annotation => annotation.Name == "Doka:MySql:RequiresExplicitBackfill").CreateValueSnapshot()));

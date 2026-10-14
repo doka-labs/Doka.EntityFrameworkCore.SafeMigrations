@@ -38,8 +38,9 @@ internal sealed class SafeMigrationMigrationsAssembly : IMigrationsAssembly
         if (!_migrationContextType.IsInstanceOfType(_context))
         {
             throw new InvalidOperationException(
-                $"Canonical migration context '{_migrationContextType.FullName}' is not assignable from runtime context "
-                + $"'{_context.GetType().FullName}'.");
+                $"Canonical migration context '{DisplayType(_migrationContextType)}' is not assignable from runtime "
+                + $"context '{DisplayType(_context.GetType())}'. Configure a canonical base context compatible "
+                + "with this runtime context, or use a separate migration lineage.");
         }
     }
 
@@ -76,7 +77,8 @@ internal sealed class SafeMigrationMigrationsAssembly : IMigrationsAssembly
             if (snapshots.Length > 1)
             {
                 throw new InvalidOperationException(
-                    $"Multiple migration model snapshots are registered for '{_migrationContextType.FullName}'.");
+                    $"Multiple migration model snapshots are registered for '{DisplayType(_migrationContextType)}'. "
+                    + "Keep exactly one snapshot for this canonical context in the configured migrations assembly.");
             }
 
             _modelSnapshot = snapshots.Length == 0
@@ -85,9 +87,12 @@ internal sealed class SafeMigrationMigrationsAssembly : IMigrationsAssembly
                     snapshots[0]
                         .AsType(),
                     nonPublic: true) as ModelSnapshot
-                ?? throw new InvalidOperationException("The migration model snapshot could not be constructed.");
+                ?? throw new InvalidOperationException(
+                    $"The migration model snapshot for '{DisplayType(_migrationContextType)}' could not be "
+                    + "constructed. Check that the snapshot derives from ModelSnapshot and has a usable constructor.");
 
             _modelSnapshotInitialized = true;
+
             return _modelSnapshot;
         }
     }
@@ -115,11 +120,19 @@ internal sealed class SafeMigrationMigrationsAssembly : IMigrationsAssembly
         ArgumentException.ThrowIfNullOrWhiteSpace(activeProvider);
 
         var migration = Activator.CreateInstance(migrationClass.AsType(), nonPublic: true) as Migration
-            ?? throw new InvalidOperationException($"Migration '{migrationClass.FullName}' could not be constructed.");
+            ?? throw new InvalidOperationException(
+                $"Migration '{DisplayType(migrationClass.AsType())}' could not be constructed. Check that the "
+                + "selected type derives from Migration and has a usable constructor.");
 
         migration.ActiveProvider = activeProvider;
+
         return migration;
     }
+
+    /// <summary>Formats only bounded structural type metadata, never reflection loader payloads.</summary>
+    private static string DisplayType(
+        Type type
+    ) => SafeMigrationDiagnosticMessages.BoundForDisplay(type.FullName ?? type.Name);
 
     private static TypeInfo[] GetDefinedTypes(
         Assembly assembly
@@ -132,7 +145,10 @@ internal sealed class SafeMigrationMigrationsAssembly : IMigrationsAssembly
         catch (ReflectionTypeLoadException exception)
         {
             throw new InvalidOperationException(
-                $"Migration types could not be loaded from assembly '{assembly.GetName().Name}'.",
+                "Migration types could not be loaded from assembly "
+                + $"'{SafeMigrationDiagnosticMessages.BoundForDisplay(assembly.GetName().Name ?? "<unnamed>")}'. "
+                + "Check the deployed dependency versions and migrations assembly. The original loader exception "
+                + "is preserved as InnerException for diagnosis.",
                 exception);
         }
     }

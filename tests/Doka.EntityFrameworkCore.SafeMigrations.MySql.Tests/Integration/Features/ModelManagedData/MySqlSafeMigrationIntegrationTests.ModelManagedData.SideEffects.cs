@@ -75,7 +75,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.NotNull(origin);
         Assert.Equal(0, origin.OperationOrdinal);
         Assert.Equal(SafeMigrationObservedState.Different, Assert.Single(actual.Assessments).ObservedState);
-        Assert.IsType<MySqlException>(exception);
+        AssertOwnedGuardFailure(exception);
         Assert.Equal(1, changedRows);
     }
 
@@ -287,7 +287,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal("projected_model_managed_data_state_unknown", preflight.Assessments[2].AnalysisCode);
         Assert.NotNull(preflight.Assessments[2].DeferredOrigin);
         Assert.Equal(SafeMigrationObservedState.DataBlocked, Assert.Single(actual.Assessments).ObservedState);
-        Assert.IsType<MySqlException>(exception);
+        AssertOwnedGuardFailure(exception);
         Assert.Equal(1, parents);
         Assert.Equal(1, recreatedChildren);
     }

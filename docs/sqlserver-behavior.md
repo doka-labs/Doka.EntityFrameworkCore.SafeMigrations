@@ -1,5 +1,9 @@
 # SQL Server behavior
 
+Unreleased runtime diagnostics retain the native guard error number/state while
+adding bounded owner/reason text. Identity-scope recovery and ordinary native
+errors remain separate; see [diagnostics](diagnostics.md#runtime-provider-differences).
+
 The SQL Server adapter is a separate, optional package introduced in 10.4.6.
 Releases 10.4.2 through 10.4.5 contain only Core, MySQL/MariaDB, PostgreSQL,
 and SQLite. Prepared stable 10.4.11 qualifies sparse FK endpoints and reference

@@ -102,7 +102,8 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
             if (plan.IsStaticallyUnsupported)
             {
                 throw new NotSupportedException(
-                    "The SQL Server SafeMigrations contract is unsupported: " + plan.UnsupportedCode + ".");
+                    SafeMigrationDiagnosticMessages.FormatRuntime(safeOperation,
+                        "doka_sm_unsupported", ordinal, plan.UnsupportedCode));
             }
 
             plans[ordinal] = plan;
@@ -157,7 +158,7 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
 
             var plan = plans[ordinal] ?? throw new UnreachableException();
 
-            var baseline = RenderBaseline(safeOperation, plan, model, options);
+            var baseline = RenderBaseline(safeOperation, plan, model, options, ordinal);
             var repairBaseline = RenderRepairBaseline(safeOperation, plan, model, options);
             var effectiveRepairBaseline = repairBaseline.Count > 0
                 ? repairBaseline
@@ -172,7 +173,10 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
                 && !IsUnchangedTableRename(safeOperation.Intent))
             {
                 throw new InvalidOperationException(
-                    "A supported SQL Server SafeMigrations operation has no baseline command.");
+                    "A supported SQL Server SafeMigrations operation has no baseline command. "
+                    + SafeMigrationDiagnosticMessages.FormatIdentity(
+                        SafeMigrationOperationIdentity.Create(safeOperation.Intent))
+                    + "; next=Inspect the configured provider baseline generator; no DDL was approved.");
             }
 
             if (safeOperation.Policy == SafeMigrationPolicy.RepairIfSafe
@@ -180,20 +184,25 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
                 && effectiveRepairBaseline.Count == 0)
             {
                 throw new InvalidOperationException(
-                    "A repairable SQL Server SafeMigrations operation has no repair command.");
+                    "A repairable SQL Server SafeMigrations operation has no repair command. "
+                    + SafeMigrationDiagnosticMessages.FormatIdentity(
+                        SafeMigrationOperationIdentity.Create(safeOperation.Intent))
+                    + "; next=Inspect the configured provider repair baseline; no repair was approved.");
             }
 
             if (HasTransactionSuppressedCommand(baseline)
                 || HasTransactionSuppressedCommand(effectiveRepairBaseline))
             {
                 throw new NotSupportedException(
-                    "A transaction-suppressed SQL Server baseline cannot be guarded atomically.");
+                    SafeMigrationDiagnosticMessages.FormatRuntime(safeOperation,
+                        "doka_sm_unsupported", ordinal, "baseline_transaction_suppressed"));
             }
 
             var guarded = new SqlOperation
             {
                 Sql = BuildGuardedSql(safeOperation, plan, baseline, effectiveRepairBaseline,
-                    scriptIdentityScope: (options & MigrationsSqlGenerationOptions.Script) != 0),
+                    scriptIdentityScope: (options & MigrationsSqlGenerationOptions.Script) != 0,
+                    operationOrdinal: ordinal),
             };
 
             var guardedCommands = _baselineGenerator.Generate([guarded], model, options);
@@ -214,7 +223,9 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
                         cleanupSql,
                         _dependencies,
                         analyzer,
-                        metadataCommand));
+                        metadataCommand,
+                        safeOperation,
+                        ordinal));
                 }
             }
             else
@@ -378,7 +389,8 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
         SafeMigrationOperation operation,
         SqlServerSafeMigrationRuntimePlan plan,
         IModel? model,
-        MigrationsSqlGenerationOptions options
+        MigrationsSqlGenerationOptions options,
+        int ordinal
     )
     {
         if (plan.IsStaticallyUnsupported)
@@ -392,7 +404,9 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
                 [new SqlOperation
                 {
                     Sql = _catalogSqlBuilder.BuildModelManagedDataMutationSql(data,
-                        scriptIdentityScope: (options & MigrationsSqlGenerationOptions.Script) != 0),
+                        scriptIdentityScope: (options & MigrationsSqlGenerationOptions.Script) != 0,
+                        scopeInUseMessage: SafeMigrationDiagnosticMessages.FormatRuntime(operation,
+                            "doka_sm_identity_scope_in_use", ordinal)),
                 }],
                 model,
                 options);
@@ -489,16 +503,19 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
     /// <param name="scriptIdentityScope">
     /// Whether SQL-only execution owns its own marker instead of client bootstrap.
     /// </param>
+    /// <param name="operationOrdinal">The known stream ordinal, or null for a prepared-plan rendering caller.</param>
     /// <returns>The complete isolated guard with deferred scalar and DDL scopes intact.</returns>
     internal static string BuildGuardedSql(
         SafeMigrationOperation operation,
         SqlServerSafeMigrationRuntimePlan plan,
         IReadOnlyList<MigrationCommand> baseline,
         IReadOnlyList<MigrationCommand> repairBaseline,
-        bool scriptIdentityScope = false
+        bool scriptIdentityScope = false,
+        int? operationOrdinal = null
     )
     {
         var builder = new StringBuilder(1024);
+        var diagnostic = new SqlServerSafeMigrationRuntimeDiagnostic(operation, operationOrdinal);
 
         if (operation.Intent is EnsureModelManagedDataIntent)
         {
@@ -509,7 +526,9 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
         // WHY: SQL Server hides catalog metadata the caller cannot view. A
         // missing catalog row is not evidence that the object is absent.
         builder.Append("IF COALESCE(").Append(MetadataVisibilityExpression)
-            .Append(", 0) <> 1\nBEGIN\n    THROW 51002, N'doka_sm_unsupported', 1;\nEND;\n");
+            .Append(", 0) <> 1\nBEGIN\n    ");
+        diagnostic.AppendThrow(builder, 51002, "doka_sm_unsupported", "catalog_metadata_not_visible");
+        builder.Append("\nEND;\n");
 
         if (plan.PhysicalTableSupportExpression is { } physicalTableSupport)
         {
@@ -517,7 +536,10 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
             // require different DDL and DML. Reject before any row expression
             // is bound or a caller policy can authorize a baseline command.
             builder.Append("IF COALESCE((").Append(physicalTableSupport)
-                .Append("), 0) <> 1\nBEGIN\n    THROW 51002, N'doka_sm_unsupported', 1;\nEND;\n");
+                .Append("), 0) <> 1\nBEGIN\n    ");
+            diagnostic.AppendThrow(builder, 51002, "doka_sm_unsupported",
+                SqlServerSafeMigrationRuntimePlan.PhysicalTableUnsupportedCode);
+            builder.Append("\nEND;\n");
         }
 
         if (plan.ColumnLayoutFailureExpression is { } columnLayoutFailure)
@@ -525,8 +547,20 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
             // WHY: An absent column consumes a new slot and fixed row storage.
             // Reject an unproven layout using metadata before typed constants,
             // row probes, caller policy, or baseline DDL can bind or execute.
-            builder.Append("IF (").Append(columnLayoutFailure)
-                .Append(") IS NOT NULL\nBEGIN\n    THROW 51002, N'doka_sm_unsupported', 1;\nEND;\n");
+            // WHY: The existing predicate already computes the exact capacity
+            // failure. Capture it once, then select failure-only constant text;
+            // diagnostics must neither repeat its catalog read nor claim that
+            // a proven capacity limit is merely an unknown layout.
+            builder.Append("DECLARE @doka_layout_failure nvarchar(64) = (").Append(columnLayoutFailure)
+                .Append(");\nIF @doka_layout_failure IS NOT NULL\nBEGIN\n")
+                .Append("    DECLARE @doka_layout_message nvarchar(2048) = CASE @doka_layout_failure\n")
+                .Append("        WHEN N'column_limit' THEN ");
+            diagnostic.AppendLiteral(builder, "doka_sm_unsupported", "column_limit");
+            builder.Append("\n        WHEN N'column_fixed_row_limit' THEN ");
+            diagnostic.AppendLiteral(builder, "doka_sm_unsupported", "column_fixed_row_limit");
+            builder.Append("\n        ELSE ");
+            diagnostic.AppendLiteral(builder, "doka_sm_unsupported", "column_layout_unproven");
+            builder.Append(" END;\n    THROW 51002, @doka_layout_message, 1;\nEND;\n");
         }
 
         if (plan.ColumnCollationSupportExpression is { } columnCollationSupport)
@@ -535,7 +569,10 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
             // IF branch executes. Prove it exists before delayed conversion
             // or baseline SQL can compile that physical name.
             builder.Append("IF COALESCE((").Append(columnCollationSupport)
-                .Append("), 0) <> 1\nBEGIN\n    THROW 51002, N'doka_sm_unsupported', 1;\nEND;\n");
+                .Append("), 0) <> 1\nBEGIN\n    ");
+            diagnostic.AppendThrow(builder, 51002, "doka_sm_unsupported",
+                SqlServerSafeMigrationRuntimePlan.ColumnCollationUnsupportedCode);
+            builder.Append("\nEND;\n");
         }
 
         if (plan.DefaultValueSupportExpression is { } defaultValueSupport)
@@ -551,7 +588,10 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
             }
 
             builder.Append("IF COALESCE((").Append(defaultValueSupport)
-                .Append("), 0) <> 1\nBEGIN\n    THROW 51002, N'doka_sm_unsupported', 1;\nEND;\n");
+                .Append("), 0) <> 1\nBEGIN\n    ");
+            diagnostic.AppendThrow(builder, 51002, "doka_sm_unsupported",
+                SqlServerSafeMigrationRuntimePlan.DefaultValueUnsupportedCode);
+            builder.Append("\nEND;\n");
         }
 
         if (plan.IndexFilterSupportExpression is { } indexFilterSupport)
@@ -560,7 +600,10 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
             // column-side conversion or an invalid constant. Qualify only
             // catalog metadata and constants before binding any row filter.
             builder.Append("IF COALESCE((").Append(indexFilterSupport)
-                .Append("), 0) <> 1\nBEGIN\n    THROW 51002, N'doka_sm_unsupported', 1;\nEND;\n");
+                .Append("), 0) <> 1\nBEGIN\n    ");
+            diagnostic.AppendThrow(builder, 51002, "doka_sm_unsupported",
+                SqlServerSafeMigrationRuntimePlan.IndexFilterUnsupportedCode);
+            builder.Append("\nEND;\n");
         }
 
         if (UsesDefaultSchema(operation.Intent))
@@ -568,8 +611,9 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
             // WHY: EF's unqualified DDL targets the caller's default schema.
             // Catalog classification uses dbo, so prohibit a different default
             // before any baseline command can run.
-            builder.Append("IF COALESCE(SCHEMA_NAME(), N'') <> N'dbo'\nBEGIN\n"
-                + "    THROW 51004, N'doka_sm_prerequisite_missing', 1;\nEND;\n");
+            builder.Append("IF COALESCE(SCHEMA_NAME(), N'') <> N'dbo'\nBEGIN\n    ");
+            diagnostic.AppendThrow(builder, 51004, "doka_sm_prerequisite_missing", "default_schema_mismatch");
+            builder.Append("\nEND;\n");
         }
 
         builder.Append("DECLARE @doka_state nvarchar(32);\n")
@@ -634,15 +678,15 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
         builder.Append("END;\nSET @doka_action = ");
         AppendActionCase(builder, operation, plan.RepairCapability);
 
-        builder.Append(";\nIF @doka_action = N'reject_different'\nBEGIN\n")
-            .Append("    THROW 51001, N'doka_sm_different', 1;\nEND;\n")
-            .Append("IF @doka_action = N'reject_unsupported'\nBEGIN\n")
-            .Append("    THROW 51002, N'doka_sm_unsupported', 1;\nEND;\n")
-            .Append("IF @doka_action = N'reject_data_blocked'\nBEGIN\n")
-            .Append("    THROW 51003, N'doka_sm_data_blocked', 1;\nEND;\n")
-            .Append("IF @doka_action = N'reject_prerequisite_missing'\nBEGIN\n")
-            .Append("    THROW 51004, N'doka_sm_prerequisite_missing', 1;\nEND;\n")
-            .Append("IF @doka_action = N'apply'\nBEGIN\n");
+        builder.Append(";\nIF @doka_action = N'reject_different'\nBEGIN\n    ");
+        diagnostic.AppendThrow(builder, 51001, "doka_sm_different");
+        builder.Append("\nEND;\nIF @doka_action = N'reject_unsupported'\nBEGIN\n    ");
+        diagnostic.AppendThrow(builder, 51002, "doka_sm_unsupported", plan.UnsupportedCode);
+        builder.Append("\nEND;\nIF @doka_action = N'reject_data_blocked'\nBEGIN\n    ");
+        diagnostic.AppendThrow(builder, 51003, "doka_sm_data_blocked");
+        builder.Append("\nEND;\nIF @doka_action = N'reject_prerequisite_missing'\nBEGIN\n    ");
+        diagnostic.AppendThrow(builder, 51004, "doka_sm_prerequisite_missing");
+        builder.Append("\nEND;\nIF @doka_action = N'apply'\nBEGIN\n");
 
         AppendDynamicCommands(builder, baseline);
 
@@ -681,9 +725,9 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
                 .Append("), 0) <> 1\n");
         }
 
-        builder.Append("    BEGIN\n")
-            .Append("        THROW 51005, N'doka_sm_postcondition', 1;\n")
-            .Append("    END;\nEND;");
+        builder.Append("    BEGIN\n        ");
+        diagnostic.AppendThrow(builder, 51005, "doka_sm_postcondition");
+        builder.Append("\n    END;\nEND;");
 
         if (operation.Intent is EnsureModelManagedDataIntent && !scriptIdentityScope)
         {

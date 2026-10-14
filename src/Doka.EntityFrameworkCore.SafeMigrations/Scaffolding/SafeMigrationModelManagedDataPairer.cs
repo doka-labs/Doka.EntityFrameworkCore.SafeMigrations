@@ -44,7 +44,9 @@ internal static class SafeMigrationModelManagedDataPairer
         if (inverseRows.HasUnconsumedRows)
         {
             throw new InvalidOperationException(
-                "SafeMigrations could not pair every inverse model-managed-data row exactly once.");
+                "SafeMigrations could not pair every inverse model-managed-data row exactly once. "
+                + "Scaffold both Up and Down from the same provider model difference and retain their "
+                + "inverse data operations; row values were not included in this diagnostic.");
         }
 
         SafeMigrationModelManagedDataContractValidator.Validate(result);
@@ -188,7 +190,8 @@ internal static class SafeMigrationModelManagedDataPairer
                         columnTypes[column]))
                 {
                     throw new InvalidOperationException(
-                        $"Inverse update column '{columnName}' uses an inconsistent store type.");
+                        $"Inverse update column '{SafeMigrationDiagnosticMessages.BoundForDisplay(columnName)}' "
+                        + "uses an inconsistent store type.");
                 }
 
                 for (var row = 0; row < matches.Length; row++)
@@ -442,7 +445,8 @@ internal static class SafeMigrationModelManagedDataPairer
             if (!result.TryAdd(columns[ordinal], ordinal))
             {
                 throw new InvalidOperationException(
-                    $"An inverse update repeats column '{columns[ordinal]}'.");
+                    $"An inverse update repeats column "
+                    + $"'{SafeMigrationDiagnosticMessages.BoundForDisplay(columns[ordinal])}'.");
             }
         }
 
@@ -583,7 +587,9 @@ internal static class SafeMigrationModelManagedDataPairer
                 || addition.Ambiguous)
             {
                 throw new InvalidOperationException(
-                    $"Model-managed update column '{column}' has no inverse value or preceding column addition.");
+                    $"Model-managed update column '{SafeMigrationDiagnosticMessages.BoundForDisplay(column)}' "
+                    + "has no inverse value or preceding column addition. Keep the provider-generated inverse "
+                    + "operation, or supply an explicit source-frozen data contract.");
             }
 
             var operation = addition.Operation;
@@ -591,14 +597,17 @@ internal static class SafeMigrationModelManagedDataPairer
                 && !StringComparer.OrdinalIgnoreCase.Equals(operation.ColumnType, expectedStoreType))
             {
                 throw new InvalidOperationException(
-                    $"Added model-managed column '{column}' uses an inconsistent store type.");
+                    $"Added model-managed column '{SafeMigrationDiagnosticMessages.BoundForDisplay(column)}' "
+                    + "uses an inconsistent store type.");
             }
 
             if (operation.ComputedColumnSql is not null
                 || operation.DefaultValueSql is not null)
             {
                 throw new InvalidOperationException(
-                    $"Added model-managed column '{column}' has no deterministic source-frozen initial value.");
+                    $"Added model-managed column '{SafeMigrationDiagnosticMessages.BoundForDisplay(column)}' "
+                    + "has no deterministic source-frozen initial value. Supply an explicit data transition "
+                    + "rather than deriving old row values from a SQL default or computed expression.");
             }
 
             if (operation.DefaultValue is not null)
@@ -609,7 +618,9 @@ internal static class SafeMigrationModelManagedDataPairer
             return operation.IsNullable
                 ? null
                 : throw new InvalidOperationException(
-                    $"Required model-managed column '{column}' has no explicit initial value.");
+                    $"Required model-managed column '{SafeMigrationDiagnosticMessages.BoundForDisplay(column)}' "
+                    + "has no explicit initial value. Supply a deterministic initial value or an explicit "
+                    + "source-frozen data transition.");
         }
 
         public void RequireDrop(
@@ -621,7 +632,8 @@ internal static class SafeMigrationModelManagedDataPairer
             if (!_dropped.Contains(identity))
             {
                 throw new InvalidOperationException(
-                    $"Inverse update column '{column}' is absent without a column drop.");
+                    $"Inverse update column '{SafeMigrationDiagnosticMessages.BoundForDisplay(column)}' "
+                    + "is absent without a column drop.");
             }
         }
 
@@ -890,7 +902,8 @@ internal static class SafeMigrationModelManagedDataPairer
 
         private static DataRow MissingInverse() => throw new InvalidOperationException(
             "SafeMigrations could not find the exact inverse row required for "
-            + "model-managed-data convergence.");
+            + "model-managed-data convergence. Preserve the provider-generated inverse data operation, "
+            + "or author an explicit source-frozen contract; row values were not included in this diagnostic.");
 
         private static int[] KeyOrdinals(
             string[] columns,
@@ -913,7 +926,8 @@ internal static class SafeMigrationModelManagedDataPairer
                 if (ordinal < 0)
                 {
                     throw new InvalidOperationException(
-                        $"An inverse insert row does not contain key column '{keyColumns[key]}'.");
+                        "An inverse insert row does not contain key column "
+                        + $"'{SafeMigrationDiagnosticMessages.BoundForDisplay(keyColumns[key])}'.");
                 }
 
                 result[key] = ordinal;

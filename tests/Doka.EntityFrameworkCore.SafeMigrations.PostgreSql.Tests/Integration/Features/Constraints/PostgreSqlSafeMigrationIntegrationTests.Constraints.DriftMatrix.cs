@@ -189,7 +189,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
         Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
         Assert.Equal("P1001", exception.SqlState);
-        Assert.Equal("doka_sm_different", exception.MessageText);
+        Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
         Assert.Equal(
             1,
             await ScalarIntAsync(
@@ -240,7 +240,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 ExecuteOperationsAsync(context, [operation]));
 
             Assert.Equal("P1001", exception.SqlState);
-            Assert.Equal("doka_sm_different", exception.MessageText);
+            Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
         }
 
         Assert.Equal(
@@ -381,7 +381,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 ExecuteOperationsAsync(context, [operation]));
 
             Assert.Equal("P1001", exception.SqlState);
-            Assert.Equal("doka_sm_different", exception.MessageText);
+            Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
         }
 
         Assert.Equal(
@@ -507,7 +507,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 ExecuteOperationsAsync(context, [operation]));
 
             Assert.Equal("P1001", exception.SqlState);
-            Assert.Equal("doka_sm_different", exception.MessageText);
+            Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
         }
     }
 
@@ -571,7 +571,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 ExecuteOperationsAsync(context, [builder.Operations[index]]));
 
             Assert.Equal("P1001", exception.SqlState);
-            Assert.Equal("doka_sm_different", exception.MessageText);
+            Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
         }
     }
 
@@ -615,7 +615,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 ExecuteOperationsAsync(context, [operation]));
 
             Assert.Equal("P1001", exception.SqlState);
-            Assert.Equal("doka_sm_different", exception.MessageText);
+            Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
         }
     }
 
@@ -654,7 +654,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
         Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
         Assert.Equal("P1001", exception.SqlState);
-        Assert.Equal("doka_sm_different", exception.MessageText);
+        Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -697,7 +697,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
         Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
         Assert.Equal("P1001", exception.SqlState);
-        Assert.Equal("doka_sm_different", exception.MessageText);
+        Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -751,7 +751,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 ExecuteOperationsAsync(context, [operation]));
 
             Assert.Equal("P1001", exception.SqlState);
-            Assert.Equal("doka_sm_different", exception.MessageText);
+            Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
         }
     }
 

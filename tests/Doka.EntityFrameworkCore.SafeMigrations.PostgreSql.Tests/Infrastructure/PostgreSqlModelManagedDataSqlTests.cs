@@ -44,7 +44,7 @@ public sealed class PostgreSqlModelManagedDataSqlTests
             StringComparison.Ordinal);
         Assert.Contains("JOIN app.user_roles AS doka_dependent", command.CommandText,
             StringComparison.Ordinal);
-        Assert.Contains("MESSAGE = 'doka_sm_data_blocked'", command.CommandText, StringComparison.Ordinal);
+        Assert.Contains("MESSAGE = E'doka_sm_data_blocked:", command.CommandText, StringComparison.Ordinal);
     }
 
     [Fact]

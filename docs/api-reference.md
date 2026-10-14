@@ -698,7 +698,8 @@ fingerprints, ordered `SafeMigrationAssessment` entries, and unexpected objects.
 Collections are immutable. `SafeMigrationUnexpectedObject` identifies preserved
 objects; it is not an instruction to remove them.
 
-Each schema-version-3 assessment exposes:
+Each schema-version-4 assessment exposes the established state evidence and
+additional identifier-only diagnostic context:
 
 | Member | Contract |
 | --- | --- |
@@ -708,6 +709,16 @@ Each schema-version-3 assessment exposes:
 | `Differences` | At most 16 typed catalog-facet differences with bounded printable ASCII metadata |
 | `OperationalImpact` | `NotApplicable`, `TableRewritePossible`, or `Unknown` |
 | `DeferredOrigin` | Owning migration ID when known, zero-based operation ordinal, and CLR type of the preceding proof-invalidating operation requiring runtime validation; otherwise null |
+| `Identity` | Immutable authored schema/table/object, ordered columns, FK principal and rename destination; null when not captured |
+| `Explanation` | Stable reason code, explanation and next step derived from actual analysis and decision evidence |
+| `MigrationId`, `Policy` | Current owning migration and authored safe policy when captured; otherwise null |
+
+`SafeMigrationOperationIdentity.Create(intent)` snapshots only structural names,
+not defaults, comments or managed row values. A null authored schema means
+unqualified, not a guessed physical schema. `SafeMigrationDiagnosticMessages`
+formats bounded ASCII identities, runtime rejections and individual assessments.
+`FormatRuntimeFromAnalysis` consumes the actual analysis and rejecting decision;
+the guard-code overload does not invent row-level causes.
 
 Representative difference facets include `column_store_type`,
 `column_max_length`, `column_collation`, `foreign_key_delete_behavior`,
@@ -746,10 +757,11 @@ snake-case values.
 `SafeMigrationReportJson.SerializeToUtf8Bytes(report)` returns a new
 byte array. `Write(writer, report)` uses a caller-owned `Utf8JsonWriter` and
 does not replace the caller's lifetime management. The packaged
-[version 3 JSON Schema](../schemas/safe-migration-run-report-v3.schema.json)
+[version 4 JSON Schema](../schemas/safe-migration-run-report-v4.schema.json)
 defines the current wire contract. The
 [version 1](../schemas/safe-migration-run-report-v1.schema.json) and
-[version 2](../schemas/safe-migration-run-report-v2.schema.json) schemas remain
+[version 2](../schemas/safe-migration-run-report-v2.schema.json) and
+[version 3](../schemas/safe-migration-run-report-v3.schema.json) schemas remain
 available for previously persisted reports. Treat every report as sensitive;
 it can identify schema objects even though telemetry excludes them.
 
@@ -763,7 +775,7 @@ view rather than changing the canonical report contract:
 | `BlockingOnly` | Preflight rejects or failed safe postconditions | Excluded |
 
 Every report view uses
-[`safe-migration-report-view-v2`](../schemas/safe-migration-report-view-v2.schema.json)
+[`safe-migration-report-view-v3`](../schemas/safe-migration-report-view-v3.schema.json)
 and carries `documentKind`, selection, source report identity, source totals,
 included totals, and the selected arrays. Selection scans the immutable source
 without allocating a filtered collection and preserves original order and
@@ -771,6 +783,23 @@ ordinals. A non-blocked source produces a valid empty `BlockingOnly` view. A
 source marked `Blocked` without a selectable blocker fails closed because the
 view could otherwise conceal an unknown or inconsistent blocking contract.
 Zero and undefined enum values throw before output is written.
+
+`SafeMigrationReportText.Format(report, selection)` and
+`Write(textWriter, report, selection)` use the same selection contract, defaulting
+to `BlockingOnly`. The writer remains caller-owned. The summary includes at most
+20 selected assessment details and 10 unexpected-object details, with explicit
+omission counts; it never silently changes the source report. JSON retains the
+original `objectName`, adds bounded owner/principal/rename fields and marks
+diagnostic-context truncation. Older schema files remain packaged.
+
+`SafeMigrationExecutionException` identifies positively correlated MySQL/MariaDB
+runtime guards after native cleanup, preserving the exact original exception in
+`InnerException`. `GuardCode`, `ReasonCode`, `Identity`, `OperationOrdinal` and
+`Policy` support triage without parsing localized text. This intentionally changes
+the outer exception type only for those owned guards; ordinary provider errors,
+cancellation and uncertain cleanup retain their native contracts. Other providers
+retain their existing exception types and machine error categories. See
+[actionable diagnostics](diagnostics.md) for script and recovery boundaries.
 
 `RuntimeValidationRequired` is a preflight status distinct from `Ready` and
 `Blocked`. A later safe assessment with `ValidateAtRuntime` has nullable state
@@ -823,8 +852,10 @@ remains available for previously persisted views.
 
 Invalid input can throw `ArgumentException`/derived exceptions; canonical model
 drift throws `SafeMigrationModelMismatchException`; invalid integration can
-throw `InvalidOperationException`; provider/database failures retain their
-provider exception category. Cancellation is not converted into a successful
+throw `InvalidOperationException`; unowned provider/database failures retain
+their provider exception category. Positively correlated owned MySQL/MariaDB
+guards use `SafeMigrationExecutionException` with the exact native inner cause
+described above. Cancellation is not converted into a successful
 partial report. Stable assessment and runtime categories are documented in
 [failure codes](runbooks/failure-codes.md). A blocked report is a result, not
 necessarily an exception. Never interpret absence of an exception as permission

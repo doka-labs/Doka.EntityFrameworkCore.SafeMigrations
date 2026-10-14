@@ -7,7 +7,10 @@ Native owner/backfill/supporting-index, CHECK/index-input and SQLite key/capacit
 contracts remain separate guards. Earlier concurrent required-add/delete and
 verified schema/session recovery protections remain. Public signatures,
 production dependency ranges, migration source, policy selection, report
-schemas and history remain unchanged. Timing comparisons are informational;
+schemas and history remain unchanged in that released baseline. The unreleased
+diagnostics feature adds explicit assessment owners, readable errors and text
+summaries with new versioned JSON contracts; see [diagnostics](diagnostics.md).
+Timing comparisons are informational;
 functional and evidence failures remain blocking. Deferred preflight states
 require runtime validation; unproved lossy conversions and independent
 permission refusals remain blocked.
@@ -30,6 +33,7 @@ external registries, not by source documentation alone.
 | Understand SQL Server catalog checks, guards, and engine qualification | [SQL Server behavior](sqlserver-behavior.md) |
 | Deploy independently to heterogeneous instances and recover safely | [Deployment and recovery](runbooks/deployment-and-recovery.md) |
 | Interpret a blocked report or stable error | [Failure codes](runbooks/failure-codes.md) |
+| Identify the affected table and read an actionable error or compact report | [Errors and readable reports](diagnostics.md) |
 | Collect metrics without exposing protected reports | [Observability](runbooks/observability.md) |
 | Independently verify a downloaded release | [Release verification](security/release-verification.md) |
 

@@ -112,7 +112,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(Assert.IsType<EnsureColumnIntent>(operation.Intent).Definition.StoreType, typeDifference.Expected);
         Assert.Equal(storeType, typeDifference.Actual);
         Assert.NotEqual(typeDifference.Expected, typeDifference.Actual);
-        Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(failure).Message,
+        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
             StringComparison.Ordinal);
         Assert.Contains(inventory,
             item => item.ObjectKind == SafeMigrationDatabaseObjectKind.CheckConstraint && item.Name == guardName);

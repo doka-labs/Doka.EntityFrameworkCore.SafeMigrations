@@ -146,7 +146,8 @@ internal static class SafeMigrationModelManagedDataOwnershipFilter
         ? excluded
         : throw new InvalidOperationException(
             $"SafeMigrations could not resolve the {context} table {identity.DisplayName} "
-            + "while applying excluded-table model-managed-data ownership.");
+            + "while applying excluded-table model-managed-data ownership. Check the source and target relational "
+            + "table mappings and their migration ownership before scaffolding.");
 
     private static InvalidOperationException OwnershipTransition(
         TableIdentity identity,
@@ -157,7 +158,9 @@ internal static class SafeMigrationModelManagedDataOwnershipFilter
     ) => new(
         "SafeMigrations rejected model-managed-data ownership transition "
         + $"'model_managed_data_ownership_transition' for {identity.DisplayName}: "
-        + $"{firstContext} excluded={firstExcluded}, {secondContext} excluded={secondExcluded}.");
+        + $"{firstContext} excluded={firstExcluded}, {secondContext} excluded={secondExcluded}. "
+        + "Keep schema and model-managed data under one migration lineage, "
+        + "or author an explicit ownership transition.");
 
     private readonly record struct TableIdentity(
         string Table,
@@ -165,7 +168,8 @@ internal static class SafeMigrationModelManagedDataOwnershipFilter
     )
     {
         public string DisplayName => Schema is null
-            ? $"'{Table}'"
-            : $"'{Schema}.{Table}'";
+            ? $"'{SafeMigrationDiagnosticMessages.BoundForDisplay(Table)}'"
+            : $"'{SafeMigrationDiagnosticMessages.BoundForDisplay(Schema)}."
+                + $"{SafeMigrationDiagnosticMessages.BoundForDisplay(Table)}'";
     }
 }

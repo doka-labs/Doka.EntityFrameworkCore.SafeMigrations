@@ -239,7 +239,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 await Assert.ThrowsAsync<PostgresException>(() => ExecuteOperationsAsync(context, builder.Operations));
 
             Assert.Equal("P1002", exception.SqlState);
-            Assert.Equal("doka_sm_unsupported", exception.MessageText);
+            Assert.StartsWith("doka_sm_unsupported:", exception.MessageText, StringComparison.Ordinal);
             return;
         }
 

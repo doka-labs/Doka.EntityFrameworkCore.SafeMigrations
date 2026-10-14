@@ -182,7 +182,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
 
         // Assert
-        var providerException = Assert.IsType<MySqlException>(exception);
+        var providerException = AssertOwnedGuardFailure(exception);
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -237,7 +237,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("qualified-collation"));
 
         var exception =
-            await Assert.ThrowsAsync<MySqlException>(() => ExecuteOperationsAsync(context, builder.Operations));
+            await AssertOwnedGuardFailureAsync(() => ExecuteOperationsAsync(context, builder.Operations));
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(
@@ -429,7 +429,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         builder.AddColumnIfNotExists<int>("sequence", "orders", type: "int", nullable: false);
 
         var exception =
-            await Assert.ThrowsAsync<MySqlException>(() => ExecuteOperationsAsync(context, builder.Operations));
+            await AssertOwnedGuardFailureAsync(() => ExecuteOperationsAsync(context, builder.Operations));
 
         Assert.Contains("doka_sm_data_blocked", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(
@@ -510,7 +510,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
         Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
         var exception =
-            await Assert.ThrowsAsync<MySqlException>(() => ExecuteOperationsAsync(context, blockedRepair.Operations));
+            await AssertOwnedGuardFailureAsync(() => ExecuteOperationsAsync(context, blockedRepair.Operations));
 
         Assert.Contains("doka_sm_different", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(
@@ -640,7 +640,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 builder.Operations.Cast<SafeMigrationOperation>().ToArray(),
                 CancellationToken.None);
 
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
         var assessment = Assert.Single(report.Assessments);
@@ -690,7 +690,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 new SafeMigrationRunOptions("legacy-type-drift"),
                 CancellationToken.None);
 
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
         var assessment = Assert.Single(report.Assessments);
@@ -738,7 +738,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 new SafeMigrationRunOptions("legacy-on-update"),
                 CancellationToken.None);
 
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
         var assessment = Assert.Single(report.Assessments);
@@ -975,7 +975,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 unsupportedColumns.Add(definition.Name);
 
                 var unsupported =
-                    await Assert.ThrowsAsync<MySqlException>(() => ExecuteOperationsAsync(context, builder.Operations));
+                    await AssertOwnedGuardFailureAsync(() => ExecuteOperationsAsync(context, builder.Operations));
 
                 Assert.Contains("doka_sm_unsupported", unsupported.Message, StringComparison.OrdinalIgnoreCase);
                 Assert.Equal(
@@ -1129,7 +1129,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 Assert.Single(report.Assessments)
                     .ObservedState);
             var exception =
-                await Assert.ThrowsAsync<MySqlException>(() => ExecuteOperationsAsync(context, builder.Operations));
+                await AssertOwnedGuardFailureAsync(() => ExecuteOperationsAsync(context, builder.Operations));
 
             Assert.Contains("doka_sm_unsupported", exception.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Equal(

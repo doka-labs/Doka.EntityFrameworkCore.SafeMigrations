@@ -8,6 +8,8 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
     internal const string RecoveryFailureDataKey = "Doka:SqlServerIdentityInsertRecovery";
 
     private readonly string _cleanupSql;
+    private readonly string? _scopeInUseMessage;
+    private readonly string? _acquisitionUnprovenMessage;
 
     /// <summary>Creates a seed-command recovery boundary using the existing scoped quarantine.</summary>
     /// <param name="command">The original provider command to delegate unchanged.</param>
@@ -15,17 +17,31 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
     /// <param name="dependencies">The command-building and current-context services.</param>
     /// <param name="analyzer">The scoped provider session-quarantine owner.</param>
     /// <param name="metadataCommand">An optional shared empty metadata command, never a copy of the payload.</param>
+    /// <param name="operation">The exact authored operation when known, never inferred from cleanup SQL.</param>
+    /// <param name="operationOrdinal">The known operation ordinal, or null when unavailable.</param>
     public SqlServerSafeMigrationIdentityInsertCommand(
         MigrationCommand command,
         string cleanupSql,
         MigrationsSqlGeneratorDependencies dependencies,
         SqlServerSafeMigrationProviderAnalyzer analyzer,
-        IRelationalCommand? metadataCommand = null
+        IRelationalCommand? metadataCommand = null,
+        SafeMigrationOperation? operation = null,
+        int? operationOrdinal = null
     ) : base(command, dependencies, analyzer, metadataCommand)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(cleanupSql);
 
         _cleanupSql = cleanupSql;
+        if (operation is not null)
+        {
+            // WHY: A command can be retried. Capture bounded identifier-only
+            // messages once, without changing its native cleanup or delegate.
+            _scopeInUseMessage = SafeMigrationDiagnosticMessages.FormatRuntime(operation,
+                "doka_sm_identity_scope_in_use", operationOrdinal);
+            _acquisitionUnprovenMessage = SafeMigrationDiagnosticMessages.FormatRuntime(operation,
+                "doka_sm_identity_acquisition_unproven", operationOrdinal);
+        }
+
     }
 
     /// <inheritdoc />
@@ -51,7 +67,7 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
             using (var command = connection.DbConnection.CreateCommand())
             {
                 ConfigureScopeCommand(connection, command,
-                    SqlServerSafeMigrationIdentityInsertScope.BuildBootstrapSql(token));
+                    SqlServerSafeMigrationIdentityInsertScope.BuildBootstrapSql(token, _scopeInUseMessage));
                 scopeIssued = true;
                 command.ExecuteNonQuery();
             }
@@ -114,7 +130,7 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
             await using (var command = connection.DbConnection.CreateCommand())
             {
                 ConfigureScopeCommand(connection, command,
-                    SqlServerSafeMigrationIdentityInsertScope.BuildBootstrapSql(token));
+                    SqlServerSafeMigrationIdentityInsertScope.BuildBootstrapSql(token, _scopeInUseMessage));
                 scopeIssued = true;
 
                 await command.ExecuteNonQueryAsync(cancellationToken);
@@ -331,7 +347,8 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
         // may remove only an exact ready marker; even observation failure must
         // quarantine supported reuse without physically closing caller state.
         ConfigureScopeCommand(connection, command,
-            SqlServerSafeMigrationIdentityInsertScope.BuildRecoverySql(token, _cleanupSql, providerDispatched));
+            SqlServerSafeMigrationIdentityInsertScope.BuildRecoverySql(token, _cleanupSql, providerDispatched,
+                _acquisitionUnprovenMessage));
     }
 
     /// <summary>Keeps ownership setup and recovery on the borrowed session and current caller transaction.</summary>

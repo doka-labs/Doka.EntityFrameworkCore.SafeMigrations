@@ -103,7 +103,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             nullable ? 1 : 0, textColumn && nullable ? 1 : 0, blocked ? 0 : 1), visits);
         if (blocked)
         {
-            Assert.Contains("doka_sm_data_blocked", Assert.IsType<MySqlException>(exception).Message,
+            Assert.Contains("doka_sm_data_blocked", AssertOwnedGuardFailure(exception).Message,
                 StringComparison.Ordinal);
         }
         else
@@ -164,7 +164,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(new RuntimeMatchingVisits(1, 1, 1, 0, 0, 1), visits);
         if (collationDrift)
         {
-            Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(exception).Message,
+            Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(exception).Message,
                 StringComparison.Ordinal);
         }
         else
@@ -223,7 +223,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             "SELECT COUNT(*) FROM `runtime_match_rows` WHERE `id` = 1 AND `value` IS NULL;");
 
         // Assert
-        Assert.Contains("doka_sm_data_blocked", Assert.IsType<MySqlException>(exception).Message,
+        Assert.Contains("doka_sm_data_blocked", AssertOwnedGuardFailure(exception).Message,
             StringComparison.Ordinal);
         AssertRuntimeMatchingInstrumentation(observer, textColumn, operationCount: 2);
         Assert.Equal(new RuntimeMatchingVisits(2, textColumn ? 1 : 0, 1, 1, 0, 0), visits);
@@ -263,7 +263,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             + "AND TABLE_NAME = 'runtime_match_rows';");
 
         // Assert
-        Assert.Contains("doka_sm_unsupported", Assert.IsType<MySqlException>(exception).Message,
+        Assert.Contains("doka_sm_unsupported", AssertOwnedGuardFailure(exception).Message,
             StringComparison.Ordinal);
         AssertRuntimeMatchingInstrumentation(observer, textColumn: true, operationCount: 1);
         Assert.Equal(new RuntimeMatchingVisits(0, 0, 0, 0, 0, 0), visits);

@@ -49,7 +49,9 @@ internal static class SafeMigrationServiceCollectionDecorator
         }
 
         var implementationType = descriptor.ImplementationType
-            ?? throw new InvalidOperationException("The provider model-differ registration has no implementation.");
+            ?? throw new InvalidOperationException(
+                "The provider model-differ registration has no implementation. Register the active EF Core provider "
+                + "before applying the SafeMigrations decorator; check custom IMigrationsModelDiffer registrations.");
 
         return (IMigrationsModelDiffer)ActivatorUtilities.CreateInstance(provider, implementationType);
     }

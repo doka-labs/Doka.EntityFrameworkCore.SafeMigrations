@@ -17,7 +17,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             await Assert.ThrowsAsync<PostgresException>(() => ExecuteOperationsAsync(context, builder.Operations));
 
         Assert.Equal("P1001", exception.SqlState);
-        Assert.Equal("doka_sm_different", exception.MessageText);
+        Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
     }
 
     [Fact]

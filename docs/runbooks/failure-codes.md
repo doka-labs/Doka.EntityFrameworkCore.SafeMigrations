@@ -121,12 +121,22 @@ Runtime guards preserve the same categories at the database boundary:
 | `doka_sm_postcondition` | `P1005` / `doka_sm_postcondition` | `51005` / `doka_sm_postcondition` | Target DDL ran but final catalog condition is false. |
 
 MySQL/MariaDB uses unique constraints on a session-local temporary assertion
-table because `SIGNAL` cannot be used in its prepared-statement path.
+table because the shared qualified MySQL prepared-statement path cannot use
+`SIGNAL`. The managed command boundary associates a failure only with an exact
+command-local correlation and its owned assertion key, after native cleanup.
+It raises `SafeMigrationExecutionException` with table/column or FK identity,
+reason and next step; the original native exception remains in `InnerException`.
+An exactly identified required-add staging CHECK violation can also be associated
+with its owning operation, without assuming that concurrency caused the failure.
+Unrelated duplicate keys or CHECK failures remain native exceptions.
 PostgreSQL uses private application SQLSTATE values in the provider `DO` block.
 PostgreSQL exposes the category through SQLSTATE. MySQL/MariaDB uses duplicate
 key error 1062 for these assertions; that number alone does not identify a
-SafeMigrations rejection. Match the invariant `doka_sm_*` constraint token for
-the guarded command, not localized sentence fragments. Do not export the full
+SafeMigrations rejection. Do not classify arbitrary native errors from a
+`doka_sm_*` name alone; use the managed owned-guard contract. SQL scripts emit
+a bounded failure-only diagnostic result before owned decision assertions; the
+client must display that result. Native DDL errors, including staging CHECK errors
+that abort the DDL itself, remain native in scripts. Do not export the full
 provider error message into public telemetry.
 PostgreSQL identity-first failures retain `P1002 / doka_sm_unsupported`:
 DETAIL `schema_search_path_mismatch` means that native owner resolution is not
@@ -330,8 +340,10 @@ the four reject actions; postflight views contain failed safe postconditions.
 The view preserves source ordinals and difference evidence while excluding
 non-blockers and unexpected objects. Use `NonMatching` when preserved
 unexpected objects or accepted-but-not-converged assessments are relevant.
-Validate the result against `safe-migration-report-view-v2`; it is not a
-schema-v3 report with entries silently removed.
+Validate the result against `safe-migration-report-view-v3`; it is not a
+schema-v4 report with entries silently removed. `SafeMigrationReportText` provides
+a bounded, table-aware alternative for operator reading. See
+[diagnostic context and privacy](../diagnostics.md).
 
 ## Accepting planner decision codes
 

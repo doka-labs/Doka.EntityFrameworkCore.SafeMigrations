@@ -78,7 +78,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 Assert.Equal("prerequisite_missing", assessment.Code);
             });
 
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, [builder.Operations[0]]));
 
         Assert.Equal(1062, exception.Number);
@@ -562,7 +562,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         foreach (var operation in builder.Operations)
         {
             var exception =
-                await Assert.ThrowsAsync<MySqlException>(() => ExecuteOperationsAsync(context, [operation]));
+                await AssertOwnedGuardFailureAsync(() => ExecuteOperationsAsync(context, [operation]));
 
             Assert.Contains("doka_sm_different", exception.Message, StringComparison.OrdinalIgnoreCase);
         }

@@ -36,9 +36,11 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 report_schemas=(
     safe-migration-report-view-v1.schema.json
     safe-migration-report-view-v2.schema.json
+    safe-migration-report-view-v3.schema.json
     safe-migration-run-report-v1.schema.json
     safe-migration-run-report-v2.schema.json
     safe-migration-run-report-v3.schema.json
+    safe-migration-run-report-v4.schema.json
 )
 package_ids=(
     Doka.EntityFrameworkCore.SafeMigrations

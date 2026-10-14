@@ -100,7 +100,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationAction.RejectDifferent, report.Assessments[0].Action);
-        Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(failure).Message,
+        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
             StringComparison.Ordinal);
         Assert.Equal(2, await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() "
@@ -167,7 +167,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             }
             else
             {
-                Assert.Contains("doka_sm_data_blocked", Assert.IsType<MySqlException>(failure).Message,
+                Assert.Contains("doka_sm_data_blocked", AssertOwnedGuardFailure(failure).Message,
                     StringComparison.Ordinal);
             }
 
@@ -344,7 +344,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             // Assert
             if (fold)
             {
-                Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(failure).Message,
+                Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
                     StringComparison.Ordinal);
                 Assert.Equal(0, tables);
             }

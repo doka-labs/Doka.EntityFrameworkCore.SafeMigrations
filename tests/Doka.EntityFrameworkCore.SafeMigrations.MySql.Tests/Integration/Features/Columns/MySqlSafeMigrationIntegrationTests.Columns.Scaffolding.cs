@@ -126,7 +126,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("annotated-nullable-blocked"));
 
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations));
         var assessment = Assert.Single(
             report.Assessments,
@@ -173,7 +173,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("identity-mismatch"));
 
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations));
 
         Assert.Contains(
@@ -241,7 +241,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("scaffolded-identity-drift"));
 
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations));
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -269,7 +269,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("unsupported-operation-facet"));
 
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations));
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -642,7 +642,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions($"invalid-{testCase}"));
 
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations));
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -688,7 +688,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions(tableName));
 
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations));
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);

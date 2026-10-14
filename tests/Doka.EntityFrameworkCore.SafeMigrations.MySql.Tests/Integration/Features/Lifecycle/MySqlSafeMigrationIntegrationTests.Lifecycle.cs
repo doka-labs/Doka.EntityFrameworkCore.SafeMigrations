@@ -19,7 +19,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             policy: SafeMigrationPolicy.ThrowIfDifferent);
 
         var exception =
-            await Assert.ThrowsAsync<MySqlException>(() => ExecuteOperationsAsync(context, mismatch.Operations));
+            await AssertOwnedGuardFailureAsync(() => ExecuteOperationsAsync(context, mismatch.Operations));
 
         Assert.Contains("doka_sm_different", exception.Message, StringComparison.OrdinalIgnoreCase);
 
@@ -64,7 +64,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             policy: SafeMigrationPolicy.ThrowIfDifferent);
 
         var mismatchException =
-            await Assert.ThrowsAsync<MySqlException>(() => ExecuteOperationsAsync(context, mismatch.Operations));
+            await AssertOwnedGuardFailureAsync(() => ExecuteOperationsAsync(context, mismatch.Operations));
 
         Assert.Contains("doka_sm_different", mismatchException.Message, StringComparison.OrdinalIgnoreCase);
 
@@ -77,7 +77,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var blockedException =
-            await Assert.ThrowsAsync<MySqlException>(() => ExecuteOperationsAsync(context, blockedCheck.Operations));
+            await AssertOwnedGuardFailureAsync(() => ExecuteOperationsAsync(context, blockedCheck.Operations));
 
         Assert.Contains("doka_sm_data_blocked", blockedException.Message, StringComparison.OrdinalIgnoreCase);
 
@@ -241,7 +241,8 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         await ExecuteSqlAsync(connectionString, "CREATE VIEW `pipeline_state` AS SELECT 1 AS `id`;");
         await using var context = CreateContext(connectionString);
 
-        var exception = await Assert.ThrowsAsync<MySqlException>(() => context.Database.MigrateAsync(cancellationToken: CancellationToken.None));
+        var exception = await AssertOwnedGuardFailureAsync(() =>
+            context.Database.MigrateAsync(cancellationToken: CancellationToken.None));
 
         Assert.Contains("doka_sm_unsupported", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(

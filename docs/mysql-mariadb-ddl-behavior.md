@@ -1,5 +1,10 @@
 # MySQL and MariaDB DDL behavior
 
+Unreleased owned runtime diagnostics identify the authored owner and established
+rejection reason after native cleanup. Their managed outer exception and script
+result transport are described in [diagnostics](diagnostics.md#runtime-provider-differences);
+ordinary native errors, decisions and forward-recovery requirements remain intact.
+
 Prepared stable 10.4.11 qualifies sparse mixed column/index/FK prerequisites
 against independently captured native endpoints, key/backing identities and
 accepted physical lifetimes. Native table-case equality is shared by live

@@ -54,12 +54,12 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         // Assert
         Assert.True(checkpoint.CheckpointWasReached);
         Assert.True(checkpoint.WasInjected);
-        Assert.IsType<MySqlException>(failure);
+        Assert.Contains(guardName, AssertOwnedAtomicCheckFailure(failure).Message, StringComparison.Ordinal);
         Assert.Equal(0, interrupted.Columns);
         Assert.Equal(0, interrupted.Guards);
         Assert.Equal(1, interrupted.Rows);
         Assert.Equal(SafeMigrationAction.RejectDataBlocked, retry.Assessments[0].Action);
-        Assert.Contains("doka_sm_data_blocked", Assert.IsType<MySqlException>(retryFailure).Message,
+        Assert.Contains("doka_sm_data_blocked", AssertOwnedGuardFailure(retryFailure).Message,
             StringComparison.OrdinalIgnoreCase);
     }
 

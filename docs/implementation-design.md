@@ -791,7 +791,7 @@ immutable blocked report and renders one bounded deterministic conflict summary
 for hosts that prefer an exception boundary.
 
 Explicit report selection writes a separate report-view schema, currently
-version 2. The serializer first counts selected entries and then streams them
+version 3. The serializer first counts selected entries and then streams them
 directly from the immutable source report, so it can emit accurate
 source/included totals and size its bounded initial buffer without allocating
 a filtered array or DTO graph. `Complete`, `NonMatching`, and phase-specific
@@ -799,6 +799,25 @@ a filtered array or DTO graph. `Complete`, `NonMatching`, and phase-specific
 retain the same bounded field representation. A blocked report with no selected
 blocker fails closed; future status/action contracts cannot become invisible
 through an old filter.
+
+Schema version 4 and view version 3 add authored structural identity, proven
+diagnostic reason and next-step fields. Core snapshots identifiers only; it does
+not retain managed row matrices, defaults or SQL parameters for later messages.
+The original object-name field and selection ordinals retain their meaning.
+Missing capture is explicit, while an omitted authored schema remains omitted.
+New JSON fields are bounded with an explicit truncation flag. The text writer
+streams the same selection, caps displayed details and reports omissions.
+
+The shared formatter owns reason selection and bounded single-line escaping.
+Providers supply established evidence, not guessed data defects. PostgreSQL and
+SQL Server append essential context to native guard messages while preserving
+machine categories. SQLite formats only failure paths. MySQL/MariaDB command
+decoration delegates native resource ownership and cleanup before translating an
+exactly correlated assertion or owned staging CHECK to the managed diagnostic
+exception. Ordinary native errors and uncertain cleanup are not translated.
+Generated MySQL/MariaDB scripts emit a failure-only result for decision guards;
+native DDL errors remain native. No automatic preflight or extra cause query is
+introduced. See [diagnostics](diagnostics.md) for the caller-visible contracts.
 
 Report schema version 3 and report-view schema version 2 add the distinct
 `RuntimeValidationRequired` preflight outcome. After raw SQL makes the ordered

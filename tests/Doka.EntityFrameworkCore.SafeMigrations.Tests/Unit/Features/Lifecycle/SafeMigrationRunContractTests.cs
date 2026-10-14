@@ -549,6 +549,58 @@ public sealed class SafeMigrationRunContractTests
         AssertMatchesSchema(schemaRoot, root, schemaRoot);
     }
 
+    /// <summary>Current schema files match both newly captured and compatibility-constructed assessment shapes.</summary>
+    [Fact]
+    public void CurrentSchemasMatchKnownAndUnknownDiagnosticIdentityShapes()
+    {
+        // Arrange
+        var intent = new EnsureForeignKeyIntent(new ExpectedForeignKeyDefinition("fk_child_parent", "children",
+            ["Tenant", "OwnerId"], "parents", ["Tenant", "Id"], schema: "dependent", principalSchema: "principal"));
+
+        var known = new SafeMigrationAssessment(0, typeof(SafeMigrationOperation).FullName!, true, intent.Kind,
+            intent.ObjectName, SafeMigrationObservedState.PrerequisiteMissing,
+            SafeMigrationAction.RejectPrerequisiteMissing, false, "prerequisite_missing",
+            "classified_prerequisite_missing", "prerequisite_missing", SafeMigrationOperationalImpact.NotApplicable,
+            differences: null, deferredOrigin: null, identity: SafeMigrationOperationIdentity.Create(intent),
+            migrationId: "202610140001_Diagnostics", policy: SafeMigrationPolicy.ThrowIfDifferent);
+
+        var unknown = new SafeMigrationAssessment(1, typeof(SafeMigrationOperation).FullName!, true,
+            SafeMigrationOperationKind.EnsureColumn, "Id", SafeMigrationObservedState.DataBlocked,
+            SafeMigrationAction.RejectDataBlocked, false, "data_blocked");
+
+        var report = CreateReport(status: SafeMigrationReportStatus.Blocked, assessments: [known, unknown]);
+        using var completeSchema = LoadReportSchema();
+        using var viewSchema = LoadReportViewSchema();
+
+        // Act
+        using var complete = JsonDocument.Parse(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
+        using var view = JsonDocument.Parse(SafeMigrationReportJson.SerializeToUtf8Bytes(report,
+            SafeMigrationReportSelection.BlockingOnly));
+
+        // Assert
+        Assert.Equal(4, complete.RootElement.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(3, view.RootElement.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(4, view.RootElement.GetProperty("sourceReport").GetProperty("schemaVersion").GetInt32());
+        AssertMatchesSchema(completeSchema.RootElement, complete.RootElement, completeSchema.RootElement);
+        AssertMatchesSchema(viewSchema.RootElement, view.RootElement, viewSchema.RootElement);
+        var completeAssessmentSchema = completeSchema.RootElement.GetProperty("$defs").GetProperty("assessment");
+        var viewAssessmentSchema = viewSchema.RootElement.GetProperty("$defs").GetProperty("assessment");
+        var completeAssessments = complete.RootElement.GetProperty("assessments");
+        var viewAssessments = view.RootElement.GetProperty("assessments");
+
+        AssertClosedObjectSurface(completeAssessmentSchema, completeAssessments[0]);
+        AssertClosedObjectSurface(completeAssessmentSchema, completeAssessments[1]);
+        AssertClosedObjectSurface(viewAssessmentSchema, viewAssessments[0]);
+        AssertClosedObjectSurface(viewAssessmentSchema, viewAssessments[1]);
+        Assert.True(completeAssessments[0].GetProperty("identityKnown").GetBoolean());
+        Assert.False(completeAssessments[1].GetProperty("identityKnown").GetBoolean());
+        Assert.Equal("children", completeAssessments[0].GetProperty("table").GetString());
+        Assert.Equal(JsonValueKind.Null, completeAssessments[1].GetProperty("table").ValueKind);
+        Assert.Equal(JsonValueKind.Array, completeAssessments[0].GetProperty("columns").ValueKind);
+        Assert.Equal(JsonValueKind.Null, completeAssessments[1].GetProperty("columns").ValueKind);
+        Assert.Equal(completeAssessments.GetRawText(), viewAssessments.GetRawText());
+    }
+
     [Fact]
     public void FailureTelemetry_ContainsOnlyBoundedLowCardinalityTags()
     {
@@ -795,7 +847,7 @@ public sealed class SafeMigrationRunContractTests
             Path.Combine(
                 AppContext.BaseDirectory,
                 "schemas",
-                "safe-migration-report-view-v2.schema.json")));
+                "safe-migration-report-view-v3.schema.json")));
 
     private static void AssertSchemaEnum(
         JsonElement schema,

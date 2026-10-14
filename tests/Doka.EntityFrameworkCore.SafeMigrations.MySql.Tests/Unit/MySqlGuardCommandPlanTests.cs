@@ -384,10 +384,7 @@ public sealed class MySqlGuardCommandPlanTests
         // Assert
         Assert.False(MySqlSafeMigrationCatalogSqlBuilder.CanUseRequiredColumnAddProtocol(
             Assert.IsType<EnsureColumnIntent>(operation.Intent).Definition));
-        Assert.Equal(
-            "MySqlScopedMigrationCommand",
-            command.GetType()
-                .Name);
+        AssertNativeScopedCommandIsPreserved(command);
         Assert.Equal(3, Count(command.CommandText, "PREPARE doka_sm_statement FROM"));
         Assert.Equal(2, Count(command.CommandText, "EXECUTE doka_sm_statement"));
         Assert.Equal(2, Count(command.CommandText, "DEALLOCATE PREPARE doka_sm_statement"));
@@ -420,10 +417,7 @@ public sealed class MySqlGuardCommandPlanTests
 
         var command = Assert.Single(commands);
 
-        Assert.Equal(
-            "MySqlScopedMigrationCommand",
-            command.GetType()
-                .Name);
+        AssertNativeScopedCommandIsPreserved(command);
         Assert.Equal(2, Count(command.CommandText, "PREPARE doka_sm_statement FROM"));
         Assert.Equal(1, Count(command.CommandText, "EXECUTE doka_sm_statement"));
         Assert.Equal(1, Count(command.CommandText, "DEALLOCATE PREPARE doka_sm_statement"));
@@ -460,24 +454,22 @@ public sealed class MySqlGuardCommandPlanTests
                 .Generate([operation], context.Model));
 
         // Assert
-        var captureIndex = command.CommandText.IndexOf("@__doka_previous_sql_mode", StringComparison.Ordinal);
-        var resetIndex = command.CommandText.IndexOf("SET @doka_sm_provider_setup_entered = 0;",
+        var scopedSql = ReadRuntimeCommandBody(command.CommandText);
+        var captureIndex = scopedSql.IndexOf("@__doka_previous_sql_mode", StringComparison.Ordinal);
+        var resetIndex = scopedSql.IndexOf("SET @doka_sm_provider_setup_entered = 0;",
             StringComparison.Ordinal);
-        var decisionIndex = command.CommandText.IndexOf("WHERE @doka_sm_action = 'reject_different'",
+        var decisionIndex = scopedSql.IndexOf("WHERE @doka_sm_action = 'reject_different'",
             StringComparison.Ordinal);
-        var bodyIndex = command.CommandText.IndexOf(
+        var bodyIndex = scopedSql.IndexOf(
             "PREPARE doka_sm_statement FROM @doka_sm_sql",
             StringComparison.Ordinal);
 
-        var cleanupIndex = command.CommandText.LastIndexOf("SET SESSION sql_mode", StringComparison.OrdinalIgnoreCase);
-        var guardCleanupIndex = command.CommandText.LastIndexOf(
+        var cleanupIndex = scopedSql.LastIndexOf("SET SESSION sql_mode", StringComparison.OrdinalIgnoreCase);
+        var guardCleanupIndex = scopedSql.LastIndexOf(
             "DROP TEMPORARY TABLE IF EXISTS `__doka_sm_assert`",
             StringComparison.Ordinal);
 
-        Assert.Equal(
-            "MySqlScopedMigrationCommand",
-            command.GetType()
-                .Name);
+        AssertNativeScopedCommandIsPreserved(command);
         Assert.True(captureIndex >= 0);
         Assert.Equal(0, resetIndex);
         Assert.True(decisionIndex > resetIndex);
@@ -785,6 +777,31 @@ public sealed class MySqlGuardCommandPlanTests
     private static ExpectedColumnDefinition Column(
         string name
     ) => new(name, typeof(int), isNullable: false, storeType: "int");
+
+    /// <summary>Requires the exact diagnostic decorator while keeping Doka's scoped ownership authoritative.</summary>
+    /// <param name="command">
+    /// The generated command whose native resource and transaction boundaries are checked.
+    /// </param>
+    private static void AssertNativeScopedCommandIsPreserved(MigrationCommand command)
+    {
+        var diagnostic = Assert.IsType<MySqlSafeMigrationDiagnosticCommand>(command);
+        var original = diagnostic.OriginalCommand;
+        Assert.Equal("Doka.EntityFrameworkCore.MySql.MySqlScopedMigrationCommand", original.GetType().FullName);
+        Assert.Same(original.CommandText, diagnostic.CommandText);
+        Assert.Same(original.CommandLogger, diagnostic.CommandLogger);
+        Assert.Equal(original.TransactionSuppressed, diagnostic.TransactionSuppressed);
+    }
+
+    /// <summary>Removes only validated leading correlation metadata from the native command ordering oracle.</summary>
+    /// <param name="sql">The generated native scope with its exact ownership marker.</param>
+    private static ReadOnlySpan<char> ReadRuntimeCommandBody(string sql)
+    {
+        Assert.True(MySqlSafeMigrationRuntimeDiagnostic.TryReadMarker(sql, out _, out _));
+        var text = sql.AsSpan().TrimStart();
+        var markerEnd = text.IndexOf("*/", StringComparison.Ordinal) + 2;
+
+        return text[markerEnd..].TrimStart();
+    }
 
     private static DbContext CreateContext()
     {

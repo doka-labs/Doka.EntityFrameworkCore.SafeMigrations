@@ -39,6 +39,50 @@ public sealed partial class MySqlSafeMigrationIntegrationTests : MySqlIntegratio
         string prefix
     ) => prefix + new string('x', 64 - prefix.Length);
 
+    /// <summary>Requires an owned guard diagnostic while preserving its exact native duplicate-key cause.</summary>
+    /// <param name="exception">The failure captured from the generated safe migration command.</param>
+    private static MySqlException AssertOwnedGuardFailure(
+        Exception? exception
+    )
+    {
+        // WHY: Native application, setup and cleanup failures must not satisfy an owned-guard assertion.
+        var diagnostic = Assert.IsType<SafeMigrationExecutionException>(exception);
+        var native = Assert.IsType<MySqlException>(diagnostic.InnerException);
+        Assert.Equal(1062, native.Number);
+        Assert.Equal("23000", native.SqlState);
+        Assert.Contains(diagnostic.GuardCode, native.Message, StringComparison.Ordinal);
+        Assert.False(string.IsNullOrEmpty(diagnostic.ReasonCode));
+        Assert.NotNull(diagnostic.OperationOrdinal);
+
+        return native;
+    }
+
+    /// <summary>Requires the owned guard wrapper on the asynchronous provider execution path.</summary>
+    /// <param name="action">The generated safe migration command to execute.</param>
+    private static async Task<MySqlException> AssertOwnedGuardFailureAsync(
+        Func<Task> action
+    )
+    {
+        var exception = await Assert.ThrowsAsync<SafeMigrationExecutionException>(action);
+
+        return AssertOwnedGuardFailure(exception);
+    }
+
+    /// <summary>Requires the owned atomic-add CHECK, not ordinary constraint or MODIFY errors.</summary>
+    /// <param name="exception">The failure from the admitted staged required-column migration body.</param>
+    private MySqlException AssertOwnedAtomicCheckFailure(Exception? exception)
+    {
+        var diagnostic = Assert.IsType<SafeMigrationExecutionException>(exception);
+        var native = Assert.IsType<MySqlException>(diagnostic.InnerException);
+        Assert.Equal("doka_sm_data_blocked", diagnostic.GuardCode);
+        Assert.Equal("column_atomic_add_check_failed", diagnostic.ReasonCode);
+        Assert.Equal(Fixture.IsMariaDb ? 4025 : 3819, native.Number);
+        Assert.Equal(Fixture.IsMariaDb ? "23000" : "HY000", native.SqlState);
+        Assert.NotNull(diagnostic.OperationOrdinal);
+
+        return native;
+    }
+
     private sealed class ConflictingSafeMigrationHandler : IMySqlMigrationOperationHandler
     {
         public string HandlerId => "safe_migrations_tests.conflict";

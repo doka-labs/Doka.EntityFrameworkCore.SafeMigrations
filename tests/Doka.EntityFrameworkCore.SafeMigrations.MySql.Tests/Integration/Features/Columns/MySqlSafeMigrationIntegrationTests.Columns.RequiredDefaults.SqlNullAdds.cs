@@ -83,12 +83,12 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             // WHY: The structurally known NULL default cannot populate any
             // existing row. Both preflight and the fresh runtime gate reject
             // this case before target DDL rather than relying on its native error.
-            Assert.Contains("doka_sm_data_blocked", Assert.IsType<MySqlException>(failure).Message,
+            Assert.Contains("doka_sm_data_blocked", AssertOwnedGuardFailure(failure).Message,
                 StringComparison.Ordinal);
         }
         else
         {
-            Assert.Contains("doka_sm_unsupported", Assert.IsType<MySqlException>(failure).Message,
+            Assert.Contains("doka_sm_unsupported", AssertOwnedGuardFailure(failure).Message,
                 StringComparison.Ordinal);
         }
 
@@ -155,7 +155,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         }
         else
         {
-            Assert.Contains("doka_sm_unsupported", Assert.IsType<MySqlException>(failure).Message,
+            Assert.Contains("doka_sm_unsupported", AssertOwnedGuardFailure(failure).Message,
                 StringComparison.Ordinal);
             if (!Fixture.IsMariaDb)
             {
@@ -218,7 +218,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(earlyUnsupported ? 0 : 1, observer.CommittedRows);
         if (earlyUnsupported)
         {
-            Assert.Contains("doka_sm_unsupported", Assert.IsType<MySqlException>(failure).Message,
+            Assert.Contains("doka_sm_unsupported", AssertOwnedGuardFailure(failure).Message,
                 StringComparison.Ordinal);
         }
         else if (useNullDefault)

@@ -45,7 +45,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             report.Assessments[1].Action);
         if (ansiQuotes)
         {
-            Assert.Contains("doka_sm_unsupported", Assert.IsType<MySqlException>(failure).Message,
+            Assert.Contains("doka_sm_unsupported", AssertOwnedGuardFailure(failure).Message,
                 StringComparison.Ordinal);
             Assert.Equal(new AtomicRequiredAddState(0, 0, 0, 0), state);
         }
@@ -108,7 +108,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         }
         else
         {
-            Assert.Contains("doka_sm_unsupported", Assert.IsType<MySqlException>(failure).Message,
+            Assert.Contains("doka_sm_unsupported", AssertOwnedGuardFailure(failure).Message,
                 StringComparison.Ordinal);
         }
 
@@ -143,7 +143,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
         Assert.Equal(SafeMigrationAction.RejectUnsupported, report.Assessments[1].Action);
-        Assert.Contains("doka_sm_unsupported", Assert.IsType<MySqlException>(failure).Message,
+        Assert.Contains("doka_sm_unsupported", AssertOwnedGuardFailure(failure).Message,
             StringComparison.Ordinal);
         Assert.Equal(new AtomicRequiredAddState(0, 0, 0, 0), state);
     }
@@ -197,7 +197,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
         Assert.Equal(SafeMigrationAction.RejectUnsupported, report.Assessments[1].Action);
-        Assert.Contains("doka_sm_unsupported", Assert.IsType<MySqlException>(failure).Message,
+        Assert.Contains("doka_sm_unsupported", AssertOwnedGuardFailure(failure).Message,
             StringComparison.Ordinal);
         Assert.Equal(0, targetColumns);
         Assert.Equal(1, retainedKeys);

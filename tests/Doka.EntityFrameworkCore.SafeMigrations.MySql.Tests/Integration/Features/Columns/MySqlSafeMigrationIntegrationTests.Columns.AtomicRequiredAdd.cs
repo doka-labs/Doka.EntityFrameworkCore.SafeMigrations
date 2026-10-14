@@ -123,7 +123,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         // Assert
         Assert.Equal(SafeMigrationAction.RejectUnsupported, Assert.Single(report.Assessments).Action);
-        Assert.Contains("doka_sm_unsupported", Assert.IsType<MySqlException>(exception).Message,
+        Assert.Contains("doka_sm_unsupported", AssertOwnedGuardFailure(exception).Message,
             StringComparison.Ordinal);
         Assert.Equal(new AtomicRequiredAddState(0, 0, 0, 0), state);
     }
@@ -150,7 +150,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         // Assert
         Assert.Equal(SafeMigrationAction.RejectUnsupported, Assert.Single(report.Assessments).Action);
-        Assert.Contains("doka_sm_unsupported", Assert.IsType<MySqlException>(exception).Message,
+        Assert.Contains("doka_sm_unsupported", AssertOwnedGuardFailure(exception).Message,
             StringComparison.Ordinal);
         Assert.Equal(new AtomicRequiredAddState(0, 0, 0, 0), state);
     }
@@ -188,7 +188,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(Fixture.IsMariaDb ? SafeMigrationAction.RejectUnsupported : SafeMigrationAction.RejectDifferent,
             Assert.Single(report.Assessments).Action);
         Assert.Contains(Fixture.IsMariaDb ? "doka_sm_unsupported" : "doka_sm_different",
-            Assert.IsType<MySqlException>(exception).Message, StringComparison.Ordinal);
+            AssertOwnedGuardFailure(exception).Message, StringComparison.Ordinal);
         Assert.Equal(Fixture.IsMariaDb
             ? new AtomicRequiredAddState(0, 0, 0, 0)
             : new AtomicRequiredAddState(1, 1, 1, 0), state);
@@ -246,7 +246,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             ? SafeMigrationAction.RejectUnsupported
             : SafeMigrationAction.RejectDifferent, Assert.Single(report.Assessments).Action);
         Assert.Contains(failure == "name-collision" ? "doka_sm_unsupported" : "doka_sm_different",
-            Assert.IsType<MySqlException>(exception).Message,
+            AssertOwnedGuardFailure(exception).Message,
             StringComparison.Ordinal);
         Assert.Equal(before, after);
         Assert.Equal(failure == "name-collision" ? 0 : 1, after.Columns);
@@ -278,7 +278,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         // Assert
         Assert.Equal(SafeMigrationAction.RejectDifferent, Assert.Single(report.Assessments).Action);
-        Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(exception).Message,
+        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(exception).Message,
             StringComparison.Ordinal);
         Assert.Equal(new AtomicRequiredAddState(1, 0, 1, 0), state);
     }

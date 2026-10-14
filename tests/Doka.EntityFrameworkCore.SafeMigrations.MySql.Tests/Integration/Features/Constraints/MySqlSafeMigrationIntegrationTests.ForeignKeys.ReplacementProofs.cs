@@ -117,7 +117,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, operations,
             new SafeMigrationRunOptions("fk-replacement-orphan"), CancellationToken.None);
 
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, operations, CancellationToken.None));
         var remaining = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM `proof_child` WHERE `id` = 1 "
@@ -153,7 +153,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         // models a legal intervening write without disabling FK enforcement.
         await ExecuteSqlAsync(connectionString,
             "UPDATE `proof_child` SET `alternate_owner_id` = '00000000-0000-0000-0000-000000000999';");
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, operations, CancellationToken.None));
         var foreignKeys = await ReplacementForeignKeyCountAsync(connectionString);
 
@@ -243,7 +243,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("fk-replacement-required-column"), CancellationToken.None);
 
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
         var foreignKeys = await ReplacementForeignKeyCountAsync(connectionString);
 
@@ -284,7 +284,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("fk-replacement-case-required-column"), CancellationToken.None);
 
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
         var requiredColumns = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
@@ -644,7 +644,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         }
         else
         {
-            exception = await Assert.ThrowsAsync<MySqlException>(() =>
+            exception = await AssertOwnedGuardFailureAsync(() =>
                 ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
         }
 
@@ -861,7 +861,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             "ALTER TABLE `proof_child` DROP FOREIGN KEY `fk_proof_child_parent`; "
             + "ALTER TABLE `proof_child` DROP FOREIGN KEY `fk_semantic_proof_1`; "
             + "UPDATE `proof_child` SET `owner_id` = '00000000-0000-0000-0000-000000000999';");
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
         var exactForeignKeys = await ReplacementForeignKeyCountAsync(connectionString);
 
@@ -891,7 +891,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("fk-replacement-exact-collision-control"), CancellationToken.None);
 
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
         var foreignKeys = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
