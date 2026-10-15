@@ -1,11 +1,11 @@
 # MySQL and MariaDB DDL behavior
 
-Unreleased owned runtime diagnostics identify the authored owner and established
-rejection reason after native cleanup. Their managed outer exception and script
+Prepared stable 10.5.0 owned runtime diagnostics identify the authored owner
+and established rejection reason after native cleanup. Their managed outer exception and script
 result transport are described in [diagnostics](diagnostics.md#runtime-provider-differences);
 ordinary native errors, decisions and forward-recovery requirements remain intact.
 
-Prepared stable 10.4.11 qualifies sparse mixed column/index/FK prerequisites
+The 10.4.11 patch qualifies sparse mixed column/index/FK prerequisites
 against independently captured native endpoints, key/backing identities and
 accepted physical lifetimes. Native table-case equality is shared by live
 transition/backfill catalogs; connection-free generation selects exact/folded
@@ -21,8 +21,10 @@ the two stages are not one transaction. Strict SQL mode, TIMESTAMP semantics,
 ENUM/SET domains and retained SET NULL/PRIMARY dependencies remain independently
 guarded. Comment matching is byte-exact, and native cleanup is bound to acquired
 setup. Runtime checks remain fresh even when analysis uses session-owned
-catalog copies. Public APIs, dependency ranges, migration source, policies,
-reports and history are unchanged; no server durability setting is modified.
+catalog copies. The 10.5.0 diagnostic API/schema/exception and Doka dependency
+changes are documented in [support and qualification](support-and-qualification.md).
+Migration source, policies and history remain unchanged; no server durability
+setting is modified.
 Earlier bounded analysis/runtime optimizations remain. Required data scans and
 DDL can still dominate large-table workloads; timing comparisons are informational.
 

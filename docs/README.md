@@ -1,19 +1,16 @@
 # Documentation
 
 This is the task-oriented entry point for SafeMigrations documentation. This
-source prepares stable 10.4.11 for all five packages, with independently captured
-sparse live prerequisites, accepted physical lifetimes and current row proofs.
-Native owner/backfill/supporting-index, CHECK/index-input and SQLite key/capacity
-contracts remain separate guards. Earlier concurrent required-add/delete and
-verified schema/session recovery protections remain. Public signatures,
-production dependency ranges, migration source, policy selection, report
-schemas and history remain unchanged in that released baseline. The unreleased
-diagnostics feature adds explicit assessment owners, readable errors and text
-summaries with new versioned JSON contracts; see [diagnostics](diagnostics.md).
-Timing comparisons are informational;
-functional and evidence failures remain blocking. Deferred preflight states
-require runtime validation; unproved lossy conversions and independent
-permission refusals remain blocked.
+source prepares stable 10.5.0 for all five packages. Start with the task table
+below; release changes and consumer upgrade notes belong in the
+[changelog](../CHANGELOG.md). The [diagnostics guide](diagnostics.md) explains
+readable errors, affected owners, text summaries and report-schema compatibility;
+[support and qualification](support-and-qualification.md) owns dependency and
+native UUID boundaries. Existing ordered proofs, concurrency guards and verified
+schema/session recovery remain. Deferred preflight states require runtime
+validation; unproved lossy conversions and independent permission refusals
+remain blocked. Timing comparisons are informational; functional and evidence
+failures remain blocking.
 Package availability and OpenSSF status are established by their linked
 external registries, not by source documentation alone.
 

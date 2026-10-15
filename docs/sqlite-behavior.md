@@ -1,11 +1,11 @@
 # SQLite behavior
 
-Unreleased managed diagnostics identify the affected owner and proven cause
-without exposing `foreign_key_check` row identifiers or changing rollback.
+Prepared stable 10.5.0 managed diagnostics identify the affected owner and
+proven cause without exposing `foreign_key_check` row identifiers or changing rollback.
 See [diagnostics](diagnostics.md#runtime-provider-differences) for readable reports;
 guarded SQL scripts remain explicitly unsupported.
 
-Prepared stable 10.4.11 combines actual live column/key facts with accepted
+The 10.4.11 patch combines actual live column/key facts with accepted
 ordered physical lifetimes. Only current NULL-preserving additions or proven
 empty owners can certify dependent rows; target-model nullability, future adds,
 non-NULL defaults and generation do not. Native parent-key declared collations
@@ -19,8 +19,9 @@ endpoints retain independent evidence, including absent-source no-op
 postconditions; existence-only acceptance cannot install an authored matching
 definition. Canonical managed keys retain column/value ordinals. Earlier
 lossless affinity, CLR-domain and generation repair gates remain unchanged.
-Public APIs, dependency ranges, migration source, policy selection, report
-schemas and history are unchanged; no migration regeneration is required.
+Provider APIs, dependency ranges, migration source, policy selection and history
+are unchanged; no migration regeneration is required. Core diagnostic APIs and
+report schemas advance in 10.5.0 as described above.
 
 ## Supported deployment shape
 

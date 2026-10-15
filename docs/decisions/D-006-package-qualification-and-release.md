@@ -279,6 +279,14 @@ owns independent consumer readback.
   x86-64, full coverage/tooling, exact packages, provenance, SBOM and public
   readback mandatory; local source preparation does not establish publication.
 
+- 2026-10-15: Prepare stable 10.5.0 at the same five-package identity for
+  actionable diagnostics, optional MariaDB native UUID through Doka 10.5,
+  exact persisted defaults and isolated parallel provider tests. Promote the
+  prepared diagnostic API baseline and explicitly document report schema 4/view 3,
+  the owned MySQL/MariaDB exception, Doka range and default reclassification.
+  Preserve migration source, policies, fingerprint formats and history; retain
+  native qualification, coverage, tooling, provenance, SBOM and public readback.
+
 ### Implementation References
 
 - [Release candidate workflow](../../.github/workflows/release-candidate.yml)

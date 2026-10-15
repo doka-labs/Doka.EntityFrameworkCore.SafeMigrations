@@ -89,7 +89,7 @@ It retains the same public APIs, production dependencies, migration source,
 policies, reports and history. Timing comparisons stay informational; invalid
 evidence and functional failures remain blocking. The complete hosted matrix,
 including native x86-64 SQL Server, and public readback remain release gates.
-Prepared stable 10.4.11 adds independently captured sparse live prerequisites
+The 10.4.11 patch adds independently captured sparse live prerequisites
 to accepted ordered physical lifetimes and independent current row proofs.
 It corrects MySQL/MariaDB owner equality and supporting-index/backfill risks,
 PostgreSQL CHECK/index-input qualification and bounded prerequisite SQL, and
@@ -98,6 +98,10 @@ uses compatible live endpoint/key evidence without weakening permission or row
 guards. The same public signatures, dependencies, migrations, policies, reports,
 history and full five-package release gates remain; no general performance or
 publication claim follows from source preparation.
+Prepared stable 10.5.0 adds readable diagnostics and report owners, optional
+MariaDB native UUID through Doka 10.5, exact persisted-default checks and
+isolated parallel provider tests. See the [changelog](CHANGELOG.md) for schema,
+exception and dependency upgrade notes; the full release gates remain required.
 These releases follow changed dependency conditions and confirmed correctness
 requirements; they are not deferred initial scope.
 

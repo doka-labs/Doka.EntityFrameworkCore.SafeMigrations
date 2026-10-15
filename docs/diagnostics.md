@@ -3,8 +3,8 @@
 SafeMigrations diagnostics identify the authored operation, affected owner and
 established reason without changing the migration decision. No automatic
 preflight, data scan, new privilege or external logging service is required.
-This feature is currently unreleased; stable 10.4.11 retains the preceding
-report and runtime-error contracts.
+Prepared stable 10.5.0 introduces this diagnostic contract relative to
+10.4.11. Preparation does not establish public package availability.
 
 ## Read a rejected operation
 
@@ -62,7 +62,9 @@ evidence. Fingerprint formats and selection/order semantics are unchanged.
 
 The package retains all older schemas for saved evidence. Consumers validating
 the new output must select the matching schema; do not validate a version 4
-document against version 3. See [API reference](api-reference.md#reports-serialization-and-failure).
+document against version 3. Rebuild consumers that reference the compiled
+`SafeMigrationRunReport.CurrentSchemaVersion` constant, now 4. See
+[API reference](api-reference.md#reports-serialization-and-failure).
 
 ## Console and log summaries
 

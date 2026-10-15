@@ -91,7 +91,7 @@ policy selection, fingerprint format, report schema or migration history
 changes; existing migrations do not need regeneration. Native timing overruns
 are informational, not a waiver of functional or evidence validation.
 
-Prepared stable 10.4.11 retains the same public APIs, EF/provider ranges, policies,
+The 10.4.11 patch retains the same public APIs, EF/provider ranges, policies,
 fingerprint formats, canonical report v3, filtered-view v2 and migration history.
 An internal provider channel supplies actual sparse live prerequisites, not
 target-model definitions; ordered projection still owns accepted physical
@@ -100,6 +100,21 @@ index, PRIMARY-removal column-source, native CHECK/index-input and SQLite
 key/capacity fixes do not require migration regeneration or API-baseline promotion.
 The SQL Server PKCS minimum is 9.0.21. Qualification and publication
 remain separate from these prepared contracts.
+
+Prepared stable 10.5.0 adds operation identity, diagnostic explanation,
+`SafeMigrationDiagnosticMessages`, `SafeMigrationReportText` and
+`SafeMigrationExecutionException`; existing public signatures remain available.
+The Core shipped baseline includes this prepared surface. Canonical report
+schema advances to 4 and selected-view schema to 3; update validators and rebuild
+references to the compiled `CurrentSchemaVersion` constant. MySQL/MariaDB callers
+must handle positively correlated owned assertions through the new managed
+exception, whose inner exception preserves the exact native cause. Other native
+failures and cancellation retain their contracts. Doka moves to
+`[10.5.0,10.6.0)`; native UUID is opt-in and persisted-default reclassification
+can require an explicitly eligible repair. See [diagnostics](diagnostics.md),
+[support and qualification](support-and-qualification.md) and the
+[10.5.0 changelog](../CHANGELOG.md#1050---2026-10-15). Migration source,
+policy selection, fingerprint formats and history do not change.
 
 ## Packages and registration
 

@@ -1,11 +1,11 @@
 # PostgreSQL behavior
 
-Unreleased runtime diagnostics put essential owner/reason context into native
-guard messages without enabling error-detail disclosure or changing SQLSTATE.
+Prepared stable 10.5.0 runtime diagnostics put essential owner/reason context
+into native guard messages without enabling error-detail disclosure or changing SQLSTATE.
 See [diagnostics](diagnostics.md#runtime-provider-differences) for bounded text,
 privacy and report-schema compatibility.
 
-Prepared stable 10.4.11 qualifies sparse live/projected endpoint and candidate-key
+The 10.4.11 patch qualifies sparse live/projected endpoint and candidate-key
 prerequisites, structured CHECK bindings and native physical index-input types.
 Unresolved operator-class or access-method compatibility remains unsupported;
 ordinary Btree keys on `json` are rejected before DDL or duplicate-row probes.
@@ -20,8 +20,9 @@ Source-frozen managed deletes fence dependent writers and reclassify under the
 owned lock, requiring physically present enforced FK counterparts. Earlier
 column-contract and trigger-freshness fixes remain: supported unproven states
 need fresh runtime validation, while independent refusals remain blocking.
-Public APIs, dependency ranges, migration source, policy selection, report
-schemas and history are unchanged. Prior bounded plan-lifetime and matching
+Provider APIs, dependency ranges, migration source, policy selection and history
+are unchanged. Core diagnostic APIs and report schemas advance in 10.5.0 as
+described above. Prior bounded plan-lifetime and matching
 fast paths remain; native timing comparisons are informational.
 
 ## Operational summary

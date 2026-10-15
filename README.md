@@ -55,35 +55,35 @@ evidence. See [Support and qualification](docs/support-and-qualification.md).
 ## Installation
 
 Install one provider package. The core package is included transitively. The
-examples target prepared stable 10.4.11 and select that version exactly, so
+examples target prepared stable 10.5.0 and select that version exactly, so
 restore does not move to another version implicitly. Verify public package
 availability before installation; source preparation is not publication
 evidence. Release changes and compatibility notes belong in the
 [changelog](CHANGELOG.md).
 
 ```bash
-package_version='10.4.11'
+package_version='10.5.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.MySql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.4.11'
+package_version='10.5.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.4.11'
+package_version='10.5.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.Sqlite --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.4.11'
+package_version='10.5.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.SqlServer --version "$package_version"
 ```
 
@@ -802,11 +802,10 @@ remain available for previously persisted views. `NonMatching` retains deferred
 assessments and their origins; `BlockingOnly` does not present them as proven
 blockers.
 
-The unreleased diagnostics feature adds explicit table/schema and relationship
-identity to assessments, readable explanations and a built-in bounded text
-summary via `SafeMigrationReportText`. Runtime diagnostics also work without
-preflight. See [errors and readable reports](docs/diagnostics.md) for usage,
-provider differences and compatibility with the published 10.4.11 baseline.
+Assessments include explicit table/schema and relationship identity, readable
+explanations and bounded text summaries via `SafeMigrationReportText`. Runtime
+diagnostics also work without preflight. See
+[errors and readable reports](docs/diagnostics.md) for usage and compatibility.
 
 Do not encode a preflight-only operation inside `Migration.Up`. EF would record
 the migration as applied after successful command execution even when the

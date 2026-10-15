@@ -2,8 +2,10 @@
 
 ## Support contract
 
-Unreleased actionable diagnostics add canonical report schema 4, selected view
-schema 3 and contextual owned runtime errors. Older schema files remain packaged.
+Prepared stable 10.5.0 adds actionable diagnostics with canonical report schema
+4, selected view schema 3 and contextual owned runtime errors. Older schema
+files remain packaged; update validators and rebuild references to the compiled
+`CurrentSchemaVersion` constant.
 Those diagnostics do not change migration decisions or the target framework.
 The separate Doka upgrade below changes the MySQL/MariaDB dependency range.
 MySQL/MariaDB callers must account for the owned-guard outer exception type;
@@ -71,9 +73,11 @@ The SQL Server project supplies the fifth lockfile. Releases 10.4.2 through
 10.4.5 contain four package artifacts; their inventory remains unchanged.
 
 The five-package set began with stable 10.4.6, including the optional SQL Server
-provider. Prepared stable 10.4.11 retains that inventory, the EF/provider ranges
-and all public API baselines, while raising the SQL Server PKCS minimum to
-9.0.21. Publication still requires the blocking workflow, including all three
+provider. Prepared stable 10.5.0 retains that inventory and the SQL Server PKCS
+minimum of 9.0.21. The Core API baseline gains the diagnostic surface described
+above, and the MySQL/MariaDB Doka range changes to the qualified 10.5 line.
+Other production dependency ranges remain unchanged. Publication still requires
+the blocking workflow, including all three
 native x86-64 SQL Server cells, and exact public readback
 of all five package IDs. Source preparation alone does not establish availability.
 
@@ -100,8 +104,8 @@ acquisition. Earlier provider repair and trigger-freshness contracts remain.
 These are bounded path-specific changes, not a general engine-latency or
 peak-memory guarantee. SQLite retains its model-owned rebuild contract.
 Engineering dependencies inherit the reviewed Testcontainers 4.16.0 and pinned
-Action updates on `main`. Apart from the SQL Server PKCS floor above,
-production ranges and package lockfiles are unchanged.
+Action updates on `main`. For 10.5.0 only the MySQL/MariaDB package lockfile
+changes to resolve Doka 10.5.0; the other four package lockfiles are unchanged.
 No engine, tooling, package or coverage gate is removed. Performance measurements
 remain informational; invalid evidence and functional failures remain blocking.
 The analysis and runtime optimizations introduced in 10.4.7 remain in place;

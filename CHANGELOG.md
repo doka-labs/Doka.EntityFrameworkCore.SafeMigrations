@@ -6,6 +6,18 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
+## [10.5.0] - 2026-10-15
+
+Prepare stable 10.5.0 for all five packages. This release adds actionable
+diagnostics, optional MariaDB native UUID support through Doka 10.5, exact
+persisted-default checks and isolated parallel provider tests. Existing
+migration source, policies, fingerprint formats and history remain
+unchanged. Consumers must account for new report schemas, owned MySQL/MariaDB
+exception transport, the Doka dependency floor and default reclassification
+described below. Source preparation is not publication evidence: the complete
+hosted/native matrix, coverage, tooling, five primary/symbol pairs, provenance,
+SBOM and public readback remain required. Timing comparisons are informational.
+
 ### Added
 
 - Support opt-in MariaDB native `uuid` columns through Doka 10.5, including
@@ -20,6 +32,9 @@ the shared release identity described in [Release process](docs/release-process.
   and filtered view schema 3; retain older packaged schemas and existing code,
   fingerprint, objectName, ordering and selection semantics. Add streaming
   `SafeMigrationReportText` summaries with explicit total and omitted counts.
+  Update schema validators and rebuild consumers of the compiled
+  `SafeMigrationRunReport.CurrentSchemaVersion` constant; existing public
+  signatures remain available.
 
 ### Changed
 
@@ -2032,7 +2047,8 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.11...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.5.0...HEAD
+[10.5.0]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.11...v10.5.0
 [10.4.11]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.10...v10.4.11
 [10.4.10]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.9...v10.4.10
 [10.4.9]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.8...v10.4.9

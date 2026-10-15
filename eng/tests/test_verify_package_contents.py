@@ -13,7 +13,7 @@ from pathlib import Path
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 VERIFIER = REPOSITORY_ROOT / "eng/verify-package-contents.sh"
 CORE_ID = "Doka.EntityFrameworkCore.SafeMigrations"
-PACKAGE_VERSION = "10.4.11"
+PACKAGE_VERSION = "10.5.0"
 PKCS_ID = "System.Security.Cryptography.Pkcs"
 PROVIDER_DEPENDENCIES = {
     "": "Microsoft.EntityFrameworkCore.Relational",
