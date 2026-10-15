@@ -14,6 +14,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     private Dictionary<MySqlCatalogParameterValue, string>? _valueMarkers;
     private List<MySqlCatalogParameterValue>? _parameterValues;
     private bool _renderValuesInline;
+    private List<MySqlSafeMigrationBinaryDefaultProof>? _binaryDefaultProofs;
 
     public MySqlSafeMigrationCatalogSqlBuilder(
         IRelationalTypeMappingSource typeMappingSource,
@@ -152,7 +153,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 plan,
                 requiredDatabaseQualifiers);
 
-            return plan with { ParameterValues = _parameterValues.ToArray() };
+            return plan with
+            {
+                ParameterValues = _parameterValues.ToArray(),
+                BinaryDefaultProofs = _binaryDefaultProofs?.ToArray() ?? [],
+                RequiresLazyStateEvaluation = plan.RequiresLazyStateEvaluation || _binaryDefaultProofs is not null,
+            };
         }
         finally
         {
@@ -166,6 +172,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             _valueMarkers = null;
             _parameterValues = null;
             _renderValuesInline = false;
+            _binaryDefaultProofs = null;
         }
     }
 

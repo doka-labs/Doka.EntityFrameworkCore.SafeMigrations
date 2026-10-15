@@ -24,6 +24,9 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     /// <summary>Gets the captured parameter values in placeholder order.</summary>
     public MySqlCatalogParameterValue[] ParameterValues { get; init; } = [];
 
+    /// <summary>Gets exact native binary-default proofs owned only by this operation.</summary>
+    public IReadOnlyList<MySqlSafeMigrationBinaryDefaultProof> BinaryDefaultProofs { get; init; } = [];
+
     /// <summary>Gets the catalog relation binding, or null to read the live INFORMATION_SCHEMA.</summary>
     /// <remarks>
     /// WHY: Batched classification may read a snapshot of the scoped catalog rather than the live
@@ -195,7 +198,10 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     /// <summary>Renders lazy-guard diagnostics using only facts available before live row probes.</summary>
     /// <param name="renderValue">The bounded catalog parameter renderer.</param>
     /// <returns>The catalog-safe code expression, or SQL NULL when any required proof is unavailable.</returns>
-    /// <remarks>Quoted marker-shaped names remain literal; required-add status must already be bound.</remarks>
+    /// <remarks>
+    /// Quoted marker-shaped names remain literal; required-add status must already be bound.
+    /// Binary-default and row proofs are unavailable when the earlier catalog guard fails.
+    /// </remarks>
     internal string RenderStateEvaluationGuardClassificationCodeExpression(
         Func<MySqlCatalogParameterValue, string> renderValue
     )
@@ -279,6 +285,24 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     public string RenderPostcondition(
         Func<MySqlCatalogParameterValue, string> renderValue
     ) => RenderTemplate(Postcondition, ParameterValues, renderValue);
+
+    /// <summary>Renders the catalog barrier before a native DEFAULT(column) proof may be prepared.</summary>
+    /// <param name="proof">The exact proof owned by this plan.</param>
+    /// <param name="renderValue">The bounded catalog-value renderer.</param>
+    /// <returns>The current-column eligibility predicate.</returns>
+    public string RenderBinaryDefaultEligibilityExpression(
+        MySqlSafeMigrationBinaryDefaultProof proof,
+        Func<MySqlCatalogParameterValue, string> renderValue
+    ) => MySqlCatalogSqlTemplate.Render(proof.EligibilityExpression, ParameterValues, renderValue);
+
+    /// <summary>Renders the fresh native-default binding barrier using prepared literal values.</summary>
+    /// <param name="proof">The exact proof owned by this plan.</param>
+    /// <param name="renderedValues">The literal values in captured placeholder order.</param>
+    /// <returns>The current-column eligibility predicate, independent of catalog snapshots.</returns>
+    public static string RenderPreparedBinaryDefaultEligibilityExpression(
+        MySqlSafeMigrationBinaryDefaultProof proof,
+        IReadOnlyList<string> renderedValues
+    ) => MySqlCatalogSqlTemplate.RenderPrepared(proof.EligibilityExpression, renderedValues);
 
     /// <summary>Renders the repair precondition with provider literals.</summary>
     /// <param name="renderValue">The provider literal renderer.</param>
@@ -635,7 +659,8 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
                 1 => transitionReplacement,
                 2 => nullabilityReplacement,
                 3 => repairInvariantReplacement,
-                _ => requiredAddStatusReplacement ?? RequiredColumnAddStatusPlaceholder,
+                4 => requiredAddStatusReplacement ?? RequiredColumnAddStatusPlaceholder,
+                _ => throw new InvalidOperationException("A binary-default proof must be bound before replacement."),
             };
 
             resultLength = checked(resultLength + replacement.Length - marker.Length);
@@ -680,7 +705,9 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
                         1 => state.Transition,
                         2 => state.Nullability,
                         3 => state.RepairInvariant,
-                        _ => state.RequiredAddStatus,
+                        4 => state.RequiredAddStatus,
+                        _ => throw new InvalidOperationException(
+                            "A binary-default proof must be bound before replacement."),
                     };
 
                     replacement.AsSpan().CopyTo(destination[destinationOffset..]);
@@ -691,7 +718,10 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     }
 
     /// <summary>Locates structural proof tokens without interpreting quoted identifiers or SQL literals.</summary>
-    private static (int Index, int Kind, int Length) FindNextProofMarker(
+    /// <param name="sql">The owned SQL template with doubled-quote literal and identifier escaping.</param>
+    /// <param name="start">The first position not consumed by the preceding marker.</param>
+    /// <returns>The next marker's position, closed kind and length, or a negative position when none remains.</returns>
+    internal static (int Index, int Kind, int Length) FindNextProofMarker(
         ReadOnlySpan<char> sql,
         int start
     )
@@ -771,6 +801,26 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
             {
                 return (index, 4, RequiredColumnAddStatusPlaceholder.Length);
             }
+
+            if (remaining.StartsWith(MySqlSafeMigrationBinaryDefaultProof.MarkerPrefix, StringComparison.Ordinal))
+            {
+                var end = MySqlSafeMigrationBinaryDefaultProof.MarkerPrefix.Length;
+                var digits = end;
+                while (end < remaining.Length && char.IsAsciiDigit(remaining[end]))
+                {
+                    end++;
+                }
+
+                if (end == digits || !remaining[end..].StartsWith("__", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException("The MySQL binary-default proof token is malformed.");
+                }
+
+                // WHY: Every consumer must see the same proof domain. Guard
+                // diagnostics must not render a later proof as catalog fact,
+                // and ordinary replacement must never alias it to add status.
+                return (index, 5, end + 2);
+            }
         }
 
         return (-1, 0, 0);
@@ -782,7 +832,8 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         Func<MySqlCatalogParameterValue, string> renderValue
     )
     {
-        var rendered = MySqlCatalogSqlTemplate.Render(template, values, renderValue, CatalogRelations);
+        var rendered = MySqlSafeMigrationBinaryDefaultProof.Bind(
+            MySqlCatalogSqlTemplate.Render(template, values, renderValue, CatalogRelations), BinaryDefaultProofs);
         if (!HasRequiredColumnAddStatusMarker(rendered))
         {
             return rendered;
@@ -801,7 +852,8 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         IReadOnlyList<string> renderedValues
     )
     {
-        var rendered = MySqlCatalogSqlTemplate.RenderPrepared(template, renderedValues, CatalogRelations);
+        var rendered = MySqlSafeMigrationBinaryDefaultProof.Bind(
+            MySqlCatalogSqlTemplate.RenderPrepared(template, renderedValues, CatalogRelations), BinaryDefaultProofs);
         if (!HasRequiredColumnAddStatusMarker(rendered))
         {
             return rendered;
@@ -841,8 +893,12 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     /// <summary>Rejects recursive status templates while preserving tokens inside authored SQL values.</summary>
     /// <param name="expression">The raw rendered catalog classifier.</param>
     /// <returns>The nonrecursive classifier.</returns>
-    private static string ValidateRequiredColumnAddStatusExpression(string expression)
+    private string ValidateRequiredColumnAddStatusExpression(string expression)
     {
+        // WHY: The raw status renderer intentionally bypasses bound status to
+        // prevent recursion. Other proof domains still need their own binding
+        // and ownership checks, including an absent binary result becoming FALSE.
+        expression = MySqlSafeMigrationBinaryDefaultProof.Bind(expression, BinaryDefaultProofs);
         if (HasRequiredColumnAddStatusMarker(expression))
         {
             throw new InvalidOperationException("A required-column add status cannot depend on its own status marker.");

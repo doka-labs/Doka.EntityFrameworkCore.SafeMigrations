@@ -29,12 +29,12 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
         // Nullable native ADD passes validation without inventing replacement
         // data; the same atomic ALTER installs the owned non-null barrier.
         nullableAdd.IsNullable = true;
-        var apply = GetBaselineBatch(context.RenderStandardOperation(nullableAdd));
+        var apply = GetBaselineBatch(RenderNativeOperation(context, nullableAdd, intent));
         var requiredModify = SafeMigrationStandardOperationFactory.CreateFullDefinitionRepair(
             intent, _expressionRenderer.Render, static collation => collation.Schema is null ? collation.Name : null,
             MySqlSafeMigrationColumnMetadata.CanSafelyConverge);
 
-        var finish = GetBaselineBatch(context.RenderStandardOperation(requiredModify));
+        var finish = GetBaselineBatch(RenderNativeOperation(context, requiredModify, intent));
         if (apply.Commands.Count != 1 || finish.Commands.Count != 1
             || apply.TransactionSuppressed != finish.TransactionSuppressed
             || !apply.Commands[0].SetupCommands.SequenceEqual(finish.Commands[0].SetupCommands, StringComparer.Ordinal)

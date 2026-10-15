@@ -131,6 +131,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         }
 
         var postconditionSuffix = BuildPostconditionSuffix(diagnostic, scriptDiagnostics);
+        runtimePlan = BindRuntimeBinaryDefaults(runtimePlan);
 
         if (runtimePlan.RequiredColumnAddPlan is { } requiredAddProtocol)
         {
@@ -209,6 +210,12 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             {
                 setupCommands.Add(BuildGuardEvaluationAssignment(runtimePlan, renderedParameterValues));
                 fusedSetupFragmentCount += 3;
+            }
+
+            if (runtimePlan.BinaryDefaultProofs.Count > 0)
+            {
+                setupCommands.Add(BuildBinaryDefaultProofEvaluation(
+                    runtimePlan, renderedParameterValues, "@doka_sm_state IS NULL"));
             }
 
             // WHY: An exact match needs no repair proof. Its classification belongs to the first
@@ -314,7 +321,8 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
                 renderedParameterValues, prepareBaselineInSetup, postconditionSuffix);
 
         var cleanupCommands = BuildCleanupCommands(baseline, runtimePlan.NullabilityDataProbe is not null,
-            runtimePlan.RequiredColumnAddPlan is not null, hasNativeSqlModeCleanup);
+            runtimePlan.RequiredColumnAddPlan is not null, hasNativeSqlModeCleanup,
+            runtimePlan.BinaryDefaultProofs.Count);
 
         // WHY: Reduce owned setup transport without joining opaque provider setup, the guarded
         // body or independent cleanup. Fresh checks and exact script text remain operation-local.
@@ -857,12 +865,16 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             // WHY: The common single-command path does not need incremental
             // composition. Direct concatenation allocates the final command
             // once instead of growing a StringBuilder for every operation.
+            if (runtimePlan.BinaryDefaultProofs.Count == 0)
+            {
+                return $"EXECUTE {PreparedStatementName};\n"
+                    + PostconditionBodyPrefix
+                    + runtimePlan.RenderPreparedExecutionPostcondition(renderedParameterValues)
+                    + postconditionSuffix;
+            }
+
             return $"EXECUTE {PreparedStatementName};\n"
-                + "SET @doka_sm_post_ok = CASE "
-                + "WHEN @doka_sm_action IN ('apply', 'repair') "
-                + "THEN COALESCE(("
-                + runtimePlan.RenderPreparedExecutionPostcondition(renderedParameterValues)
-                + postconditionSuffix;
+                + BuildPostconditionBody(runtimePlan, renderedParameterValues, postconditionSuffix);
         }
 
         var builder = new StringBuilder();
@@ -897,7 +909,9 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         MySqlSafeMigrationRuntimePlan runtimePlan,
         IReadOnlyList<string> renderedParameterValues,
         string postconditionSuffix
-    ) => PostconditionBodyPrefix
+    ) => BuildBinaryDefaultProofEvaluation(
+            runtimePlan, renderedParameterValues, "@doka_sm_action IN ('apply', 'repair')")
+        + PostconditionBodyPrefix
         + runtimePlan.RenderPreparedExecutionPostcondition(renderedParameterValues)
         + postconditionSuffix;
 
@@ -918,11 +932,13 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
     /// <param name="hasNullabilityProof">Whether the operation owns a materialized NULL-proof variable.</param>
     /// <param name="hasRequiredColumnAdd">Whether the operation owns catalog-status and resume variables.</param>
     /// <param name="hasNativeSqlModeCleanup">Whether the scope has a certified native acquisition snapshot.</param>
+    /// <param name="binaryDefaultProofCount">The number of operation-owned exact-default variables to clear.</param>
     private static IReadOnlyList<string> BuildCleanupCommands(
         BaselineBatch baseline,
         bool hasNullabilityProof,
         bool hasRequiredColumnAdd = false,
-        bool hasNativeSqlModeCleanup = false
+        bool hasNativeSqlModeCleanup = false,
+        int binaryDefaultProofCount = 0
     )
     {
         var cleanupCommandCount = 0;
@@ -931,7 +947,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             cleanupCommandCount += command.CleanupCommands.Count;
         }
 
-        if (cleanupCommandCount == 0 && !hasRequiredColumnAdd)
+        if (cleanupCommandCount == 0 && !hasRequiredColumnAdd && binaryDefaultProofCount == 0)
         {
             // WHY: These immutable SQL templates contain no operation or database state.
             // CreateScoped snapshots and reverses its own copy; it never mutates this input.
@@ -940,7 +956,8 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
 
         var commands = new List<string>(2 + cleanupCommandCount)
         {
-            BuildGuardCleanupSql(hasNullabilityProof, hasRequiredColumnAdd, hasNativeSqlModeCleanup),
+            BuildGuardCleanupSql(hasNullabilityProof, hasRequiredColumnAdd, hasNativeSqlModeCleanup)
+                + MySqlSafeMigrationBinaryDefaultProof.BuildResetSql(binaryDefaultProofCount, 0, clear: true),
         };
 
         // WHY: CreateScoped reverses cleanup input. Add provider cleanup in
@@ -1057,7 +1074,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             alterColumn.OldColumn.IsNullable = alterColumn.IsNullable;
         }
 
-        return context.RenderStandardOperation(standardOperation);
+        return RenderNativeOperation(context, standardOperation, operation.Intent);
     }
 
     private BaselineBatch? RenderRepairBaseline(
@@ -1084,7 +1101,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             static collation => collation.Schema is null ? collation.Name : null,
             MySqlSafeMigrationColumnMetadata.CanSafelyConverge);
 
-        var repair = GetBaselineBatch(context.RenderStandardOperation(repairOperation));
+        var repair = GetBaselineBatch(RenderNativeOperation(context, repairOperation, intent));
         if (repair.TransactionSuppressed != apply.TransactionSuppressed
             || repair.Commands.Count != apply.Commands.Count)
         {

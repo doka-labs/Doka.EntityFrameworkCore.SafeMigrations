@@ -1277,13 +1277,15 @@ public sealed class MySqlRequiredColumnAddCatalogTests
         var values = RenderValues(context, plan);
         var expressionLiteral = values[Array.FindIndex(plan.ParameterValues,
             parameter => Equals(parameter.Value, expressionDisplay))];
+        var stableLiteral = values[Array.FindIndex(plan.ParameterValues,
+            parameter => Equals(parameter.Value, "convert(0x323030312d30312d30322030333a30343a3035 using utf8mb4)"))];
 
         // Act
         var matching = plan.RenderPreparedPostcondition(values);
 
         // Assert
         Assert.Contains("CASE WHEN LOCATE('DEFAULT_GENERATED', UPPER(COALESCE(c.EXTRA, ''))) > 0 "
-            + "THEN CAST(c.COLUMN_DEFAULT AS BINARY) = " + expressionLiteral
+            + "THEN CAST(c.COLUMN_DEFAULT AS BINARY) IN (" + expressionLiteral + ", " + stableLiteral + ")"
             + " ELSE CAST(c.COLUMN_DEFAULT AS BINARY) IN (", matching, StringComparison.Ordinal);
         Assert.Contains(plan.ParameterValues, parameter => Equals(parameter.Value, "2001-01-02 03:04:05.000000"));
         Assert.Contains(plan.ParameterValues,

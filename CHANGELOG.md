@@ -29,6 +29,16 @@ the shared release identity described in [Release process](docs/release-process.
   changes implicit application-owned 16-byte binary mappings to `varbinary(17)`;
   consumers must review newly scaffolded schema changes rather than treating
   this dependency update as an automatic data or storage-format migration.
+- Reassess existing default identity exactly. MySQL generated string defaults
+  containing backslash, quote, NUL, newline, carriage return or Ctrl-Z no longer
+  qualify as matching merely from their SQL-mode-dependent display. Strict
+  `ThrowIfDifferent` can therefore reject previously accepted defaults; an
+  otherwise eligible explicit default-only `RepairIfSafe` operation can replace
+  their serialization without changing existing rows. Structured function
+  defaults now match the engine's compact argument separators. Exact binary
+  checks can also reject previously accepted truncated MySQL prefixes or
+  ambiguous legacy MariaDB text. Review such differences explicitly; this update
+  does not rewrite historical migrations or broaden repair permissions.
 - Translate only positively correlated MySQL/MariaDB owned runtime assertions
   into `SafeMigrationExecutionException`, preserving the exact native cause
   after Doka cleanup. Consumers catching those assertions as `MySqlException`
@@ -47,6 +57,24 @@ the shared release identity described in [Release process](docs/release-process.
   test-owned resources promptly, and isolate only process-wide observers and
   measurements. Preserve test coverage, native platform boundaries and required
   qualification; elapsed-time comparisons remain informational.
+
+### Fixed
+
+- Preserve exact string-default bytes across MySQL/MariaDB table reopening and
+  SQL-mode changes. Render known structured string defaults and literal TEXT
+  defaults through UTF-8 hex conversion before native create/add/alter/repair
+  generation, and compare the persisted expression exactly. Keep opaque SQL,
+  GUID/numeric/temporal mappings and existing repair capability boundaries
+  unchanged.
+- Validate MySQL binary literal defaults against their exact native value,
+  not catalog text truncated at NUL. Preserve literal `DEFAULT(column)`
+  semantics, qualify native probes before binding identifiers and refresh
+  operation-local evidence after DDL without scanning table rows. Keep exact
+  generated-expression identity separate from literal defaults and clear
+  acquired proof state on failure or cancellation. Preserve MariaDB defaults
+  through binary hex conversion, including older catalogs that otherwise
+  serialize escaped or lossy text. Do not confuse a real question mark with
+  non-UTF-8 bytes replaced by legacy catalog conversion.
 
 ## [10.4.11] - 2026-10-14
 

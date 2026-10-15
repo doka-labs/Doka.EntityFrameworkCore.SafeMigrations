@@ -469,6 +469,54 @@ unsupported by this type-changing path because expression serialization can
 change the subsequent `INSERT DEFAULT` value. This restriction does not apply
 to `VARCHAR` defaults or existing row data.
 
+Known structured string-default leaves and literal `TEXT` defaults are rendered
+as UTF-8 hex conversion expressions before delegation to Doka. Unlike a string
+literal that the engine can serialize with backslash escapes, this expression
+retains its bytes after table reopening under a different SQL mode. Empty
+strings keep their mode-independent quoted form. Create, add, explicit alter
+and full-definition repair use the same default materialization; computed,
+CHECK and index expressions retain their ordinary renderer. Opaque SQL and
+GUID, numeric and temporal defaults are not rewritten. Exact catalog comparisons
+distinguish actual control characters from literal backslash sequences. This encoding
+does not by itself expand the type-changing repair permissions above. See
+[MySQL expression-default rules](https://dev.mysql.com/doc/refman/8.4/en/data-type-defaults.html)
+for persisted expressions and SQL-mode dependence.
+
+An existing MySQL expression literal containing a backslash, quote, NUL,
+newline, carriage return or Ctrl-Z cannot prove a mode-independent default.
+Strict policy reports it as different; an otherwise eligible explicit
+`EnsureColumn` with `RepairIfSafe` can replace the default without rewriting
+existing rows. Ordinary non-generated `CHAR`/`VARCHAR` literal defaults keep
+their exact value comparison and are not rejected merely for containing these
+characters.
+
+MySQL's INFORMATION_SCHEMA can truncate literal binary-default text at NUL.
+Neither a matching prefix nor a successful CREATE proves the complete default.
+For these defaults, SafeMigrations qualifies the current base table, column
+and literal default kind before preparing an exact native `DEFAULT(column)`
+comparison. The comparison uses an impossible table join, not a row scan,
+and accounts for fixed `BINARY(n)` zero padding. Analysis batches these
+metadata-selected proofs; runtime evidence is operation-local, refreshed
+after DDL and cleared after success, rejection, failure or cancellation.
+Operations without binary-default proofs do not acquire this extra work.
+
+Native literal defaults remain literals. Explicit structured binary-expression
+defaults retain their separate complete SQL identity and are not decoded as
+text. MySQL itself permits `DEFAULT(column)` only for literal defaults, so
+expression-default columns are excluded before native statement preparation,
+not hidden inside an unexecuted SQL CASE branch. See the
+[MySQL DEFAULT function contract](https://dev.mysql.com/doc/refman/8.4/en/miscellaneous-functions.html#function_default).
+
+MariaDB literal and untyped structured binary defaults use binary hex
+conversion without changing CLR/store mappings or converting bytes to text.
+This preserves exact metadata on MariaDB 10.11, whose catalog can otherwise
+serialize binary defaults as escaped strings and replace invalid UTF-8 with
+question marks. Ambiguous legacy quoted metadata cannot certify question-mark
+or non-ASCII byte identities; exact hex/expression identity or a reviewed
+default-only repair is required. MariaDB `DEFAULT(column)` retains its native
+binary value. Neither provider requires a SHOW CREATE query or table-row scan
+for this validation.
+
 A `VARCHAR` length repair requires the same nonbinary character family,
 character set, effective collation, generated/identity/row-version state,
 provider metadata, and compatible dependent indexes. A column on either side
