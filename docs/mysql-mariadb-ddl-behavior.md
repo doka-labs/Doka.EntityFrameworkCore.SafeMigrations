@@ -649,7 +649,8 @@ Ensure repair. A captured replacement reports
 `projected_foreign_key_set_null_unrepresentable` instead of borrowing stale
 nullable metadata or promoting a previous matching/missing result.
 
-The locked Doka 10.4.2 contract removes synthetic defaults and marks additions
+The Doka contract, established in 10.4.2 and retained by the locked 10.5.0,
+removes synthetic defaults and marks additions
 or nullable-to-required alterations requiring explicit backfill. Its provider
 generator rejects required additions without an explicit default, computed
 expression or server-generated value:
@@ -1058,8 +1059,8 @@ For column value generation, `AutoIncrement` is compared against `c.EXTRA`.
 latter is a client-side EF value generator and is therefore not a database
 column facet. SafeMigrations still retains the exact annotation in its
 immutable definition, contract fingerprint, and provider operation replay.
-Supported `Binary16` and `Char36` Guid metadata is accepted only when it is
-consistent with a Guid column's complete store type. HiLo, malformed,
+Supported `Binary16`, `Char36` and MariaDB `Uuid` Guid metadata is accepted only
+when it is consistent with a Guid column's complete store type. HiLo, malformed,
 contradictory, spatial, invisible, and unknown column metadata remains
 unsupported until its complete observable database contract is modeled.
 
@@ -1168,8 +1169,51 @@ Doka requires `UseAffectedRows=false` independently of SafeMigrations because
 EF update concurrency depends on matched-row semantics. Its low-level connector
 transport is always `GuidFormat=Binary16`; Doka's model-level
 `DefaultGuidFormat` and property configuration continue to control whether a
-Guid property is stored as `binary(16)` or `char(36)`. This separation prevents
-connection ownership from changing the model's storage contract.
+Guid property is stored as `binary(16)`, `char(36)` or MariaDB `uuid`. This
+separation prevents connection ownership from changing the model's storage
+contract.
+
+### GUID storage and native UUID
+
+The Doka dependency range is `[10.5.0,10.6.0)`. `Binary16` remains the default;
+`Char36` is unchanged. Native `uuid` is an explicit Doka model choice through
+`DefaultGuidFormat(MySqlGuidFormat.Uuid)` or a property's
+`HasMySqlGuidFormat(MySqlGuidFormat.Uuid)`. It requires MariaDB 10.7 or later;
+the SafeMigrations supported matrix remains narrower than this capability
+threshold. Doka rejects UUID mapping on MySQL and older MariaDB profiles, even
+with its unsupported-version override.
+
+Hand-authored migration operations must specify `type: "uuid"` for native
+storage. A `Doka:MySql:GuidFormat` annotation without a store type does not
+replace Doka's ordinary context-default type inference. Model-based fluent
+UUID configuration supplies the explicit native type during scaffolding.
+
+Native UUID columns retain CLR `Guid`/`Guid?`, exact unsized `uuid` storage,
+and no text collation, max-length or fixed-length facet. SafeMigrations uses
+the public Doka mapping and typed metadata, not a duplicate converter or
+internal capability enum. Doka sends canonical UUID text with `DbType.String`;
+the connector's separate `GuidFormat=Binary16` invariant remains mandatory.
+UUID contributes 16 bytes to row and index budgets and cannot use a key prefix.
+Column, key, FK and model-managed-data checks keep the same ordered live/
+projected evidence and runtime rechecks as the other supported scalar types.
+Existing native-compatible UUID/Binary16 FK endpoints do not convert either
+column's storage. Sparse mixed live/projected FK certificates still require
+their existing exact-storage proof; native live compatibility alone does not
+authorize a different projected endpoint domain.
+
+`RepairIfSafe` does not authorize conversion among `binary(16)`, `char(36)` and
+`uuid`, including an application-owned binary GUID converter. A format change
+requires an explicitly staged destination column, application-defined backfill,
+verification and replacement of affected keys/relationships. Do not reinterpret
+binary GUID payloads as MariaDB UUID storage or rely on their byte ordering.
+
+Upgrading Doka also changes implicit application-owned 16-byte binary mappings
+to `varbinary(17)` under every GUID default. Review generated model differences
+and migrations separately; SafeMigrations does not remove those differences,
+rewrite prior source or silently approve storage conversions. These contracts
+were checked against the [published 10.5.0 GUID migration guidance](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/27a8d3cce3ce2bc64f6efd1e9034b1cd66eb1ff0/docs/operations/migrations.md#guid-representation-changes)
+and [MariaDB UUID reference](https://mariadb.com/docs/server/reference/data-types/string-data-types/uuid-data-type)
+on 2026-10-15.
 
 Unsupported features are rejected from Doka's canonical server feature
 profile. Examples include independent relational schema namespaces,

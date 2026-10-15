@@ -667,6 +667,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         // WHY: The SQL-layer 65,535-byte limit does not prove that an InnoDB
         // record fits its page. Include directory/null overhead, retain full
         // primary-key values, and fail closed for unknown storage layouts.
+        // Native UUID always remains an inline sixteen-byte scalar.
         var width = $"CASE WHEN {targetColumn} THEN ({targetWidth}) "
             + "WHEN LOWER(inline_column.DATA_TYPE) IN ('varchar', 'varbinary') "
             + $"THEN ({variableWidth}) "
@@ -674,6 +675,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             + "WHEN LOWER(inline_column.DATA_TYPE) IN ('tinyblob', 'tinytext', 'blob', 'text', "
             + "'mediumblob', 'mediumtext', 'longblob', 'longtext', 'json', 'geometry') "
             + $"THEN CASE WHEN {primaryColumn} THEN {octets} ELSE {textWidth} END "
+            + "WHEN LOWER(inline_column.DATA_TYPE) = 'uuid' THEN 16 "
             + "WHEN LOWER(inline_column.DATA_TYPE) = 'tinyint' THEN 1 "
             + "WHEN LOWER(inline_column.DATA_TYPE) = 'smallint' THEN 2 "
             + "WHEN LOWER(inline_column.DATA_TYPE) = 'mediumint' THEN 3 "
@@ -1684,6 +1686,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         // WHY: MySQL rejects a declared row above 65,535 bytes before
         // InnoDB can move long values off-page. Unknown families consume the
         // complete budget so incomplete catalog knowledge fails closed.
+        // MariaDB UUID contributes sixteen bytes without string overhead.
         builder
             .Append("COALESCE((SELECT SUM(CASE WHEN row_column.COLUMN_NAME = ")
             .Append(Literal(column))
@@ -1713,6 +1716,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             .Append("THEN row_column.CHARACTER_OCTET_LENGTH ")
             .Append("WHEN LOWER(row_column.DATA_TYPE) IN ('tinyblob', 'tinytext', 'blob', 'text', ")
             .Append("'mediumblob', 'mediumtext', 'longblob', 'longtext', 'json', 'geometry') THEN 12 ")
+            .Append("WHEN LOWER(row_column.DATA_TYPE) = 'uuid' THEN 16 ")
             .Append("WHEN LOWER(row_column.DATA_TYPE) = 'tinyint' THEN 1 ")
             .Append("WHEN LOWER(row_column.DATA_TYPE) = 'smallint' THEN 2 ")
             .Append("WHEN LOWER(row_column.DATA_TYPE) = 'mediumint' THEN 3 ")
@@ -1780,6 +1784,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             .Append("THEN 1 ELSE COALESCE(cs.MAXLEN, 1) END ")
             .Append("WHEN ic.CHARACTER_OCTET_LENGTH IS NOT NULL ")
             .Append("THEN ic.CHARACTER_OCTET_LENGTH ")
+            // WHY: A native UUID key retains its full sixteen-byte value; it
+            // must not inherit an unknown-family overflow during sibling repair.
+            .Append("WHEN LOWER(ic.DATA_TYPE) = 'uuid' THEN 16 ")
             .Append("WHEN LOWER(ic.DATA_TYPE) = 'tinyint' THEN 1 ")
             .Append("WHEN LOWER(ic.DATA_TYPE) = 'smallint' THEN 2 ")
             .Append("WHEN LOWER(ic.DATA_TYPE) = 'mediumint' THEN 3 ")

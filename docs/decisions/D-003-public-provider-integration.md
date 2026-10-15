@@ -103,7 +103,7 @@ Its first release requires independent x64 Linux qualification on all three
 declared SQL Server majors; local ARM64 test skips are not qualification.
 
 The current MySQL/MariaDB adapter consumes Doka through the bounded
-`[10.4.2,10.5.0)` NuGet dependency range. Doka 10.3.0 introduced typed
+`[10.5.0,10.6.0)` NuGet dependency range. Doka 10.3.0 introduced typed
 read-only migration metadata for Guid storage, value generation, and index
 prefixes. Doka 10.4.0 adds an explicit commandless consumed result, which the
 internal design-time-services guard uses without emitting synthetic SQL.
@@ -114,9 +114,16 @@ while development overlaps, but it cannot satisfy the release gate.
 
 The upper bound is the next Doka minor rather than the next major because the
 operation-handler SPI is both a binary and behavioral dependency. Patch
-releases within the qualified 10.4 line remain consumable without creating a
-diamond conflict through an exact transitive pin. A Doka 10.5 or later line
+releases within the qualified 10.5 line remain consumable without creating a
+diamond conflict through an exact transitive pin. A Doka 10.6 or later line
 requires a reviewed range change and fresh SafeMigrations qualification.
+
+Doka 10.5.0 adds opt-in native MariaDB `uuid` without changing its default
+Binary16 contract. SafeMigrations consumes the public typed `Uuid` metadata and
+mapping gate, and budgets native UUID as a non-prefixable 16-byte scalar.
+It does not copy Doka's internal feature enum or authorize in-place GUID
+representation conversions. MySQL and profiles below MariaDB 10.7 remain
+unsupported for UUID. Qualification remains bounded by the supported matrix.
 
 SafeMigrations also declares its server-side user-variable requirement through
 Doka 10.3.0's public `RequireUserVariables()` contract. Doka may normalize an
@@ -245,6 +252,11 @@ being accepted through broad string normalization.
 - 2026-09-30: Added official-provider SQL Server composition, preserving
   ordinary operation batches and rejecting transaction-suppressed guarded
   baselines. Live qualification remains required before the first release.
+- 2026-10-15: Raise the Doka range to `[10.5.0,10.6.0)` and restore published
+  10.5.0, commit `27a8d3cce3ce2bc64f6efd1e9034b1cd66eb1ff0`, matching its
+  verified signed release tag. Qualify explicit native UUID metadata and
+  16-byte physical proofs while retaining storage-format boundaries. Document
+  the separate implicit `byte[16]` -> `varbinary(17)` model-diff consequence.
 
 ### 2026-09-22 Compatibility Amendment
 
@@ -254,6 +266,8 @@ where it is created instead of rejecting published migrations later.
 
 ### Implementation References
 
+- [Native UUID contract regressions](../../tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Unit/MySqlNativeUuidContractTests.cs)
+- [Native UUID live regressions](../../tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Integration/MySqlNativeUuidIntegrationTests.cs)
 - [Exact Doka handler](../../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/SqlGeneration/MySqlSafeMigrationOperationHandler.cs)
 - [Typed plan capture](../../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/Analysis/MySqlSafeMigrationPlanCapture.cs)
 - [MySQL/MariaDB options registration](../../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/Extensions/MySqlSafeMigrationOptionsBuilderExtensions.cs)
@@ -301,4 +315,8 @@ where it is created instead of rejecting published migrations later.
 - [Doka 10.4.1 signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.4.1) (primary release identity; retrieved 2026-09-21)
 - [Doka.EntityFrameworkCore.MySql 10.4.2 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.4.2) (primary package metadata; retrieved 2026-09-21)
 - [Doka 10.4.2 signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.4.2) (primary release identity; retrieved 2026-09-21)
+- [Doka 10.5.0 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.5.0),
+  [verified signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.5.0),
+  and [typed UUID contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/27a8d3cce3ce2bc64f6efd1e9034b1cd66eb1ff0/src/Doka.EntityFrameworkCore.MySql/Migrations/MySqlMigrationOperationMetadata.cs)
+  (primary sources; retrieved 2026-10-15)
 - [Npgsql EF Core provider and configuration](https://www.npgsql.org/efcore/) (primary source; retrieved 2026-08-26)

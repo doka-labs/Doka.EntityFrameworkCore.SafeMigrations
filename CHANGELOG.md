@@ -8,6 +8,10 @@ the shared release identity described in [Release process](docs/release-process.
 
 ### Added
 
+- Support opt-in MariaDB native `uuid` columns through Doka 10.5, including
+  16-byte row/index budgeting, keys, foreign keys and model-managed Guid data.
+  Keep unsupported engines, index prefixes and implicit GUID storage conversions
+  rejected; existing Binary16 and Char36 defaults are unchanged.
 - Add shared, bounded operation identity and human-readable diagnostics across
   SafeMigrations failures. Include authored schema/table/member, FK principal,
   rename endpoints, known operation/migration context, established reason and
@@ -19,6 +23,12 @@ the shared release identity described in [Release process](docs/release-process.
 
 ### Changed
 
+- Raise the MySQL/MariaDB provider's Doka dependency to `[10.5.0,10.6.0)` and
+  lock qualification to published 10.5.0. Native UUID remains explicit and
+  requires MariaDB 10.7 or later within the qualified engine matrix. Doka also
+  changes implicit application-owned 16-byte binary mappings to `varbinary(17)`;
+  consumers must review newly scaffolded schema changes rather than treating
+  this dependency update as an automatic data or storage-format migration.
 - Translate only positively correlated MySQL/MariaDB owned runtime assertions
   into `SafeMigrationExecutionException`, preserving the exact native cause
   after Doka cleanup. Consumers catching those assertions as `MySqlException`

@@ -389,6 +389,9 @@ internal static class MySqlProjectedIndexPhysicalShape
         "timestamp" => 4 + FractionalSeconds(type.FirstArgument ?? dateTimePrecision),
         "enum" => 2,
         "set" => 8,
+        // WHY: MariaDB stores native UUIDs in sixteen bytes even though Doka
+        // transfers canonical text. This fixed scalar has no prefix semantics.
+        "uuid" => 16,
         _ => null,
     };
 

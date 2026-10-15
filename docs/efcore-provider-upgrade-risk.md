@@ -37,14 +37,15 @@ Doka 10.4.0 also exposes an explicit commandless consumed result. The internal
 design-time-services guard uses that state so runtime history-model generation
 retains outcome telemetry without emitting a synthetic SQL statement.
 
-Doka 10.3.0 supports two distinct model-level Guid contracts. Application-owned converters
+Doka supports distinct model-level Guid contracts. Application-owned converters
 are preserved through relationship chains; their generated key columns retain
 the provider CLR type, carry no provider-owned `GuidFormat`, and may carry
 `ClientGuid`. Native Doka Guid mappings instead emit
-`Doka:MySql:GuidFormat` with `Binary16` plus `binary(16)` or `Char36` plus
-`char(36)`. SafeMigrations accepts only those exact Guid CLR/store-type pairs.
+`Doka:MySql:GuidFormat` with `Binary16` plus `binary(16)`, `Char36` plus
+`char(36)`, or opt-in `Uuid` plus MariaDB `uuid` since Doka 10.5.0.
+SafeMigrations accepts only those exact Guid CLR/store-type pairs.
 Undefined enum values, contradictory store types, non-Guid CLR types, HiLo,
-and unknown provider facets remain unsupported before target DDL. Both accepted
+and unknown provider facets remain unsupported before target DDL. All accepted
 Guid formats remain part of immutable operation snapshots, fingerprints,
 provider DDL replay, and catalog-shape comparison.
 
@@ -55,7 +56,14 @@ Doka supplies an omitted `AllowUserVariables=true` option only on the owned
 string path and validates borrowed inputs without mutation. Doka also requires
 `UseAffectedRows=false` and `GuidFormat=Binary16` on every connection path.
 The latter is a low-level wire contract and does not replace the independently
-configurable model-level `Binary16` or `Char36` storage contract.
+configurable model-level `Binary16`, `Char36` or MariaDB `Uuid` storage contract.
+
+The reviewed Doka 10.5 line adds UUID only on MariaDB 10.7 or later, with
+unsized storage, text-bound Guid values and 16-byte physical budgets. It does
+not permit implicit GUID representation changes. It also changes implicit
+application-owned 16-byte binary mappings to `varbinary(17)` independently of
+GUID defaults; inspect new model differences and migrations during upgrade.
+See [GUID storage and native UUID](mysql-mariadb-ddl-behavior.md#guid-storage-and-native-uuid).
 
 Doka 10.3.0 also exposes an immutable typed migration-operation metadata
 snapshot for Guid format, value-generation strategy, and ordered index prefix

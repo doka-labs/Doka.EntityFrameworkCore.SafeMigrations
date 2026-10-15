@@ -4,6 +4,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
 {
     private readonly DbContext _context = CreateContext();
+    private ServiceProvider? _nativeServices;
 
     /// <summary>Five accepted text conversions preserve an ordinary GUID key and bounded log-like columns.</summary>
     /// <param name="rowFormat">The independently captured InnoDB storage format.</param>
@@ -515,6 +516,183 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
         Assert.False(result);
     }
 
+    /// <summary>Native UUID row and key contributions do not depend on textual wire encoding.</summary>
+    /// <param name="projected">Whether to derive the shape from an accepted definition instead of the catalog.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void NativeUuidPhysicalShapeUsesSixteenFixedBytes(bool projected)
+    {
+        // Arrange
+        using var context = CreateNativeUuidContext();
+        var definition = NativeUuid("id");
+
+        // Act
+        var known = true;
+        MySqlAlterColumnPhysicalShape shape;
+        if (projected)
+        {
+            known = MySqlProjectedAlterPhysicalSnapshot.TryCreateProjectedColumn(
+                definition, context.GetService<IRelationalTypeMappingSource>(), 4, out shape);
+        }
+        else
+        {
+            shape = Catalog("uuid");
+        }
+
+        // Assert
+        Assert.True(known);
+        Assert.Equal(16L, shape.DeclaredRowBytes);
+        Assert.Equal(16L, shape.DynamicInlineBytes);
+        Assert.Equal(16L, shape.CompactInlineBytes);
+        Assert.Equal(16L, shape.IndexShape.FullWidthBytes);
+        Assert.False(shape.IndexShape.SupportsPrefix);
+        Assert.Null(shape.IndexShape.MaximumPrefixUnits);
+    }
+
+    /// <summary>Unrelated repairs include live and newly added UUID key columns without relaxing key limits.</summary>
+    /// <param name="kind">
+    /// Zero for a live index, one for a projected index, two for a primary key, or three for a unique key.
+    /// </param>
+    /// <param name="projectedUuid">Whether the UUID column was added earlier in the operation stream.</param>
+    /// <param name="targetLength">The unrelated target VARCHAR width under its captured one-byte encoding.</param>
+    /// <param name="expected">Whether the complete composite key fits the captured limit.</param>
+    [Theory]
+    [InlineData(0, false, 752, true)]
+    [InlineData(0, false, 753, false)]
+    [InlineData(0, true, 752, true)]
+    [InlineData(0, true, 753, false)]
+    [InlineData(1, false, 752, true)]
+    [InlineData(1, false, 753, false)]
+    [InlineData(1, true, 752, true)]
+    [InlineData(1, true, 753, false)]
+    [InlineData(2, false, 752, true)]
+    [InlineData(2, false, 753, false)]
+    [InlineData(2, true, 752, true)]
+    [InlineData(2, true, 753, false)]
+    [InlineData(3, false, 752, true)]
+    [InlineData(3, false, 753, false)]
+    [InlineData(3, true, 752, true)]
+    [InlineData(3, true, 753, false)]
+    public void NativeUuidSiblingRetainsCompositeKeyBoundaries(
+        int kind,
+        bool projectedUuid,
+        int targetLength,
+        bool expected
+    )
+    {
+        // Arrange
+        using var context = CreateNativeUuidContext();
+        var original = new Dictionary<string, MySqlAlterColumnPhysicalShape>(StringComparer.Ordinal)
+        {
+            ["value"] = Catalog("longtext", characterBytes: 1),
+        };
+
+        if (!projectedUuid)
+        {
+            original.Add("id", Catalog("uuid"));
+        }
+
+        var table = new TableView(projectedUuid
+            ? [NativeUuid("id"), Character("value", "longtext")]
+            : [Character("value", "longtext")])
+        {
+            Indexes = kind == 1 ? [new ExpectedIndexDefinition("ix_values", "records",
+                [new ExpectedIndexKeyDefinition("id"), new ExpectedIndexKeyDefinition("value")])] : [],
+            PrimaryKey = kind == 2 ? new ExpectedPrimaryKeyDefinition("pk_records", "records", ["id", "value"]) : null,
+            UniqueConstraints = kind == 3
+                ? [new ExpectedUniqueConstraintDefinition("uq_records", "records", ["id", "value"])] : [],
+        };
+
+        var snapshot = new MySqlProjectedAlterPhysicalSnapshot(original,
+            kind == 0 ? [new MySqlAlterIndexPhysicalShape(false,
+                [new MySqlAlterIndexPart("id", null), new MySqlAlterIndexPart("value", null)])] : [],
+            Environment(maximumKeyBytes: 768));
+
+        // Act
+        var result = snapshot.IsSafe(
+            Alter("value", targetLength), table, context.GetService<IRelationalTypeMappingSource>());
+
+        // Assert
+        Assert.Equal(expected, result);
+    }
+
+    /// <summary>A native UUID sibling consumes its full fixed width at the declared SQL row boundary.</summary>
+    /// <param name="binaryLength">The retained binary sibling's declared capacity.</param>
+    /// <param name="expected">Whether the total declared row stays at or below 65,535 bytes.</param>
+    [Theory]
+    [InlineData(65515, true)]
+    [InlineData(65516, false)]
+    public void NativeUuidSiblingParticipatesInDeclaredRowBoundary(int binaryLength, bool expected)
+    {
+        // Arrange
+        var snapshot = Snapshot(("id", Catalog("uuid")), ("payload", Catalog("varbinary", binaryLength, 1)),
+            ("value", Catalog("longtext", characterBytes: 1)));
+
+        var table = new TableView(Character("value", "longtext"));
+
+        // Act
+        var result = snapshot.IsSafe(Alter("value", 1), table, Mappings);
+
+        // Assert
+        Assert.Equal(expected, result);
+    }
+
+    /// <summary>Fixed UUID fields remain inline and cannot borrow variable-field overflow capacity.</summary>
+    /// <param name="targetLength">The unrelated one-byte VARCHAR target's capacity.</param>
+    /// <param name="expected">Whether the complete in-page record fits the conservative ceiling.</param>
+    [Theory]
+    [InlineData(26, true)]
+    [InlineData(27, false)]
+    public void NativeUuidSiblingsParticipateInInlineRowBoundary(int targetLength, bool expected)
+    {
+        // Arrange
+        var columns = Enumerable.Range(0, 98).ToDictionary(
+            index => $"id_{index.ToString(CultureInfo.InvariantCulture)}",
+            _ => Catalog("uuid"), StringComparer.Ordinal);
+
+        columns.Add("value", Catalog("longtext", characterBytes: 1));
+        var snapshot = new MySqlProjectedAlterPhysicalSnapshot(columns, [], Environment(pageSize: 4096));
+        var table = new TableView(Character("value", "longtext"));
+
+        // Act
+        var result = snapshot.IsSafe(Alter("value", targetLength), table, Mappings);
+
+        // Assert
+        Assert.Equal(expected, result);
+    }
+
+    /// <summary>Native UUID indexes cannot acquire prefix semantics during an unrelated repair.</summary>
+    /// <param name="projectedIndex">Whether the invalid index was accepted earlier in the stream.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void NativeUuidSiblingPrefixDoesNotAuthorizeRepair(bool projectedIndex)
+    {
+        // Arrange
+        var columns = new Dictionary<string, MySqlAlterColumnPhysicalShape>(StringComparer.Ordinal)
+        {
+            ["id"] = Catalog("uuid"),
+            ["value"] = Catalog("longtext"),
+        };
+
+        var snapshot = new MySqlProjectedAlterPhysicalSnapshot(columns,
+            projectedIndex ? [] : [new MySqlAlterIndexPhysicalShape(false, [new MySqlAlterIndexPart("id", 1)])],
+            Environment());
+
+        var table = new TableView(Character("value", "longtext"))
+        {
+            Indexes = projectedIndex ? [new ExpectedIndexDefinition("ix_id", "records",
+                [new ExpectedIndexKeyDefinition("id", prefixLength: 1)])] : [],
+        };
+
+        // Act
+        var result = snapshot.IsSafe(Alter("value", 80), table, Mappings);
+
+        // Assert
+        Assert.False(result);
+    }
+
     /// <summary>All accepted widths participate in the same captured composite index.</summary>
     [Fact]
     public void CompositeLiveIndexRejectsCumulativeWidthOverflow()
@@ -639,7 +817,11 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
     }
 
     /// <inheritdoc />
-    public void Dispose() => _context.Dispose();
+    public void Dispose()
+    {
+        _context.Dispose();
+        _nativeServices?.Dispose();
+    }
 
     private IRelationalTypeMappingSource Mappings => _context.GetService<IRelationalTypeMappingSource>();
 
@@ -683,6 +865,12 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
     ) => new(
         name, typeof(string), isNullable: false, storeType: storeType);
 
+    /// <summary>Describes fixed native UUID storage without character or binary length facets.</summary>
+    /// <param name="name">The exact column name.</param>
+    /// <returns>A native UUID column with no textual length facets.</returns>
+    private static ExpectedColumnDefinition NativeUuid(string name) => new(
+        name, typeof(Guid), isNullable: false, storeType: "uuid");
+
     private static ExpectedColumnDefinition Varchar(
         string name,
         int length,
@@ -708,6 +896,24 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
         return new DbContext(options.Options);
     }
 
+    /// <summary>Resolves native UUID mappings without opening a server connection.</summary>
+    /// <returns>A context configured for a capable MariaDB profile.</returns>
+    private DbContext CreateNativeUuidContext()
+    {
+        // WHY: Capability-profile probes own their provider lifetime instead
+        // of retaining additional configurations in EF's process-wide cache.
+        _nativeServices ??= new ServiceCollection().AddEntityFrameworkDokaMySql()
+            .BuildServiceProvider(validateScopes: true);
+
+        var options = new DbContextOptionsBuilder<DbContext>();
+        options.UseInternalServiceProvider(_nativeServices);
+        options.UseMySql(
+            "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
+            MySqlServerVersion.MariaDb(new Version(11, 8, 8)));
+
+        return new DbContext(options.Options);
+    }
+
     private sealed class TableView(params ExpectedColumnDefinition[] definitions) : ISafeMigrationProjectedAlterTable
     {
         private readonly Dictionary<string, ExpectedColumnDefinition> _columns = definitions
@@ -715,9 +921,11 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
 
         public IEnumerable<ExpectedColumnDefinition> Columns => _columns.Values;
 
-        public ExpectedPrimaryKeyDefinition? PrimaryKey => null;
+        /// <inheritdoc />
+        public ExpectedPrimaryKeyDefinition? PrimaryKey { get; init; }
 
-        public IEnumerable<ExpectedUniqueConstraintDefinition> UniqueConstraints => [];
+        /// <inheritdoc />
+        public IEnumerable<ExpectedUniqueConstraintDefinition> UniqueConstraints { get; init; } = [];
 
         public IEnumerable<ExpectedIndexDefinition> Indexes { get; init; } = [];
 
