@@ -3,6 +3,60 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 /// <summary>Protects bounded, SQL-escaped rejection messages inside the existing private guard scope.</summary>
 public sealed class SqlServerRuntimeDiagnosticTests
 {
+    /// <summary>Shares a distinctive private value so prose cannot impersonate a caller-state disclosure.</summary>
+    internal const string CallerStateSentinel = "sm_test_private_session_9c08c0a00ea6406891f404379c54c98a";
+
+    /// <summary>
+    /// Actual session THROW messages retain ownership guidance without exposing the native test marker.
+    /// </summary>
+    /// <param name="template">The bootstrap, managed/script acquisition or recovery renderer.</param>
+    /// <param name="authored">Whether the renderer receives an operation-owned diagnostic.</param>
+    [Theory]
+    [InlineData("bootstrap", false)]
+    [InlineData("bootstrap", true)]
+    [InlineData("acquisition", false)]
+    [InlineData("acquisition", true)]
+    [InlineData("script", false)]
+    [InlineData("script", true)]
+    [InlineData("recovery", false)]
+    [InlineData("recovery", true)]
+    public void SessionDiagnosticDoesNotDiscloseCallerState(
+        string template,
+        bool authored
+    )
+    {
+        // Arrange
+        var code = template == "recovery" ? "doka_sm_identity_acquisition_unproven" : "doka_sm_identity_scope_in_use";
+
+        // Act
+        var sql = RenderSessionDiagnostic(template, authored);
+        var message = ReadMessage(sql, code, 51007);
+
+        // Assert
+        Assert.StartsWith(code + ":", message, StringComparison.Ordinal);
+        Assert.Contains("next=", message, StringComparison.Ordinal);
+        Assert.Equal(authored, message.Contains("identity_owner", StringComparison.Ordinal));
+        Assert.DoesNotContain(CallerStateSentinel, message, StringComparison.Ordinal);
+    }
+
+    /// <summary>The same privacy assertion still fails if a rendered message actually discloses caller state.</summary>
+    [Fact]
+    public void CallerStatePrivacyAssertionRejectsInjectedDisclosure()
+    {
+        // Arrange
+        var message = ReadMessage(RenderSessionDiagnostic("bootstrap", authored: true),
+            "doka_sm_identity_scope_in_use", 51007);
+
+        var leakedMessage = message + "; leaked_state=" + CallerStateSentinel;
+
+        // Act
+        var failure = Record.Exception(() =>
+            Assert.DoesNotContain(CallerStateSentinel, leakedMessage, StringComparison.Ordinal));
+
+        // Assert
+        Assert.IsType<Xunit.Sdk.DoesNotContainException>(failure);
+    }
+
     /// <summary>Every native rejection retains its number and supplies actionable operation context.</summary>
     /// <param name="code">The existing SafeMigrations guard token.</param>
     /// <param name="number">The existing SQL Server guard error number.</param>
@@ -349,6 +403,32 @@ public sealed class SqlServerRuntimeDiagnosticTests
         Assert.Contains("reasonCode=column_layout_unproven", sql, StringComparison.Ordinal);
         Assert.True(sql.IndexOf("THROW 51002, @doka_layout_message", StringComparison.Ordinal)
             < sql.IndexOf("DECLARE @doka_state", StringComparison.Ordinal));
+    }
+
+    /// <summary>Renders the real session ownership paths without reading any private caller-state value.</summary>
+    /// <param name="template">The bootstrap, managed/script acquisition or recovery renderer.</param>
+    /// <param name="authored">Whether to retain an operation-owned message or use the native fallback.</param>
+    /// <returns>The generated session SQL containing the unchanged native guard.</returns>
+    private static string RenderSessionDiagnostic(
+        string template,
+        bool authored
+    )
+    {
+        const string token = "0123456789ABCDEF0123456789ABCDEF";
+        var code = template == "recovery" ? "doka_sm_identity_acquisition_unproven" : "doka_sm_identity_scope_in_use";
+        var message = authored
+            ? SafeMigrationDiagnosticMessages.FormatRuntime(ColumnOperation("identity_owner", "Id"), code, 3)
+            : null;
+
+        return template switch
+        {
+            "bootstrap" => SqlServerSafeMigrationIdentityInsertScope.BuildBootstrapSql(token, message),
+            "acquisition" or "script" => SqlServerSafeMigrationIdentityInsertScope.BuildAcquisitionSql(
+                "[dbo].[identity_owner]", script: template == "script", scopeInUseMessage: message),
+            "recovery" => SqlServerSafeMigrationIdentityInsertScope.BuildRecoverySql(token,
+                "SET IDENTITY_INSERT [dbo].[identity_owner] OFF;", acquisitionUnprovenMessage: message),
+            _ => throw new ArgumentOutOfRangeException(nameof(template)),
+        };
     }
 
     /// <summary>Reads one SQL THROW literal while retaining its unchanged state-one terminator.</summary>

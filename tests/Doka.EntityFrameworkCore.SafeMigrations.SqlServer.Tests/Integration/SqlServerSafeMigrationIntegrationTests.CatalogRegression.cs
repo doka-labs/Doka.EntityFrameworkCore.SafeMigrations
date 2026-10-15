@@ -23,6 +23,8 @@ public sealed class SqlServerSafeMigrationCatalogRegressionIntegrationTests : Sq
             "CREATE TABLE #doka_sm_identifiers (Sentinel int NOT NULL); "
             + "INSERT INTO #doka_sm_identifiers VALUES (73); "
             + "CREATE TABLE dbo.identifier_items (Id int NOT NULL, Caption nvarchar(80) NULL);");
+        var connection = (SqlConnection)context.Database.GetDbConnection();
+        var originalObjectId = await SqlServerTemporaryTableProbe.ReadObjectIdAsync(connection, "#doka_sm_identifiers");
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureColumn("identifier_items", new ExpectedColumnDefinition("Id", typeof(int), false, "int"),
             SafeMigrationPolicy.ThrowIfDifferent);
@@ -35,16 +37,15 @@ public sealed class SqlServerSafeMigrationCatalogRegressionIntegrationTests : Sq
             context, builder.Operations.Cast<SafeMigrationOperation>().ToArray());
 
         var sentinel = await ReadContextIntAsync(context, "SELECT Sentinel FROM #doka_sm_identifiers;");
-        var temporaryTableCount = await ReadContextIntAsync(context,
-            "SELECT COUNT(*) FROM tempdb.sys.tables "
-            + "WHERE name LIKE N'#doka[_]sm[_]identifiers[_]%';");
+        var retainedObjectId = await SqlServerTemporaryTableProbe.ReadObjectIdAsync(connection, "#doka_sm_identifiers");
 
         // Assert
         Assert.Equal(2, analyses.Count);
         Assert.All(analyses,
             static analysis => Assert.Equal(SafeMigrationObservedState.Matching, analysis.ObservedState));
         Assert.Equal(73, sentinel);
-        Assert.Equal(1, temporaryTableCount);
+        Assert.NotNull(originalObjectId);
+        Assert.Equal(originalObjectId, retainedObjectId);
     }
 
     /// <summary>

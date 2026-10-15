@@ -89,7 +89,9 @@ public sealed class SqlServerSafeMigrationRuntimeDiagnosticsIntegrationTests : S
         Assert.InRange(native.Message.Length, 1, 2048);
     }
 
-    /// <summary>Native capacity refusals preserve the selected cause, including an honest unknown-layout case.</summary>
+    /// <summary>
+    /// Native capacity refusals preserve the selected cause, including an honest unknown-layout case.
+    /// </summary>
     /// <param name="reasonCode">The metadata-only capacity failure selected by the original proof.</param>
     [SqlServerLiveTheory]
     [InlineData("column_limit")]
@@ -129,7 +131,10 @@ public sealed class SqlServerSafeMigrationRuntimeDiagnosticsIntegrationTests : S
         await connection.OpenAsync(CancellationToken.None);
         await using var setup = connection.CreateCommand();
         setup.CommandText = "EXEC sys.sp_set_session_context @key = N'"
-            + SqlServerSafeMigrationIdentityInsertScope.ContextKey + "', @value = N'caller-owned';";
+            + SqlServerSafeMigrationIdentityInsertScope.ContextKey + "', @value = @caller_state;";
+        setup.Parameters.Add("@caller_state", SqlDbType.NVarChar, 80).Value =
+            SqlServerRuntimeDiagnosticTests.CallerStateSentinel;
+
         await setup.ExecuteNonQueryAsync(CancellationToken.None);
         var operation = SqlServerRuntimeDiagnosticTests.ColumnOperation("identity_owner", "Id");
         await using var command = connection.CreateCommand();
@@ -147,9 +152,11 @@ public sealed class SqlServerSafeMigrationRuntimeDiagnosticsIntegrationTests : S
         // Assert
         var native = Assert.IsType<SqlException>(failure);
         Assert.Equal(51007, native.Number);
+        Assert.Equal(1, native.State);
         Assert.Contains("identity_owner", native.Message, StringComparison.Ordinal);
-        Assert.DoesNotContain("caller-owned", native.Message, StringComparison.Ordinal);
-        Assert.Equal("caller-owned", retained);
+        Assert.DoesNotContain(SqlServerRuntimeDiagnosticTests.CallerStateSentinel,
+            native.Message, StringComparison.Ordinal);
+        Assert.Equal(SqlServerRuntimeDiagnosticTests.CallerStateSentinel, retained);
     }
 
     /// <summary>Ordinary foreign-key errors remain native error 547, not a SafeMigrations rejection.</summary>
