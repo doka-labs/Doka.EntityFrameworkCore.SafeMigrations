@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the IndexesCollationSets PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlIndexesCollationSetsIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>Explicit key collation remains exact between two collapsed plain-key positions.</summary>
     /// <param name="alias">Whether the requested name differs from the matching physical index.</param>
     [Theory]
@@ -12,7 +19,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await CreateMixedCollationIndexAsync(connectionString);
         await using var context = CreateContext(connectionString);
         var builder = MixedCollationBuilder(context, alias, new SafeMigrationCollationIdentifier("C", "pg_catalog"));
@@ -49,7 +56,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await CreateMixedCollationIndexAsync(connectionString);
         await using var context = CreateContext(connectionString);
         var expected = collation is null ? null : new SafeMigrationCollationIdentifier(collation, "pg_catalog");
@@ -85,7 +92,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await CreateMixedCollationIndexAsync(connectionString, collationName: "POSIX");
         await using var context = CreateContext(connectionString);
         var builder = MixedCollationBuilder(context, alias, collation: null, explicitOperatorClass);
@@ -114,7 +121,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE SCHEMA custom; CREATE COLLATION custom.\"C\" FROM pg_catalog.\"C\";");
@@ -151,7 +158,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await CreateMixedCollationIndexAsync(connectionString);
         await using var context = CreateContext(connectionString);
         var expected = collation is null ? null : new SafeMigrationCollationIdentifier(collation, "pg_catalog");
@@ -163,7 +170,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         // Assert
         var postgres = Assert.IsType<PostgresException>(exception);
         Assert.Equal("P1001", postgres.SqlState);
-        Assert.Equal("doka_sm_different", postgres.MessageText);
+        Assert.StartsWith("doka_sm_different:", postgres.MessageText, StringComparison.Ordinal);
         Assert.Equal(1, await MixedCollationIndexCountAsync(connectionString));
         Assert.Equal(
             "C",
@@ -197,7 +204,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE collation_sets (value text COLLATE pg_catalog.\"POSIX\"); "
@@ -251,7 +258,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE collation_sets (value text COLLATE pg_catalog.\"POSIX\"); "
@@ -288,7 +295,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task ExpressionKeyNoncollatableDefaultIsNoOp()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE collation_sets (value text); "
@@ -328,7 +335,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var storedExpression = nested
             ? "lower(value COLLATE pg_catalog.\"C\")"
             : columnOnly ? "value COLLATE pg_catalog.\"C\"" : "lower(value) COLLATE pg_catalog.\"C\"";
@@ -378,7 +385,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE collation_sets (value text COLLATE pg_catalog.\"POSIX\"); "
@@ -399,7 +406,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         {
             var postgres = Assert.IsType<PostgresException>(exception);
             Assert.Equal("P1001", postgres.SqlState);
-            Assert.Equal("doka_sm_different", postgres.MessageText);
+            Assert.StartsWith("doka_sm_different:", postgres.MessageText, StringComparison.Ordinal);
         }
 
         Assert.Equal(1, await MixedCollationIndexCountAsync(connectionString));
@@ -423,7 +430,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE collation_sets (value text COLLATE pg_catalog.\"POSIX\");");
@@ -454,7 +461,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var storedExpression = nested
             ? "lower(value COLLATE pg_catalog.\"C\")"
             : "lower(value) COLLATE pg_catalog.\"C\"";
@@ -580,4 +587,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     ) => ScalarIntAsync(
         connectionString,
         "SELECT count(*) FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND tablename = 'collation_sets';");
+
 }

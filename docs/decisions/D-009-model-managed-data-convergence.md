@@ -106,7 +106,8 @@ Provider catalog parameters and inline runtime literals select a relational
 mapping from the captured store type plus the original non-null CLR type. EF's
 mapping converter then owns the provider representation. Store-type-only lookup
 is reserved for a null value with no CLR type. This keeps `char`, enum, Char36
-Guid, Binary16 Guid, and the remaining supported model-managed values identical
+Guid, Binary16 Guid, native MariaDB UUID Guid, and the remaining supported
+model-managed values identical
 across analysis and execution without a duplicate conversion registry.
 
 The transformation applies only to newly scaffolded, exactly paired
@@ -227,6 +228,9 @@ adds row/cell limits and value non-disclosure.
   `jsonb`, including the missing equality boundary of the textual `json` type.
 - 2026-09-18: D-013 extended model-managed convergence to SQLite with bounded
   parameterized batches and transactional source/target revalidation.
+- 2026-10-15: Qualify Doka 10.5's native MariaDB UUID through the existing
+  CLR-aware mapping/converter path. Guid identities remain canonical in Core;
+  UUID catalog parameters and runtime literals use Doka's text-bound mapping.
 
 ### Implementation References
 
@@ -242,6 +246,8 @@ adds row/cell limits and value non-disclosure.
 
 ### Sources
 
+- [Doka 10.5.0 UUID mapping](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/27a8d3cce3ce2bc64f6efd1e9034b1cd66eb1ff0/src/Doka.EntityFrameworkCore.MySql/Internal/Storage/TypeMappings/MySqlTypeMappingSource.cs)
+  (primary implementation evidence for the public mapping; retrieved 2026-10-15)
 - [EF Core model-managed data](https://learn.microsoft.com/en-us/ef/core/modeling/data-seeding) (primary source; retrieved 2026-09-02)
 - [EF Core applying migrations](https://learn.microsoft.com/en-us/ef/core/managing-schemas/migrations/applying) (primary source; retrieved 2026-09-02)
 - [EF Core 10.0.11 MigrationsScaffolder](https://github.com/dotnet/efcore/blob/v10.0.11/src/EFCore.Design/Migrations/Design/MigrationsScaffolder.cs) (primary source; retrieved 2026-09-02)

@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
-public sealed partial class SqlServerSafeMigrationIntegrationTests
+/// <summary>Verifies filter predicates SQL Server contracts against isolated databases.</summary>
+public sealed class SqlServerSafeMigrationFilterPredicatesIntegrationTests : SqlServerSafeMigrationIntegrationTests
 {
+    /// <summary>Creates the feature suite with the assembly-owned SQL Server fixture.</summary>
+    /// <param name="fixture">The shared fixture providing a database per test.</param>
+    public SqlServerSafeMigrationFilterPredicatesIntegrationTests(
+        SqlServerContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>Invalid filter grammar is rejected before uniqueness probes or any earlier migration DDL.</summary>
     /// <param name="filter">The syntactically representable but unsupported filtered-index predicate.</param>
     [SqlServerLiveTheory]

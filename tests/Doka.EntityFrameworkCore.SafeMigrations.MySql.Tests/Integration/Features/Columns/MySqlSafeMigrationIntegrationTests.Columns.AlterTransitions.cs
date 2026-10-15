@@ -1,7 +1,12 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the ColumnsAlterTransitions migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlColumnsAlterTransitionsIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     /// <summary>Proves explicit string alterations preserve rows and replay without row probes.</summary>
     /// <param name="sourceType">The exact prior store type.</param>
     /// <param name="targetType">The desired store type.</param>
@@ -20,7 +25,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             $"CREATE TABLE `alter_rows` (`id` int PRIMARY KEY, `value` {sourceType} NULL) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
@@ -82,7 +87,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task AlterTransition_RejectsOverlengthValues(string sourceType)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             $"CREATE TABLE `alter_rows` (`value` {sourceType} NULL) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
@@ -103,7 +108,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(SafeMigrationObservedState.DataBlocked, analysis.ObservedState);
         Assert.Equal("varchar_narrowing_value_too_long", analysis.Code);
         Assert.True(analysis.RequiresLiveDataProof);
-        Assert.Contains("doka_sm_data_blocked", Assert.IsType<MySqlException>(failure).Message,
+        Assert.Contains("doka_sm_data_blocked", AssertOwnedGuardFailure(failure).Message,
             StringComparison.Ordinal);
         Assert.Equal(1, preserved);
     }
@@ -130,7 +135,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task AlterTransition_RejectsIneligibleRepairsWithoutRowProbes(string blocker)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var column = blocker == "missing" ? string.Empty : ", `value` varchar(20) NULL"
             + (blocker == "collation" ? " COLLATE utf8mb4_bin" : string.Empty)
             + (blocker is "default_case" or "structured_default_case" ? " DEFAULT 'UPPER'" : string.Empty)
@@ -212,7 +217,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var analysis = Assert.Single(analysisResults);
         Assert.Equal(SafeMigrationRepairCapability.None, analysis.RepairCapability);
         Assert.False(analysis.RequiresLiveDataProof);
-        Assert.IsType<MySqlException>(failure);
+        AssertOwnedGuardFailure(failure);
         Assert.Equal(0, visits.LengthRows);
         Assert.Equal(0, visits.NullRows);
         Assert.Equal(blocker == "missing" ? 0 : 1, columns);
@@ -232,7 +237,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `alter_rows` (`value` varchar(20) NULL) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
@@ -280,7 +285,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task AlterTransition_AnalyzerBoundsRepeatedEligibility(bool reuseOperations)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `alter_rows` (`value` varchar(20) NULL) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
@@ -333,7 +338,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `alter_rows` (`value` varchar(20) NULL) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
@@ -370,7 +375,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         }
         else
         {
-            Assert.Contains("doka_sm_data_blocked", Assert.IsType<MySqlException>(failure).Message,
+            Assert.Contains("doka_sm_data_blocked", AssertOwnedGuardFailure(failure).Message,
                 StringComparison.Ordinal);
         }
 
@@ -388,7 +393,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task AlterTransition_RuntimeRejectsInvalidatedPreflight(bool disableStrictMode)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `alter_rows` (`value` varchar(20) NULL) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
@@ -416,7 +421,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(SafeMigrationRepairCapability.Safe, before.RepairCapability);
         Assert.True(before.RequiresLiveDataProof);
         Assert.Contains(disableStrictMode ? "doka_sm_different" : "doka_sm_data_blocked",
-            Assert.IsType<MySqlException>(failure).Message, StringComparison.Ordinal);
+            AssertOwnedGuardFailure(failure).Message, StringComparison.Ordinal);
         Assert.Equal(20, length);
         Assert.Equal(disableStrictMode ? 1 : 2, rows);
     }
@@ -441,7 +446,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             $"CREATE TABLE `alter_rows` (`value` {sourceType} NULL) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
@@ -476,7 +481,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var analysis = Assert.Single(analysisResults);
         Assert.Equal(SafeMigrationRepairCapability.None, analysis.RepairCapability);
         Assert.False(analysis.RequiresLiveDataProof);
-        Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(failure).Message,
+        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
             StringComparison.Ordinal);
         Assert.Equal(1, nulls);
     }
@@ -495,7 +500,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var constraint = unique ? "UNIQUE KEY `uq_value` (`value`)" : "CONSTRAINT `ck_value` CHECK (`value` <> 'x')";
         await ExecuteSqlAsync(connectionString,
             $"CREATE TABLE `alter_rows` (`value` varchar(10) NULL, {constraint}) "
@@ -528,7 +533,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.True(analysis.RequiresLiveDataProof);
         if (containsNull)
         {
-            Assert.Contains("doka_sm_data_blocked", Assert.IsType<MySqlException>(failure).Message,
+            Assert.Contains("doka_sm_data_blocked", AssertOwnedGuardFailure(failure).Message,
                 StringComparison.Ordinal);
         }
         else
@@ -560,7 +565,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var check = constraintKind == "check";
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `alter_rows` (`value` varchar(10) NULL) "
@@ -606,7 +611,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             analyses[1].RepairCapability);
         if (containsNull)
         {
-            Assert.Contains("doka_sm_data_blocked", Assert.IsType<MySqlException>(failure).Message,
+            Assert.Contains("doka_sm_data_blocked", AssertOwnedGuardFailure(failure).Message,
                 StringComparison.Ordinal);
         }
         else
@@ -626,7 +631,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task AlterTransition_RenamedTransientConstraintRetainsNullProof(bool containsNull)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `alter_rows` (`value` varchar(10) NULL) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
@@ -673,7 +678,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             sourceAnalysis.RepairCapability);
         if (containsNull)
         {
-            Assert.Contains("doka_sm_data_blocked", Assert.IsType<MySqlException>(failure).Message,
+            Assert.Contains("doka_sm_data_blocked", AssertOwnedGuardFailure(failure).Message,
                 StringComparison.Ordinal);
         }
         else
@@ -703,7 +708,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             $"CREATE TABLE `alter_rows` (`value` {sourceType} NULL) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
@@ -749,7 +754,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(!supplementary, analysis.RepairMutatesData);
         if (supplementary)
         {
-            Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(failure).Message,
+            Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
                 StringComparison.Ordinal);
         }
         else
@@ -770,7 +775,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task AlterTransition_BackfillRequiresCharacterSetRepresentability(bool asciiLiteral)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `alter_rows` (`value` varchar(20) NULL) "
             + "ENGINE=InnoDB DEFAULT CHARSET=ascii COLLATE=ascii_bin; INSERT INTO `alter_rows` VALUES (NULL);");
@@ -799,7 +804,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         }
         else
         {
-            Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(failure).Message,
+            Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
                 StringComparison.Ordinal);
         }
 
@@ -860,7 +865,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `alter_rows` (`value` varchar(20) NULL) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
@@ -927,9 +932,9 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var after = Assert.Single(afterResults);
         if (blocked)
         {
-            Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(firstFailure).Message,
+            Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(firstFailure).Message,
                 StringComparison.Ordinal);
-            Assert.IsType<MySqlException>(secondFailure);
+            AssertOwnedGuardFailure(secondFailure);
             Assert.Equal(SafeMigrationRepairCapability.None, before.RepairCapability);
             Assert.Equal(SafeMigrationRepairCapability.None, after.RepairCapability);
             Assert.Equal(0, preserved);
@@ -960,7 +965,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `alter_rows` (`value` varchar(20) NULL"
             + (sourceDefault ? " DEFAULT 'a''b'" : string.Empty)
@@ -1006,7 +1011,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             Assert.Single(analyses).RepairCapability);
         if (blocked)
         {
-            Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(failure).Message,
+            Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
                 StringComparison.Ordinal);
         }
         else
@@ -1024,7 +1029,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task AlterTransition_RejectsInlineRowOverflowWithoutDataProbes()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var additionalColumns = string.Join(", ", Enumerable.Range(1, 38)
             .Select(index => $"`other_{index}` varchar(200) NULL"));
 
@@ -1049,7 +1054,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var analysis = Assert.Single(analysisResults);
         Assert.Equal(SafeMigrationRepairCapability.None, analysis.RepairCapability);
         Assert.False(analysis.RequiresLiveDataProof);
-        Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(failure).Message,
+        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
             StringComparison.Ordinal);
         Assert.Equal(0, connection.NarrowingDataStatementCount);
         Assert.Equal(200, length);
@@ -1060,7 +1065,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task AlterTransition_RejectsClusteredUniqueInlineOverflow()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var additionalColumns = string.Join(", ", Enumerable.Range(1, 750)
             .Select(index => $"`other_{index}` double NOT NULL"));
 
@@ -1093,7 +1098,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var analysis = Assert.Single(analysisResults);
         Assert.Equal(SafeMigrationRepairCapability.None, analysis.RepairCapability);
         Assert.False(analysis.RequiresLiveDataProof);
-        Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(failure).Message,
+        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
             StringComparison.Ordinal);
         Assert.Contains("Row size too large", Assert.IsType<MySqlException>(directFailure).Message,
             StringComparison.Ordinal);
@@ -1108,7 +1113,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task AlterTransition_BooleanDomainPreservesValuesAndReplays(bool nullableClr)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `alter_rows` (`id` int PRIMARY KEY, `value` bit(1) NULL) ENGINE=InnoDB; "
             + "INSERT INTO `alter_rows` VALUES (1, b'0'), (2, b'1'), (3, NULL);");

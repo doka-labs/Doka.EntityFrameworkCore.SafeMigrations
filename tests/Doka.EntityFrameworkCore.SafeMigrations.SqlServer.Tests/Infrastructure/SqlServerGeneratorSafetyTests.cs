@@ -289,7 +289,11 @@ public sealed class SqlServerGeneratorSafetyTests
             context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model));
 
         // Assert
-        Assert.IsType<NotSupportedException>(exception);
+        var unsupported = Assert.IsType<NotSupportedException>(exception);
+        Assert.StartsWith("doka_sm_unsupported:", unsupported.Message, StringComparison.Ordinal);
+        Assert.Contains("items", unsupported.Message, StringComparison.Ordinal);
+        Assert.Contains("Amount", unsupported.Message, StringComparison.Ordinal);
+        Assert.Contains("next=", unsupported.Message, StringComparison.Ordinal);
         Assert.Single(baseline.Calls);
         Assert.IsType<AddColumnOperation>(Assert.Single(baseline.Calls[0]));
     }

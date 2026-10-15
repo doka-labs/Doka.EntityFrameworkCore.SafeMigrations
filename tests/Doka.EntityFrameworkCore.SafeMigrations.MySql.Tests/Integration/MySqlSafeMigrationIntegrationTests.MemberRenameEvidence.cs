@@ -1,7 +1,12 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the MemberRenameEvidence migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlMemberRenameEvidenceIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlMemberRenameEvidenceIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     /// <summary>A brownfield source created earlier cannot overwrite a live owner-local destination.</summary>
     /// <param name="index">Whether an index rather than a column is renamed.</param>
     /// <param name="sourceExists">Whether the source already exists in the immutable live catalog.</param>
@@ -22,7 +27,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var source = index ? "source_index" : "source_value";
         var target = index ? "target_index" : "target_value";
         await ExecuteSqlAsync(connectionString, "CREATE TABLE member_rows (id int NOT NULL, decoy int NULL"
@@ -75,7 +80,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             report.Assessments[^1].Action);
         if (targetExists)
         {
-            Assert.IsType<MySqlException>(failure);
+            AssertOwnedGuardFailure(failure);
         }
         else
         {
@@ -94,7 +99,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task MemberRename_AbsentSourceReplayPreservesDestination(bool index)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE member_rows (id int NOT NULL, target_value int NULL); "
             + "INSERT INTO member_rows VALUES (7, 29); CREATE INDEX target_index ON member_rows (id);");
@@ -128,7 +133,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task MemberRename_IndexDestinationRemainsOwnerLocal()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE member_rows (id int NOT NULL); CREATE TABLE other_rows (id int NOT NULL); "
             + "CREATE INDEX target_index ON other_rows (id);");
@@ -162,7 +167,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task MemberRename_CaseVariantDestinationIsOccupied(bool index)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE member_rows (id int NOT NULL, decoy int NULL, Target_Value int NULL); "
             + "CREATE INDEX Target_Index ON member_rows (decoy);");
@@ -203,7 +208,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task MemberRename_TargetDropRequiresIndependentlySupportedSource(bool primary)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var source = primary ? "PRIMARY" : "source_index";
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE member_rows (id int NOT NULL, decoy int NULL, PRIMARY KEY (id)); "
@@ -255,7 +260,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var target = reservedTarget ? "PRIMARY" : "destination_index";
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE member_rows (id int NOT NULL); INSERT INTO member_rows VALUES (7); "
@@ -291,7 +296,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             report.Assessments[^1].Action);
         if (reservedTarget)
         {
-            Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(failure).Message,
+            Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
                 StringComparison.Ordinal);
         }
         else
@@ -308,7 +313,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task MemberRename_ReservedDestinationMissingSourceReplayRemainsNoOp()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE member_rows (id int NOT NULL, PRIMARY KEY (id)); INSERT INTO member_rows VALUES (7);");
 

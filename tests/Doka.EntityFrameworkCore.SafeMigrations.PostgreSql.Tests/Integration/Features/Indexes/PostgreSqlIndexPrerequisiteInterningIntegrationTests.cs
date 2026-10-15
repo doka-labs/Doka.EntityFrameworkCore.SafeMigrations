@@ -17,7 +17,7 @@ public sealed class PostgreSqlIndexPrerequisiteInterningIntegrationTests : Postg
     public async Task MatchingNativeInputsRemainLazyAndDoNotShadowDataOwners(bool distinct)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE \"_doka_sm_index_input_0\" (id integer, parent_id integer);"
             + " CREATE INDEX ix_prerequisite ON \"_doka_sm_index_input_0\" (id,parent_id);");
@@ -62,7 +62,7 @@ public sealed class PostgreSqlIndexPrerequisiteInterningIntegrationTests : Postg
     public async Task ComputedOwnerNamesRemainNativeRelations(bool explicitSchema, bool cast)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         const string owner = "_doka_sm_index_input_0";
         await ExecuteSqlAsync(connectionString, "CREATE TABLE \"" + owner
             + "\" (id integer, label text, payload json); CREATE INDEX ix_computed ON \"" + owner
@@ -100,7 +100,7 @@ public sealed class PostgreSqlIndexPrerequisiteInterningIntegrationTests : Postg
     public async Task DifferentUniqueIdentityRetainsSafeDuplicateProofBinding(bool jsonb, bool replace)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE input_members (id integer, payload "
             + (jsonb ? "jsonb" : "json") + "); CREATE UNIQUE INDEX ix_target ON input_members(id); "
             + "INSERT INTO input_members VALUES (1,'{}'),(2,'{}');");
@@ -137,7 +137,7 @@ public sealed class PostgreSqlIndexPrerequisiteInterningIntegrationTests : Postg
     public async Task QualifiedUniqueInputsRetainRowProofAndPostconditions(bool computed, bool duplicate)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE input_members (id integer, payload jsonb, label text);"
             + " INSERT INTO input_members VALUES (1,'{}','FIRST'),(2,'"
             + (duplicate ? "{}" : "{\"value\":2}") + "','" + (duplicate ? "first" : "second") + "');");
@@ -191,7 +191,7 @@ public sealed class PostgreSqlIndexPrerequisiteInterningIntegrationTests : Postg
     public async Task ExplicitOperatorClassMatchesNativeVisibleIdentity(bool hidden, bool qualified, bool alias)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE SCHEMA hidden; CREATE OPERATOR CLASS hidden.int4_ops "
             + "FOR TYPE integer USING btree AS OPERATOR 1 <(integer,integer), OPERATOR 2 <=(integer,integer), "
             + "OPERATOR 3 =(integer,integer), OPERATOR 4 >=(integer,integer), OPERATOR 5 >(integer,integer), "

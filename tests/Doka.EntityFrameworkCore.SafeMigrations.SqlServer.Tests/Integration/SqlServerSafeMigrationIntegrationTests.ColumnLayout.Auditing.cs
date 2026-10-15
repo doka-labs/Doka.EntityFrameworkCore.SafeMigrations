@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
-public sealed partial class SqlServerSafeMigrationIntegrationTests
+/// <summary>Verifies column layout auditing SQL Server contracts against isolated databases.</summary>
+public sealed class SqlServerSafeMigrationColumnLayoutAuditingIntegrationTests : SqlServerSafeMigrationIntegrationTests
 {
+    /// <summary>Creates the feature suite with the assembly-owned SQL Server fixture.</summary>
+    /// <param name="fixture">The shared fixture providing a database per test.</param>
+    public SqlServerSafeMigrationColumnLayoutAuditingIntegrationTests(
+        SqlServerContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>Proves the layout audit records real table DDL only while its trigger is enabled.</summary>
     /// <param name="disabled">Whether the audit remains disabled for the known ALTER statement.</param>
     [SqlServerLiveTheory]
@@ -139,29 +146,4 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
         Assert.Equal(freshTable ? 0 : 1, rows);
         Assert.Equal(freshTable ? 0 : 1, sentinelRows);
     }
-
-    /// <summary>
-    /// Creates a disabled DDL audit so read-only layout analysis keeps its original proof environment.
-    /// </summary>
-    /// <param name="connectionString">The isolated test database that owns the audit table and trigger.</param>
-    private static async Task CreateColumnLayoutAuditAsync(
-        string connectionString
-    )
-    {
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.layout_ddl_events (Id int NOT NULL);");
-        await ExecuteSqlAsync(connectionString, "CREATE TRIGGER layout_ddl_audit ON DATABASE FOR DDL_TABLE_EVENTS "
-            + "AS INSERT dbo.layout_ddl_events VALUES(1);");
-
-        // WHY: Even an insert-only observer is an enabled DDL trigger. Keeping
-        // it active during analysis invalidates subsequent ordered layout proofs.
-        await ExecuteSqlAsync(connectionString, "DISABLE TRIGGER layout_ddl_audit ON DATABASE;");
-    }
-
-    /// <summary>
-    /// Arms the observer immediately before runtime DDL whose accepted or rejected events are asserted.
-    /// </summary>
-    /// <param name="connectionString">The isolated test database containing the disabled layout audit.</param>
-    private static Task EnableColumnLayoutAuditAsync(
-        string connectionString
-    ) => ExecuteSqlAsync(connectionString, "ENABLE TRIGGER layout_ddl_audit ON DATABASE;");
 }

@@ -1,6 +1,11 @@
 # MySQL and MariaDB DDL behavior
 
-Prepared stable 10.4.11 qualifies sparse mixed column/index/FK prerequisites
+Prepared stable 10.5.0 owned runtime diagnostics identify the authored owner
+and established rejection reason after native cleanup. Their managed outer exception and script
+result transport are described in [diagnostics](diagnostics.md#runtime-provider-differences);
+ordinary native errors, decisions and forward-recovery requirements remain intact.
+
+The 10.4.11 patch qualifies sparse mixed column/index/FK prerequisites
 against independently captured native endpoints, key/backing identities and
 accepted physical lifetimes. Native table-case equality is shared by live
 transition/backfill catalogs; connection-free generation selects exact/folded
@@ -16,8 +21,10 @@ the two stages are not one transaction. Strict SQL mode, TIMESTAMP semantics,
 ENUM/SET domains and retained SET NULL/PRIMARY dependencies remain independently
 guarded. Comment matching is byte-exact, and native cleanup is bound to acquired
 setup. Runtime checks remain fresh even when analysis uses session-owned
-catalog copies. Public APIs, dependency ranges, migration source, policies,
-reports and history are unchanged; no server durability setting is modified.
+catalog copies. The 10.5.0 diagnostic API/schema/exception and Doka dependency
+changes are documented in [support and qualification](support-and-qualification.md).
+Migration source, policies and history remain unchanged; no server durability
+setting is modified.
 Earlier bounded analysis/runtime optimizations remain. Required data scans and
 DDL can still dominate large-table workloads; timing comparisons are informational.
 
@@ -464,6 +471,54 @@ unsupported by this type-changing path because expression serialization can
 change the subsequent `INSERT DEFAULT` value. This restriction does not apply
 to `VARCHAR` defaults or existing row data.
 
+Known structured string-default leaves and literal `TEXT` defaults are rendered
+as UTF-8 hex conversion expressions before delegation to Doka. Unlike a string
+literal that the engine can serialize with backslash escapes, this expression
+retains its bytes after table reopening under a different SQL mode. Empty
+strings keep their mode-independent quoted form. Create, add, explicit alter
+and full-definition repair use the same default materialization; computed,
+CHECK and index expressions retain their ordinary renderer. Opaque SQL and
+GUID, numeric and temporal defaults are not rewritten. Exact catalog comparisons
+distinguish actual control characters from literal backslash sequences. This encoding
+does not by itself expand the type-changing repair permissions above. See
+[MySQL expression-default rules](https://dev.mysql.com/doc/refman/8.4/en/data-type-defaults.html)
+for persisted expressions and SQL-mode dependence.
+
+An existing MySQL expression literal containing a backslash, quote, NUL,
+newline, carriage return or Ctrl-Z cannot prove a mode-independent default.
+Strict policy reports it as different; an otherwise eligible explicit
+`EnsureColumn` with `RepairIfSafe` can replace the default without rewriting
+existing rows. Ordinary non-generated `CHAR`/`VARCHAR` literal defaults keep
+their exact value comparison and are not rejected merely for containing these
+characters.
+
+MySQL's INFORMATION_SCHEMA can truncate literal binary-default text at NUL.
+Neither a matching prefix nor a successful CREATE proves the complete default.
+For these defaults, SafeMigrations qualifies the current base table, column
+and literal default kind before preparing an exact native `DEFAULT(column)`
+comparison. The comparison uses an impossible table join, not a row scan,
+and accounts for fixed `BINARY(n)` zero padding. Analysis batches these
+metadata-selected proofs; runtime evidence is operation-local, refreshed
+after DDL and cleared after success, rejection, failure or cancellation.
+Operations without binary-default proofs do not acquire this extra work.
+
+Native literal defaults remain literals. Explicit structured binary-expression
+defaults retain their separate complete SQL identity and are not decoded as
+text. MySQL itself permits `DEFAULT(column)` only for literal defaults, so
+expression-default columns are excluded before native statement preparation,
+not hidden inside an unexecuted SQL CASE branch. See the
+[MySQL DEFAULT function contract](https://dev.mysql.com/doc/refman/8.4/en/miscellaneous-functions.html#function_default).
+
+MariaDB literal and untyped structured binary defaults use binary hex
+conversion without changing CLR/store mappings or converting bytes to text.
+This preserves exact metadata on MariaDB 10.11, whose catalog can otherwise
+serialize binary defaults as escaped strings and replace invalid UTF-8 with
+question marks. Ambiguous legacy quoted metadata cannot certify question-mark
+or non-ASCII byte identities; exact hex/expression identity or a reviewed
+default-only repair is required. MariaDB `DEFAULT(column)` retains its native
+binary value. Neither provider requires a SHOW CREATE query or table-row scan
+for this validation.
+
 A `VARCHAR` length repair requires the same nonbinary character family,
 character set, effective collation, generated/identity/row-version state,
 provider metadata, and compatible dependent indexes. A column on either side
@@ -644,7 +699,8 @@ Ensure repair. A captured replacement reports
 `projected_foreign_key_set_null_unrepresentable` instead of borrowing stale
 nullable metadata or promoting a previous matching/missing result.
 
-The locked Doka 10.4.2 contract removes synthetic defaults and marks additions
+The Doka contract, established in 10.4.2 and retained by the locked 10.5.0,
+removes synthetic defaults and marks additions
 or nullable-to-required alterations requiring explicit backfill. Its provider
 generator rejects required additions without an explicit default, computed
 expression or server-generated value:
@@ -1053,8 +1109,8 @@ For column value generation, `AutoIncrement` is compared against `c.EXTRA`.
 latter is a client-side EF value generator and is therefore not a database
 column facet. SafeMigrations still retains the exact annotation in its
 immutable definition, contract fingerprint, and provider operation replay.
-Supported `Binary16` and `Char36` Guid metadata is accepted only when it is
-consistent with a Guid column's complete store type. HiLo, malformed,
+Supported `Binary16`, `Char36` and MariaDB `Uuid` Guid metadata is accepted only
+when it is consistent with a Guid column's complete store type. HiLo, malformed,
 contradictory, spatial, invisible, and unknown column metadata remains
 unsupported until its complete observable database contract is modeled.
 
@@ -1163,8 +1219,51 @@ Doka requires `UseAffectedRows=false` independently of SafeMigrations because
 EF update concurrency depends on matched-row semantics. Its low-level connector
 transport is always `GuidFormat=Binary16`; Doka's model-level
 `DefaultGuidFormat` and property configuration continue to control whether a
-Guid property is stored as `binary(16)` or `char(36)`. This separation prevents
-connection ownership from changing the model's storage contract.
+Guid property is stored as `binary(16)`, `char(36)` or MariaDB `uuid`. This
+separation prevents connection ownership from changing the model's storage
+contract.
+
+### GUID storage and native UUID
+
+The Doka dependency range is `[10.5.0,10.6.0)`. `Binary16` remains the default;
+`Char36` is unchanged. Native `uuid` is an explicit Doka model choice through
+`DefaultGuidFormat(MySqlGuidFormat.Uuid)` or a property's
+`HasMySqlGuidFormat(MySqlGuidFormat.Uuid)`. It requires MariaDB 10.7 or later;
+the SafeMigrations supported matrix remains narrower than this capability
+threshold. Doka rejects UUID mapping on MySQL and older MariaDB profiles, even
+with its unsupported-version override.
+
+Hand-authored migration operations must specify `type: "uuid"` for native
+storage. A `Doka:MySql:GuidFormat` annotation without a store type does not
+replace Doka's ordinary context-default type inference. Model-based fluent
+UUID configuration supplies the explicit native type during scaffolding.
+
+Native UUID columns retain CLR `Guid`/`Guid?`, exact unsized `uuid` storage,
+and no text collation, max-length or fixed-length facet. SafeMigrations uses
+the public Doka mapping and typed metadata, not a duplicate converter or
+internal capability enum. Doka sends canonical UUID text with `DbType.String`;
+the connector's separate `GuidFormat=Binary16` invariant remains mandatory.
+UUID contributes 16 bytes to row and index budgets and cannot use a key prefix.
+Column, key, FK and model-managed-data checks keep the same ordered live/
+projected evidence and runtime rechecks as the other supported scalar types.
+Existing native-compatible UUID/Binary16 FK endpoints do not convert either
+column's storage. Sparse mixed live/projected FK certificates still require
+their existing exact-storage proof; native live compatibility alone does not
+authorize a different projected endpoint domain.
+
+`RepairIfSafe` does not authorize conversion among `binary(16)`, `char(36)` and
+`uuid`, including an application-owned binary GUID converter. A format change
+requires an explicitly staged destination column, application-defined backfill,
+verification and replacement of affected keys/relationships. Do not reinterpret
+binary GUID payloads as MariaDB UUID storage or rely on their byte ordering.
+
+Upgrading Doka also changes implicit application-owned 16-byte binary mappings
+to `varbinary(17)` under every GUID default. Review generated model differences
+and migrations separately; SafeMigrations does not remove those differences,
+rewrite prior source or silently approve storage conversions. These contracts
+were checked against the [published 10.5.0 GUID migration guidance](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/27a8d3cce3ce2bc64f6efd1e9034b1cd66eb1ff0/docs/operations/migrations.md#guid-representation-changes)
+and [MariaDB UUID reference](https://mariadb.com/docs/server/reference/data-types/string-data-types/uuid-data-type)
+on 2026-10-15.
 
 Unsupported features are rejected from Doka's canonical server feature
 profile. Examples include independent relational schema namespaces,

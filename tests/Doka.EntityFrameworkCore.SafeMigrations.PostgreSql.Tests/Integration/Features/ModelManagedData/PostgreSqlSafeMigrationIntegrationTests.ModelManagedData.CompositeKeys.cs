@@ -1,11 +1,18 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the ModelManagedDataCompositeKeys PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlModelManagedDataCompositeKeysIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlModelManagedDataCompositeKeysIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     [Fact]
     public async Task CompositeModelManagedKeysConvergeAndReplayInOperationOrder()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE model_composite_roles ("
@@ -90,4 +97,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
 
         return builder;
     }
+
 }

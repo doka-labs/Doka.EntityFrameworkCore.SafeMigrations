@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
-public sealed partial class SqliteSafeMigrationCatalogIntegrationTests
+/// <summary>Exercises review regressions with independently owned SQLite state.</summary>
+public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : SqliteSafeMigrationCatalogIntegrationTests
 {
     [Fact]
     public async Task RawSqlRemovingDependentTable_DefersStaleIncomingForeignKeyEvidence()

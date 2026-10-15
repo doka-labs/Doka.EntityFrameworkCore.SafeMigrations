@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the ModelManagedData PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlModelManagedDataIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     [Theory]
     [InlineData(SafeMigrationScaffoldingMode.Strict)]
     [InlineData(SafeMigrationScaffoldingMode.LegacyConvergence)]
@@ -9,7 +16,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         SafeMigrationScaffoldingMode mode
     )
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
 
@@ -86,7 +93,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ModelManagedDataBlocksUniquePrerequisiteAndUnmodeledDependencyEdges()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE model_edge_roles ("
@@ -164,7 +171,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ModelManagedUpdateHandlesNullSourceAndMixedTargetRowsAtomically()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE model_null_roles (id integer NOT NULL PRIMARY KEY, name varchar(64) NULL);"
@@ -202,7 +209,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task OrderedChildDeleteDefersStaleParentDependencyEvidence()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE model_roles (id integer NOT NULL PRIMARY KEY, name varchar(64) NOT NULL);"
@@ -253,7 +260,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ModelManagedDataTransitionsAreIdempotentAndRejectDrift()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE model_roles ("
@@ -408,4 +415,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
 
         return builder;
     }
+
 }

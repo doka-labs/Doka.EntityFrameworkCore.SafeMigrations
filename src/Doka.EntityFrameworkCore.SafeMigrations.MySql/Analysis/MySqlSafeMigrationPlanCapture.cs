@@ -32,6 +32,38 @@ internal sealed class MySqlSafeMigrationPlanCapture
     private bool _includeAnalysisEvidence;
     private bool _includeTransitionEvidence;
     private bool _completed;
+    private Dictionary<int, MySqlSafeMigrationRuntimeDiagnostic>? _runtimeDiagnostics;
+    private int _runtimeDiagnosticCapacity;
+
+    /// <summary>Records authored native-guard context only while the outer generator owns the stream.</summary>
+    /// <param name="diagnostic">The exact handler ordinal and bounded correlation.</param>
+    internal void RecordRuntimeDiagnostic(MySqlSafeMigrationRuntimeDiagnostic diagnostic)
+    {
+        if (HasGenerationContract)
+        {
+            // WHY: The complete authored safe-operation count is already known.
+            // Allocate its lookup once, lazily, rather than repeatedly growing
+            // a large migration's dictionary or allocating for ordinary EF SQL.
+            (_runtimeDiagnostics ??= new Dictionary<int, MySqlSafeMigrationRuntimeDiagnostic>(
+                _runtimeDiagnosticCapacity)).Add(diagnostic.Ordinal, diagnostic);
+        }
+    }
+
+    /// <summary>Finds context only when both the native command marker and its generation correlation agree.</summary>
+    /// <param name="commandText">The unchanged original native command text.</param>
+    /// <returns>The owning diagnostic, or null for ordinary provider operations.</returns>
+    internal MySqlSafeMigrationRuntimeDiagnostic? FindRuntimeDiagnostic(string commandText)
+    {
+        if (_runtimeDiagnostics is not null
+            && MySqlSafeMigrationRuntimeDiagnostic.TryReadMarker(commandText, out var ordinal, out var correlation)
+            && _runtimeDiagnostics.TryGetValue(ordinal, out var diagnostic)
+            && correlation.Equals(diagnostic.Correlation, StringComparison.Ordinal))
+        {
+            return diagnostic;
+        }
+
+        return null;
+    }
 
     /// <summary>Gets whether an incomplete analysis capture is active.</summary>
     public bool IsActive => _expected is not null && !_completed;
@@ -154,6 +186,7 @@ internal sealed class MySqlSafeMigrationPlanCapture
 
         ClearGeneration();
         var safeOperations = operations.OfType<SafeMigrationOperation>().ToArray();
+        _runtimeDiagnosticCapacity = safeOperations.Length;
         var databaseQualifiers = MySqlSafeMigrationCatalogSqlBuilder.GetDatabaseQualifiers(operations);
         var guardedDatabase = databaseQualifiers.Length == 1
             ? databaseQualifiers[0]
@@ -539,6 +572,8 @@ internal sealed class MySqlSafeMigrationPlanCapture
 
     private void ClearGeneration()
     {
+        _runtimeDiagnostics = null;
+        _runtimeDiagnosticCapacity = 0;
         _generationBackfillConstraints = null;
         _generationFoldedBackfillConstraints = null;
         _generationDatabaseQualifiers = null;

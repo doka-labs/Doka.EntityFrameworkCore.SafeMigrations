@@ -1,13 +1,18 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the ColumnsPrimaryKeyRemovalNegative migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlColumnsPrimaryKeyRemovalNegativeIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlColumnsPrimaryKeyRemovalNegativeIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     /// <summary>A nullable alteration cannot bypass a retained physical PRIMARY containing its column.</summary>
     [Fact]
     public async Task PrimaryKeyRemovalStandaloneAlterRejectsRetainedPhysicalPrimaryKey()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, PrimaryKeyRemovalFixture(supportingIndexExists: true)
             + " ALTER TABLE `key_items` DROP FOREIGN KEY `fk_key_items_user`;");
         await using var context = CreateContext(connectionString);
@@ -27,7 +32,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationAction.RejectDifferent, Assert.Single(report.Assessments).Action);
-        Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(failure).Message,
+        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
             StringComparison.OrdinalIgnoreCase);
         Assert.Equal(1, retained);
         Assert.Equal(1, primaryMembership);
@@ -43,7 +48,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task PrimaryKeyRemovalRejectsExactSourceDrift(string sourceDrift)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, PrimaryKeyRemovalFixture(supportingIndexExists: true)
             + " ALTER TABLE `key_items` DROP FOREIGN KEY `fk_key_items_user`; "
             + PrimaryKeyRemovalMutationSql(sourceDrift));
@@ -65,7 +70,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.True(report.Assessments[^1].Action is SafeMigrationAction.RejectDifferent
             or SafeMigrationAction.RejectPrerequisiteMissing);
-        Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(failure).Message,
+        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
             StringComparison.OrdinalIgnoreCase);
         Assert.Equal(1, retained);
         Assert.Equal(0, primaryMembership);
@@ -77,7 +82,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task PrimaryKeyRemovalRecreatedPrimaryRejectsNullableAlter()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, PrimaryKeyRemovalFixture(supportingIndexExists: true));
         await using var context = CreateContext(connectionString);
         var operations = PrimaryKeyRemovalOperations();
@@ -100,7 +105,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.True(report.Assessments[^1].Action is SafeMigrationAction.RejectDifferent
             or SafeMigrationAction.RejectPrerequisiteMissing);
-        Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(failure).Message,
+        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
             StringComparison.OrdinalIgnoreCase);
         Assert.Equal(1, retained);
         Assert.Equal(1, primaryMembership);
@@ -117,7 +122,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task PrimaryKeyRemovalRejectsMutationBetweenPrefixAndAlter(string mutation)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, PrimaryKeyRemovalFixture(supportingIndexExists: true));
         await using var context = CreateContext(connectionString);
         var operations = PrimaryKeyRemovalOperations();
@@ -139,7 +144,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.Equal(SafeMigrationAction.Repair, preflight.Assessments[3].Action);
-        Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(failure).Message,
+        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
             StringComparison.OrdinalIgnoreCase);
         Assert.Equal(1, retained);
         Assert.Equal(mutation == "primary" ? 1 : 0, primaryMembership);
@@ -151,7 +156,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task PrimaryKeyRemovalOnUnrelatedOwnerDoesNotAuthorizeNullableAlter()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, PrimaryKeyRemovalFixture(supportingIndexExists: true)
             + " ALTER TABLE `key_items` DROP FOREIGN KEY `fk_key_items_user`; "
             + "CREATE TABLE `other_key_items` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB;");
@@ -177,7 +182,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationAction.RejectDifferent, report.Assessments[1].Action);
-        Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(failure).Message,
+        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
             StringComparison.OrdinalIgnoreCase);
         Assert.Equal(1, retained);
         Assert.Equal(1, primaryMembership);
@@ -190,7 +195,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task PrimaryKeyRemovalOpaqueRecreationDefersAndRejectsAtRuntime()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, PrimaryKeyRemovalFixture(supportingIndexExists: true));
         await using var context = CreateContext(connectionString);
         var operations = PrimaryKeyRemovalOperations();
@@ -209,7 +214,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         // Assert
         Assert.Equal(SafeMigrationAction.ValidateAtRuntime, report.Assessments[^1].Action);
-        Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(failure).Message,
+        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
             StringComparison.OrdinalIgnoreCase);
         Assert.Equal(1, retained);
         Assert.Equal(1, primaryMembership);
@@ -241,15 +246,23 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             "SELECT CONCAT(COLUMN_TYPE, '|', IS_NULLABLE, '|', COALESCE(COLUMN_DEFAULT, '<none>'), '|', "
             + "COLUMN_COMMENT) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
             + "AND TABLE_NAME = 'key_items' AND COLUMN_NAME = 'user_id';");
+}
+
+public abstract partial class MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Counts the complete deterministic sentinel rather than only total rows.</summary>
     /// <param name="connectionString">The isolated test database connection.</param>
     /// <returns>The number of unchanged sentinel rows.</returns>
-    private static Task<int> PrimaryKeyRemovalSentinelCountAsync(string connectionString)
+    protected static Task<int> PrimaryKeyRemovalSentinelCountAsync(string connectionString)
         => ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM `key_items` WHERE `question_id` = "
             + "'00000000-0000-0000-0000-000000000001' AND `user_id` = "
             + "'00000000-0000-0000-0000-000000000002' AND `payload` = 'retained';");
+}
+
+public sealed partial class MySqlColumnsPrimaryKeyRemovalNegativeIntegrationTests : MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Reads physical PRIMARY membership independently of the logical operation name.</summary>
     /// <param name="connectionString">The isolated test database connection.</param>

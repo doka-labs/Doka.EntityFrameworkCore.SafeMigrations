@@ -43,6 +43,35 @@ Silicon skips are not runtime qualification. The three required x86-64 CI cells
 must pass without skipped tests. See the [SQL Server guide](docs/sqlserver-behavior.md)
 for the platform boundary and declared engine matrix.
 
+### Parallel execution and resource ownership
+
+The tracked solution settings allow Core and all four provider test assemblies
+to run concurrently in Rider. The shared `tests/Shared/xunit.runner.json` is
+copied to every test output and enables independent collection scheduling for
+both IDE and CLI runners. A personal `.DotSettings.user` override can still
+replace the solution setting; keep it consistent when checking local scheduling.
+
+Server-provider assemblies share one container for the selected test run, not
+one container per class. Their default limit is four concurrent class
+collections per assembly. Core and SQLite keep xUnit's CPU-based default.
+Every live test owns its database or SQLite connection/file; completed tests
+release only their own resources. Explicit initialization-only server profiles
+still use a dedicated container when sharing would change their contract.
+Unit-only discovery and entirely skipped live selections do not start servers.
+
+Tests that force process-wide garbage collection, capture unfiltered global
+metrics, or measure process-total allocations use the explicitly nonparallel
+`Process-wide test contracts` collection. Ordinary feature classes remain
+parallel. Connection-pool cleanup targets the owned database pool rather than
+resetting other tests' sessions. Startup, test and cleanup failures remain
+visible; an assembly fixture is never disposed by an individual test class.
+
+Keep all qualification cases in CLI/CI runs, including `LargeScale` tests.
+Parallel scheduling is not permission to skip them, lower coverage floors or
+add hardware-dependent duration gates. Local elapsed times are informational;
+test discovery, overlap, database isolation and cleanup are verified contracts.
+Native SQL Server qualification still requires the declared x86-64 engine cells.
+
 The default local engines are MariaDB 11.8.8 and PostgreSQL
 18.6. Select another qualified image with:
 

@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the ColumnsMatchingOptimization PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlColumnsMatchingOptimizationIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlColumnsMatchingOptimizationIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>Preserves qualified collation through mutable-facet and varchar-length repairs.</summary>
     /// <param name="qualified">Whether Npgsql needs a companion schema-qualified COLLATE statement.</param>
     /// <param name="lengthTransition">Whether the reviewed target widens the existing varchar type.</param>
@@ -16,7 +23,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var collationSql = qualified ? "repair_collation.shared" : "\"C\"";
         var collation = qualified ? new SafeMigrationCollationIdentifier("shared", "repair_collation")
             : new SafeMigrationCollationIdentifier("C");
@@ -66,7 +73,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task CollationRepair_DifferentPhysicalOidCannotAuthorizeRepair()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE SCHEMA repair_collation; CREATE COLLATION repair_collation.shared FROM \"C\"; "
             + "CREATE TABLE matching_optimization_rows (value character varying(32) COLLATE \"C\" NOT NULL); "
@@ -97,7 +104,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE matching_optimization_rows (value text COLLATE \"C\" NULL); "
             + "INSERT INTO matching_optimization_rows VALUES ('preserved');");
@@ -137,7 +144,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var storeType = varchar ? "character varying(32)" : "timestamp without time zone";
         var value = varchar ? "'preserved'" : "'2026-01-02 03:04:05.123456'";
         await ExecuteSqlAsync(connectionString,
@@ -177,7 +184,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task MatchingRuntime_ParentOnlyNotNullCannotSkipDescendantProof()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var constraint = Fixture.ServerVersion.Major >= 18
             ? "NOT NULL value NO INHERIT"
             : "CHECK (value IS NOT NULL) NO INHERIT";
@@ -220,7 +227,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var childValue = containsNull ? "NULL" : "'child'";
         var constraint = Fixture.ServerVersion.Major >= 18
             ? "NOT NULL value NO INHERIT"
@@ -281,7 +288,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task MatchingRuntime_RechecksTargetAfterInterveningColumnMutation()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE matching_optimization_rows (value timestamp without time zone NOT NULL); "
             + "INSERT INTO matching_optimization_rows VALUES ('2026-01-02 03:04:05');");
@@ -351,4 +358,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         command.CommandText = sql;
         await command.ExecuteNonQueryAsync(CancellationToken.None);
     }
+
 }

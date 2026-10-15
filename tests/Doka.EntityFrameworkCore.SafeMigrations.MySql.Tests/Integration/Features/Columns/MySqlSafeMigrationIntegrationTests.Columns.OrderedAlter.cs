@@ -1,7 +1,12 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the ColumnsOrderedAlter migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlColumnsOrderedAlterIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlColumnsOrderedAlterIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     /// <summary>Both new and populated tables retain physical provenance through multiple alterations.</summary>
     /// <param name="existing">Whether convergence observes an existing populated table.</param>
     [Theory]
@@ -10,7 +15,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task OrderedRenameAlterTransitionsUseAcceptedTargetWidths(bool existing)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         if (existing)
         {
             await ExecuteSqlAsync(connectionString,
@@ -63,7 +68,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task OrderedRenameAlterRetainsSourceBlockers(string failure)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var sourceType = failure == "old_definition" ? "text" : "longtext";
         var rowFormat = failure == "source_row_format" ? "COMPACT" : "DYNAMIC";
         await ExecuteSqlAsync(connectionString,
@@ -104,7 +109,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task OrderedRenameAlterRejectsStaleDataProof()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `ordered_source` (`id` char(36) NOT NULL, `value` longtext NOT NULL, "
             + "`other_value` longtext NOT NULL) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 "
@@ -165,7 +170,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task NewProjectedTableCannotRenameOverAnExistingDestination(bool isView)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, isView
             ? "CREATE VIEW `ordered_target` AS SELECT 1 AS `id`;"
             : "CREATE TABLE `ordered_target` (`id` int NOT NULL);");
@@ -186,7 +191,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task AcceptedForeignKeyBeforeRenameBlocksProjectedAlter()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `fk_source` (`value` varchar(100) NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `fk_dependent` (`value` varchar(100) NOT NULL) ENGINE=InnoDB;");
@@ -219,7 +224,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task NewEmptyForeignKeyTableRejectsProjectedTypeTransition()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var source = new ExpectedColumnDefinition("value", typeof(string), false, "varchar(100)", maxLength: 100);
         var target = new ExpectedColumnDefinition("value", typeof(string), false, "varchar(200)", maxLength: 200);
@@ -249,7 +254,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task OpaqueSqlAfterRenameDefersAlterAndDoesNotApplyItsShape()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var operations = OrderedAlterOperations();
         operations.Insert(2, new SqlOperation { Sql = "SELECT 1;" });
@@ -268,7 +273,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task RejectedOrderedAlterDoesNotAuthorizeTheTargetIndexPrefix()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var source = new ExpectedColumnDefinition("value", typeof(string), false, "varchar(100)", maxLength: 100);
         var target = new ExpectedColumnDefinition("value", typeof(string), false, "varchar(500)", maxLength: 500);
@@ -301,7 +306,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task OrderedAlterRetainsAcceptedCompositeIndexBudget(bool providerAlter)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `composite_alter` (`left_value` varchar(100) NOT NULL, "
             + "`right_value` varchar(100) NOT NULL) ENGINE=InnoDB ROW_FORMAT=DYNAMIC "
@@ -364,7 +369,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task RepeatedOrderedAlterReferenceCapturesSourceOnceAndProjectsReplay()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var operations = OrderedAlterOperations();
         operations.Insert(3, operations[2]);
@@ -387,7 +392,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task OrderedRenameRebindsAcceptedIndexIdentity(bool existing)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         if (existing)
         {
             await ExecuteSqlAsync(connectionString,
@@ -428,7 +433,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             $"CREATE TABLE `converged_source` (`value` varchar({originalLength}) NOT NULL) "
             + "ENGINE=InnoDB ROW_FORMAT=DYNAMIC "
@@ -514,7 +519,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task OrdinaryAlterBackfillTriggerInvalidatesLaterNarrowingProof()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `trigger_target` (`value` longtext NOT NULL) ENGINE=InnoDB; "
             + "INSERT INTO `trigger_target` VALUES ('short'); "
@@ -570,7 +575,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ModelManagedTriggerInvalidatesRetainedAlterValueDomain(string kind)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `managed_target` (`value` varchar(200) NOT NULL) ENGINE=InnoDB; "
             + "INSERT INTO `managed_target` VALUES ('short'); "

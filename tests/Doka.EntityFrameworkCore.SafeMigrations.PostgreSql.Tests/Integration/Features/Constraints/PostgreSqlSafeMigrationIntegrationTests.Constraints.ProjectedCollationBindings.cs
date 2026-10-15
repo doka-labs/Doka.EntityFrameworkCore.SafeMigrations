@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the ConstraintsProjectedCollationBindings PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlConstraintsProjectedCollationBindingsIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlConstraintsProjectedCollationBindingsIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>A COLLATE node must resolve both its operand's native collatability and the exact collation.</summary>
     /// <param name="text">Whether the unchanged live operand is a collatable native type.</param>
     /// <param name="exists">Whether the exact explicitly requested native collation exists.</param>
@@ -12,7 +19,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task EmptyMixedCheckRequiresNativeCollatableOperandAndKnownCollation(bool text, bool exists)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var type = text ? "text" : "integer";
         await ExecuteSqlAsync(connectionString, $"CREATE TABLE mixed_columns (id {type} NOT NULL);");
         await using var context = CreateContext(connectionString);
@@ -70,4 +77,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             Assert.Equal(SafeMigrationAction.RejectUnsupported, report.Assessments[1].Action);
         }
     }
+
 }

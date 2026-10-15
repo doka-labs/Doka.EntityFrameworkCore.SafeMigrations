@@ -112,11 +112,11 @@ public sealed class SafeMigrationDecisionPlannerActionTests
     {
         // Arrange
         const int count = 1000;
-        Func<SafeMigrationAction> publicPlan = static () => SafeMigrationDecisionPlanner.Plan(
+        var publicPlan = static () => SafeMigrationDecisionPlanner.Plan(
             SafeMigrationOperationKind.EnsureColumn, SafeMigrationObservedState.Different,
             SafeMigrationPolicy.RepairIfSafe, SafeMigrationRepairCapability.Safe).Action;
 
-        Func<SafeMigrationAction> actionPlan = static () => SafeMigrationDecisionPlanner.PlanAction(
+        var actionPlan = static () => SafeMigrationDecisionPlanner.PlanAction(
             SafeMigrationOperationKind.EnsureColumn, SafeMigrationObservedState.Different,
             SafeMigrationPolicy.RepairIfSafe, SafeMigrationRepairCapability.Safe);
 

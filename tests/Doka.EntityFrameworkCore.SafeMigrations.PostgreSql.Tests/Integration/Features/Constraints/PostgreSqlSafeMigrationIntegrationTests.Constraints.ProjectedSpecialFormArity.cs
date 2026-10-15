@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the ConstraintsProjectedSpecialFormArity PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlConstraintsProjectedSpecialFormArityIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlConstraintsProjectedSpecialFormArityIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>
     /// Native common-type forms require inputs but are not ordinary function argument-limit consumers.
     /// </summary>
@@ -17,7 +24,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task EmptyMixedCheckPreservesNativeSpecialFormArityContract(string function, bool empty)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var limit = await ScalarIntAsync(connectionString, "SELECT current_setting('max_function_args')::integer;");
         var count = empty ? 0 : limit + 1;
         await ExecuteSqlAsync(connectionString, "CREATE TABLE mixed_columns (id integer NOT NULL);");
@@ -75,4 +82,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             Assert.Equal(SafeMigrationAction.RejectUnsupported, report.Assessments[1].Action);
         }
     }
+
 }

@@ -1,11 +1,16 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the ColumnsRowVersion migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlColumnsRowVersionIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlColumnsRowVersionIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     [Fact]
     public async Task ProviderGeneratedTemporalRowVersionAndJsonConstraint_AreOwnedAndIdempotent()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         _ = builder.CreateTableIfNotExists(
@@ -111,7 +116,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task TemporalRowVersionWithoutOnUpdate_IsRejectedAsDifferent()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `row_version_drift` ("
@@ -136,7 +141,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 builder.Operations,
                 new SafeMigrationRunOptions("row-version-without-update"),
                 CancellationToken.None);
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);

@@ -140,7 +140,9 @@ immutable definitions. Provider column annotations use a closed snapshot value
 set, deterministic order, and fingerprints. MySQL/MariaDB compares Doka's
 `None` and auto-increment strategies with `INFORMATION_SCHEMA.COLUMNS.EXTRA`.
 It accepts native Guid-format annotations only for Doka's defined
-`Binary16`/`binary(16)` and `Char36`/`char(36)` pairs on Guid CLR columns.
+`Binary16`/`binary(16)`, `Char36`/`char(36)` and opt-in MariaDB
+`Uuid`/`uuid` pairs on Guid CLR columns. UUID is unsized and capability-gated
+by the public Doka mapping; no storage-format conversion is inferred.
 PostgreSQL compares `None`, identity-always, and identity-by-default with
 `pg_attribute.attidentity`. Unknown value types fail capture. Undefined,
 contradictory, or unmodeled operation annotations classify unsupported before
@@ -292,6 +294,9 @@ snapshots already required for catalog comparison and hashing.
   validate the complete operation stream before publishing source. Already
   published migrations keep their behavior; the change applies only to source
   scaffolded from this release onward.
+- 2026-10-15: Include Doka 10.5's explicit MariaDB UUID metadata in the same
+  exact typed Guid contract. Strict and legacy generation retain the format
+  without inferring representation conversions or unsupported engine support.
 
 ### 2026-09-22 Compatibility Amendment
 
@@ -326,6 +331,8 @@ when they were authored; nothing reinterprets them at analysis or execution.
 
 ### Sources
 
+- [Doka 10.5.0 typed migration metadata](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/27a8d3cce3ce2bc64f6efd1e9034b1cd66eb1ff0/src/Doka.EntityFrameworkCore.MySql/Migrations/MySqlMigrationOperationMetadata.cs)
+  (primary source; retrieved 2026-10-15)
 - [EF Core design-time services](https://learn.microsoft.com/en-us/ef/core/cli/services) (primary source; retrieved 2026-08-27)
 - [Installing EF Core tools](https://learn.microsoft.com/en-us/ef/core/get-started/overview/install) (primary source; retrieved 2026-08-27)
 - [EF Core design-time DbContext creation](https://learn.microsoft.com/en-us/ef/core/cli/dbcontext-creation) (primary source; retrieved 2026-08-27)

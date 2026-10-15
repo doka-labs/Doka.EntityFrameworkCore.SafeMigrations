@@ -61,7 +61,9 @@ internal static class SafeMigrationCatalogWorkOrder
             || ordinal != submittedOrdinals[consumed])
         {
             throw new InvalidOperationException(
-                "The SafeMigrations catalog classifier returned an unsubmitted or out-of-order ordinal.");
+                "The SafeMigrations catalog classifier returned an unsubmitted or out-of-order ordinal. "
+                + "Stop migration analysis; inspect the provider contract and report this invariant "
+                + "failure using redacted evidence.");
         }
 
         consumed++;
@@ -80,7 +82,9 @@ internal static class SafeMigrationCatalogWorkOrder
         if (consumed != submittedOrdinals.Count)
         {
             throw new InvalidOperationException(
-                "The SafeMigrations catalog classifier returned an inconsistent submitted row count.");
+                "The SafeMigrations catalog classifier returned an inconsistent submitted row count. "
+                + "Stop migration analysis; inspect the provider contract and report this invariant "
+                + "failure using redacted evidence.");
         }
     }
 }

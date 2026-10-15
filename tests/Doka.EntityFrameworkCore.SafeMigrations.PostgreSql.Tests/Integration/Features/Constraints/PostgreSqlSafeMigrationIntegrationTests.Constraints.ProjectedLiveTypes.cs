@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the ConstraintsProjectedLiveTypes PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlConstraintsProjectedLiveTypesIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>Sparse CHECK typing preserves native functions, explicit casts and common-type expressions.</summary>
     /// <param name="shape">The supported expression family whose binding must remain valid.</param>
     [Theory]
@@ -18,7 +25,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task EmptyMixedCheckRetainsValidNativeExpressionBinding(string shape)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var existingType = shape is "lower-varchar" or "lower-irrelevant-variadic" ? "varchar(32)" : "text";
         await ExecuteSqlAsync(connectionString, $"CREATE TABLE mixed_columns (id {existingType} NOT NULL);");
 
@@ -100,7 +107,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task ForeignKeyNewNullableColumnUsesAcceptedTypeInsteadOfLaterProposal(SafeMigrationPolicy policy)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE live_parent (id integer NOT NULL PRIMARY KEY); "
             + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES (1);");
@@ -140,7 +147,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task ForeignKeyNewNullableColumnDoesNotReuseReoccupiedConstraintName(bool dropReplacement)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE live_parent (id integer NOT NULL PRIMARY KEY); "
             + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY, old_parent_id integer NULL, "
@@ -187,7 +194,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task ForeignKeyNewTableThenSeparateColumnUsesUnchangedLivePrincipal()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE live_parent (id integer NOT NULL PRIMARY KEY);");
 
         await using var context = CreateContext(connectionString);
@@ -229,7 +236,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task EmptyMixedCheckRejectsInvalidNativeExpressionBinding(string shape)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE mixed_columns (id uuid NOT NULL);");
 
         await using var context = CreateContext(connectionString);
@@ -276,7 +283,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task CheckNativeDeparseDoesNotApproveDifferentPredicate(string shape)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var current = shape switch
         {
             "lower" => "lower(id) >= ''",
@@ -334,7 +341,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task EmptyMixedCheckDoesNotApproveUnresolvedNativeBinding(string shape)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var setup = shape switch
         {
             "domain" => "CREATE DOMAIN owned_integer AS integer; CREATE TABLE mixed_columns (id owned_integer);",
@@ -394,7 +401,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task EmptyMixedCheckQualifiesUserFunctionWithoutInvokingIt()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE mixed_columns (id integer); CREATE TABLE callback_audit (id integer); "
             + "CREATE FUNCTION metadata_callback(integer) RETURNS boolean LANGUAGE plpgsql AS $$ "
@@ -428,7 +435,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task EmptyMixedCheckRejectsResolvedNonBooleanPredicate()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE mixed_columns (id text);");
 
         await using var context = CreateContext(connectionString);
@@ -463,7 +470,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task ForeignKeyNewNullableColumnHonorsExactDroppedConstraintFamily(string kind, bool correctFamily)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var constraint = kind switch
         {
             "primary" => "PRIMARY KEY (id)",
@@ -516,4 +523,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         Assert.Equal(correctFamily ? SafeMigrationAction.Apply : SafeMigrationAction.RejectPrerequisiteMissing,
             report.Assessments[2].Action);
     }
+
 }

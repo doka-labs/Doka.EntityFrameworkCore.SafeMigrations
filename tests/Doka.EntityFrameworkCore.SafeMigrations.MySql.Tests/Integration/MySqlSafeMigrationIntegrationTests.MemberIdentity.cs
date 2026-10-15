@@ -1,13 +1,18 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the MemberIdentity migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlMemberIdentityIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlMemberIdentityIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     /// <summary>Native index casing shares one drop tombstone and cannot revive a removed rename source.</summary>
     [Fact]
     public async Task MemberIdentity_IndexCaseVariantsSharePhysicalDropLifetime()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE member_rows (id int NOT NULL, Code int NULL, KEY IX_Code (Code)); "
             + "INSERT INTO member_rows VALUES (7, 29);");
@@ -55,7 +60,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task MemberIdentity_SharedUniqueCaseVariantsInvalidateAcrossKinds(bool dropConstraint)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE member_rows (id int NOT NULL, Code int NULL, UNIQUE KEY UX_Code (Code)); "
             + "INSERT INTO member_rows VALUES (7, 29);");
@@ -125,7 +130,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(new ExpectedTableDefinition("member_parent",
@@ -183,7 +188,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task MemberIdentity_IndexCasingDoesNotMergeCaseDistinctTableOwners()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var ownerMode = await ScalarIntAsync(connectionString, "SELECT @@lower_case_table_names;");
 
         // WHY: Qualified Linux containers use native mode zero, which permits

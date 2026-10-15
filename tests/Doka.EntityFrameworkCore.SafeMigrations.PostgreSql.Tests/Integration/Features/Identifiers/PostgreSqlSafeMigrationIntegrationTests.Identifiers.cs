@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the Identifiers PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlIdentifiersIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlIdentifiersIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     [Fact]
     public async Task ServerQuotedExpressionIdentifiers_ConvergeAcrossEveryStructuredFacet()
     {
@@ -47,7 +54,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 SafeMigrationSqlBinaryOperator.GreaterThan,
                 SafeMigrationSql.Literal(0)));
 
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.ConvergeTable(definition);
@@ -141,7 +148,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             ],
             foreignKeys: [new ExpectedForeignKeyDefinition(foreignKey, table, [parent], table, [id]),]);
 
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.ConvergeTable(
@@ -178,4 +185,13 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             report.Assessments,
             assessment => Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState));
     }
+
+    private static string PostgreSqlMaximumIdentifier(
+        string prefix
+    )
+    {
+        var remainingBytes = 63 - Encoding.UTF8.GetByteCount(prefix);
+        return prefix + new string('x', remainingBytes);
+    }
+
 }

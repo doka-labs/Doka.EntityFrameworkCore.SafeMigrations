@@ -1,11 +1,18 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the Diagnostics PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlDiagnosticsIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlDiagnosticsIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     [Fact]
     public async Task PreflightDiagnostics_DistinguishForeignKeyActionsAndIndexOrder()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE diagnostic_principal (id integer NOT NULL PRIMARY KEY); "
@@ -86,7 +93,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
 
         var reversedPrincipalKeys = string.Join(", ", principalColumns.Reverse().Select(PostgreSqlIdentifier));
         var reversedDependentKeys = string.Join(", ", dependentColumns.Reverse().Select(PostgreSqlIdentifier));
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
@@ -144,7 +151,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         const string liveDefault = "private-live-default";
         const string targetDefault = "private-target-default";
 
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             $"CREATE TABLE diagnostic_defaults (value character varying(40) NULL DEFAULT '{liveDefault}');");
@@ -188,4 +195,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         Assert.DoesNotContain(liveDefault, exception.Message, StringComparison.Ordinal);
         Assert.DoesNotContain(targetDefault, exception.Message, StringComparison.Ordinal);
     }
+
 }

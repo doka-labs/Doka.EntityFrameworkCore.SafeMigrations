@@ -2,13 +2,24 @@
 
 ## Support contract
 
+Prepared stable 10.5.0 adds actionable diagnostics with canonical report schema
+4, selected view schema 3 and contextual owned runtime errors. Older schema
+files remain packaged; update validators and rebuild references to the compiled
+`CurrentSchemaVersion` constant.
+Those diagnostics do not change migration decisions or the target framework.
+The separate Doka upgrade below changes the MySQL/MariaDB dependency range.
+MySQL/MariaDB callers must account for the owned-guard outer exception type;
+see [diagnostic compatibility](diagnostics.md#runtime-provider-differences).
+Native qualification still requires the complete blocking matrix; ARM SQL Server
+skips and offline SQL-shape tests are not substitutes for its x64 cells.
+
 All publishable projects target `net10.0`. The repository pins SDK 10.0.401
 with roll-forward disabled. SafeMigrations supports EF Core 10 only.
 
 | Package | Runtime dependency contract |
 | --- | --- |
 | Core | `Microsoft.EntityFrameworkCore.Relational` `[10.0.12,10.1.0)` |
-| MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` `[10.4.2,10.5.0)` |
+| MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` `[10.5.0,10.6.0)` |
 | PostgreSQL | `Npgsql.EntityFrameworkCore.PostgreSQL` `[10.0.3,11.0.0)` |
 | SQLite | EF Core SQLite Core `[10.0.12,10.1.0)`; application-owned native bundle |
 | SQL Server (available since 10.4.6) | `Microsoft.EntityFrameworkCore.SqlServer` `[10.0.12,10.1.0)`; `System.Security.Cryptography.Pkcs` minimum `9.0.21` |
@@ -27,16 +38,30 @@ The minimum is not an exact version lock or a claim that every higher major
 version is patched. Consumers selecting PKCS 10.x must use 10.0.13 or later
 for these advisories; NuGet audit remains enabled for the actual resolved graph.
 
-The MySQL/MariaDB package requires Doka 10.4.2 or a compatible later 10.4 patch
+The MySQL/MariaDB package requires Doka 10.5.0 or a compatible later 10.5 patch
 release and rejects the next minor line. This boundary avoids an exact
 transitive pin without claiming compatibility across an unqualified behavioral
 SPI revision. CI does not build Doka and never uses a cross-repository
 ProjectReference. The MySQL/MariaDB package lockfile resolves the public
-Doka 10.4.2 package. Its signed release tag identifies source commit
-`b2408bfbe29517d742734d06d848081cdb9e1de0`. The complete package, engine,
+Doka 10.5.0 package. Its verified signed release tag identifies source commit
+`27a8d3cce3ce2bc64f6efd1e9034b1cd66eb1ff0`. The complete package, engine,
 tooling, coverage, and performance matrix remains the SafeMigrations release
 gate; a local Doka ProjectReference or locally packed candidate is not release
 evidence.
+
+This upgrade enables explicit `MySqlGuidFormat.Uuid` on MariaDB, not an
+automatic conversion of existing GUID columns. Doka requires MariaDB 10.7 or
+later for this type; SafeMigrations qualification still uses the declared
+engine matrix, not every server above that capability threshold. MySQL rejects
+native UUID. Binary16 remains the default and Char36 remains supported.
+Native UUID has 16-byte physical width and no text collation or index-prefix
+contract. See [GUID storage and upgrade guidance](mysql-mariadb-ddl-behavior.md#guid-storage-and-native-uuid).
+
+Doka 10.5.0 also maps implicit application-owned 16-byte binary properties to
+`varbinary(17)`, independently of GUID defaults. This can create a model diff
+and a newly scaffolded `AlterColumn`; review that authored migration and its
+data contract. The dependency update does not rewrite existing migrations or
+approve GUID representation changes.
 
 The remaining declared dependency graph and .NET 10 release metadata were
 rechecked on 2026-09-21. Bounded package ranges describe compatibility. The
@@ -48,9 +73,11 @@ The SQL Server project supplies the fifth lockfile. Releases 10.4.2 through
 10.4.5 contain four package artifacts; their inventory remains unchanged.
 
 The five-package set began with stable 10.4.6, including the optional SQL Server
-provider. Prepared stable 10.4.11 retains that inventory, the EF/provider ranges
-and all public API baselines, while raising the SQL Server PKCS minimum to
-9.0.21. Publication still requires the blocking workflow, including all three
+provider. Prepared stable 10.5.0 retains that inventory and the SQL Server PKCS
+minimum of 9.0.21. The Core API baseline gains the diagnostic surface described
+above, and the MySQL/MariaDB Doka range changes to the qualified 10.5 line.
+Other production dependency ranges remain unchanged. Publication still requires
+the blocking workflow, including all three
 native x86-64 SQL Server cells, and exact public readback
 of all five package IDs. Source preparation alone does not establish availability.
 
@@ -77,8 +104,8 @@ acquisition. Earlier provider repair and trigger-freshness contracts remain.
 These are bounded path-specific changes, not a general engine-latency or
 peak-memory guarantee. SQLite retains its model-owned rebuild contract.
 Engineering dependencies inherit the reviewed Testcontainers 4.16.0 and pinned
-Action updates on `main`. Apart from the SQL Server PKCS floor above,
-production ranges and package lockfiles are unchanged.
+Action updates on `main`. For 10.5.0 only the MySQL/MariaDB package lockfile
+changes to resolve Doka 10.5.0; the other four package lockfiles are unchanged.
 No engine, tooling, package or coverage gate is removed. Performance measurements
 remain informational; invalid evidence and functional failures remain blocking.
 The analysis and runtime optimizations introduced in 10.4.7 remain in place;
@@ -648,6 +675,11 @@ and release-asset verification.
   [migration-operation handler contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.4.2/docs/migration-operation-handlers.md),
   and [signed release tag](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.4.2),
   retrieved 2026-09-21.
+- [Doka 10.5.0 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.5.0),
+  [verified signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.5.0),
+  [package catalog provenance](https://api.nuget.org/v3/catalog0/data/2026.10.14.23.33.52/doka.entityframeworkcore.mysql.10.5.0.json),
+  and [GUID migration contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/27a8d3cce3ce2bc64f6efd1e9034b1cd66eb1ff0/docs/operations/migrations.md#guid-representation-changes),
+  retrieved 2026-10-15.
 - [MySQL 8.4 InnoDB limits](https://dev.mysql.com/doc/refman/8.4/en/innodb-limits.html),
   [MySQL 8.4 CREATE INDEX](https://dev.mysql.com/doc/refman/8.4/en/create-index.html),
   [MySQL 8.4 invisible indexes](https://dev.mysql.com/doc/refman/8.4/en/invisible-indexes.html),

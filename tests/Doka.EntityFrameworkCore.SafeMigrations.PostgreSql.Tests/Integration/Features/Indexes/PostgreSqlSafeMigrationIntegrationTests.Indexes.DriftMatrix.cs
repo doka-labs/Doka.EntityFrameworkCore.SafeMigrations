@@ -1,11 +1,18 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the IndexesDriftMatrix PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlIndexesDriftMatrixIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     [Fact]
     public async Task EquivalentIndexWithDifferentName_IsAnIdempotentNoOp()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE index_identity (code integer NOT NULL, tenant_id integer NOT NULL);"
@@ -56,7 +63,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task DifferentlyNamedIndexWithDifferentShape_RemainsApplicable()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE index_nonidentity (code integer NOT NULL, alternate_code integer NOT NULL);"
@@ -92,7 +99,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task InvalidIndexWithExpectedName_IsRejectedBeforeDdl()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE invalid_index_drift (id integer NOT NULL, code integer NOT NULL);"
@@ -132,13 +139,13 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
         Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
         Assert.Equal("P1001", exception.SqlState);
-        Assert.Equal("doka_sm_different", exception.MessageText);
+        Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
     }
 
     [Fact]
     public async Task DifferentlyNamedInvalidIndex_DoesNotBlockValidIndex()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE invalid_index_identity (id integer NOT NULL, code integer NOT NULL);"
@@ -184,7 +191,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task PartitionedParentIndex_IsMatching_WhileAttachedChildOperationsAreRejected()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE partitioned_index_root (bucket integer NOT NULL, code integer NOT NULL) "
@@ -238,14 +245,14 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 ExecuteOperationsAsync(context, [operation]));
 
             Assert.Equal("P1001", exception.SqlState);
-            Assert.Equal("doka_sm_different", exception.MessageText);
+            Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
         }
     }
 
     [Fact]
     public async Task ConstraintOwnedIndexOperations_AreRejectedBeforeDdl()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE constraint_owned_index (code integer NULL, "
@@ -288,14 +295,14 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 ExecuteOperationsAsync(context, [operation]));
 
             Assert.Equal("P1001", exception.SqlState);
-            Assert.Equal("doka_sm_different", exception.MessageText);
+            Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
         }
     }
 
     [Fact]
     public async Task ObservableIndexFacetDrift_IsRejectedOneFieldAtATime()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE index_facets (value text NULL, alternate text NULL, payload text NULL, other text NULL);");
@@ -462,7 +469,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task RelationNamespaceCollisions_AreRejectedBeforeIndexDdl()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE index_namespace_owner (code integer NOT NULL);"
@@ -501,7 +508,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 ExecuteOperationsAsync(context, [operation]));
 
             Assert.Equal("P1001", exception.SqlState);
-            Assert.Equal("doka_sm_different", exception.MessageText);
+            Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
         }
 
         Assert.Equal(
@@ -522,7 +529,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task PrefixLength_IsRejectedAsUnsupportedBeforeTargetDdl()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE unsupported_prefix (value text NULL);");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -548,4 +555,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 connectionString,
                 "SELECT COUNT(*) FROM pg_catalog.pg_class WHERE relname = 'ix_unsupported_prefix';"));
     }
+
 }

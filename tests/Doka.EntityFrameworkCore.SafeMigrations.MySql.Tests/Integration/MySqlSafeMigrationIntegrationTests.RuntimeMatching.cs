@@ -1,11 +1,19 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+public abstract partial class MySqlSafeMigrationIntegrationTests
 {
-    private const string RuntimeMatchingResetSql = "SET @runtime_matching_catalog_visits = 0, "
+    protected const string RuntimeMatchingResetSql = "SET @runtime_matching_catalog_visits = 0, "
         + "@runtime_matching_transition_visits = 0, @runtime_matching_repair_visits = 0, "
         + "@runtime_matching_null_visits = 0, @runtime_matching_length_visits = 0, "
         + "@runtime_matching_final_repair_visits = 0;";
+}
+
+/// <summary>Exercises the RuntimeMatching migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlRuntimeMatchingIntegrationTests : MySqlSafeMigrationIntegrationTests
+{
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlRuntimeMatchingIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
 
     /// <summary>Skips repair catalogs and row proofs after an exact operation-local runtime match.</summary>
     /// <param name="textColumn">Whether the required column is varchar rather than int.</param>
@@ -17,7 +25,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var storeType = textColumn ? "varchar(5)" : "int";
         var value = textColumn ? "'kept'" : "7";
         await ExecuteSqlAsync(connectionString,
@@ -66,7 +74,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var nullable = drift != "facet";
         var blocked = drift == "null";
         var storeType = textColumn ? nullable ? "varchar(20)" : "varchar(5)" : "int";
@@ -103,7 +111,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             nullable ? 1 : 0, textColumn && nullable ? 1 : 0, blocked ? 0 : 1), visits);
         if (blocked)
         {
-            Assert.Contains("doka_sm_data_blocked", Assert.IsType<MySqlException>(exception).Message,
+            Assert.Contains("doka_sm_data_blocked", AssertOwnedGuardFailure(exception).Message,
                 StringComparison.Ordinal);
         }
         else
@@ -128,7 +136,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task RuntimeMatching_DefaultAndCollationDriftVisitRepairCatalogs(bool collationDrift)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var columnCollation = collationDrift ? "utf8mb4_bin" : "utf8mb4_unicode_ci";
         var defaultClause = collationDrift ? string.Empty : "DEFAULT 'prior' ";
         await ExecuteSqlAsync(connectionString,
@@ -164,7 +172,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(new RuntimeMatchingVisits(1, 1, 1, 0, 0, 1), visits);
         if (collationDrift)
         {
-            Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(exception).Message,
+            Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(exception).Message,
                 StringComparison.Ordinal);
         }
         else
@@ -189,7 +197,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var storeType = textColumn ? "varchar(5)" : "int";
         var value = textColumn ? "'kept'" : "7";
         await ExecuteSqlAsync(connectionString,
@@ -223,7 +231,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             "SELECT COUNT(*) FROM `runtime_match_rows` WHERE `id` = 1 AND `value` IS NULL;");
 
         // Assert
-        Assert.Contains("doka_sm_data_blocked", Assert.IsType<MySqlException>(exception).Message,
+        Assert.Contains("doka_sm_data_blocked", AssertOwnedGuardFailure(exception).Message,
             StringComparison.Ordinal);
         AssertRuntimeMatchingInstrumentation(observer, textColumn, operationCount: 2);
         Assert.Equal(new RuntimeMatchingVisits(2, textColumn ? 1 : 0, 1, 1, 0, 0), visits);
@@ -238,8 +246,8 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task RuntimeMatching_ForeignQualifierRejectsBeforeMatchingCatalog()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
-        var foreignConnectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
+        var foreignConnectionString = await CreateDatabaseAsync(CancellationToken.None);
         var foreignDatabase = new MySqlConnectionStringBuilder(foreignConnectionString).Database;
         await ExecuteSqlAsync(foreignConnectionString,
             "CREATE TABLE `runtime_match_rows` (`id` int PRIMARY KEY, `value` varchar(5) NOT NULL "
@@ -263,7 +271,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             + "AND TABLE_NAME = 'runtime_match_rows';");
 
         // Assert
-        Assert.Contains("doka_sm_unsupported", Assert.IsType<MySqlException>(exception).Message,
+        Assert.Contains("doka_sm_unsupported", AssertOwnedGuardFailure(exception).Message,
             StringComparison.Ordinal);
         AssertRuntimeMatchingInstrumentation(observer, textColumn: true, operationCount: 1);
         Assert.Equal(new RuntimeMatchingVisits(0, 0, 0, 0, 0, 0), visits);
@@ -288,7 +296,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `runtime_match_rows` (`id` int PRIMARY KEY, `value` int NULL "
             + $"COMMENT '{liveComment}') ENGINE=InnoDB; "
@@ -337,9 +345,13 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(1, canonicalColumns);
         Assert.Equal(2, preservedRows);
     }
+}
+
+public abstract partial class MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Uses the normal provider execution path with only a test-owned branch observer.</summary>
-    private SafeMigrationDbContext CreateRuntimeMatchingContext(
+    private protected SafeMigrationDbContext CreateRuntimeMatchingContext(
         string connectionString,
         RuntimeMatchingProbeInterceptor observer
     ) => new(new DbContextOptionsBuilder<SafeMigrationDbContext>()
@@ -347,6 +359,10 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         .UseMySqlSafeMigrations<SafeMigrationDbContext>()
         .AddInterceptors(observer)
         .Options);
+}
+
+public sealed partial class MySqlRuntimeMatchingIntegrationTests : MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Creates a full required scalar contract without an analysis preflight.</summary>
     private static SafeMigrationOperation RuntimeMatchingOperation(
@@ -356,9 +372,13 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         "value", textColumn ? typeof(string) : typeof(int), isNullable: false,
         storeType: textColumn ? "varchar(5)" : "int", maxLength: textColumn ? 5 : null,
         comment: "canonical"), schema), SafeMigrationPolicy.RepairIfSafe);
+}
+
+public abstract partial class MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Reads only bounded counters that cleanup intentionally does not own.</summary>
-    private static async Task<RuntimeMatchingVisits> ReadRuntimeMatchingVisitsAsync(
+    protected static async Task<RuntimeMatchingVisits> ReadRuntimeMatchingVisitsAsync(
         DbContext context
     ) => new(
         await ContextScalarIntAsync(context, "SELECT @runtime_matching_catalog_visits;"),
@@ -367,6 +387,10 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         await ContextScalarIntAsync(context, "SELECT @runtime_matching_null_visits;"),
         await ContextScalarIntAsync(context, "SELECT @runtime_matching_length_visits;"),
         await ContextScalarIntAsync(context, "SELECT @runtime_matching_final_repair_visits;"));
+}
+
+public sealed partial class MySqlRuntimeMatchingIntegrationTests : MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Rejects vacuous zero counts when a changed SQL shape prevents instrumentation.</summary>
     private static void AssertRuntimeMatchingInstrumentation(
@@ -380,9 +404,13 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(operationCount * (textColumn ? 2 : 1), observer.CatalogInstrumentations);
         Assert.Equal(operationCount * (textColumn ? 2 : 1), observer.RowInstrumentations);
     }
+}
+
+public abstract partial class MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Contains only branch counts, without retaining SQL, identifiers, or user data.</summary>
-    private sealed record RuntimeMatchingVisits(
+    protected sealed record RuntimeMatchingVisits(
         int Matching,
         int Transition,
         int PhysicalRepair,

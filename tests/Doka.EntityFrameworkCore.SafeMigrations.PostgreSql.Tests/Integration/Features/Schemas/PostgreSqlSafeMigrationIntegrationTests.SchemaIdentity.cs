@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the SchemaIdentity PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlSchemaIdentityIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>Current-schema aliases preserve drop/ensure order and final-writer verification.</summary>
     /// <param name="kind">The catalog resource replaced in the ordered stream.</param>
     /// <param name="qualifiedDrop">Whether the drop uses the explicit current schema.</param>
@@ -26,7 +33,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, SchemaIdentityFixtureSql(kind));
         await using var context = CreateContext(connectionString);
         var builder = SchemaIdentityReplacement(context, kind, qualifiedDrop);
@@ -54,7 +61,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task NonPublicCurrentSchemaReplacement_PreservesItsVerifiedAlias(string searchPath)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE SCHEMA identity_module; CREATE TABLE identity_module.identity_target (id integer NULL);");
 
@@ -83,7 +90,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task OrdinaryColumnAddAndSafeIndex_ShareVerifiedCurrentSchemaAliases(bool qualifiedProvider)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE public.identity_target (id integer NULL);");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -118,7 +125,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task OrdinaryColumnDropAndSafeEnsure_ShareVerifiedCurrentSchemaAliases(bool qualifiedProvider)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE public.identity_target (id integer NULL, restored integer NULL);");
 
@@ -150,7 +157,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task UnqualifiedSearchPathFallback_IsRejectedBeforeCatalogAndExecution()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE SCHEMA identity_module; CREATE TABLE public.identity_target (id integer NULL);");
 
@@ -184,7 +191,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task CatalogOnlyTableIdentityGuard_RejectsShadowWithoutPrerequisiteRoundTrip()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE public.identity_target (id integer NULL);");
         await using var context = CreateContext(connectionString);
         await using var connection = new CatalogClassificationCountingConnection(
@@ -214,7 +221,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task QualifiedSearchPathFallback_RemainsSupportedAndIsolated()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE SCHEMA identity_module; CREATE TABLE public.identity_target (id integer NULL);");
 
@@ -249,7 +256,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task MixedCurrentSchemaTableAndStandaloneConstraint_ShareRuntimeContract(bool qualifiedTable)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE public.identity_target (id integer NULL, CONSTRAINT uq_identity_target UNIQUE (id));");
 
@@ -275,7 +282,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task ForeignStandaloneConstraint_DoesNotAuthorizeEarlierUnqualifiedTable()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE SCHEMA identity_foreign; CREATE TABLE identity_foreign.identity_target (id integer NULL); "
             + "CREATE TABLE public.identity_target (id integer NULL, CONSTRAINT uq_identity_target UNIQUE (id));");
@@ -305,7 +312,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task TemporaryTableShadow_IsRejectedBeforeChangingEitherOwner()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE public.identity_target (id integer NULL);");
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
@@ -333,7 +340,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task MissingCurrentSchema_ExplicitOwnerRemainsSupported()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var configured = new NpgsqlConnectionStringBuilder(connectionString) { SearchPath = "identity_missing" };
         await using var context = CreateContext(configured.ConnectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -362,7 +369,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task MissingCurrentSchema_UnqualifiedOwnerIsRejected()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var configured = new NpgsqlConnectionStringBuilder(connectionString) { SearchPath = "identity_missing" };
         await using var context = CreateContext(configured.ConnectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -385,7 +392,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task RawSqlBarrier_DoesNotLendLaterConstraintToEarlierTable()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE public.identity_target (id integer NULL, CONSTRAINT uq_identity_target UNIQUE (id));");
 
@@ -414,7 +421,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task CurrentSchemaIdentity_IsNotRetainedBetweenAnalysisInvocations()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE SCHEMA identity_first; CREATE SCHEMA identity_second; "
             + "CREATE TABLE identity_first.identity_target (id integer NULL); "
@@ -447,7 +454,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task QuotedSchemaCase_RemainsDistinctDuringProjection()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE SCHEMA \"Scope\"; CREATE SCHEMA \"scope\"; "
             + "CREATE TABLE \"Scope\".identity_target (id integer NULL); "
@@ -471,7 +478,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task PostflightHistoricalUnqualifiedOwner_DoesNotHideRetainedOldSchemaTable()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE SCHEMA identity_final; CREATE TABLE public.identity_target (id integer NULL); "
             + "CREATE TABLE identity_final.identity_target (id integer NULL);");
@@ -502,7 +509,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task PostflightExplicitHistoricalOwner_RemainsSupportedAcrossSearchPathChange()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE SCHEMA identity_final; CREATE TABLE identity_final.identity_target (id integer NULL);");
 
@@ -530,7 +537,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task PostflightHistoricalUnqualifiedIndex_RequiresAnExplicitOwnerAcrossOpaqueSql()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE public.identity_target (id integer NULL);");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -558,7 +565,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task RawSqlEstablishesCurrentOwner_InitialMismatchIsDeferredAndRuntimeRechecked()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE SCHEMA identity_module; CREATE TABLE public.identity_target (id integer NULL);");
 
@@ -594,7 +601,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task SchemaCreationActivatesSearchPathEntry_LaterTableEnsureIsDeferred()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE public.identity_target (id integer NULL);");
         var configured = new NpgsqlConnectionStringBuilder(connectionString)
         {
@@ -738,4 +745,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
 
         return builder;
     }
+
 }

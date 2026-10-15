@@ -1,10 +1,13 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the ColumnsNullProofEligibility PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlColumnsNullProofEligibilityIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
-    private const string NullProofSentinelSql = "CREATE FUNCTION null_proof_sentinel() RETURNS boolean "
-        + "LANGUAGE plpgsql AS $null_proof$ BEGIN RAISE EXCEPTION USING ERRCODE = 'P1901', "
-        + "MESSAGE = 'null_proof_branch_executed'; END $null_proof$;";
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlColumnsNullProofEligibilityIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
 
     /// <summary>Proves valid NOT NULL metadata excludes row queries in matching and repairable-drift paths.</summary>
     /// <param name="varchar">Whether the contract uses varchar rather than timestamp.</param>
@@ -20,7 +23,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var storeType = varchar ? "character varying(800)" : "timestamp without time zone";
         var value = varchar ? "'preserved'" : "'2026-01-02 03:04:05.123456'";
         var comment = drift ? "legacy" : "canonical";
@@ -71,7 +74,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var value = containsNull ? "NULL" : "'preserved'";
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE proof_eligibility_rows (id integer PRIMARY KEY, value character varying(800) NULL); "
@@ -126,7 +129,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var value = containsNull ? "NULL" : "'preserved'";
         var constraint = Fixture.ServerVersion.Major >= 18
             ? "NOT NULL value NOT VALID"
@@ -195,7 +198,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var childValue = containsNull ? "NULL" : "'child'";
         var constraint = Fixture.ServerVersion.Major >= 18
             ? "NOT NULL value NO INHERIT"
@@ -259,7 +262,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var nullability = inherited ? "NULL" : "NOT NULL";
         await ExecuteSqlAsync(connectionString,
             $"CREATE TABLE proof_eligibility_rows (id integer, value character varying(800) {nullability}); "
@@ -325,7 +328,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task NullProofEligibility_RechecksRowsAfterPreflightDml()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE proof_eligibility_rows (id integer PRIMARY KEY, value character varying(800) NULL); "
             + "INSERT INTO proof_eligibility_rows VALUES (1, 'preserved');");
@@ -357,7 +360,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     {
         // Arrange
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        var connectionString = await Fixture.CreateDatabaseAsync(cancellation.Token);
+        var connectionString = await CreateDatabaseAsync(cancellation.Token);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE proof_eligibility_rows (id integer PRIMARY KEY, value timestamp without time zone NULL); "
             + "INSERT INTO proof_eligibility_rows VALUES (1, '2026-01-02 03:04:05.123456');");
@@ -406,7 +409,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, NullProofSentinelSql);
         if (tableExists)
         {
@@ -443,14 +446,6 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         "value", varchar ? typeof(string) : typeof(DateTime), false,
         storeType: varchar ? "character varying(800)" : "timestamp without time zone",
         maxLength: varchar ? 800 : null, comment: "canonical")), SafeMigrationPolicy.RepairIfSafe);
-
-    /// <summary>Builds real catalog predicates without retaining a live catalog snapshot.</summary>
-    private static PostgreSqlSafeMigrationRuntimePlan BuildNullProofEligibilityPlan(
-        DbContext context,
-        SafeMigrationOperation operation
-    ) => new PostgreSqlSafeMigrationCatalogSqlBuilder(
-        context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>())
-        .Build(operation, includeAnalysisEvidence: true, includeTransitionEvidence: true);
 
     /// <summary>Proves the inline CASE branch excludes row SQL using a volatile raising function.</summary>
     private static async Task<string> ExecuteInlineNullProofSentinelAsync(
@@ -497,4 +492,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             plan.NullabilityDataProbe!.BlockedExpression, "null_proof_sentinel()", StringComparison.Ordinal);
         await command.ExecuteNonQueryAsync(CancellationToken.None);
     }
+
 }

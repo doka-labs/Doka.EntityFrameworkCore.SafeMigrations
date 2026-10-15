@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
-public sealed partial class SqlServerSafeMigrationIntegrationTests
+/// <summary>Verifies ddl row deferral SQL Server contracts against isolated databases.</summary>
+public sealed class SqlServerSafeMigrationDdlRowDeferralIntegrationTests : SqlServerSafeMigrationIntegrationTests
 {
+    /// <summary>Creates the feature suite with the assembly-owned SQL Server fixture.</summary>
+    /// <param name="fixture">The shared fixture providing a database per test.</param>
+    public SqlServerSafeMigrationDdlRowDeferralIntegrationTests(
+        SqlServerContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>
     /// Initial constraints defer unknown server-trigger effects without requiring a server-level grant.
     /// </summary>
@@ -712,26 +719,6 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
             default:
                 throw new ArgumentOutOfRangeException(nameof(family));
         }
-    }
-
-    /// <summary>Checks the complete deferred-origin contract rather than only its aggregate report status.</summary>
-    private static void AssertDdlDeferredOrigin(
-        SafeMigrationAssessment assessment,
-        string analysisCode,
-        int operationOrdinal,
-        Type operationType,
-        string? migrationId
-    )
-    {
-        Assert.Equal(SafeMigrationAction.ValidateAtRuntime, assessment.Action);
-        Assert.Equal("runtime_validation_required", assessment.Code);
-        Assert.Equal(analysisCode, assessment.AnalysisCode);
-        Assert.Null(assessment.ObservedState);
-        Assert.Null(assessment.PostconditionSatisfied);
-        var origin = Assert.IsType<SafeMigrationDeferredOrigin>(assessment.DeferredOrigin);
-        Assert.Equal(operationOrdinal, origin.OperationOrdinal);
-        Assert.Equal(operationType.FullName, origin.OperationType);
-        Assert.Equal(migrationId, origin.MigrationId);
     }
 
     /// <summary>Preserves exact status expectations while exposing the operation that failed live projection.</summary>

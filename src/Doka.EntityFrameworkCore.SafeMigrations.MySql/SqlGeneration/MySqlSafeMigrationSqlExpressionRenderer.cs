@@ -1,11 +1,24 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 
+/// <summary>Renders structured MySQL-family expressions without interpreting opaque SQL.</summary>
 internal sealed class MySqlSafeMigrationSqlExpressionRenderer
 {
     private const string ProviderId = "doka_mysql";
+    private const string DefaultHexPrefix = "convert(0x";
+    private const string DefaultStringSuffix = " using utf8mb4)";
+    private const string DefaultBinarySuffix = " using binary)";
+    private const int StackUtf8ByteLimit = 512;
+
+    private static readonly UTF8Encoding s_strictUtf8 = new(
+        encoderShouldEmitUTF8Identifier: false,
+        throwOnInvalidBytes: true);
+
     private readonly ISqlGenerationHelper _sqlGenerationHelper;
     private readonly IRelationalTypeMappingSource _typeMappingSource;
 
+    /// <summary>Initializes the renderer with the active provider's public mappings and identifier syntax.</summary>
+    /// <param name="typeMappingSource">The provider's literal mapping source.</param>
+    /// <param name="sqlGenerationHelper">The provider's identifier delimiter.</param>
     public MySqlSafeMigrationSqlExpressionRenderer(
         IRelationalTypeMappingSource typeMappingSource,
         ISqlGenerationHelper sqlGenerationHelper
@@ -18,6 +31,9 @@ internal sealed class MySqlSafeMigrationSqlExpressionRenderer
         _sqlGenerationHelper = sqlGenerationHelper;
     }
 
+    /// <summary>Renders an ordinary computed, check, or index expression using native literal spelling.</summary>
+    /// <param name="expression">The structured expression to render.</param>
+    /// <returns>The complete SQL expression.</returns>
     public string Render(
         SafeMigrationSqlExpression expression
     )
@@ -26,7 +42,113 @@ internal sealed class MySqlSafeMigrationSqlExpressionRenderer
 
         var builder = new StringBuilder();
         Append(builder, expression);
+
         return builder.ToString();
+    }
+
+    /// <summary>Renders a default expression with SQL-mode-independent UTF-8 string leaves.</summary>
+    /// <param name="expression">The authored default expression, including any nested structured nodes.</param>
+    /// <returns>The complete default expression without rewriting opaque or provider-owned SQL.</returns>
+    internal string RenderDefault(
+        SafeMigrationSqlExpression expression
+    )
+    {
+        ArgumentNullException.ThrowIfNull(expression);
+
+        var builder = new StringBuilder();
+        Append(builder, expression, defaultContext: true);
+
+        return builder.ToString();
+    }
+
+    /// <summary>Renders one default string without depending on the session's backslash interpretation.</summary>
+    /// <param name="value">The valid UTF-16 default text.</param>
+    /// <returns>A canonical UTF-8 conversion, or the existing quoted spelling for an empty string.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="value" /> is null.</exception>
+    /// <exception cref="EncoderFallbackException">The text contains an unpaired UTF-16 surrogate.</exception>
+    internal static string RenderStringDefault(
+        string value
+    )
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        if (value.Length == 0)
+        {
+            // WHY: Empty quoted text is mode-independent and retains the
+            // existing catalog spelling without an ambiguous empty hex token.
+            return "''";
+        }
+
+        var byteCount = s_strictUtf8.GetByteCount(value);
+        var resultLength = checked(DefaultHexPrefix.Length + (byteCount * 2) + DefaultStringSuffix.Length);
+        byte[]? rented = null;
+        var bytes = byteCount <= StackUtf8ByteLimit
+            ? stackalloc byte[byteCount]
+            : (rented = ArrayPool<byte>.Shared.Rent(byteCount)).AsSpan(0, byteCount);
+
+        try
+        {
+            _ = s_strictUtf8.GetBytes(value.AsSpan(), bytes);
+
+            // WHY: A synchronous ref-struct state avoids a captured closure and
+            // intermediate byte/hex strings; only the complete SQL is allocated.
+            return string.Create(
+                resultLength,
+                (ReadOnlySpan<byte>)bytes,
+                static (destination, source) =>
+                {
+                    DefaultHexPrefix.AsSpan().CopyTo(destination);
+                    var hex = destination.Slice(DefaultHexPrefix.Length, source.Length * 2);
+                    if (!Convert.TryToHexStringLower(source, hex, out var written)
+                        || written != hex.Length)
+                    {
+                        throw new InvalidOperationException("A default string could not be encoded as UTF-8 hex.");
+                    }
+
+                    DefaultStringSuffix.AsSpan().CopyTo(destination[(DefaultHexPrefix.Length + hex.Length)..]);
+                });
+        }
+        finally
+        {
+            if (rented is not null)
+            {
+                // WHY: Default text must not remain visible to a later renter;
+                // clear the complete rented array, including its spare capacity.
+                ArrayPool<byte>.Shared.Return(rented, clearArray: true);
+            }
+        }
+    }
+
+    /// <summary>Renders a binary default without passing its bytes through server text-literal serialization.</summary>
+    /// <param name="value">The exact authored bytes, including values that are not valid UTF-8.</param>
+    /// <returns>A canonical binary conversion, or the native empty binary literal for an empty span.</returns>
+    internal static string RenderBinaryDefault(
+        ReadOnlySpan<byte> value
+    )
+    {
+        if (value.IsEmpty)
+        {
+            return "X''";
+        }
+
+        // WHY: Older MariaDB catalog versions can reserialize raw hex defaults
+        // as escaped text. A binary conversion preserves every byte after a
+        // reopen without routing arbitrary binary data through an encoding.
+        return string.Create(
+            checked(DefaultHexPrefix.Length + (value.Length * 2) + DefaultBinarySuffix.Length),
+            value,
+            static (destination, source) =>
+            {
+                DefaultHexPrefix.AsSpan().CopyTo(destination);
+                var hex = destination.Slice(DefaultHexPrefix.Length, source.Length * 2);
+                if (!Convert.TryToHexStringLower(source, hex, out var written)
+                    || written != hex.Length)
+                {
+                    throw new InvalidOperationException("A binary default could not be encoded as hexadecimal.");
+                }
+
+                DefaultBinarySuffix.AsSpan().CopyTo(destination[(DefaultHexPrefix.Length + hex.Length)..]);
+            });
     }
 
     /// <summary>Returns the first provider-specific incompatibility in an expression tree.</summary>
@@ -73,7 +195,8 @@ internal sealed class MySqlSafeMigrationSqlExpressionRenderer
 
     private void Append(
         StringBuilder builder,
-        SafeMigrationSqlExpression expression
+        SafeMigrationSqlExpression expression,
+        bool defaultContext = false
     )
     {
         switch (expression)
@@ -82,54 +205,54 @@ internal sealed class MySqlSafeMigrationSqlExpressionRenderer
                 builder.AppendJoin('.', value.Parts.Select(_sqlGenerationHelper.DelimitIdentifier));
                 break;
             case SafeMigrationSqlLiteralExpression value:
-                AppendLiteral(builder, value.Value, value.StoreType);
+                AppendLiteral(builder, value.Value, value.StoreType, defaultContext);
                 break;
             case SafeMigrationSqlUnaryExpression value:
                 builder.Append(value.Operator == SafeMigrationSqlUnaryOperator.Not ? "(NOT " : "(-");
-                Append(builder, value.Operand);
+                Append(builder, value.Operand, defaultContext);
                 builder.Append(')');
                 break;
             case SafeMigrationSqlBinaryExpression value:
                 builder.Append('(');
-                Append(builder, value.Left);
+                Append(builder, value.Left, defaultContext);
                 builder
                     .Append(' ')
                     .Append(BinaryOperator(value.Operator))
                     .Append(' ');
-                Append(builder, value.Right);
+                Append(builder, value.Right, defaultContext);
                 builder.Append(')');
                 break;
             case SafeMigrationSqlNullTestExpression value:
                 builder.Append('(');
-                Append(builder, value.Operand);
+                Append(builder, value.Operand, defaultContext);
                 builder.Append(value.Negated ? " IS NOT NULL)" : " IS NULL)");
                 break;
             case SafeMigrationSqlBetweenExpression value:
                 builder.Append('(');
-                Append(builder, value.Operand);
+                Append(builder, value.Operand, defaultContext);
                 builder.Append(value.Negated ? " NOT BETWEEN " : " BETWEEN ");
-                Append(builder, value.Lower);
+                Append(builder, value.Lower, defaultContext);
                 builder.Append(" AND ");
-                Append(builder, value.Upper);
+                Append(builder, value.Upper, defaultContext);
                 builder.Append(')');
                 break;
             case SafeMigrationSqlInExpression value:
                 builder.Append('(');
-                Append(builder, value.Operand);
+                Append(builder, value.Operand, defaultContext);
                 builder.Append(value.Negated ? " NOT IN (" : " IN (");
-                AppendList(builder, value.Values);
+                AppendList(builder, value.Values, defaultContext);
                 builder.Append("))");
                 break;
             case SafeMigrationSqlFunctionExpression value:
                 builder
                     .Append(value.Name.ToLowerInvariant())
                     .Append('(');
-                AppendList(builder, value.Arguments);
+                AppendList(builder, value.Arguments, defaultContext);
                 builder.Append(')');
                 break;
             case SafeMigrationSqlCastExpression value:
                 builder.Append("CAST(");
-                Append(builder, value.Operand);
+                Append(builder, value.Operand, defaultContext);
                 builder
                     .Append(" AS ")
                     .Append(MySqlSafeMigrationCastTypeRenderer.Render(value.StoreType))
@@ -142,7 +265,7 @@ internal sealed class MySqlSafeMigrationSqlExpressionRenderer
                 }
 
                 builder.Append('(');
-                Append(builder, value.Operand);
+                Append(builder, value.Operand, defaultContext);
                 builder
                     .Append(" COLLATE ")
                     .Append(_sqlGenerationHelper.DelimitIdentifier(value.Name))
@@ -172,7 +295,8 @@ internal sealed class MySqlSafeMigrationSqlExpressionRenderer
     private void AppendLiteral(
         StringBuilder builder,
         object? value,
-        string? storeType
+        string? storeType,
+        bool defaultContext
     )
     {
         var castType = storeType is null ? null : MySqlSafeMigrationCastTypeRenderer.Render(storeType);
@@ -199,7 +323,18 @@ internal sealed class MySqlSafeMigrationSqlExpressionRenderer
             ?? throw new NotSupportedException(
                 $"MySQL has no type mapping for structured literal '{value.GetType().FullName}'.");
 
-        var literal = mapping.GenerateSqlLiteral(value);
+        // WHY: Native introducer/quoted literals can be reserialized by the
+        // server when stored as DEFAULT expressions. A conversion expression
+        // retains the authored bytes after reopening under another SQL mode.
+        var literal = defaultContext
+            ? value switch
+            {
+                string text => RenderStringDefault(text),
+                char character => RenderStringDefault(character.ToString()),
+                _ => mapping.GenerateSqlLiteral(value),
+            }
+            : mapping.GenerateSqlLiteral(value);
+
         if (castType is null)
         {
             builder.Append(literal);
@@ -237,17 +372,20 @@ internal sealed class MySqlSafeMigrationSqlExpressionRenderer
 
     private void AppendList(
         StringBuilder builder,
-        IReadOnlyList<SafeMigrationSqlExpression> values
+        IReadOnlyList<SafeMigrationSqlExpression> values,
+        bool defaultContext
     )
     {
         for (var index = 0; index < values.Count; index++)
         {
             if (index > 0)
             {
-                builder.Append(", ");
+                // WHY: Server DEFAULT expression metadata uses compact argument
+                // lists. Ordinary expression output retains its established form.
+                builder.Append(defaultContext ? "," : ", ");
             }
 
-            Append(builder, values[index]);
+            Append(builder, values[index], defaultContext);
         }
     }
 

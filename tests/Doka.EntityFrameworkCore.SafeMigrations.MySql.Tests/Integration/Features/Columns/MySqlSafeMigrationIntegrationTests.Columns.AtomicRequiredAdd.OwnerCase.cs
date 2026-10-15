@@ -1,7 +1,12 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the ColumnsAtomicRequiredAddOwnerCase migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlColumnsAtomicRequiredAddOwnerCaseIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlColumnsAtomicRequiredAddOwnerCaseIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     /// <summary>
     /// Required SQL-default eligibility binds mixed-case authored owners through native mode-one identity.
     /// </summary>
@@ -208,7 +213,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 Assert.IsType<InvalidOperationException>(inventoryFailure).Message, StringComparison.Ordinal);
             Assert.Equal(SafeMigrationReportStatus.Blocked, aliasReport.Status);
             Assert.Equal(SafeMigrationAction.RejectDifferent, Assert.Single(aliasReport.Assessments).Action);
-            Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(aliasFailure).Message,
+            Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(aliasFailure).Message,
                 StringComparison.Ordinal);
             Assert.Equal(new AtomicRequiredAddState(1, 1, 1, 0), state);
         }
@@ -223,7 +228,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task AtomicRequiredAddModeZeroDistinctOwnersCannotBorrowRecoveryGuard()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var original = AtomicRequiredAddOperation(table: "MixedItems");
         var other = AtomicRequiredAddOperation(table: "mixeditems");
         var originalGuard = AtomicRequiredAddGuardName(original);
@@ -260,7 +265,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             item => item.ObjectKind == SafeMigrationDatabaseObjectKind.CheckConstraint && item.Name == originalGuard);
         Assert.Equal(SafeMigrationReportStatus.Blocked, otherReport.Status);
         Assert.Equal(SafeMigrationAction.RejectDifferent, Assert.Single(otherReport.Assessments).Action);
-        Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(otherFailure).Message,
+        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(otherFailure).Message,
             StringComparison.Ordinal);
         Assert.Equal(new AtomicRequiredAddState(1, 1, 1, 0), originalState);
         Assert.Equal(new AtomicRequiredAddState(1, 1, 0, 0), otherState);
@@ -276,11 +281,11 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task AtomicRequiredAddModeZeroSnapshotCannotBorrowMatchingShadow(bool requestedLowerCase)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var requestedTable = requestedLowerCase ? "mixeditems" : "MixedItems";
         var shadowTable = requestedLowerCase ? "MixedItems" : "mixeditems";
-        var requested = AtomicRequiredAddOperation(guid: false, table: requestedTable);
-        var shadow = AtomicRequiredAddOperation(guid: false, table: shadowTable);
+        var requested = AtomicRequiredAddOperation(useGuidStorage: false, table: requestedTable);
+        var shadow = AtomicRequiredAddOperation(useGuidStorage: false, table: shadowTable);
         await ExecuteSqlAsync(connectionString, AtomicRequiredAddOriginalTableSql(requestedTable)
             + AtomicRequiredAddStagedTableSql(shadow, guardName: null, expression: "`required_value` IS NOT NULL",
                 columnType: "int", nullable: false)
@@ -339,11 +344,15 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(new AtomicRequiredAddState(1, 0, 0, 1), shadowFinal);
         Assert.Equal(1, preserved);
     }
+}
+
+public abstract partial class MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Declares only test-owned expected objects while preserving each authored owner and target.</summary>
     /// <param name="pending">The complete pending required-column stream used for ownership reconciliation.</param>
     /// <returns>The expected owner definitions followed by the untouched pending column operations.</returns>
-    private static List<MigrationOperation> AtomicRequiredAddOwnerInventoryOperations(
+    protected static List<MigrationOperation> AtomicRequiredAddOwnerInventoryOperations(
         IReadOnlyList<SafeMigrationOperation> pending
     )
     {
@@ -370,6 +379,10 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         return builder.Operations;
     }
+}
+
+public sealed partial class MySqlColumnsAtomicRequiredAddOwnerCaseIntegrationTests : MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Observes case-distinct mode-zero owners without catalog-collation aliases.</summary>
     /// <param name="connectionString">The isolated mode-zero database.</param>

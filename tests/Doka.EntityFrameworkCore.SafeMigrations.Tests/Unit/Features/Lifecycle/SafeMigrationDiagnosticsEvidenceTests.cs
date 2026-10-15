@@ -198,7 +198,7 @@ public sealed class SafeMigrationDiagnosticsEvidenceTests
 
         var exception = Assert.Throws<SafeMigrationPreflightException>(report.ThrowIfBlocked);
 
-        Assert.InRange(exception.Message.Length, 1, 900);
+        Assert.InRange(exception.Message.Length, 1, 2300);
         Assert.DoesNotContain(objectName, exception.Message, StringComparison.Ordinal);
         Assert.DoesNotContain(analysisCode, exception.Message, StringComparison.Ordinal);
         Assert.DoesNotContain(decisionCode, exception.Message, StringComparison.Ordinal);
@@ -244,9 +244,9 @@ public sealed class SafeMigrationDiagnosticsEvidenceTests
         Assert.DoesNotContain('\n', exception.Message);
         Assert.DoesNotContain('\r', exception.Message);
         Assert.DoesNotContain('\u001b', exception.Message);
-        Assert.Contains("column?forged", exception.Message, StringComparison.Ordinal);
-        Assert.Contains("analysis?code", exception.Message, StringComparison.Ordinal);
-        Assert.Contains("decision??code", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("column\\u000Aforged", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("analysis\\u001Bcode", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("decision\\u000D\\u000Acode", exception.Message, StringComparison.Ordinal);
         Assert.Equal(objectName, assessment.ObjectName);
         Assert.Equal(analysisCode, assessment.AnalysisCode);
         Assert.Equal(decisionCode, assessment.DecisionCode);

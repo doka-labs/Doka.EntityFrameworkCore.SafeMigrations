@@ -1,7 +1,12 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the ColumnsNullabilityConcurrency migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlColumnsNullabilityConcurrencyIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlColumnsNullabilityConcurrencyIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     /// <summary>A late committed NULL cannot be coerced after an earlier runtime NULL-free proof.</summary>
     /// <param name="ensure">Whether the target is EnsureColumn rather than an explicit AlterColumn.</param>
     [Theory]
@@ -10,7 +15,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task NullabilityTighteningLateNullWriterFailsWithoutInventingValues(bool ensure)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, NullabilityConcurrencyFixtureSql());
         var observer = new NullabilityConcurrencyWriter(connectionString, insertNull: true);
         await using var context = CreateRuntimeContext(connectionString, observer);
@@ -59,7 +64,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task NullabilityTighteningLateExplicitWriterSurvivesRequiredRepair(bool ensure)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, NullabilityConcurrencyFixtureSql());
         var observer = new NullabilityConcurrencyWriter(connectionString, insertNull: false);
         await using var context = CreateRuntimeContext(connectionString, observer);
@@ -130,6 +135,10 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         return Assert.IsType<SafeMigrationOperation>(Assert.Single(builder.Operations));
     }
+}
+
+public abstract partial class MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Commits an external row exactly after runtime proof setup and before the real guarded body.</summary>
     /// <remarks>
@@ -137,7 +146,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     /// classification. This synchronous checkpoint narrows the interleaving to
     /// the actual proof-to-MODIFY window without sleeps or production hooks.
     /// </remarks>
-    private sealed class NullabilityConcurrencyWriter : DbCommandInterceptor
+    protected sealed class NullabilityConcurrencyWriter : DbCommandInterceptor
     {
         private readonly string _connectionString;
         private readonly bool _insertNull;

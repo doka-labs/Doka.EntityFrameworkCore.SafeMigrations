@@ -1,13 +1,18 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the ColumnsExplicitBackfill migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlColumnsExplicitBackfillIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     /// <summary>A nullable GUID column with no NULL rows needs no invented backfill value.</summary>
     [Fact]
     public async Task ExplicitBackfillGuidTighteningWithoutNullsConvergesAndRemainsIdempotent()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ExplicitBackfillNullableGuidFixture(includeNull: false));
         await using var context = CreateContext(connectionString);
         var operation = ExplicitBackfillGuidTightening();
@@ -47,7 +52,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ExplicitBackfillGuidTighteningWithNullsBlocksBeforeChangingDataOrNullability()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ExplicitBackfillNullableGuidFixture(includeNull: true));
         await using var context = CreateContext(connectionString);
         var operation = ExplicitBackfillGuidTightening();
@@ -65,7 +70,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         // Assert
         Assert.Equal(SafeMigrationAction.RejectDataBlocked, Assert.Single(report.Assessments).Action);
-        Assert.Contains("doka_sm_data_blocked", Assert.IsType<MySqlException>(exception).Message,
+        Assert.Contains("doka_sm_data_blocked", AssertOwnedGuardFailure(exception).Message,
             StringComparison.Ordinal);
         Assert.Equal(1, nullRows);
         Assert.Equal(0, required);
@@ -76,7 +81,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ExplicitBackfillGuidTighteningRejectsNullInsertedAfterPreflight()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ExplicitBackfillNullableGuidFixture(includeNull: false));
         await using var context = CreateContext(connectionString);
         var operation = ExplicitBackfillGuidTightening();
@@ -96,7 +101,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
-        Assert.Contains("doka_sm_data_blocked", Assert.IsType<MySqlException>(exception).Message,
+        Assert.Contains("doka_sm_data_blocked", AssertOwnedGuardFailure(exception).Message,
             StringComparison.Ordinal);
         Assert.Equal(1, nullRows);
         Assert.Equal(0, required);
@@ -107,7 +112,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ExplicitBackfillGuidAddRejectsRowInsertedAfterPreflight()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `explicit_backfill_items` (`value` int NOT NULL);");
         await using var context = CreateContext(connectionString);
@@ -129,7 +134,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         // Assert
         Assert.Equal(SafeMigrationAction.Apply, Assert.Single(report.Assessments).Action);
-        Assert.Contains("doka_sm_data_blocked", Assert.IsType<MySqlException>(exception).Message,
+        Assert.Contains("doka_sm_data_blocked", AssertOwnedGuardFailure(exception).Message,
             StringComparison.Ordinal);
         Assert.Equal(0, idColumns);
         Assert.Equal(1, preserved);
@@ -140,7 +145,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ExplicitBackfillGuidTighteningPreservesDeclaredDefaultAndExistingValues()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ExplicitBackfillNullableGuidFixture(includeNull: true));
         await using var context = CreateContext(connectionString);
         var replacement = Guid.Parse("00000000-0000-0000-0000-000000000001");
@@ -181,7 +186,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ExplicitBackfillGuidAddOnEmptyTableAllowsPrimaryKeyReplacementAndRerun()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `explicit_backfill_items` (`value` int NOT NULL PRIMARY KEY) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
@@ -226,7 +231,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ExplicitBackfillGuidAddOnPopulatedTableRejectsRuntimeWithoutFabricatingIds()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `explicit_backfill_items` (`value` int NOT NULL); "
             + "INSERT INTO `explicit_backfill_items` (`value`) VALUES (7);");
@@ -248,7 +253,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         // Assert
         Assert.Equal(SafeMigrationAction.RejectDataBlocked, Assert.Single(report.Assessments).Action);
-        Assert.Contains("doka_sm_data_blocked", Assert.IsType<MySqlException>(exception).Message,
+        Assert.Contains("doka_sm_data_blocked", AssertOwnedGuardFailure(exception).Message,
             StringComparison.Ordinal);
         Assert.Equal(0, idColumns);
         Assert.Equal(1, preserved);
@@ -261,7 +266,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ExplicitBackfillCallerSuppliedStagedGuidsAllowRequiredColumn()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `explicit_backfill_items` (`value` int NOT NULL); "
             + "INSERT INTO `explicit_backfill_items` (`value`) VALUES (1), (2);");
@@ -314,7 +319,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ExplicitBackfillGuidTighteningRejectsStillLiveSetNullForeignKey(bool onUpdate)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ExplicitBackfillGuidForeignKeyFixture(
             onUpdate ? ReferentialAction.NoAction : ReferentialAction.SetNull,
             onUpdate ? ReferentialAction.SetNull : ReferentialAction.NoAction));
@@ -339,7 +344,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
         Assert.Equal("alter_not_approved", assessment.Code);
         Assert.Equal("column_set_null_dependency", assessment.AnalysisCode);
-        Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(exception).Message,
+        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(exception).Message,
             StringComparison.Ordinal);
         Assert.Equal(0, required);
         Assert.Equal(1, preserved);
@@ -351,7 +356,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ExplicitBackfillGuidTighteningAfterAllSetNullDropsConvergesAndReruns()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ExplicitBackfillGuidForeignKeyFixture(
             ReferentialAction.SetNull, ReferentialAction.NoAction, secondDependency: true));
 
@@ -396,7 +401,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ExplicitBackfillGuidTighteningAfterPartialSetNullDropRemainsBlocked()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ExplicitBackfillGuidForeignKeyFixture(
             ReferentialAction.SetNull, ReferentialAction.NoAction, secondDependency: true));
 
@@ -421,7 +426,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(SafeMigrationAction.RejectDifferent, report.Assessments[1].Action);
         Assert.Equal("alter_not_approved", report.Assessments[1].Code);
         Assert.Equal("column_set_null_dependency", report.Assessments[1].AnalysisCode);
-        Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(exception).Message,
+        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(exception).Message,
             StringComparison.Ordinal);
         Assert.Equal(0, required);
         Assert.Equal(1, preserved);
@@ -433,7 +438,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ExplicitBackfillGuidTighteningPreservesCompatibleCascadeForeignKey()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ExplicitBackfillGuidForeignKeyFixture(
             ReferentialAction.Cascade, ReferentialAction.NoAction));
 
@@ -470,7 +475,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ExplicitBackfillGuidTighteningRejectsSetNullForeignKeyRecreatedAfterDrop(bool reusePhysicalName)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ExplicitBackfillGuidForeignKeyFixture(
             ReferentialAction.SetNull, ReferentialAction.NoAction));
 
@@ -500,7 +505,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(SafeMigrationAction.RejectDifferent, report.Assessments[2].Action);
         Assert.Equal("alter_not_approved", report.Assessments[2].Code);
         Assert.Equal("column_set_null_dependency", report.Assessments[2].AnalysisCode);
-        Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(exception).Message,
+        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(exception).Message,
             StringComparison.Ordinal);
         Assert.Equal(0, required);
         Assert.Equal(1, preserved);
@@ -521,7 +526,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         if (recreated)
         {
             await ExecuteSqlAsync(connectionString,
@@ -551,7 +556,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(SafeMigrationAction.RejectDifferent, alteration.Action);
         Assert.Equal("alter_not_approved", alteration.Code);
         Assert.Equal("column_set_null_dependency", alteration.AnalysisCode);
-        Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(exception).Message,
+        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(exception).Message,
             StringComparison.Ordinal);
         Assert.Equal(0, required);
         Assert.Equal(0, rows);
@@ -563,7 +568,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ExplicitBackfillGuidTighteningAfterSetNullDropsPreservesDeclaredRowBackfill()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ExplicitBackfillGuidForeignKeyFixture(
             ReferentialAction.SetNull, ReferentialAction.NoAction, secondDependency: true)
             + " INSERT INTO `explicit_backfill_owners` (`id`) VALUES ('00000000-0000-0000-0000-000000000001');"
@@ -676,7 +681,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ExplicitBackfillGuidEnsureRejectsStillLiveSetNullForeignKey(bool onUpdate)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ExplicitBackfillGuidForeignKeyFixture(
             onUpdate ? ReferentialAction.NoAction : ReferentialAction.SetNull,
             onUpdate ? ReferentialAction.SetNull : ReferentialAction.NoAction));
@@ -701,7 +706,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
         Assert.Equal("different_no_safe_repair", assessment.Code);
         Assert.Equal("column_set_null_dependency", assessment.AnalysisCode);
-        Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(exception).Message,
+        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(exception).Message,
             StringComparison.Ordinal);
         Assert.Equal(0, required);
         Assert.Equal(1, preserved);
@@ -713,7 +718,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ExplicitBackfillGuidEnsureAfterAllSetNullDropsConvergesAndReruns()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ExplicitBackfillGuidForeignKeyFixture(
             ReferentialAction.SetNull, ReferentialAction.NoAction, secondDependency: true));
 
@@ -758,7 +763,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ExplicitBackfillGuidEnsurePreservesCompatibleCascadeForeignKey()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ExplicitBackfillGuidForeignKeyFixture(
             ReferentialAction.Cascade, ReferentialAction.NoAction));
 
@@ -792,7 +797,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ExplicitBackfillGuidEnsureWithNullRowsRemainsDataBlocked()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ExplicitBackfillNullableGuidFixture(includeNull: true));
         await using var context = CreateContext(connectionString);
         var operation = ExplicitBackfillGuidEnsure();
@@ -810,7 +815,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         // Assert
         Assert.Equal(SafeMigrationAction.RejectDataBlocked, Assert.Single(report.Assessments).Action);
-        Assert.Contains("doka_sm_data_blocked", Assert.IsType<MySqlException>(exception).Message,
+        Assert.Contains("doka_sm_data_blocked", AssertOwnedGuardFailure(exception).Message,
             StringComparison.Ordinal);
         Assert.Equal(1, nullRows);
         Assert.Equal(0, required);
@@ -824,7 +829,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ExplicitBackfillGuidEnsureNullableTargetRequiresPrimaryKeyRemoval(bool dropPrimaryKey)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `explicit_backfill_items` (`value` int NOT NULL, `owner_id` char(36) NOT NULL PRIMARY KEY) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
@@ -866,7 +871,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         }
         else
         {
-            Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(exception).Message,
+            Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(exception).Message,
                 StringComparison.Ordinal);
         }
 
@@ -889,7 +894,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ExplicitBackfillNullableGuidFixture(includeNull: false)
             + (alreadyMatching
                 ? " ALTER TABLE `explicit_backfill_items` MODIFY `owner_id` char(36) NOT NULL;"
@@ -921,7 +926,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         }
         else
         {
-            Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(exception).Message,
+            Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(exception).Message,
                 StringComparison.Ordinal);
         }
 

@@ -1,11 +1,19 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Verifies operation-local NULL-proof safety against generic live MySQL and MariaDB databases.</summary>
-public sealed partial class MySqlSafeMigrationIntegrationTests
+public abstract partial class MySqlSafeMigrationIntegrationTests
 {
-    private const string NullProofVariablesClearedSql = "SELECT @doka_sm_nullability_blocked IS NULL "
+    protected const string NullProofVariablesClearedSql = "SELECT @doka_sm_nullability_blocked IS NULL "
         + "AND @doka_sm_data_blocked IS NULL AND @doka_sm_data_probe_required IS NULL "
         + "AND @doka_sm_column_repair_eligible IS NULL;";
+}
+
+/// <summary>Exercises the ColumnsNullProof migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlColumnsNullProofIntegrationTests : MySqlSafeMigrationIntegrationTests
+{
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlColumnsNullProofIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
 
     /// <summary>Repairs nullable scalar columns without NULL rows and safely replays on the same session.</summary>
     /// <param name="textColumn">Whether the live column contains strings rather than integers.</param>
@@ -17,7 +25,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var storeType = textColumn ? "varchar(40)" : "int";
         var values = textColumn ? "(1, 'preserved'), (2, '')" : "(1, 7), (2, 0)";
         var preservedPredicate = textColumn
@@ -113,7 +121,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var storeType = textColumn ? "varchar(40)" : "int";
         var firstValue = textColumn ? "'preserved'" : "7";
         var preservedPredicate = textColumn
@@ -159,7 +167,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var sessionAfter = await ContextScalarIntAsync(context, "SELECT CONNECTION_ID();");
 
         // Assert
-        var providerException = Assert.IsType<MySqlException>(exception);
+        var providerException = AssertOwnedGuardFailure(exception);
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -189,7 +197,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task RuntimeNullProof_MatchingRequiredColumnIsNoOp()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `null_proof_rows` (`id` int NOT NULL, `value` int NOT NULL, PRIMARY KEY (`id`)); "
@@ -232,7 +240,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task RuntimeNullProof_MissingColumnCreatesWithoutAnIdentifierDependentNullQuery()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE `null_proof_rows` (`id` int NOT NULL);");
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
@@ -281,7 +289,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var firstValue = containsOverlength ? "'too-long'" : "'fits'";
         var secondValue = containsNull ? "NULL" : "''";
         var blocked = containsNull || containsOverlength;
@@ -335,7 +343,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         if (blocked)
         {
-            var providerException = Assert.IsType<MySqlException>(exception);
+            var providerException = AssertOwnedGuardFailure(exception);
 
             Assert.Contains("doka_sm_data_blocked", providerException.Message, StringComparison.Ordinal);
         }
@@ -383,7 +391,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `null_proof_rows` (`id` int NOT NULL, `first_value` int NULL, `second_value` int NULL, "
@@ -422,7 +430,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var sessionAfter = await ContextScalarIntAsync(context, "SELECT CONNECTION_ID();");
 
         // Assert
-        var providerException = Assert.IsType<MySqlException>(exception);
+        var providerException = AssertOwnedGuardFailure(exception);
 
         Assert.Contains("doka_sm_data_blocked", providerException.Message, StringComparison.Ordinal);
         Assert.Equal(1, cleaned);
@@ -460,7 +468,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task RuntimeNullProof_IneligibleTypeRejectsWithoutMutation()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `null_proof_rows` (`id` int NOT NULL, `value` varchar(40) NULL COMMENT 'legacy'); "
@@ -484,7 +492,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var cleaned = await ContextScalarIntAsync(context, NullProofVariablesClearedSql);
 
         // Assert
-        var providerException = Assert.IsType<MySqlException>(exception);
+        var providerException = AssertOwnedGuardFailure(exception);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationObservedState.Different, Assert.Single(report.Assessments).ObservedState);
@@ -518,7 +526,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var database = new MySqlConnectionStringBuilder(connectionString).Database;
         var qualifier = caseMismatch ? database.ToUpperInvariant() : "foreign_null_proof_database";
         await ExecuteSqlAsync(
@@ -545,7 +553,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var cleaned = await ContextScalarIntAsync(context, NullProofVariablesClearedSql);
 
         // Assert
-        var providerException = Assert.IsType<MySqlException>(exception);
+        var providerException = AssertOwnedGuardFailure(exception);
         var assessment = Assert.Single(report.Assessments);
 
         Assert.NotEqual(database, qualifier);
@@ -582,7 +590,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `null_proof_rows` (`id` int NOT NULL, `value` varchar(40) NULL COMMENT 'legacy', "
@@ -729,9 +737,13 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             cleanedAfterRecovery,
             cleanedAfterReplay);
     }
+}
+
+public abstract partial class MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Carries immutable interrupted-proof evidence and successful same-session retry and replay.</summary>
-    private sealed record RuntimeNullProofRecovery(
+    protected sealed record RuntimeNullProofRecovery(
         Exception? Exception,
         long BodiesBeforeRecovery,
         RuntimeCleanupProof Cleanup,

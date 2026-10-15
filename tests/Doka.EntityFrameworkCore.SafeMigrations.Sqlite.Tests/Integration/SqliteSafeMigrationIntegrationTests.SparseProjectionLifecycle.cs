@@ -1,6 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
-public sealed partial class SqliteSafeMigrationCatalogIntegrationTests
+/// <summary>Exercises sparse projection lifecycle with independently owned SQLite state.</summary>
+public sealed class SqliteSafeMigrationSparseProjectionLifecycleIntegrationTests
+    : SqliteSafeMigrationCatalogIntegrationTests
 {
     /// <summary>A newly accepted index is dropped once, without reviving immutable live state on replay.</summary>
     /// <param name="createTable">Whether the owner is new instead of an incompletely projected live table.</param>

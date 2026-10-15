@@ -1,7 +1,12 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the ColumnsNullDefaultIdentity migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlColumnsNullDefaultIdentityIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlColumnsNullDefaultIdentityIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     /// <summary>SQL NULL defaults retain exact source and target identity, including expression defaults.</summary>
     /// <param name="expressionDefault">Whether the original NULL default uses expression syntax.</param>
     /// <param name="literalNull">Whether the expected contract explicitly specifies a NULL literal.</param>
@@ -22,7 +27,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var defaultSql = expressionDefault ? "(NULL)" : "NULL";
         var storeType = alreadyTarget ? "varchar(40)" : "varchar(20)";
         await ExecuteSqlAsync(connectionString,
@@ -85,7 +90,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var defaultSql = expressionDefault ? "('NULL')" : "'NULL'";
         var width = alreadyTarget ? 40 : 20;
         await ExecuteSqlAsync(connectionString,
@@ -111,8 +116,8 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(SafeMigrationObservedState.Different, analysis.ObservedState);
         Assert.Equal(SafeMigrationRepairCapability.None, analysis.RepairCapability);
         Assert.False(analysis.RequiresLiveDataProof);
-        Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(failure).Message, StringComparison.Ordinal);
-        Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(replayFailure).Message,
+        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message, StringComparison.Ordinal);
+        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(replayFailure).Message,
             StringComparison.Ordinal);
         Assert.Equal(width, unchangedWidth);
         Assert.Equal("4E554C4C", value);
@@ -126,7 +131,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task NullDefaultIdentity_NewColumnSatisfiesPostcondition(bool literalNull)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE `null_defaults` (`id` int NOT NULL);");
         var operation = new SafeMigrationOperation(
             new EnsureColumnIntent("null_defaults", NullDefaultColumn("varchar(40)", literalNull)),
@@ -154,7 +159,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task NullDefaultIdentity_RequiredColumnPreservesAbsentDefaultContract()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var operation = new SafeMigrationOperation(
             new EnsureColumnIntent("null_defaults", new ExpectedColumnDefinition("value", typeof(string), false,
                 "varchar(40)")),
@@ -198,10 +203,10 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         {
             Assert.Null(creationFailure);
             Assert.Equal(SafeMigrationObservedState.Different, Assert.Single(results).ObservedState);
-            Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(failure).Message,
+            Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
                 StringComparison.Ordinal);
 
-            Assert.IsType<MySqlException>(replayFailure);
+            AssertOwnedGuardFailure(replayFailure);
             Assert.Equal(1, required);
         }
 

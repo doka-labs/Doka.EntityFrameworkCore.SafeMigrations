@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
-public sealed partial class SqliteSafeMigrationCatalogIntegrationTests
+/// <summary>Exercises migrations with independently owned SQLite state.</summary>
+public sealed class SqliteSafeMigrationMigrationsIntegrationTests : SqliteSafeMigrationCatalogIntegrationTests
 {
     [Fact]
     public async Task Migrator_MixesProviderAndSafeOperationsAndWritesHistoryAfterSuccess()

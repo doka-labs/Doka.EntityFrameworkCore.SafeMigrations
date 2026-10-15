@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the ConstraintsProjectedLivePrerequisites PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>A new nullable endpoint references an unchanged live primary key without parent convergence.</summary>
     /// <param name="onDelete">The independently authored deletion action.</param>
     [Theory]
@@ -13,7 +20,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY); "
             + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); "
@@ -74,7 +81,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, parentSql
             + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); "
             + "INSERT INTO live_child VALUES (1), (2);");
@@ -106,7 +113,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task ForeignKeyNewNullableNonNullDefaultDoesNotBorrowNullRowProof()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY); "
             + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); "
@@ -137,7 +144,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task MixedIndexNewNullableColumnUsesUnchangedLiveMember(bool unique)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE mixed_columns (id integer NOT NULL PRIMARY KEY); "
             + "INSERT INTO mixed_columns VALUES (1), (2);");
@@ -169,7 +176,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task ForeignKeyNewNullableColumnRechecksRuntimeOrphansAfterPreflight()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY); "
             + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); "
@@ -215,7 +222,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task ForeignKeyNewNullableColumnResolvesCurrentSchemaAliases(bool qualifyChild)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY); "
             + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES (1);");
@@ -251,7 +258,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task EmptyTableMixedConstraintUsesUnchangedLiveColumn(string kind)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE mixed_columns (id integer NOT NULL);");
 
         await using var context = CreateContext(connectionString);
@@ -295,7 +302,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task NewNullableIndexDoesNotApproveNullsNotDistinctDuplicates()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE mixed_columns (id integer NOT NULL PRIMARY KEY); "
             + "INSERT INTO mixed_columns VALUES (1), (2);");
@@ -327,7 +334,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task ForeignKeyNewNullableColumnHonorsExactLiveCandidateLifetimes(bool survivingAlias)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE live_parent (id uuid NOT NULL, CONSTRAINT pk_native PRIMARY KEY (id)); "
             + (survivingAlias ? "CREATE UNIQUE INDEX ux_surviving ON live_parent (id); " : "")
@@ -367,7 +374,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task ForeignKeyNewNullableColumnQualifiesNativeCollation(string childCollation, bool compatible)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE live_parent (id text COLLATE \"C\" NOT NULL PRIMARY KEY); "
             + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES (1);");
@@ -401,7 +408,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task ForeignKeyNewNullableColumnReplacesExactlyDroppedOwnedForeignKey()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY); "
             + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY, old_parent_id uuid NULL, "
@@ -444,7 +451,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task ForeignKeyNewNullableColumnRejectsDifferentNondeterministicCollations()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE COLLATION nd_parent (provider = icu, locale = 'und-u-ks-level2', deterministic = false); "
             + "CREATE COLLATION nd_child (provider = icu, locale = 'und-u-ks-level2', deterministic = false); "
@@ -485,7 +492,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task ForeignKeyNewNullableColumnRetainsUncertifiedRenameBoundary(bool qualifiedChild)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY); "
             + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES (1); "
@@ -523,7 +530,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task ForeignKeyNewNullableColumnQualifiesBuiltinIntegerEqualityFamily()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE live_parent (id bigint NOT NULL PRIMARY KEY); "
             + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES (1);");
@@ -551,7 +558,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task ForeignKeyNewTableUsesUnchangedLivePrincipalWithoutInlineConstraint()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY);");
 
         await using var context = CreateContext(connectionString);
@@ -592,7 +599,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task EmptyMixedCheckDoesNotApproveIncompatibleLiveOperandType()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE mixed_columns (id text NOT NULL);");
 
         await using var context = CreateContext(connectionString);
@@ -617,4 +624,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         Assert.Equal("42883", exception.SqlState);
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
     }
+
 }

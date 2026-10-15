@@ -39,6 +39,7 @@ internal sealed record SafeMigrationCanonicalContextConfiguration(
 
         throw new InvalidOperationException(
             "SafeMigrations services are already configured with a different provider, "
-            + "baseline generator, or canonical migration context.");
+            + "baseline generator, or canonical migration context. Configure one provider, baseline generator, "
+            + "and canonical context per internal service provider; keep incompatible context registrations separate.");
     }
 }

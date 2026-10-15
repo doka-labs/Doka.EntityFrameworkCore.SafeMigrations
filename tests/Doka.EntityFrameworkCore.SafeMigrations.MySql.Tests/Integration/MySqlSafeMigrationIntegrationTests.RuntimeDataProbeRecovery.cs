@@ -1,7 +1,12 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the RuntimeDataProbeRecovery migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlRuntimeDataProbeRecoveryIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlRuntimeDataProbeRecoveryIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     private const string RuntimeProbeColumnLengthSql = "SELECT CHARACTER_MAXIMUM_LENGTH "
         + "FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
         + "AND TABLE_NAME = 'runtime_probe_rows' AND COLUMN_NAME = 'Code';";
@@ -26,7 +31,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task RuntimeDataProbeSetupFailure_PreservesRowsAndRecoversSameSession(string failureMode)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `runtime_probe_rows` (`Id` int NOT NULL, `Code` varchar(20) NULL, "
@@ -165,11 +170,15 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             preservedAfter,
             observer.GuardedBodyCount);
     }
+}
+
+public abstract partial class MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>
     /// Carries immutable before-retry proofs and successful same-session DataProbe recovery evidence.
     /// </summary>
-    private sealed record RuntimeDataProbeRecovery(
+    protected sealed record RuntimeDataProbeRecovery(
         Exception? Exception,
         long BodiesBeforeRecovery,
         RuntimeCleanupProof Cleanup,

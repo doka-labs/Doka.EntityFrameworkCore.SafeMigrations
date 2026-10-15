@@ -310,7 +310,9 @@ public sealed class SqliteSafeMigrationLosslessAlterIntegrationTests : SqliteInt
         Assert.Equal(true, modelGeneration);
         Assert.Equal(SafeMigrationAction.RejectDifferent, report.Assessments[1].Action);
         var rejection = Assert.IsType<InvalidOperationException>(executionError);
-        Assert.Contains("SQLite SafeMigrations blocked AlterColumn", rejection.Message, StringComparison.Ordinal);
+        Assert.StartsWith("doka_sm_different", rejection.Message, StringComparison.Ordinal);
+        Assert.Contains("AlterColumn", rejection.Message, StringComparison.Ordinal);
+        Assert.Contains("lossless_alter_records", rejection.Message, StringComparison.Ordinal);
         Assert.Contains("decision=alter_not_approved", rejection.Message, StringComparison.Ordinal);
         Assert.Equal(0, ddlCounter.Count);
         Assert.Equal(tableExists ? 1 : 0, tableCount);

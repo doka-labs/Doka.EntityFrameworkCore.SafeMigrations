@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
-public sealed partial class SqlServerSafeMigrationIntegrationTests
+/// <summary>Verifies included indexes SQL Server contracts against isolated databases.</summary>
+public sealed class SqlServerSafeMigrationIncludedIndexesIntegrationTests : SqlServerSafeMigrationIntegrationTests
 {
+    /// <summary>Creates the feature suite with the assembly-owned SQL Server fixture.</summary>
+    /// <param name="fixture">The shared fixture providing a database per test.</param>
+    public SqlServerSafeMigrationIncludedIndexesIntegrationTests(
+        SqlServerContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>
     /// Creates a covering index and recognizes its included column on replay.
     /// </summary>

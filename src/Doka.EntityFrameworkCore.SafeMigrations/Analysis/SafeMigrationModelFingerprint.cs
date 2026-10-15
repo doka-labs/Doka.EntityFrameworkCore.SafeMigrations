@@ -39,6 +39,16 @@ public static partial class SafeMigrationModelFingerprint
     public static void ValidateExpected(
         string actualFingerprint,
         string? expectedFingerprint
+    ) => ValidateExpected(actualFingerprint, expectedFingerprint, contextType: null);
+
+    /// <summary>Validates the same fingerprint contract with known context for error presentation only.</summary>
+    /// <param name="actualFingerprint">The computed runtime model fingerprint.</param>
+    /// <param name="expectedFingerprint">The optional canonical migration model fingerprint.</param>
+    /// <param name="contextType">The known runtime context, or null when not available at this boundary.</param>
+    internal static void ValidateExpected(
+        string actualFingerprint,
+        string? expectedFingerprint,
+        Type? contextType
     )
     {
         ValidateFingerprint(actualFingerprint, nameof(actualFingerprint));
@@ -52,7 +62,7 @@ public static partial class SafeMigrationModelFingerprint
 
         if (!StringComparer.Ordinal.Equals(actualFingerprint, expectedFingerprint))
         {
-            throw new SafeMigrationModelMismatchException(expectedFingerprint, actualFingerprint);
+            throw new SafeMigrationModelMismatchException(expectedFingerprint, actualFingerprint, contextType);
         }
     }
 
@@ -103,7 +113,19 @@ public sealed class SafeMigrationModelMismatchException : InvalidOperationExcept
     public SafeMigrationModelMismatchException(
         string expectedFingerprint,
         string actualFingerprint
-    ) : base("The runtime DbContext model does not match the canonical migration model fingerprint.")
+    ) : this(expectedFingerprint, actualFingerprint, contextType: null)
+    {
+    }
+
+    /// <summary>Initializes the unchanged mismatch contract with a known, bounded runtime context label.</summary>
+    /// <param name="expectedFingerprint">The canonical migration model fingerprint.</param>
+    /// <param name="actualFingerprint">The computed runtime model fingerprint.</param>
+    /// <param name="contextType">The known runtime context, or null when unavailable.</param>
+    internal SafeMigrationModelMismatchException(
+        string expectedFingerprint,
+        string actualFingerprint,
+        Type? contextType
+    ) : base(CreateMessage(contextType))
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(expectedFingerprint);
         ArgumentException.ThrowIfNullOrWhiteSpace(actualFingerprint);
@@ -117,4 +139,21 @@ public sealed class SafeMigrationModelMismatchException : InvalidOperationExcept
 
     /// <summary>Gets the actual fingerprint.</summary>
     public string ActualFingerprint { get; }
+
+    /// <summary>Formats a context identifier only; fingerprint values remain exact property evidence.</summary>
+    private static string CreateMessage(
+        Type? contextType
+    )
+    {
+        var context = contextType is null
+            ? "The runtime DbContext model"
+            : "The runtime DbContext '"
+                + SafeMigrationDiagnosticMessages.BoundForDisplay(contextType.FullName ?? contextType.Name)
+                + "' model";
+
+        return context + " does not match the canonical migration model fingerprint. "
+            + "This is a model-contract mismatch, not a live database comparison. Compare the runtime and migration "
+            + "model configuration, provider, and canonical context before applying migrations; use the "
+            + "ExpectedFingerprint and ActualFingerprint properties for exact contract evidence.";
+    }
 }

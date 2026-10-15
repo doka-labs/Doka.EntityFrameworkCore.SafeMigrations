@@ -330,6 +330,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                         operationOffset,
                         cancellationToken);
 
+                    await FindBinaryDefaultProofsAsync(
+                        connection, plans, shortCircuitStates, maximumPayloadBytes,
+                        commandTimeout, operationOffset, cancellationToken);
+
                     await FindStateEvaluationGuardStatesAsync(
                         connection,
                         plans,

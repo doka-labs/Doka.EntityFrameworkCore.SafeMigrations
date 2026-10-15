@@ -1,7 +1,12 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the ColumnsRequiredDefaultsProjectedAdds migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlColumnsRequiredDefaultsProjectedAddsIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlColumnsRequiredDefaultsProjectedAddsIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     /// <summary>
     /// Fresh projected ENUM additions respect captured double-quoted literal syntax before target DDL.
     /// </summary>
@@ -12,7 +17,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task RequiredDefaultProjectedEnumAddUsesCapturedDoubleQuoteMode(bool ansiQuotes)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = 'STRICT_ALL_TABLES"
@@ -45,7 +50,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             report.Assessments[1].Action);
         if (ansiQuotes)
         {
-            Assert.Contains("doka_sm_unsupported", Assert.IsType<MySqlException>(failure).Message,
+            Assert.Contains("doka_sm_unsupported", AssertOwnedGuardFailure(failure).Message,
                 StringComparison.Ordinal);
             Assert.Equal(new AtomicRequiredAddState(0, 0, 0, 0), state);
         }
@@ -73,7 +78,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task RequiredDefaultProjectedNoDefaultAddUsesCapturedEnvironment(string environment)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         var strictSession = environment != "permissive";
@@ -81,7 +86,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         await AtomicRequiredAddSessionSqlAsync(context,
             "SET SESSION sql_mode = '" + (strictSession ? "STRICT_ALL_TABLES" : "") + "'; "
             + "SET SESSION default_storage_engine = " + engine + ";");
-        var column = AtomicRequiredAddOperation(guid: false, table: "required_projected_items");
+        var column = AtomicRequiredAddOperation(useGuidStorage: false, table: "required_projected_items");
         var operations = RequiredDefaultsProjectedOwnerOperations(column);
         var allowed = environment == "strict-innodb";
 
@@ -108,26 +113,30 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         }
         else
         {
-            Assert.Contains("doka_sm_unsupported", Assert.IsType<MySqlException>(failure).Message,
+            Assert.Contains("doka_sm_unsupported", AssertOwnedGuardFailure(failure).Message,
                 StringComparison.Ordinal);
         }
 
         Assert.Equal(engine, actualEngine);
         Assert.Equal(allowed ? new AtomicRequiredAddState(1, 0, 0, 0) : new AtomicRequiredAddState(0, 0, 0, 0), state);
     }
+}
+
+public sealed partial class MySqlColumnsRequiredDefaultsProjectedAddsIntegrationTests : MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Fresh MariaDB owners cannot certify a no-default add with session CHECK protection disabled.</summary>
     [AtomicAddMariaDbFact]
     public async Task RequiredDefaultProjectedNoDefaultAddRejectsDisabledMariaCheckProtection()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         await AtomicRequiredAddSessionSqlAsync(context,
             "SET SESSION sql_mode = 'STRICT_ALL_TABLES'; SET SESSION default_storage_engine = InnoDB; "
             + "SET SESSION check_constraint_checks = OFF;");
-        var column = AtomicRequiredAddOperation(guid: false, table: "required_projected_items");
+        var column = AtomicRequiredAddOperation(useGuidStorage: false, table: "required_projected_items");
         var operations = RequiredDefaultsProjectedOwnerOperations(column);
 
         // Act
@@ -143,10 +152,14 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
         Assert.Equal(SafeMigrationAction.RejectUnsupported, report.Assessments[1].Action);
-        Assert.Contains("doka_sm_unsupported", Assert.IsType<MySqlException>(failure).Message,
+        Assert.Contains("doka_sm_unsupported", AssertOwnedGuardFailure(failure).Message,
             StringComparison.Ordinal);
         Assert.Equal(new AtomicRequiredAddState(0, 0, 0, 0), state);
     }
+}
+
+public sealed partial class MySqlColumnsRequiredDefaultsProjectedAddsIntegrationTests : MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>
     /// A dropped matching TIMESTAMP target cannot borrow its former completion for an unavailable required add.
@@ -155,7 +168,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task RequiredDefaultProjectedTimestampDropThenEnsureRejectsUnavailableMissingAdd()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         // WHY: Creating the original TIMESTAMP with explicit semantics avoids
@@ -197,7 +210,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
         Assert.Equal(SafeMigrationAction.RejectUnsupported, report.Assessments[1].Action);
-        Assert.Contains("doka_sm_unsupported", Assert.IsType<MySqlException>(failure).Message,
+        Assert.Contains("doka_sm_unsupported", AssertOwnedGuardFailure(failure).Message,
             StringComparison.Ordinal);
         Assert.Equal(0, targetColumns);
         Assert.Equal(1, retainedKeys);

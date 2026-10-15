@@ -62,6 +62,7 @@ internal static class MySqlSafeMigrationServiceCollectionDecorator
             IServiceProvider provider
         ) => new(
             CreateProviderGenerator(provider, providerDescriptor),
-            provider.GetRequiredService<MySqlSafeMigrationPlanCapture>());
+            provider.GetRequiredService<MySqlSafeMigrationPlanCapture>(),
+            provider.GetRequiredService<MigrationsSqlGeneratorDependencies>());
     }
 }

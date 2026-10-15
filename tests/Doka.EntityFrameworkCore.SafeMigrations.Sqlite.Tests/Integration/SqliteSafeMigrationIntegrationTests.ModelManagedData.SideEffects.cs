@@ -1,6 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
-public sealed partial class SqliteSafeMigrationCatalogIntegrationTests
+/// <summary>Exercises model managed data side effects with independently owned SQLite state.</summary>
+public sealed partial class SqliteSafeMigrationModelManagedDataSideEffectsIntegrationTests
+    : SqliteSafeMigrationCatalogIntegrationTests
 {
     /// <summary>
     /// Requires runtime validation when a managed write can invalidate the immutable live row snapshot.

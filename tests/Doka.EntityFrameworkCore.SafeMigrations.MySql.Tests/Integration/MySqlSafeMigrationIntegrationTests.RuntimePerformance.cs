@@ -1,7 +1,12 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the RuntimePerformance migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlRuntimePerformanceIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     private const int MeasuredRuntimeSampleCount = 3;
     private const int RuntimeOperationCount = (MySqlRuntimeConvergenceMigration.TableCount * 18) - 1;
     private static readonly JsonSerializerOptions s_runtimeSerializerOptions = new() { WriteIndented = true };
@@ -53,7 +58,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task RuntimeSetupFailure_PreventsBodyAndRecoversSameSession()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var observer = new MySqlRuntimeCommandInterceptor();
         observer.InjectFirstSetup(
             "SELECT * FROM `runtime_missing_setup_probe`; SET @runtime_setup_after_error = 1;");
@@ -81,7 +86,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task RuntimeSetupCancellation_CleansStateAndRecoversSameSession()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var blocker = await AcquireRuntimeSetupLockAsync(connectionString);
         var observer = new MySqlRuntimeCommandInterceptor();
         using var cancellation = new CancellationTokenSource();
@@ -110,7 +115,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task RuntimeSetupTimeout_CleansStateAndRecoversSameSession()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var blocker = await AcquireRuntimeSetupLockAsync(connectionString);
         var observer = new MySqlRuntimeCommandInterceptor();
 
@@ -147,7 +152,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         string violation
     )
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await PrepareRuntimeCatalogAsync(connectionString, "partial");
         var table = MySqlRuntimeConvergenceMigration.TableName(violation == "duplicate" ? 0 : 1);
         var offendingSql = violation == "duplicate"
@@ -161,7 +166,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         var result = await RejectAndRecoverRuntimeDataAsync(context, connectionString, table, violation);
 
-        var exception = Assert.IsType<MySqlException>(result.Exception);
+        var exception = AssertOwnedGuardFailure(result.Exception);
         Assert.Equal(1062, exception.Number);
         Assert.Contains("doka_sm_data_blocked", exception.Message, StringComparison.Ordinal);
         Assert.Equal(0, result.TargetConstraintBeforeRecovery);
@@ -179,7 +184,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task RuntimeFreshDataGuard_RejectsAfterEarlierMigrationAndRollsBackLaterDml()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var options = new DbContextOptionsBuilder<MySqlRuntimeFreshStateDbContext>()
             .UseMySql(
                 connectionString,
@@ -195,7 +200,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         var result = await RejectAndRecoverFreshRuntimeDataAsync(context);
 
-        var exception = Assert.IsType<MySqlException>(result.Exception);
+        var exception = AssertOwnedGuardFailure(result.Exception);
         Assert.Contains("doka_sm_data_blocked", exception.Message, StringComparison.Ordinal);
         Assert.Equal(0, result.TargetConstraintBeforeRecovery);
         Assert.Equal(1, result.HistoryBeforeRecovery);
@@ -208,9 +213,13 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(2, result.HistoryAfterRecovery);
         Assert.Equal(1, result.TargetConstraintAfterRecovery);
     }
+}
+
+public abstract partial class MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Acquires a real held row lock whose interrupted wait cannot complete like the SLEEP function.</summary>
-    private static async Task<RuntimeSetupLock> AcquireRuntimeSetupLockAsync(
+    protected static async Task<RuntimeSetupLock> AcquireRuntimeSetupLockAsync(
         string connectionString
     )
     {
@@ -240,7 +249,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     }
 
     /// <summary>Configures the real provider pipeline with no explicit analysis runner.</summary>
-    private MySqlRuntimePerformanceDbContext CreateRuntimeContext(
+    protected MySqlRuntimePerformanceDbContext CreateRuntimeContext(
         string connectionString,
         DbCommandInterceptor observer
     )
@@ -258,6 +267,10 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         return new MySqlRuntimePerformanceDbContext(options);
     }
+}
+
+public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Configures a discovered one-operation migration for actual scope-failure and retry probes.</summary>
     private MySqlRuntimeScopeProbeDbContext CreateRuntimeScopeProbeContext(
@@ -291,7 +304,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         object? engineSettings = null;
         for (var sample = 0; sample < sampleCount; sample++)
         {
-            var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+            var connectionString = await CreateDatabaseAsync(CancellationToken.None);
             await PrepareRuntimeCatalogAsync(connectionString, initialState);
             engineSettings ??= await ReadRuntimeEngineSettingsAsync(connectionString);
             var observer = new MySqlRuntimeCommandInterceptor();
@@ -339,7 +352,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     /// <summary>Warms model and generator caches before measuring synchronous SQL-generation allocation.</summary>
     private async Task<long> WarmRuntimeGenerationAsync()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateRuntimeContext(connectionString, new MySqlRuntimeCommandInterceptor());
         var generator = context.GetService<IMigrationsSqlGenerator>();
         var migration = new MySqlRuntimeConvergenceMigration { ActiveProvider = context.Database.ProviderName! };
@@ -460,9 +473,13 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         return (total, preserved);
     }
+}
+
+public abstract partial class MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Observes the failed operation, independent cleanup, and retry through the same open session.</summary>
-    private static async Task<RuntimeRecovery> FailAndRecoverRuntimeAsync(
+    private protected static async Task<RuntimeRecovery> FailAndRecoverRuntimeAsync(
         DbContext context,
         MySqlRuntimeCommandInterceptor observer,
         CancellationToken cancellationToken
@@ -515,6 +532,10 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             rowsAfter,
             acquired);
     }
+}
+
+public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Captures default server durability settings separately from the timed migration workflow.</summary>
     private static async Task<object> ReadRuntimeEngineSettingsAsync(
@@ -699,9 +720,13 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         return label;
     }
+}
+
+public abstract partial class MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Carries one isolated application's timings and bounded transport counters.</summary>
-    private sealed record RuntimeSample(
+    protected sealed record RuntimeSample(
         int Ordinal,
         double ApplyMilliseconds,
         double ReplayMilliseconds,
@@ -710,7 +735,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     );
 
     /// <summary>Carries authoritative catalog, data-preservation, replay, and history checks.</summary>
-    private sealed record RuntimeVerification(
+    protected sealed record RuntimeVerification(
         int Tables,
         int Columns,
         int PrimaryKeys,
@@ -745,7 +770,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     }
 
     /// <summary>Carries acquired-resource failure and same-session recovery observations.</summary>
-    private sealed record RuntimeRecovery(
+    protected sealed record RuntimeRecovery(
         Exception? Exception,
         long BodiesBeforeRecovery,
         int TablesBeforeRecovery,
@@ -765,7 +790,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     );
 
     /// <summary>Carries duplicate/orphan rejection and same-session repair outcomes.</summary>
-    private sealed record RuntimeDataRecovery(
+    protected sealed record RuntimeDataRecovery(
         Exception? Exception,
         int TargetConstraintBeforeRecovery,
         int HistoryBeforeRecovery,
@@ -779,7 +804,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     );
 
     /// <summary>Owns the independent blocking transaction and releases it with its physical connection.</summary>
-    private sealed class RuntimeSetupLock(
+    protected sealed class RuntimeSetupLock(
         MySqlConnection connection,
         MySqlTransaction transaction
     ) : IAsyncDisposable

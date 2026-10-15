@@ -1,14 +1,19 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the ConstraintsPhysicalKeys migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlConstraintsPhysicalKeysIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     [Fact]
     public async Task UniqueConstraintDropCanBeReplacedByAnEquivalentUniqueIndex()
     {
         const string table = "constraint_to_index";
         const string constraint = "uq_constraint_to_index_code";
         const string index = "ux_constraint_to_index_code";
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
@@ -46,7 +51,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         const string table = "index_to_constraint";
         const string index = "ux_index_to_constraint_code";
         const string constraint = "uq_index_to_constraint_code";
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
@@ -84,7 +89,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     {
         const string table = "cross_kind_constraint_drop";
         const string physicalName = "uq_cross_kind_constraint_code";
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
@@ -134,7 +139,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     {
         const string table = "cross_kind_index_drop";
         const string physicalName = "ux_cross_kind_index_code";
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
@@ -184,7 +189,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     {
         const string table = "primary_is_not_index_alias";
         const string index = "ux_primary_is_not_index_alias_id";
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
@@ -220,7 +225,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task PrimaryIsRejectedAsAnOrdinaryIndexName()
     {
         const string table = "reserved_primary_index_name";
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
@@ -250,7 +255,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     {
         const string table = "unique_constraint_name_collision";
         const string requestedName = "uq_requested_code";
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
@@ -281,7 +286,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     {
         const string table = "wide_index_replacement";
         const string index = "ix_wide_index_replacement";
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
@@ -323,7 +328,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     {
         const string table = "wide_cross_kind_replacement";
         const string keyName = "uq_wide_cross_kind_replacement";
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
@@ -365,7 +370,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     {
         const string table = "unique_replacement_duplicates";
         const string constraint = "uq_unique_replacement";
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
@@ -407,7 +412,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     {
         const string primaryTable = "wide_primary_key";
         const string uniqueTable = "wide_unique_constraint";
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
@@ -456,7 +461,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     {
         const string primaryTable = "narrow_primary_key";
         const string uniqueTable = "narrow_unique_constraint";
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
@@ -507,7 +512,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             ", ",
             columns.Select(static column => $"`{column}` int NOT NULL"));
 
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
@@ -564,7 +569,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             columns.Select(static column => $"`{column}` int NOT NULL"));
 
         var keyColumns = string.Join(", ", columns.Select(static column => $"`{column}`"));
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,

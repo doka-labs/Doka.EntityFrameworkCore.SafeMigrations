@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
-public sealed partial class SqlServerSafeMigrationIntegrationTests
+/// <summary>Verifies dml structural deferral SQL Server contracts against isolated databases.</summary>
+public sealed class SqlServerSafeMigrationDmlStructuralDeferralIntegrationTests : SqlServerSafeMigrationIntegrationTests
 {
+    /// <summary>Creates the feature suite with the assembly-owned SQL Server fixture.</summary>
+    /// <param name="fixture">The shared fixture providing a database per test.</param>
+    public SqlServerSafeMigrationDmlStructuralDeferralIntegrationTests(
+        SqlServerContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>Typed DML can remove or redefine unrelated matching metadata through an enabled trigger.</summary>
     /// <param name="writeKind">The typed EF INSERT, UPDATE or DELETE operation.</param>
     /// <param name="triggerMode">Absent, enabled or disabled trigger presence.</param>

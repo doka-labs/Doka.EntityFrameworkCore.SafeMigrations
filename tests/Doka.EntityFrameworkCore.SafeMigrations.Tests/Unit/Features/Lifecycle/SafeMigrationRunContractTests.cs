@@ -549,46 +549,56 @@ public sealed class SafeMigrationRunContractTests
         AssertMatchesSchema(schemaRoot, root, schemaRoot);
     }
 
+    /// <summary>Current schema files match both newly captured and compatibility-constructed assessment shapes.</summary>
     [Fact]
-    public void FailureTelemetry_ContainsOnlyBoundedLowCardinalityTags()
+    public void CurrentSchemasMatchKnownAndUnknownDiagnosticIdentityShapes()
     {
-        var measurements = new List<KeyValuePair<string, object?>[]>();
-        using var listener = new MeterListener();
-        listener.InstrumentPublished = (
-            instrument,
-            meterListener
-        ) =>
-        {
-            if (instrument.Meter.Name == SafeMigrationDiagnostics.MeterName
-                && instrument.Name == SafeMigrationDiagnostics.RunFailureCountMetricName)
-            {
-                meterListener.EnableMeasurementEvents(instrument);
-            }
-        };
-        listener.SetMeasurementEventCallback<long>((
-            _,
-            _,
-            tags,
-            _
-        ) => measurements.Add(tags.ToArray()));
-        listener.Start();
+        // Arrange
+        var intent = new EnsureForeignKeyIntent(new ExpectedForeignKeyDefinition("fk_child_parent", "children",
+            ["Tenant", "OwnerId"], "parents", ["Tenant", "Id"], schema: "dependent", principalSchema: "principal"));
 
-        SafeMigrationTelemetry.RecordFailure(
-            SafeMigrationReportMode.Preflight,
-            SafeMigrationTelemetry.FailureCode(new InvalidOperationException("sensitive payload")));
+        var known = new SafeMigrationAssessment(0, typeof(SafeMigrationOperation).FullName!, true, intent.Kind,
+            intent.ObjectName, SafeMigrationObservedState.PrerequisiteMissing,
+            SafeMigrationAction.RejectPrerequisiteMissing, false, "prerequisite_missing",
+            "classified_prerequisite_missing", "prerequisite_missing", SafeMigrationOperationalImpact.NotApplicable,
+            differences: null, deferredOrigin: null, identity: SafeMigrationOperationIdentity.Create(intent),
+            migrationId: "202610140001_Diagnostics", policy: SafeMigrationPolicy.ThrowIfDifferent);
 
-        var tags = Assert.Single(measurements);
-        Assert.Equal(2, tags.Length);
-        Assert.Contains(tags, value => value.Key == "safe_migrations.mode" && Equals(value.Value, "preflight"));
-        Assert.Contains(
-            tags,
-            value => value.Key == "safe_migrations.failure_code" && Equals(value.Value, "runtime_contract_invalid"));
-        Assert.DoesNotContain(
-            tags,
-            value => Convert
-                    .ToString(value.Value, CultureInfo.InvariantCulture)
-                    ?.Contains("sensitive", StringComparison.OrdinalIgnoreCase)
-                == true);
+        var unknown = new SafeMigrationAssessment(1, typeof(SafeMigrationOperation).FullName!, true,
+            SafeMigrationOperationKind.EnsureColumn, "Id", SafeMigrationObservedState.DataBlocked,
+            SafeMigrationAction.RejectDataBlocked, false, "data_blocked");
+
+        var report = CreateReport(status: SafeMigrationReportStatus.Blocked, assessments: [known, unknown]);
+        using var completeSchema = LoadReportSchema();
+        using var viewSchema = LoadReportViewSchema();
+
+        // Act
+        using var complete = JsonDocument.Parse(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
+        using var view = JsonDocument.Parse(SafeMigrationReportJson.SerializeToUtf8Bytes(report,
+            SafeMigrationReportSelection.BlockingOnly));
+
+        // Assert
+        Assert.Equal(4, complete.RootElement.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(3, view.RootElement.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(4, view.RootElement.GetProperty("sourceReport").GetProperty("schemaVersion").GetInt32());
+        AssertMatchesSchema(completeSchema.RootElement, complete.RootElement, completeSchema.RootElement);
+        AssertMatchesSchema(viewSchema.RootElement, view.RootElement, viewSchema.RootElement);
+        var completeAssessmentSchema = completeSchema.RootElement.GetProperty("$defs").GetProperty("assessment");
+        var viewAssessmentSchema = viewSchema.RootElement.GetProperty("$defs").GetProperty("assessment");
+        var completeAssessments = complete.RootElement.GetProperty("assessments");
+        var viewAssessments = view.RootElement.GetProperty("assessments");
+
+        AssertClosedObjectSurface(completeAssessmentSchema, completeAssessments[0]);
+        AssertClosedObjectSurface(completeAssessmentSchema, completeAssessments[1]);
+        AssertClosedObjectSurface(viewAssessmentSchema, viewAssessments[0]);
+        AssertClosedObjectSurface(viewAssessmentSchema, viewAssessments[1]);
+        Assert.True(completeAssessments[0].GetProperty("identityKnown").GetBoolean());
+        Assert.False(completeAssessments[1].GetProperty("identityKnown").GetBoolean());
+        Assert.Equal("children", completeAssessments[0].GetProperty("table").GetString());
+        Assert.Equal(JsonValueKind.Null, completeAssessments[1].GetProperty("table").ValueKind);
+        Assert.Equal(JsonValueKind.Array, completeAssessments[0].GetProperty("columns").ValueKind);
+        Assert.Equal(JsonValueKind.Null, completeAssessments[1].GetProperty("columns").ValueKind);
+        Assert.Equal(completeAssessments.GetRawText(), viewAssessments.GetRawText());
     }
 
     /// <summary>Accepts the SQL Server engine family in the versioned report contract.</summary>
@@ -650,75 +660,6 @@ public sealed class SafeMigrationRunContractTests
             "matching_no_op",
             (SafeMigrationOperationalImpact)int.MaxValue,
             differences: null));
-    }
-
-    [Fact]
-    public void SuccessfulTelemetry_UsesStableDatabaseSemanticConventionTags()
-    {
-        var measurements = new List<(string Instrument, KeyValuePair<string, object?>[] Tags)>();
-        using var listener = new MeterListener();
-        listener.InstrumentPublished = (
-            instrument,
-            meterListener
-        ) =>
-        {
-            if (instrument.Meter.Name == SafeMigrationDiagnostics.MeterName
-                && instrument.Name is SafeMigrationDiagnostics.RunCountMetricName
-                    or SafeMigrationDiagnostics.RunDurationMetricName
-                    or SafeMigrationDiagnostics.OperationCountMetricName)
-            {
-                meterListener.EnableMeasurementEvents(instrument);
-            }
-        };
-        listener.SetMeasurementEventCallback<long>((
-            instrument,
-            _,
-            tags,
-            _
-        ) => measurements.Add((instrument.Name, tags.ToArray())));
-        listener.SetMeasurementEventCallback<double>((
-            instrument,
-            _,
-            tags,
-            _
-        ) => measurements.Add((instrument.Name, tags.ToArray())));
-        listener.Start();
-
-        SafeMigrationTelemetry.Record(
-            SafeMigrationReportMode.Preflight,
-            SafeMigrationReportStatus.Ready,
-            "npgsql_postgresql",
-            "postgresql",
-            operationCount: 3,
-            TimeSpan.FromMilliseconds(5));
-
-        Assert.Equal(3, measurements.Count);
-        Assert.Equal(
-            [
-                SafeMigrationDiagnostics.RunCountMetricName,
-                SafeMigrationDiagnostics.RunDurationMetricName,
-                SafeMigrationDiagnostics.OperationCountMetricName,
-            ],
-            measurements.Select(static measurement => measurement.Instrument));
-        Assert.All(
-            measurements,
-            measurement =>
-            {
-                Assert.Equal(4, measurement.Tags.Length);
-                Assert.Contains(
-                    measurement.Tags,
-                    value => value.Key == "db.system.name" && Equals(value.Value, "postgresql"));
-                Assert.DoesNotContain(measurement.Tags, value => value.Key == "db.system");
-                Assert.Contains(
-                    measurement.Tags,
-                    value => value.Key == "safe_migrations.provider" && Equals(value.Value, "npgsql_postgresql"));
-                Assert.Contains(
-                    measurement.Tags,
-                    value => value.Key == "safe_migrations.mode" && Equals(value.Value, "preflight"));
-                Assert.Contains(
-                    measurement.Tags,
-                    value => value.Key == "safe_migrations.status" && Equals(value.Value, "ready"));
-            });
     }
 
     private static SafeMigrationRunReport CreateReport(
@@ -795,7 +736,7 @@ public sealed class SafeMigrationRunContractTests
             Path.Combine(
                 AppContext.BaseDirectory,
                 "schemas",
-                "safe-migration-report-view-v2.schema.json")));
+                "safe-migration-report-view-v3.schema.json")));
 
     private static void AssertSchemaEnum(
         JsonElement schema,

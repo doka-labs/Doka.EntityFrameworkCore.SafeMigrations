@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
-public sealed partial class SqlServerSafeMigrationIntegrationTests
+/// <summary>Verifies filter values SQL Server contracts against isolated databases.</summary>
+public sealed class SqlServerSafeMigrationFilterValuesIntegrationTests : SqlServerSafeMigrationIntegrationTests
 {
+    /// <summary>Creates the feature suite with the assembly-owned SQL Server fixture.</summary>
+    /// <param name="fixture">The shared fixture providing a database per test.</param>
+    public SqlServerSafeMigrationFilterValuesIntegrationTests(
+        SqlServerContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>Proves constant conversion and predicate-side precedence before row reads or index DDL.</summary>
     [SqlServerLiveTheory]
     [InlineData("int", "1", "[Flag] = N'abc'", false)]

@@ -1,6 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
-public sealed partial class SqliteSafeMigrationCatalogIntegrationTests
+/// <summary>Exercises projected foreign key new owner with independently owned SQLite state.</summary>
+public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegrationTests
+    : SqliteSafeMigrationCatalogIntegrationTests
 {
     /// <summary>Allowed later PK shapes cannot lend their native identity to an incompatible original PK.</summary>
     /// <param name="nativeKeyColumn">The physically installed initial or allowed terminal key member.</param>

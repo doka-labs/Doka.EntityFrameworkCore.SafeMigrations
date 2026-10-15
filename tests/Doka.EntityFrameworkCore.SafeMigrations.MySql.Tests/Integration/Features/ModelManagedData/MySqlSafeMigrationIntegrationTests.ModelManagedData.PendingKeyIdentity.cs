@@ -1,13 +1,18 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the ModelManagedDataPendingKeyIdentity migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlModelManagedDataPendingKeyIdentityIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlModelManagedDataPendingKeyIdentityIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     /// <summary>Two pending migrations may transition the same typed composite key in their migration order.</summary>
     [Fact]
     public async Task ModelManagedPendingKeyIdentityPreservesMigrationBoundariesAndCompositeOrdinals()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `managed_pending_keys` (`Id` int NOT NULL, `Code` int NOT NULL, "
             + "`Marker` int NOT NULL, PRIMARY KEY (`Id`, `Code`)) ENGINE=InnoDB;");

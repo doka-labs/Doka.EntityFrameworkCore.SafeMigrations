@@ -1,11 +1,16 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the MixedPendingStream migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlMixedPendingStreamIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlMixedPendingStreamIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     [Fact]
     public async Task PendingPreflight_DoesNotMisclassifyStrictOperationsAfterLegacyDataPreparationSql()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `mixed_records` (`id` int NOT NULL, `code` varchar(20) NOT NULL, "
@@ -61,7 +66,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task PendingPreflight_IdentifiesTheSqlMigrationBehindLaterUncertainty()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `mixed_records` (`id` int NOT NULL, `code` varchar(20) NOT NULL, "
@@ -95,7 +100,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task PendingPreflight_AnalyzesStrictMigrationAfterDataPreparationWasApplied()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `mixed_records` (`id` int NOT NULL, `code` varchar(20) NOT NULL, "
@@ -144,7 +149,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         int expectedIndexCount
     )
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `mixed_records` (`id` int NOT NULL, `code` varchar(20) NOT NULL, "
@@ -184,7 +189,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             "projected_structure_state_unknown",
             preflight.Assessments[1].AnalysisCode);
 
-        var providerFailure = Assert.IsType<MySqlException>(failure);
+        var providerFailure = AssertOwnedGuardFailure(failure);
         Assert.Contains(expectedFailureCode, providerFailure.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(expectedIndexCount, indexCount);
     }
@@ -192,7 +197,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task OpaqueSql_DoesNotReclassifyAnEarlierProvenBlocker()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `mixed_records` (`id` int NOT NULL, PRIMARY KEY (`id`));");
@@ -216,7 +221,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task OpaqueSql_DoesNotDeferAnInvariantDatabaseQualifierMismatch()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = new MixedPendingStreamDbContext(connectionString, Fixture.ServerVersion);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         _ = builder.Sql("SELECT 1;");
@@ -241,7 +246,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task OpaqueSql_DoesNotDeferUnsupportedSchemaDrop()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var database = new MySqlConnectionStringBuilder(connectionString).Database;
         await using var context = new MixedPendingStreamDbContext(connectionString, Fixture.ServerVersion);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -269,7 +274,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task OpaqueSql_DoesNotDeferUnsupportedOperationAnnotation()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = new MixedPendingStreamDbContext(connectionString, Fixture.ServerVersion);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         _ = builder.Sql("SELECT 1;");

@@ -1,11 +1,16 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the Lifecycle migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlLifecycleIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     [Fact]
     public async Task StrictMismatch_FailsWithStableCategoryAndNextOperationRecoversSameSession()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `accounts` (`id` int NOT NULL, `name` varchar(20) NULL);");
@@ -19,7 +24,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             policy: SafeMigrationPolicy.ThrowIfDifferent);
 
         var exception =
-            await Assert.ThrowsAsync<MySqlException>(() => ExecuteOperationsAsync(context, mismatch.Operations));
+            await AssertOwnedGuardFailureAsync(() => ExecuteOperationsAsync(context, mismatch.Operations));
 
         Assert.Contains("doka_sm_different", exception.Message, StringComparison.OrdinalIgnoreCase);
 
@@ -39,7 +44,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task SessionSqlModes_DoNotDisableAssertionsAndFailureRecovery()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `sql_mode_guard` ("
@@ -64,7 +69,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             policy: SafeMigrationPolicy.ThrowIfDifferent);
 
         var mismatchException =
-            await Assert.ThrowsAsync<MySqlException>(() => ExecuteOperationsAsync(context, mismatch.Operations));
+            await AssertOwnedGuardFailureAsync(() => ExecuteOperationsAsync(context, mismatch.Operations));
 
         Assert.Contains("doka_sm_different", mismatchException.Message, StringComparison.OrdinalIgnoreCase);
 
@@ -77,7 +82,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var blockedException =
-            await Assert.ThrowsAsync<MySqlException>(() => ExecuteOperationsAsync(context, blockedCheck.Operations));
+            await AssertOwnedGuardFailureAsync(() => ExecuteOperationsAsync(context, blockedCheck.Operations));
 
         Assert.Contains("doka_sm_data_blocked", blockedException.Message, StringComparison.OrdinalIgnoreCase);
 
@@ -113,7 +118,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task MissingHandler_FailsClosedDuringGeneration()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString, registerSafeMigrations: false);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists(
@@ -137,7 +142,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task Migrator_MixesStandardAndSafeOperationsAndWritesHistoryOnlyAfterSuccess()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `pipeline_state` (`id` int NOT NULL, PRIMARY KEY (`id`));");
@@ -166,7 +171,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task MigrationScripts_ExecuteNormalIdempotentAndNoTransactionPaths()
     {
-        var generationConnectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var generationConnectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var generationContext = CreateContext(generationConnectionString);
         var migrator = generationContext.GetService<IMigrator>();
         var scripts = new[]
@@ -179,7 +184,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         foreach (var script in scripts)
         {
             Assert.Contains(CoreConvergenceMigration.MigrationIdentifier, script, StringComparison.Ordinal);
-            var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+            var connectionString = await CreateDatabaseAsync(CancellationToken.None);
             await ExecuteMigrationScriptAsync(connectionString, script);
             if (script != scripts[0])
             {
@@ -205,7 +210,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task Migrator_WithoutHandlerWritesNeitherTargetDdlNorHistoryRow()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString, registerSafeMigrations: false);
 
         var exception = await Assert.ThrowsAsync<MySqlMigrationOperationHandlerException>(() =>
@@ -237,11 +242,12 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task RuntimeGuardFailureAfterStandardDdl_RequiresForwardFixAndRemainsRetryable()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE VIEW `pipeline_state` AS SELECT 1 AS `id`;");
         await using var context = CreateContext(connectionString);
 
-        var exception = await Assert.ThrowsAsync<MySqlException>(() => context.Database.MigrateAsync(cancellationToken: CancellationToken.None));
+        var exception = await AssertOwnedGuardFailureAsync(() =>
+            context.Database.MigrateAsync(cancellationToken: CancellationToken.None));
 
         Assert.Contains("doka_sm_unsupported", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(
@@ -272,7 +278,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ExternalInternalServiceProvider_ResolvesTheAdditiveHandlerAndRunner()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var services = new ServiceCollection();
         services.AddEntityFrameworkDokaMySql();
         services.AddEntityFrameworkDokaMySqlSafeMigrations();
@@ -305,7 +311,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ConflictingHandler_FailsBeforeTargetDdlAndHistory()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var services = new ServiceCollection();
         services.AddEntityFrameworkDokaMySql();
         services.AddEntityFrameworkDokaMySqlSafeMigrations();
@@ -346,7 +352,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ConcurrentMigrators_SerializePerDatabaseAndRunDifferentDatabasesInParallel()
     {
-        var sharedConnectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var sharedConnectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             sharedConnectionString,
             "CREATE TABLE `__LegacyMigrationsHistory` (`MigrationId` varchar(150) NOT NULL); "
@@ -371,8 +377,8 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 sharedConnectionString,
                 "SELECT COUNT(*) FROM `__LegacyMigrationsHistory` " + "WHERE `MigrationId` = 'legacy-unchanged';"));
 
-        var leftConnectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
-        var rightConnectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var leftConnectionString = await CreateDatabaseAsync(CancellationToken.None);
+        var rightConnectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var left = CreateContext(leftConnectionString);
         await using var right = CreateContext(rightConnectionString);
         await Task.WhenAll(left.Database.MigrateAsync(cancellationToken: CancellationToken.None), right.Database.MigrateAsync(cancellationToken: CancellationToken.None));
@@ -394,7 +400,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task PreflightAndPostflight_AreReadOnlyAndUseRuntimeClassification()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists(
@@ -448,7 +454,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task PendingPreflight_ProjectsACompleteMissingConvergenceTable()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
 
         var report = await context
@@ -482,7 +488,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task PreflightProjectsProviderAddColumnForFollowingSafeIndex()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `mixed_customers` ("
@@ -574,7 +580,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task PreflightPreservesSafeStructureAcrossProviderSeedData()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         _ = builder.CreateTableIfNotExists(
@@ -648,7 +654,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         DokaMySqlGuidFormat guidFormat
     )
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         var storeType = GuidStoreType(guidFormat);
@@ -835,7 +841,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task PreflightDoesNotInferUniqueSafetyAcrossProviderSeedData()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         _ = builder.CreateTableIfNotExists(
@@ -883,7 +889,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task PreflightPreservesLiveNonUniqueIndexAcrossProviderSeedData()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `existing_seed_projection` (`Id` int NOT NULL, `GroupId` int NOT NULL);");
@@ -926,7 +932,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task PreflightInvalidatesLiveUniqueIndexSafetyAcrossProviderSeedData()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `existing_seed_unique_projection` (`Id` int NOT NULL, `GroupId` int NOT NULL);");
@@ -972,7 +978,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task Preflight_RejectsWrongCanonicalModelFingerprintBeforeCatalogAccess()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var runner = context.GetService<ISafeMigrationRunner>();
 
@@ -988,7 +994,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task Preflight_RejectsASchemaChangingDerivedContextAgainstTheMigrationSnapshot()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = new SchemaChangingDerivedContext(connectionString, Fixture.ServerVersion);
 
         await Assert.ThrowsAsync<SafeMigrationModelMismatchException>(() => context
@@ -999,7 +1005,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task Preflight_ReportsButDoesNotDeleteUnexpectedLegacyObjects()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `inventory_target` ("
@@ -1041,7 +1047,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ColumnTableIndexLifecycle_IsIdempotentAcrossEveryOperationFamily()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `lifecycle` (`id` int NOT NULL, `old_name` varchar(40) NULL); "
@@ -1098,7 +1104,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task MissingRenameSources_AreIdempotentNoOps()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameTableIfExists("missing_table", "renamed_table");
@@ -1119,13 +1125,14 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task GuardPlan_FailedBodyCleansSameSessionAndRemainsRetryable()
     {
-        var databaseConnectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var databaseConnectionString = await CreateDatabaseAsync(CancellationToken.None);
         var connectionString = new MySqlConnectionStringBuilder(databaseConnectionString)
         {
             Pooling = true,
             ConnectionReset = false,
             MaximumPoolSize = 1,
         }.ConnectionString;
+        TrackOwnedPool(connectionString);
 
         await ExecuteSqlAsync(connectionString, "CREATE TABLE `fault_target` (`id` int NOT NULL);");
         await using var context = CreateContext(connectionString);
@@ -1167,13 +1174,13 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'fault_target' "
                 + "AND COLUMN_NAME = 'guarded_value';"));
 
-        await MySqlConnection.ClearAllPoolsAsync(CancellationToken.None);
+        await MySqlConnection.ClearPoolAsync((MySqlConnection)context.Database.GetDbConnection(), CancellationToken.None);
     }
 
     [Fact]
     public async Task GuardPlan_CancelledBodyCleansSameSessionAndRemainsRetryable()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE `cancel_target` (`id` int NOT NULL);");
         await using var blocker = new MySqlConnection(connectionString);
         await blocker.OpenAsync(CancellationToken.None);
@@ -1227,13 +1234,14 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ScopedCommand_CleanupFailureEvictsThePhysicalSession()
     {
-        var databaseConnectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var databaseConnectionString = await CreateDatabaseAsync(CancellationToken.None);
         var connectionString = new MySqlConnectionStringBuilder(databaseConnectionString)
         {
             Pooling = true,
             ConnectionReset = false,
             MaximumPoolSize = 1,
         }.ConnectionString;
+        TrackOwnedPool(connectionString);
 
         var services = new ServiceCollection();
         services.AddEntityFrameworkDokaMySql();
@@ -1272,13 +1280,13 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.NotEqual(originalConnectionId, replacementConnectionId);
         Assert.Equal(1, await ContextScalarIntAsync(context, "SELECT @safe_migrations_cleanup_probe IS NULL;"));
 
-        await MySqlConnection.ClearAllPoolsAsync(CancellationToken.None);
+        await MySqlConnection.ClearPoolAsync((MySqlConnection)context.Database.GetDbConnection(), CancellationToken.None);
     }
 
     [Fact]
     public async Task GuardPlan_RunsWithLeastPrivilegeWithoutCreateRoutine()
     {
-        var rootConnectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var rootConnectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(rootConnectionString, "CREATE TABLE `least_privilege_target` (`id` int NOT NULL);");
         var connectionString = await Fixture.CreateLeastPrivilegeConnectionStringAsync(
             rootConnectionString,

@@ -1,7 +1,10 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public abstract class MySqlIntegrationTestBase : IClassFixture<MySqlEngineContainerFixture>
+public abstract class MySqlIntegrationTestBase : IClassFixture<MySqlEngineContainerFixture>, IAsyncLifetime
 {
+    private readonly List<string> _ownedDatabases = [];
+    private readonly HashSet<string> _ownedPools = new(StringComparer.Ordinal);
+
     protected MySqlIntegrationTestBase(
         MySqlEngineContainerFixture fixture
     )
@@ -10,6 +13,82 @@ public abstract class MySqlIntegrationTestBase : IClassFixture<MySqlEngineContai
     }
 
     protected MySqlEngineContainerFixture Fixture { get; }
+
+    /// <summary>Creates a unique database owned by this test instance rather than its class or assembly.</summary>
+    /// <param name="cancellationToken">Cancels database creation.</param>
+    /// <returns>The new database's root connection string.</returns>
+    protected async Task<string> CreateDatabaseAsync(CancellationToken cancellationToken)
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(cancellationToken);
+        _ownedDatabases.Add(connectionString);
+
+        return connectionString;
+    }
+
+    /// <summary>Tracks an explicitly enabled pool belonging to one of this test's database leases.</summary>
+    /// <param name="connectionString">The derived connection string with the test's pooling settings.</param>
+    protected void TrackOwnedPool(string connectionString)
+    {
+        var settings = new MySqlConnectionStringBuilder(connectionString);
+        if (!_ownedDatabases.Any(owned =>
+            {
+                var lease = new MySqlConnectionStringBuilder(owned);
+
+                return settings.Database == lease.Database
+                    && settings.Server == lease.Server
+                    && settings.Port == lease.Port;
+            }))
+        {
+            throw new ArgumentException("The pool does not belong to this test's database lease.",
+                nameof(connectionString));
+        }
+
+        _ownedPools.Add(connectionString);
+    }
+
+    /// <inheritdoc />
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    /// <inheritdoc />
+    public async Task DisposeAsync()
+    {
+        List<Exception>? failures = null;
+
+        foreach (var connectionString in _ownedPools)
+        {
+            try
+            {
+                await using var pool = new MySqlConnection(connectionString);
+                await MySqlConnection.ClearPoolAsync(pool, CancellationToken.None);
+            }
+            catch (Exception exception)
+            {
+                (failures ??= []).Add(exception);
+            }
+        }
+
+        _ownedPools.Clear();
+
+        foreach (var connectionString in _ownedDatabases)
+        {
+            try
+            {
+                await Fixture.ReleaseDatabaseAsync(connectionString, CancellationToken.None);
+            }
+            catch (Exception exception)
+            {
+                // WHY: Failed drops remain fixture-owned for final cleanup without leaking the other test's resources.
+                (failures ??= []).Add(exception);
+            }
+        }
+
+        _ownedDatabases.Clear();
+
+        if (failures is not null)
+        {
+            throw new AggregateException("MySQL test database cleanup failed.", failures);
+        }
+    }
 
     protected SafeMigrationDbContext CreateContext(
         string connectionString,

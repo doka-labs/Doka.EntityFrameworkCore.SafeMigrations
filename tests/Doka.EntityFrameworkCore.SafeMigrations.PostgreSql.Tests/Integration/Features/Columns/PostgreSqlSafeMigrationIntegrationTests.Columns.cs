@@ -1,11 +1,18 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the Columns PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlColumnsIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     [Fact]
     public async Task NullCollation_MeansProviderInferredDefaultAndNeverWildcard()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE collation_defaults (inherited text NULL, explicit text COLLATE \"C\" NULL);");
@@ -42,7 +49,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task UnsafeNotNullAdd_FailsBeforeTargetDdl()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE orders (id integer NOT NULL); INSERT INTO orders VALUES (1);");
@@ -66,7 +73,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task RepairIfSafe_RequiresTheLiveColumnToMatchTheDeclaredOldDefinition()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE repair_guard ("
@@ -153,7 +160,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task LegacyConvergenceRepair_RepairsMutableColumnDriftAndIsIdempotent()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE legacy_repair (value character varying(40) NULL DEFAULT 'legacy'); "
@@ -241,7 +248,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task LegacyConvergenceRepair_NullabilityTighteningWithNullRowsIsDataBlocked()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE legacy_nulls (value character varying(40) NULL); "
@@ -310,7 +317,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task LegacyConvergenceRepair_InvariantTypeDriftRejectsWithoutMutation()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE legacy_type_drift (value character(30) NULL); "
@@ -368,7 +375,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task UnmappedClrType_IsClassifiedUnsupportedBeforeDdl()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE unsupported_values (id integer NOT NULL);");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -398,7 +405,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ComputedCollationAndCommentFacets_ConvergeAndDetectSingleFieldDrift()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE advanced_columns (a integer NOT NULL, b integer NOT NULL);");
@@ -455,7 +462,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task VirtualGeneratedColumn_IsClassifiedUnsupportedBeforeDdl()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE virtual_values (a integer NOT NULL);");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -490,7 +497,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task LiteralDefaultMatrix_ConvergesAndIsIdempotent()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE default_values (id integer NOT NULL);");
         await using var context = CreateContext(connectionString);
         var definitions = new[]
@@ -752,4 +759,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                         .GetValue(index)
                         .ToString()));
     }
+
 }

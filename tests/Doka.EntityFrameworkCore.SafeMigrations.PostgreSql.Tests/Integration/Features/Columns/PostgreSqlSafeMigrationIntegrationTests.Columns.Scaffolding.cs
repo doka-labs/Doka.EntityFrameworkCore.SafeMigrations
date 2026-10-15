@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the ColumnsScaffolding PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlColumnsScaffoldingIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlColumnsScaffoldingIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     [Theory]
     [InlineData(NpgsqlValueGenerationStrategy.IdentityAlwaysColumn, "a")]
     [InlineData(NpgsqlValueGenerationStrategy.IdentityByDefaultColumn, "d")]
@@ -10,7 +17,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         string expectedIdentity
     )
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         _ = AddScaffoldedIdentityTable(builder, "scaffolded_identity", strategy);
@@ -42,7 +49,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ScaffoldedIdentityTable_RejectsExistingNonGeneratedColumn()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE scaffolded_identity_drift ("
@@ -78,7 +85,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ScaffoldedOperationLevelAnnotation_IsRejectedBeforeDdl()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         var operation = AddScaffoldedIdentityTable(builder, "unsupported_scaffolded_annotation");
@@ -106,7 +113,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task UnmodeledSerialStrategy_IsRejectedBeforeDdl()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         _ = AddScaffoldedIdentityTable(
@@ -155,4 +162,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
 
         return Assert.IsType<SafeMigrationOperation>(Assert.Single(builder.Operations));
     }
+
 }

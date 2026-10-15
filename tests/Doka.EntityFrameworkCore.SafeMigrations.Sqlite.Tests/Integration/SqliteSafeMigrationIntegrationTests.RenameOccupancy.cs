@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
-public sealed partial class SqliteSafeMigrationCatalogIntegrationTests
+/// <summary>Exercises rename occupancy with independently owned SQLite state.</summary>
+public sealed class SqliteSafeMigrationRenameOccupancyIntegrationTests : SqliteSafeMigrationCatalogIntegrationTests
 {
     /// <summary>A projected new source cannot overwrite an independently occupied live destination.</summary>
     /// <param name="targetExists">Whether the destination already exists before the operation stream.</param>

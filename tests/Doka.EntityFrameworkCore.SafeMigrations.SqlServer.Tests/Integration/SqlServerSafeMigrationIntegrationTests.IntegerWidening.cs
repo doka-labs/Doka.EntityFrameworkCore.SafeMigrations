@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
-public sealed partial class SqlServerSafeMigrationIntegrationTests
+/// <summary>Verifies integer widening SQL Server contracts against isolated databases.</summary>
+public sealed class SqlServerSafeMigrationIntegerWideningIntegrationTests : SqlServerSafeMigrationIntegrationTests
 {
+    /// <summary>Creates the feature suite with the assembly-owned SQL Server fixture.</summary>
+    /// <param name="fixture">The shared fixture providing a database per test.</param>
+    public SqlServerSafeMigrationIntegerWideningIntegrationTests(
+        SqlServerContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>Preserves complete integer source domains and replays qualified and default-schema repairs.</summary>
     [SqlServerLiveTheory]
     [InlineData("tinyint", typeof(byte), "smallint", typeof(short), "0,255", null)]

@@ -1,7 +1,12 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the ColumnsRequiredDefaultsEnumDomain migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlColumnsRequiredDefaultsEnumDomainIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlColumnsRequiredDefaultsEnumDomainIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     /// <summary>Exact ENUM and SET domains allow only their owned resume or already matching no-op.</summary>
     /// <param name="useSetStorage">Whether the finite string domain uses SET rather than ENUM.</param>
     /// <param name="alreadyRequired">Whether the exact target is already complete without a recovery guard.</param>
@@ -16,7 +21,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var operation = RequiredDefaultsEnumDomainOperation(useSetStorage);
         var storeType = RequiredDefaultsEnumDomainStoreType(useSetStorage, "exact");
         await ExecuteSqlAsync(connectionString,
@@ -72,7 +77,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var operation = RequiredDefaultsEnumDomainOperation(useSetStorage);
         var originalFingerprint = SafeMigrationContractFingerprint.Create([operation]);
         var guardName = AtomicRequiredAddGuardName(operation);
@@ -112,7 +117,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(Assert.IsType<EnsureColumnIntent>(operation.Intent).Definition.StoreType, typeDifference.Expected);
         Assert.Equal(storeType, typeDifference.Actual);
         Assert.NotEqual(typeDifference.Expected, typeDifference.Actual);
-        Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(failure).Message,
+        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
             StringComparison.Ordinal);
         Assert.Contains(inventory,
             item => item.ObjectKind == SafeMigrationDatabaseObjectKind.CheckConstraint && item.Name == guardName);

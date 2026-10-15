@@ -158,7 +158,8 @@ public sealed class MySqlRequiredColumnAddGenerationTests
         Assert.DoesNotContain(Payloads(first.CommandText), static sql => sql.StartsWith("UPDATE ",
             StringComparison.Ordinal));
         Assert.DoesNotContain("LOCK TABLES", first.CommandText, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(first.CommandText, second.CommandText);
+        Assert.Equal(MySqlRuntimeSqlCanonicalizer.NormalizeOwnedCorrelation(first.CommandText),
+            MySqlRuntimeSqlCanonicalizer.NormalizeOwnedCorrelation(second.CommandText));
         Assert.False(authored.IsNullable);
         Assert.False(definition.IsNullable);
         Assert.Equal("keep; 'quoted'\\path", authored.Comment);
@@ -294,9 +295,7 @@ public sealed class MySqlRequiredColumnAddGenerationTests
             + "SET @doka_sm_post_ok = CASE WHEN @doka_sm_action IN ('apply', 'repair') THEN COALESCE(("
             + plan.RenderPreparedExecutionPostcondition([])
             + "), FALSE) ELSE TRUE END;\nINSERT INTO `__doka_sm_assert` "
-            + "(`different_code`, `unsupported_code`, `data_blocked_code`, "
-            + "`prerequisite_missing_code`, `postcondition_code`) "
-            + "SELECT 4, 5, 6, 7, 1 WHERE NOT COALESCE(@doka_sm_post_ok, FALSE);\n";
+            + "SELECT 4, 5, 6, 7, @doka_sm_diag WHERE NOT COALESCE(@doka_sm_post_ok, FALSE);\n";
 
         // Act
         var result = handler.Generate(operationContext);
@@ -333,7 +332,7 @@ public sealed class MySqlRequiredColumnAddGenerationTests
         var resumeOffset = sql.IndexOf(resumePrefix, StringComparison.Ordinal);
         var resumeEnd = sql.IndexOf(';', resumeOffset);
         var postconditionOffset = sql.LastIndexOf("SET @doka_sm_post_ok", StringComparison.Ordinal);
-        var assertionOffset = sql.LastIndexOf("SELECT 4, 5, 6, 7, 1", StringComparison.Ordinal);
+        var assertionOffset = sql.LastIndexOf("SELECT 4, 5, 6, 7, @doka_sm_diag", StringComparison.Ordinal);
         var state = Assert.Single(Payloads(sql), static payload => payload.StartsWith("SELECT (",
             StringComparison.Ordinal) && payload.Contains("INTO @doka_sm_state", StringComparison.Ordinal));
 

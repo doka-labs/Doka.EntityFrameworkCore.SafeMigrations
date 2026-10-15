@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
-public sealed partial class SqlServerSafeMigrationIntegrationTests
+/// <summary>Verifies projected keys SQL Server contracts against isolated databases.</summary>
+public sealed class SqlServerSafeMigrationProjectedKeysIntegrationTests : SqlServerSafeMigrationIntegrationTests
 {
+    /// <summary>Creates the feature suite with the assembly-owned SQL Server fixture.</summary>
+    /// <param name="fixture">The shared fixture providing a database per test.</param>
+    public SqlServerSafeMigrationProjectedKeysIntegrationTests(
+        SqlServerContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>Does not mistake a newly added NULL column for SQL Server NULL-distinct uniqueness.</summary>
     [SqlServerLiveTheory]
     [InlineData(false, 0, SafeMigrationReportStatus.Ready)]

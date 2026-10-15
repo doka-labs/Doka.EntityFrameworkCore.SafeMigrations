@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
-public sealed partial class SqliteSafeMigrationCatalogIntegrationTests
+/// <summary>Exercises provider composition with independently owned SQLite state.</summary>
+public sealed class SqliteSafeMigrationProviderCompositionIntegrationTests : SqliteSafeMigrationCatalogIntegrationTests
 {
     [Fact]
     public async Task ContiguousProviderOperations_AreRewrittenAsOneLosslessTransition()

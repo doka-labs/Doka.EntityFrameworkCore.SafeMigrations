@@ -64,7 +64,9 @@ internal static class SafeMigrationCatalogProbeBatch
                     || statement.FirstOrdinal < 0
                     || string.IsNullOrEmpty(command.CommandText))
                 {
-                    throw new InvalidOperationException("The catalog probe builder returned an invalid statement.");
+                    throw new InvalidOperationException(
+                        "The catalog probe builder returned an invalid statement. Stop migration analysis; "
+                        + "inspect the provider contract and report this invariant failure using redacted evidence.");
                 }
 
                 var statementPayloadBytes = checked(
@@ -105,7 +107,9 @@ internal static class SafeMigrationCatalogProbeBatch
                     if (resultSet >= statements.Count)
                     {
                         throw new InvalidOperationException(
-                            "The catalog probe transport returned an invalid result-set count.");
+                            "The catalog probe transport returned an invalid result-set count. "
+                            + "Stop migration analysis; inspect the provider contract and report this invariant "
+                            + "failure using redacted evidence.");
                     }
 
                     var statement = statements[resultSet];
@@ -117,7 +121,9 @@ internal static class SafeMigrationCatalogProbeBatch
             if (resultSet != statements.Count)
             {
                 throw new InvalidOperationException(
-                    "The catalog probe transport returned an inconsistent result-set count.");
+                    "The catalog probe transport returned an inconsistent result-set count. "
+                    + "Stop migration analysis; inspect the provider contract and report this invariant "
+                    + "failure using redacted evidence.");
             }
         }
     }

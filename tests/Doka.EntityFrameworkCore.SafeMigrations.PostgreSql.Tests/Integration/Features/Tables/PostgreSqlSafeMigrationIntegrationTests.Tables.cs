@@ -1,11 +1,18 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the Tables PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlTablesIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlTablesIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     [Fact]
     public async Task GeneratedCheckConstraint_IsAcceptedByPreflightRuntimeAndPostflight()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists(
@@ -46,7 +53,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task GranularConvergence_CompletesExistingPartialTableAndIsIdempotent()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE module_state (id integer NOT NULL PRIMARY KEY); "
@@ -89,7 +96,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ExistenceOnly_AcceptsAnExistingTableContainerWithoutMutatingShapeDrift()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE existence_shape (id character varying(20) NOT NULL);");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -145,7 +152,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         {
             var table = $"state_matrix_{scenario.Index.ToString(CultureInfo.InvariantCulture)}";
             var index = $"ix_{table}_id";
-            var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+            var connectionString = await CreateDatabaseAsync(CancellationToken.None);
             var columnSql = scenario.Values["column"] switch
             {
                 "missing" => string.Empty,
@@ -263,7 +270,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task StrictTableDefinition_RejectsUnexpectedColumnsAndConstraints()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var definition = new ExpectedTableDefinition(
             "strict_table",
@@ -316,7 +323,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task StrictTableDefinition_AllowsPendingStandaloneForeignKeyAndRejectsUnexpectedTransitionShape()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE transition_parents (id integer NOT NULL, "
@@ -395,55 +402,4 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         Assert.Equal(SafeMigrationObservedState.Missing, drift.Assessments[1].ObservedState);
     }
 
-    private sealed class StandaloneForeignKeyContext(
-        DbContextOptions<StandaloneForeignKeyContext> options
-    ) : DbContext(options)
-    {
-        protected override void OnModelCreating(
-            ModelBuilder modelBuilder
-        )
-        {
-            modelBuilder.Entity<TransitionParent>(entity =>
-            {
-                entity.ToTable("transition_parents");
-                entity.HasKey(value => value.Id)
-                    .HasName("pk_transition_parents");
-                entity.Property(value => value.Id)
-                    .HasColumnName("id")
-                    .HasColumnType("integer")
-                    .ValueGeneratedNever();
-            });
-
-            modelBuilder.Entity<TransitionChild>(entity =>
-            {
-                entity.ToTable("transition_children");
-                entity.HasKey(value => value.Id)
-                    .HasName("pk_transition_children");
-                entity.Property(value => value.Id)
-                    .HasColumnName("id")
-                    .HasColumnType("integer")
-                    .ValueGeneratedNever();
-                entity.Property(value => value.ParentId)
-                    .HasColumnName("parent_id")
-                    .HasColumnType("integer");
-                entity.HasOne<TransitionParent>()
-                    .WithMany()
-                    .HasForeignKey(value => value.ParentId)
-                    .OnDelete(DeleteBehavior.SetNull)
-                    .HasConstraintName("fk_transition_children_parent");
-            });
-        }
-    }
-
-    private sealed class TransitionParent
-    {
-        public int Id { get; init; }
-    }
-
-    private sealed class TransitionChild
-    {
-        public int Id { get; init; }
-
-        public int? ParentId { get; init; }
-    }
 }

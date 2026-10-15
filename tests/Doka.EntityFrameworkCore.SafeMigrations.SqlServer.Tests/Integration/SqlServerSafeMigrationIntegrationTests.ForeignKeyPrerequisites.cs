@@ -1,7 +1,15 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
-public sealed partial class SqlServerSafeMigrationIntegrationTests
+/// <summary>Verifies foreign key prerequisites SQL Server contracts against isolated databases.</summary>
+public sealed class SqlServerSafeMigrationForeignKeyPrerequisitesIntegrationTests
+    : SqlServerSafeMigrationIntegrationTests
 {
+    /// <summary>Creates the feature suite with the assembly-owned SQL Server fixture.</summary>
+    /// <param name="fixture">The shared fixture providing a database per test.</param>
+    public SqlServerSafeMigrationForeignKeyPrerequisitesIntegrationTests(
+        SqlServerContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>
     /// Adds a foreign key over valid existing rows and recognizes it on replay.
     /// </summary>

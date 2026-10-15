@@ -235,6 +235,8 @@ public sealed class SafeMigrationCatalogProbeBatchTests
         // Arrange
         await using var connection = new CatalogProbeTestConnection(native) { Fault = fault };
         var consumedOffsets = new List<int>();
+        const string recoveryGuidance = " Stop migration analysis; inspect the provider contract and report "
+            + "this invariant failure using redacted evidence.";
 
         // Act
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -251,8 +253,10 @@ public sealed class SafeMigrationCatalogProbeBatchTests
         // Assert
         Assert.Equal((fault, native) switch
         {
-            ("missing-set", _) => "The catalog probe transport returned an inconsistent result-set count.",
-            ("extra-set", true) => "The catalog probe transport returned an invalid result-set count.",
+            ("missing-set", _) => "The catalog probe transport returned an inconsistent result-set count."
+                + recoveryGuidance,
+            ("extra-set", true) => "The catalog probe transport returned an invalid result-set count."
+                + recoveryGuidance,
             ("reversed", _) => "Invalid probe result ordinal.",
             _ => "Missing probe result row.",
         }, failure.Message);

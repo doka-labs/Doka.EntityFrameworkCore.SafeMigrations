@@ -1,7 +1,12 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the ForeignKeysProjectedLivePrerequisites migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlForeignKeysProjectedLivePrerequisitesIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     /// <summary>A populated existing child needs no parent convergence before adding a nullable FK.</summary>
     /// <param name="guidStorage">Whether the new endpoint uses the provider's CHAR(36) GUID contract.</param>
     /// <param name="onDelete">The independently authored parent deletion action.</param>
@@ -18,7 +23,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var principalType = guidStorage ? "char(36)" : "int";
 
         await ExecuteSqlAsync(connectionString,
@@ -113,7 +118,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB "
             + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; INSERT INTO `live_child` VALUES (1), (2);"
@@ -147,7 +152,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeySparseNonNullDefaultDoesNotProveNullRows()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
@@ -179,7 +184,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeySparseMatchingPrincipalDeclarationsCannotHideInheritedCollationDrift(bool newMember)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `live_parent` (`id` varchar(36) NOT NULL PRIMARY KEY) ENGINE=InnoDB "
             + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
@@ -219,7 +224,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task SparseCompositeIndexCombinesLiveAndNewNullableMembers(int kind)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY, `code` int NOT NULL) ENGINE=InnoDB; "
             + "INSERT INTO `live_child` VALUES (1, 7), (2, 7);");
@@ -270,7 +275,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeySparseCandidateKeyRemovalRemainsBlocking(string kind)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var keySql = kind is "primary" or "replacement" ? "PRIMARY KEY (`id`)" : "UNIQUE KEY `uq_parent_id` (`id`)";
 
         await ExecuteSqlAsync(connectionString,
@@ -317,7 +322,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeySparseRuntimeRevalidatesRowsAfterPreflight()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
@@ -334,7 +339,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         preflight.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, operations.Take(2).ToArray(), CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "UPDATE `live_child` SET `parent_id` = 999 WHERE `id` = 1;");
-        var exception = await Assert.ThrowsAsync<MySqlException>(async () =>
+        var exception = await AssertOwnedGuardFailureAsync(async () =>
             await ExecuteOperationsAsync(context, [operations[2]], CancellationToken.None));
 
         var final = await runner.AnalyzeAsync(context, [operations[2]],
@@ -356,7 +361,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeySparseNullableSelfReferenceUsesLivePrimaryKey()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "INSERT INTO `live_child` VALUES (1), (2);");
@@ -391,7 +396,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeySparseCompositeEndpointCombinesLiveAndNewMembers()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `live_parent` (`tenant_id` int NOT NULL, `id` int NOT NULL, "
             + "PRIMARY KEY (`tenant_id`, `id`)) ENGINE=InnoDB; "
@@ -428,7 +433,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeySparseIndependentUniqueCandidateSurvivesOtherCandidateDrop()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `live_parent` (`id` int NOT NULL, UNIQUE KEY `uq_removed` (`id`), "
             + "UNIQUE KEY `uq_surviving` (`id`)) ENGINE=InnoDB; "
@@ -464,7 +469,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeySparseDatabaseScopedSymbolCollisionRemainsBlocking()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `other_child` (`id` int NOT NULL, CONSTRAINT `fk_live_child_parent` "
@@ -496,7 +501,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeySparseSetNullRequiresActualNullableEndpoint()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB;");
@@ -523,7 +528,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeySparseOwnedSymbolCanBeReusedOnlyAfterAcceptedRemoval()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY, `old_parent_id` int NULL, "
@@ -576,7 +581,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var keySql = nonstandardKey ? "KEY `ix_parent_id` (`id`, `code`)" : "PRIMARY KEY (`id`)";
 
         await ExecuteSqlAsync(connectionString,
@@ -632,7 +637,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeySparseQualifiedOwnerSurvivesUnrelatedRenameSourceAnalysis()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
@@ -674,7 +679,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeySparseFactsAreClearedBeforeCanceledReanalysis()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
@@ -713,7 +718,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task SparseMixedRequiredConstraintUsesLiveColumnsOnlyWithCurrentEmptyProof(bool check)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE `live_child` (`id` int NOT NULL) ENGINE=InnoDB;");
 
         await using var context = CreateContext(connectionString);
@@ -761,7 +766,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeySparseNewChildUsesUntouchedLivePrincipal(bool separateAdd)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB;");
 
@@ -813,7 +818,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeySparseOwnedSymbolWithoutNewCoveringIndexIsBlocked()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY, `old_parent_id` int NULL, "
@@ -840,7 +845,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
         Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, preflight.Assessments[2].Action);
-        Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(exception).Message,
+        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(exception).Message,
             StringComparison.Ordinal);
         Assert.DoesNotContain("Duplicate key name", exception.Message, StringComparison.Ordinal);
     }
@@ -854,7 +859,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeySparseEnumDomainPreservesMemberSpelling(string memberDrift)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `live_parent` (`id` enum('A','b') COLLATE utf8mb4_unicode_ci NOT NULL PRIMARY KEY) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
@@ -906,7 +911,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeySparseNewChildQualifiesNativeCreationDefaults(string shape)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var database = new MySqlConnectionStringBuilder(connectionString).Database;
         var databaseCollation = shape == "inherited" ? "utf8mb4_unicode_ci" : "utf8mb4_general_ci";
         await ExecuteSqlAsync(connectionString, "ALTER DATABASE `"
@@ -966,7 +971,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeyNativeSupportingIndexVariantsRemainUsable(string shape)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY, `parent_id` int NULL, `old_id` int NULL, "
@@ -1008,7 +1013,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         }
         else
         {
-            Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(exception).Message,
+            Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(exception).Message,
                 StringComparison.Ordinal);
         }
     }
@@ -1018,7 +1023,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeySparsePrincipalDescendingKeyUsesNativeEngineContract()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `live_parent` (`id` int NOT NULL, UNIQUE INDEX `uq_parent_desc` (`id` DESC)) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
@@ -1061,7 +1066,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     {
         // Arrange
         var multiValued = expressionKind == "multi";
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY, `parent_id` int NULL, "
@@ -1128,7 +1133,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         if (!supported)
         {
             Assert.Equal("foreign_key_multi_valued_supporting_index", preflight.Assessments[0].AnalysisCode);
-            Assert.Contains("doka_sm_unsupported", Assert.IsType<MySqlException>(managedFailure).Message,
+            Assert.Contains("doka_sm_unsupported", AssertOwnedGuardFailure(managedFailure).Message,
                 StringComparison.Ordinal);
         }
         else if (cascade)
@@ -1165,7 +1170,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeyNativeMultiValuedRiskCannotBorrowNamespaceOrOtherIndex(string shape, bool cascade)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY, `parent_id` int NULL, "
@@ -1237,7 +1242,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         {
             Assert.Equal("foreign_key_multi_valued_supporting_index", preflight.Assessments[0].AnalysisCode);
             Assert.False(final.Assessments[0].PostconditionSatisfied);
-            Assert.Contains("doka_sm_unsupported", Assert.IsType<MySqlException>(failure).Message,
+            Assert.Contains("doka_sm_unsupported", AssertOwnedGuardFailure(failure).Message,
                 StringComparison.Ordinal);
         }
 
@@ -1256,7 +1261,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeyNativeMultiValuedRiskCanBeRetiredByAcceptedPhysicalRemovals(bool newOwner)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY, `parent_id` int NULL, "
@@ -1323,7 +1328,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignKeyNativeMultiValuedDropCannotEraseUnsafeConstraintHistory(bool alias)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY, `parent_id` int NULL, "
@@ -1373,7 +1378,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         else
         {
             Assert.Equal(SafeMigrationAction.RejectUnsupported, preflight.Assessments[0].Action);
-            Assert.Contains("doka_sm_unsupported", Assert.IsType<MySqlException>(failure).Message,
+            Assert.Contains("doka_sm_unsupported", AssertOwnedGuardFailure(failure).Message,
                 StringComparison.Ordinal);
             Assert.Equal(1, await ScalarIntAsync(connectionString,
                 "SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS "

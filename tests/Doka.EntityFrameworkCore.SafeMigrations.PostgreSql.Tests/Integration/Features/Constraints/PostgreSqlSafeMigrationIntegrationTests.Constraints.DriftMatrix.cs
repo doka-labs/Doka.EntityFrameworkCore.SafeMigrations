@@ -1,11 +1,18 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the ConstraintsDriftMatrix PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlConstraintsDriftMatrixIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     [Fact]
     public async Task EquivalentUniqueAndCheckConstraintsWithDifferentNames_AreIdempotentNoOps()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE constraint_identity ("
@@ -75,7 +82,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task DifferentlyNamedUniqueAndCheckConstraintsWithDifferentShapes_RemainApplicable()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE constraint_nonidentity ("
@@ -122,7 +129,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ExistingPrimaryKeyWithDifferentName_IsAnIdempotentNoOp()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE primary_key_identity ("
@@ -163,7 +170,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task DifferentlyNamedPrimaryKeyWithDifferentShape_IsRejectedBeforeDdl()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE primary_key_singleton ("
@@ -189,7 +196,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
         Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
         Assert.Equal("P1001", exception.SqlState);
-        Assert.Equal("doka_sm_different", exception.MessageText);
+        Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
         Assert.Equal(
             1,
             await ScalarIntAsync(
@@ -202,7 +209,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task BackingIndexNamespaceCollisions_AreRejectedBeforeDdl()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE constraint_namespace_owner (id integer NOT NULL, code integer NULL);"
@@ -240,7 +247,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 ExecuteOperationsAsync(context, [operation]));
 
             Assert.Equal("P1001", exception.SqlState);
-            Assert.Equal("doka_sm_different", exception.MessageText);
+            Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
         }
 
         Assert.Equal(
@@ -266,7 +273,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         int legacyConstraintCount
     )
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var legacyName = new string('l', 63);
         var secondLegacyName = new string('s', 63);
         var expectedName = new string('e', 63);
@@ -319,7 +326,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ExactNameDrift_IsNeverHiddenByEquivalentAliases()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE identity_precedence_parents (id integer NOT NULL PRIMARY KEY);"
@@ -381,7 +388,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 ExecuteOperationsAsync(context, [operation]));
 
             Assert.Equal("P1001", exception.SqlState);
-            Assert.Equal("doka_sm_different", exception.MessageText);
+            Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
         }
 
         Assert.Equal(
@@ -401,7 +408,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         ReferentialAction onDelete
     )
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE identity_action_parents (id integer NOT NULL PRIMARY KEY);"
@@ -445,7 +452,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task NonCanonicalConstraintSemantics_AreRejectedBeforeDdl()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE semantic_primary_key ("
@@ -507,14 +514,14 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 ExecuteOperationsAsync(context, [operation]));
 
             Assert.Equal("P1001", exception.SqlState);
-            Assert.Equal("doka_sm_different", exception.MessageText);
+            Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
         }
     }
 
     [Fact]
     public async Task PartitionDerivedConstraints_AreRejectedBeforeDdl()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE partition_identity_parents ("
@@ -571,14 +578,14 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 ExecuteOperationsAsync(context, [builder.Operations[index]]));
 
             Assert.Equal("P1001", exception.SqlState);
-            Assert.Equal("doka_sm_different", exception.MessageText);
+            Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
         }
     }
 
     [Fact]
     public async Task PartitionDerivedConstraintDrops_AreRejectedBeforeDdl()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE partition_drop_parents (tenant_id integer NOT NULL, id integer NOT NULL, "
@@ -615,7 +622,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 ExecuteOperationsAsync(context, [operation]));
 
             Assert.Equal("P1001", exception.SqlState);
-            Assert.Equal("doka_sm_different", exception.MessageText);
+            Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
         }
     }
 
@@ -627,7 +634,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             return;
         }
 
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE unique_null_semantics ("
@@ -654,7 +661,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
         Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
         Assert.Equal("P1001", exception.SqlState);
-        Assert.Equal("doka_sm_different", exception.MessageText);
+        Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -665,7 +672,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             return;
         }
 
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE partial_set_parent ("
@@ -697,7 +704,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
         Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
         Assert.Equal("P1001", exception.SqlState);
-        Assert.Equal("doka_sm_different", exception.MessageText);
+        Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -708,7 +715,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             return;
         }
 
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE EXTENSION btree_gist;"
@@ -751,14 +758,14 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 ExecuteOperationsAsync(context, [operation]));
 
             Assert.Equal("P1001", exception.SqlState);
-            Assert.Equal("doka_sm_different", exception.MessageText);
+            Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
         }
     }
 
     [Fact]
     public async Task ObservableConstraintFacetDrift_IsRejectedOneFieldAtATime()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE constraint_matrix_parents ("
@@ -1023,4 +1030,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 onUpdate: ReferentialAction.Cascade,
                 onDelete: onDelete),
         ]);
+
 }

@@ -357,7 +357,7 @@ internal sealed class MySqlRuntimeCommandInterceptor : DbCommandInterceptor
                     CompleteSetupInjection(command);
                 }
             }
-            else if (command.CommandText.StartsWith(
+            else if (ReadRuntimeCommandText(command.CommandText).StartsWith(
                          "DROP TEMPORARY TABLE IF EXISTS `__doka_sm_assert`",
                          StringComparison.Ordinal))
             {
@@ -439,32 +439,50 @@ internal sealed class MySqlRuntimeCommandInterceptor : DbCommandInterceptor
         string sql
     )
     {
-        if (sql.Contains("SET @doka_sm_post_ok", StringComparison.Ordinal))
+        var commandText = ReadRuntimeCommandText(sql);
+        if (commandText.Contains("SET @doka_sm_post_ok", StringComparison.Ordinal))
         {
             return "guarded_body";
         }
 
-        if (sql.Contains("SET @doka_sm_state = NULL, @doka_sm_action = NULL", StringComparison.Ordinal))
+        if (commandText.Contains("SET @doka_sm_state = NULL, @doka_sm_action = NULL", StringComparison.Ordinal))
         {
             return "guard_cleanup";
         }
 
-        if (sql.StartsWith("PREPARE doka_sm_statement FROM 'DO 0'", StringComparison.Ordinal))
+        if (commandText.StartsWith("PREPARE doka_sm_statement FROM 'DO 0'", StringComparison.Ordinal))
         {
             return "prepared_cleanup";
         }
 
-        if (sql.Contains("doka_sm", StringComparison.Ordinal))
+        if (commandText.Contains("doka_sm", StringComparison.Ordinal))
         {
-            return ClassifySetup(sql);
+            return ClassifySetup(commandText);
         }
 
         return "migration_infrastructure";
     }
 
+    /// <summary>Ignores only the exact leading diagnostic marker without copying the measured SQL payload.</summary>
+    /// <param name="sql">The actual dispatched command, potentially beginning with owned correlation metadata.</param>
+    private static ReadOnlySpan<char> ReadRuntimeCommandText(string sql)
+    {
+        var commandText = sql.AsSpan().TrimStart();
+        if (!MySqlSafeMigrationRuntimeDiagnostic.TryReadMarker(sql, out _, out _))
+        {
+            return commandText;
+        }
+
+        // WHY: Arbitrary comment stripping could hide unknown command shapes;
+        // the canonical decoder first validates the complete ordinal and correlation token.
+        var markerEnd = commandText.IndexOf("*/", StringComparison.Ordinal) + 2;
+
+        return commandText[markerEnd..].TrimStart();
+    }
+
     /// <summary>Attributes a mixed setup dispatch once rather than inventing per-statement durations.</summary>
     private static string ClassifySetup(
-        string sql
+        ReadOnlySpan<char> sql
     )
     {
         string? category = null;
@@ -479,11 +497,18 @@ internal sealed class MySqlRuntimeCommandInterceptor : DbCommandInterceptor
         }
 
         var offset = 0;
-        while ((offset = sql.IndexOf("SET @doka_sm_", offset, StringComparison.Ordinal)) >= 0)
+        while (offset < sql.Length)
         {
+            var assignmentOffset = sql[offset..].IndexOf("SET @doka_sm_", StringComparison.Ordinal);
+            if (assignmentOffset < 0)
+            {
+                break;
+            }
+
+            offset += assignmentOffset;
             // WHY: Owned dynamic SQL is hex-encoded. Inspect only emitted assignment markers;
             // PREPARE/EXECUTE/DEALLOCATE stay with their assignment's command-level measurement.
-            category = CombineSetupCategories(category, ClassifySetupAssignment(sql.AsSpan(offset)));
+            category = CombineSetupCategories(category, ClassifySetupAssignment(sql[offset..]));
             offset += "SET @doka_sm_".Length;
         }
 

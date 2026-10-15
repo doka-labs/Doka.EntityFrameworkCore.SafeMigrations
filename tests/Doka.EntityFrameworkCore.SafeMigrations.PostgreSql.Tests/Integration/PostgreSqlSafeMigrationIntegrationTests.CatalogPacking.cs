@@ -1,12 +1,19 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the CatalogPacking PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlCatalogPackingIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlCatalogPackingIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>Prerequisite failures between live operations do not fragment bounded classification.</summary>
     [Fact]
     public async Task Analyzer_PacksAcrossShortCircuitGapsAndCaptureBoundariesWithoutMixingResults()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE catalog_packing (id integer NOT NULL);");
         await using var context = CreateContext(connectionString);
         await using var connection = new CatalogClassificationCountingConnection(
@@ -63,7 +70,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         bool missingRows
     )
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE catalog_ownership (id integer NOT NULL);");
         await using var context = CreateContext(connectionString);
         await using var connection = new CatalogClassificationCountingConnection(
@@ -91,4 +98,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         Assert.Equal(ConnectionState.Closed, connection.State);
         Assert.Contains("catalog classifier", exception.Message, StringComparison.Ordinal);
     }
+
 }

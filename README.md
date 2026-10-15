@@ -30,7 +30,7 @@ equivalent.
 - `Doka.EntityFrameworkCore.SafeMigrations`: provider-neutral intent,
   definitions, planning, reports, and `MigrationBuilder` extensions
 - `Doka.EntityFrameworkCore.SafeMigrations.MySql`: MySQL and MariaDB adapter on
-  the public `Doka.EntityFrameworkCore.MySql` 10.4.2 operation-handler and
+  the public `Doka.EntityFrameworkCore.MySql` 10.5 operation-handler and
   typed migration-metadata SPI
 - `Doka.EntityFrameworkCore.SafeMigrations.PostgreSql`: PostgreSQL adapter on
   Npgsql 10
@@ -55,35 +55,35 @@ evidence. See [Support and qualification](docs/support-and-qualification.md).
 ## Installation
 
 Install one provider package. The core package is included transitively. The
-examples target prepared stable 10.4.11 and select that version exactly, so
+examples target prepared stable 10.5.0 and select that version exactly, so
 restore does not move to another version implicitly. Verify public package
 availability before installation; source preparation is not publication
 evidence. Release changes and compatibility notes belong in the
 [changelog](CHANGELOG.md).
 
 ```bash
-package_version='10.4.11'
+package_version='10.5.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.MySql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.4.11'
+package_version='10.5.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.4.11'
+package_version='10.5.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.Sqlite --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.4.11'
+package_version='10.5.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.SqlServer --version "$package_version"
 ```
 
@@ -151,7 +151,7 @@ it after an attention or timeout; SQL Server `TRY/CATCH` does not catch those
 client interruptions.
 
 `UseMySqlSafeMigrations()` declares its user-variable requirement through the
-Doka 10.4 line. For a provider-owned connection string, Doka supplies
+Doka 10.5 line. For a provider-owned connection string, Doka supplies
 `AllowUserVariables=true` when it was omitted. An explicitly contradictory
 setting is rejected. Caller-owned `DbConnection` and `MySqlDataSource` inputs
 are never mutated and must already use `AllowUserVariables=true` and
@@ -714,7 +714,7 @@ binds each contract's fingerprint to the same deployment artifact and target.
 
 Reports include provider and engine identity, model and operation-contract
 SHA-256 fingerprints, ordered assessments, preserved unexpected objects, and
-stable codes. The current report schema v3 retains separate provider
+stable codes. The current report schema v4 retains separate provider
 `AnalysisCode` and policy `DecisionCode`, bounded typed facet differences, and
 the known `OperationalImpact`. Detailed evidence remains in the report, never
 in metric labels, and model-managed values remain redacted. A blocked preflight
@@ -729,9 +729,10 @@ properties are not captured by this fingerprint. Newly scaffolded
 strict source. Retain the immutable artifact digest and independent review for
 every provider-owned operation.
 Serialize with `SafeMigrationReportJson`; the package includes the current
-[`safe-migration-run-report-v3` schema](schemas/safe-migration-run-report-v3.schema.json).
+[`safe-migration-run-report-v4` schema](schemas/safe-migration-run-report-v4.schema.json).
 The [version 1](schemas/safe-migration-run-report-v1.schema.json) and
-[version 2](schemas/safe-migration-run-report-v2.schema.json) schemas remain
+[version 2](schemas/safe-migration-run-report-v2.schema.json) and
+[version 3](schemas/safe-migration-run-report-v3.schema.json) schemas remain
 available for readers of previously persisted reports.
 
 When pending migrations contain raw SQL followed by safe operations, read-only
@@ -793,12 +794,18 @@ assessments, and `BlockingOnly` includes only the assessments that block the
 current preflight or postflight phase. The view retains source identity and
 total/included counts, preserves assessment order, and never includes
 unexpected objects in `BlockingOnly`. It uses the distinct packaged
-[`safe-migration-report-view-v2` schema](schemas/safe-migration-report-view-v2.schema.json);
-the existing one-argument serializer remains the canonical complete report v3.
-The [version 1 view schema](schemas/safe-migration-report-view-v1.schema.json)
-remains available for previously persisted views. `NonMatching` retains deferred
+[`safe-migration-report-view-v3` schema](schemas/safe-migration-report-view-v3.schema.json);
+the existing one-argument serializer remains the canonical complete report v4.
+The [version 1](schemas/safe-migration-report-view-v1.schema.json) and
+[version 2](schemas/safe-migration-report-view-v2.schema.json) view schemas
+remain available for previously persisted views. `NonMatching` retains deferred
 assessments and their origins; `BlockingOnly` does not present them as proven
 blockers.
+
+Assessments include explicit table/schema and relationship identity, readable
+explanations and bounded text summaries via `SafeMigrationReportText`. Runtime
+diagnostics also work without preflight. See
+[errors and readable reports](docs/diagnostics.md) for usage and compatibility.
 
 Do not encode a preflight-only operation inside `Migration.Up`. EF would record
 the migration as applied after successful command execution even when the

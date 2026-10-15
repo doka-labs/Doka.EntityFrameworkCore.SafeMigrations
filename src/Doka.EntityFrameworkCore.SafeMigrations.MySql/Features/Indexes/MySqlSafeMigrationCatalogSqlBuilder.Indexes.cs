@@ -508,7 +508,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var fractionalSeconds = "CASE COALESCE(c.DATETIME_PRECISION, 0) "
             + "WHEN 0 THEN 0 WHEN 1 THEN 1 WHEN 2 THEN 1 WHEN 3 THEN 2 WHEN 4 THEN 2 ELSE 3 END";
 
+        // WHY: MariaDB UUID is a sixteen-byte scalar, not a character or binary
+        // string. Keeping it in this arm preserves rejection of prefix keys.
         var scalarWidth = "CASE "
+            + "WHEN c.DATA_TYPE = 'uuid' THEN 16 "
             + "WHEN c.DATA_TYPE = 'tinyint' THEN 1 WHEN c.DATA_TYPE = 'smallint' THEN 2 "
             + "WHEN c.DATA_TYPE = 'mediumint' THEN 3 WHEN c.DATA_TYPE IN ('int', 'integer') THEN 4 "
             + "WHEN c.DATA_TYPE = 'float' THEN CASE WHEN c.NUMERIC_PRECISION <= 24 THEN 4 ELSE 8 END "

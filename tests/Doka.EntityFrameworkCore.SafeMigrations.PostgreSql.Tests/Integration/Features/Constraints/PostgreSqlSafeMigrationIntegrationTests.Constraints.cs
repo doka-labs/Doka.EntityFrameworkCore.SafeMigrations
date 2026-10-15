@@ -1,11 +1,18 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the Constraints PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlConstraintsIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlConstraintsIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     [Fact]
     public async Task ConstraintLifecycle_IsIdempotentAcrossEveryConstraintFamily()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE parents (id integer NOT NULL PRIMARY KEY); "
@@ -69,7 +76,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ExistingConstraintDefinitionDrift_IsRejectedForEveryConstraintFamily()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE constraint_parents (id integer NOT NULL PRIMARY KEY); "
@@ -123,7 +130,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ConstraintAndUniqueIndexDataBlockers_StopBeforeTargetDdl()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE blocker_parents (id integer NOT NULL PRIMARY KEY); "
@@ -182,4 +189,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 "SELECT COUNT(*) FROM pg_catalog.pg_class c "
                 + "WHERE c.relname = 'ux_blocker_children_code' AND c.relkind = 'i';"));
     }
+
 }

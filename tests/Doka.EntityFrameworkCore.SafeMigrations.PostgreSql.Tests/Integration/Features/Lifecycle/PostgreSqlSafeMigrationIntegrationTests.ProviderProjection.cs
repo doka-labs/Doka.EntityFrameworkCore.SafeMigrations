@@ -1,11 +1,18 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the ProviderProjection PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlProviderProjectionIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     [Fact]
     public async Task ExistingTablesProjectAcceptedColumnsAndKeysIntoForeignKeyPreflight()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE projection_parents (id integer NOT NULL PRIMARY KEY); "
@@ -63,7 +70,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ForeignKeyPreflightRejectsUnprovenRowsFromNewDefaultedColumn()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE projection_parents (id integer NOT NULL PRIMARY KEY); "
@@ -100,7 +107,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task SemanticUniqueNoOpDoesNotSurvivePhysicalDropInForeignKeyProjection()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE alias_projection_parents ("
@@ -142,7 +149,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ProviderAnalysisResolvesPhysicalIdentitiesForSemanticAliases()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE identity_parents ("
@@ -183,7 +190,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ProviderAnalysisDoesNotResolveAmbiguousSemanticAliases()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE ambiguous_parents ("
@@ -232,7 +239,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task EmptyExistingTableProjectsPrimaryUniqueAndCheckConstraintPrerequisites()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE projection_constraints (legacy_marker integer NULL);");
@@ -301,7 +308,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         var expectedCheckConstraint = TargetName(checkConstraint, useSemanticAliases);
         var expectedForeignKey = TargetName(foreignKey, useSemanticAliases);
         var expectedIndex = TargetName(index, useSemanticAliases);
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
@@ -389,7 +396,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     {
         const string table = "ordered_data_mutation";
         const string constraint = "uq_ordered_data_mutation_code";
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
@@ -674,4 +681,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
 
         return builder;
     }
+
 }

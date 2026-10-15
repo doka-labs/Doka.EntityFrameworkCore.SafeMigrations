@@ -18,7 +18,7 @@ public sealed class PostgreSqlIndexTypeCapabilityTests : PostgreSqlIntegrationTe
     public async Task OrdinaryDeclarationsRetainCurrentNativeIndexBinding(string shape)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE native_members (id integer, label varchar(8)); "
             + "INSERT INTO native_members VALUES (1, 'value');");
 
@@ -108,7 +108,7 @@ public sealed class PostgreSqlIndexTypeCapabilityTests : PostgreSqlIntegrationTe
     public async Task DefaultBtreeRequiresNativeInputOperatorClass(string path, bool jsonb)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var type = jsonb ? "jsonb" : "json";
         if (path != "authored")
         {
@@ -200,7 +200,7 @@ public sealed class PostgreSqlIndexTypeCapabilityTests : PostgreSqlIntegrationTe
     public async Task DefaultBindingsRetainNativeDomainBinaryAndPolymorphicSelection(string shape)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var setup = shape switch
         {
             "domain" => "CREATE DOMAIN label_domain AS varchar(32); ",
@@ -272,7 +272,7 @@ public sealed class PostgreSqlIndexTypeCapabilityTests : PostgreSqlIntegrationTe
     public async Task ExplicitOperatorClassRequiresDirectionalNativeCompatibility(bool compatible, bool qualified)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE native_members (value varchar(32) NOT NULL); INSERT INTO native_members VALUES ('a');");
 
@@ -336,7 +336,7 @@ public sealed class PostgreSqlIndexTypeCapabilityTests : PostgreSqlIntegrationTe
     public async Task PhysicalAliasesIncludesAndComputedResultsRetainDistinctContracts(string shape)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE native_members (id integer NOT NULL, "
             + "payload json NULL, label text NOT NULL); INSERT INTO native_members VALUES (1, '{}', 'a');");
 
@@ -408,7 +408,7 @@ public sealed class PostgreSqlIndexTypeCapabilityTests : PostgreSqlIntegrationTe
     public async Task NativeIdentifierAliasRetainsQualifiedPhysicalIdentity(string mismatch)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE native_members (id integer, other integer); "
             + "CREATE INDEX ix_native_members ON native_members (id);");
 
@@ -434,7 +434,7 @@ public sealed class PostgreSqlIndexTypeCapabilityTests : PostgreSqlIntegrationTe
     public async Task UniqueJsonInputIsRejectedBeforeDataProbeBinding()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE native_members (payload json); "
             + "INSERT INTO native_members VALUES ('{}');");
 
@@ -459,7 +459,7 @@ public sealed class PostgreSqlIndexTypeCapabilityTests : PostgreSqlIntegrationTe
     public async Task NativeCastCandidatePreservesOperandAndTarget(string mismatch)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE native_members (id integer, other integer); "
             + "CREATE INDEX ix_native_members ON native_members ((id::bigint));");
 
@@ -489,7 +489,7 @@ public sealed class PostgreSqlIndexTypeCapabilityTests : PostgreSqlIntegrationTe
     public async Task NativeHashFlagsRejectUnsupportedLayouts(string requirement)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE native_members (id integer, added integer);");
 
         await using var context = CreateContext(connectionString);
@@ -516,7 +516,7 @@ public sealed class PostgreSqlIndexTypeCapabilityTests : PostgreSqlIntegrationTe
     public async Task UnprovenMethodFlagsDoNotInvokeCustomHandler()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE FUNCTION custom_btree(internal) RETURNS index_am_handler "
             + "LANGUAGE internal AS 'bthandler'; CREATE ACCESS METHOD custom_btree_alias TYPE INDEX "
             + "HANDLER custom_btree; CREATE TABLE native_members (id integer, added integer);");
@@ -541,7 +541,7 @@ public sealed class PostgreSqlIndexTypeCapabilityTests : PostgreSqlIntegrationTe
     public async Task CustomMethodAliasRetainsActualMethodAndBuiltinHandlerIdentity()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE ACCESS METHOD native_hash_alias TYPE INDEX "
             + "HANDLER pg_catalog.hashhandler; CREATE OPERATOR CLASS alias_integer_ops DEFAULT FOR TYPE integer "
             + "USING native_hash_alias AS OPERATOR 1 =(integer, integer), FUNCTION 1 hashint4(integer); "

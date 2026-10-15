@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
-public sealed partial class SqlServerSafeMigrationIntegrationTests
+/// <summary>Verifies identity admission SQL Server contracts against isolated databases.</summary>
+public sealed class SqlServerSafeMigrationIdentityAdmissionIntegrationTests : SqlServerSafeMigrationIntegrationTests
 {
+    /// <summary>Creates the feature suite with the assembly-owned SQL Server fixture.</summary>
+    /// <param name="fixture">The shared fixture providing a database per test.</param>
+    public SqlServerSafeMigrationIdentityAdmissionIntegrationTests(
+        SqlServerContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>Metadata visibility cannot bind even a skipped row arm of an existing identity classifier.</summary>
     [SqlServerLiveFact]
     public async Task ExistingIdentityWithoutSelect_IsStructuredUnsupportedInsteadOfPermissionFailure()

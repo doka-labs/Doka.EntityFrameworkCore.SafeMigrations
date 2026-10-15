@@ -1,7 +1,12 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the ColumnsRequiredDefaultsSqlNullAdds migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlColumnsRequiredDefaultsSqlNullAddsIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlColumnsRequiredDefaultsSqlNullAddsIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     /// <summary>
     /// Required SQL NULL additions never authorize implicit values for existing rows or permissive sessions.
     /// </summary>
@@ -15,7 +20,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task RequiredDefaultSqlNullAddQualifiesSessionAndExistingRows(bool strictSession, bool populated)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `sql_null_add_items` (`key` int NOT NULL PRIMARY KEY) ENGINE=InnoDB;"
             + (populated ? " INSERT INTO `sql_null_add_items` (`key`) VALUES (1);" : ""));
@@ -83,12 +88,12 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             // WHY: The structurally known NULL default cannot populate any
             // existing row. Both preflight and the fresh runtime gate reject
             // this case before target DDL rather than relying on its native error.
-            Assert.Contains("doka_sm_data_blocked", Assert.IsType<MySqlException>(failure).Message,
+            Assert.Contains("doka_sm_data_blocked", AssertOwnedGuardFailure(failure).Message,
                 StringComparison.Ordinal);
         }
         else
         {
-            Assert.Contains("doka_sm_unsupported", Assert.IsType<MySqlException>(failure).Message,
+            Assert.Contains("doka_sm_unsupported", AssertOwnedGuardFailure(failure).Message,
                 StringComparison.Ordinal);
         }
 
@@ -113,7 +118,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task RequiredDefaultSqlNullAddFreshProjectedOwnerUsesCapturedSession(bool strictSession)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         await AtomicRequiredAddSessionSqlAsync(context,
@@ -155,7 +160,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         }
         else
         {
-            Assert.Contains("doka_sm_unsupported", Assert.IsType<MySqlException>(failure).Message,
+            Assert.Contains("doka_sm_unsupported", AssertOwnedGuardFailure(failure).Message,
                 StringComparison.Ordinal);
             if (!Fixture.IsMariaDb)
             {
@@ -180,7 +185,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task RequiredDefaultSqlNullAddLateWriterCannotReceiveImplicitValues(bool useNullDefault)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `sql_null_add_items` (`key` int NOT NULL PRIMARY KEY) ENGINE=InnoDB;");
         var observer = new RequiredSqlDefaultAddWriter(connectionString);
@@ -218,7 +223,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(earlyUnsupported ? 0 : 1, observer.CommittedRows);
         if (earlyUnsupported)
         {
-            Assert.Contains("doka_sm_unsupported", Assert.IsType<MySqlException>(failure).Message,
+            Assert.Contains("doka_sm_unsupported", AssertOwnedGuardFailure(failure).Message,
                 StringComparison.Ordinal);
         }
         else if (useNullDefault)
@@ -236,6 +241,10 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(useNullDefault ? 0 : 1, explicitValues);
         Assert.Equal(originalFingerprint, SafeMigrationContractFingerprint.Create([operation]));
     }
+}
+
+public abstract partial class MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Writes exactly after the runtime missing/apply proof and before the real native required ADD.</summary>
     /// <remarks>
@@ -243,7 +252,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     /// interval. The independent committed writer runs at the actual body
     /// checkpoint, without sleeps, session locks or a production test hook.
     /// </remarks>
-    private sealed class RequiredSqlDefaultAddWriter : DbCommandInterceptor
+    protected sealed class RequiredSqlDefaultAddWriter : DbCommandInterceptor
     {
         private readonly string _connectionString;
 
@@ -301,6 +310,10 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             return result;
         }
     }
+}
+
+public sealed partial class MySqlColumnsRequiredDefaultsSqlNullAddsIntegrationTests : MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>Captures a SQL NULL expression without confusing it with a rejected CLR literal NULL default.</summary>
     /// <returns>The immutable required integer addition under explicit repair policy.</returns>

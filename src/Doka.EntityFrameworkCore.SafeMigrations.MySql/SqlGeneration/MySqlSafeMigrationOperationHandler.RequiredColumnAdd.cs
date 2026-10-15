@@ -29,12 +29,12 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
         // Nullable native ADD passes validation without inventing replacement
         // data; the same atomic ALTER installs the owned non-null barrier.
         nullableAdd.IsNullable = true;
-        var apply = GetBaselineBatch(context.RenderStandardOperation(nullableAdd));
+        var apply = GetBaselineBatch(RenderNativeOperation(context, nullableAdd, intent));
         var requiredModify = SafeMigrationStandardOperationFactory.CreateFullDefinitionRepair(
             intent, _expressionRenderer.Render, static collation => collation.Schema is null ? collation.Name : null,
             MySqlSafeMigrationColumnMetadata.CanSafelyConverge);
 
-        var finish = GetBaselineBatch(context.RenderStandardOperation(requiredModify));
+        var finish = GetBaselineBatch(RenderNativeOperation(context, requiredModify, intent));
         if (apply.Commands.Count != 1 || finish.Commands.Count != 1
             || apply.TransactionSuppressed != finish.TransactionSuppressed
             || !apply.Commands[0].SetupCommands.SequenceEqual(finish.Commands[0].SetupCommands, StringComparer.Ordinal)
@@ -96,10 +96,12 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
     /// <param name="baseline">The atomic native stages with their separately admitted ordinary repair body.</param>
     /// <param name="runtimePlan">The final target postcondition, including owned CHECK absence.</param>
     /// <param name="renderedParameterValues">The already rendered operation-local provider literals.</param>
+    /// <param name="postconditionSuffix">The same correlated assertion and optional script result used by ordinary bodies.</param>
     private static string BuildRequiredColumnAddBody(
         RequiredColumnAddBaseline baseline,
         MySqlSafeMigrationRuntimePlan runtimePlan,
-        IReadOnlyList<string> renderedParameterValues
+        IReadOnlyList<string> renderedParameterValues,
+        string postconditionSuffix
     )
     {
         // WHY: This path previously materialized two hex assignments and the
@@ -123,7 +125,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
             Environment.NewLine,
             PostconditionBodyPrefix,
             runtimePlan.RenderPreparedExecutionPostcondition(renderedParameterValues),
-            PostconditionBodySuffix).ToSql();
+            postconditionSuffix).ToSql();
     }
 
     /// <summary>Admits only a native single-column ALTER before appending one owned atomic CHECK clause.</summary>

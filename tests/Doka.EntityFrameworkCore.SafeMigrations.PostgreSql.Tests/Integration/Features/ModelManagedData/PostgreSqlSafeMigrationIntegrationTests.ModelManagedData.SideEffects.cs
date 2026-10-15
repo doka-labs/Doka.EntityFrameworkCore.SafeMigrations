@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the ModelManagedDataSideEffects PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlModelManagedDataSideEffectsIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlModelManagedDataSideEffectsIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>
     /// Requires runtime validation when a managed write can invalidate the immutable live row snapshot.
     /// </summary>
@@ -16,7 +23,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task SideEffects_ManagedWriteTriggerInvalidatesLiveMatchingRow(string writeKind)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
@@ -87,7 +94,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task SideEffects_ExecutedManagedInsertReplayProvesSameRow()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
@@ -133,7 +140,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task SideEffects_NewlyCreatedPlainTableRemainsReady()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
 
@@ -177,7 +184,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task SideEffects_TwoChildDeletesThenParentRemainExecutableWithRuntimeValidation()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
@@ -229,7 +236,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task SideEffects_InterveningTriggerRecreationRejectsParentDelete()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
@@ -306,48 +313,6 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             ["integer", "character varying(64)"],
             new object?[,] { { 1, "expected" } });
 
-    private static void AppendSideEffectWrite(MigrationBuilder builder, string writeKind)
-    {
-        switch (writeKind)
-        {
-            case "INSERT":
-                builder.EnsureModelManagedDataFromModel(
-                    "side_effect_writes",
-                    ["id"],
-                    ["integer"],
-                    ["id", "managed_value"],
-                    ["integer", "character varying(64)"],
-                    new object?[,] { { 1, "target" } });
-
-                break;
-            case "UPDATE":
-                builder.UpdateModelManagedDataFromModel(
-                    "side_effect_writes",
-                    ["id"],
-                    ["integer"],
-                    new object?[,] { { 1 } },
-                    ["managed_value"],
-                    ["character varying(64)"],
-                    new object?[,] { { "source" } },
-                    new object?[,] { { "target" } });
-
-                break;
-            case "DELETE":
-                builder.DeleteModelManagedDataFromModel(
-                    "side_effect_writes",
-                    ["id"],
-                    ["integer"],
-                    new object?[,] { { 1 } },
-                    ["id", "managed_value"],
-                    ["integer", "character varying(64)"],
-                    new object?[,] { { 1, "source" } });
-
-                break;
-            default:
-                throw new ArgumentOutOfRangeException(nameof(writeKind));
-        }
-    }
-
     private static void AppendSideEffectChildDelete(MigrationBuilder builder, int id)
         => builder.DeleteModelManagedDataFromModel(
             "side_effect_children",
@@ -374,4 +339,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                     ["parent_id"],
                     ["id"]),
             ]);
+
 }

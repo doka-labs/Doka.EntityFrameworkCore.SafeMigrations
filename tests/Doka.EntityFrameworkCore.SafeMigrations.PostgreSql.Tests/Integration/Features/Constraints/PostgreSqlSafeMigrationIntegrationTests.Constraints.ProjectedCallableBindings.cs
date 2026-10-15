@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the ConstraintsProjectedCallableBindings PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlConstraintsProjectedCallableBindingsIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlConstraintsProjectedCallableBindingsIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>An exact custom VARCHAR overload cannot inherit a builtin LOWER-to-TEXT match certificate.</summary>
     /// <param name="defaultSuffix">Whether the exact supplied VARCHAR prefix has an omitted default argument.</param>
     [Theory]
@@ -10,7 +17,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task MatchingCheckDoesNotBorrowBuiltinLowerCastAcrossCustomOverload(bool defaultSuffix)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var signature = defaultSuffix ? "varchar, boolean DEFAULT false" : "varchar";
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE mixed_columns (id varchar(32) NOT NULL, added integer NOT NULL, "
@@ -57,7 +64,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         bool variadicCompetitor = false)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var type = exact || defaultPrefix ? "integer" : "smallint";
         var firstSignature = defaultPrefix ? "integer, boolean DEFAULT false" : "integer";
         var secondSignature = defaultPrefix ? "integer, text DEFAULT ''"
@@ -122,4 +129,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, report.Assessments[1].Action);
         }
     }
+
 }

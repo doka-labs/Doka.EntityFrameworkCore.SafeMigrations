@@ -6,4 +6,14 @@
     <IsTestProject>true</IsTestProject>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)Shared/SharedContainer*.cs"
+             Link="Infrastructure/%(Filename)%(Extension)" />
+    <Compile Include="$(MSBuildThisFileDirectory)Shared/ProcessWideTestGroup.cs"
+             Link="Infrastructure/ProcessWideTestGroup.cs" />
+    <None Include="$(MSBuildThisFileDirectory)Shared/xunit.runner.json"
+          Link="xunit.runner.json"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

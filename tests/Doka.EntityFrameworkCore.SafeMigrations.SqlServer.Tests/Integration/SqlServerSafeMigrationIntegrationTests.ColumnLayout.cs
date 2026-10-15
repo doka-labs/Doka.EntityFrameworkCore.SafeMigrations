@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
-public sealed partial class SqlServerSafeMigrationIntegrationTests
+/// <summary>Verifies column layout SQL Server contracts against isolated databases.</summary>
+public sealed class SqlServerSafeMigrationColumnLayoutIntegrationTests : SqlServerSafeMigrationIntegrationTests
 {
+    /// <summary>Creates the feature suite with the assembly-owned SQL Server fixture.</summary>
+    /// <param name="fixture">The shared fixture providing a database per test.</param>
+    public SqlServerSafeMigrationColumnLayoutIntegrationTests(
+        SqlServerContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>Admits the exact 8,060-byte fixed row boundary and rejects additions beyond it before DDL.</summary>
     /// <param name="existingBytes">The physical fixed column width.</param>
     /// <param name="addedBytes">The requested additional fixed width.</param>
@@ -656,11 +663,4 @@ public sealed partial class SqlServerSafeMigrationIntegrationTests
         Assert.Equal("column_row_layout_unproven", analysis.Code);
         Assert.Equal(0, added);
     }
-
-    private static SafeMigrationOperation LayoutColumn(
-        string name,
-        string storeType,
-        Type? clrType = null
-    ) => new(new EnsureColumnIntent("layout_probe", new ExpectedColumnDefinition(
-        name, clrType ?? typeof(string), true, storeType)), SafeMigrationPolicy.ThrowIfDifferent);
 }

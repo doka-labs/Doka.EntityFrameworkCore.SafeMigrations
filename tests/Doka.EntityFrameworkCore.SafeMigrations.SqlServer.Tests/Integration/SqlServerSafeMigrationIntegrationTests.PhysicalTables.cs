@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
-public sealed partial class SqlServerSafeMigrationIntegrationTests
+/// <summary>Verifies physical tables SQL Server contracts against isolated databases.</summary>
+public sealed class SqlServerSafeMigrationPhysicalTablesIntegrationTests : SqlServerSafeMigrationIntegrationTests
 {
+    /// <summary>Creates the feature suite with the assembly-owned SQL Server fixture.</summary>
+    /// <param name="fixture">The shared fixture providing a database per test.</param>
+    public SqlServerSafeMigrationPhysicalTablesIntegrationTests(
+        SqlServerContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>Rejects unsupported engines before row probes, prerequisite failures, projection, or DDL.</summary>
     [SqlServerLiveTheory]
     [InlineData("memory")]

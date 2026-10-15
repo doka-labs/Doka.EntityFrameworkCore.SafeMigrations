@@ -1,4 +1,4 @@
-"""Positive and negative contracts for the published SQL Server PKCS floor."""
+"""Positive and negative contracts for package dependency floors and report schemas."""
 
 import json
 import os
@@ -13,7 +13,7 @@ from pathlib import Path
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 VERIFIER = REPOSITORY_ROOT / "eng/verify-package-contents.sh"
 CORE_ID = "Doka.EntityFrameworkCore.SafeMigrations"
-PACKAGE_VERSION = "10.4.11"
+PACKAGE_VERSION = "10.5.0"
 PKCS_ID = "System.Security.Cryptography.Pkcs"
 PROVIDER_DEPENDENCIES = {
     "": "Microsoft.EntityFrameworkCore.Relational",
@@ -24,7 +24,12 @@ PROVIDER_DEPENDENCIES = {
 }
 
 
-def write_packages(directory: Path, pkcs_version: str | None, leak: str | None = None) -> None:
+def write_packages(
+    directory: Path,
+    pkcs_version: str | None,
+    leak: str | None = None,
+    omitted_schema: str | None = None,
+) -> None:
     """Create the exact five-package fixture without restoring or loading code."""
     for suffix, provider in PROVIDER_DEPENDENCIES.items():
         package_id = CORE_ID + suffix
@@ -56,17 +61,22 @@ def write_packages(directory: Path, pkcs_version: str | None, leak: str | None =
                 package.writestr(f"buildTransitive/{package_id}.props", "<Project />")
             else:
                 for schema in (REPOSITORY_ROOT / "schemas").glob("*.schema.json"):
-                    package.writestr(f"schemas/{schema.name}", schema.read_bytes())
+                    if schema.name != omitted_schema:
+                        package.writestr(f"schemas/{schema.name}", schema.read_bytes())
 
         with zipfile.ZipFile(directory / f"{package_id}.{PACKAGE_VERSION}.snupkg", "w") as symbols:
             symbols.writestr(f"lib/net10.0/{package_id}.pdb", b"synthetic fixture, never loaded")
 
 
-def verify(pkcs_version: str | None, leak: str | None = None) -> subprocess.CompletedProcess[str]:
+def verify(
+    pkcs_version: str | None,
+    leak: str | None = None,
+    omitted_schema: str | None = None,
+) -> subprocess.CompletedProcess[str]:
     """Exercise the real package gate against isolated archives, not a duplicate validator."""
     with tempfile.TemporaryDirectory() as temporary_root:
         directory = Path(temporary_root)
-        write_packages(directory, pkcs_version, leak)
+        write_packages(directory, pkcs_version, leak, omitted_schema)
 
         return subprocess.run(
             ["bash", str(VERIFIER), "--package-dir", str(directory), "--version", PACKAGE_VERSION],
@@ -135,6 +145,21 @@ class VerifyPackageContentsTests(unittest.TestCase):
 
                 self.assertNotEqual(0, result.returncode)
                 self.assertIn("SQL Server-only PKCS dependency", result.stderr)
+
+    def test_rejects_missing_current_or_historical_report_schema(self) -> None:
+        """New diagnostics must ship their schemas without dropping saved-report contracts."""
+        schemas = (
+            "safe-migration-run-report-v1.schema.json",
+            "safe-migration-run-report-v4.schema.json",
+            "safe-migration-report-view-v1.schema.json",
+            "safe-migration-report-view-v3.schema.json",
+        )
+
+        for schema in schemas:
+            with self.subTest(schema=schema):
+                result = verify("9.0.21", omitted_schema=schema)
+
+                self.assertNotEqual(0, result.returncode)
 
     def test_accepts_fixed_isolated_consumer_package(self) -> None:
         """The consumer guard must accept the patched package identity and kind."""

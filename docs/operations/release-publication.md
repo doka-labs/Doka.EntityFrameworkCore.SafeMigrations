@@ -5,15 +5,15 @@ untagged `main` commit first, then waits at the protected `nuget` environment.
 Only after that wait begins does the operator create the signed tag and approve
 publication. Run every command separately and stop on the first failure.
 
-The current source prepares 10.4.11 for all five package IDs. This maintenance
-patch retains the inventory introduced in 10.4.6 and corrects sparse native
-prerequisites, physical identity and provider capability checks. Earlier
-concurrent required-add/delete guards, schema identity and recovery remain.
-Public signatures, production dependency ranges, migration source, policies,
-report schemas and history are unchanged. Timing evidence is informational;
-functional and evidence failures remain blocking. Do not publish a subset or
-treat preparation, earlier engine runs or native ARM skips as proof that this
-candidate's complete qualification or public readback has succeeded.
+The current source prepares 10.5.0 for all five package IDs, retaining the
+inventory introduced in 10.4.6. Review the
+[10.5.0 compatibility notes](../../CHANGELOG.md#1050---2026-10-15), including
+report schemas, owned MySQL/MariaDB exceptions, Doka 10.5 and persisted defaults.
+Existing migration source, policies, fingerprint formats, history, concurrency
+and recovery guards remain. Timing evidence is informational; functional and
+evidence failures remain blocking. Do not publish a subset or treat preparation,
+earlier engine runs or native ARM skips as proof that this candidate's complete
+qualification or public readback has succeeded.
 
 ## One-time configuration
 

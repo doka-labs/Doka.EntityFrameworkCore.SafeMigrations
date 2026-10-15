@@ -83,8 +83,6 @@ public sealed class SafeMigrationFacetDifference
 /// <summary>Represents a blocked SafeMigrations preflight with its complete immutable report.</summary>
 public sealed class SafeMigrationPreflightException : InvalidOperationException
 {
-    private const int MaximumSummaryFieldLength = 128;
-
     /// <summary>Initializes a blocked-preflight exception.</summary>
     /// <param name="report">The immutable blocked preflight report.</param>
     /// <exception cref="ArgumentException">
@@ -133,56 +131,8 @@ public sealed class SafeMigrationPreflightException : InvalidOperationException
             return "SafeMigrations preflight is blocked. Inspect the attached report for details.";
         }
 
-        var objectName = first.ObjectName is null
-            ? string.Empty
-            : $" {BoundForMessage(first.ObjectName)}";
-
-        var difference = first.Differences.Count == 0
-            ? null
-            : first.Differences[0];
-
-        var differenceText = difference is null
-            ? string.Empty
-            : $"; {difference.Facet}: expected {BoundForMessage(difference.Expected)}, "
-            + $"actual {BoundForMessage(difference.Actual)}";
-
         return $"SafeMigrations preflight blocked {blockedCount} operations. "
-            + $"First conflict: operation {first.Ordinal}, {first.OperationKind}{objectName}; "
-            + $"analysis {BoundForMessage(first.AnalysisCode)}; "
-            + $"decision {BoundForMessage(first.DecisionCode)}{differenceText}. "
+            + $"First conflict: {SafeMigrationDiagnosticMessages.FormatAssessment(first)} "
             + "Inspect the attached report for all conflicts.";
-    }
-
-    private static string BoundForMessage(
-        string value
-    )
-    {
-        var isTruncated = value.Length > MaximumSummaryFieldLength;
-        var contentLength = isTruncated
-            ? MaximumSummaryFieldLength - 3
-            : value.Length;
-
-        return string.Create(
-            contentLength + (isTruncated ? 3 : 0),
-            (Value: value, ContentLength: contentLength, IsTruncated: isTruncated),
-            static (destination, state) =>
-            {
-                for (var index = 0; index < state.ContentLength; index++)
-                {
-                    var character = state.Value[index];
-
-                    // WHY: Public constructors retain their established
-                    // compatibility, but exception text must not let caller-
-                    // supplied control characters forge terminal or log lines.
-                    destination[index] = character is >= ' ' and <= '~'
-                        ? character
-                        : '?';
-                }
-
-                if (state.IsTruncated)
-                {
-                    "...".AsSpan().CopyTo(destination[state.ContentLength..]);
-                }
-            });
     }
 }

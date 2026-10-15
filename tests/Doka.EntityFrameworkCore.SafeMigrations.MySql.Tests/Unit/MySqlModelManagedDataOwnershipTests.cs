@@ -251,7 +251,8 @@ public sealed class MySqlModelManagedDataOwnershipTests
         var ownershipSql = GenerateCompiledMigrationSql(ownershipContext);
 
         Assert.NotEmpty(defaultSql);
-        Assert.Equal(defaultSql, ownershipSql);
+        Assert.Equal(defaultSql.Select(MySqlRuntimeSqlCanonicalizer.NormalizeOwnedCorrelation),
+            ownershipSql.Select(MySqlRuntimeSqlCanonicalizer.NormalizeOwnedCorrelation));
     }
 
     [Fact]

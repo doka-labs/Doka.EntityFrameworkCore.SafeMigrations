@@ -53,8 +53,8 @@ public sealed class SqlServerGuardScopeTests
             Assert.Contains("DECLARE @doka_action", body, StringComparison.Ordinal);
             Assert.Contains("DECLARE @doka_repair_ok", body, StringComparison.Ordinal);
             Assert.Contains("EXEC sys.sp_executesql", body, StringComparison.Ordinal);
-            Assert.Contains("THROW 51001, N'doka_sm_different'", body, StringComparison.Ordinal);
-            Assert.Contains("THROW 51005, N'doka_sm_postcondition'", body, StringComparison.Ordinal);
+            Assert.Contains("THROW 51001, N'doka_sm_different:", body, StringComparison.Ordinal);
+            Assert.Contains("THROW 51005, N'doka_sm_postcondition:", body, StringComparison.Ordinal);
             Assert.DoesNotContain("\nGO\n", body, StringComparison.Ordinal);
         });
 

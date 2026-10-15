@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
-public sealed partial class SqlServerSafeMigrationIntegrationTests
+/// <summary>Verifies ddl structural deferral SQL Server contracts against isolated databases.</summary>
+public sealed class SqlServerSafeMigrationDdlStructuralDeferralIntegrationTests : SqlServerSafeMigrationIntegrationTests
 {
+    /// <summary>Creates the feature suite with the assembly-owned SQL Server fixture.</summary>
+    /// <param name="fixture">The shared fixture providing a database per test.</param>
+    public SqlServerSafeMigrationDdlStructuralDeferralIntegrationTests(
+        SqlServerContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>DDL-trigger-created dependencies invalidate captured widening certificates before their runtime guard.</summary>
     /// <param name="dependency">The physical dependency introduced by DROP_INDEX.</param>
     /// <param name="disabled">Whether the trigger is disabled and emits no side effects.</param>

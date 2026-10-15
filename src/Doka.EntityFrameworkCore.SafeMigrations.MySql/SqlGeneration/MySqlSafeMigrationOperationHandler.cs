@@ -16,11 +16,18 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
     private const string PreparedSqlAssignmentSuffix = " USING utf8mb4) ELSE 'DO 0' END;";
     private const string PostconditionBodyPrefix = "SET @doka_sm_post_ok = CASE "
         + "WHEN @doka_sm_action IN ('apply', 'repair') THEN COALESCE((";
-    private const string PostconditionBodySuffix = "), FALSE) ELSE TRUE END;\n"
-        + "INSERT INTO `__doka_sm_assert` "
-        + "(`different_code`, `unsupported_code`, `data_blocked_code`, "
-        + "`prerequisite_missing_code`, `postcondition_code`) "
-        + "SELECT 4, 5, 6, 7, 1 WHERE NOT COALESCE(@doka_sm_post_ok, FALSE);\n";
+    private const string PostconditionAssertionSql = "INSERT INTO `__doka_sm_assert` "
+        + "SELECT 4, 5, 6, 7, @doka_sm_diag WHERE NOT COALESCE(@doka_sm_post_ok, FALSE);\n";
+    private const string PostconditionAssignmentSuffix = "), FALSE) ELSE TRUE END;\n";
+    private const string PostconditionBodySuffix = PostconditionAssignmentSuffix + PostconditionAssertionSql;
+    private const string DecisionAssertionSql = "INSERT INTO `__doka_sm_assert` "
+        + "SELECT @doka_sm_diag, @doka_sm_diag, @doka_sm_diag, @doka_sm_diag, @doka_sm_diag "
+        + "UNION ALL SELECT @doka_sm_diag, 2, 2, 2, 2 WHERE @doka_sm_action = 'reject_different' "
+        + "UNION ALL SELECT 2, @doka_sm_diag, 3, 3, 3 WHERE @doka_sm_action = 'reject_unsupported' "
+        + "UNION ALL SELECT 3, 4, "
+        + "CASE WHEN @doka_sm_action = 'reject_data_blocked' THEN @doka_sm_diag ELSE 5 END, "
+        + "CASE WHEN @doka_sm_action = 'reject_prerequisite_missing' THEN @doka_sm_diag ELSE 5 END, 4 "
+        + "WHERE @doka_sm_action IN ('reject_data_blocked', 'reject_prerequisite_missing');";
 
     private const string MatchingStatePrefix =
         "SET @doka_sm_state = CASE WHEN @doka_sm_state IS NULL THEN CASE WHEN COALESCE((";
@@ -116,6 +123,16 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
                 "safe_catalog_plan_capture");
         }
 
+        var diagnostic = new MySqlSafeMigrationRuntimeDiagnostic(operation, context.OperationOrdinal, runtimePlan);
+        var scriptDiagnostics = (context.Options & MigrationsSqlGenerationOptions.Script) != 0;
+        if (!scriptDiagnostics)
+        {
+            _planCapture.RecordRuntimeDiagnostic(diagnostic);
+        }
+
+        var postconditionSuffix = BuildPostconditionSuffix(diagnostic, scriptDiagnostics);
+        runtimePlan = BindRuntimeBinaryDefaults(runtimePlan);
+
         if (runtimePlan.RequiredColumnAddPlan is { } requiredAddProtocol)
         {
             // WHY: One completed catalog statement owns this operation-local
@@ -152,7 +169,8 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         // Opaque provider setup grows on demand instead of reserving its space for every operation.
         var setupCommands = new List<MySqlSafeMigrationSetupFragment>(runtimePlan.RequiresLazyStateEvaluation ? 13 : 5)
         {
-            hasNativeSqlModeCleanup ? ProviderSetupEnteredReset + BuildAssertionSetupSql() : BuildAssertionSetupSql(),
+            MySqlSafeMigrationSetupFragment.Compose(diagnostic.Marker,
+                hasNativeSqlModeCleanup ? ProviderSetupEnteredReset : string.Empty, BuildAssertionSetupSql()),
         };
 
         var fusedSetupFragmentCount = 0;
@@ -192,6 +210,12 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             {
                 setupCommands.Add(BuildGuardEvaluationAssignment(runtimePlan, renderedParameterValues));
                 fusedSetupFragmentCount += 3;
+            }
+
+            if (runtimePlan.BinaryDefaultProofs.Count > 0)
+            {
+                setupCommands.Add(BuildBinaryDefaultProofEvaluation(
+                    runtimePlan, renderedParameterValues, "@doka_sm_state IS NULL"));
             }
 
             // WHY: An exact match needs no repair proof. Its classification belongs to the first
@@ -248,8 +272,15 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             }
         }
 
-        setupCommands.Add(BuildActionAssignment(operation.Intent.Kind, operation.Policy, runtimePlan.RepairCapability));
-        setupCommands.Add(BuildDecisionAssertionSql());
+        // WHY: Both right-hand sides consume already completed state/proof
+        // variables, never each other's assignment. One existing SET retains
+        // native fragment admission without undefined user-variable ordering.
+        setupCommands.Add(MySqlSafeMigrationSetupFragment.Compose(
+            BuildActionAssignment(operation.Intent.Kind, operation.Policy, runtimePlan.RepairCapability,
+                terminateStatement: false),
+            ", @doka_sm_diag = CONCAT('", diagnostic.Correlation, "-', ",
+            diagnostic.BuildReasonSlotExpression(), ");"));
+        setupCommands.Add(BuildDecisionAssertionSql(diagnostic, scriptDiagnostics));
 
         if (requiredColumnAdd is not null)
         {
@@ -285,12 +316,13 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         }
 
         var bodyCommand = requiredColumnAdd is not null
-            ? BuildRequiredColumnAddBody(requiredColumnAdd, runtimePlan, renderedParameterValues)
+            ? BuildRequiredColumnAddBody(requiredColumnAdd, runtimePlan, renderedParameterValues, postconditionSuffix)
             : BuildGuardedBaselineBody(operation, runtimePlan, baseline, repair,
-                renderedParameterValues, prepareBaselineInSetup);
+                renderedParameterValues, prepareBaselineInSetup, postconditionSuffix);
 
         var cleanupCommands = BuildCleanupCommands(baseline, runtimePlan.NullabilityDataProbe is not null,
-            runtimePlan.RequiredColumnAddPlan is not null, hasNativeSqlModeCleanup);
+            runtimePlan.RequiredColumnAddPlan is not null, hasNativeSqlModeCleanup,
+            runtimePlan.BinaryDefaultProofs.Count);
 
         // WHY: Reduce owned setup transport without joining opaque provider setup, the guarded
         // body or independent cleanup. Fresh checks and exact script text remain operation-local.
@@ -472,11 +504,13 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
     /// <param name="Policy">The canonical planner policy.</param>
     /// <param name="RepairCapability">The provider's structural repair capability.</param>
     /// <param name="Sql">The complete immutable assignment for this exact tuple.</param>
+    /// <param name="UnterminatedSql">The same immutable assignment before its final statement separator.</param>
     private sealed record ActionAssignmentCacheEntry(
         SafeMigrationOperationKind Kind,
         SafeMigrationPolicy Policy,
         SafeMigrationRepairCapability RepairCapability,
-        string Sql
+        string Sql,
+        string UnterminatedSql
     );
 
     /// <summary>Classifies state and repair eligibility using the same operation-local row proofs.</summary>
@@ -822,7 +856,8 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         BaselineBatch baseline,
         BaselineBatch? repair,
         IReadOnlyList<string> renderedParameterValues,
-        bool preparedInSetup
+        bool preparedInSetup,
+        string postconditionSuffix
     )
     {
         if (preparedInSetup)
@@ -830,17 +865,16 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             // WHY: The common single-command path does not need incremental
             // composition. Direct concatenation allocates the final command
             // once instead of growing a StringBuilder for every operation.
+            if (runtimePlan.BinaryDefaultProofs.Count == 0)
+            {
+                return $"EXECUTE {PreparedStatementName};\n"
+                    + PostconditionBodyPrefix
+                    + runtimePlan.RenderPreparedExecutionPostcondition(renderedParameterValues)
+                    + postconditionSuffix;
+            }
+
             return $"EXECUTE {PreparedStatementName};\n"
-                + "SET @doka_sm_post_ok = CASE "
-                + "WHEN @doka_sm_action IN ('apply', 'repair') "
-                + "THEN COALESCE(("
-                + runtimePlan.RenderPreparedExecutionPostcondition(renderedParameterValues)
-                + "), FALSE) "
-                + "ELSE TRUE END;\n"
-                + "INSERT INTO `__doka_sm_assert` "
-                + "(`different_code`, `unsupported_code`, `data_blocked_code`, "
-                + "`prerequisite_missing_code`, `postcondition_code`) "
-                + "SELECT 4, 5, 6, 7, 1 WHERE NOT COALESCE(@doka_sm_post_ok, FALSE);";
+                + BuildPostconditionBody(runtimePlan, renderedParameterValues, postconditionSuffix);
         }
 
         var builder = new StringBuilder();
@@ -866,17 +900,20 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             AppendCommand(builder, $"DEALLOCATE PREPARE {PreparedStatementName};");
         }
 
-        builder.Append(BuildPostconditionBody(runtimePlan, renderedParameterValues));
+        builder.Append(BuildPostconditionBody(runtimePlan, renderedParameterValues, postconditionSuffix));
 
         return builder.ToString();
     }
 
     private static string BuildPostconditionBody(
         MySqlSafeMigrationRuntimePlan runtimePlan,
-        IReadOnlyList<string> renderedParameterValues
-    ) => PostconditionBodyPrefix
+        IReadOnlyList<string> renderedParameterValues,
+        string postconditionSuffix
+    ) => BuildBinaryDefaultProofEvaluation(
+            runtimePlan, renderedParameterValues, "@doka_sm_action IN ('apply', 'repair')")
+        + PostconditionBodyPrefix
         + runtimePlan.RenderPreparedExecutionPostcondition(renderedParameterValues)
-        + PostconditionBodySuffix;
+        + postconditionSuffix;
 
     private static string? GetRepairBody(
         SafeMigrationOperation operation,
@@ -895,11 +932,13 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
     /// <param name="hasNullabilityProof">Whether the operation owns a materialized NULL-proof variable.</param>
     /// <param name="hasRequiredColumnAdd">Whether the operation owns catalog-status and resume variables.</param>
     /// <param name="hasNativeSqlModeCleanup">Whether the scope has a certified native acquisition snapshot.</param>
+    /// <param name="binaryDefaultProofCount">The number of operation-owned exact-default variables to clear.</param>
     private static IReadOnlyList<string> BuildCleanupCommands(
         BaselineBatch baseline,
         bool hasNullabilityProof,
         bool hasRequiredColumnAdd = false,
-        bool hasNativeSqlModeCleanup = false
+        bool hasNativeSqlModeCleanup = false,
+        int binaryDefaultProofCount = 0
     )
     {
         var cleanupCommandCount = 0;
@@ -908,7 +947,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             cleanupCommandCount += command.CleanupCommands.Count;
         }
 
-        if (cleanupCommandCount == 0 && !hasRequiredColumnAdd)
+        if (cleanupCommandCount == 0 && !hasRequiredColumnAdd && binaryDefaultProofCount == 0)
         {
             // WHY: These immutable SQL templates contain no operation or database state.
             // CreateScoped snapshots and reverses its own copy; it never mutates this input.
@@ -917,7 +956,8 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
 
         var commands = new List<string>(2 + cleanupCommandCount)
         {
-            BuildGuardCleanupSql(hasNullabilityProof, hasRequiredColumnAdd, hasNativeSqlModeCleanup),
+            BuildGuardCleanupSql(hasNullabilityProof, hasRequiredColumnAdd, hasNativeSqlModeCleanup)
+                + MySqlSafeMigrationBinaryDefaultProof.BuildResetSql(binaryDefaultProofCount, 0, clear: true),
         };
 
         // WHY: CreateScoped reverses cleanup input. Add provider cleanup in
@@ -961,7 +1001,8 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
     {
         const string prefix = "SET @doka_sm_state = NULL, @doka_sm_action = NULL, "
             + "@doka_sm_repair_ok = NULL, @doka_sm_prerequisite_ok = NULL, @doka_sm_sql = NULL, "
-            + "@doka_sm_post_ok = NULL, @doka_sm_data_probe_required = NULL, @doka_sm_data_blocked = NULL; ";
+            + "@doka_sm_post_ok = NULL, @doka_sm_data_probe_required = NULL, @doka_sm_data_blocked = NULL, "
+            + "@doka_sm_diag = NULL; ";
 
         const string suffix = "DROP TEMPORARY TABLE IF EXISTS `__doka_sm_assert`;";
         var requiredColumnAddCleanup = hasRequiredColumnAdd
@@ -1033,7 +1074,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             alterColumn.OldColumn.IsNullable = alterColumn.IsNullable;
         }
 
-        return context.RenderStandardOperation(standardOperation);
+        return RenderNativeOperation(context, standardOperation, operation.Intent);
     }
 
     private BaselineBatch? RenderRepairBaseline(
@@ -1060,7 +1101,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             static collation => collation.Schema is null ? collation.Name : null,
             MySqlSafeMigrationColumnMetadata.CanSafelyConverge);
 
-        var repair = GetBaselineBatch(context.RenderStandardOperation(repairOperation));
+        var repair = GetBaselineBatch(RenderNativeOperation(context, repairOperation, intent));
         if (repair.TransactionSuppressed != apply.TransactionSuppressed
             || repair.Commands.Count != apply.Commands.Count)
         {
@@ -1090,11 +1131,13 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
     /// <param name="kind">The canonical planner operation family.</param>
     /// <param name="policy">The canonical conflict policy.</param>
     /// <param name="repairCapability">The structural repair capability, not a cached row-safety result.</param>
+    /// <param name="terminateStatement">Whether the caller needs the complete standalone statement.</param>
     /// <returns>The immutable decision assignment for the exact tuple.</returns>
     internal string BuildActionAssignment(
         SafeMigrationOperationKind kind,
         SafeMigrationPolicy policy,
-        SafeMigrationRepairCapability repairCapability
+        SafeMigrationRepairCapability repairCapability,
+        bool terminateStatement = true
     )
     {
         var cached = Volatile.Read(ref _actionAssignmentCache);
@@ -1103,7 +1146,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             && cached.Policy == policy
             && cached.RepairCapability == repairCapability)
         {
-            return cached.Sql;
+            return terminateStatement ? cached.Sql : cached.UnterminatedSql;
         }
 
         ReadOnlySpan<SafeMigrationObservedState> states =
@@ -1155,9 +1198,11 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
 
         // WHY: Adjacent columns repeatedly render the same planner tuple. Keep one immutable entry,
         // not a growing cache or any live safety evidence; atomic publication cannot mix keys and SQL.
-        Volatile.Write(ref _actionAssignmentCache, new ActionAssignmentCacheEntry(kind, policy, repairCapability, sql));
+        var unterminatedSql = sql[..^1];
+        Volatile.Write(ref _actionAssignmentCache,
+            new ActionAssignmentCacheEntry(kind, policy, repairCapability, sql, unterminatedSql));
 
-        return sql;
+        return terminateStatement ? sql : unterminatedSql;
     }
 
     private static string StateCode(
@@ -1192,31 +1237,36 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
 
     private static string BuildAssertionSetupSql() => "DROP TEMPORARY TABLE IF EXISTS `__doka_sm_assert`; "
         + "CREATE TEMPORARY TABLE `__doka_sm_assert` ("
-        + "`different_code` TINYINT NOT NULL, "
-        + "`unsupported_code` TINYINT NOT NULL, "
-        + "`data_blocked_code` TINYINT NOT NULL, "
-        + "`prerequisite_missing_code` TINYINT NOT NULL, "
-        + "`postcondition_code` TINYINT NOT NULL, "
+        + "`different_code` VARCHAR(40) NOT NULL, "
+        + "`unsupported_code` VARCHAR(40) NOT NULL, "
+        + "`data_blocked_code` VARCHAR(40) NOT NULL, "
+        + "`prerequisite_missing_code` VARCHAR(40) NOT NULL, "
+        + "`postcondition_code` VARCHAR(40) NOT NULL, "
         + "CONSTRAINT `doka_sm_different` UNIQUE (`different_code`), "
         + "CONSTRAINT `doka_sm_unsupported` UNIQUE (`unsupported_code`), "
         + "CONSTRAINT `doka_sm_data_blocked` UNIQUE (`data_blocked_code`), "
         + "CONSTRAINT `doka_sm_prerequisite_missing` UNIQUE (`prerequisite_missing_code`), "
         + "CONSTRAINT `doka_sm_postcondition` UNIQUE (`postcondition_code`)"
-        + "); "
-        + "INSERT INTO `__doka_sm_assert` "
-        + "(`different_code`, `unsupported_code`, `data_blocked_code`, "
-        + "`prerequisite_missing_code`, `postcondition_code`) "
-        + "VALUES (1, 1, 1, 1, 1);";
+        + ") CHARACTER SET ascii COLLATE ascii_bin;";
 
-    private static string BuildDecisionAssertionSql() => "INSERT INTO `__doka_sm_assert` "
-        + "(`different_code`, `unsupported_code`, `data_blocked_code`, "
-        + "`prerequisite_missing_code`, `postcondition_code`) "
-        + "SELECT 1, 2, 2, 2, 2 WHERE @doka_sm_action = 'reject_different' "
-        + "UNION ALL SELECT 2, 1, 3, 3, 3 WHERE @doka_sm_action = 'reject_unsupported' "
-        + "UNION ALL SELECT 3, 4, "
-        + "CASE WHEN @doka_sm_action = 'reject_data_blocked' THEN 1 ELSE 5 END, "
-        + "CASE WHEN @doka_sm_action = 'reject_prerequisite_missing' THEN 1 ELSE 5 END, 4 "
-        + "WHERE @doka_sm_action IN ('reject_data_blocked', 'reject_prerequisite_missing');";
+    /// <summary>Seeds and rejects in the same existing assertion statement without another transport exchange.</summary>
+    private static string BuildDecisionAssertionSql(MySqlSafeMigrationRuntimeDiagnostic diagnostic, bool script)
+    {
+        // WHY: One bounded ASCII value carries both correlation and reason.
+        // VARCHAR avoids mode-dependent CHAR padding, and the original single
+        // column unique names preserve native guard identities. Shared SQL does
+        // not copy a nonce or wider composite-key definition for every branch.
+        // WHY: This private temporary table is created with exactly these five
+        // columns in this order. Positional inserts remove repeated column-list
+        // copies; a changed owned shape is rejected by the shape contract test.
+        return script ? BuildDiagnosticResultSql(diagnostic, postcondition: false) + DecisionAssertionSql
+            : DecisionAssertionSql;
+    }
+
+    /// <summary>Emits actionable script evidence immediately before an owned postcondition assertion.</summary>
+    private static string BuildPostconditionSuffix(MySqlSafeMigrationRuntimeDiagnostic diagnostic, bool script) =>
+        script ? PostconditionAssignmentSuffix + BuildDiagnosticResultSql(diagnostic, postcondition: true)
+            + PostconditionAssertionSql : PostconditionBodySuffix;
 
     private string Literal(
         string value

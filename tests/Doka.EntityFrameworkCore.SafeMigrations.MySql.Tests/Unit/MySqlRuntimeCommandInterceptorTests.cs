@@ -5,16 +5,22 @@ public sealed class MySqlRuntimeCommandInterceptorTests
 {
     private const string PreparedEvaluation = "PREPARE doka_sm_statement FROM @doka_sm_sql;"
         + "EXECUTE doka_sm_statement;DEALLOCATE PREPARE doka_sm_statement;";
+    private const string RuntimeMarker = "/*doka_sm_runtime:7:0123456789abcdef0123456789abcdef*/";
     private const string AssertionSetup = "DROP TEMPORARY TABLE IF EXISTS `__doka_sm_assert`;"
-        + "CREATE TEMPORARY TABLE `__doka_sm_assert` (`different_code` TINYINT);"
-        + "INSERT INTO `__doka_sm_assert` (`different_code`) VALUES (1);";
+        + "CREATE TEMPORARY TABLE `__doka_sm_assert` (`different_code` VARCHAR(40)) "
+        + "CHARACTER SET ascii COLLATE ascii_bin;";
     private const string Prerequisite = "SET @doka_sm_prerequisite_ok = COALESCE((TRUE), FALSE);";
     private const string InitialState = "SET @doka_sm_state = CASE WHEN NOT @doka_sm_prerequisite_ok "
         + "THEN 'prerequisite_missing' ELSE NULL END, @doka_sm_repair_ok = FALSE;";
     private const string ActionAssignment = "SET @doka_sm_action = CASE @doka_sm_state "
         + "WHEN 'missing' THEN 'apply' ELSE 'skip' END;";
-    private const string DecisionAssertion = "INSERT INTO `__doka_sm_assert` (`different_code`) "
-        + "SELECT 1 WHERE @doka_sm_action = 'reject_different';";
+    private const string CorrelatedActionAssignment = "SET @doka_sm_action = CASE @doka_sm_state "
+        + "WHEN 'missing' THEN 'apply' ELSE 'skip' END, "
+        + "@doka_sm_diag = CONCAT('0123456789abcdef0123456789abcdef-', 7);";
+    private const string DecisionAssertion = "INSERT INTO `__doka_sm_assert` "
+        + "SELECT @doka_sm_diag, @doka_sm_diag, @doka_sm_diag, @doka_sm_diag, @doka_sm_diag "
+        + "UNION ALL SELECT @doka_sm_diag, 2, 2, 2, 2 "
+        + "WHERE @doka_sm_action = 'reject_different';";
     private const string UnknownSetup = "SET @doka_sm_future_probe = FALSE;";
 
     /// <summary>Routes known commands to fixed categories and preserves cleanup/body precedence.</summary>
@@ -42,6 +48,7 @@ public sealed class MySqlRuntimeCommandInterceptorTests
     [InlineData("SET @doka_sm_state = CASE WHEN @doka_sm_state IS NULL THEN CASE WHEN TRUE "
         + "THEN 'matching' ELSE NULL END ELSE @doka_sm_state END;", "state_classification_repair")]
     [InlineData(ActionAssignment, "decision_prepare")]
+    [InlineData(CorrelatedActionAssignment, "decision_prepare")]
     [InlineData(DecisionAssertion, "decision_prepare")]
     [InlineData("SET @doka_sm_sql = CASE WHEN @doka_sm_action = 'apply' THEN CONVERT(0x444F2030 "
         + "USING utf8mb4) ELSE 'DO 0' END;PREPARE doka_sm_statement FROM @doka_sm_sql;", "decision_prepare")]
@@ -52,6 +59,10 @@ public sealed class MySqlRuntimeCommandInterceptorTests
     [InlineData("SET @doka_sm_state = NULL, @doka_sm_action = NULL;" + AssertionSetup, "guard_cleanup")]
     [InlineData("PREPARE doka_sm_statement FROM 'DO 0';DEALLOCATE PREPARE doka_sm_statement;", "prepared_cleanup")]
     [InlineData("SELECT 1;", "migration_infrastructure")]
+    [InlineData(RuntimeMarker + "SELECT 1;", "migration_infrastructure")]
+    [InlineData(RuntimeMarker + "PREPARE doka_sm_statement FROM 'DO 0';", "prepared_cleanup")]
+    [InlineData(RuntimeMarker + AssertionSetup, "assertion_setup")]
+    [InlineData(RuntimeMarker + CorrelatedActionAssignment + DecisionAssertion, "decision_prepare")]
     public void Classify_RoutesKnownCommands(
         string sql,
         string expectedCategory
@@ -141,6 +152,8 @@ public sealed class MySqlRuntimeCommandInterceptorTests
     [Theory]
     [InlineData(Prerequisite + InitialState, "prerequisite_qualification")]
     [InlineData(ActionAssignment + DecisionAssertion, "decision_prepare")]
+    [InlineData(CorrelatedActionAssignment + DecisionAssertion, "decision_prepare")]
+    [InlineData(RuntimeMarker + CorrelatedActionAssignment + DecisionAssertion, "decision_prepare")]
     public void Classify_SamePurposeGroupingKeepsItsCategory(
         string sql,
         string expectedCategory
@@ -154,5 +167,64 @@ public sealed class MySqlRuntimeCommandInterceptorTests
 
         // Assert
         Assert.Equal(expectedCategory, category);
+    }
+
+    /// <summary>Does not discard arbitrary comments or malformed ownership when attributing a dispatch.</summary>
+    /// <param name="prefix">A malformed or unrelated marker prefix that must not be treated as ownership.</param>
+    [Theory]
+    [InlineData("/*doka_sm_runtime:-1:0123456789abcdef0123456789abcdef*/")]
+    [InlineData("/*doka_sm_runtime:2147483648:0123456789abcdef0123456789abcdef*/")]
+    [InlineData("/*doka_sm_runtime:7:0123456789abcdef0123456789abcdeg*/")]
+    [InlineData("/*doka_sm_runtime:7:0123456789abcdef0123456789abcde*/")]
+    [InlineData("/*doka_sm_runtime:7:0123456789abcdef0123456789abcdef")]
+    [InlineData("/*doka_sm_unknown:7:0123456789abcdef0123456789abcdef*/")]
+    public void Classify_MalformedRuntimeOwnershipRemainsUnknown(string prefix)
+    {
+        // Arrange
+        var sql = prefix + "SELECT 1;";
+
+        // Act
+        var category = MySqlRuntimeCommandInterceptor.Classify(sql);
+
+        // Assert
+        Assert.Equal("other_setup", category);
+    }
+
+    /// <summary>The diagnostic value does not hide unknown similarly named future state.</summary>
+    [Fact]
+    public void Classify_UnknownDiagnosticValueAssignmentRetainsMixedPurpose()
+    {
+        // Arrange
+        var sql = CorrelatedActionAssignment + "SET @doka_sm_diag_future = 0;";
+
+        // Act
+        var category = MySqlRuntimeCommandInterceptor.Classify(sql);
+
+        // Assert
+        Assert.Equal("owned_setup_batch", category);
+    }
+
+    /// <summary>The correlated scope marker preserves injection after actual assertion-table acquisition.</summary>
+    /// <param name="prefix">A valid or invalid leading marker.</param>
+    /// <param name="expectedInjected">Whether the test hook must reach owned assertion setup.</param>
+    [Theory]
+    [InlineData(RuntimeMarker, true)]
+    [InlineData(" \r\n" + RuntimeMarker + "\n", true)]
+    [InlineData("/*doka_sm_runtime:7:bad*/", false)]
+    public void SetupInjectionRequiresRecognizedRuntimeOwnership(string prefix, bool expectedInjected)
+    {
+        // Arrange
+        const string injection = "SET @test_setup_failure_sentinel = 1;";
+        using var command = new MySqlCommand(prefix + AssertionSetup);
+        var interceptor = new MySqlRuntimeCommandInterceptor();
+        interceptor.InjectFirstSetup(injection);
+
+        // Act
+        _ = interceptor.NonQueryExecuting(command, null!, default);
+
+        // Assert
+        Assert.Equal(expectedInjected, interceptor.SetupWasInjected);
+        Assert.Equal(expectedInjected, command.CommandText.EndsWith(injection, StringComparison.Ordinal));
+        Assert.Equal(1, interceptor.CommandCount);
     }
 }

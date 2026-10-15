@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the LifecycleMissingSnapshot PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlLifecycleMissingSnapshotIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlLifecycleMissingSnapshotIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     private const string SnapshotFreeCatalogCountSql =
         "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = current_schema() "
         + "AND table_name IN ('snapshotless_items', '__EFMigrationsHistory');";
@@ -13,7 +20,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         bool requireExpectedFingerprint
     )
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateSnapshotFreeContext(connectionString);
         var assembly = context.GetService<IMigrationsAssembly>();
         var model = context.GetService<IDesignTimeModel>()
@@ -81,7 +88,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         SafeMigrationReportMode mode
     )
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateSnapshotFreeContext(connectionString);
         await using var differentModelContext = CreateContext(connectionString);
         var expected = SafeMigrationModelFingerprint.Create(
@@ -147,30 +154,4 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         return builder;
     }
 
-    private sealed class SnapshotFreeContext : DbContext
-    {
-        public SnapshotFreeContext(
-            DbContextOptions<SnapshotFreeContext> options
-        ) : base(options) { }
-
-        protected override void OnModelCreating(
-            ModelBuilder modelBuilder
-        )
-        {
-            modelBuilder.Entity<SnapshotFreeEntry>(entity =>
-            {
-                entity.HasNoKey();
-                entity.ToTable("snapshotless_items", table => table.HasComment("Snapshot-free target."));
-                entity
-                    .Property(entry => entry.Id)
-                    .HasColumnName("id")
-                    .HasColumnType("integer");
-            });
-        }
-    }
-
-    private sealed class SnapshotFreeEntry
-    {
-        public int Id { get; set; }
-    }
 }

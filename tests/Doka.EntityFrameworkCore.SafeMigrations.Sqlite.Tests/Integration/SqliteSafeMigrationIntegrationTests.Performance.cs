@@ -1,6 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
-public sealed partial class SqliteSafeMigrationCatalogIntegrationTests
+/// <summary>Exercises performance with independently owned SQLite state.</summary>
+[Collection(ProcessWideTestGroup.Name)]
+public sealed class SqliteSafeMigrationPerformanceIntegrationTests : SqliteSafeMigrationCatalogIntegrationTests
 {
     [Fact]
     [Trait("Category", "LargeScale")]

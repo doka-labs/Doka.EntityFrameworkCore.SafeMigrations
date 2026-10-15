@@ -1,7 +1,6 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
 /// <summary>Separates SQL Server 2019 metadata compatibility from actual SQL Server 2022+ ledger rejection.</summary>
-[Collection(SqlServerSharedContainer.Name)]
 public sealed class SqlServerLedgerPhysicalBoundaryTests : SqlServerIntegrationTestBase
 {
     private readonly Xunit.Abstractions.ITestOutputHelper _output;

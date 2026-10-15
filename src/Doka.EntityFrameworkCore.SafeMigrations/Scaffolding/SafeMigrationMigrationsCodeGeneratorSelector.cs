@@ -86,5 +86,9 @@ internal sealed class SafeMigrationMigrationsCodeGeneratorSelector : IMigrations
 
     private static OperationException UnsupportedLanguage(
         string language
-    ) => new($"No SafeMigrations code generator supports language '{language}'.");
+    ) => new(
+        "No SafeMigrations code generator supports language "
+        + $"'{SafeMigrationDiagnosticMessages.BoundForDisplay(language)}'. "
+        + "Use C# scaffolding and register the active provider's C# design-time generator together with "
+        + "SafeMigrations design-time services.");
 }

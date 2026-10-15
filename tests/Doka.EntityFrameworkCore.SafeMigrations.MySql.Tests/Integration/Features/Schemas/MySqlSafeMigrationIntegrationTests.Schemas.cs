@@ -1,11 +1,16 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the Schemas migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlSchemasIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     [Fact]
     public async Task SchemaOperations_AreClassifiedUnsupportedWithoutDatabaseDdl()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureSchemaExists("independent_schema");
@@ -26,7 +31,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task CurrentDatabaseEnsureSchema_IsAnIdempotentNoOp()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var database = new MySqlConnectionStringBuilder(connectionString).Database;
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -53,7 +58,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task CurrentDatabaseDropSchema_RemainsUnsupportedWithoutDatabaseDdl()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var database = new MySqlConnectionStringBuilder(connectionString).Database;
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -64,7 +69,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             context,
             builder.Operations,
             new SafeMigrationRunOptions("current-database-drop-schema"));
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations));
 
         var assessment = Assert.Single(report.Assessments);
@@ -85,7 +90,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignDatabaseDropSchemaRejectsIdentityBeforeSchemaCapability()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var foreignDatabase = "doka_foreign_" + Guid.NewGuid().ToString("N");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -97,7 +102,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             context,
             builder.Operations,
             new SafeMigrationRunOptions("foreign-database-drop-schema"));
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations));
 
         // Assert
@@ -119,7 +124,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task CurrentDatabaseQualifierSharesCurrentCatalogInventoryIdentity()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var database = new MySqlConnectionStringBuilder(connectionString).Database;
         await ExecuteSqlAsync(
             connectionString,
@@ -158,7 +163,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task CurrentDatabaseQualifiedPrefixIndex_ExecutesAndReplays()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var database = new MySqlConnectionStringBuilder(connectionString).Database;
         await ExecuteSqlAsync(
             connectionString,
@@ -201,7 +206,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task CurrentDatabaseQualifiedIndexLifecyclePreservesIdentityAndData()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var database = new MySqlConnectionStringBuilder(connectionString).Database;
         await ExecuteSqlAsync(
             connectionString,
@@ -298,7 +303,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task QualifiedDropThenUnqualifiedEnsurePassesPostflightAsOnePhysicalIndex()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var database = new MySqlConnectionStringBuilder(connectionString).Database;
         await ExecuteSqlAsync(
             connectionString,
@@ -338,7 +343,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task CurrentDatabaseQualifiedModelManagedData_ExecutesAndReplays()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var database = new MySqlConnectionStringBuilder(connectionString).Database;
         await ExecuteSqlAsync(
             connectionString,
@@ -383,7 +388,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ForeignDatabaseQualificationRejectsBeforeIndexOrDataMutation()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var foreignDatabase = "doka_foreign_" + Guid.NewGuid().ToString("N");
         await ExecuteSqlAsync(
             connectionString,
@@ -422,9 +427,9 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                     operations,
                     new SafeMigrationRunOptions("foreign-database-isolation"));
 
-            var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+            var exception = await AssertOwnedGuardFailureAsync(() =>
                 ExecuteOperationsAsync(context, operations));
-            var dataException = await Assert.ThrowsAsync<MySqlException>(() =>
+            var dataException = await AssertOwnedGuardFailureAsync(() =>
                 ExecuteOperationsAsync(context, data.Operations));
 
             Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -463,7 +468,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ForeignStreamQualifierRejectsBeforeEarlierUnqualifiedTableMutation()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var foreignDatabase = "doka_foreign_" + Guid.NewGuid().ToString("N");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -480,7 +485,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             foreignDatabase);
 
         // Act
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations));
 
         // Assert
@@ -496,7 +501,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task SchemaQualifiedOperationMatrix_FailsClosedForEveryPublicObjectFamily()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
 
@@ -565,7 +570,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
                 Assert.Equal(SafeMigrationAction.RejectUnsupported, assessment.Action);
             });
 
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, [builder.Operations[2]]));
 
         Assert.Contains("doka_sm_unsupported", exception.Message, StringComparison.OrdinalIgnoreCase);
@@ -580,7 +585,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task SchemaQualifiedExpectations_NeverSuppressCurrentDatabaseInventory()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `legacy` (`id` int NOT NULL, `extra` int NULL); "

@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
-public sealed partial class SqlServerSafeMigrationIntegrationTests
+/// <summary>Verifies script scopes SQL Server contracts against isolated databases.</summary>
+public sealed class SqlServerSafeMigrationScriptScopesIntegrationTests : SqlServerSafeMigrationIntegrationTests
 {
+    /// <summary>Creates the feature suite with the assembly-owned SQL Server fixture.</summary>
+    /// <param name="fixture">The shared fixture providing a database per test.</param>
+    public SqlServerSafeMigrationScriptScopesIntegrationTests(
+        SqlServerContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>Concatenated guard batches preserve caller variables and safely bind earlier-created objects.</summary>
     [SqlServerLiveTheory]
     [InlineData(false, false)]

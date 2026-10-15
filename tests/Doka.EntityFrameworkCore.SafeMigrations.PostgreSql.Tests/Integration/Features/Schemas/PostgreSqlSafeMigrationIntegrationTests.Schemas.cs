@@ -1,11 +1,18 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the Schemas PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlSchemasIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlSchemasIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     [Fact]
     public async Task SchemaOperations_AreIdempotent()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var create = new MigrationBuilder(context.Database.ProviderName!);
         create.EnsureSchemaExists("module");
@@ -33,7 +40,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task CrossSchemaConvergence_IsQualifiedIdempotentAndCatalogExact()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE public.qualified_parent (id integer NOT NULL PRIMARY KEY); "
@@ -146,7 +153,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     [Fact]
     public async Task NonDefaultSchemaRenameAndDropMatrix_IsIdempotentAndIsolated()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE SCHEMA lifecycle_module; CREATE SCHEMA lifecycle_archive; "
@@ -208,4 +215,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' "
                 + "AND table_name IN ('lifecycle_target', 'renamed_source', 'moved_table');"));
     }
+
 }

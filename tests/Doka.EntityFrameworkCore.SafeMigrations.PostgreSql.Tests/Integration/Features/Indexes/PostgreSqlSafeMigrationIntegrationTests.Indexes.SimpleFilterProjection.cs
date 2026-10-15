@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the IndexesSimpleFilterProjection PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlIndexesSimpleFilterProjectionIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlIndexesSimpleFilterProjectionIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>A newly projected table cannot manufacture the canonical predicate's missing column.</summary>
     /// <param name="filter">The canonical predicate referencing an absent physical column.</param>
     [Theory]
@@ -13,7 +20,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE SCHEMA hierarchy;");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -51,7 +58,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE SCHEMA hierarchy;");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -98,7 +105,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE SCHEMA hierarchy; CREATE TABLE hierarchy.simple_filters (id integer NOT NULL);");
@@ -133,7 +140,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE SCHEMA hierarchy; CREATE TABLE hierarchy.simple_filters (id integer NOT NULL);");
@@ -168,7 +175,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task SimpleFilterProjectedTableDoesNotAdmitComplexRawSql()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE SCHEMA hierarchy;");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -203,4 +210,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             ]
             : [new ExpectedColumnDefinition("id", typeof(int), false, "integer")],
         schema: "hierarchy");
+
 }

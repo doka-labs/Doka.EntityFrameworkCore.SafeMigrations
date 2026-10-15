@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
-public sealed partial class SqlServerSafeMigrationIntegrationTests
+/// <summary>Verifies table admission SQL Server contracts against isolated databases.</summary>
+public sealed class SqlServerSafeMigrationTableAdmissionIntegrationTests : SqlServerSafeMigrationIntegrationTests
 {
+    /// <summary>Creates the feature suite with the assembly-owned SQL Server fixture.</summary>
+    /// <param name="fixture">The shared fixture providing a database per test.</param>
+    public SqlServerSafeMigrationTableAdmissionIntegrationTests(
+        SqlServerContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>A maximum-row warning remains valid schema admission with NULL or empty variable rows.</summary>
     [SqlServerLiveTheory]
     [InlineData(false)]

@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the TriggerBackfills PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlTriggerBackfillsIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlTriggerBackfillsIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>Column backfill SQL can invoke a user trigger and invalidate an unrelated captured index.</summary>
     /// <param name="authoring">Whether EF ALTER, safe ALTER or safe ensure-repair owns the baseline.</param>
     /// <param name="sqlDefault">Whether the default is SQL rather than a CLR literal.</param>
@@ -15,7 +22,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task EventTriggers_ColumnBackfillDefersStructuralMatch(string authoring, bool sqlDefault)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE event_existing_values(id integer NOT NULL, value integer); "
             + "CREATE INDEX ix_event_existing ON event_existing_values(id); "
@@ -64,7 +71,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task EventTriggers_ColumnAlterWithoutBackfillRetainsStructuralMatch(string authoring)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE event_existing_values(id integer NOT NULL, value integer); "
             + "CREATE INDEX ix_event_existing ON event_existing_values(id); "
@@ -99,7 +106,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task EventTriggers_ComputedReplacementWithoutBackfillRetainsStructuralMatch()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE event_existing_values(id integer NOT NULL, value integer); "
             + "CREATE INDEX ix_event_existing ON event_existing_values(id); "
@@ -201,4 +208,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             throw new ArgumentOutOfRangeException(nameof(authoring));
         }
     }
+
 }

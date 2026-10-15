@@ -1,7 +1,18 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
-public sealed partial class SqliteSafeMigrationCatalogIntegrationTests
+/// <summary>Exercises projected foreign key new owner with independently owned SQLite state.</summary>
+public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegrationTests
+    : SqliteSafeMigrationCatalogIntegrationTests, IClassFixture<SqliteConstraintShapeServiceFixture>
 {
+    private readonly SqliteConstraintShapeServiceFixture _constraintShapeServices;
+
+    /// <summary>Owns provider services for this feature's independently cached models.</summary>
+    /// <param name="constraintShapeServices">The feature class-owned provider and model caches.</param>
+    public SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegrationTests(
+        SqliteConstraintShapeServiceFixture constraintShapeServices
+    ) => _constraintShapeServices = constraintShapeServices
+        ?? throw new ArgumentNullException(nameof(constraintShapeServices));
+
     /// <summary>A modular new child can add its nullable FK member before referencing a live parent.</summary>
     [Fact]
     public async Task ProjectedForeignKey_NewChildWithSeparateNullableAddAppliesVerifiesAndReplays()
@@ -48,9 +59,9 @@ public sealed partial class SqliteSafeMigrationCatalogIntegrationTests
 
         var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
 
-        Assert.Contains("postcondition failed for EnsureTable",
-            Assert.IsType<InvalidOperationException>(exception).Message,
-            StringComparison.Ordinal);
+        var postconditionFailure = Assert.IsType<InvalidOperationException>(exception);
+        Assert.StartsWith("doka_sm_postcondition:", postconditionFailure.Message, StringComparison.Ordinal);
+        Assert.Contains("constraint_children", postconditionFailure.Message, StringComparison.Ordinal);
         Assert.Equal(0, await ScalarIntAsync(connection,
             "SELECT COUNT(*) FROM sqlite_schema WHERE type = 'table' AND name = 'constraint_children';"));
         Assert.Equal(1, await ScalarIntAsync(connection,
@@ -209,57 +220,5 @@ public sealed partial class SqliteSafeMigrationCatalogIntegrationTests
             onDelete: ReferentialAction.Cascade);
 
         return builder;
-    }
-
-    /// <summary>Supplies only the final rebuild model; preflight consumes actual operation definitions.</summary>
-    private sealed class SqliteProjectedSeparateAddContext(
-        DbConnection connection,
-        IServiceProvider internalServices) : DbContext
-    {
-        /// <inheritdoc />
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-        {
-            optionsBuilder.UseSqlite(connection);
-            optionsBuilder.UseSqliteSafeMigrations();
-            optionsBuilder.UseInternalServiceProvider(internalServices);
-        }
-
-        /// <inheritdoc />
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
-        {
-            modelBuilder.Entity<SeparateAddParent>(entity =>
-            {
-                entity.ToTable("constraint_parents");
-                entity.HasKey(value => value.Id).HasName("pk_constraint_parents");
-                entity.Property(value => value.Id).ValueGeneratedNever();
-            });
-
-            modelBuilder.Entity<SeparateAddChild>(entity =>
-            {
-                entity.ToTable("constraint_children");
-                entity.HasKey(value => value.Id).HasName("pk_constraint_children");
-                entity.Property(value => value.Id).ValueGeneratedNever();
-                entity.HasIndex(value => value.ParentId).HasDatabaseName("ix_constraint_children_parent_id");
-                entity.HasOne<SeparateAddParent>().WithMany().HasForeignKey(value => value.ParentId)
-                    .HasConstraintName("fk_constraint_children_parent").OnDelete(DeleteBehavior.Cascade);
-            });
-        }
-
-        /// <summary>Models the unchanged native principal used by the final rebuild contract.</summary>
-        private sealed class SeparateAddParent
-        {
-            /// <summary>Gets or sets the native principal key.</summary>
-            public int Id { get; set; }
-        }
-
-        /// <summary>Models the final child after its separately authored column ADD.</summary>
-        private sealed class SeparateAddChild
-        {
-            /// <summary>Gets or sets the native child key.</summary>
-            public int Id { get; set; }
-
-            /// <summary>Gets or sets the nullable native parent reference.</summary>
-            public int? ParentId { get; set; }
-        }
     }
 }

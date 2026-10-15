@@ -1,7 +1,12 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the ColumnsAtomicRequiredAdd migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlColumnsAtomicRequiredAddIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlColumnsAtomicRequiredAddIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     /// <summary>Missing required columns use two atomic ALTERs without inventing row values or defaults.</summary>
     /// <param name="useGuidStorage">
     /// Whether the required target uses the annotated GUID rather than integer shape.
@@ -12,7 +17,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task AtomicRequiredAddMissingColumnConvergesAndRemainsIdempotent(bool useGuidStorage)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, AtomicRequiredAddOriginalTableSql());
         var operation = AtomicRequiredAddOperation(useGuidStorage);
         var guardName = AtomicRequiredAddGuardName(operation);
@@ -67,7 +72,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task AtomicRequiredAddInterruptedStageResumesWithoutRepairApproval(bool useGuidStorage)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, AtomicRequiredAddOriginalTableSql());
         var operation = AtomicRequiredAddOperation(useGuidStorage);
         var observer = new AtomicRequiredAddStageProbe(AtomicRequiredAddGuardName(operation),
@@ -105,7 +110,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task AtomicRequiredAddWithoutStrictModeFailsBeforeTargetDdl()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, AtomicRequiredAddOriginalTableSql());
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
@@ -123,7 +128,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         // Assert
         Assert.Equal(SafeMigrationAction.RejectUnsupported, Assert.Single(report.Assessments).Action);
-        Assert.Contains("doka_sm_unsupported", Assert.IsType<MySqlException>(exception).Message,
+        Assert.Contains("doka_sm_unsupported", AssertOwnedGuardFailure(exception).Message,
             StringComparison.Ordinal);
         Assert.Equal(new AtomicRequiredAddState(0, 0, 0, 0), state);
     }
@@ -133,7 +138,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task AtomicRequiredAddNonInnodbTableFailsBeforeTargetDdl()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `atomic_required_items` (`key` int NOT NULL PRIMARY KEY) ENGINE=MyISAM;");
         await using var context = CreateContext(connectionString);
@@ -150,7 +155,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         // Assert
         Assert.Equal(SafeMigrationAction.RejectUnsupported, Assert.Single(report.Assessments).Action);
-        Assert.Contains("doka_sm_unsupported", Assert.IsType<MySqlException>(exception).Message,
+        Assert.Contains("doka_sm_unsupported", AssertOwnedGuardFailure(exception).Message,
             StringComparison.Ordinal);
         Assert.Equal(new AtomicRequiredAddState(0, 0, 0, 0), state);
     }
@@ -160,7 +165,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task AtomicRequiredAddRequiresActiveCheckEnforcement()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var operation = AtomicRequiredAddOperation();
         var guardName = AtomicRequiredAddGuardName(operation);
         await ExecuteSqlAsync(connectionString, Fixture.IsMariaDb
@@ -188,7 +193,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(Fixture.IsMariaDb ? SafeMigrationAction.RejectUnsupported : SafeMigrationAction.RejectDifferent,
             Assert.Single(report.Assessments).Action);
         Assert.Contains(Fixture.IsMariaDb ? "doka_sm_unsupported" : "doka_sm_different",
-            Assert.IsType<MySqlException>(exception).Message, StringComparison.Ordinal);
+            AssertOwnedGuardFailure(exception).Message, StringComparison.Ordinal);
         Assert.Equal(Fixture.IsMariaDb
             ? new AtomicRequiredAddState(0, 0, 0, 0)
             : new AtomicRequiredAddState(1, 1, 1, 0), state);
@@ -208,7 +213,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task AtomicRequiredAddRejectsMalformedOrUnownedIntermediateState(string failure)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var operation = AtomicRequiredAddOperation();
         var guardName = AtomicRequiredAddGuardName(operation);
         var actualGuardName = failure switch
@@ -246,7 +251,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             ? SafeMigrationAction.RejectUnsupported
             : SafeMigrationAction.RejectDifferent, Assert.Single(report.Assessments).Action);
         Assert.Contains(failure == "name-collision" ? "doka_sm_unsupported" : "doka_sm_different",
-            Assert.IsType<MySqlException>(exception).Message,
+            AssertOwnedGuardFailure(exception).Message,
             StringComparison.Ordinal);
         Assert.Equal(before, after);
         Assert.Equal(failure == "name-collision" ? 0 : 1, after.Columns);
@@ -260,7 +265,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task AtomicRequiredAddMatchingTargetWithReservedGuardRejectsWithoutCleanup()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var operation = AtomicRequiredAddOperation();
         await ExecuteSqlAsync(connectionString, AtomicRequiredAddStagedTableSql(operation,
             AtomicRequiredAddGuardName(operation), "`required_value` IS NOT NULL", nullable: false));
@@ -278,7 +283,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         // Assert
         Assert.Equal(SafeMigrationAction.RejectDifferent, Assert.Single(report.Assessments).Action);
-        Assert.Contains("doka_sm_different", Assert.IsType<MySqlException>(exception).Message,
+        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(exception).Message,
             StringComparison.Ordinal);
         Assert.Equal(new AtomicRequiredAddState(1, 0, 1, 0), state);
     }
@@ -293,7 +298,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task AtomicRequiredAddQuotedQualifiedIdentifiersPreserveExactIdentity(bool ansiQuotes)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         const string table = "atomic_'slash\\`owner";
         const string column = "value_'slash\\`";
         await ExecuteSqlAsync(connectionString, AtomicRequiredAddOriginalTableSql(table));
@@ -335,7 +340,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task AtomicRequiredAddRecoveryInventoryAdmitsOnlyExactPendingOwnership(string ownership)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var operation = AtomicRequiredAddOperation();
         var guardName = AtomicRequiredAddGuardName(operation);
         var actualGuardName = ownership == "lookalike-name"
@@ -356,7 +361,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         builder.Operations.Add(operation);
         if (ownership == "ambiguous-target")
         {
-            builder.Operations.Add(AtomicRequiredAddOperation(guid: false));
+            builder.Operations.Add(AtomicRequiredAddOperation(useGuidStorage: false));
         }
 
         // Act
@@ -385,7 +390,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task AtomicRequiredAddResumeDoesNotAuthorizePrimaryKeyOverExistingDuplicates()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var operation = AtomicRequiredAddOperation();
         await ExecuteSqlAsync(connectionString, AtomicRequiredAddStagedTableSql(operation,
             AtomicRequiredAddGuardName(operation), "`required_value` IS NOT NULL")
@@ -417,24 +422,28 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         Assert.Equal(new AtomicRequiredAddState(1, 1, 1, 2), state);
         Assert.Equal(1, originalKeys);
     }
+}
+
+public abstract partial class MySqlSafeMigrationIntegrationTests
+{
 
     /// <summary>
     /// Captures an eligible required addition with no default and the provider's exact boolean safety marker.
     /// </summary>
-    /// <param name="guid">Whether the target uses GUID rather than integer storage.</param>
+    /// <param name="useGuidStorage">Whether the target uses GUID rather than integer storage.</param>
     /// <param name="table">The anonymous target table.</param>
     /// <param name="column">The anonymous target column.</param>
     /// <param name="schema">The optional current-database qualifier.</param>
     /// <returns>The immutable strict-policy column operation.</returns>
-    private static SafeMigrationOperation AtomicRequiredAddOperation(
-        bool guid = true,
+    protected static SafeMigrationOperation AtomicRequiredAddOperation(
+        bool useGuidStorage = true,
         string table = "atomic_required_items",
         string column = "required_value",
         string? schema = null
     )
     {
         var builder = new MigrationBuilder("Doka.EntityFrameworkCore.MySql");
-        if (guid)
+        if (useGuidStorage)
         {
             builder.AddColumnIfNotExistsFromModel(
                 operationFactory: operations => operations.AddColumn<Guid>(
@@ -461,14 +470,14 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     /// </summary>
     /// <param name="operation">The exact pending required-column operation.</param>
     /// <returns>The stable owned CHECK name.</returns>
-    private static string AtomicRequiredAddGuardName(SafeMigrationOperation operation)
+    protected static string AtomicRequiredAddGuardName(SafeMigrationOperation operation)
         => MySqlSafeMigrationCatalogSqlBuilder.GetRequiredColumnAddGuardName(
             Assert.IsType<EnsureColumnIntent>(operation.Intent));
 
     /// <summary>Creates an empty InnoDB owner without any required target or fabricated row values.</summary>
     /// <param name="table">The anonymous owner name, including quoted-identifier controls.</param>
     /// <returns>The original fixture DDL.</returns>
-    private static string AtomicRequiredAddOriginalTableSql(string table = "atomic_required_items")
+    protected static string AtomicRequiredAddOriginalTableSql(string table = "atomic_required_items")
         => "CREATE TABLE " + AtomicRequiredAddDelimited(table)
             + " (`key` int NOT NULL PRIMARY KEY) ENGINE=InnoDB "
             + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;";
@@ -482,7 +491,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     /// <param name="checkSuffix">An optional provider CHECK enforcement suffix.</param>
     /// <param name="nullable">Whether the actual column is still an intermediate nullable target.</param>
     /// <returns>The isolated test-only DDL; it is never used to implement production recovery.</returns>
-    private static string AtomicRequiredAddStagedTableSql(
+    protected static string AtomicRequiredAddStagedTableSql(
         SafeMigrationOperation operation,
         string? guardName,
         string expression,
@@ -507,7 +516,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     /// <param name="operation">The pending target whose owner is inspected.</param>
     /// <param name="actualGuardName">An optional deliberately unowned CHECK name to inspect.</param>
     /// <returns>The immutable state needed to prove that rejection never loses the barrier or data.</returns>
-    private static async Task<AtomicRequiredAddState> ReadAtomicRequiredAddStateAsync(
+    private protected static async Task<AtomicRequiredAddState> ReadAtomicRequiredAddStateAsync(
         string connectionString,
         SafeMigrationOperation operation,
         string? actualGuardName = null
@@ -535,7 +544,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     /// <summary>Sets only this test's already open migration session, never global server configuration.</summary>
     /// <param name="context">The context retaining the session under test.</param>
     /// <param name="sql">The bounded test-owned session statement.</param>
-    private static async Task AtomicRequiredAddSessionSqlAsync(DbContext context, string sql)
+    protected static async Task AtomicRequiredAddSessionSqlAsync(DbContext context, string sql)
     {
         await using var command = context.Database.GetDbConnection().CreateCommand();
         command.CommandText = sql;
@@ -545,13 +554,13 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     /// <summary>Escapes identifiers using delimiter doubling, independently of literal-string SQL modes.</summary>
     /// <param name="identifier">The anonymous test-owned identifier.</param>
     /// <returns>The exact backtick-delimited identifier.</returns>
-    private static string AtomicRequiredAddDelimited(string identifier)
+    protected static string AtomicRequiredAddDelimited(string identifier)
         => "`" + identifier.Replace("`", "``", StringComparison.Ordinal) + "`";
 
     /// <summary>Uses UTF-8 hex literals so catalog probes do not assume backslash escape semantics.</summary>
     /// <param name="value">The anonymous identifier used as a catalog value.</param>
     /// <returns>The SQL-mode-independent literal expression.</returns>
-    private static string AtomicRequiredAddLiteral(string value)
+    protected static string AtomicRequiredAddLiteral(string value)
         => "CONVERT(0x" + Convert.ToHexString(Encoding.UTF8.GetBytes(value)) + " USING utf8mb4)";
 
     /// <summary>Retains only durable aggregate state, not connection details or row payloads.</summary>
@@ -559,7 +568,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     /// <param name="NullableColumns">The actual nullable named target-column count.</param>
     /// <param name="Guards">The exact named CHECK count.</param>
     /// <param name="Rows">The owner row count.</param>
-    private readonly record struct AtomicRequiredAddState(int Columns, int NullableColumns, int Guards, int Rows);
+    private protected readonly record struct AtomicRequiredAddState(int Columns, int NullableColumns, int Guards, int Rows);
 
     /// <summary>
     /// Observes or interrupts the real atomic body exactly after its first complete prepared triplet.
@@ -569,7 +578,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     /// failure would miss durable staging; injection inside that actual command
     /// proves the first ALTER committed before the second was allowed to start.
     /// </remarks>
-    private sealed class AtomicRequiredAddStageProbe : DbCommandInterceptor
+    protected sealed class AtomicRequiredAddStageProbe : DbCommandInterceptor
     {
         private const string Deallocate = "DEALLOCATE PREPARE doka_sm_statement;";
         private readonly string _guardName;

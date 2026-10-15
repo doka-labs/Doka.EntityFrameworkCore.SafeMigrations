@@ -12,6 +12,7 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
     private readonly MigrationsSqlGenerationOptions _options;
     private readonly SqliteRebuildArtifactContract _rebuildArtifacts;
     private readonly bool _requiresForeignKeySuspension;
+    private readonly int _firstOperationOrdinal;
 
     /// <summary>Initializes an ordered SQLite structural batch.</summary>
     public SqliteSafeMigrationBatchCommand(
@@ -25,7 +26,8 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
         MigrationsSqlGenerationOptions options,
         IRelationalCommand placeholder,
         DbContext context,
-        IRelationalCommandDiagnosticsLogger logger
+        IRelationalCommandDiagnosticsLogger logger,
+        int firstOperationOrdinal
     ) : base(placeholder, context, logger, RequiresForeignKeySuspension(operations))
     {
         ArgumentNullException.ThrowIfNull(operations);
@@ -49,6 +51,7 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
         _model = model;
         _options = options;
         _requiresForeignKeySuspension = RequiresForeignKeySuspension(operations);
+        _firstOperationOrdinal = firstOperationOrdinal;
     }
 
     /// <inheritdoc />
@@ -124,7 +127,8 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
                     VerifyForeignKeys(
                         connection.DbConnection,
                         localTransaction.GetDbTransaction(),
-                        ReadForeignKeyValidationTables(postSnapshot));
+                        ReadForeignKeyValidationTables(postSnapshot),
+                        postSnapshot);
                 }
 
                 localTransaction.Commit();
@@ -162,8 +166,10 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
 
         var acceptedOperations = new List<MigrationOperation>(_operations.Count);
 
-        foreach (var operation in _operations)
+        for (var operationIndex = 0; operationIndex < _operations.Count; operationIndex++)
         {
+            var operation = _operations[operationIndex];
+
             if (operation is not SafeMigrationOperation safeOperation)
             {
                 acceptedOperations.Add(operation);
@@ -187,7 +193,8 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
 
             if (decision.Action.RejectsExecution())
             {
-                throw CreateBlockedException(safeOperation, analysis, decision);
+                throw new InvalidOperationException(SqliteSafeMigrationDiagnosticMessages.FormatBlocked(
+                    safeOperation, analysis, decision, _firstOperationOrdinal + operationIndex));
             }
 
             projection.Observe(safeOperation, liveAnalysis, analysis, decision);
@@ -245,8 +252,8 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
             if (!postcondition.PostconditionSatisfied && !postflight.IsSuperseded(index))
             {
                 throw new InvalidOperationException(
-                    $"SQLite SafeMigrations postcondition failed for {operation.Intent.Kind} "
-                    + $"'{operation.Intent.ObjectName}' with analysis code '{postcondition.Code}'.");
+                    SafeMigrationDiagnosticMessages.FormatPostcondition(
+                        operation, postcondition, _firstOperationOrdinal + index));
             }
         }
 
@@ -458,7 +465,8 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
     private static void VerifyForeignKeys(
         DbConnection connection,
         DbTransaction transaction,
-        HashSet<string> tables
+        HashSet<string> tables,
+        SqliteCatalogSnapshot snapshot
     )
     {
         foreach (var validationTable in tables.OrderBy(static table => table, SqliteIdentifierComparer.Instance))
@@ -472,16 +480,17 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
                 continue;
             }
 
-            var table = reader.IsDBNull(0) ? "unknown" : reader.GetString(0);
-            var rowId = reader.IsDBNull(1)
-                ? "without-rowid"
-                : Convert.ToString(reader.GetValue(1), CultureInfo.InvariantCulture) ?? "unknown";
-
-            var principal = reader.IsDBNull(2) ? "unknown" : reader.GetString(2);
+            // WHY: PRAGMA's second field is a row key, not structural context.
+            // Keep integrity failures actionable without disclosing that value.
+            var principal = reader.IsDBNull(2) ? null : reader.GetString(2);
+            var foreignKeyOrdinal = reader.IsDBNull(3) ? (long?)null : reader.GetInt64(3);
+            var foreignKey = snapshot.Tables.TryGetValue(validationTable, out var owner)
+                ? owner.ForeignKeys.FirstOrDefault(candidate => candidate.Id == foreignKeyOrdinal)
+                : null;
 
             throw new InvalidOperationException(
-                $"SQLite SafeMigrations foreign-key validation failed after rebuilding table '{table}' "
-                + $"at row '{rowId}' against '{principal}'.");
+                SqliteSafeMigrationDiagnosticMessages.FormatForeignKeyValidation(
+                    validationTable, principal, foreignKeyOrdinal, foreignKey));
         }
     }
 
@@ -494,12 +503,4 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
     ) => command.CommandText.AsSpan().Trim().StartsWith(
         "PRAGMA foreign_keys",
         StringComparison.OrdinalIgnoreCase);
-
-    private static InvalidOperationException CreateBlockedException(
-        SafeMigrationOperation operation,
-        SafeMigrationProviderAnalysis analysis,
-        SafeMigrationDecision decision
-    ) => new(
-        $"SQLite SafeMigrations blocked {operation.Intent.Kind} '{operation.Intent.ObjectName}': "
-        + $"analysis={analysis.Code}, decision={decision.Code}.");
 }

@@ -25,8 +25,8 @@ public sealed class SqlServerColumnLayoutGuardSqlTests
         // Act
         var plan = catalog.Build(operation);
         var runtime = GenerateGuardedCommand(context, operation);
-        var guard = "IF (" + plan.ColumnLayoutFailureExpression + ") IS NOT NULL\nBEGIN\n"
-            + "    THROW 51002, N'doka_sm_unsupported', 1;\nEND;\n";
+        var guard = "DECLARE @doka_layout_failure nvarchar(64) = (" + plan.ColumnLayoutFailureExpression
+            + ");\nIF @doka_layout_failure IS NOT NULL\nBEGIN\n";
 
         var guardOffset = runtime.IndexOf(guard, StringComparison.Ordinal);
         var dynamicOffset = runtime.IndexOf("EXEC sys.sp_executesql", StringComparison.Ordinal);
@@ -43,6 +43,9 @@ public sealed class SqlServerColumnLayoutGuardSqlTests
         Assert.Contains("column_fixed_row_limit", failureExpression, StringComparison.Ordinal);
         Assert.Contains("column_layout_unproven", failureExpression, StringComparison.Ordinal);
         Assert.DoesNotContain("SELECT TOP (1)", failureExpression, StringComparison.Ordinal);
+        Assert.Contains("THROW 51002, @doka_layout_message, 1;", runtime, StringComparison.Ordinal);
+        Assert.Contains("reasonCode=column_limit", runtime, StringComparison.Ordinal);
+        Assert.Contains("reasonCode=column_fixed_row_limit", runtime, StringComparison.Ordinal);
         Assert.True(guardOffset >= 0);
         Assert.True(dynamicOffset > guardOffset);
         Assert.True(stateOffset > guardOffset);
@@ -68,7 +71,8 @@ public sealed class SqlServerColumnLayoutGuardSqlTests
         // Act
         var plan = catalog.Build(operation);
         var runtime = GenerateGuardedCommand(context, operation);
-        var guardOffset = runtime.IndexOf("IF (" + plan.ColumnLayoutFailureExpression + ") IS NOT NULL",
+        var guardOffset = runtime.IndexOf("DECLARE @doka_layout_failure nvarchar(64) = ("
+            + plan.ColumnLayoutFailureExpression + ");",
             StringComparison.Ordinal);
 
         var defaultOffset = runtime.IndexOf("DECLARE @doka_default_supported", StringComparison.Ordinal);
@@ -106,7 +110,9 @@ public sealed class SqlServerColumnLayoutGuardSqlTests
             StringComparison.Ordinal);
         Assert.Contains("c.name = N'Value') THEN CONVERT(nvarchar(128), NULL) ELSE (", failureExpression,
             StringComparison.Ordinal);
-        Assert.Contains("IF (" + failureExpression + ") IS NOT NULL", runtime, StringComparison.Ordinal);
+        Assert.Contains("DECLARE @doka_layout_failure nvarchar(64) = (" + failureExpression + ");",
+            runtime, StringComparison.Ordinal);
+        Assert.Contains("IF @doka_layout_failure IS NOT NULL", runtime, StringComparison.Ordinal);
         Assert.DoesNotContain("IF COALESCE((" + failureExpression, runtime, StringComparison.Ordinal);
         Assert.False(plan.IsStaticallyUnsupported);
     }

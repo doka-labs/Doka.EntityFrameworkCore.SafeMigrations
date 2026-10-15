@@ -1,11 +1,18 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the IndexesReplacement PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlIndexesReplacementIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlIndexesReplacementIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     [Fact]
     public async Task ProviderDropThenUniqueCreate_PreservesDataBlockedClassificationAndExistingIndex()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE blocked_index_replacement (code integer NOT NULL); "
@@ -43,4 +50,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
                 + "AND i.relname = 'ix_blocked_index_replacement' "
                 + "AND i.relkind = 'i';"));
     }
+
 }

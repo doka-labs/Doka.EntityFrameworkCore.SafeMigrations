@@ -1,11 +1,16 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the ColumnsScaffolding migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlColumnsScaffoldingIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     [Fact]
     public async Task AnnotatedColumns_RepairDefaultsAndCommentsWithoutLosingRows()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `annotated_column_repair` ("
@@ -97,7 +102,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task AnnotatedNullableColumn_WithNullRows_IsDataBlockedWithoutMutation()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `annotated_nullable_blocked` ("
@@ -126,7 +131,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("annotated-nullable-blocked"));
 
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations));
         var assessment = Assert.Single(
             report.Assessments,
@@ -149,7 +154,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task RepairIfSafe_DoesNotRewriteAutoIncrementMismatch()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `annotated_identity_mismatch` (`id` int NOT NULL, PRIMARY KEY (`id`));");
@@ -173,7 +178,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("identity-mismatch"));
 
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations));
 
         Assert.Contains(
@@ -197,7 +202,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ScaffoldedAutoIncrementTable_PreservesGenerationAndIsIdempotent()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         _ = AddScaffoldedAutoIncrementTable(builder, "scaffolded_identity");
@@ -227,7 +232,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ScaffoldedAutoIncrementTable_RejectsExistingNonGeneratedColumn()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `scaffolded_identity_drift` ("
@@ -241,7 +246,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("scaffolded-identity-drift"));
 
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations));
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -259,7 +264,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ScaffoldedOperationLevelAnnotation_IsRejectedBeforeDdl()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         var operation = AddScaffoldedAutoIncrementTable(builder, "unsupported_scaffolded_annotation");
@@ -269,7 +274,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("unsupported-operation-facet"));
 
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations));
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -290,7 +295,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         SafeMigrationScaffoldingMode mode
     )
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
 
@@ -389,7 +394,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         DokaMySqlGuidFormat guidFormat
     )
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         var storeType = GuidStoreType(guidFormat);
@@ -604,7 +609,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         UnsupportedGuidAnnotationCase testCase
     )
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         var guidFormat = testCase switch
@@ -642,7 +647,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions($"invalid-{testCase}"));
 
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations));
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -663,7 +668,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         bool useUnknownAnnotation
     )
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         var tableName = useUnknownAnnotation ? "unsupported_unknown" : "unsupported_hilo";
@@ -688,7 +693,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions(tableName));
 
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        var exception = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations));
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -722,8 +727,12 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         return Assert.IsType<SafeMigrationOperation>(Assert.Single(builder.Operations));
     }
+}
 
-    private static OperationBuilder<SafeMigrationOperation> AddScaffoldedTable<TColumns>(
+public abstract partial class MySqlSafeMigrationIntegrationTests
+{
+
+    protected static OperationBuilder<SafeMigrationOperation> AddScaffoldedTable<TColumns>(
         MigrationBuilder builder,
         SafeMigrationScaffoldingMode mode,
         string name,
@@ -742,7 +751,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unsupported scaffolding mode."),
     };
 
-    private static string GuidStoreType(
+    protected static string GuidStoreType(
         DokaMySqlGuidFormat format
     ) => format switch
     {
@@ -750,8 +759,12 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         DokaMySqlGuidFormat.Char36 => "char(36)",
         _ => throw new ArgumentOutOfRangeException(nameof(format), format, "Unsupported GUID format."),
     };
+}
 
-    private static string GuidLiteral(
+public abstract partial class MySqlSafeMigrationIntegrationTests
+{
+
+    private protected static string GuidLiteral(
         DokaMySqlGuidFormat format,
         string value
     ) => format switch
@@ -760,6 +773,10 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         DokaMySqlGuidFormat.Char36 => $"'{value}'",
         _ => throw new ArgumentOutOfRangeException(nameof(format), format, "Unsupported GUID format."),
     };
+}
+
+public abstract partial class MySqlSafeMigrationIntegrationTests
+{
 
     public enum UnsupportedGuidAnnotationCase
     {

@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
-public sealed partial class SqliteSafeMigrationCatalogIntegrationTests : SqliteIntegrationTestBase
+/// <summary>Exercises indexes and catalog with independently owned SQLite state.</summary>
+public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : SqliteSafeMigrationCatalogIntegrationTests
 {
     /// <summary>Comment-free and trivia-bearing definitions retain trimmed expressions and ordered keys.</summary>
     [Theory]

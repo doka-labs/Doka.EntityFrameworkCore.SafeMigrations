@@ -61,5 +61,7 @@ internal static class SafeMigrationGeneratedSource
 
     private static InvalidOperationException InconsistentLineEndings() => new(
         "The EF Core migrations generator emitted inconsistent line endings. "
-        + "SafeMigrations stopped instead of producing malformed migration source.");
+        + "SafeMigrations stopped instead of producing malformed migration source. Check the provider and "
+        + "EF Core design-time generator versions and custom generator replacements, then regenerate with "
+        + "one compatible line-ending convention.");
 }

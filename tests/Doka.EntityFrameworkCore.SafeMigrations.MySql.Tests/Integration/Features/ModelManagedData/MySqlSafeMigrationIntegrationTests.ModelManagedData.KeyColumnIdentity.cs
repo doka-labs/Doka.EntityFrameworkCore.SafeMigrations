@@ -1,7 +1,12 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the ModelManagedDataKeyColumnIdentity migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlModelManagedDataKeyColumnIdentityIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlModelManagedDataKeyColumnIdentityIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     /// <summary>
     /// Native key-column case aliases identify the same row across ordered final-writer verification.
     /// </summary>
@@ -9,7 +14,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ModelManagedKeyColumnIdentityVerifiesOrderedEnsureAndUpdate()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ModelManagedKeyColumnIdentityFixtureSql("managed_key_items"));
         await using var context = CreateContext(connectionString);
         var builder = ModelManagedKeyColumnIdentityOperations(context.Database.ProviderName!, "ID");
@@ -57,7 +62,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ModelManagedKeyColumnIdentityExactOperationsVerifySeparately()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ModelManagedKeyColumnIdentityFixtureSql("managed_key_items"));
         await using var context = CreateContext(connectionString);
         var builder = ModelManagedKeyColumnIdentityOperations(context.Database.ProviderName!, "Id");
@@ -100,7 +105,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ModelManagedKeyColumnIdentityExactDuplicateBatchIsRejectedBeforeMutation()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ModelManagedKeyColumnIdentityFixtureSql("managed_key_items"));
         await using var context = CreateContext(connectionString);
         var builder = ModelManagedKeyColumnIdentityOperations(context.Database.ProviderName!, "Id");
@@ -125,7 +130,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ModelManagedKeyColumnIdentityDoesNotHideFinalValueDrift()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ModelManagedKeyColumnIdentityFixtureSql("managed_key_items"));
         await using var context = CreateContext(connectionString);
         var builder = ModelManagedKeyColumnIdentityOperations(context.Database.ProviderName!, "ID");
@@ -154,7 +159,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task ModelManagedKeyColumnIdentityDoesNotSupersedeAnotherOwner()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ModelManagedKeyColumnIdentityFixtureSql("managed_key_items")
             + ModelManagedKeyColumnIdentityFixtureSql("managed_other_items"));
 

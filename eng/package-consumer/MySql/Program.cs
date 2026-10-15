@@ -17,9 +17,24 @@ var expectsDesignTimeReference = args switch
 var migrationBuilder = new MigrationBuilder("PackageConsumer");
 migrationBuilder.EnsureSchemaExists("consumer_schema");
 
-if (migrationBuilder.Operations is not [SafeMigrationOperation])
+if (migrationBuilder.Operations is not [SafeMigrationOperation operation])
 {
     return 1;
+}
+
+// WHY: Exercise the public diagnostic surface through the isolated NuGet
+// consumer, not just repository ProjectReferences or packaged-file checks.
+var rejection = new SafeMigrationExecutionException(
+    operation, "doka_sm_unsupported", 0, new InvalidOperationException("synthetic native guard"));
+
+if (rejection.GuardCode != "doka_sm_unsupported"
+    || rejection.Identity.Schema != "consumer_schema"
+    || !rejection.Message.Contains("consumer_schema", StringComparison.Ordinal)
+    || SafeMigrationDiagnosticMessages.FormatIdentity(rejection.Identity).Length == 0)
+{
+    Console.Error.WriteLine("The package consumer diagnostic identity contract is unavailable.");
+
+    return 3;
 }
 
 _ = new DbContextOptionsBuilder().UseMySqlSafeMigrations();

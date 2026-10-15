@@ -162,8 +162,19 @@ internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffe
 
         return match
             ?? throw new InvalidOperationException(
-                $"SafeMigrations could not resolve the {context} table in the relational model.");
+                $"SafeMigrations could not resolve the {context} table {DisplayTable(table, schema)} "
+                + "in the relational model. Check the source and target table mappings and the active "
+                + "provider model differ before scaffolding this data transition.");
     }
+
+    /// <summary>Formats known relational ownership only when an authored metadata diagnostic is required.</summary>
+    private static string DisplayTable(
+        string table,
+        string? schema
+    ) => schema is null
+        ? $"'{SafeMigrationDiagnosticMessages.BoundForDisplay(table)}'"
+        : $"'{SafeMigrationDiagnosticMessages.BoundForDisplay(schema)}."
+            + $"{SafeMigrationDiagnosticMessages.BoundForDisplay(table)}'";
 
     private static string[] CompleteTypes(
         string[] columns,
@@ -178,7 +189,8 @@ internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffe
                 || existingTypes.Any(string.IsNullOrWhiteSpace))
             {
                 throw new InvalidOperationException(
-                    $"The provider emitted an incomplete {context} store-type vector.");
+                    $"The provider emitted an incomplete {context} store-type vector for "
+                    + $"table {DisplayTable(table.Name, table.Schema)}. Retain one provider store type per column.");
             }
 
             ValidateTypes(columns, existingTypes, table, context);
@@ -191,7 +203,9 @@ internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffe
                     StringComparer.Ordinal.Equals(candidate.Name, column))
                 ?.StoreType
                 ?? throw new InvalidOperationException(
-                    $"SafeMigrations could not resolve {context} column '{column}' in the relational model."))
+                    $"SafeMigrations could not resolve {context} column "
+                    + $"'{SafeMigrationDiagnosticMessages.BoundForDisplay(column)}' in relational table "
+                    + $"{DisplayTable(table.Name, table.Schema)}. Check the source and target column mappings."))
             .ToArray();
     }
 
@@ -208,14 +222,18 @@ internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffe
                     StringComparer.Ordinal.Equals(candidate.Name, columns[ordinal]))
                 ?.StoreType
                 ?? throw new InvalidOperationException(
-                    $"SafeMigrations could not resolve {context} column '{columns[ordinal]}' "
-                    + "in the relational model.");
+                    $"SafeMigrations could not resolve {context} column "
+                    + $"'{SafeMigrationDiagnosticMessages.BoundForDisplay(columns[ordinal])}' "
+                    + $"in relational table {DisplayTable(table.Name, table.Schema)}. "
+                    + "Check the source and target column mappings.");
 
             if (!StringComparer.OrdinalIgnoreCase.Equals(types[ordinal], modelType))
             {
                 throw new InvalidOperationException(
-                    $"The provider-emitted {context} store type for column '{columns[ordinal]}' "
-                    + "does not match the relational model.");
+                    $"The provider-emitted {context} store type for column "
+                    + $"'{SafeMigrationDiagnosticMessages.BoundForDisplay(columns[ordinal])}' "
+                    + $"in table {DisplayTable(table.Name, table.Schema)} does not match the relational model. "
+                    + "Use the same provider model configuration for both the differ and code generator.");
             }
         }
     }
@@ -237,7 +255,8 @@ internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffe
                 || providedTypes.Any(string.IsNullOrWhiteSpace)))
         {
             throw new InvalidOperationException(
-                $"The provider emitted an incomplete {context} store-type vector.");
+                $"The provider emitted an incomplete {context} store-type vector for table "
+                + $"{DisplayTable(targetTable.Name, targetTable.Schema)}. Retain one provider store type per column.");
         }
 
         var result = new string[columns.Length];
@@ -252,7 +271,10 @@ internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffe
                 && !StringComparer.OrdinalIgnoreCase.Equals(sourceType, targetType))
             {
                 throw new InvalidOperationException(
-                    $"The {context} column '{column}' changes store type while model-managed data also changes.");
+                    $"The {context} column '{SafeMigrationDiagnosticMessages.BoundForDisplay(column)}' "
+                    + $"in table {DisplayTable(targetTable.Name, targetTable.Schema)} changes store type while "
+                    + "model-managed data also changes. Separate the schema and data transitions, "
+                    + "or author an explicit source-frozen conversion contract.");
             }
 
             // A newly mapped member exists only in the forward target model.
@@ -261,14 +283,19 @@ internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffe
             var modelType = targetType
                 ?? sourceType
                 ?? throw new InvalidOperationException(
-                    $"SafeMigrations could not resolve {context} column '{column}' in either relational model.");
+                    $"SafeMigrations could not resolve {context} column "
+                    + $"'{SafeMigrationDiagnosticMessages.BoundForDisplay(column)}' in either relational model "
+                    + $"for table {DisplayTable(targetTable.Name, targetTable.Schema)}. "
+                    + "Check the source and target column mappings.");
 
             if (providedTypes is not null
                 && !StringComparer.OrdinalIgnoreCase.Equals(providedTypes[ordinal], modelType))
             {
                 throw new InvalidOperationException(
-                    $"The provider-emitted {context} store type for column '{column}' "
-                    + "does not match the relational model.");
+                    $"The provider-emitted {context} store type for column "
+                    + $"'{SafeMigrationDiagnosticMessages.BoundForDisplay(column)}' "
+                    + $"in table {DisplayTable(targetTable.Name, targetTable.Schema)} does not match "
+                    + "the relational model. Use the same provider model configuration for the differ and generator.");
             }
 
             result[ordinal] = modelType;
@@ -317,14 +344,18 @@ internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffe
     {
         var primaryKey = table.PrimaryKey
             ?? throw new InvalidOperationException(
-                "SafeMigrations cannot source-freeze model-managed inserts for a table without a primary key.");
+                "SafeMigrations cannot source-freeze model-managed inserts for table "
+                + $"{DisplayTable(table.Name, table.Schema)} without a primary key. Configure an explicit "
+                + "stable primary key before scaffolding model-managed rows.");
 
         var columns = primaryKey.Columns.Select(static column => column.Name).ToArray();
 
         if (columns.Any(column => !managedColumns.Contains(column, StringComparer.Ordinal)))
         {
             throw new InvalidOperationException(
-                "A model-managed insert does not contain every primary-key column from the relational model.");
+                "A model-managed insert for table "
+                + $"{DisplayTable(table.Name, table.Schema)} does not contain every primary-key column "
+                + "from the relational model. Include the complete stable key in the model-managed data mapping.");
         }
 
         return (

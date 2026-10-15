@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the MemberRenameEvidence PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlMemberRenameEvidenceIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlMemberRenameEvidenceIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>A source created on a brownfield table cannot overwrite an occupied destination.</summary>
     /// <param name="index">Whether an index rather than a column is renamed.</param>
     /// <param name="sourceExists">Whether the source exists in the immutable catalog.</param>
@@ -22,7 +29,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var source = index ? "source_index" : "source_value";
         var target = index ? "target_index" : "target_value";
         await ExecuteSqlAsync(connectionString, "CREATE TABLE member_rows (id integer NOT NULL, decoy integer NULL"
@@ -95,7 +102,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task MemberRename_IndexDestinationUsesSchemaGlobalNamespace(bool tableOccupant)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE member_rows (id integer NOT NULL); "
             + "CREATE TABLE other_rows (id integer NOT NULL); "
             + (tableOccupant ? "CREATE TABLE target_index (id integer NOT NULL);"
@@ -133,7 +140,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task MemberRename_AbsentSourceReplayPreservesDestination(bool index)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE member_rows (id integer NOT NULL, target_value integer NULL); "
             + "INSERT INTO member_rows VALUES (7, 29); CREATE INDEX target_index ON member_rows (id);");
@@ -170,7 +177,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task MemberRename_DifferentIdentifierCaseDoesNotOccupyDestination(bool index)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE member_rows (id integer NOT NULL, decoy integer NULL, \"Target_Value\" integer NULL); "
             + "CREATE INDEX \"Target_Index\" ON member_rows (decoy);");
@@ -214,7 +221,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task MemberRename_TargetDropRequiresIndependentlySupportedSource(string kind)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var supported = kind == "independent";
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE member_rows (id integer NOT NULL, decoy integer NULL"
@@ -263,4 +270,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         Assert.Equal(supported ? 0 : 1, sourceCount);
         Assert.Equal(1, rows);
     }
+
 }

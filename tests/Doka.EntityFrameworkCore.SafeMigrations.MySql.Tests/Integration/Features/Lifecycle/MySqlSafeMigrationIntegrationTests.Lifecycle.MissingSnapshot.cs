@@ -1,7 +1,12 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the LifecycleMissingSnapshot migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlLifecycleMissingSnapshotIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlLifecycleMissingSnapshotIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     private const string SnapshotFreeCatalogCountSql =
         "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() "
         + "AND TABLE_NAME IN ('snapshotless_items', '__EFMigrationsHistory');";
@@ -13,7 +18,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         bool requireExpectedFingerprint
     )
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateSnapshotFreeContext(connectionString);
         var assembly = context.GetService<IMigrationsAssembly>();
         var model = context.GetService<IDesignTimeModel>()
@@ -74,7 +79,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         SafeMigrationReportMode mode
     )
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateSnapshotFreeContext(connectionString);
         await using var differentModelContext = CreateContext(connectionString);
         var expected = SafeMigrationModelFingerprint.Create(
@@ -139,8 +144,12 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
 
         return builder;
     }
+}
 
-    private sealed class SnapshotFreeContext : DbContext
+public abstract partial class MySqlSafeMigrationIntegrationTests
+{
+
+    protected sealed class SnapshotFreeContext : DbContext
     {
         public SnapshotFreeContext(
             DbContextOptions<SnapshotFreeContext> options

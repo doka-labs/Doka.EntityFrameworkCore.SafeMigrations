@@ -53,9 +53,14 @@ public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
         if ((options & MigrationsSqlGenerationOptions.Script) != 0
             && operations.Any(static operation => operation is SafeMigrationOperation))
         {
-            throw new NotSupportedException(
-                "SQLite cannot express SafeMigrations runtime catalog decisions in a SQL script. "
-                + "Apply migrations through EF Core or a migration bundle instead.");
+            for (var ordinal = 0; ordinal < operations.Count; ordinal++)
+            {
+                if (operations[ordinal] is SafeMigrationOperation safeOperation)
+                {
+                    throw new NotSupportedException(SafeMigrationDiagnosticMessages.FormatRuntime(
+                        safeOperation, "doka_sm_script_unsupported", ordinal));
+                }
+            }
         }
 
         SafeMigrationExpectedIndexTransitions.Validate(operations);
@@ -86,6 +91,9 @@ public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
             if (SqliteSafeMigrationOperationClassifier.CanParticipateInStructuralBatch(operation))
             {
                 var structuralOperations = new List<MigrationOperation>();
+                // WHY: Batch-local positions lose preceding provider and safe
+                // segments. Retain the original supplied-stream origin for errors.
+                var firstOperationOrdinal = ordinal;
                 while (ordinal < operations.Count
                        && SqliteSafeMigrationOperationClassifier.CanParticipateInStructuralBatch(
                            operations[ordinal]))
@@ -113,7 +121,8 @@ public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
                             CreatePlaceholder(
                                 $"-- SQLite SafeMigrations structural batch: {structuralOperations.Count}"),
                             _dependencies.CurrentContext.Context,
-                            _dependencies.Logger));
+                            _dependencies.Logger,
+                            firstOperationOrdinal));
                 }
                 else
                 {
@@ -148,8 +157,8 @@ public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
                 continue;
             }
 
-            var applyCommands = RenderBaseline(safeOperation, effectiveModel, options);
-            ValidateBaseline(applyCommands);
+            var applyCommands = RenderBaseline(safeOperation, effectiveModel, options, ordinal);
+            ValidateBaseline(safeOperation, applyCommands, ordinal);
             var operationArtifacts = SqliteRebuildArtifactContract.FromOperations([safeOperation]);
 
             result.Add(
@@ -161,7 +170,8 @@ public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
                     operationArtifacts,
                     CreatePlaceholder(safeOperation),
                     _dependencies.CurrentContext.Context,
-                    _dependencies.Logger));
+                    _dependencies.Logger,
+                    ordinal));
             ordinal++;
         }
 
@@ -171,7 +181,8 @@ public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
     private IReadOnlyList<MigrationCommand> RenderBaseline(
         SafeMigrationOperation operation,
         IModel? model,
-        MigrationsSqlGenerationOptions options
+        MigrationsSqlGenerationOptions options,
+        int operationOrdinal
     )
     {
         if (operation.Intent is ModelManagedDataIntent or EnsureSchemaIntent or DropSchemaIntent or RenameIndexIntent)
@@ -182,7 +193,7 @@ public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
         if (operation.Intent is EnsureColumnIntent column
             && (column.Definition.ComputedColumnSql is not null || column.Definition.ComputedExpression is not null))
         {
-            return [CreateCommand(RenderGeneratedColumn(column))];
+            return [CreateCommand(RenderGeneratedColumn(operation, operationOrdinal))];
         }
 
         if (operation.Intent is EnsureIndexIntent index
@@ -239,9 +250,11 @@ public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
         transactionSuppressed: false);
 
     private string RenderGeneratedColumn(
-        EnsureColumnIntent intent
+        SafeMigrationOperation operation,
+        int operationOrdinal
     )
     {
+        var intent = (EnsureColumnIntent)operation.Intent;
         var definition = intent.Definition;
         var storeType = definition.StoreType
             ?? _dependencies.TypeMappingSource.FindMapping(
@@ -255,7 +268,8 @@ public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
                     precision: definition.Precision,
                     scale: definition.Scale)
                 ?.StoreType
-            ?? throw new NotSupportedException($"SQLite has no type mapping for generated column '{definition.Name}'.");
+            ?? throw new NotSupportedException(SafeMigrationDiagnosticMessages.FormatRuntime(
+                operation, "doka_sm_unsupported", operationOrdinal, "column_type_mapping"));
 
         var expression = definition.ComputedExpression is null
             ? definition.ComputedColumnSql!
@@ -327,7 +341,9 @@ public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
         key.Expression is not null || key.StructuredExpression is not null || key.Collation is not null);
 
     private static void ValidateBaseline(
-        IReadOnlyList<MigrationCommand> commands
+        SafeMigrationOperation operation,
+        IReadOnlyList<MigrationCommand> commands,
+        int operationOrdinal
     )
     {
         foreach (var command in commands)
@@ -340,7 +356,8 @@ public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
                     .StartsWith("PRAGMA foreign_keys", StringComparison.OrdinalIgnoreCase))
             {
                 throw new NotSupportedException(
-                    "SQLite SafeMigrations cannot guard an unexpected transaction-suppressed baseline command.");
+                    SafeMigrationDiagnosticMessages.FormatRuntime(
+                        operation, "doka_sm_unsupported", operationOrdinal, "baseline_transaction_suppressed"));
             }
         }
     }

@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the ColumnsAlterTransitions PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlColumnsAlterTransitionsIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlColumnsAlterTransitionsIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>Preserves values, indexes and schema identity through a length transition and replay.</summary>
     /// <param name="sourceLength">The current VARCHAR limit.</param>
     /// <param name="targetLength">The requested VARCHAR limit.</param>
@@ -17,7 +24,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var liveType = sourceLength is null ? "character varying" : $"character varying({sourceLength})";
         await ExecuteSqlAsync(connectionString,
             "CREATE SCHEMA alter_scope; CREATE TABLE alter_rows (value integer); "
@@ -84,7 +91,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE alter_rows (value character varying(40) NULL); "
             + $"INSERT INTO alter_rows VALUES ('{value}');");
@@ -126,7 +133,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE alter_rows (value character varying(40) NULL); "
             + $"INSERT INTO alter_rows VALUES ('{(overlong ? "longer-than-ten" : "fits")}');");
@@ -180,7 +187,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var liveType = drift == "text" ? "text" : "character varying(40)";
         var collation = drift == "collation" ? " COLLATE \"C\"" : string.Empty;
         await ExecuteSqlAsync(connectionString,
@@ -223,7 +230,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE alter_rows (value character varying(10) NULL); "
             + $"INSERT INTO alter_rows VALUES ({(containsNull ? "NULL" : "'fits'")});");
@@ -269,7 +276,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             exists ? "CREATE TABLE alter_rows (value character varying(10) NULL);"
                 : "CREATE TABLE alter_rows (id integer);");
@@ -306,7 +313,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task AlterTransition_DependentViewFailureIsAtomic()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE alter_rows (value character varying(10) NULL); "
             + "INSERT INTO alter_rows VALUES ('preserved'); CREATE VIEW alter_view AS SELECT value FROM alter_rows;");
@@ -330,7 +337,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task AlterTransition_MultibyteCharactersFitWithoutTruncation()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE alter_rows (value character varying(40) NULL); "
             + "INSERT INTO alter_rows VALUES (repeat(chr(233), 9));");
@@ -359,7 +366,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE alter_rows (value character varying(40) NULL); INSERT INTO alter_rows VALUES ('fits');");
 
@@ -408,7 +415,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         if (!createTable)
         {
             await ExecuteSqlAsync(connectionString,
@@ -453,7 +460,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task AlterTransition_NewEmptyTableStillRejectsTextSource()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var source = new ExpectedColumnDefinition("value", typeof(string), true, "text");
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -477,7 +484,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task AlterTransition_RenamedExistingTableDoesNotBorrowUnboundEvidence()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE source_rows (value character varying(40) NULL);");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -509,4 +516,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     ) => ScalarIntAsync(connectionString,
         "SELECT character_maximum_length FROM information_schema.columns WHERE table_schema = current_schema() "
         + "AND table_name = 'alter_rows' AND column_name = 'value';");
+
 }

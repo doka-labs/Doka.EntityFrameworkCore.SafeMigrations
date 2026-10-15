@@ -1,7 +1,12 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the ModelManagedData migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlModelManagedDataIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlModelManagedDataIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     [Theory]
     [InlineData(SafeMigrationScaffoldingMode.Strict)]
     [InlineData(SafeMigrationScaffoldingMode.LegacyConvergence)]
@@ -9,7 +14,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         SafeMigrationScaffoldingMode mode
     )
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
 
@@ -86,7 +91,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ModelManagedDataBlocksUniquePrerequisiteEngineAndUnmodeledDependencyEdges()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `model_edge_roles` ("
@@ -162,7 +167,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             new SafeMigrationRunOptions("model-data-unmodeled-dependency"),
             CancellationToken.None);
 
-        _ = await Assert.ThrowsAsync<MySqlException>(() =>
+        _ = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, unmodeledDependency.Operations, CancellationToken.None));
 
         Assert.Equal(SafeMigrationObservedState.DataBlocked, Assert.Single(uniqueReport.Assessments).ObservedState);
@@ -182,7 +187,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ModelManagedUpdateHandlesNullSourceAndMixedTargetRowsAtomically()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `model_null_roles` (`id` int NOT NULL, `name` varchar(64) NULL, "
@@ -221,7 +226,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task OrderedChildDeleteDefersStaleParentDependencyEvidence()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `model_roles` (`id` int NOT NULL, `name` varchar(64) NOT NULL, "
@@ -273,7 +278,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ModelManagedDataTransitionsAreIdempotentAndRejectDrift()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `model_roles` ("
@@ -368,7 +373,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             new SafeMigrationRunOptions("model-data-drift"),
             CancellationToken.None);
 
-        _ = await Assert.ThrowsAsync<MySqlException>(() =>
+        _ = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, drift.Operations, CancellationToken.None));
 
         Assert.Equal(SafeMigrationReportStatus.Ready, ensurePreflight.Status);

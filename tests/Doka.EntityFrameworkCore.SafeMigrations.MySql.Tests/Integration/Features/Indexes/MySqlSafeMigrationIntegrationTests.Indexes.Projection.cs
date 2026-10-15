@@ -1,11 +1,16 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the IndexesProjection migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlIndexesProjectionIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     [Fact]
     public async Task ProjectedVarcharWideningAuthorizesTheTargetPrefixAndReplaysAsNoOp()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `projected_index_width` ("
@@ -83,7 +88,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task RejectedVarcharWideningCannotAuthorizeTheTargetPrefix()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `rejected_projected_width` ("
@@ -133,7 +138,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ProjectedCompositeIndexCombinesTargetAndLiveColumnWidths()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `projected_composite_width` ("
@@ -192,7 +197,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ProjectedUniqueIndexUsesLiveDuplicateEvidenceBeforePhysicalRevalidation()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `projected_unique_width` ("
@@ -241,7 +246,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ProjectedUniqueIndexWithDuplicateRowsRemainsDataBlocked()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `projected_unique_blocked` ("
@@ -291,7 +296,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ProjectedUniqueIndexRetainsDuplicateEvidenceBeforePhysicalFailure()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `projected_unique_physical_blocked` ("
@@ -343,7 +348,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ProviderAlterColumnAuthorizesTheFollowingTargetPrefix()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `provider_projected_index` ("
@@ -408,7 +413,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ProjectedIndexBeyondTheTargetLimitRemainsBlockedBeforeMutation()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `projected_index_blocked` ("
@@ -465,7 +470,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task MissingTableWithAnInvalidTargetPrefixRemainsBlocked()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         _ = builder.ConvergeTableFromModel(
@@ -512,7 +517,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     {
         const string table = "accepted_index_drop";
         const string indexName = "ix_accepted_index_drop_property";
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `accepted_index_drop` ("
@@ -566,7 +571,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     {
         const string table = "accepted_index_column_drop";
         const string indexName = "ix_accepted_index_column_drop_property";
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `accepted_index_column_drop` ("
@@ -623,14 +628,18 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         isNullable: false,
         storeType: $"varchar({length.ToString(CultureInfo.InvariantCulture)})",
         maxLength: length);
+}
 
-    private static ExpectedIndexDefinition Index(
+public abstract partial class MySqlSafeMigrationIntegrationTests
+{
+
+    protected static ExpectedIndexDefinition Index(
         string name,
         string table,
         params ExpectedIndexKeyDefinition[] keys
     ) => Index(name, table, unique: false, keys);
 
-    private static ExpectedIndexDefinition Index(
+    protected static ExpectedIndexDefinition Index(
         string name,
         string table,
         bool unique,

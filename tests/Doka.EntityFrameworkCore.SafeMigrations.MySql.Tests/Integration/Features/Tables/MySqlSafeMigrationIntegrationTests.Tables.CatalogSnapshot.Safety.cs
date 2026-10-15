@@ -1,7 +1,12 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the TablesCatalogSnapshotSafety migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlTablesCatalogSnapshotSafetyIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlTablesCatalogSnapshotSafetyIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     /// <summary>
     /// Catalog TEXT columns remain snapshot-compatible regardless of the session temporary-table engine.
     /// </summary>
@@ -18,7 +23,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         }
 
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `snapshot_padding` (`id` int NOT NULL, `code` int NOT NULL);");
@@ -66,7 +71,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `snapshot_check` (`value` varchar(64) NOT NULL);"
@@ -100,8 +105,8 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
-        var childConnectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
+        var childConnectionString = await CreateDatabaseAsync(CancellationToken.None);
         var database = new MySqlConnectionStringBuilder(connectionString).Database;
         await ExecuteSqlAsync(
             connectionString,
@@ -150,7 +155,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task Analyzer_SnapshotPermissionDenialFallsBackToLiveCatalog()
     {
         // Arrange
-        var rootConnectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var rootConnectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             rootConnectionString,
             "CREATE TABLE `snapshot_padding` (`id` int NOT NULL, `code` int NOT NULL);");
@@ -194,7 +199,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task Analyzer_SnapshotPreservesCallerReadOnlyTransaction()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `snapshot_padding` (`id` int NOT NULL, `code` int NOT NULL);");
@@ -235,7 +240,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task Analyzer_ResetDisabledPooledConnectionUsesLiveCatalogWithoutSnapshotDdl()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `snapshot_padding` (`id` int NOT NULL, `code` int NOT NULL);");
@@ -245,6 +250,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
             Pooling = true,
             ConnectionReset = false,
         };
+        TrackOwnedPool(settings.ConnectionString);
 
         await using var context = CreateContext(settings.ConnectionString);
         await using var physicalConnection = new MySqlConnection(settings.ConnectionString);
@@ -280,7 +286,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     public async Task Analyzer_ResetDisabledNonpooledConnectionStillUsesSnapshot()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `snapshot_padding` (`id` int NOT NULL, `code` int NOT NULL);");

@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
-public sealed partial class SqliteSafeMigrationCatalogIntegrationTests
+/// <summary>Exercises execution with independently owned SQLite state.</summary>
+public sealed class SqliteSafeMigrationExecutionIntegrationTests : SqliteSafeMigrationCatalogIntegrationTests
 {
     [Fact]
     public async Task PreCancelledAnalysis_LeavesCatalogUnchanged()
@@ -35,12 +36,8 @@ public sealed partial class SqliteSafeMigrationCatalogIntegrationTests
     [Fact]
     public async Task ConcurrentMigrators_ConvergeThroughTheEfMigrationLock()
     {
-        var databasePath = Path.Combine(
-            Path.GetTempPath(),
-            "sqlite-safe-migrations-" + Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture) + ".db");
-
-        var connectionString = $"Data Source={databasePath};Mode=ReadWriteCreate;Cache=Private;"
-            + "Default Timeout=10;Foreign Keys=True";
+        var databasePath = CreateOwnedDatabasePath();
+        var connectionString = CreateOwnedFileConnectionString(databasePath);
 
         try
         {
@@ -83,10 +80,22 @@ public sealed partial class SqliteSafeMigrationCatalogIntegrationTests
         }
         finally
         {
-            SqliteConnection.ClearAllPools();
             File.Delete(databasePath);
         }
     }
+
+    /// <summary>Allocates one file identity per invocation, not per class or assembly.</summary>
+    /// <returns>The GUID-qualified native database path owned by its caller.</returns>
+    internal static string CreateOwnedDatabasePath() => Path.Combine(
+        Path.GetTempPath(),
+        "sqlite-safe-migrations-" + Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture) + ".db");
+
+    /// <summary>Prevents file ownership from requiring a process-wide pool reset during cleanup.</summary>
+    /// <param name="databasePath">The independently allocated path owned by this invocation.</param>
+    /// <returns>The same migration-lock connection options with pooling explicitly disabled.</returns>
+    internal static string CreateOwnedFileConnectionString(string databasePath) =>
+        $"Data Source={databasePath};Mode=ReadWriteCreate;Cache=Private;"
+        + "Default Timeout=10;Foreign Keys=True;Pooling=False";
 
     private static async Task<ConcurrentExecutionResult> ExecuteConcurrentMigrationAsync(
         string connectionString,

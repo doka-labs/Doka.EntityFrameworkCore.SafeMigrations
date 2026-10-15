@@ -1,7 +1,18 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
-public sealed partial class SqliteSafeMigrationCatalogIntegrationTests
+/// <summary>Exercises projected foreign key null proof with independently owned SQLite state.</summary>
+public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTests
+    : SqliteSafeMigrationCatalogIntegrationTests, IClassFixture<SqliteConstraintShapeServiceFixture>
 {
+    private readonly SqliteConstraintShapeServiceFixture _constraintShapeServices;
+
+    /// <summary>Owns provider services for this feature's independently cached models.</summary>
+    /// <param name="constraintShapeServices">The feature class-owned provider and model caches.</param>
+    public SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTests(
+        SqliteConstraintShapeServiceFixture constraintShapeServices
+    ) => _constraintShapeServices = constraintShapeServices
+        ?? throw new ArgumentNullException(nameof(constraintShapeServices));
+
     /// <summary>Rejects projected FK safety when the actual ADD populates orphan values.</summary>
     [Fact]
     public async Task ProjectedForeignKey_NonNullAddDefaultCannotProveNullRows()
@@ -484,121 +495,5 @@ public sealed partial class SqliteSafeMigrationCatalogIntegrationTests
             onDelete: ReferentialAction.Cascade);
 
         return builder;
-    }
-
-    /// <summary>Keeps the target rebuild model aligned with an explicit NULL-default ADD.</summary>
-    private sealed class SqliteProjectedForeignKeyNullDefaultContext(
-        DbConnection connection,
-        IServiceProvider internalServices) : DbContext
-    {
-        /// <inheritdoc />
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-        {
-            optionsBuilder.UseSqlite(connection);
-            optionsBuilder.UseSqliteSafeMigrations();
-
-            // WHY: Distinct target models need model-cache entries, not extra
-            // singleton provider caches. The existing class fixture owns both.
-            optionsBuilder.UseInternalServiceProvider(internalServices);
-        }
-
-        /// <inheritdoc />
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
-        {
-            modelBuilder.Entity<NullDefaultParent>(entity =>
-            {
-                entity.ToTable("constraint_parents");
-                entity.HasKey(value => value.Id).HasName("pk_constraint_parents");
-                entity.Property(value => value.Id).ValueGeneratedNever();
-            });
-
-            modelBuilder.Entity<NullDefaultChild>(entity =>
-            {
-                entity.ToTable("constraint_children");
-                entity.HasKey(value => value.Id).HasName("pk_constraint_children");
-                entity.Property(value => value.Id).ValueGeneratedNever();
-                entity.Property(value => value.ParentId).HasDefaultValueSql("NULL");
-                entity.HasIndex(value => value.ParentId).HasDatabaseName("ix_constraint_children_parent_id");
-                entity.HasOne<NullDefaultParent>().WithMany().HasForeignKey(value => value.ParentId)
-                    .HasConstraintName("fk_constraint_children_parent").OnDelete(DeleteBehavior.Cascade);
-            });
-        }
-
-        /// <summary>Models the untouched native FK principal.</summary>
-        private sealed class NullDefaultParent
-        {
-            /// <summary>Gets or sets the principal key.</summary>
-            public int Id { get; set; }
-        }
-
-        /// <summary>Models the FK dependent after adding the NULL-preserving column.</summary>
-        private sealed class NullDefaultChild
-        {
-            /// <summary>Gets or sets the dependent key.</summary>
-            public int Id { get; set; }
-
-            /// <summary>Gets or sets the nullable FK reference.</summary>
-            public int? ParentId { get; set; }
-        }
-    }
-
-    /// <summary>Models one FK containing both an unchanged live column and a newly added nullable column.</summary>
-    private sealed class SqliteProjectedCompositeForeignKeyContext(
-        DbConnection connection,
-        IServiceProvider internalServices) : DbContext
-    {
-        /// <inheritdoc />
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-        {
-            optionsBuilder.UseSqlite(connection);
-            optionsBuilder.UseSqliteSafeMigrations();
-
-            // WHY: Keep independent CLR model identities in the fixture-owned
-            // shared provider instead of growing EF's process-wide cache.
-            optionsBuilder.UseInternalServiceProvider(internalServices);
-        }
-
-        /// <inheritdoc />
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
-        {
-            modelBuilder.Entity<CompositeParent>(entity =>
-            {
-                entity.ToTable("composite_parents");
-                entity.HasKey(value => new { value.TenantId, value.Id }).HasName("pk_composite_parents");
-                entity.Property(value => value.TenantId).ValueGeneratedNever();
-                entity.Property(value => value.Id).ValueGeneratedNever();
-            });
-
-            modelBuilder.Entity<CompositeChild>(entity =>
-            {
-                entity.ToTable("composite_children");
-                entity.HasKey(value => value.Id).HasName("pk_composite_children");
-                entity.Property(value => value.Id).ValueGeneratedNever();
-                entity.HasIndex(value => new { value.Id, value.ParentId })
-                    .HasDatabaseName("ix_composite_children_parent");
-                entity.HasOne<CompositeParent>().WithMany().HasForeignKey(value => new { value.Id, value.ParentId })
-                    .HasConstraintName("fk_composite_children_parent").OnDelete(DeleteBehavior.NoAction);
-            });
-        }
-
-        /// <summary>Models the native composite principal key.</summary>
-        private sealed class CompositeParent
-        {
-            /// <summary>Gets or sets the first principal key component.</summary>
-            public int TenantId { get; set; }
-
-            /// <summary>Gets or sets the second principal key component.</summary>
-            public int Id { get; set; }
-        }
-
-        /// <summary>Models the accepted composite FK endpoints.</summary>
-        private sealed class CompositeChild
-        {
-            /// <summary>Gets or sets the unchanged live dependent component.</summary>
-            public int Id { get; set; }
-
-            /// <summary>Gets or sets the newly materialized NULL dependent component.</summary>
-            public int? ParentId { get; set; }
-        }
     }
 }

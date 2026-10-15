@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the EventTriggers PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlEventTriggersIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlEventTriggersIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>Event-trigger writes invalidate the empty-table certificate before a later CHECK.</summary>
     /// <param name="typedCreate">Whether creation is an ordinary EF operation rather than a safe operation.</param>
     /// <param name="enabledMode">The origin-session activation mode.</param>
@@ -12,7 +19,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task EventTriggers_CreateThenCheckDefersTriggerRows(bool typedCreate, string enabledMode)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await InstallEventTriggerAsync(connectionString, "INSERT INTO event_created_values VALUES (-1);", enabledMode);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -44,7 +51,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task EventTriggers_InactiveTriggerRetainsReady(string enabledMode)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await InstallEventTriggerAsync(connectionString, "INSERT INTO event_created_values VALUES (-1);", enabledMode);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -68,7 +75,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task EventTriggers_CreateThenEnsureIndexDefersStructuralMatch()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE event_existing_values(id integer NOT NULL, value integer); "
             + "CREATE INDEX ix_event_existing ON event_existing_values(id);");
@@ -100,7 +107,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task EventTriggers_MatchingCreateRetainsReady()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE event_created_values(id integer NOT NULL);");
         await InstallEventTriggerAsync(connectionString, "INSERT INTO event_created_values VALUES (-1);", "ENABLE");
         await using var context = CreateContext(connectionString);
@@ -127,7 +134,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task EventTriggers_UnsupportedExpressionRemainsBlocked()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await InstallEventTriggerAsync(connectionString, "INSERT INTO event_created_values VALUES (-1);", "ENABLE");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -149,7 +156,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task EventTriggers_OriginCountsOrdinaryPrefix()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE event_prefix(id integer NOT NULL);");
         await InstallEventTriggerAsync(connectionString, "INSERT INTO event_created_values VALUES (-1);", "ENABLE");
         await using var context = CreateContext(connectionString);
@@ -187,7 +194,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     )
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await InstallEventTriggerAsync(connectionString, "INSERT INTO event_created_values VALUES (-1);", enabledMode);
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync();
@@ -216,7 +223,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task EventTriggers_SessionDisableOrMissingOptionUsesActualServerSetting()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await InstallEventTriggerAsync(connectionString, "INSERT INTO event_created_values VALUES (-1);", "ENABLE");
         var hasOption = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM pg_catalog.pg_settings WHERE name='event_triggers';") != 0;
@@ -251,7 +258,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task EventTriggers_RevokedCatalogVisibilityRequiresRuntimeValidation()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var role = "event_reader_" + Guid.NewGuid().ToString("N");
         await ExecuteSqlAsync(connectionString, "CREATE ROLE " + role + " LOGIN PASSWORD 'event-reader-fixture'; "
             + "GRANT USAGE, CREATE ON SCHEMA public TO " + role + "; "
@@ -290,7 +297,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task EventTriggers_DisablingBetweenAnalysesClearsCapturedOrigin()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await InstallEventTriggerAsync(connectionString, "INSERT INTO event_created_values VALUES (-1);", "ENABLE");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -312,7 +319,6 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
         Assert.All(disabled.Assessments, static assessment => Assert.Null(assessment.DeferredOrigin));
     }
 
-
     /// <summary>
     /// Initial live row violations stay blocked until an actual preceding operation invalidates evidence.
     /// </summary>
@@ -320,7 +326,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task EventTriggers_InitialLiveViolationRemainsBlocked()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE event_created_values(id integer NOT NULL); INSERT INTO event_created_values VALUES(-1);");
         await InstallEventTriggerAsync(connectionString, "INSERT INTO event_created_values VALUES (-1);", "ENABLE");
@@ -345,7 +351,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task EventTriggers_DropRecreatesOwnerAndDefersStaleTombstone()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE event_drop_owner(id integer NOT NULL); "
             + "CREATE FUNCTION event_drop_trigger_fixture() RETURNS event_trigger LANGUAGE plpgsql AS $$ BEGIN "
@@ -416,4 +422,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             });
         }
     }
+
 }

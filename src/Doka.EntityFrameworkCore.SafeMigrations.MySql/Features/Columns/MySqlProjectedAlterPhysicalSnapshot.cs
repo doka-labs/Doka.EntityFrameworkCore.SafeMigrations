@@ -203,6 +203,9 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
             "year" => 1,
             "enum" => 2,
             "set" => 8,
+            // WHY: Native UUID storage is fixed at sixteen bytes, independent
+            // of the provider's textual wire mapping and character metadata.
+            "uuid" => 16,
             _ => 65536,
         };
 

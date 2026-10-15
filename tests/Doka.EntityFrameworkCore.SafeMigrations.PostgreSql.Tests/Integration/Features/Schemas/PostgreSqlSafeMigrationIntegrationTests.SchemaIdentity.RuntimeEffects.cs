@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed partial class PostgreSqlSafeMigrationIntegrationTests
+/// <summary>Runs the SchemaIdentityRuntimeEffects PostgreSQL feature cases independently.</summary>
+public sealed class PostgreSqlSchemaIdentityRuntimeEffectsIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned container for this feature.</summary>
+    /// <param name="fixture">The shared PostgreSQL container fixture.</param>
+    public PostgreSqlSchemaIdentityRuntimeEffectsIntegrationTests(
+        PostgreSqlContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>DDL-trigger identity changes cannot redirect the postcondition to another physical owner.</summary>
     /// <param name="effect">The trigger's bounded identity effect, or an inert positive control.</param>
     [Theory]
@@ -11,7 +18,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task RuntimeDdlTriggerIdentityEffect_IsRecheckedBeforePostcondition(string effect)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var triggerBody = effect switch
         {
             "search-path" => "PERFORM pg_catalog.set_config('search_path', 'identity_redirect,public', false);",
@@ -74,7 +81,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task TemporaryIndexShadow_IsRejectedBeforeChangingEitherIndex(bool rename)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE public.identity_target (id integer NULL); "
             + "CREATE INDEX ix_identity_target ON public.identity_target (id);");
@@ -127,7 +134,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task ConsumedSourceFallback_RemainsIsolatedDuringExecutionAndVerification(string kind)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE SCHEMA identity_tail; "
             + "CREATE TABLE public.identity_target (id integer NULL); "
@@ -179,7 +186,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task CreationTargetAndInlinePrincipalSharingAName_StillRequireNativePrincipalProof()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         await context.Database.ExecuteSqlRawAsync(
@@ -216,7 +223,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task QualifiedDdlTriggerChangesPath_LaterInitialMismatchIsDeferredAndReproved()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE SCHEMA identity_final; CREATE TABLE public.identity_source (id integer NULL); "
             + "CREATE TABLE identity_final.identity_target (id integer NULL); "
@@ -261,7 +268,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task ScopedIdentityChange_DoesNotDeferInvariantUnsupportedContract()
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE SCHEMA identity_final; CREATE TABLE identity_final.identity_target (id integer NULL);");
 
@@ -298,7 +305,7 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
     public async Task PostflightQualifiedTriggerBoundary_DoesNotCertifyAnotherSchemaOwner(string effect)
     {
         // Arrange
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE SCHEMA identity_final; CREATE TABLE public.identity_source (id integer NULL); "
             + "CREATE TABLE public.identity_target (id integer NULL); "
@@ -358,4 +365,5 @@ public sealed partial class PostgreSqlSafeMigrationIntegrationTests
             Assert.True(report.Assessments[0].PostconditionSatisfied);
         }
     }
+
 }

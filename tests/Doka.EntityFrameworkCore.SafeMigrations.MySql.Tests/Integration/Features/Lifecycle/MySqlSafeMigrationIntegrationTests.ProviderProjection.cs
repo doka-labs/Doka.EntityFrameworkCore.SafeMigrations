@@ -1,11 +1,16 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed partial class MySqlSafeMigrationIntegrationTests
+/// <summary>Exercises the ProviderProjection migration contracts in an independent class collection.</summary>
+public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlProviderProjectionIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+
     [Fact]
     public async Task ExistingTablesProjectAcceptedColumnsAndKeysIntoForeignKeyPreflight()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `projection_parents` (`id` int NOT NULL, PRIMARY KEY (`id`)); "
@@ -64,7 +69,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ForeignKeyPreflightRejectsUnprovenRowsFromNewDefaultedColumn()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `projection_parents` (`id` int NOT NULL, PRIMARY KEY (`id`)); "
@@ -101,7 +106,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task SemanticUniqueNoOpDoesNotSurvivePhysicalDropInForeignKeyProjection()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `alias_projection_parents` ("
@@ -143,7 +148,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ProviderAnalysisResolvesPhysicalIdentitiesForSemanticAliases()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `identity_parents` ("
@@ -183,7 +188,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task ProviderAnalysisDoesNotResolveAmbiguousSemanticAliases()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `ambiguous_parents` ("
@@ -222,7 +227,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     [Fact]
     public async Task EmptyExistingTableProjectsPrimaryUniqueAndCheckConstraintPrerequisites()
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `projection_constraints` (`legacy_marker` int NULL);");
@@ -278,7 +283,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         SafeMigrationScaffoldingMode mode
     )
     {
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         var alterDatabase = new AlterDatabaseOperation();
@@ -377,7 +382,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
         var expectedCheckConstraint = TargetName(checkConstraint, useSemanticAliases);
         var expectedForeignKey = TargetName(foreignKey, useSemanticAliases);
         var expectedIndex = TargetName(index, useSemanticAliases);
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
@@ -464,7 +469,7 @@ public sealed partial class MySqlSafeMigrationIntegrationTests
     {
         const string table = "ordered_data_mutation";
         const string constraint = "uq_ordered_data_mutation_code";
-        var connectionString = await Fixture.CreateDatabaseAsync(CancellationToken.None);
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,

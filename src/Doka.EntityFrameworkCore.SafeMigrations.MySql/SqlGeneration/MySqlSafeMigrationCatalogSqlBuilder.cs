@@ -6,10 +6,15 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     private readonly ISqlGenerationHelper _sqlGenerationHelper;
     private readonly MySqlSafeMigrationSqlExpressionRenderer _expressionRenderer;
     private readonly RelationalTypeMapping _stringMapping;
+    private readonly Dictionary<string, string> _identifierScratch = new(StringComparer.Ordinal);
+    private readonly Dictionary<MySqlCatalogParameterValue, string> _valueScratch =
+        new(MySqlCatalogParameterValueComparer.Instance);
+    private readonly List<MySqlCatalogParameterValue> _parameterScratch = [];
     private Dictionary<string, string>? _identifierMarkers;
     private Dictionary<MySqlCatalogParameterValue, string>? _valueMarkers;
     private List<MySqlCatalogParameterValue>? _parameterValues;
     private bool _renderValuesInline;
+    private List<MySqlSafeMigrationBinaryDefaultProof>? _binaryDefaultProofs;
 
     public MySqlSafeMigrationCatalogSqlBuilder(
         IRelationalTypeMappingSource typeMappingSource,
@@ -49,9 +54,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 "The MySQL catalog plan builder does not support reentrant generation.");
         }
 
-        _identifierMarkers = new Dictionary<string, string>(StringComparer.Ordinal);
-        _valueMarkers = new Dictionary<MySqlCatalogParameterValue, string>(MySqlCatalogParameterValueComparer.Instance);
-        _parameterValues = [];
+        // WHY: These are scoped scratch containers, not evidence caches. Reusing
+        // empty capacity avoids per-operation buckets, while finally clears all
+        // identifiers, default/row values and parameters before the next call.
+        _identifierMarkers = _identifierScratch;
+        _valueMarkers = _valueScratch;
+        _parameterValues = _parameterScratch;
         _renderValuesInline = !parameterizeValues;
         try
         {
@@ -145,14 +153,26 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 plan,
                 requiredDatabaseQualifiers);
 
-            return plan with { ParameterValues = _parameterValues.ToArray() };
+            return plan with
+            {
+                ParameterValues = _parameterValues.ToArray(),
+                BinaryDefaultProofs = _binaryDefaultProofs?.ToArray() ?? [],
+                RequiresLazyStateEvaluation = plan.RequiresLazyStateEvaluation || _binaryDefaultProofs is not null,
+            };
         }
         finally
         {
+            // WHY: The returned plan has its own parameter snapshot. Even an
+            // exception or rejected nested Build must leave no payload references
+            // in scratch storage and must restore the active-scope sentinel.
+            _identifierScratch.Clear();
+            _valueScratch.Clear();
+            _parameterScratch.Clear();
             _identifierMarkers = null;
             _valueMarkers = null;
             _parameterValues = null;
             _renderValuesInline = false;
+            _binaryDefaultProofs = null;
         }
     }
 

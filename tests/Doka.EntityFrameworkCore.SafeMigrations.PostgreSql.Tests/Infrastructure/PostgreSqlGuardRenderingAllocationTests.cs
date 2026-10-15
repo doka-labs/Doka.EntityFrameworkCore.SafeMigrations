@@ -87,7 +87,7 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
         }
 
         Assert.Contains("doka_repair_ok := COALESCE((", guarded, StringComparison.Ordinal);
-        Assert.Contains("MESSAGE = 'doka_sm_postcondition'", guarded, StringComparison.Ordinal);
+        Assert.Contains("MESSAGE = E'doka_sm_postcondition:", guarded, StringComparison.Ordinal);
     }
 
     /// <summary>Measures only prepared rendering work and rejects reintroduced legacy SQL copies.</summary>
