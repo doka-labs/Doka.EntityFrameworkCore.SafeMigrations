@@ -12,6 +12,12 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     StringComparer ISafeMigrationProviderObjectIdentityNormalizer.IdentifierComparer => StringComparer.Ordinal;
 
     /// <inheritdoc />
+    char? ISafeMigrationProviderObjectIdentityNormalizer.CapturedSqlIdentifierDelimiter => '"';
+
+    /// <inheritdoc />
+    bool ISafeMigrationProviderObjectIdentityNormalizer.FoldUnquotedCapturedSqlIdentifiers => true;
+
+    /// <inheritdoc />
     bool ISafeMigrationProviderObjectIdentityNormalizer.IndexUsesSchemaScopedIdentity => true;
 
     /// <inheritdoc />
@@ -247,10 +253,22 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 
     /// <summary>Preserves the identity-first diagnostic from the catalog-only prerequisite phase.</summary>
     private SafeMigrationProviderAnalysis ShortCircuitAnalysis(int ordinal, SafeMigrationObservedState state)
-        => new(state, SafeMigrationRepairCapability.None, false,
-            _schemaIdentityMismatchOrdinals.Contains(ordinal) ? SchemaIdentityMismatchCode
-                : _indexInputShortCircuitCodes?.TryGetValue(ordinal, out var code) == true ? code
-                : ClassificationCode(state));
+    {
+        var code = _schemaIdentityMismatchOrdinals.Contains(ordinal) ? SchemaIdentityMismatchCode
+                : _indexInputShortCircuitCodes?.TryGetValue(ordinal, out var indexCode) == true ? indexCode
+                : state == SafeMigrationObservedState.Unsupported
+                    && _stateEvaluationGuardShortCircuitCodes?.TryGetValue(ordinal, out var guardCode) == true
+                    ? guardCode
+                : ClassificationCode(state);
+
+        return new SafeMigrationProviderAnalysis(state, SafeMigrationRepairCapability.None, false, code)
+        {
+            // WHY: Accepted DDL cannot make a reserved bare source token into
+            // valid PostgreSQL grammar. This refusal is not a mutable row proof.
+            IsInvariantUnsupported = state == SafeMigrationObservedState.Unsupported
+                && code == "captured_sql_identifier",
+        };
+    }
 
     /// <summary>Prevents reuse of initial schema aliases after an executed schema/search-path boundary.</summary>
     private SafeMigrationProviderAnalysis? QualifyProjectedSchemaIdentity(
@@ -293,6 +311,12 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     {
         /// <inheritdoc />
         public StringComparer IdentifierComparer => StringComparer.Ordinal;
+
+        /// <inheritdoc />
+        public char? CapturedSqlIdentifierDelimiter => '"';
+
+        /// <inheritdoc />
+        public bool FoldUnquotedCapturedSqlIdentifiers => true;
 
         /// <inheritdoc />
         public bool IndexUsesSchemaScopedIdentity => true;

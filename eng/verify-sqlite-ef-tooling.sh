@@ -136,6 +136,19 @@ grep -Fq 'migrationBuilder.ConvergeTableFromModel(' "$legacy_migration_file"
 grep -Fq 'migrationBuilder.EnsureModelManagedDataFromModel(' "$legacy_migration_file"
 grep -Fq 'using Doka.EntityFrameworkCore.SafeMigrations;' "$legacy_migration_file"
 
+for migration in "$strict_migration_file" "$legacy_migration_file"; do
+    for generated_contract in \
+        'scaffolding_generated_nodes' \
+        'HasDescendants' \
+        'CASE WHEN' \
+        'ck_scaffolding_generated_bounds'; do
+        if ! grep -Fq "$generated_contract" "$migration"; then
+            echo "SQLite scaffolding is missing its generated expression contract: $generated_contract" >&2
+            exit 1
+        fi
+    done
+done
+
 if grep -Fq 'migrationBuilder.CreateTable(' "$strict_migration_file" \
     || grep -Fq 'migrationBuilder.InsertData(' "$strict_migration_file" \
     || grep -Fq 'migrationBuilder.CreateTable(' "$legacy_migration_file" \

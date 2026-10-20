@@ -15,6 +15,12 @@ internal interface ISafeMigrationProviderObjectIdentityNormalizer
     /// <summary>Gets the physical column-member comparer without changing table or schema identity.</summary>
     StringComparer ColumnIdentifierComparer => IdentifierComparer;
 
+    /// <summary>Gets the native opening identifier quote for captured-source rewrites, or null if unverified.</summary>
+    char? CapturedSqlIdentifierDelimiter => null;
+
+    /// <summary>Gets whether captured unquoted identifiers use PostgreSQL's native lower-case binding.</summary>
+    bool FoldUnquotedCapturedSqlIdentifiers => false;
+
     /// <summary>Gets the physical index-member comparer without changing table or schema identity.</summary>
     StringComparer IndexIdentifierComparer => IdentifierComparer;
 

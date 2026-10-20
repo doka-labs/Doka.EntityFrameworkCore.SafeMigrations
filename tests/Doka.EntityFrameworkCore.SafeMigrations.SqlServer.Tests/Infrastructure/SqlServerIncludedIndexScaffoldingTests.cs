@@ -21,7 +21,8 @@ public sealed class SqlServerIncludedIndexScaffoldingTests
         var model = context.GetService<IDesignTimeModel>().Model.GetRelationalModel();
         var differ = context.GetService<IMigrationsModelDiffer>();
         var operations = differ.GetDifferences(source: null, model);
-        var index = operations.OfType<CreateIndexOperation>().Single();
+        var index = operations.OfType<CreateIndexOperation>()
+            .Single(static value => value.Table == "scaffolding_users");
         var sourceBuilder = new IndentedStringBuilder();
         var generator = CreateGenerator(context.GetService<ITypeMappingSource>());
 
@@ -38,7 +39,7 @@ public sealed class SqlServerIncludedIndexScaffoldingTests
         var intent = (EnsureIndexIntent)safeOperation.Intent;
 
         // Assert
-        Assert.Single(operations.OfType<CreateIndexOperation>());
+        Assert.Single(operations.OfType<CreateIndexOperation>(), static value => value.Table == "scaffolding_users");
         Assert.IsType<SafeMigrationOperation>(Assert.Single(migrationBuilder.Operations));
         Assert.IsType<EnsureIndexIntent>(safeOperation.Intent);
         Assert.Equal(["DisplayName"], Assert.IsType<string[]>(index["SqlServer:Include"]));

@@ -29,9 +29,11 @@ public interface ISafeMigrationRunner
 
     /// <summary>Verifies final target conditions for an operation sequence.</summary>
     /// <remarks>
-    /// Every supplied postcondition is checked independently against the live catalog,
-    /// without preflight projection. Reuse an execution sequence only when all of its
-    /// postconditions still describe the final state. Otherwise supply a reviewed
+    /// Effective final postconditions are checked against the live catalog, without replaying preflight.
+    /// Later safe writers supersede earlier writes to the same provider-proven physical resource.
+    /// A certified column rename also transforms an earlier known strict-table contract for a fresh
+    /// complete comparison; unrelated facets and the original report identity remain unchanged.
+    /// Opaque or unproven rename lineage cannot transform that contract. Otherwise, supply a reviewed
     /// final-state contract and validate the report against that contract's fingerprint.
     /// </remarks>
     /// <param name="context">The configured DbContext whose database is inspected.</param>

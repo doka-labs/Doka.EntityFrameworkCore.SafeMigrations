@@ -28,7 +28,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         ExpectedCheckConstraintDefinition definition
     )
     {
-        var expression = definition.Sql ?? _expressionRenderer.Render(definition.Expression!);
+        var expression = definition.CapturedSql ?? definition.Sql ?? _expressionRenderer.Render(definition.Expression!);
 
         return $"EXISTS (SELECT 1 FROM {Qualified(definition.Table, definition.Schema)} "
             + $"WHERE NOT COALESCE(({expression}), TRUE) LIMIT 1)";
@@ -80,7 +80,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         ExpectedCheckConstraintDefinition definition
     ) => definition.Expression is not null
         ? ExpressionMatches("pg_catalog.pg_get_expr(co.conbin, co.conrelid)", definition.Expression,
-            relationOid: "co.conrelid")
+            relationOid: "co.conrelid", capturedSql: definition.CapturedSql)
         : ExpressionMatches("pg_catalog.pg_get_expr(co.conbin, co.conrelid)", definition.Sql!);
 
     /// <summary>Verifies every required check constraint of one table through three catalog scans.</summary>

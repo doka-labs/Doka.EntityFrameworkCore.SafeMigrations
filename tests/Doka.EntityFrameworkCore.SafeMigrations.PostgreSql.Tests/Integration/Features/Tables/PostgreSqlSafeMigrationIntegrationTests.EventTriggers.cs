@@ -9,6 +9,89 @@ public sealed class PostgreSqlEventTriggersIntegrationTests : PostgreSqlSafeMigr
         PostgreSqlContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Event and DML activation retain independent bits when native operators are qualified.</summary>
+    /// <param name="eventEnabled">Whether an active event trigger exists in the isolated database.</param>
+    /// <param name="dmlEnabled">Whether an unrelated active row trigger exists in that same database.</param>
+    /// <param name="catalogReadable">Whether generated-dependency metadata is readable in the same scalar.</param>
+    [Theory]
+    [InlineData(false, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(true, false, false)]
+    [InlineData(true, true, false)]
+    [InlineData(false, false, true)]
+    [InlineData(false, true, true)]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, true)]
+    public async Task EventTriggers_ActivationRemainsIndependentOfUnrelatedDmlTrigger(
+        bool eventEnabled, bool dmlEnabled, bool catalogReadable)
+    {
+        // Arrange
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
+        if (dmlEnabled)
+        {
+            await ExecuteSqlAsync(connectionString,
+                "CREATE TABLE activation_dml_rows (id integer); "
+                + "CREATE FUNCTION activation_dml_noop() RETURNS trigger LANGUAGE plpgsql "
+                + "AS $$ BEGIN RETURN NEW; END; $$; "
+                + "CREATE TRIGGER activation_dml_noop BEFORE INSERT ON activation_dml_rows "
+                + "FOR EACH ROW EXECUTE FUNCTION activation_dml_noop();");
+        }
+
+        if (eventEnabled)
+        {
+            await InstallEventTriggerAsync(connectionString, "PERFORM 1;", "ENABLE");
+        }
+
+        var role = catalogReadable ? null : "activation_reader_" + Guid.NewGuid().ToString("N");
+        if (role is not null)
+        {
+            await ExecuteSqlAsync(connectionString, "CREATE ROLE " + role + "; "
+                + "GRANT USAGE, CREATE ON SCHEMA public TO " + role + "; "
+                + "REVOKE SELECT ON pg_catalog.pg_depend FROM PUBLIC;");
+        }
+
+        try
+        {
+            await using var context = CreateContext(connectionString);
+            if (role is not null)
+            {
+                await context.Database.OpenConnectionAsync();
+                await context.Database.ExecuteSqlAsync(
+                    $"SELECT pg_catalog.set_config('role', {role}, false);");
+            }
+
+            var builder = new MigrationBuilder(context.Database.ProviderName!);
+            AppendEventTriggerCreate(builder, typedCreate: false);
+            AppendEventTriggerCheck(builder);
+
+            // Act
+            var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
+                new SafeMigrationRunOptions("postgresql-independent-trigger-activation"));
+
+            // Assert
+            Assert.Equal(eventEnabled ? SafeMigrationReportStatus.RuntimeValidationRequired
+                : SafeMigrationReportStatus.Ready, report.Status);
+            Assert.Equal(eventEnabled ? SafeMigrationAction.ValidateAtRuntime : SafeMigrationAction.Apply,
+                report.Assessments[1].Action);
+            if (eventEnabled)
+            {
+                Assert.Equal("projected_event_trigger_state_unknown", report.Assessments[1].AnalysisCode);
+            }
+            else
+            {
+                Assert.Null(report.Assessments[1].DeferredOrigin);
+            }
+        }
+        finally
+        {
+            if (role is not null)
+            {
+                await ExecuteSqlAsync(connectionString,
+                    "REVOKE USAGE, CREATE ON SCHEMA public FROM " + role + "; DROP ROLE " + role + ";");
+            }
+        }
+    }
+
     /// <summary>Event-trigger writes invalidate the empty-table certificate before a later CHECK.</summary>
     /// <param name="typedCreate">Whether creation is an ordinary EF operation rather than a safe operation.</param>
     /// <param name="enabledMode">The origin-session activation mode.</param>
@@ -139,7 +222,10 @@ public sealed class PostgreSqlEventTriggersIntegrationTests : PostgreSqlSafeMigr
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         AppendEventTriggerCreate(builder, typedCreate: false);
-        builder.AddCheckConstraintIfNotExists("ck_event_values", "event_created_values", "id > 0");
+        // WHY: The SQL helper now structurally parses this simple predicate.
+        // Only an explicitly opaque definition exercises unsupported-contract precedence.
+        builder.EnsureCheckConstraint(new ExpectedCheckConstraintDefinition(
+            "ck_event_values", "event_created_values", "id > 0"), SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,

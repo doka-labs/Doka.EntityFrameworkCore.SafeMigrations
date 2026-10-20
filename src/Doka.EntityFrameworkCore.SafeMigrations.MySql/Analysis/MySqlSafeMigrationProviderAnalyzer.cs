@@ -1,9 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 
-internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
-    ISafeMigrationProviderAnalyzer,
-    ISafeMigrationProviderOperationProjection,
-    ISafeMigrationProjectedKeyAnalyzer,
+internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProviderAnalyzer,
+    ISafeMigrationProviderOperationProjection, ISafeMigrationProjectedKeyAnalyzer,
     ISafeMigrationProviderObjectIdentityNormalizer
 {
     private readonly MySqlSafeMigrationPlanCapture _planCapture;
@@ -11,16 +9,20 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
     private readonly IRelationalTypeMappingSource _typeMappingSource;
     private string? _currentDatabase;
     private bool _tableNamesIgnoreCase;
+    private MySqlGeneratedColumnDependencyContractCatalog? _generatedColumnDependencyContracts;
+    private bool _generatedColumnDependencyIsMariaDb;
+    private bool _requiresGeneratedDependencyQualification;
 
     /// <summary>
     /// Uses the independently captured native owner policy without folding mode-zero table identities.
     /// </summary>
-    private StringComparer TableIdentifierComparer => _tableNamesIgnoreCase
-        ? StringComparer.OrdinalIgnoreCase
-        : StringComparer.Ordinal;
+    private StringComparer TableIdentifierComparer =>
+        _tableNamesIgnoreCase ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 
     /// <summary>Canonicalizes an owner only after the server proves case-insensitive physical identity.</summary>
-    private string NormalizeTableIdentifier(string identifier) => _tableNamesIgnoreCase
+    private string NormalizeTableIdentifier(
+        string identifier
+    ) => _tableNamesIgnoreCase
         ? SafeMigrationModelManagedKeyIdentity.NormalizeOrdinalIgnoreCase(identifier)
         : identifier;
 
@@ -49,6 +51,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         StringComparer.OrdinalIgnoreCase;
 
     /// <inheritdoc />
+    char? ISafeMigrationProviderObjectIdentityNormalizer.CapturedSqlIdentifierDelimiter => '`';
+
+    /// <inheritdoc />
     StringComparer ISafeMigrationProviderObjectIdentityNormalizer.IndexIdentifierComparer =>
         StringComparer.OrdinalIgnoreCase;
 
@@ -60,14 +65,13 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
     ) => NormalizeTableIdentifier(identifier);
 
     /// <inheritdoc />
-    string ISafeMigrationProviderObjectIdentityNormalizer.NormalizeColumnIdentifier(string identifier) =>
-        SafeMigrationModelManagedKeyIdentity.NormalizeOrdinalIgnoreCase(identifier);
+    string ISafeMigrationProviderObjectIdentityNormalizer.NormalizeColumnIdentifier(
+        string identifier
+    ) => SafeMigrationModelManagedKeyIdentity.NormalizeOrdinalIgnoreCase(identifier);
 
     string? ISafeMigrationProviderObjectIdentityNormalizer.NormalizeSchema(
         string? schema
-    ) => schema is not null && StringComparer.Ordinal.Equals(schema, _currentDatabase)
-        ? null
-        : schema;
+    ) => schema is not null && StringComparer.Ordinal.Equals(schema, _currentDatabase) ? null : schema;
 
     bool ISafeMigrationProviderObjectIdentityNormalizer.IsObjectIdentityMismatch(
         SafeMigrationProviderAnalysis analysis
@@ -177,6 +181,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
             _renameTargetConflicts.Clear();
             ClearLivePrerequisites();
             _tableNamesIgnoreCase = false;
+            _expiredGeneratedDependencyOwners = null;
+            _requiresGeneratedDependencyQualification = operations.Any(static operation =>
+                operation.Intent is RenameColumnIntent or DropColumnIntent);
         }
 
         if (operations.Count == 0)
@@ -211,8 +218,12 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
             var physicalKeyOperations = operations
                 .Where(operation => TargetsCurrentDatabase(operation.Intent, _currentDatabase))
                 .ToArray();
-            var columnSessionEnvironment = await ReadProjectedColumnSessionEnvironmentAsync(connection,
-                physicalKeyOperations, maximumPayloadBytes, commandTimeout, cancellationToken);
+            var columnSessionEnvironment = await ReadProjectedColumnSessionEnvironmentAsync(
+                connection,
+                physicalKeyOperations,
+                maximumPayloadBytes,
+                commandTimeout,
+                cancellationToken);
 
             var indexEnvironments = await ReadIndexPhysicalEnvironmentsAsync(
                 connection,
@@ -232,20 +243,55 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
 
             var expectedUniqueIndexes = MySqlSafeMigrationPlanCapture.CreateExpectedUniqueIndexes(
                 operations,
-                _currentDatabase, TableIdentifierComparer);
+                _currentDatabase,
+                TableIdentifierComparer);
 
             var expectedTableConstraints = SafeMigrationExpectedTableConstraints.FromOperations(
                 operations,
-                schema => MySqlTableIdentity.NormalizeDatabase(schema, _currentDatabase), TableIdentifierComparer);
+                schema => MySqlTableIdentity.NormalizeDatabase(schema, _currentDatabase),
+                TableIdentifierComparer,
+                '`',
+                false,
+                StringComparer.OrdinalIgnoreCase);
+
+            var dependencyOperations = captureRenameSources && _analysisOperationStream is { } fullStream
+                ? fullStream
+                : operations;
+
+            var generatedCandidates = MySqlGeneratedColumnModelCandidates.CaptureTargets(
+                dependencyOperations,
+                captureRenameSources ? _analysisTargetModels : null,
+                context.Model,
+                context.GetService<IModelRuntimeInitializer>());
+
+            _generatedColumnDependencyContracts = MySqlGeneratedColumnDependencyContractCatalog.Create(
+                dependencyOperations,
+                _currentDatabase,
+                TableIdentifierComparer,
+                generatedCandidates);
+            if (captureRenameSources)
+            {
+                // WHY: Normalize only after this invocation has read its native
+                // owner profile. Rebound rename probes share the analyzer but
+                // must not replace the root stream's index lifetime facts.
+                PrepareGeneratedIndexIdentityCapture(operations);
+            }
 
             // WHY: MariaDB spills every INFORMATION_SCHEMA subquery of a classification statement to
             // an on-disk temporary table, so the catalog of the connected database is copied once
             // per operation window and classified against instead. MySQL keeps the equivalent work
             // in memory and rejects a second reference to a temporary table in one statement, so it
             // stays on the live views. See D-014.
-            var snapshotEligible = MySqlServerVersion
-                .AutoDetect(connection, MySqlServerVersionCompatibilityMode.AllowUnsupported)
+            var isMariaDb = MySqlServerVersion.AutoDetect(
+                    connection,
+                    MySqlServerVersionCompatibilityMode.AllowUnsupported)
                 .IsMariaDb;
+            if (captureRenameSources)
+            {
+                _generatedColumnDependencyIsMariaDb = isMariaDb;
+            }
+
+            var snapshotEligible = isMariaDb;
 
             var results = new SafeMigrationProviderAnalysis[operations.Count];
             var separatorBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Separator);
@@ -264,6 +310,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                     backfillConstraints);
 
                 AttachIndexPhysicalEnvironments(operationWindow, plans, indexEnvironments);
+                AttachGeneratedIndexIdentityCapture(operationWindow, plans);
                 var shortCircuitStates = await FindPrerequisiteShortCircuitStatesAsync(
                     connection,
                     plans,
@@ -271,6 +318,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                     commandTimeout,
                     operationOffset,
                     cancellationToken);
+
+                CaptureGeneratedIndexIdentityFacts(operationWindow, plans);
 
                 // WHY: Explicit qualifiers keep live reads, including a foreign key's principal.
                 // Unqualified operations use local catalog rows plus incoming foreign keys owned
@@ -281,8 +330,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                 {
                     bindable[ordinal] = shortCircuitStates[ordinal] is null
                         && !plans[ordinal].IsStaticallyUnsupported
-                        && !MySqlSafeMigrationCatalogSqlBuilder.HasDatabaseQualifier(
-                            operationWindow[ordinal].Intent);
+                        && !MySqlSafeMigrationCatalogSqlBuilder.HasDatabaseQualifier(operationWindow[ordinal].Intent);
 
                     if (bindable[ordinal])
                     {
@@ -331,8 +379,22 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                         cancellationToken);
 
                     await FindBinaryDefaultProofsAsync(
-                        connection, plans, shortCircuitStates, maximumPayloadBytes,
-                        commandTimeout, operationOffset, cancellationToken);
+                        connection,
+                        plans,
+                        shortCircuitStates,
+                        maximumPayloadBytes,
+                        commandTimeout,
+                        operationOffset,
+                        cancellationToken);
+
+                    await FindIdentifierReferenceProofsAsync(
+                        connection,
+                        plans,
+                        shortCircuitStates,
+                        maximumPayloadBytes,
+                        commandTimeout,
+                        operationOffset,
+                        cancellationToken);
 
                     await FindStateEvaluationGuardStatesAsync(
                         connection,
@@ -379,6 +441,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                         cancellationToken);
 
                     var workIndex = 0;
+                    var captureDropCompleteness = plans.Any(static plan =>
+                        plan.DropLeavesNoGeneratedColumnsExpression is not null);
                     while (workIndex < workOrder.Length)
                     {
                         cancellationToken.ThrowIfCancellationRequested();
@@ -410,8 +474,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                                 MySqlDataProbeResult? dataProbeResult = plan.DataProbe is null
                                     ? null
                                     : dataProbeResults[ordinal]
-                                        ?? throw new InvalidOperationException(
-                                            "The MySQL narrowing probe returned no classification result.");
+                                    ?? throw new InvalidOperationException(
+                                        "The MySQL narrowing probe returned no classification result.");
 
                                 var stateExpression = plan.DataProbe is null
                                     ? plan.RenderStateExpression(parameterizer.Add)
@@ -463,6 +527,13 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                                     + $"({diagnosticEvidence}), "
                                     + $"({matchedObjectName})";
 
+                                if (captureDropCompleteness)
+                                {
+                                    selection += plan.DropLeavesNoGeneratedColumnsExpression is not null
+                                        ? ", " + plan.RenderDropLeavesNoGeneratedColumnsExpression(parameterizer.Add)
+                                        : ", NULL";
+                                }
+
                                 var selectionBytes = Encoding.UTF8.GetByteCount(selection)
                                     + (selections.Count == 0 ? 0 : separatorBytes);
 
@@ -486,8 +557,6 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                                                 prospectiveBatchParameters,
                                                 prospectiveBatchPayload);
                                         }
-
-                                        break;
                                     }
 
                                     break;
@@ -583,23 +652,50 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
             if (captureRenameSources)
             {
                 await CaptureLivePrerequisitesAsync(
-                    context, operations, results, maximumPayloadBytes, commandTimeout, cancellationToken);
+                    context,
+                    operations,
+                    results,
+                    maximumPayloadBytes,
+                    commandTimeout,
+                    cancellationToken);
 
                 await CaptureMultiValuedIndexDropProofsAsync(
-                    context, operations, results, maximumPayloadBytes, commandTimeout, cancellationToken);
+                    context,
+                    operations,
+                    results,
+                    maximumPayloadBytes,
+                    commandTimeout,
+                    cancellationToken);
 
                 await CaptureForeignKeyReplacementProofsAsync(
-                    context, operations, results, maximumPayloadBytes, commandTimeout, cancellationToken);
+                    context,
+                    operations,
+                    results,
+                    maximumPayloadBytes,
+                    commandTimeout,
+                    cancellationToken);
+
+                CaptureGeneratedColumnSourceProofs(operations, results, isMariaDb);
+                CompleteGeneratedIndexIdentityFacts(operations, results);
             }
 
             if (captureRenameSources)
             {
                 await ReadMemberRenameTargetEvidenceAsync(
-                    connection, operations, results, _currentDatabase, maximumPayloadBytes,
-                    commandTimeout, cancellationToken);
+                    connection,
+                    operations,
+                    results,
+                    _currentDatabase,
+                    maximumPayloadBytes,
+                    commandTimeout,
+                    cancellationToken);
 
                 await CaptureRenameSourceAnalysesAsync(
-                    context, operations, results, backfillConstraints, cancellationToken);
+                    context,
+                    operations,
+                    results,
+                    backfillConstraints,
+                    cancellationToken);
             }
 
             return Array.AsReadOnly(results);
@@ -617,6 +713,11 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         }
         finally
         {
+            // The full authored prefix is needed only while bounded SQL plans
+            // are captured. Accepted dependency projection uses Core's current
+            // member view, not these conditional operation references.
+            _generatedColumnDependencyContracts = null;
+
             if (openedHere)
             {
                 try
@@ -625,7 +726,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                 }
                 catch (Exception exception) when (analysisFailure is not null)
                 {
-                    // WHY: Closing a failed or cancelled session can itself fail. Preserve the
+                    // WHY: Closing a failed or canceled session can itself fail. Preserve the
                     // primary analysis exception, while keeping the close failure diagnosable.
                     analysisFailure.Data["SafeMigrations.AnalysisConnectionCloseException"] = exception;
                 }
@@ -637,8 +738,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         IReadOnlyList<SafeMigrationOperation> operations,
         IModel model,
         MySqlExpectedUniqueIndexCatalog expectedUniqueIndexes,
-        IReadOnlyDictionary<
-            (string? Schema, string Table), SafeMigrationExpectedTableConstraints> expectedTableConstraints,
+        IReadOnlyDictionary<(string? Schema, string Table), SafeMigrationExpectedTableConstraints>
+            expectedTableConstraints,
         MySqlBackfillConstraintCatalog backfillConstraints,
         bool includeAnalysisEvidence = false,
         bool includeTransitionEvidence = false
@@ -653,7 +754,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
             expectedTableConstraints,
             includeAnalysisEvidence,
             includeTransitionEvidence,
-            backfillConstraints);
+            backfillConstraints,
+            _generatedColumnDependencyContracts);
 
         _ = _sqlGenerator.Generate(operations, model);
 
@@ -666,8 +768,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         SafeMigrationProviderAnalysis[] results,
         IModel model,
         MySqlExpectedUniqueIndexCatalog expectedUniqueIndexes,
-        IReadOnlyDictionary<
-            (string? Schema, string Table), SafeMigrationExpectedTableConstraints> expectedTableConstraints,
+        IReadOnlyDictionary<(string? Schema, string Table), SafeMigrationExpectedTableConstraints>
+            expectedTableConstraints,
         MySqlBackfillConstraintCatalog backfillConstraints,
         int maximumPayloadBytes,
         int? commandTimeout,
@@ -684,10 +786,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                 && analysis.ObservedState is SafeMigrationObservedState.Different
                     or SafeMigrationObservedState.DataBlocked)
             {
-                candidates.Add(
-                    new MySqlDiagnosticCandidate(
-                        operationOffset + localOrdinal,
-                        operations[localOrdinal]));
+                candidates.Add(new MySqlDiagnosticCandidate(operationOffset + localOrdinal, operations[localOrdinal]));
             }
         }
 
@@ -697,7 +796,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         }
 
         var plans = CapturePlans(
-            candidates.Select(static candidate => candidate.Operation).ToArray(),
+            candidates
+                .Select(static candidate => candidate.Operation)
+                .ToArray(),
             model,
             expectedUniqueIndexes,
             expectedTableConstraints,
@@ -710,10 +811,14 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
             candidates.Count,
             maximumPayloadBytes,
             commandTimeout,
-            (command, offset) =>
+            (
+                command,
+                offset
+            ) =>
             {
                 var count = Math.Min(
-                    SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement, candidates.Count - offset);
+                    SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement,
+                    candidates.Count - offset);
 
                 var parameterizer = new MySqlCatalogQueryParameterizer(command, _typeMappingSource);
                 var selections = new List<string>(count);
@@ -733,17 +838,24 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                     + SafeMigrationCatalogQueryLimits.Trailer;
 
                 return new SafeMigrationCatalogProbeStatement(
-                    count, parameterizer.Utf8PayloadBytes, candidates[offset].Ordinal);
+                    count,
+                    parameterizer.Utf8PayloadBytes,
+                    candidates[offset].Ordinal);
             },
-            async (reader, offset, count, token) =>
+            async (
+                reader,
+                offset,
+                count,
+                token
+            ) =>
             {
                 var row = 0;
                 while (await reader.ReadAsync(token))
                 {
-                    if (row >= count || reader.GetInt32(0) != candidates[offset + row].Ordinal)
+                    if (row >= count
+                        || reader.GetInt32(0) != candidates[offset + row].Ordinal)
                     {
-                        throw new InvalidOperationException(
-                            "The MySQL diagnostic query returned an invalid ordinal.");
+                        throw new InvalidOperationException("The MySQL diagnostic query returned an invalid ordinal.");
                     }
 
                     var differences = reader.IsDBNull(1)
@@ -751,7 +863,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                         : SafeMigrationFacetDifferenceParser.Parse(reader.GetString(1), "MySQL");
 
                     ReplaceAnalysisWithDifferences(
-                        results, candidates[offset + row].Ordinal, plans[offset + row], differences);
+                        results,
+                        candidates[offset + row].Ordinal,
+                        plans[offset + row],
+                        differences);
 
                     row++;
                 }
@@ -777,10 +892,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         results[ordinal] = current.WithDifferences(
             differences,
             plan.MayRequireNullabilityDataProof
-                && (current.RepairCapability == SafeMigrationRepairCapability.Safe
-                    || current.ObservedState == SafeMigrationObservedState.DataBlocked)
-                && differences.Any(static difference =>
-                    StringComparer.Ordinal.Equals(difference.Facet, "column_nullability")));
+            && (current.RepairCapability == SafeMigrationRepairCapability.Safe
+                || current.ObservedState == SafeMigrationObservedState.DataBlocked)
+            && differences.Any(static difference =>
+                StringComparer.Ordinal.Equals(difference.Facet, "column_nullability")));
     }
 
     private async Task<MySqlDataProbeResult?[]> ResolveDataProbeResultsAsync(
@@ -792,8 +907,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         Dictionary<MySqlDataProbeIdentity, bool> blockingDataCache,
         IModel model,
         MySqlExpectedUniqueIndexCatalog expectedUniqueIndexes,
-        IReadOnlyDictionary<
-            (string? Schema, string Table), SafeMigrationExpectedTableConstraints> expectedTableConstraints,
+        IReadOnlyDictionary<(string? Schema, string Table), SafeMigrationExpectedTableConstraints> expectedTableConstraints,
         MySqlBackfillConstraintCatalog backfillConstraints,
         int maximumPayloadBytes,
         int? commandTimeout,
@@ -806,7 +920,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         for (var ordinal = 0; ordinal < plans.Length; ordinal++)
         {
             var probe = plans[ordinal].DataProbe;
-            if (probe is null || shortCircuitStates[ordinal] is not null)
+            if (probe is null
+                || shortCircuitStates[ordinal] is not null)
             {
                 continue;
             }
@@ -829,7 +944,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         {
             var candidateArray = candidates.Values.ToArray();
             var transitionPlans = CapturePlans(
-                candidateArray.Select(static candidate => candidate.Operation).ToArray(),
+                candidateArray
+                    .Select(static candidate => candidate.Operation)
+                    .ToArray(),
                 model,
                 expectedUniqueIndexes,
                 expectedTableConstraints,
@@ -849,7 +966,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
             // may share one length scan only after independent eligibility.
             await FindBlockingDataAsync(
                 connection,
-                candidateArray.Where(candidate => resolved[candidate.Contract].IsRequired
+                candidateArray
+                    .Where(candidate => resolved[candidate.Contract].IsRequired
                         && !blockingDataCache.ContainsKey(candidate.Identity))
                     .DistinctBy(static candidate => candidate.Identity),
                 blockingDataCache,
@@ -860,17 +978,20 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
             foreach (var candidate in candidateArray)
             {
                 var result = resolved[candidate.Contract];
-                cache.Add(candidate.Contract, result with
-                {
-                    IsBlocked = result.IsRequired && blockingDataCache[candidate.Identity],
-                });
+                cache.Add(
+                    candidate.Contract,
+                    result with
+                    {
+                        IsBlocked = result.IsRequired && blockingDataCache[candidate.Identity],
+                    });
             }
         }
 
         for (var ordinal = 0; ordinal < plans.Length; ordinal++)
         {
             var probe = plans[ordinal].DataProbe;
-            if (probe is null || shortCircuitStates[ordinal] is not null)
+            if (probe is null
+                || shortCircuitStates[ordinal] is not null)
             {
                 continue;
             }
@@ -878,8 +999,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
             var identity = new MySqlDataProbeIdentity(probe.Table, probe.Column, probe.TargetLength);
             results[ordinal] = cache.TryGetValue(CreateDataProbeContract(identity, operations[ordinal]), out var result)
                 ? result
-                : throw new InvalidOperationException(
-                    "The MySQL narrowing probe did not resolve every candidate.");
+                : throw new InvalidOperationException("The MySQL narrowing probe did not resolve every candidate.");
         }
 
         return results;
@@ -900,10 +1020,14 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
             candidates.Count,
             maximumPayloadBytes,
             commandTimeout,
-            (command, offset) =>
+            (
+                command,
+                offset
+            ) =>
             {
                 var count = Math.Min(
-                    SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement, candidates.Count - offset);
+                    SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement,
+                    candidates.Count - offset);
 
                 var parameterizer = new MySqlCatalogQueryParameterizer(command, _typeMappingSource);
                 var selections = new List<string>(count);
@@ -917,13 +1041,15 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
 
                     var transitionExpression = MySqlCatalogSqlTemplate.Render(
                         transitionProbe.TransitionInvariantExpression
-                            ?? throw new InvalidOperationException(
-                                "The MySQL transition capture returned no physical invariant."),
+                        ?? throw new InvalidOperationException(
+                            "The MySQL transition capture returned no physical invariant."),
                         transitionPlan.ParameterValues,
                         parameterizer.Add);
 
                     var narrowingExpression = MySqlCatalogSqlTemplate.Render(
-                        transitionProbe.NarrowingExpression, transitionPlan.ParameterValues, parameterizer.Add);
+                        transitionProbe.NarrowingExpression,
+                        transitionPlan.ParameterValues,
+                        parameterizer.Add);
 
                     selections.Add(
                         $"SELECT {candidate.Ordinal.ToString(CultureInfo.InvariantCulture)}, "
@@ -935,14 +1061,22 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                     + SafeMigrationCatalogQueryLimits.Trailer;
 
                 return new SafeMigrationCatalogProbeStatement(
-                    count, parameterizer.Utf8PayloadBytes, candidates[offset].Ordinal);
+                    count,
+                    parameterizer.Utf8PayloadBytes,
+                    candidates[offset].Ordinal);
             },
-            async (reader, offset, count, token) =>
+            async (
+                reader,
+                offset,
+                count,
+                token
+            ) =>
             {
                 var row = 0;
                 while (await reader.ReadAsync(token))
                 {
-                    if (row >= count || reader.GetInt32(0) != candidates[offset + row].Ordinal)
+                    if (row >= count
+                        || reader.GetInt32(0) != candidates[offset + row].Ordinal)
                     {
                         throw new InvalidOperationException(
                             "The MySQL narrowing prerequisite query returned an invalid ordinal.");
@@ -954,7 +1088,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                     results.Add(
                         candidates[offset + row].Contract,
                         new MySqlDataProbeResult(
-                            transitionEligible, IsRequired: transitionEligible && narrowing, IsBlocked: false));
+                            transitionEligible,
+                            IsRequired: transitionEligible && narrowing,
+                            IsBlocked: false));
 
                     row++;
                 }
@@ -1026,7 +1162,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
             {
                 var candidates = statements[offset];
 
-                if (reader.FieldCount != candidates.Length || !await reader.ReadAsync(token))
+                if (reader.FieldCount != candidates.Length
+                    || !await reader.ReadAsync(token))
                 {
                     throw new InvalidOperationException("The MySQL narrowing data query returned an invalid result.");
                 }
@@ -1165,7 +1302,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                             maximumPayloadBytes))
                     {
                         parameterizer.Rollback(checkpoint);
-                        if (selections.Count == 0 && batch.Count == 1)
+                        if (selections.Count == 0
+                            && batch.Count == 1)
                         {
                             batch.RemoveLastCommand(command);
 
@@ -1193,6 +1331,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
 
                 command.CommandText = string.Join(SafeMigrationCatalogQueryLimits.Separator, selections)
                     + SafeMigrationCatalogQueryLimits.Trailer;
+
                 batchParameterCount += parameterizer.Count;
                 batchPayloadBytes += sqlBytes + parameterizer.Utf8PayloadBytes;
                 selectedOrdinals.AddRange(statementOrdinals);
@@ -1203,12 +1342,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                 continue;
             }
 
-            await ReadDatabaseQualificationBatchAsync(
-                batch,
-                states,
-                selectedOrdinals,
-                plans,
-                cancellationToken);
+            await ReadDatabaseQualificationBatchAsync(batch, states, selectedOrdinals, plans, cancellationToken);
         }
     }
 
@@ -1222,6 +1356,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         CancellationToken cancellationToken
     )
     {
+        var captureIndexIdentity = plans.Any(static plan => plan.CaptureProjectedIndexIdentity);
         var ordinal = 0;
         var separatorBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Separator);
         var trailerBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Trailer);
@@ -1231,7 +1366,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
 
             while (ordinal < plans.Length
                    && (states[ordinal] is not null
-                       || StringComparer.Ordinal.Equals(plans[ordinal].PrerequisiteExpression, "TRUE")))
+                       || (StringComparer.Ordinal.Equals(plans[ordinal].PrerequisiteExpression, "TRUE")
+                           && plans[ordinal].CapturedSourceSyntaxExpression is null)))
             {
                 ordinal++;
             }
@@ -1267,7 +1403,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                     // this catalog-only phase has nothing to evaluate. SQL
                     // equivalence, parameter values, and prior results are not.
                     if (states[ordinal] is not null
-                        || StringComparer.Ordinal.Equals(plans[ordinal].PrerequisiteExpression, "TRUE"))
+                        || (StringComparer.Ordinal.Equals(plans[ordinal].PrerequisiteExpression, "TRUE")
+                            && plans[ordinal].CapturedSourceSyntaxExpression is null))
                     {
                         ordinal++;
 
@@ -1277,10 +1414,20 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                     var checkpoint = parameterizer.Capture();
                     var plan = plans[ordinal];
                     var prerequisite = plan.RenderPrerequisiteExpression(parameterizer.Add);
+                    var syntax = plan.CapturedSourceSyntaxExpression is null
+                        ? null
+                        : plan.RenderCapturedSourceSyntaxExpression(parameterizer.Add);
 
                     var selection = $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, CASE "
+                        + (syntax is null ? string.Empty : $"WHEN NOT COALESCE(({syntax}), FALSE) THEN 'unsupported' ")
                         + $"WHEN NOT COALESCE(({prerequisite}), FALSE) THEN 'prerequisite_missing' "
                         + "ELSE NULL END";
+                    if (captureIndexIdentity)
+                    {
+                        selection += plan.CaptureProjectedIndexIdentity
+                            ? ", " + plan.RenderProjectedIndexIdentityExpression(parameterizer.Add)
+                            : ", NULL";
+                    }
 
                     var selectionBytes = Encoding.UTF8.GetByteCount(selection)
                         + (selections.Count == 0 ? 0 : separatorBytes);
@@ -1305,8 +1452,6 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                                     prospectiveBatchParameters,
                                     prospectiveBatchPayload);
                             }
-
-                            break;
                         }
 
                         break;
@@ -1337,7 +1482,13 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                 continue;
             }
 
-            await ReadPrerequisiteBatchAsync(batch, states, selectedOrdinals, cancellationToken);
+            await ReadPrerequisiteBatchAsync(
+                batch,
+                plans,
+                states,
+                selectedOrdinals,
+                captureIndexIdentity,
+                cancellationToken);
         }
     }
 
@@ -1410,8 +1561,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                     var plan = plans[ordinal];
                     var stateEvaluationGuard = plan.RenderStateEvaluationGuardExpression(parameterizer.Add);
                     var guardFailure = plan.RenderStateEvaluationGuardFailureExpression(parameterizer.Add);
-                    var classificationCode = plan.RenderStateEvaluationGuardClassificationCodeExpression(
-                        parameterizer.Add);
+                    var classificationCode =
+                        plan.RenderStateEvaluationGuardClassificationCodeExpression(parameterizer.Add);
 
                     var selection = $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, CASE "
                         + $"WHEN NOT COALESCE(({stateEvaluationGuard}), FALSE) THEN ({guardFailure}) "
@@ -1461,6 +1612,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
 
                 command.CommandText = string.Join(SafeMigrationCatalogQueryLimits.Separator, selections)
                     + SafeMigrationCatalogQueryLimits.Trailer;
+
                 batchParameterCount += parameterizer.Count;
                 batchPayloadBytes += sqlBytes + parameterizer.Utf8PayloadBytes;
                 selectedOrdinals.AddRange(statementOrdinals);
@@ -1479,15 +1631,12 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         MySqlShortCircuitState shortCircuit,
         MySqlSafeMigrationRuntimePlan plan,
         SafeMigrationIntent intent
-    ) => new(
-        shortCircuit.State,
-        SafeMigrationRepairCapability.None,
-        false,
-        shortCircuit.Code)
+    ) => new(shortCircuit.State, SafeMigrationRepairCapability.None, false, shortCircuit.Code)
     {
         IndexPhysicalEnvironment = plan.IndexPhysicalEnvironment,
         IsInvariantUnsupported = shortCircuit.State == SafeMigrationObservedState.Unsupported
-            && plan.IsStaticallyUnsupported,
+            && (plan.IsStaticallyUnsupported || shortCircuit.Code == "captured_expression_identifier_keyword_unverified"),
+
         RequiresLiveDataProof = IsFreshRequiredColumnAddMissing(intent, plan, shortCircuit.State, shortCircuit.Code)
             || IsBlockedRequiredColumnAddRowProof(intent, plan, shortCircuit.State, shortCircuit.Code),
     };
@@ -1505,7 +1654,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         string? code
     )
     {
-        if (state != SafeMigrationObservedState.Missing || intent is not EnsureColumnIntent ensure
+        if (state != SafeMigrationObservedState.Missing
+            || intent is not EnsureColumnIntent ensure
             || SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(ensure.Definition)
             || StringComparer.Ordinal.Equals(code, "column_atomic_add_resume"))
         {
@@ -1517,9 +1667,11 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         // staged rows cannot supply this empty-table certificate.
         return plan.RequiredColumnAddPlan is { } protocol
             ? StringComparer.Ordinal.Equals(protocol.StatusBinding, "'fresh'")
-            : ensure.Definition.DefaultValue.Kind == SafeMigrationDefaultValueKind.Sql
-                && ensure.Definition.DefaultValue.StructuredExpression
-                    is SafeMigrationSqlLiteralExpression { Value: null };
+            : ensure.Definition.DefaultValue is
+            {
+                Kind: SafeMigrationDefaultValueKind.Sql,
+                StructuredExpression: SafeMigrationSqlLiteralExpression { Value: null }
+            };
     }
 
     /// <summary>Marks current blocked add rows as data-dependent without turning them into empty-row proof.</summary>
@@ -1527,7 +1679,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
     /// <param name="plan">The enriched plan carrying fresh protocol status when applicable.</param>
     /// <param name="state">The provider-classified current state.</param>
     /// <param name="code">The provider code that separates staging from fresh addition.</param>
-    /// <returns>Whether subsequent DML must invalidate this add's captured negative row result.</returns>
+    /// <returns>Whether subsequent DML must invalidate this adds captured negative row result.</returns>
     internal static bool IsBlockedRequiredColumnAddRowProof(
         SafeMigrationIntent intent,
         MySqlSafeMigrationRuntimePlan plan,
@@ -1548,9 +1700,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
 
         var value = await command.ExecuteScalarAsync(cancellationToken);
 
-        return value is null or DBNull
-            ? null
-            : Convert.ToString(value, CultureInfo.InvariantCulture);
+        return value is null or DBNull ? null : Convert.ToString(value, CultureInfo.InvariantCulture);
     }
 
     private async Task<int> GetMaximumPayloadBytesAsync(
@@ -1589,8 +1739,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         CancellationToken cancellationToken
     )
     {
-        if (reader.FieldCount != 2 || !await reader.ReadAsync(cancellationToken)
-            || reader.IsDBNull(0) || reader.IsDBNull(1)
+        if (reader.FieldCount != 2
+            || !await reader.ReadAsync(cancellationToken)
+            || reader.IsDBNull(0)
+            || reader.IsDBNull(1)
             || reader.GetValue(0) is not (int or uint or long or ulong)
             || reader.GetValue(1) is not (sbyte or byte or short or ushort or int or uint or long or ulong))
         {
@@ -1599,7 +1751,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
 
         var packet = Convert.ToDecimal(reader.GetValue(0), CultureInfo.InvariantCulture);
         var ownerMode = Convert.ToDecimal(reader.GetValue(1), CultureInfo.InvariantCulture);
-        if (packet is <= 0 or > long.MaxValue || ownerMode is < 0 or > 2
+        if (packet is <= 0 or > long.MaxValue
+            || ownerMode is < 0 or > 2
             || await reader.ReadAsync(cancellationToken))
         {
             throw new InvalidOperationException("MySQL returned an invalid packet or owner-identity profile.");
@@ -1620,12 +1773,15 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
     )
     {
         var consumed = 0;
+        var captureDropCompleteness = plans.Any(static plan => plan.DropLeavesNoGeneratedColumnsExpression is not null);
         await batch.ForEachResultSetAsync(
-            async (
-                reader,
-                token
-            ) =>
+            async (reader, token) =>
             {
+                if (captureDropCompleteness && reader.FieldCount != 10)
+                {
+                    throw new InvalidOperationException("The MySQL DROP classifier returned an invalid shape.");
+                }
+
                 while (await reader.ReadAsync(token))
                 {
                     var ordinal = reader.GetInt32(0);
@@ -1649,16 +1805,29 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
 
                     var localOrdinal = ordinal - operationOffset;
                     var plan = plans[localOrdinal];
+                    var dropLeavesNoGeneratedColumns = false;
+                    if (captureDropCompleteness)
+                    {
+                        var expectedCompleteness = plan.DropLeavesNoGeneratedColumnsExpression is not null;
+                        if (reader.IsDBNull(9) == expectedCompleteness)
+                        {
+                            throw new InvalidOperationException("The MySQL DROP completeness evidence is invalid.");
+                        }
+
+                        if (expectedCompleteness)
+                        {
+                            dropLeavesNoGeneratedColumns = ReadColumnDependencyBoolean(reader, 9);
+                        }
+                    }
+
                     var evidence = plan.ModelManagedRowEvidenceExpression is null
                         ? null
                         : SafeMigrationModelManagedDataEvidence.Parse(
-                                reader.GetString(5),
-                                plan.ModelManagedRowCount,
-                                plan.ModelManagedDependencyCountsExpression is null
-                                    ? string.Empty
-                                    : reader.GetString(6),
-                                plan.ModelManagedDependencyCount,
-                                "MySQL");
+                            reader.GetString(5),
+                            plan.ModelManagedRowCount,
+                            plan.ModelManagedDependencyCountsExpression is null ? string.Empty : reader.GetString(6),
+                            plan.ModelManagedDependencyCount,
+                            "MySQL");
 
                     IReadOnlyList<SafeMigrationFacetDifference> differences;
                     if (state == SafeMigrationObservedState.Different
@@ -1670,12 +1839,13 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                     }
                     else
                     {
-                        differences = state is not (SafeMigrationObservedState.Different
-                            or SafeMigrationObservedState.DataBlocked
-                            or SafeMigrationObservedState.Unsupported)
+                        differences =
+                            state is not (SafeMigrationObservedState.Different
+                                or SafeMigrationObservedState.DataBlocked
+                                or SafeMigrationObservedState.Unsupported)
                             || reader.IsDBNull(7)
-                            ? []
-                            : SafeMigrationFacetDifferenceParser.Parse(reader.GetString(7), "MySQL");
+                                ? []
+                                : SafeMigrationFacetDifferenceParser.Parse(reader.GetString(7), "MySQL");
                     }
 
                     var operationalImpact = state == SafeMigrationObservedState.DataBlocked
@@ -1691,63 +1861,71 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                         && differences.Any(static difference =>
                             StringComparer.Ordinal.Equals(difference.Facet, "column_nullability"));
 
-                    var analysis = new SafeMigrationProviderAnalysis(
-                        state,
-                        repairCapability,
-                        reader.GetBoolean(2),
-                        code,
-                        operationalImpact,
-                        differences)
-                    {
-                        IndexPhysicalEnvironment = plan.IndexPhysicalEnvironment,
-                        IsInvariantUnsupported = state == SafeMigrationObservedState.Unsupported
-                            && plan.IsStaticallyUnsupported,
-                        MatchedObjectName = state == SafeMigrationObservedState.Matching
-                            && !reader.IsDBNull(8)
-                                ? reader.GetString(8)
-                                : null,
-                        ModelManagedDataEvidence = evidence,
-                        RequiredColumnAddResumesOwnedStaging = state == SafeMigrationObservedState.Missing
-                            && plan.RequiredColumnAddPlan is not null
-                            && StringComparer.Ordinal.Equals(code, "column_atomic_add_resume"),
-                        // WHY: Every VARCHAR transition carries a probe template,
-                        // but widening is catalog-only. Only a catalog-confirmed
-                        // narrowing or nullable-to-required result becomes stale
-                        // after projected DML.
-                        RequiresLiveDataProof = dataProbeResults[localOrdinal]?.IsRequired == true
-                            || requiresNullabilityDataProof
-                            || IsFreshRequiredColumnAddMissing(operations[localOrdinal].Intent, plan, state, code)
-                            || IsBlockedRequiredColumnAddRowProof(operations[localOrdinal].Intent, plan, state, code),
-                        // WHY: Provider backfill executes UPDATE before MODIFY.
-                        // Triggers can change any table, so ordered projection
-                        // must invalidate all row proofs after accepted repair.
-                        RepairMutatesData = state == SafeMigrationObservedState.Different
-                            && repairCapability == SafeMigrationRepairCapability.Safe
-                            && operations[localOrdinal] is
-                            {
-                                Policy: SafeMigrationPolicy.RepairIfSafe,
-                                Intent: AlterColumnIntent
+                    var analysis =
+                        new SafeMigrationProviderAnalysis(
+                            state,
+                            repairCapability,
+                            reader.GetBoolean(2),
+                            code,
+                            operationalImpact,
+                            differences)
+                        {
+                            IndexPhysicalEnvironment = plan.IndexPhysicalEnvironment,
+                            IsInvariantUnsupported =
+                                state == SafeMigrationObservedState.Unsupported && plan.IsStaticallyUnsupported,
+                            MatchedObjectName =
+                                state == SafeMigrationObservedState.Matching && !reader.IsDBNull(8)
+                                    ? reader.GetString(8)
+                                    : null,
+                            ModelManagedDataEvidence = evidence,
+                            DropLeavesNoGeneratedColumns =
+                                state == SafeMigrationObservedState.Matching
+                                && operations[localOrdinal].Intent is DropColumnIntent
+                                && dropLeavesNoGeneratedColumns,
+                            RequiredColumnAddResumesOwnedStaging = state == SafeMigrationObservedState.Missing
+                                && plan.RequiredColumnAddPlan is not null
+                                && StringComparer.Ordinal.Equals(code, "column_atomic_add_resume"),
+                            // WHY: Every VARCHAR transition carries a probe template,
+                            // but widening is catalog-only. Only a catalog-confirmed
+                            // narrowing or nullable-to-required result becomes stale
+                            // after projected DML.
+                            RequiresLiveDataProof = dataProbeResults[localOrdinal]?.IsRequired == true
+                                || requiresNullabilityDataProof
+                                || IsFreshRequiredColumnAddMissing(operations[localOrdinal].Intent, plan, state, code)
+                                || IsBlockedRequiredColumnAddRowProof(
+                                    operations[localOrdinal].Intent,
+                                    plan,
+                                    state,
+                                    code),
+                            // WHY: Provider backfill executes UPDATE before MODIFY.
+                            // Triggers can change any table, so ordered projection
+                            // must invalidate all row proofs after accepted repair.
+                            RepairMutatesData = state == SafeMigrationObservedState.Different
+                                && repairCapability == SafeMigrationRepairCapability.Safe
+                                && operations[localOrdinal] is
                                 {
-                                    OldDefinition.IsNullable: true,
-                                    Definition.IsNullable: false,
-                                } alterIntent,
-                            }
-                            && SafeMigrationColumnRepairHelper.HasProvablyNonNullDefault(
-                                alterIntent.Definition.DefaultValue),
-                        // WHY: Ensure's full-definition repair never emits
-                        // UPDATE. Only its non-narrowing string proof can retain
-                        // a captured source-domain bound across ordered DDL.
-                        RepairPreservesLiveValueDomain = state == SafeMigrationObservedState.Different
-                            && repairCapability == SafeMigrationRepairCapability.Safe
-                            && plan.RepairOperationalImpact == SafeMigrationOperationalImpact.TableRewritePossible
-                            && dataProbeResults[localOrdinal]?.IsRequired != true
-                            && operations[localOrdinal] is
-                            {
-                                Policy: SafeMigrationPolicy.RepairIfSafe,
-                                Intent: EnsureColumnIntent { Definition.ClrType: var columnType },
-                            }
-                            && columnType == typeof(string),
-                    };
+                                    Policy: SafeMigrationPolicy.RepairIfSafe,
+                                    Intent: AlterColumnIntent
+                                    {
+                                        OldDefinition.IsNullable: true, Definition.IsNullable: false,
+                                    } alterIntent,
+                                }
+                                && SafeMigrationColumnRepairHelper.HasProvablyNonNullDefault(
+                                    alterIntent.Definition.DefaultValue),
+                            // WHY: Ensure's full-definition repair never emits
+                            // UPDATE. Only its non-narrowing string proof can retain
+                            // a captured source-domain bound across ordered DDL.
+                            RepairPreservesLiveValueDomain = state == SafeMigrationObservedState.Different
+                                && repairCapability == SafeMigrationRepairCapability.Safe
+                                && plan.RepairOperationalImpact == SafeMigrationOperationalImpact.TableRewritePossible
+                                && dataProbeResults[localOrdinal]?.IsRequired != true
+                                && operations[localOrdinal] is
+                                {
+                                    Policy: SafeMigrationPolicy.RepairIfSafe,
+                                    Intent: EnsureColumnIntent { Definition.ClrType: var columnType },
+                                }
+                                && columnType == typeof(string),
+                        };
 
                     results[ordinal] = analysis;
                 }
@@ -1767,10 +1945,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
     {
         var row = 0;
         await batch.ForEachResultSetAsync(
-            async (
-                reader,
-                token
-            ) =>
+            async (reader, token) =>
             {
                 while (await reader.ReadAsync(token))
                 {
@@ -1787,7 +1962,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                         states[resultOrdinal] = new MySqlShortCircuitState(
                             ParseState(reader.GetString(1)),
                             plans[resultOrdinal].CurrentDatabaseQualificationFailureCode
-                                ?? "database_qualifier_mismatch");
+                            ?? "database_qualifier_mismatch");
                     }
 
                     row++;
@@ -1804,18 +1979,22 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
 
     private static async Task ReadPrerequisiteBatchAsync(
         SafeMigrationCatalogBatch batch,
+        MySqlSafeMigrationRuntimePlan[] plans,
         MySqlShortCircuitState?[] states,
         List<int> selectedOrdinals,
+        bool captureIndexIdentity,
         CancellationToken cancellationToken
     )
     {
         var row = 0;
         await batch.ForEachResultSetAsync(
-            async (
-                reader,
-                token
-            ) =>
+            async (reader, token) =>
             {
+                if (reader.FieldCount != (captureIndexIdentity ? 3 : 2))
+                {
+                    throw new InvalidOperationException("The MySQL prerequisite classifier returned an invalid shape.");
+                }
+
                 while (await reader.ReadAsync(token))
                 {
                     var resultOrdinal = reader.GetInt32(0);
@@ -1826,11 +2005,29 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                             "The MySQL SafeMigrations prerequisite classifier returned an invalid ordinal.");
                     }
 
-                    if (states[resultOrdinal] is null && !reader.IsDBNull(1))
+                    if (states[resultOrdinal] is null
+                        && !reader.IsDBNull(1))
                     {
+                        var state = ParseState(reader.GetString(1));
                         states[resultOrdinal] = new MySqlShortCircuitState(
-                            ParseState(reader.GetString(1)),
-                            "classified_prerequisite_missing");
+                            state,
+                            state == SafeMigrationObservedState.Unsupported
+                                ? "captured_expression_identifier_keyword_unverified"
+                                : "classified_prerequisite_missing");
+                    }
+
+                    if (captureIndexIdentity && !reader.IsDBNull(2))
+                    {
+                        var identity = ParseState(reader.GetString(2));
+                        if (identity is not (SafeMigrationObservedState.Missing
+                                or SafeMigrationObservedState.Matching
+                                or SafeMigrationObservedState.Different)
+                            || !plans[resultOrdinal].CaptureProjectedIndexIdentity)
+                        {
+                            throw new InvalidOperationException("The MySQL captured index identity is invalid.");
+                        }
+
+                        plans[resultOrdinal] = plans[resultOrdinal] with { CapturedIndexIdentity = identity };
                     }
 
                     row++;
@@ -1854,10 +2051,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
     {
         var row = 0;
         await batch.ForEachResultSetAsync(
-            async (
-                reader,
-                token
-            ) =>
+            async (reader, token) =>
             {
                 while (await reader.ReadAsync(token))
                 {
@@ -1870,7 +2064,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                             "The MySQL SafeMigrations state-evaluation guard classifier returned an invalid ordinal.");
                     }
 
-                    if (states[resultOrdinal] is null && !reader.IsDBNull(1))
+                    if (states[resultOrdinal] is null
+                        && !reader.IsDBNull(1))
                     {
                         var state = ParseState(reader.GetString(1));
 
@@ -1952,14 +2147,28 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
 
             var maximumPayloadBytes = await GetMaximumPayloadBytesAsync(connection, commandTimeout, cancellationToken);
             expected = await CanonicalizeUnexpectedInventoryOwnersAsync(
-                connection, expected, maximumPayloadBytes, commandTimeout, cancellationToken);
+                connection,
+                expected,
+                maximumPayloadBytes,
+                commandTimeout,
+                cancellationToken);
 
             var findings = await ReadUnexpectedInventoryAsync(
-                connection, expected, serverVersion.IsMariaDb, maximumPayloadBytes, commandTimeout, cancellationToken);
+                connection,
+                expected,
+                serverVersion.IsMariaDb,
+                maximumPayloadBytes,
+                commandTimeout,
+                cancellationToken);
 
             findings = await RemoveRequiredColumnAddRecoveryChecksAsync(
-                context, operations, findings, serverVersion.IsMariaDb,
-                maximumPayloadBytes, commandTimeout, cancellationToken);
+                context,
+                operations,
+                findings,
+                serverVersion.IsMariaDb,
+                maximumPayloadBytes,
+                commandTimeout,
+                cancellationToken);
 
             return await RemoveSemanticAliasesAsync(context, operations, findings, cancellationToken);
         }
@@ -1991,11 +2200,18 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
     {
         var findings = new List<SafeMigrationUnexpectedObject>();
         var seen = new HashSet<(SafeMigrationDatabaseObjectKind Kind, string Table, string Name)>();
-        var tables = expected.Keys.Order(StringComparer.Ordinal).ToArray();
+        var tables = expected
+            .Keys
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
         await SafeMigrationCatalogProbeBatch.ReadAsync(
-            connection, 1 + (tables.Length + SafeMigrationCatalogQueryLimits.MaximumInventoryValues - 1)
-                / SafeMigrationCatalogQueryLimits.MaximumInventoryValues,
-            maximumPayloadBytes, commandTimeout,
+            connection,
+            1
+            + ((tables.Length + SafeMigrationCatalogQueryLimits.MaximumInventoryValues - 1)
+                / SafeMigrationCatalogQueryLimits.MaximumInventoryValues),
+            maximumPayloadBytes,
+            commandTimeout,
             (command, slot) =>
             {
                 if (slot == 0)
@@ -2006,17 +2222,28 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                 }
 
                 var parameters = new MySqlCatalogQueryParameterizer(command);
-                var tableScope = string.Join(", ", tables
-                    .Skip((slot - 1) * SafeMigrationCatalogQueryLimits.MaximumInventoryValues)
-                    .Take(SafeMigrationCatalogQueryLimits.MaximumInventoryValues).Select(parameters.AddString));
+                var tableScope = string.Join(
+                    ", ",
+                    tables
+                        .Skip((slot - 1) * SafeMigrationCatalogQueryLimits.MaximumInventoryValues)
+                        .Take(SafeMigrationCatalogQueryLimits.MaximumInventoryValues)
+                        .Select(parameters.AddString));
 
                 command.CommandText = BuildUnexpectedChildObjectSql(tableScope, isMariaDb);
 
                 return new SafeMigrationCatalogProbeStatement(1, parameters.Utf8PayloadBytes, slot);
             },
-            (reader, slot, _, token) => ReadUnexpectedAsync(reader, expected, findings, seen,
-                slot == 0 ? null : tables.Skip((slot - 1) * SafeMigrationCatalogQueryLimits.MaximumInventoryValues)
-                    .Take(SafeMigrationCatalogQueryLimits.MaximumInventoryValues).ToHashSet(StringComparer.Ordinal),
+            (reader, slot, _, token) => ReadUnexpectedAsync(
+                reader,
+                expected,
+                findings,
+                seen,
+                slot == 0
+                    ? null
+                    : tables
+                        .Skip((slot - 1) * SafeMigrationCatalogQueryLimits.MaximumInventoryValues)
+                        .Take(SafeMigrationCatalogQueryLimits.MaximumInventoryValues)
+                        .ToHashSet(StringComparer.Ordinal),
                 token),
             cancellationToken);
 
@@ -2066,10 +2293,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
         }
 
         return findings
-            .Where((
-                _,
-                index
-            ) => !semanticAliases.Contains(index))
+            .Where((_, index) => !semanticAliases.Contains(index))
             .ToArray();
     }
 
@@ -2091,8 +2315,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
             var objectName = reader.GetString(2);
             var providerGeneratedJsonCheck = reader.GetBoolean(3);
             if (permittedTables is null
-                ? kind != SafeMigrationDatabaseObjectKind.Table
-                : kind == SafeMigrationDatabaseObjectKind.Table || !permittedTables.Contains(tableName))
+                    ? kind != SafeMigrationDatabaseObjectKind.Table
+                    : kind == SafeMigrationDatabaseObjectKind.Table || !permittedTables.Contains(tableName))
             {
                 throw new InvalidOperationException("MySQL returned an unowned inventory object.");
             }
@@ -2269,14 +2493,14 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
                                                                   """;
 
     private const string MariaDbImplicitJsonCheckInventoryExpression = """
-        CASE WHEN tc.CONSTRAINT_TYPE = 'CHECK'
-          AND json_column.DATA_TYPE = 'longtext'
-          AND LOWER(json_column.COLLATION_NAME) = 'utf8mb4_bin'
-          AND LOWER(REPLACE(REPLACE(REPLACE(REPLACE(
-                cc.CHECK_CLAUSE, '`', ''), ' ', ''), '(', ''), ')', ''))
-              = CONCAT('json_valid', LOWER(json_column.COLUMN_NAME))
-        THEN TRUE ELSE FALSE END
-        """;
+                                                                       CASE WHEN tc.CONSTRAINT_TYPE = 'CHECK'
+                                                                         AND json_column.DATA_TYPE = 'longtext'
+                                                                         AND LOWER(json_column.COLLATION_NAME) = 'utf8mb4_bin'
+                                                                         AND LOWER(REPLACE(REPLACE(REPLACE(REPLACE(
+                                                                               cc.CHECK_CLAUSE, '`', ''), ' ', ''), '(', ''), ')', ''))
+                                                                             = CONCAT('json_valid', LOWER(json_column.COLUMN_NAME))
+                                                                       THEN TRUE ELSE FALSE END
+                                                                       """;
 
     private readonly record struct MySqlDataProbeIdentity(
         string Table,
@@ -2292,7 +2516,11 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer :
     {
         EnsureColumnIntent intent => new(identity, intent.Definition, null, intent.Schema, operation.Policy),
         AlterColumnIntent intent => new(
-            identity, intent.Definition, intent.OldDefinition, intent.Schema, operation.Policy),
+            identity,
+            intent.Definition,
+            intent.OldDefinition,
+            intent.Schema,
+            operation.Policy),
         _ => throw new InvalidOperationException("A MySQL column data probe requires a column intent."),
     };
 

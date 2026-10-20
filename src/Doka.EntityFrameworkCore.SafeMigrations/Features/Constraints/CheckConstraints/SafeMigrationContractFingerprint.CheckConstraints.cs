@@ -25,5 +25,13 @@ public static partial class SafeMigrationContractFingerprint
         writer.Add(definition.Name);
         writer.Add(definition.Sql);
         SafeMigrationSqlExpressionContract.Write(writer, definition.Expression);
+        if (definition.CapturedSql is not null)
+        {
+            // WHY: A bare native numeric literal and its typed rendering can
+            // select different division rules; the authored source is part of
+            // this captured contract, not merely a display preference.
+            writer.Add("captured_check_sql:v1");
+            writer.Add(definition.CapturedSql);
+        }
     }
 }

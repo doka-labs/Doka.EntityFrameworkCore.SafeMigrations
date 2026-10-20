@@ -129,6 +129,14 @@ procedure requires recreating every affected index, trigger, and view. Guessing
 at an artifact outside the EF model could lose behavior while producing a
 syntactically valid table.
 
+A matching source-column confirmation also does not erase a native retained-FK
+rebuild violation. Preflight keeps that row-safety refusal while its evidence
+remains current; row-independent metadata changes do not prove orphan repair.
+Actual or unknown row effects require origin-bearing runtime revalidation,
+and a new owner cannot inherit the removed owner's row evidence. Explicit FK
+retirement is evaluated separately. Mandatory execution still verifies foreign
+keys before committing the owned rebuild transaction.
+
 A strictly matching existing table reuses its captured snapshot to certify
 actual named PK/UNIQUE/CHECK/FK members separately from their authored semantic
 aliases. Exact named matches or a uniquely resolved named witness can bind the
@@ -158,11 +166,9 @@ Table renames reject while `PRAGMA legacy_alter_table` is enabled. In that mode,
 SQLite can leave trigger and view references on the old name, which cannot be
 represented by a successful rename postcondition alone.
 
-Virtual generated columns can be added directly when every expression and
-facet is supported. SQLite cannot add a STORED generated column through
-`ALTER TABLE ADD COLUMN`; that operation fails before DDL with
-`stored_generated_column_add`. A model-owned full rebuild may retain a STORED
-generated column already represented by the terminal model.
+Generated columns follow the [generated-column contract](#generated-columns)
+below. A model-owned full rebuild may retain a STORED generated column already
+represented by the terminal model.
 
 An exact old column definition alone does not prove a lossless alteration.
 `RepairIfSafe` rebuilds require the same declared store type, CLR value domain,
@@ -181,6 +187,50 @@ the check against a column that has not been materialized yet, and the provider
 operation does not carry a general proof of every resulting row value. Split
 the column materialization and the check into ordered migrations, then analyze
 the check against the resulting live data.
+
+## Generated columns
+
+Fresh safe table creation, direct virtual-column additions and owned rebuilds
+emit the expected generated column's declared store type, collation,
+nullability, expression and virtual/stored form. SQLite determines a generated
+column's affinity from its declared type, not from the expression's result.
+Omitting `INTEGER` or `NOT NULL` is therefore not an equivalent spelling.
+Catalog capture continues to use `table_xinfo`, including its generated-column
+kind; strict comparison does not ignore type or nullability to make a replay
+appear matching. A table created outside this contract with missing facets
+remains different rather than being silently adopted or repaired.
+
+The local SQLite generator correction is scoped to generated-column definition
+rendering and the accepted safe owner's physical lifetime. Ordinary
+provider-owned SQLite DDL keeps its native generation even in a mixed stream;
+it is not opted into safe generated-column rewriting by a terminal model or an
+unrelated safe operation. Complete rebuild ownership, transaction
+boundaries, final FK validation and migration-history handling retain their
+existing contracts. A failed generated-column postcondition rolls back the
+owned transaction; it is not permission to edit catalog text or history.
+
+Virtual generated columns can be added directly when the expression and every
+other facet are supported. SQLite cannot add a STORED generated column through
+`ALTER TABLE ADD COLUMN`; that operation still rejects before DDL with
+`stored_generated_column_add`. A fresh table can declare either storage form.
+The bounded expression parser preserves searched CASE and checked identifier
+dependencies; it does not admit subqueries or arbitrary function SQL.
+Validated captured source retains its native numeric spelling. SQL Server's
+captured type-first CONVERT syntax is `structured_convert_dialect`, not an
+implicit SQLite cast.
+
+Source-column DROP inspects surviving generated expressions from the native
+table snapshot before mutation. A retained reference rejects with
+`generated_column_drop_dependency`; an unparseable surviving expression remains
+`generated_column_drop_unproven`, not a guessed absence. Explicitly removing
+the generated member first and dropping an unrelated column remain subject to
+the existing rebuild-artifact and ownership checks. Runtime uses the same
+analyzer even without optional preflight, with no additional catalog roundtrip.
+
+An index involving the generated value retains its own supported-shape and
+data prerequisites. See SQLite's
+[generated-column syntax and limits](https://www.sqlite.org/gencol.html)
+(primary source; retrieved 2026-10-20).
 
 ## Script boundary
 

@@ -18,6 +18,8 @@ var expectsDesignTimeReference = args switch
     _ => throw new ArgumentException("Usage: PackageConsumer [--expect-design-reference]"),
 };
 
+GeneratedExpressionConsumerContract.Verify();
+
 var migrationBuilder = new MigrationBuilder(providerName);
 migrationBuilder.CreateTableIfNotExists(
     "consumer_items",

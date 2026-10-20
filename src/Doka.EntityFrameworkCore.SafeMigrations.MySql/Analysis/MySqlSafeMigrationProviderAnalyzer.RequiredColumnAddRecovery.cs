@@ -44,7 +44,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
         var expectedTableConstraints = SafeMigrationExpectedTableConstraints.FromOperations(
             candidateOperations, schema => MySqlTableIdentity.NormalizeDatabase(schema, _currentDatabase),
-            TableIdentifierComparer);
+            TableIdentifierComparer, '`', false, StringComparer.OrdinalIgnoreCase);
 
         var backfillConstraints = MySqlBackfillConstraintCatalog.Create(candidateOperations, _currentDatabase,
             TableIdentifierComparer);
@@ -68,8 +68,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             {
                 var candidate = candidates[offset + index];
                 var plan = plans[index];
-                if (!plan.IsStaticallyUnsupported
-                    && plan.RequiredColumnAddPlan is { } add
+                if (plan is { IsStaticallyUnsupported: false, RequiredColumnAddPlan: { } add }
                     && add.IsMariaDb == isMariaDb
                     && StringComparer.Ordinal.Equals(add.GuardName, findings[candidate.FindingIndex].Name))
                 {

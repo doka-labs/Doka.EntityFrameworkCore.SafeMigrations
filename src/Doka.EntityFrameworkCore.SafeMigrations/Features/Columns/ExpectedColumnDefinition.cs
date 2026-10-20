@@ -8,6 +8,12 @@ public sealed class ExpectedColumnDefinition
     /// <summary>Gets the immutable provider-owned facets captured for this column.</summary>
     internal IReadOnlyList<SafeMigrationProviderAnnotation> ProviderAnnotations { get; init; } = [];
 
+    /// <summary>Gets the original provider SQL accompanying a successfully parsed EF computed expression.</summary>
+    /// <remarks>
+    /// The structured expression proves roles; the source retains native literal and conversion semantics.
+    /// </remarks>
+    internal string? CapturedComputedSql { get; init; }
+
     /// <summary>Initializes a complete expected column definition.</summary>
     /// <param name="name">The database object name.</param>
     /// <param name="clrType">The CLR type used for provider type mapping.</param>

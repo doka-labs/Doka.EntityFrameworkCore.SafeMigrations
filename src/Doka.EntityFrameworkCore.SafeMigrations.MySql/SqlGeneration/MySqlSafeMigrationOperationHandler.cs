@@ -53,6 +53,10 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
     private IModel? _modelUniqueIndexSource;
     private ActionAssignmentCacheEntry? _actionAssignmentCache;
 
+    /// <summary>Retains exact generated/CHECK text bytes without relying on session quote interpretation.</summary>
+    private string RenderStructuredExpression(SafeMigrationSqlExpression expression) =>
+        MySqlCapturedExpressionContract.RenderExecutable(expression, _expressionRenderer);
+
     public MySqlSafeMigrationOperationHandler(
         IRelationalTypeMappingSource typeMappingSource,
         ISqlGenerationHelper sqlGenerationHelper,
@@ -98,6 +102,9 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             ? GetExpectedTableConstraints(tableIntent, context.Model)
             : null;
 
+        var hasGeneratedDependencyContract = operation.Intent is RenameColumnIntent or DropColumnIntent
+            && (_planCapture.IsActive || _planCapture.HasGenerationContract);
+
         var runtimePlan = _catalogSqlBuilder.Build(
             operation,
             context,
@@ -113,7 +120,16 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             nativeTableAlternative: operation.Intent is EnsureTableIntent nativeTable
                 ? _planCapture.GetGenerationTableAlternative(nativeTable)
                 : null,
-            nativeNullFreeBackfillCondition: _planCapture.GetGenerationNullFreeBackfillCondition(operation));
+            nativeNullFreeBackfillCondition: _planCapture.GetGenerationNullFreeBackfillCondition(operation),
+            generatedColumnDependency: hasGeneratedDependencyContract
+                ? _planCapture.GetGenerationGeneratedColumnDependencyContract(operation) : null,
+            foldedGeneratedColumnDependency: hasGeneratedDependencyContract
+                ? _planCapture.GetGenerationFoldedGeneratedColumnDependencyContract(operation) : null,
+            bindFoldedGeneratedColumnDependency: _planCapture.HasGenerationContract,
+            generatedColumnModelCandidate: hasGeneratedDependencyContract
+                ? _planCapture.GetGenerationGeneratedColumnModelCandidate(operation) : null,
+            foldedGeneratedColumnModelCandidate: hasGeneratedDependencyContract
+                ? _planCapture.GetGenerationFoldedGeneratedColumnModelCandidate(operation) : null);
         if (_planCapture.IsActive)
         {
             _planCapture.Record(context.OperationOrdinal, operation, runtimePlan);
@@ -132,6 +148,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
 
         var postconditionSuffix = BuildPostconditionSuffix(diagnostic, scriptDiagnostics);
         runtimePlan = BindRuntimeBinaryDefaults(runtimePlan);
+        runtimePlan = BindRuntimeIdentifierReferences(runtimePlan);
 
         if (runtimePlan.RequiredColumnAddPlan is { } requiredAddProtocol)
         {
@@ -204,6 +221,11 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
                 setupCommands.Add(BuildRequiredColumnAddStatusAssignment(runtimePlan, renderedParameterValues));
                 setupCommands.Add("SET @doka_sm_state = CASE WHEN @doka_sm_add_status = 'complete' "
                     + "THEN 'matching' ELSE @doka_sm_state END;");
+            }
+
+            if (runtimePlan.IdentifierReferenceProofs.Count > 0)
+            {
+                setupCommands.Add(BuildIdentifierReferenceProofEvaluation(runtimePlan));
             }
 
             if (runtimePlan.StateEvaluationGuardFailureExpression is not null)
@@ -322,7 +344,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
 
         var cleanupCommands = BuildCleanupCommands(baseline, runtimePlan.NullabilityDataProbe is not null,
             runtimePlan.RequiredColumnAddPlan is not null, hasNativeSqlModeCleanup,
-            runtimePlan.BinaryDefaultProofs.Count);
+            runtimePlan.BinaryDefaultProofs.Count, runtimePlan.IdentifierReferenceProofs);
 
         // WHY: Reduce owned setup transport without joining opaque provider setup, the guarded
         // body or independent cleanup. Fresh checks and exact script text remain operation-local.
@@ -933,12 +955,14 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
     /// <param name="hasRequiredColumnAdd">Whether the operation owns catalog-status and resume variables.</param>
     /// <param name="hasNativeSqlModeCleanup">Whether the scope has a certified native acquisition snapshot.</param>
     /// <param name="binaryDefaultProofCount">The number of operation-owned exact-default variables to clear.</param>
+    /// <param name="identifierReferenceProofs">The unique native syntax scopes to release independently.</param>
     private static IReadOnlyList<string> BuildCleanupCommands(
         BaselineBatch baseline,
         bool hasNullabilityProof,
         bool hasRequiredColumnAdd = false,
         bool hasNativeSqlModeCleanup = false,
-        int binaryDefaultProofCount = 0
+        int binaryDefaultProofCount = 0,
+        IReadOnlyList<MySqlSafeMigrationIdentifierReferenceProof>? identifierReferenceProofs = null
     )
     {
         var cleanupCommandCount = 0;
@@ -947,7 +971,8 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             cleanupCommandCount += command.CleanupCommands.Count;
         }
 
-        if (cleanupCommandCount == 0 && !hasRequiredColumnAdd && binaryDefaultProofCount == 0)
+        if (cleanupCommandCount == 0 && !hasRequiredColumnAdd && binaryDefaultProofCount == 0
+            && identifierReferenceProofs is not { Count: > 0 })
         {
             // WHY: These immutable SQL templates contain no operation or database state.
             // CreateScoped snapshots and reverses its own copy; it never mutates this input.
@@ -959,6 +984,14 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             BuildGuardCleanupSql(hasNullabilityProof, hasRequiredColumnAdd, hasNativeSqlModeCleanup)
                 + MySqlSafeMigrationBinaryDefaultProof.BuildResetSql(binaryDefaultProofCount, 0, clear: true),
         };
+
+        if (identifierReferenceProofs is not null)
+        {
+            foreach (var proof in identifierReferenceProofs)
+            {
+                commands.Add(MySqlSafeMigrationIdentifierReferenceProof.BuildCleanupSql(proof));
+            }
+        }
 
         // WHY: CreateScoped reverses cleanup input. Add provider cleanup in
         // reverse scope order and reverse execution order so failure in any
@@ -1049,8 +1082,35 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
 
         var standardOperation = SafeMigrationStandardOperationFactory.Create(
             operation.Intent,
-            _expressionRenderer.Render,
+            RenderStructuredExpression,
             static collation => collation.Schema is null ? collation.Name : null);
+
+        if (context.ServerVersion.IsMariaDb)
+        {
+            // WHY: Required generated values use a catalog-qualified semantic
+            // proof. MariaDB has not generated NOT NULL grammar, so the native
+            // physical declaration remains nullable without weakening the
+            // immutable expected contract or another engine's DDL.
+            switch (standardOperation)
+            {
+                case AddColumnOperation { ComputedColumnSql: not null } generated:
+                    generated.IsNullable = true;
+                    break;
+                case AlterColumnOperation { ComputedColumnSql: not null } generated:
+                    generated.IsNullable = true;
+                    break;
+                case CreateTableOperation table:
+                    foreach (var column in table.Columns)
+                    {
+                        if (column.ComputedColumnSql is not null)
+                        {
+                            column.IsNullable = true;
+                        }
+                    }
+
+                    break;
+            }
+        }
 
         if (standardOperation is AddColumnOperation addColumn
             && operation.Intent is EnsureColumnIntent ensureIntent
@@ -1097,7 +1157,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         // required before the complete target definition is applied.
         var repairOperation = SafeMigrationStandardOperationFactory.CreateFullDefinitionRepair(
             intent,
-            _expressionRenderer.Render,
+            RenderStructuredExpression,
             static collation => collation.Schema is null ? collation.Name : null,
             MySqlSafeMigrationColumnMetadata.CanSafelyConverge);
 

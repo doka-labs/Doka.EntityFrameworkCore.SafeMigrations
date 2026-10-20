@@ -2,6 +2,22 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 public sealed class MySqlExpressionCanonicalizerTests
 {
+    /// <summary>CASE conditions retain Boolean boundaries, including nested and quoted keyword tokens.</summary>
+    [Fact]
+    public void CatalogDisplayCandidatesDoNotRegroupBooleanConditionsInsideCase()
+    {
+        // Arrange
+        const string expression = "case when `CASE` = 1 and `value` = 'END or THEN' "
+            + "then case when `value` is null or `value` = '' then 0 else 1 end else 0 end";
+
+        // Act
+        var candidates = MySqlExpressionCanonicalizer.BuildCatalogDisplayCandidates(expression,
+            includeMySqlEncodedDisplay: false);
+
+        // Assert
+        Assert.Equal(new[] { expression, "(" + expression + ")" }, candidates);
+    }
+
     /// <summary>Each Boolean term remains exact when reused by multiple display candidates.</summary>
     [Theory]
     [InlineData(false)]

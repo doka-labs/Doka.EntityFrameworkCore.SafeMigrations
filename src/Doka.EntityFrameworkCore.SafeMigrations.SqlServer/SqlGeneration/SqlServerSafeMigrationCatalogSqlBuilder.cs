@@ -44,11 +44,19 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     /// <param name="operation">The immutable safe operation.</param>
     /// <param name="expectedTableConstraints">The ordered stream's allowed intermediate table constraints.</param>
     /// <param name="targetTableKnownAbsent">Whether an analysis-only occupancy probe proved target absence.</param>
+    /// <param name="projectedIndexDropCandidates">
+    /// Exact predecessor names excluded only by an analysis certificate.
+    /// </param>
+    /// <param name="projectedConstraintDropCandidates">
+    /// Exact typed predecessor removals excluded only by an analysis certificate.
+    /// </param>
     /// <returns>A plan retaining unsupported boundaries before SQL generation.</returns>
     public SqlServerSafeMigrationRuntimePlan Build(
         SafeMigrationOperation operation,
         SafeMigrationExpectedTableConstraints? expectedTableConstraints = null,
-        bool targetTableKnownAbsent = false
+        bool targetTableKnownAbsent = false,
+        IReadOnlyList<string>? projectedIndexDropCandidates = null,
+        IReadOnlyList<SafeMigrationOperation>? projectedConstraintDropCandidates = null
     )
     {
         ArgumentNullException.ThrowIfNull(operation);
@@ -67,7 +75,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             DropTableIntent value => BuildDropTable(value),
             RenameTableIntent value => BuildRenameTable(value),
             EnsureColumnIntent value => BuildEnsureColumn(value),
-            DropColumnIntent value => BuildDropColumn(value),
+            DropColumnIntent value => BuildDropColumn(value, projectedIndexDropCandidates,
+                projectedConstraintDropCandidates),
             RenameColumnIntent value => BuildRenameColumn(value),
             AlterColumnIntent value => BuildAlterColumn(value),
             EnsureIndexIntent value => BuildEnsureIndex(value),
@@ -158,7 +167,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         {
             EnsureTableIntent value => SchemaExists(EffectiveSchema(value.Definition.Schema)),
             RenameTableIntent value => SchemaExists(EffectiveSchema(value.NewSchema ?? value.Schema)),
-            EnsureColumnIntent value => $"{TableAndColumnsExist(value.Table, value.Schema, [])} "
+            EnsureColumnIntent value => $"{TableAndColumnsExist(value.Table, value.Schema,
+                ComputedPrerequisiteColumns(value.Definition))} "
                 + $"AND ({IdentitySlotIsAvailable(value)})",
             AlterColumnIntent value => TableAndColumnsExist(value.Table, value.Schema, [value.Definition.Name]),
             EnsureIndexIntent value => TableAndColumnsExist(
@@ -235,6 +245,24 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 }
             }
 
+            foreach (var column in table.Definition.Columns)
+            {
+                if (!SqlServerComputedColumnContract.IsComputed(column))
+                {
+                    continue;
+                }
+
+                foreach (var name in ComputedPrerequisiteColumns(column))
+                {
+                    var operand = table.Definition.Columns.FirstOrDefault(value => value.Name == name);
+                    if (operand is not null
+                        && (SqlServerComputedColumnContract.IsComputed(operand) || operand.IsRowVersion))
+                    {
+                        return "computed_column_operand_unproven";
+                    }
+                }
+            }
+
             if (table.Definition.Columns.Count(static column
                 => TryGetIdentity(column, out var identity, out _, out _) && identity) > 1)
             {
@@ -262,6 +290,11 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
             foreach (var check in table.Definition.CheckConstraints)
             {
+                if (GetUnsupportedCheckSourceFeature(check) is { } sourceFeature)
+                {
+                    return sourceFeature;
+                }
+
                 if (check.Expression is { } expression
                     && _expressionRenderer.GetUnsupportedFeature(expression) is not null)
                 {
@@ -313,6 +346,12 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                     return "index_filter_unproven";
                 }
             }
+        }
+
+        if (operation.Intent is EnsureCheckConstraintIntent checkSourceIntent
+            && GetUnsupportedCheckSourceFeature(checkSourceIntent.Definition) is { } checkSourceFeature)
+        {
+            return checkSourceFeature;
         }
 
         if (operation.Intent is EnsureCheckConstraintIntent checkIntent

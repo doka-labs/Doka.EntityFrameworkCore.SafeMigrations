@@ -7,6 +7,33 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         ExpectedTableDefinition definition
     )
     {
+        List<ExpectedColumnDefinition>? computed = null;
+        for (var ordinal = 0; ordinal < definition.Columns.Count; ordinal++)
+        {
+            var column = definition.Columns[ordinal];
+            if (SqlServerComputedColumnContract.IsComputed(column))
+            {
+                (computed ??= []).Add(column);
+            }
+        }
+
+        if (computed is not null)
+        {
+            // WHY: Ordinary columns retain the shared aggregate fast path; only
+            // computed members need native compiler-owned definition identities.
+            var ordinary = definition.Columns.Where(static column
+                => !SqlServerComputedColumnContract.IsComputed(column)).ToArray();
+
+            var predicates = computed.Select(column => ColumnMatches(definition.Table, definition.Schema, column));
+            if (ordinary.Length != 0)
+            {
+                predicates = predicates.Prepend(TableColumnsMatch(new ExpectedTableDefinition(
+                    definition.Table, ordinary, definition.Schema)));
+            }
+
+            return "(" + string.Join(") AND (", predicates) + ")";
+        }
+
         // WHY: Derived VALUES has no INSERT row-count limit. One catalog
         // join preserves the 1,024-column contract without compiling a
         // separate correlated column/default/identity probe for every row.

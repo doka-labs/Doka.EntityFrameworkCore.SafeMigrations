@@ -55,6 +55,7 @@ internal static class SafeMigrationSemanticDefinitionComparers
 
         AddIdentity(ref hash, definition.Table, definition.Schema);
         hash.Add(definition.Sql, StringComparer.Ordinal);
+        hash.Add(definition.CapturedSql, StringComparer.Ordinal);
         AddExpression(ref hash, definition.Expression);
 
         return hash.ToHashCode();
@@ -146,97 +147,99 @@ internal static class SafeMigrationSemanticDefinitionComparers
         SafeMigrationSqlExpression? expression
     )
     {
-        if (expression is null)
-        {
-            hash.Add(0);
-            return;
-        }
+        var traversal = new SafeMigrationSqlExpressionTraversal(expression);
 
-        switch (expression)
+        try
         {
-            case SafeMigrationSqlIdentifierExpression value:
-                hash.Add(1);
-                AddStrings(ref hash, value.Parts);
-                break;
-            case SafeMigrationSqlLiteralExpression value:
-                hash.Add(2);
-                hash.Add(value.StoreType, StringComparer.Ordinal);
-                AddLiteral(ref hash, value.Value);
-                break;
-            case SafeMigrationSqlUnaryExpression value:
-                hash.Add(3);
-                hash.Add((int)value.Operator);
-                AddExpression(ref hash, value.Operand);
-                break;
-            case SafeMigrationSqlBinaryExpression value:
-                hash.Add(4);
-                hash.Add((int)value.Operator);
-                AddExpression(ref hash, value.Left);
-                AddExpression(ref hash, value.Right);
-                break;
-            case SafeMigrationSqlNullTestExpression value:
-                hash.Add(5);
-                hash.Add(value.Negated);
-                AddExpression(ref hash, value.Operand);
-                break;
-            case SafeMigrationSqlBetweenExpression value:
-                hash.Add(6);
-                hash.Add(value.Negated);
-                AddExpression(ref hash, value.Operand);
-                AddExpression(ref hash, value.Lower);
-                AddExpression(ref hash, value.Upper);
-                break;
-            case SafeMigrationSqlInExpression value:
-                hash.Add(7);
-                hash.Add(value.Negated);
-                AddExpression(ref hash, value.Operand);
-                AddExpressions(ref hash, value.Values);
-                break;
-            case SafeMigrationSqlFunctionExpression value:
-                hash.Add(8);
-                hash.Add(value.Name, StringComparer.Ordinal);
-                AddExpressions(ref hash, value.Arguments);
-                break;
-            case SafeMigrationSqlCastExpression value:
-                hash.Add(9);
-                hash.Add(value.StoreType, StringComparer.Ordinal);
-                AddExpression(ref hash, value.Operand);
-                break;
-            case SafeMigrationSqlCollateExpression value:
-                hash.Add(10);
-                hash.Add(value.Name, StringComparer.Ordinal);
-                hash.Add(value.Schema, StringComparer.Ordinal);
-                AddExpression(ref hash, value.Operand);
-                break;
-            case SafeMigrationSqlCurrentValueExpression value:
-                hash.Add(11);
-                hash.Add((int)value.Value);
-                hash.Add(value.Precision);
-                break;
-            case SafeMigrationSqlProviderFragmentExpression value:
-                hash.Add(12);
-                hash.Add(value.ProviderId, StringComparer.Ordinal);
-                hash.Add(value.Sql, StringComparer.Ordinal);
-                break;
-            case SafeMigrationSqlOpaqueExpression value:
-                hash.Add(13);
-                hash.Add(value.FollowsIdentifierRename);
-                hash.Add(value.Sql, StringComparer.Ordinal);
-                break;
-            default:
-                throw new UnreachableException();
-        }
-    }
+            while (traversal.TryTake(out expression, out var collectionCount))
+            {
+                if (collectionCount >= 0)
+                {
+                    hash.Add(collectionCount);
+                    continue;
+                }
 
-    private static void AddExpressions(
-        ref HashCode hash,
-        IReadOnlyList<SafeMigrationSqlExpression> expressions
-    )
-    {
-        hash.Add(expressions.Count);
-        foreach (var expression in expressions)
+                if (expression is null)
+                {
+                    hash.Add(0);
+                    continue;
+                }
+
+                switch (expression)
+                {
+                    case SafeMigrationSqlIdentifierExpression value:
+                        hash.Add(1);
+                        AddStrings(ref hash, value.Parts);
+                        break;
+                    case SafeMigrationSqlLiteralExpression value:
+                        hash.Add(value.NumericSourceToken.IsEmpty ? 2 : 16);
+                        if (!value.NumericSourceToken.IsEmpty)
+                        {
+                            hash.Add(string.GetHashCode(value.NumericSourceToken.Span, StringComparison.Ordinal));
+                        }
+
+                        hash.Add(value.StoreType, StringComparer.Ordinal);
+                        AddLiteral(ref hash, value.Value);
+                        break;
+                    case SafeMigrationSqlUnaryExpression value:
+                        hash.Add(3);
+                        hash.Add((int)value.Operator);
+                        break;
+                    case SafeMigrationSqlBinaryExpression value:
+                        hash.Add(4);
+                        hash.Add((int)value.Operator);
+                        break;
+                    case SafeMigrationSqlNullTestExpression value:
+                        hash.Add(5);
+                        hash.Add(value.Negated);
+                        break;
+                    case SafeMigrationSqlBetweenExpression value:
+                        hash.Add(6);
+                        hash.Add(value.Negated);
+                        break;
+                    case SafeMigrationSqlInExpression value:
+                        hash.Add(7);
+                        hash.Add(value.Negated);
+                        break;
+                    case SafeMigrationSqlFunctionExpression value:
+                        hash.Add(8);
+                        hash.Add(value.Name, StringComparer.Ordinal);
+                        break;
+                    case SafeMigrationSqlCastExpression value:
+                        hash.Add(value.UsesSqlServerConvert ? 15 : 9);
+                        hash.Add(value.StoreType, StringComparer.Ordinal);
+                        break;
+                    case SafeMigrationSqlCollateExpression value:
+                        hash.Add(10);
+                        hash.Add(value.Name, StringComparer.Ordinal);
+                        hash.Add(value.Schema, StringComparer.Ordinal);
+                        break;
+                    case SafeMigrationSqlCurrentValueExpression value:
+                        hash.Add(11);
+                        hash.Add((int)value.Value);
+                        hash.Add(value.Precision);
+                        break;
+                    case SafeMigrationSqlProviderFragmentExpression value:
+                        hash.Add(12);
+                        hash.Add(value.ProviderId, StringComparer.Ordinal);
+                        hash.Add(value.Sql, StringComparer.Ordinal);
+                        break;
+                    case SafeMigrationSqlOpaqueExpression value:
+                        hash.Add(13);
+                        hash.Add(value.FollowsIdentifierRename);
+                        hash.Add(value.Sql, StringComparer.Ordinal);
+                        break;
+                    case SafeMigrationSqlCaseExpression:
+                        hash.Add(14);
+                        break;
+                    default:
+                        throw new UnreachableException();
+                }
+            }
+        }
+        finally
         {
-            AddExpression(ref hash, expression);
+            traversal.Dispose();
         }
     }
 
@@ -280,8 +283,8 @@ internal static class SafeMigrationSemanticDefinitionComparers
         /// <inheritdoc />
         public bool Equals(ExpectedIndexDefinition? left, ExpectedIndexDefinition? right) =>
             ReferenceEquals(left, right)
-            || left is not null && right is not null
-                && SafeMigrationDefinitionEquivalence.IndexSemantics(left, right, columns);
+            || (left is not null && right is not null
+                && SafeMigrationDefinitionEquivalence.IndexSemantics(left, right, columns));
 
         /// <inheritdoc />
         public int GetHashCode(ExpectedIndexDefinition value) => IndexHash(value, columns);
@@ -294,8 +297,8 @@ internal static class SafeMigrationSemanticDefinitionComparers
         /// <inheritdoc />
         public bool Equals(ExpectedUniqueConstraintDefinition? left, ExpectedUniqueConstraintDefinition? right) =>
             ReferenceEquals(left, right)
-            || left is not null && right is not null
-                && SafeMigrationDefinitionEquivalence.UniqueConstraintSemantics(left, right, columns);
+            || (left is not null && right is not null
+                && SafeMigrationDefinitionEquivalence.UniqueConstraintSemantics(left, right, columns));
 
         /// <inheritdoc />
         public int GetHashCode(ExpectedUniqueConstraintDefinition value) => UniqueConstraintHash(value, columns);

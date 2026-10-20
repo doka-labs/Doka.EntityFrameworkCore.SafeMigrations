@@ -47,9 +47,14 @@ elif name == "dotnet":
         directory /= args[args.index("--output-dir") + 1]
         directory.mkdir(parents=True, exist_ok=True)
         migration = directory / ("20990101000000_" + args[3] + ".cs")
+        generated_contracts = (
+            "scaffolding_generated_nodes", "HasDescendants", "CASE WHEN", "ck_scaffolding_generated_bounds",
+        )
+        missing_contract = os.environ.get("MOCK_MISSING_GENERATED_CONTRACT", "")
         migration.write_text(
             'migrationBuilder.EnsureModelManagedDataFromModel(\n'
-            'includedColumns: ["DisplayName"]\n' + (
+            'includedColumns: ["DisplayName"]\n'
+            + "\n".join(value for value in generated_contracts if value != missing_contract) + "\n" + (
                 'migrationBuilder.CreateTableIfNotExists(\n'
                 'migrationBuilder.DropTableIfExists(\n' if mode == "strict" else
                 'migrationBuilder.ConvergeTableFromModel(\n'
@@ -206,3 +211,19 @@ class VerifySqlServerToolingTests(unittest.TestCase):
         self.assertEqual(1, result.returncode)
         self.assertIn("supported x86-64 host", result.stderr)
         self.assertEqual(["uname"], [call["name"] for call in invocations])
+
+    def test_missing_generated_contract_is_rejected_before_database_update(self) -> None:
+        # Arrange
+        missing_contract = "ck_scaffolding_generated_bounds"
+
+        # Act
+        result, invocations, root = self.run_harness(MOCK_MISSING_GENERATED_CONTRACT=missing_contract)
+
+        # Assert
+        self.assertEqual(1, result.returncode, result.stderr)
+        self.assertIn("missing its generated expression contract: " + missing_contract, result.stderr)
+        self.assertFalse(any(
+            call["name"] == "dotnet" and call["args"][:3] == ["ef", "database", "update"]
+            for call in invocations))
+        self.assertEqual("rm", invocations[-1]["args"][0])
+        self.assertEqual([], list((root / "work").iterdir()))

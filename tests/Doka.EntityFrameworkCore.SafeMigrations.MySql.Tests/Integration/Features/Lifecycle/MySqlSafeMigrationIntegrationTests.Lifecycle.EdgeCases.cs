@@ -378,7 +378,9 @@ public sealed partial class MySqlLifecycleEdgeCasesIntegrationTests : MySqlSafeM
         await ExecuteSqlAsync(connectionString, "CREATE TABLE `opaque_expression` (`value` int NULL);");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.AddCheckConstraintIfNotExists("ck_opaque_expression", "opaque_expression", "value >= 0");
+        builder.EnsureCheckConstraint(ExpectedCheckConstraintDefinition.FromExpression(
+                "ck_opaque_expression", "opaque_expression", SafeMigrationSql.Opaque("value >= 0")),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         var report = await context
             .GetService<ISafeMigrationRunner>()

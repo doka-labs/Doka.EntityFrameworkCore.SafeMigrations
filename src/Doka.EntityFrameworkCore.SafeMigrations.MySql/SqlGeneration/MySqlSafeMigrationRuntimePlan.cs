@@ -27,6 +27,9 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     /// <summary>Gets exact native binary-default proofs owned only by this operation.</summary>
     public IReadOnlyList<MySqlSafeMigrationBinaryDefaultProof> BinaryDefaultProofs { get; init; } = [];
 
+    /// <summary>Gets native MariaDB parse-only certificates for captured unquoted identifier roots.</summary>
+    public IReadOnlyList<MySqlSafeMigrationIdentifierReferenceProof> IdentifierReferenceProofs { get; init; } = [];
+
     /// <summary>Gets the catalog relation binding, or null to read the live INFORMATION_SCHEMA.</summary>
     /// <remarks>
     /// WHY: Batched classification may read a snapshot of the scoped catalog rather than the live
@@ -81,14 +84,52 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     public bool MayRequireNullabilityDataProof { get; init; }
 
     /// <summary>Gets the conservative execution-impact classification for an accepted repair.</summary>
-    public SafeMigrationOperationalImpact RepairOperationalImpact { get; init; }
-        = SafeMigrationOperationalImpact.Unknown;
+    public SafeMigrationOperationalImpact RepairOperationalImpact { get; init; } =
+        SafeMigrationOperationalImpact.Unknown;
 
     /// <summary>Gets optional bounded catalog-only facet-difference evidence.</summary>
     public string? DiagnosticEvidenceExpression { get; init; }
 
     /// <summary>Gets the physical index environment captured for ordered projection.</summary>
     public SafeMigrationIndexPhysicalEnvironment? IndexPhysicalEnvironment { get; init; }
+
+    /// <summary>Gets the already-rendered exact native index-name predicate without evaluating row data.</summary>
+    public string? IndexNameExistsExpression { get; init; }
+
+    /// <summary>Gets whether a generated-key stream needs independent native index identity evidence.</summary>
+    public bool CaptureProjectedIndexIdentity { get; init; }
+
+    /// <summary>Gets the operation-local index identity captured before missing key members short-circuit.</summary>
+    public SafeMigrationObservedState? CapturedIndexIdentity { get; init; }
+
+    /// <summary>Gets the fresh catalog predicate for an empty surviving generated-member set after DROP.</summary>
+    public string? DropLeavesNoGeneratedColumnsExpression { get; init; }
+
+    /// <summary>Renders only surviving generated-member metadata, without reading application rows.</summary>
+    internal string RenderDropLeavesNoGeneratedColumnsExpression(
+        Func<MySqlCatalogParameterValue, string> renderValue
+    ) => DropLeavesNoGeneratedColumnsExpression is { } expression
+        ? RenderTemplate(expression, ParameterValues, renderValue)
+        : throw new InvalidOperationException("The DROP plan has no generated-member completeness predicate.");
+
+    /// <summary>Gets owner-independent native source grammar qualification before missing prerequisites.</summary>
+    public string? CapturedSourceSyntaxExpression { get; init; }
+
+    /// <summary>Renders native source grammar without substituting a missing application table for evidence.</summary>
+    internal string RenderCapturedSourceSyntaxExpression(
+        Func<MySqlCatalogParameterValue, string> renderValue
+    ) => CapturedSourceSyntaxExpression is { } syntax ? RenderTemplate(syntax, ParameterValues, renderValue) : "TRUE";
+
+    /// <summary>Renders only name/semantic index identity, never physical width or unique-row predicates.</summary>
+    internal string RenderProjectedIndexIdentityExpression(
+        Func<MySqlCatalogParameterValue, string> renderValue
+    ) => IndexNameExistsExpression is { } exists
+        ? "CASE WHEN ("
+        + RenderPostcondition(renderValue)
+        + ") THEN 'matching' WHEN ("
+        + RenderTemplate(exists, ParameterValues, renderValue)
+        + ") THEN 'different' ELSE 'missing' END"
+        : throw new InvalidOperationException("The generated-key identity capture requires an index-name predicate.");
 
     /// <summary>Gets optional constant evidence for a privacy-sensitive Different result.</summary>
     public SafeMigrationFacetDifference? DifferentDifference { get; init; }
@@ -131,7 +172,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         Func<MySqlCatalogParameterValue, string> renderValue
     ) => RenderTemplate(
         CurrentDatabaseQualificationExpression
-            ?? throw new InvalidOperationException("The runtime plan has no database qualification expression."),
+        ?? throw new InvalidOperationException("The runtime plan has no database qualification expression."),
         ParameterValues,
         renderValue);
 
@@ -167,7 +208,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         Func<MySqlCatalogParameterValue, string> renderValue
     ) => RenderTemplate(
         StateEvaluationGuardFailureExpression
-            ?? throw new InvalidOperationException("The state-evaluation guard has no failure expression."),
+        ?? throw new InvalidOperationException("The state-evaluation guard has no failure expression."),
         ParameterValues,
         renderValue);
 
@@ -178,7 +219,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         Func<MySqlCatalogParameterValue, string> renderValue
     ) => RenderWithDataProbe(
         ClassificationCodeExpression
-            ?? throw new InvalidOperationException("The runtime plan has no classification-code expression."),
+        ?? throw new InvalidOperationException("The runtime plan has no classification-code expression."),
         renderValue,
         dataBlocked: null);
 
@@ -191,7 +232,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         bool dataBlocked
     ) => RenderWithDataProbe(
         ClassificationCodeExpression
-            ?? throw new InvalidOperationException("The runtime plan has no classification-code expression."),
+        ?? throw new InvalidOperationException("The runtime plan has no classification-code expression."),
         renderValue,
         dataBlocked);
 
@@ -212,15 +253,20 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
             return "NULL";
         }
 
+        var classification = MySqlSafeMigrationIdentifierReferenceBinding.Bind(
+            ClassificationCodeExpression,
+            IdentifierReferenceProofs);
+
         var statusBinding = RequiredColumnAddPlan?.StatusBinding;
         var position = 0;
-        while (FindNextProofMarker(ClassificationCodeExpression.AsSpan(), position) is var marker && marker.Index >= 0)
+        while (FindNextProofMarker(classification.AsSpan(), position) is { Index: >= 0 } marker)
         {
             // WHY: A failed catalog guard can mean the row source is absent.
             // Diagnostic rendering must not inline its later row probe or
             // manufacture a Boolean result for an unavailable proof. Checking
             // first also avoids registering unconsumed payload parameters.
-            if (marker.Kind != 4 || statusBinding is null)
+            if (marker.Kind != 4
+                || statusBinding is null)
             {
                 return "NULL";
             }
@@ -228,11 +274,15 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
             position = marker.Index + marker.Length;
         }
 
-        var rendered = MySqlCatalogSqlTemplate.Render(ClassificationCodeExpression, ParameterValues,
-            renderValue, CatalogRelations);
+        var rendered = MySqlCatalogSqlTemplate.Render(classification, ParameterValues, renderValue, CatalogRelations);
 
-        return ReplaceTransitionPlaceholders(rendered, DataProbePlaceholder, TransitionInvariantPlaceholder,
-            NullabilityDataProbePlaceholder, ColumnRepairInvariantPlaceholder, statusBinding);
+        return ReplaceTransitionPlaceholders(
+            rendered,
+            DataProbePlaceholder,
+            TransitionInvariantPlaceholder,
+            NullabilityDataProbePlaceholder,
+            ColumnRepairInvariantPlaceholder,
+            statusBinding);
     }
 
     /// <summary>Renders bounded catalog-only facet-difference evidence.</summary>
@@ -242,7 +292,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         Func<MySqlCatalogParameterValue, string> renderValue
     ) => RenderTemplate(
         DiagnosticEvidenceExpression
-            ?? throw new InvalidOperationException("The runtime plan has no diagnostic evidence expression."),
+        ?? throw new InvalidOperationException("The runtime plan has no diagnostic evidence expression."),
         ParameterValues,
         renderValue);
 
@@ -253,7 +303,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         Func<MySqlCatalogParameterValue, string> renderValue
     ) => RenderTemplate(
         MatchedObjectNameExpression
-            ?? throw new InvalidOperationException("The runtime plan has no matched-object expression."),
+        ?? throw new InvalidOperationException("The runtime plan has no matched-object expression."),
         ParameterValues,
         renderValue);
 
@@ -264,7 +314,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         Func<MySqlCatalogParameterValue, string> renderValue
     ) => RenderTemplate(
         ModelManagedRowEvidenceExpression
-            ?? throw new InvalidOperationException("The runtime plan has no model-managed row evidence."),
+        ?? throw new InvalidOperationException("The runtime plan has no model-managed row evidence."),
         ParameterValues,
         renderValue);
 
@@ -275,7 +325,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         Func<MySqlCatalogParameterValue, string> renderValue
     ) => RenderTemplate(
         ModelManagedDependencyCountsExpression
-            ?? throw new InvalidOperationException("The runtime plan has no model-managed dependency evidence."),
+        ?? throw new InvalidOperationException("The runtime plan has no model-managed dependency evidence."),
         ParameterValues,
         renderValue);
 
@@ -336,7 +386,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         IReadOnlyList<string> renderedValues
     ) => RenderPreparedTemplate(
         CurrentDatabaseQualificationExpression
-            ?? throw new InvalidOperationException("The runtime plan has no database qualification expression."),
+        ?? throw new InvalidOperationException("The runtime plan has no database qualification expression."),
         renderedValues);
 
     /// <summary>Renders the state expression with prepared literal values.</summary>
@@ -375,7 +425,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         IReadOnlyList<string> renderedValues
     ) => RenderPreparedTemplate(
         StateEvaluationGuardFailureExpression
-            ?? throw new InvalidOperationException("The state-evaluation guard has no failure expression."),
+        ?? throw new InvalidOperationException("The state-evaluation guard has no failure expression."),
         renderedValues);
 
     /// <summary>Renders the postcondition with prepared literal values.</summary>
@@ -390,9 +440,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     /// <returns>The rendered expression.</returns>
     public string RenderPreparedExecutionPostcondition(
         IReadOnlyList<string> renderedValues
-    ) => RenderPreparedTemplate(
-        ExecutionPostcondition ?? Postcondition,
-        renderedValues);
+    ) => RenderPreparedTemplate(ExecutionPostcondition ?? Postcondition, renderedValues);
 
     /// <summary>Renders the exact catalog-only ownership proof for an interrupted required-column add.</summary>
     /// <param name="renderValue">The catalog value renderer.</param>
@@ -406,20 +454,25 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     /// <returns>The raw catalog-only classifier for one fresh materialization.</returns>
     public string RenderRequiredColumnAddStatusExpression(
         Func<MySqlCatalogParameterValue, string> renderValue
-    ) => ValidateRequiredColumnAddStatusExpression(MySqlCatalogSqlTemplate.Render(
-        RequiredColumnAddPlan?.StatusExpression
+    ) => ValidateRequiredColumnAddStatusExpression(
+        MySqlCatalogSqlTemplate.Render(
+            RequiredColumnAddPlan?.StatusExpression
             ?? throw new InvalidOperationException("The runtime plan has no required-column add protocol."),
-        ParameterValues, renderValue, CatalogRelations));
+            ParameterValues,
+            renderValue,
+            CatalogRelations));
 
     /// <summary>Renders the raw status classifier for prepared operation-local materialization.</summary>
     /// <param name="renderedValues">The rendered values in captured placeholder order.</param>
     /// <returns>The raw classifier, never a previously bound variable or literal.</returns>
     public string RenderPreparedRequiredColumnAddStatusExpression(
         IReadOnlyList<string> renderedValues
-    ) => ValidateRequiredColumnAddStatusExpression(MySqlCatalogSqlTemplate.RenderPrepared(
-        RequiredColumnAddPlan?.StatusExpression
+    ) => ValidateRequiredColumnAddStatusExpression(
+        MySqlCatalogSqlTemplate.RenderPrepared(
+            RequiredColumnAddPlan?.StatusExpression
             ?? throw new InvalidOperationException("The runtime plan has no required-column add protocol."),
-        renderedValues, CatalogRelations));
+            renderedValues,
+            CatalogRelations));
 
     /// <summary>Renders the bound recovery predicate for prepared runtime SQL.</summary>
     /// <param name="renderedValues">The rendered values in captured placeholder order.</param>
@@ -461,7 +514,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         IReadOnlyList<string> renderedValues
     ) => RenderPreparedTemplate(
         DataProbe?.TransitionInvariantExpression
-            ?? throw new InvalidOperationException("The runtime plan has no data probe."),
+        ?? throw new InvalidOperationException("The runtime plan has no data probe."),
         renderedValues);
 
     /// <summary>Renders the catalog-only predicate that determines whether a row probe is required.</summary>
@@ -470,8 +523,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     public string RenderPreparedDataProbeRequiredExpression(
         IReadOnlyList<string> renderedValues
     ) => RenderPreparedTemplate(
-        DataProbe?.NarrowingExpression
-            ?? throw new InvalidOperationException("The runtime plan has no data probe."),
+        DataProbe?.NarrowingExpression ?? throw new InvalidOperationException("The runtime plan has no data probe."),
         renderedValues);
 
     /// <summary>Renders the bounded row probe used only after catalog qualification.</summary>
@@ -481,7 +533,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         IReadOnlyList<string> renderedValues
     ) => RenderPreparedTemplate(
         DataProbe?.BuildBlockedExpression()
-            ?? throw new InvalidOperationException("The runtime plan has no data probe."),
+        ?? throw new InvalidOperationException("The runtime plan has no data probe."),
         renderedValues);
 
     /// <summary>Renders the model-managed data mutation with prepared literal values.</summary>
@@ -490,8 +542,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     public string RenderPreparedMutationSql(
         IReadOnlyList<string> renderedValues
     ) => RenderPreparedTemplate(
-        MutationSql
-            ?? throw new InvalidOperationException("The runtime plan has no model-managed data mutation."),
+        MutationSql ?? throw new InvalidOperationException("The runtime plan has no model-managed data mutation."),
         renderedValues);
 
     private string RenderWithDataProbe(
@@ -522,7 +573,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         IReadOnlyList<string> renderedValues
     ) => RenderPreparedTemplate(
         NullabilityDataProbe?.NullableColumnExpression
-            ?? throw new InvalidOperationException("The runtime plan has no nullability data probe."),
+        ?? throw new InvalidOperationException("The runtime plan has no nullability data probe."),
         renderedValues);
 
     /// <summary>Renders NULL-proof eligibility against the existing physical repair invariant.</summary>
@@ -532,7 +583,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         IReadOnlyList<string> renderedValues
     ) => RenderPreparedTransitionExpressions(
         NullabilityDataProbe?.RepairInvariantExpression
-            ?? throw new InvalidOperationException("The runtime plan has no nullability data probe."),
+        ?? throw new InvalidOperationException("The runtime plan has no nullability data probe."),
         renderedValues,
         "@doka_sm_data_blocked",
         "@doka_sm_transition_eligible");
@@ -544,7 +595,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         IReadOnlyList<string> renderedValues
     ) => RenderPreparedTemplate(
         NullabilityDataProbe?.BlockedExpression
-            ?? throw new InvalidOperationException("The runtime plan has no nullability data probe."),
+        ?? throw new InvalidOperationException("The runtime plan has no nullability data probe."),
         renderedValues);
 
     /// <summary>Expands analysis proofs inline without relying on runtime session variables.</summary>
@@ -556,33 +607,40 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     )
     {
         var rendered = RenderTemplate(expression, ParameterValues, renderValue);
-        if (DataProbe is null && NullabilityDataProbe is null)
+        if (DataProbe is null
+            && NullabilityDataProbe is null)
         {
             return rendered;
         }
 
-        var dataReplacement = DataProbe is null ? "FALSE" : dataBlocked is null
-            ? RenderTemplate(DataProbe.BuildBlockedExpression(), ParameterValues, renderValue)
-            : dataBlocked.Value
-                ? "TRUE"
-                : "FALSE";
+        var dataReplacement = DataProbe is null
+            ? "FALSE"
+            : dataBlocked is null
+                ? RenderTemplate(DataProbe.BuildBlockedExpression(), ParameterValues, renderValue)
+                : dataBlocked.Value
+                    ? "TRUE"
+                    : "FALSE";
 
-        var transitionReplacement = DataProbe is null ? "FALSE" : transitionEligible is null
-            ? RenderTemplate(
-                DataProbe.TransitionInvariantExpression
+        var transitionReplacement = DataProbe is null
+            ? "FALSE"
+            : transitionEligible is null
+                ? RenderTemplate(
+                    DataProbe.TransitionInvariantExpression
                     ?? throw new InvalidOperationException("The runtime plan has no transition evidence."),
-                ParameterValues,
-                renderValue)
-            : transitionEligible.Value
-                ? "TRUE"
-                : "FALSE";
+                    ParameterValues,
+                    renderValue)
+                : transitionEligible.Value
+                    ? "TRUE"
+                    : "FALSE";
 
         var repairInvariantReplacement = NullabilityDataProbe is null
             ? "FALSE"
             : ReplaceTransitionPlaceholders(
-                RenderTemplate(
-                    NullabilityDataProbe.RepairInvariantExpression, ParameterValues, renderValue),
-                dataReplacement, transitionReplacement, "FALSE", "FALSE");
+                RenderTemplate(NullabilityDataProbe.RepairInvariantExpression, ParameterValues, renderValue),
+                dataReplacement,
+                transitionReplacement,
+                "FALSE",
+                "FALSE");
 
         // WHY: A required target does not imply the live column is nullable.
         // Keep the row-reading branch behind the same physical catalog gate
@@ -590,15 +648,17 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         var nullabilityReplacement = NullabilityDataProbe is null
             ? "FALSE"
             : "CASE WHEN ("
-                + RenderTemplate(
-                    NullabilityDataProbe.NullableColumnExpression, ParameterValues, renderValue)
-                + $") AND ({repairInvariantReplacement}) THEN ("
-                + RenderTemplate(
-                    NullabilityDataProbe.BlockedExpression, ParameterValues, renderValue)
-                + ") ELSE FALSE END";
+            + RenderTemplate(NullabilityDataProbe.NullableColumnExpression, ParameterValues, renderValue)
+            + $") AND ({repairInvariantReplacement}) THEN ("
+            + RenderTemplate(NullabilityDataProbe.BlockedExpression, ParameterValues, renderValue)
+            + ") ELSE FALSE END";
 
         return ReplaceTransitionPlaceholders(
-            rendered, dataReplacement, transitionReplacement, nullabilityReplacement, repairInvariantReplacement);
+            rendered,
+            dataReplacement,
+            transitionReplacement,
+            nullabilityReplacement,
+            repairInvariantReplacement);
     }
 
     /// <summary>Expands runtime expressions against independently materialized operation-local proofs.</summary>
@@ -610,18 +670,22 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     )
     {
         var rendered = RenderPreparedTemplate(expression, renderedValues);
-        if (DataProbe is null && NullabilityDataProbe is null)
+        if (DataProbe is null
+            && NullabilityDataProbe is null)
         {
             return rendered;
         }
 
-        var dataReplacement = DataProbe is null ? "FALSE" : dataBlockedExpression
-            ?? RenderPreparedTemplate(DataProbe.BuildBlockedExpression(), renderedValues);
+        var dataReplacement = DataProbe is null
+            ? "FALSE"
+            : dataBlockedExpression ?? RenderPreparedTemplate(DataProbe.BuildBlockedExpression(), renderedValues);
 
-        var transitionReplacement = DataProbe is null ? "FALSE" : transitionEligibleExpression
+        var transitionReplacement = DataProbe is null
+            ? "FALSE"
+            : transitionEligibleExpression
             ?? RenderPreparedTemplate(
                 DataProbe.TransitionInvariantExpression
-                    ?? throw new InvalidOperationException("The runtime plan has no transition evidence."),
+                ?? throw new InvalidOperationException("The runtime plan has no transition evidence."),
                 renderedValues);
 
         return ReplaceTransitionPlaceholders(
@@ -650,7 +714,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         var resultLength = expression.Length;
         var position = 0;
         var hasMarkers = false;
-        while (FindNextProofMarker(expression.AsSpan(), position) is var marker && marker.Index >= 0)
+        while (FindNextProofMarker(expression.AsSpan(), position) is { Index: >= 0 } marker)
         {
             hasMarkers = true;
             var replacement = marker.Kind switch
@@ -660,7 +724,8 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
                 2 => nullabilityReplacement,
                 3 => repairInvariantReplacement,
                 4 => requiredAddStatusReplacement ?? RequiredColumnAddStatusPlaceholder,
-                _ => throw new InvalidOperationException("A binary-default proof must be bound before replacement."),
+                _ => throw new InvalidOperationException(
+                    "Binary-default and identifier-reference proofs must be bound before replacement."),
             };
 
             resultLength = checked(resultLength + replacement.Length - marker.Length);
@@ -680,7 +745,10 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
             (Expression: expression, Data: dataReplacement, Transition: transitionReplacement,
                 Nullability: nullabilityReplacement, RepairInvariant: repairInvariantReplacement,
                 RequiredAddStatus: requiredAddStatusReplacement ?? RequiredColumnAddStatusPlaceholder),
-            static (destination, state) =>
+            static (
+                destination,
+                state
+            ) =>
             {
                 var source = state.Expression.AsSpan();
                 var sourceOffset = 0;
@@ -690,7 +758,8 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
                     var marker = FindNextProofMarker(source, sourceOffset);
                     if (marker.Index < 0)
                     {
-                        source[sourceOffset..].CopyTo(destination[destinationOffset..]);
+                        source[sourceOffset..]
+                            .CopyTo(destination[destinationOffset..]);
 
                         break;
                     }
@@ -707,10 +776,12 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
                         3 => state.RepairInvariant,
                         4 => state.RequiredAddStatus,
                         _ => throw new InvalidOperationException(
-                            "A binary-default proof must be bound before replacement."),
+                            "Binary-default and identifier-reference proofs must be bound before replacement."),
                     };
 
-                    replacement.AsSpan().CopyTo(destination[destinationOffset..]);
+                    replacement
+                        .AsSpan()
+                        .CopyTo(destination[destinationOffset..]);
                     destinationOffset += replacement.Length;
                     sourceOffset = marker.Index + marker.Length;
                 }
@@ -728,7 +799,8 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     {
         for (var index = start; index < sql.Length; index++)
         {
-            var next = sql[index..].IndexOfAny(s_proofTokenStarts);
+            var next = sql[index..]
+                .IndexOfAny(s_proofTokenStarts);
             if (next < 0)
             {
                 break;
@@ -750,7 +822,8 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
                         continue;
                     }
 
-                    if (index + 1 < sql.Length && sql[index + 1] == quote)
+                    if (index + 1 < sql.Length
+                        && sql[index + 1] == quote)
                     {
                         index++;
 
@@ -806,12 +879,15 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
             {
                 var end = MySqlSafeMigrationBinaryDefaultProof.MarkerPrefix.Length;
                 var digits = end;
-                while (end < remaining.Length && char.IsAsciiDigit(remaining[end]))
+                while (end < remaining.Length
+                       && char.IsAsciiDigit(remaining[end]))
                 {
                     end++;
                 }
 
-                if (end == digits || !remaining[end..].StartsWith("__", StringComparison.Ordinal))
+                if (end == digits
+                    || !remaining[end..]
+                        .StartsWith("__", StringComparison.Ordinal))
                 {
                     throw new InvalidOperationException("The MySQL binary-default proof token is malformed.");
                 }
@@ -820,6 +896,26 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
                 // diagnostics must not render a later proof as catalog fact,
                 // and ordinary replacement must never alias it to add status.
                 return (index, 5, end + 2);
+            }
+
+            if (remaining.StartsWith(MySqlSafeMigrationIdentifierReferenceProof.MarkerPrefix, StringComparison.Ordinal))
+            {
+                var end = MySqlSafeMigrationIdentifierReferenceProof.MarkerPrefix.Length;
+                var digits = end;
+                while (end < remaining.Length
+                       && char.IsAsciiDigit(remaining[end]))
+                {
+                    end++;
+                }
+
+                if (end == digits
+                    || !remaining[end..]
+                        .StartsWith("__", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException("The MySQL identifier-reference proof token is malformed.");
+                }
+
+                return (index, 6, end + 2);
             }
         }
 
@@ -833,7 +929,9 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     )
     {
         var rendered = MySqlSafeMigrationBinaryDefaultProof.Bind(
-            MySqlCatalogSqlTemplate.Render(template, values, renderValue, CatalogRelations), BinaryDefaultProofs);
+            MySqlCatalogSqlTemplate.Render(template, values, renderValue, CatalogRelations),
+            BinaryDefaultProofs);
+        rendered = MySqlSafeMigrationIdentifierReferenceBinding.Bind(rendered, IdentifierReferenceProofs);
         if (!HasRequiredColumnAddStatusMarker(rendered))
         {
             return rendered;
@@ -843,8 +941,13 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
             ?? throw new InvalidOperationException("The status marker requires a required-column add protocol.");
         var status = protocol.StatusBinding ?? "(" + RenderRequiredColumnAddStatusExpression(renderValue) + ")";
 
-        return ReplaceTransitionPlaceholders(rendered, DataProbePlaceholder, TransitionInvariantPlaceholder,
-            NullabilityDataProbePlaceholder, ColumnRepairInvariantPlaceholder, status);
+        return ReplaceTransitionPlaceholders(
+            rendered,
+            DataProbePlaceholder,
+            TransitionInvariantPlaceholder,
+            NullabilityDataProbePlaceholder,
+            ColumnRepairInvariantPlaceholder,
+            status);
     }
 
     private string RenderPreparedTemplate(
@@ -853,7 +956,9 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     )
     {
         var rendered = MySqlSafeMigrationBinaryDefaultProof.Bind(
-            MySqlCatalogSqlTemplate.RenderPrepared(template, renderedValues, CatalogRelations), BinaryDefaultProofs);
+            MySqlCatalogSqlTemplate.RenderPrepared(template, renderedValues, CatalogRelations),
+            BinaryDefaultProofs);
+        rendered = MySqlSafeMigrationIdentifierReferenceBinding.Bind(rendered, IdentifierReferenceProofs);
         if (!HasRequiredColumnAddStatusMarker(rendered))
         {
             return rendered;
@@ -864,12 +969,19 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         var status = protocol.StatusBinding
             ?? "(" + RenderPreparedRequiredColumnAddStatusExpression(renderedValues) + ")";
 
-        return ReplaceTransitionPlaceholders(rendered, DataProbePlaceholder, TransitionInvariantPlaceholder,
-            NullabilityDataProbePlaceholder, ColumnRepairInvariantPlaceholder, status);
+        return ReplaceTransitionPlaceholders(
+            rendered,
+            DataProbePlaceholder,
+            TransitionInvariantPlaceholder,
+            NullabilityDataProbePlaceholder,
+            ColumnRepairInvariantPlaceholder,
+            status);
     }
 
     /// <summary>Uses the shared quote-aware scanner before expanding an operation-local catalog status.</summary>
-    private static bool HasRequiredColumnAddStatusMarker(string expression)
+    private static bool HasRequiredColumnAddStatusMarker(
+        string expression
+    )
     {
         if (!expression.Contains(RequiredColumnAddStatusPlaceholder, StringComparison.Ordinal))
         {
@@ -877,7 +989,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         }
 
         var position = 0;
-        while (FindNextProofMarker(expression.AsSpan(), position) is var marker && marker.Index >= 0)
+        while (FindNextProofMarker(expression.AsSpan(), position) is { Index: >= 0 } marker)
         {
             if (marker.Kind == 4)
             {
@@ -893,12 +1005,15 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     /// <summary>Rejects recursive status templates while preserving tokens inside authored SQL values.</summary>
     /// <param name="expression">The raw rendered catalog classifier.</param>
     /// <returns>The nonrecursive classifier.</returns>
-    private string ValidateRequiredColumnAddStatusExpression(string expression)
+    private string ValidateRequiredColumnAddStatusExpression(
+        string expression
+    )
     {
         // WHY: The raw status renderer intentionally bypasses bound status to
         // prevent recursion. Other proof domains still need their own binding
         // and ownership checks, including an absent binary result becoming FALSE.
         expression = MySqlSafeMigrationBinaryDefaultProof.Bind(expression, BinaryDefaultProofs);
+        expression = MySqlSafeMigrationIdentifierReferenceBinding.Bind(expression, IdentifierReferenceProofs);
         if (HasRequiredColumnAddStatusMarker(expression))
         {
             throw new InvalidOperationException("A required-column add status cannot depend on its own status marker.");

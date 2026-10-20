@@ -1,6 +1,6 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
-public sealed class SafeMigrationScaffoldingTests
+public sealed partial class SafeMigrationScaffoldingTests
 {
     /// <summary>Gets the ordinary EF operations delegated by disabled scaffolding.</summary>
     public static TheoryData<MigrationOperation> DisabledUnsupportedOperations => new()

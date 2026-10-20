@@ -242,6 +242,31 @@ internal sealed partial class SafeMigrationPreflightProjection
         }
     }
 
+    /// <summary>Removes only the precisely bound CHECK after ordinary EF DDL without erasing source columns.</summary>
+    private void ObserveProviderPostcondition(DropCheckConstraintOperation operation)
+    {
+        if (string.IsNullOrWhiteSpace(operation.Table) || string.IsNullOrWhiteSpace(operation.Name)
+            || operation.GetAnnotations().Any())
+        {
+            // WHY: Unknown owner identity or opaque provider annotations can
+            // broaden a typed operation's effects. Do not infer a local proof
+            // from its CLR type alone; the provider observer has already run.
+            SetOpaqueProviderPostcondition(mayMutateData: false);
+
+            return;
+        }
+
+        var prerequisites = GetOrCreateProviderPrerequisites(operation.Table, operation.Schema);
+        prerequisites.CheckConstraints.MarkPhysicalMissing(operation.Name, CurrentOperationOrdinal);
+        if (_tables.TryGetValue(new TableKey(operation.Table, operation.Schema), out var table))
+        {
+            // WHY: CHECK removal changes its inventory, not unrelated source
+            // metadata. Native DDL-trigger and dependency qualification still
+            // runs independently; this is not a table-preservation opt-in.
+            table.CheckConstraints.Remove(operation.Name);
+        }
+    }
+
     private void ObserveProviderPostcondition(
         DropTableOperation operation
     )
@@ -438,6 +463,14 @@ internal sealed partial class SafeMigrationPreflightProjection
         ColumnOperation operation
     )
     {
+        if (operation.GetAnnotations().Any()
+            && _prerequisites.TryGetValue(new TableKey(table, schema), out var prerequisites))
+        {
+            // WHY: Generic capture can retain typed columns, but cannot prove
+            // arbitrary provider annotations introduce no generated members.
+            prerequisites.GeneratedColumnsComplete = false;
+        }
+
         try
         {
             SetProjectedColumnDefinition(

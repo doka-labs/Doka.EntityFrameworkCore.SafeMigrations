@@ -75,9 +75,13 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
 
         // WHY: The null-schema runtime guard establishes dbo as the only
         // unqualified physical identity allowed for SafeMigrations commands.
+        // Native CHECK dependency guards, not CLR case folding, admit renames.
         var tableConstraints = SafeMigrationExpectedTableConstraints.FromOperations(
             operations,
-            static schema => schema ?? "dbo");
+            static schema => schema ?? "dbo",
+            StringComparer.Ordinal,
+            '[',
+            foldUnquotedCapturedSqlIdentifiers: false);
 
         var plans = new SqlServerSafeMigrationRuntimePlan?[operations.Count];
         var safeOperationCount = 0;
@@ -714,6 +718,7 @@ public sealed class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerato
                 "int",
                 "@doka_postcondition",
                 "    ",
+                plan.PostconditionPreambleSql,
                 coalesce: true);
 
             builder.Append("    IF @doka_postcondition <> 1\n");

@@ -4,7 +4,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// Identifies safe operations whose resource state is replaced by a later safe
 /// operation before postflight observes the final database catalog.
 /// </summary>
-internal sealed class SafeMigrationPostflightProjection
+internal sealed partial class SafeMigrationPostflightProjection
 {
     private readonly HashSet<int> _supersededOrdinals = [];
     private HashSet<int>? _identityUnprovenOrdinals;
@@ -16,11 +16,13 @@ internal sealed class SafeMigrationPostflightProjection
     /// </param>
     /// <param name="projectedKeyAnalyzer">The optional provider capability for name-independent PK identity.</param>
     /// <param name="liveAnalyses">Fresh final-catalog analyses aligned with the safe subset only.</param>
+    /// <param name="renamedManagedIntents">Verified renamed row metadata keyed by original stream position.</param>
     public SafeMigrationPostflightProjection(
         IReadOnlyList<MigrationOperation> operations,
         ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer = null,
         ISafeMigrationProjectedKeyAnalyzer? projectedKeyAnalyzer = null,
-        IReadOnlyList<SafeMigrationProviderAnalysis>? liveAnalyses = null
+        IReadOnlyList<SafeMigrationProviderAnalysis>? liveAnalyses = null,
+        IReadOnlyDictionary<int, ModelManagedDataIntent>? renamedManagedIntents = null
     )
     {
         var postflightNormalizer = objectIdentityNormalizer?.GetPostflightIdentityNormalizer(operations);
@@ -65,8 +67,12 @@ internal sealed class SafeMigrationPostflightProjection
                 continue;
             }
 
+            // WHY: Resource reduction must use the same certified renamed key
+            // metadata as its fresh row probe. Reports and historical identity
+            // qualification still refer to the untouched authored operation.
+            var resourceIntent = renamedManagedIntents?.GetValueOrDefault(ordinal) ?? safeOperation.Intent;
             if (!TryCreateResources(
-                    safeOperation.Intent,
+                    resourceIntent,
                     postflightNormalizer,
                     primaryKeyNameIndependent,
                     sharedUniqueIndexIdentity,

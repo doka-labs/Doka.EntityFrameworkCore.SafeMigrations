@@ -71,6 +71,94 @@ This includes uncertified variadic binding/postcondition forms and ordinary
 calls beyond the native reported argument limit; it does not label them as
 violating application rows.
 
+Generated-column capability refusals are not data-violation reports:
+
+- `generated_column_dependency_missing` and
+  `generated_column_dependency_qualification` mean that a generated expression's
+  source column is absent or cannot be bound to its supported owner. Inspect the
+  ordered source metadata; parsing an identifier does not establish its lifetime.
+- `structured_convert_dialect` rejects a parsed CONVERT form belonging to another
+  SQL dialect. Argument order and native type interpretation are not interchangeable.
+- `captured_expression_dialect_unverified` rejects authored identifier quoting
+  whose native interpretation has not been certified. Use native quoting or the
+  structured API; apparent identifier delimiters inside strings are not identifiers.
+- `computed_column_operand_identity_unproven` rejects distinct SQL Server input
+  identities that the private tempdb compiler scope cannot distinguish. Compatible
+  alias spellings remain supported; conflicting identifier collations are not
+  permission to merge genuinely different columns.
+- `generated_column_nullability` means a required MariaDB generated result lacks
+  the bounded semantic non-null proof. Inspect every result branch and the
+  actual ordinary operand types/nullability; nullable catalog metadata is not a
+  reason to disable comparison.
+- `generated_column_identity_dependency` rejects a MySQL generated reference
+  to an `AUTO_INCREMENT` source. It is not a NULL-data report.
+- `generated_column_rename_dependency` rejects a MySQL source rename whose
+  generated dependents need a different explicit DDL transition.
+  `generated_column_rename_unproven` means the complete current dependency set
+  is unproved, not that a particular offending dependent has been found.
+- `generated_column_drop_dependency` identifies a surviving generated reference
+  to a column requested for removal. Explicitly remove or replace the dependent
+  definition first; SafeMigrations does not cascade it away.
+  `generated_column_drop_unproven` means that the surviving generated set cannot
+  be certified. Inspect current native definitions and ordered lifetimes; do
+  not infer a particular dependency or offending application row from this code.
+  PostgreSQL also uses it when required dependency visibility, explicit table
+  locking, a fresh runtime snapshot or a supported non-hierarchical owner cannot
+  be established. See the [PostgreSQL DROP contract](../postgresql-behavior.md#generated-columns);
+  SafeMigrations never grants rights or changes isolation to make the guard pass.
+- `projected_check_source_dependency` and its `_unproven` variant retain SQL
+  Server's native source-rename/removal boundary for accepted CHECK dependencies.
+  Inspect the constraint lifetime, not application rows.
+- `column_drop_dependency` and `generated_column_drop_other_dependency` retain
+  an independent SQL Server dependency or protected table restriction. They do
+  not identify a particular index, constraint or application row. Source
+  presence is not dependency absence; only exact accepted native-qualified
+  removals can discharge their own blockers.
+  `projected_generated_column_drop_dependency` identifies a still-accepted
+  generated source dependency. `projected_column_drop_safe` records the
+  separate positive proof after exact prerequisite removal, not a guard bypass.
+- `table_rebuild_foreign_key_violation` identifies a native SQLite integrity
+  failure in retained rebuild relationships. An unchanged source confirmation
+  does not repair it. Earlier row effects instead require fresh ordered runtime
+  validation under `projected_data_state_unknown`; unknown current rows must
+  not be diagnosed as a proven retained violation.
+- `captured_expression_literal_catalog_unverifiable` rejects a captured
+  literal whose native catalog identity cannot be retained exactly. A lossy
+  display is not proof that two expressions are equal.
+- `generated_expression_assignment` rejects an unsupported generated-result
+  literal assignment. Use a supported target and literal form rather than
+  bypassing the native binding check.
+- `generated_case_operand_type` means a PostgreSQL generated CASE has a known
+  incompatible or unsupported operand/result binding.
+  `projected_generated_case_binding_unproven` retains an unresolved ordered
+  binding instead of borrowing a proposed target-model type.
+- `projected_generated_case_target_occupied` means an accepted earlier operation
+  already occupies the requested PostgreSQL CHECK target name when ordered
+  CASE binding is requalified. This is `Different` without a repair certificate,
+  not an operand-type or row-data violation. Inspect the accepted constraint
+  lifetime and author an explicit reviewed transition; SafeMigrations does not
+  overwrite the occupying constraint. `ThrowIfDifferent` and `RepairIfSafe`
+  reject this state; `ExistenceOnly` retains its deliberately weaker no-op policy.
+- `generated_column_nondeterministic_expression` means that the generated
+  expression lacks the supported deterministic contract on MySQL/MariaDB.
+  Native acceptance of some MariaDB virtual expressions does not certify their
+  persisted or indexed forms. Use a supported deterministic expression rather
+  than substituting a clock value or bypassing the capability check.
+- `computed_expression_unproven` and
+  `computed_column_nullability_unproven` reject unsupported SQL Server computed
+  semantics or an unproved required result.
+  `computed_column_native_type_unproven` means native compilation did not prove
+  the requested result metadata. Inspect the expression, supported physical
+  operand metadata and temporary-object permissions rather than increasing the
+  command timeout or forcing persistence.
+- `virtual_generated_column` on PostgreSQL and `stored_generated_column_add`
+  on SQLite identify explicit provider storage-form boundaries; they do not
+  invite a silent change of storage mode.
+
+See the provider-specific
+[generated-column contracts](../migration-authoring.md#generated-columns).
+Successful parsing alone does not waive any of these gates.
+
 `index_input_operator_class` rejects a PostgreSQL physical index-key input
 whose native type/operator-class or requested access-method flags are
 incompatible. For example, an ordinary default Btree key on `json` is not

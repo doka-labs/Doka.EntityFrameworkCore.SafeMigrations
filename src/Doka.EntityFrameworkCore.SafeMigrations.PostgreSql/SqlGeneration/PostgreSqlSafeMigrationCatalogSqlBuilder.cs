@@ -46,19 +46,20 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     {
         ArgumentNullException.ThrowIfNull(operation);
 
+        var intent = SafeMigrationCapturedExpressionNormalization.NormalizeIntent(operation.Intent, true);
         var unsupported = operation.GetAnnotations().Any()
             ? "operation_annotation"
-            : GetUnsupportedFeature(operation.Intent);
+            : GetUnsupportedNativeFeature(intent);
 
         if (unsupported is not null)
         {
             return Unsupported(unsupported) with
             {
-                ObjectIdentityGuardExpression = BuildObjectIdentityGuard(operation.Intent),
+                ObjectIdentityGuardExpression = BuildObjectIdentityGuard(intent),
             };
         }
 
-        var plan = operation.Intent switch
+        var plan = intent switch
         {
             EnsureSchemaIntent value => BuildEnsureSchema(value),
             DropSchemaIntent value => BuildDropSchema(value),
@@ -98,14 +99,16 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 "Unknown SafeMigrations intent type."),
         };
 
-        var identityGuard = BuildObjectIdentityGuard(operation.Intent);
+        var identityGuard = BuildObjectIdentityGuard(intent);
+        plan = QualifyGeneratedCaseBinding(plan, intent);
+        plan = QualifyCapturedSourceBindings(plan, intent);
 
         return plan with
         {
-            PrerequisiteExpression = BuildPrerequisiteExpression(operation),
+            PrerequisiteExpression = BuildNativePrerequisiteExpression(intent),
             ObjectIdentityGuardExpression = identityGuard,
             PostExecutionObjectIdentityGuardExpression = BuildPostExecutionObjectIdentityGuard(
-                operation.Intent, identityGuard),
+                intent, identityGuard),
         };
     }
 
@@ -131,13 +134,25 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     {
         ArgumentNullException.ThrowIfNull(intent);
 
-        if (GetUnsupportedFeature(intent) is not null)
+        return BuildNativePrerequisiteExpression(
+            SafeMigrationCapturedExpressionNormalization.NormalizeIntent(intent, true));
+    }
+
+    /// <summary>Uses native captured prerequisites without changing immutable capture-key references.</summary>
+    private string BuildNativePrerequisiteExpression(SafeMigrationIntent intent)
+    {
+        if (GetUnsupportedNativeFeature(intent) is not null)
         {
             return "TRUE";
         }
 
         return intent switch
         {
+            // WHY: The finite state classifier proves each builtin operand
+            // independently. Initial source absence must remain a requalifiable
+            // type refusal, not erase accepted sparse ADD evidence before it.
+            EnsureColumnIntent value when RequiresCapturedOperandBinding(value.Definition)
+                => TableExists(value.Table, value.Schema),
             EnsureColumnIntent value => TableAndColumnsExist(
                 value.Table,
                 value.Schema,
@@ -200,8 +215,13 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     /// <returns>The existing stable unsupported code, or null for a provider-supported definition.</returns>
     internal string? GetUnsupportedFeature(
         SafeMigrationIntent intent
-    ) => GetUnsupportedSqlExpressionFeature(intent)
-        ?? GetUnsupportedColumnFeature(intent) ?? GetUnsupportedIndexFeature(intent);
+    ) => GetUnsupportedNativeFeature(SafeMigrationCapturedExpressionNormalization.NormalizeIntent(intent, true));
+
+    /// <summary>Checks only the local native view, preserving caller-owned definitions as evidence keys.</summary>
+    private string? GetUnsupportedNativeFeature(SafeMigrationIntent intent)
+        => GetUnsupportedSqlExpressionFeature(intent)
+        ?? GetUnsupportedColumnFeature(intent) ?? GetUnsupportedIndexFeature(intent)
+        ?? GetUnsupportedGeneratedCaseCheckFeature(intent);
 
     public string RenderExpression(
         SafeMigrationSqlExpression expression

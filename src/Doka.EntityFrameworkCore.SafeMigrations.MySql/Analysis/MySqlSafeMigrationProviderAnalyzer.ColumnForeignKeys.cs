@@ -62,6 +62,11 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         ISafeMigrationProjectedColumnSource columns
     )
     {
+        if (ValidateCapturedGeneratedColumn(operation, liveAnalysis, columns) is { } generated)
+        {
+            return generated;
+        }
+
         if (!TryGetColumnDependencyTarget(operation.Intent, out var table, out var schema, out var column)
             || liveAnalysis.ObservedState == SafeMigrationObservedState.Unsupported)
         {

@@ -266,7 +266,8 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         // immutable SQL text. Build it once without reusing observed evidence.
         var blockedExpression = runtimePlan.DataProbe?.BuildBlockedExpression() ?? string.Empty;
         var proofTable = runtimePlan.DataProbe?.QualifiedTable ?? runtimePlan.NullabilityDataProbe?.QualifiedTable;
-        var requiresLockedRecheck = proofTable is not null || runtimePlan.ModelManagedDeleteLockTable is not null;
+        var requiresLockedRecheck = proofTable is not null || runtimePlan.ModelManagedDeleteLockTable is not null
+            || runtimePlan.GeneratedDropLockSqlExpression is not null;
         var hasObjectIdentityGuard = !StringComparer.Ordinal.Equals(runtimePlan.ObjectIdentityGuardExpression, "TRUE");
         var evaluationIndentation = requiresLockedRecheck ? "        " : "    ";
         var evaluationBodyIndentation = evaluationIndentation + "    ";
@@ -283,6 +284,8 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             runtimePlan.PostExecutionObjectIdentityGuardExpression,
             runtimePlan.ObjectIdentityGuardFailureCodeExpression,
             runtimePlan.ModelManagedDeleteLockTable ?? string.Empty,
+            runtimePlan.GeneratedDropLockSqlExpression ?? string.Empty,
+            runtimePlan.GeneratedDropRuntimeGuardExpression ?? string.Empty,
             runtimePlan.PrerequisiteExpression,
             runtimePlan.StateEvaluationGuardExpression,
             runtimePlan.StateEvaluationGuardFailureExpression ?? string.Empty,
@@ -329,7 +332,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
 
         if (requiresLockedRecheck)
         {
-            // WHY: Only a planned repair or source-frozen delete acquires its
+            // WHY: Only an applicable repair, source-frozen delete, or DROP acquires its
             // operation-owned fence. The second pass reruns every prerequisite,
             // identity, source, and dependency predicate; no live verdict from
             // before the acquisition can authorize a mutation afterwards.
@@ -359,7 +362,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             builder
                 .Append(evaluationIndentation)
                 .Append("ELSIF NOT COALESCE((")
-                .Append(runtimePlan.StateEvaluationGuardExpression)
+                .Append(runtimePlan.GeneratedDropRuntimeGuardExpression ?? runtimePlan.StateEvaluationGuardExpression)
                 .Append("), FALSE) THEN\n")
                 .Append(evaluationBodyIndentation)
                 .Append("doka_state := (")
@@ -461,7 +464,8 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         {
             builder
                 .Append(evaluationIndentation)
-                .Append("EXIT WHEN doka_action <> 'repair' OR doka_evaluation_pass = 2;\n");
+                .Append("EXIT WHEN doka_action OPERATOR(pg_catalog.<>) 'repair' ")
+                .Append("OR doka_evaluation_pass OPERATOR(pg_catalog.=) 2;\n");
 
             if (hasObjectIdentityGuard)
             {
@@ -485,7 +489,8 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             // on newly committed children; we never change the caller's level.
             builder
                 .Append(evaluationIndentation)
-                .Append("EXIT WHEN doka_action <> 'apply' OR doka_evaluation_pass = 2;\n");
+                .Append("EXIT WHEN doka_action OPERATOR(pg_catalog.<>) 'apply' ")
+                .Append("OR doka_evaluation_pass OPERATOR(pg_catalog.=) 2;\n");
 
             if (hasObjectIdentityGuard)
             {
@@ -499,23 +504,46 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
                 .Append(" IN EXCLUSIVE MODE;\n")
                 .Append("    END LOOP;\n");
         }
+        else if (runtimePlan.GeneratedDropLockSqlExpression is not null)
+        {
+            // WHY: PostgreSQL14 can silently remove a concurrently added
+            // generated dependent. Reclassify under the same exclusive owner
+            // lock required by DROP, using READ COMMITTED's fresh catalog view.
+            // Missing/no-op or rejected operations never acquire this lock.
+            builder
+                .Append(evaluationIndentation)
+                .Append("EXIT WHEN doka_action OPERATOR(pg_catalog.<>) 'apply' ")
+                .Append("OR doka_evaluation_pass OPERATOR(pg_catalog.=) 2;\n");
+
+            if (hasObjectIdentityGuard)
+            {
+                AppendObjectIdentityGuardSql(builder, runtimePlan, diagnostic, evaluationIndentation);
+            }
+
+            builder
+                .Append(evaluationIndentation)
+                .Append("EXECUTE ")
+                .Append(runtimePlan.GeneratedDropLockSqlExpression)
+                .Append(";\n    END LOOP;\n");
+        }
 
         builder
-            .Append("    IF doka_action = 'reject_different' THEN\n")
+            .Append("    IF doka_action OPERATOR(pg_catalog.=) 'reject_different' THEN\n")
             .Append("        RAISE EXCEPTION USING ERRCODE = 'P1001', MESSAGE = ");
 
         diagnostic.AppendMessage(builder, "doka_sm_different");
-        builder.Append(";\n    ELSIF doka_action = 'reject_unsupported' THEN\n")
+        builder.Append(";\n    ELSIF doka_action OPERATOR(pg_catalog.=) 'reject_unsupported' THEN\n")
             .Append("        RAISE EXCEPTION USING ERRCODE = 'P1002', MESSAGE = ");
         diagnostic.AppendMessage(builder, "doka_sm_unsupported", runtimePlan.UnsupportedCode);
-        builder.Append(";\n    ELSIF doka_action = 'reject_data_blocked' THEN\n")
+        builder.Append(";\n    ELSIF doka_action OPERATOR(pg_catalog.=) 'reject_data_blocked' THEN\n")
             .Append("        RAISE EXCEPTION USING ERRCODE = 'P1003', MESSAGE = ");
         diagnostic.AppendMessage(builder, "doka_sm_data_blocked");
-        builder.Append(";\n    ELSIF doka_action = 'reject_prerequisite_missing' THEN\n")
+        builder.Append(";\n    ELSIF doka_action OPERATOR(pg_catalog.=) 'reject_prerequisite_missing' THEN\n")
             .Append("        RAISE EXCEPTION USING ERRCODE = 'P1004', MESSAGE = ");
         diagnostic.AppendMessage(builder, "doka_sm_prerequisite_missing");
-        builder.Append(";\n    ELSIF doka_action IN ('apply', 'repair') THEN\n")
-            .Append("        IF doka_action = 'apply' THEN\n");
+        builder.Append(";\n    ELSIF doka_action OPERATOR(pg_catalog.=) 'apply' ")
+            .Append("OR doka_action OPERATOR(pg_catalog.=) 'repair' THEN\n")
+            .Append("        IF doka_action OPERATOR(pg_catalog.=) 'apply' THEN\n");
 
         AppendActionSql(builder, baseline, indentation: "            ");
 
@@ -709,7 +737,10 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         SafeMigrationRepairCapability repairCapability
     )
     {
-        builder.Append("CASE doka_state ");
+        // WHY: Policy dispatch must not invoke an application TEXT equality
+        // overload while rejecting that same unsupported source binding.
+        // Searched CASE permits explicit native operators; simple CASE does not.
+        builder.Append("CASE ");
         foreach (var state in Enum.GetValues<SafeMigrationObservedState>())
         {
             var action = SafeMigrationDecisionPlanner.PlanAction(
@@ -719,7 +750,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
                 repairCapability);
 
             builder
-                .Append("WHEN '")
+                .Append("WHEN doka_state OPERATOR(pg_catalog.=) '")
                 .Append(StateCode(state))
                 .Append("' THEN ");
 

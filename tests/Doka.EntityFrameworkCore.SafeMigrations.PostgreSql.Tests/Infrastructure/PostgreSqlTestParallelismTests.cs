@@ -82,8 +82,8 @@ public sealed class PostgreSqlTestParallelismTests
         Assert.True(originalOwner.IsAbstract);
         Assert.Empty(inheritedCases);
         Assert.Equal(53, featureClasses.Length);
-        Assert.Equal(324, declaredCases.Length);
-        Assert.Equal(324, declaredCases.Select(static method => method.Name).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(325, declaredCases.Length);
+        Assert.Equal(325, declaredCases.Select(static method => method.Name).Distinct(StringComparer.Ordinal).Count());
         Assert.All(featureClasses, static type =>
             Assert.True(typeof(IClassFixture<PostgreSqlContainerFixture>).IsAssignableFrom(type)));
         Assert.Equal(

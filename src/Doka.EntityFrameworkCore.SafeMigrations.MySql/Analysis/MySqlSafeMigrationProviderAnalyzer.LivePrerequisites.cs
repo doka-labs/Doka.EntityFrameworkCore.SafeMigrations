@@ -8,8 +8,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
     private Dictionary<ExpectedForeignKeyDefinition, SafeMigrationProviderAnalysis>? _liveNamespaceMissingAnalyses;
     private MySqlSafeMigrationCatalogSqlBuilder? _livePrerequisiteBuilder;
     private MySqlProjectedForeignKeySupportingIndexes? _livePrerequisiteSupportingIndexes;
+
     private Dictionary<(string? Schema, string Table), LivePrerequisiteCreation>?
         _acceptedLivePrerequisiteTableCreations;
+
     private bool _livePrerequisiteCreationDefaultsCurrent;
 
     /// <summary>Discards previous or partially failed snapshots before another invocation can expose them.</summary>
@@ -25,16 +27,25 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         _livePrerequisiteCreationDefaultsCurrent = false;
         _multiValuedIndexDropProofs = null;
         _multiValuedIndexDropBoundaryUnknown = false;
+        _generatedColumnSourceProofs = null;
+        _changedGeneratedColumnSources = null;
+        _changedGeneratedColumnOwners = null;
+        _generatedColumnSourcesUnknown = false;
+        ClearGeneratedIndexIdentityFacts();
     }
 
     /// <inheritdoc />
-    bool ISafeMigrationLivePrerequisiteSource.HasLiveColumn(string table, string? schema, string column)
-        => _livePrerequisiteColumns?.TryGetValue(
-                (NormalizeProofSchema(schema), table, column), out var captured) == true
-            && captured.OwnerEligible && captured.StoreType is not null;
+    bool ISafeMigrationLivePrerequisiteSource.HasLiveColumn(
+        string table,
+        string? schema,
+        string column
+    ) => _livePrerequisiteColumns?.TryGetValue((NormalizeProofSchema(schema), table, column), out var captured) == true
+        && captured is { OwnerEligible: true, StoreType: not null };
 
     /// <inheritdoc />
-    bool ISafeMigrationLivePrerequisiteSource.RequiresLiveForeignKeyQualification(EnsureForeignKeyIntent intent)
+    bool ISafeMigrationLivePrerequisiteSource.RequiresLiveForeignKeyQualification(
+        EnsureForeignKeyIntent intent
+    )
     {
         var definition = intent.Definition;
 
@@ -43,19 +54,24 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         // Actually accepted plain creations are likewise tied to captured
         // native defaults. Authored future/rejected owners cannot borrow them.
         return _livePrerequisiteFullQualificationTargets?.Contains(definition) == true
-            && _livePrerequisiteColumns?.TryGetValue((NormalizeProofSchema(definition.Schema),
-                definition.Table, definition.Columns[0]), out var dependent) == true
+            && _livePrerequisiteColumns?.TryGetValue(
+                (NormalizeProofSchema(definition.Schema), definition.Table, definition.Columns[0]),
+                out var dependent) == true
             && (dependent.OwnerPresent || HasAcceptedLivePrerequisiteOwner(definition.Table, definition.Schema))
-            && _livePrerequisiteColumns.TryGetValue((NormalizeProofSchema(definition.PrincipalSchema),
-                definition.PrincipalTable, definition.PrincipalColumns[0]), out var principal)
+            && _livePrerequisiteColumns.TryGetValue(
+                (NormalizeProofSchema(definition.PrincipalSchema), definition.PrincipalTable,
+                    definition.PrincipalColumns[0]),
+                out var principal)
             && (principal.OwnerPresent
                 || HasAcceptedLivePrerequisiteOwner(definition.PrincipalTable, definition.PrincipalSchema));
     }
 
     /// <summary>Recognizes only an actually accepted native-default-qualified current owner creation.</summary>
-    private bool HasAcceptedLivePrerequisiteOwner(string table, string? schema)
-        => _acceptedLivePrerequisiteTableCreations?.TryGetValue((NormalizeProofSchema(schema), table),
-            out var creation) == true && creation.Eligible;
+    private bool HasAcceptedLivePrerequisiteOwner(
+        string table,
+        string? schema
+    ) => _acceptedLivePrerequisiteTableCreations?.TryGetValue((NormalizeProofSchema(schema), table), out var creation) == true
+        && creation.Eligible;
 
     /// <inheritdoc />
     bool ISafeMigrationLivePrerequisiteSource.CanRequalifyLiveForeignKeyPrerequisites(
@@ -110,14 +126,23 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
 
         for (var index = 0; index < definition.Columns.Count; index++)
         {
-            if (!TryGetLiveForeignKeyEndpoint(definition.Table, definition.Schema, definition.Columns[index],
-                    columns, out var dependent)
-                || !TryGetLiveForeignKeyEndpoint(definition.PrincipalTable, definition.PrincipalSchema,
-                    definition.PrincipalColumns[index], columns, out var principal)
+            if (!TryGetLiveForeignKeyEndpoint(
+                    definition.Table,
+                    definition.Schema,
+                    definition.Columns[index],
+                    columns,
+                    out var dependent)
+                || !TryGetLiveForeignKeyEndpoint(
+                    definition.PrincipalTable,
+                    definition.PrincipalSchema,
+                    definition.PrincipalColumns[index],
+                    columns,
+                    out var principal)
                 || !ForeignKeyStoreTypesMatch(dependent.StoreType, principal.StoreType)
                 || !StringComparer.OrdinalIgnoreCase.Equals(dependent.Collation, principal.Collation)
                 || ((definition.OnDelete == ReferentialAction.SetNull
-                        || definition.OnUpdate == ReferentialAction.SetNull) && !dependent.IsNullable))
+                        || definition.OnUpdate == ReferentialAction.SetNull)
+                    && !dependent.IsNullable))
             {
                 return null;
             }
@@ -127,12 +152,14 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
     }
 
     /// <summary>Allows only a physically accepted same-owner FK removal to release its captured symbol.</summary>
-    private bool HasReleasedLiveForeignKeyName(ExpectedForeignKeyDefinition definition, LivePrerequisiteKeyProof keys)
-        => keys.OwnedCollision
-            && (_acceptedLivePrerequisiteTableCreations?.ContainsKey(
-                    (NormalizeProofSchema(definition.Schema), definition.Table)) == true
-                || _acceptedForeignKeyRemovals?.Contains((NormalizeProofSchema(definition.Schema),
-                    definition.Table, definition.Name)) == true);
+    private bool HasReleasedLiveForeignKeyName(
+        ExpectedForeignKeyDefinition definition,
+        LivePrerequisiteKeyProof keys
+    ) => keys.OwnedCollision
+        && (_acceptedLivePrerequisiteTableCreations?.ContainsKey(
+                (NormalizeProofSchema(definition.Schema), definition.Table)) == true
+            || _acceptedForeignKeyRemovals?.Contains(
+                (NormalizeProofSchema(definition.Schema), definition.Table, definition.Name)) == true);
 
     /// <summary>Combines accepted projected storage with independently observed effective owner defaults.</summary>
     private bool TryGetLiveForeignKeyEndpoint(
@@ -152,16 +179,15 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
 
         var creation = default(LivePrerequisiteCreation);
         var newlyCreated = _acceptedLivePrerequisiteTableCreations?.TryGetValue(owner, out creation) == true;
-        if (newlyCreated
-            ? !creation.Eligible
-            : !live.OwnerEligible)
+        if (newlyCreated ? !creation.Eligible : !live.OwnerEligible)
         {
             return false;
         }
 
         if (columns.TryGetProjectedColumn(table, schema, column, out var projected))
         {
-            if (projected.ComputedColumnSql is not null || projected.ComputedExpression is not null)
+            if (projected.ComputedColumnSql is not null
+                || projected.ComputedExpression is not null)
             {
                 return false;
             }
@@ -176,7 +202,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             return true;
         }
 
-        if (newlyCreated || live.StoreType is null || live.IsGenerated)
+        if (newlyCreated
+            || live.StoreType is null
+            || live.IsGenerated)
         {
             return false;
         }
@@ -187,9 +215,13 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
     }
 
     /// <summary>Preserves native ENUM/SET literals while ignoring only integer display widths.</summary>
-    internal static bool ForeignKeyStoreTypesMatch(string first, string second)
+    internal static bool ForeignKeyStoreTypesMatch(
+        string first,
+        string second
+    )
     {
-        if (HasLiteralMembers(first) || HasLiteralMembers(second))
+        if (HasLiteralMembers(first)
+            || HasLiteralMembers(second))
         {
             // WHY: SQL keyword case and whitespace are cosmetic, but member
             // case/order is physical. Without captured literal modes, accept
@@ -202,23 +234,32 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         }
 
         return StringComparer.OrdinalIgnoreCase.Equals(
-            NormalizeForeignKeyIntegerType(first), NormalizeForeignKeyIntegerType(second));
+            NormalizeForeignKeyIntegerType(first),
+            NormalizeForeignKeyIntegerType(second));
     }
 
     /// <summary>Canonicalizes native member spelling only when session SQL literal modes cannot change it.</summary>
-    private static string? ModeIndependentMemberDisplay(string storeType)
+    private static string? ModeIndependentMemberDisplay(
+        string storeType
+    )
     {
-        var escaped = MySqlSafeMigrationCatalogSqlBuilder.BuildEnumSetCatalogDisplay(storeType,
-            backslashEscapes: true, out var escapedQuotes);
+        var escaped = MySqlSafeMigrationCatalogSqlBuilder.BuildEnumSetCatalogDisplay(
+            storeType,
+            backslashEscapes: true,
+            out var escapedQuotes);
 
-        var literal = MySqlSafeMigrationCatalogSqlBuilder.BuildEnumSetCatalogDisplay(storeType,
-            backslashEscapes: false, out var literalQuotes);
+        var literal = MySqlSafeMigrationCatalogSqlBuilder.BuildEnumSetCatalogDisplay(
+            storeType,
+            backslashEscapes: false,
+            out var literalQuotes);
 
         return !escapedQuotes && !literalQuotes && StringComparer.Ordinal.Equals(escaped, literal) ? escaped : null;
     }
 
     /// <summary>Stamps the native defaults of an actually accepted plain safe table creation.</summary>
-    private void ObserveLivePrerequisiteCreation(ExpectedTableDefinition definition)
+    private void ObserveLivePrerequisiteCreation(
+        ExpectedTableDefinition definition
+    )
     {
         var owner = (NormalizeProofSchema(definition.Schema), definition.Table);
         if (_livePrerequisiteColumns is null)
@@ -235,8 +276,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                 // owner's already accepted physical collation.
                 (_acceptedLivePrerequisiteTableCreations ??= new(PhysicalOwnerComparer))[owner] =
                     new LivePrerequisiteCreation(
-                    _livePrerequisiteCreationDefaultsCurrent && captured.CreationEngineEligible,
-                    captured.CreationCollation);
+                        _livePrerequisiteCreationDefaultsCurrent && captured.CreationEngineEligible,
+                        captured.CreationCollation);
 
                 return;
             }
@@ -251,8 +292,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             {
                 (_acceptedLivePrerequisiteTableCreations ??= new(PhysicalOwnerComparer))[owner] =
                     new LivePrerequisiteCreation(
-                    _livePrerequisiteCreationDefaultsCurrent && pair.Value.CreationEngineEligible,
-                    pair.Value.CreationCollation);
+                        _livePrerequisiteCreationDefaultsCurrent && pair.Value.CreationEngineEligible,
+                        pair.Value.CreationCollation);
 
                 return;
             }
@@ -260,9 +301,13 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
     }
 
     /// <summary>Recognizes character storage whose effective collation is inherited unless explicit.</summary>
-    private static bool IsCharacterForeignKeyType(string storeType)
+    private static bool IsCharacterForeignKeyType(
+        string storeType
+    )
     {
-        var value = storeType.AsSpan().TrimStart();
+        var value = storeType
+            .AsSpan()
+            .TrimStart();
 
         return value.StartsWith("char(", StringComparison.OrdinalIgnoreCase)
             || value.StartsWith("varchar(", StringComparison.OrdinalIgnoreCase)
@@ -271,7 +316,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
     }
 
     /// <summary>Recognizes native member-list types without interpreting their literals.</summary>
-    private static bool HasLiteralMembers(string value)
+    private static bool HasLiteralMembers(
+        string value
+    )
     {
         var text = value.AsSpan().Trim();
         var open = text.IndexOf('(');
@@ -287,7 +334,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
     }
 
     /// <summary>Normalizes a display width only for an otherwise exact native integer domain.</summary>
-    private static string NormalizeForeignKeyIntegerType(string value)
+    private static string NormalizeForeignKeyIntegerType(
+        string value
+    )
     {
         var type = value.Trim();
         var open = type.IndexOf('(');
@@ -304,7 +353,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             || name.Equals("bigint", StringComparison.OrdinalIgnoreCase);
 
         var close = type.IndexOf(')', open + 1);
-        if (!isInteger || close < 0
+        if (!isInteger
+            || close < 0
             || !int.TryParse(type.AsSpan(open + 1, close - open - 1), CultureInfo.InvariantCulture, out _))
         {
             return type;
@@ -350,106 +400,128 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                 && analyses[ordinal].ObservedState is not (SafeMigrationObservedState.Unsupported
                     or SafeMigrationObservedState.PrerequisiteMissing))
             {
-                (touchedOwners ??= new(PhysicalOwnerComparer))
-                    .Add((NormalizeProofSchema(ensureColumn.Schema), ensureColumn.Table));
+                (touchedOwners ??= new HashSet<(string? Schema, string Table)>(PhysicalOwnerComparer)).Add(
+                    (NormalizeProofSchema(ensureColumn.Schema), ensureColumn.Table));
             }
             else if (intent is EnsureTableIntent ensureTable
-                && analyses[ordinal].ObservedState != SafeMigrationObservedState.Unsupported)
+                     && analyses[ordinal].ObservedState != SafeMigrationObservedState.Unsupported)
             {
-                (touchedOwners ??= new(PhysicalOwnerComparer)).Add((NormalizeProofSchema(ensureTable.Definition.Schema),
-                    ensureTable.Definition.Table));
+                (touchedOwners ??= new HashSet<(string? Schema, string Table)>(PhysicalOwnerComparer)).Add(
+                    (NormalizeProofSchema(ensureTable.Definition.Schema), ensureTable.Definition.Table));
 
                 captureCreationDefaults = true;
             }
-            else if (intent is DropIndexIntent dropIndex && MayMutateLiveNamespace(intent, analyses[ordinal])
-                && (analyses[ordinal].ObservedState != SafeMigrationObservedState.Unsupported
-                    || RequiresSparseLivePrerequisites(analyses[ordinal])))
+            else if (intent is DropIndexIntent dropIndex
+                     && MayMutateLiveNamespace(intent, analyses[ordinal])
+                     && (analyses[ordinal].ObservedState != SafeMigrationObservedState.Unsupported
+                         || RequiresSparseLivePrerequisites(analyses[ordinal])))
             {
-                (touchedOwners ??= new(PhysicalOwnerComparer))
-                    .Add((NormalizeProofSchema(dropIndex.Schema), dropIndex.Table));
-                (namespaceOwners ??= new(PhysicalOwnerComparer))
-                    .Add((NormalizeProofSchema(dropIndex.Schema), dropIndex.Table));
+                (touchedOwners ??= new HashSet<(string? Schema, string Table)>(PhysicalOwnerComparer)).Add(
+                    (NormalizeProofSchema(dropIndex.Schema), dropIndex.Table));
+                (namespaceOwners ??= new HashSet<(string? Schema, string Table)>(PhysicalOwnerComparer)).Add(
+                    (NormalizeProofSchema(dropIndex.Schema), dropIndex.Table));
             }
             else if (intent is DropForeignKeyIntent dropForeignKey
-                && MayMutateLiveNamespace(intent, analyses[ordinal]))
+                     && MayMutateLiveNamespace(intent, analyses[ordinal]))
             {
                 // A declaration only requests catalog evidence. Authority is
                 // still issued solely by an actually accepted physical drop.
-                (touchedOwners ??= new(PhysicalOwnerComparer))
-                    .Add((NormalizeProofSchema(dropForeignKey.Schema), dropForeignKey.Table));
-                (namespaceOwners ??= new(PhysicalOwnerComparer))
-                    .Add((NormalizeProofSchema(dropForeignKey.Schema), dropForeignKey.Table));
+                (touchedOwners ??= new HashSet<(string? Schema, string Table)>(PhysicalOwnerComparer)).Add(
+                    (NormalizeProofSchema(dropForeignKey.Schema), dropForeignKey.Table));
+                (namespaceOwners ??= new HashSet<(string? Schema, string Table)>(PhysicalOwnerComparer)).Add(
+                    (NormalizeProofSchema(dropForeignKey.Schema), dropForeignKey.Table));
             }
             else if (GetPhysicalKeyTable(intent) is { } namespaceTable
-                && MayMutateLiveNamespace(intent, analyses[ordinal]))
+                     && MayMutateLiveNamespace(intent, analyses[ordinal]))
             {
-                (namespaceOwners ??= new(PhysicalOwnerComparer))
-                    .Add((NormalizeProofSchema(GetPhysicalKeySchema(intent)), namespaceTable));
+                (namespaceOwners ??= new HashSet<(string? Schema, string Table)>(PhysicalOwnerComparer)).Add(
+                    (NormalizeProofSchema(GetPhysicalKeySchema(intent)), namespaceTable));
             }
-            else if (intent is RenameIndexIntent renameIndex && MayMutateLiveNamespace(intent, analyses[ordinal]))
+            else if (intent is RenameIndexIntent renameIndex
+                     && MayMutateLiveNamespace(intent, analyses[ordinal]))
             {
-                (namespaceOwners ??= new(PhysicalOwnerComparer))
-                    .Add((NormalizeProofSchema(renameIndex.Schema), renameIndex.Table));
+                (namespaceOwners ??= new HashSet<(string? Schema, string Table)>(PhysicalOwnerComparer)).Add(
+                    (NormalizeProofSchema(renameIndex.Schema), renameIndex.Table));
             }
             else if (MayMutateLiveNamespace(intent, analyses[ordinal])
-                && intent is DropPrimaryKeyIntent or DropUniqueConstraintIntent)
+                     && intent is DropPrimaryKeyIntent or DropUniqueConstraintIntent)
             {
                 var droppedOwner = intent is DropPrimaryKeyIntent primary
                     ? (primary.Table, primary.Schema)
                     : (((DropUniqueConstraintIntent)intent).Table, ((DropUniqueConstraintIntent)intent).Schema);
 
-                (namespaceOwners ??= new(PhysicalOwnerComparer))
-                    .Add((NormalizeProofSchema(droppedOwner.Schema), droppedOwner.Table));
+                (namespaceOwners ??= new HashSet<(string? Schema, string Table)>(PhysicalOwnerComparer)).Add(
+                    (NormalizeProofSchema(droppedOwner.Schema), droppedOwner.Table));
             }
 
             var requiresFullQualification = RequiresSparseLivePrerequisites(analyses[ordinal]);
+            if (RequiresGeneratedSourceCapture(intent, analyses[ordinal])
+                && intent is EnsureColumnIntent generated)
+            {
+                // WHY: A mixed ADD may supply one dependency while another is
+                // already live. Capture those source columns independently in
+                // the existing bounded batch; a rejected whole-operation result
+                // is neither a source certificate nor proof of source absence.
+                AddRequestedColumns(
+                    generated.Table,
+                    generated.Schema,
+                    MySqlGeneratedColumnDependencies.Collect(generated.Definition));
+            }
+
             var namespaceRequest = intent is EnsureForeignKeyIntent namespaceForeignKey
                 && analyses[ordinal].ObservedState is SafeMigrationObservedState.Missing
-                    or SafeMigrationObservedState.Matching or SafeMigrationObservedState.Different
-                && namespaceOwners?.Contains((NormalizeProofSchema(namespaceForeignKey.Definition.Schema),
-                    namespaceForeignKey.Definition.Table)) == true;
+                    or SafeMigrationObservedState.Matching
+                    or SafeMigrationObservedState.Different
+                && namespaceOwners?.Contains(
+                    (NormalizeProofSchema(namespaceForeignKey.Definition.Schema), namespaceForeignKey.Definition.Table)) == true;
 
-            if (!requiresFullQualification && !namespaceRequest)
+            if (!requiresFullQualification
+                && !namespaceRequest)
             {
                 continue;
             }
 
-            if (intent is EnsureForeignKeyIntent foreignKey
-                && foreignKey.Definition.Columns.Count <= MySqlProjectedIndexPhysicalShape.MaximumKeyParts
+            if (intent is EnsureForeignKeyIntent { Definition.Columns.Count: <= MySqlProjectedIndexPhysicalShape.MaximumKeyParts } foreignKey
                 && (namespaceRequest
-                    || touchedOwners?.Contains((NormalizeProofSchema(foreignKey.Definition.Schema),
-                        foreignKey.Definition.Table))
-                        == true
-                    || touchedOwners?.Contains((NormalizeProofSchema(foreignKey.Definition.PrincipalSchema),
-                        foreignKey.Definition.PrincipalTable)) == true))
+                    || touchedOwners?.Contains(
+                        (NormalizeProofSchema(foreignKey.Definition.Schema), foreignKey.Definition.Table)) == true
+                    || touchedOwners?.Contains(
+                        (NormalizeProofSchema(foreignKey.Definition.PrincipalSchema),
+                            foreignKey.Definition.PrincipalTable)) == true))
             {
-                (requestedKeys ??= new(ReferenceEqualityComparer.Instance)).Add(foreignKey.Definition);
+                (requestedKeys ??= new HashSet<ExpectedForeignKeyDefinition>(ReferenceEqualityComparer.Instance)).Add(foreignKey.Definition);
                 if (requiresFullQualification)
                 {
-                    (fullQualificationTargets ??= new(ReferenceEqualityComparer.Instance))
-                        .Add(foreignKey.Definition);
+                    (fullQualificationTargets ??= new(ReferenceEqualityComparer.Instance)).Add(foreignKey.Definition);
                 }
                 else if (analyses[ordinal].ObservedState == SafeMigrationObservedState.Missing)
                 {
-                    (namespaceMissing ??= new(ReferenceEqualityComparer.Instance))
-                        .TryAdd(foreignKey.Definition, analyses[ordinal]);
+                    (namespaceMissing ??= new(ReferenceEqualityComparer.Instance)).TryAdd(
+                        foreignKey.Definition,
+                        analyses[ordinal]);
                 }
 
-                AddRequestedColumns(foreignKey.Definition.Table, foreignKey.Definition.Schema,
+                AddRequestedColumns(
+                    foreignKey.Definition.Table,
+                    foreignKey.Definition.Schema,
                     foreignKey.Definition.Columns);
-                AddRequestedColumns(foreignKey.Definition.PrincipalTable, foreignKey.Definition.PrincipalSchema,
+                AddRequestedColumns(
+                    foreignKey.Definition.PrincipalTable,
+                    foreignKey.Definition.PrincipalSchema,
                     foreignKey.Definition.PrincipalColumns);
             }
             else if (GetPhysicalKeyTable(intent) is { } table
-                && touchedOwners?.Contains((NormalizeProofSchema(GetPhysicalKeySchema(intent)), table)) == true)
+                     && touchedOwners?.Contains((NormalizeProofSchema(GetPhysicalKeySchema(intent)), table)) == true)
             {
                 AddRequestedColumns(table, GetPhysicalKeySchema(intent), GetPhysicalKeyColumns(intent));
             }
             else if (intent is EnsureCheckConstraintIntent check
-                && touchedOwners?.Contains((NormalizeProofSchema(check.Definition.Schema), check.Definition.Table))
-                    == true)
+                     && touchedOwners?.Contains((NormalizeProofSchema(check.Definition.Schema), check.Definition.Table))
+                     == true)
             {
-                AddRequestedColumns(check.Definition.Table, check.Definition.Schema,
+                AddRequestedColumns(
+                    check.Definition.Table,
+                    check.Definition.Schema,
                     SafeMigrationPrerequisiteColumns.Local(check));
             }
         }
@@ -460,13 +532,20 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         }
 
         var requests = requestedColumns.ToArray();
-        var captured = new Dictionary<(string? Schema, string Table, string Name), LivePrerequisiteColumn>(
-            PhysicalMemberComparer);
+        var captured =
+            new Dictionary<(string? Schema, string Table, string Name), LivePrerequisiteColumn>(PhysicalMemberComparer);
 
         await SafeMigrationCatalogProbeBatch.ReadAsync(
-            context.Database.GetDbConnection(), requests.Length, maximumPayloadBytes, commandTimeout,
-            (command, offset) => BuildLivePrerequisiteColumnsProbe(command, requests, offset,
-                maximumPayloadBytes, captureCreationDefaults),
+            context.Database.GetDbConnection(),
+            requests.Length,
+            maximumPayloadBytes,
+            commandTimeout,
+            (command, offset) => BuildLivePrerequisiteColumnsProbe(
+                command,
+                requests,
+                offset,
+                maximumPayloadBytes,
+                captureCreationDefaults),
             async (reader, offset, count, token) =>
             {
                 if (reader.FieldCount != (captureCreationDefaults ? 11 : 9))
@@ -478,27 +557,35 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                 while (await reader.ReadAsync(token))
                 {
                     var ordinal = Convert.ToInt32(reader.GetValue(0), CultureInfo.InvariantCulture);
-                    if (ordinal < offset || ordinal >= offset + count || seen[ordinal - offset])
+                    if (ordinal < offset
+                        || ordinal >= offset + count
+                        || seen[ordinal - offset])
                     {
                         throw new InvalidOperationException("MySQL returned an invalid live-prerequisite ordinal.");
                     }
 
                     seen[ordinal - offset] = true;
-                    var ownerEligible = !reader.IsDBNull(1) && reader.GetString(1) == "BASE TABLE"
-                        && !reader.IsDBNull(2) && StringComparer.OrdinalIgnoreCase.Equals(reader.GetString(2), "InnoDB")
+                    var ownerEligible = !reader.IsDBNull(1)
+                        && reader.GetString(1) == "BASE TABLE"
+                        && !reader.IsDBNull(2)
+                        && StringComparer.OrdinalIgnoreCase.Equals(reader.GetString(2), "InnoDB")
                         && !ReadLivePrerequisiteBoolean(reader, 4);
 
-                    captured.Add(requests[ordinal], new LivePrerequisiteColumn(
-                        !reader.IsDBNull(1),
-                        ownerEligible,
-                        reader.IsDBNull(3) ? null : reader.GetString(3),
-                        reader.IsDBNull(5) ? null : reader.GetString(5),
-                        reader.IsDBNull(6) ? null : reader.GetString(6),
-                        !reader.IsDBNull(7) && reader.GetString(7) == "YES",
-                        !reader.IsDBNull(8) && reader.GetString(8).Length > 0,
-                        captureCreationDefaults && !reader.IsDBNull(9)
+                    captured.Add(
+                        requests[ordinal],
+                        new LivePrerequisiteColumn(
+                            !reader.IsDBNull(1),
+                            ownerEligible,
+                            reader.IsDBNull(3) ? null : reader.GetString(3),
+                            reader.IsDBNull(5) ? null : reader.GetString(5),
+                            reader.IsDBNull(6) ? null : reader.GetString(6),
+                            !reader.IsDBNull(7) && reader.GetString(7) == "YES",
+                            !reader.IsDBNull(8)
+                            && reader.GetString(8).Length > 0,
+                            captureCreationDefaults
+                            && !reader.IsDBNull(9)
                             && StringComparer.OrdinalIgnoreCase.Equals(reader.GetString(9), "InnoDB"),
-                        captureCreationDefaults && !reader.IsDBNull(10) ? reader.GetString(10) : null));
+                            captureCreationDefaults && !reader.IsDBNull(10) ? reader.GetString(10) : null));
                 }
 
                 if (seen.Any(static value => !value))
@@ -506,14 +593,19 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                     throw new InvalidOperationException("MySQL omitted a live-prerequisite column certificate.");
                 }
             },
-            cancellationToken, context.Database.CurrentTransaction?.GetDbTransaction());
+            cancellationToken,
+            context.Database.CurrentTransaction?.GetDbTransaction());
 
         Dictionary<ExpectedForeignKeyDefinition, LivePrerequisiteKeyProof>? capturedKeys = null;
         var isMariaDb = false;
         if (requestedKeys is not null)
         {
-            (capturedKeys, isMariaDb) = await ReadLiveCandidateKeysAsync(context, requestedKeys.ToArray(),
-                maximumPayloadBytes, commandTimeout, cancellationToken);
+            (capturedKeys, isMariaDb) = await ReadLiveCandidateKeysAsync(
+                context,
+                requestedKeys.ToArray(),
+                maximumPayloadBytes,
+                commandTimeout,
+                cancellationToken);
         }
 
         // WHY: Publish only a complete capture. A canceled key query must not
@@ -522,17 +614,24 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         _livePrerequisiteKeys = capturedKeys;
         _livePrerequisiteFullQualificationTargets = fullQualificationTargets;
         _liveNamespaceMissingAnalyses = namespaceMissing;
-        _livePrerequisiteBuilder = capturedKeys is null ? null : new MySqlSafeMigrationCatalogSqlBuilder(
-            _typeMappingSource, context.GetService<ISqlGenerationHelper>());
+        _livePrerequisiteBuilder = capturedKeys is null
+            ? null
+            : new MySqlSafeMigrationCatalogSqlBuilder(_typeMappingSource, context.GetService<ISqlGenerationHelper>());
 
         _livePrerequisiteCreationDefaultsCurrent = captureCreationDefaults;
         if (capturedKeys is not null)
         {
-            var supporting = new MySqlProjectedForeignKeySupportingIndexes(NormalizeProofSchema, isMariaDb,
+            var supporting = new MySqlProjectedForeignKeySupportingIndexes(
+                NormalizeProofSchema,
+                isMariaDb,
                 NormalizeTableIdentifier);
+
             foreach (var pair in capturedKeys)
             {
-                supporting.Capture(pair.Key, pair.Value.LocalIndexNameOccupied, pair.Value.CoveringIndexNames,
+                supporting.Capture(
+                    pair.Key,
+                    pair.Value.LocalIndexNameOccupied,
+                    pair.Value.CoveringIndexNames,
                     pair.Value.MultiValuedIndexNames);
             }
 
@@ -541,7 +640,11 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
 
         return;
 
-        void AddRequestedColumns(string table, string? schema, IEnumerable<string> columns)
+        void AddRequestedColumns(
+            string table,
+            string? schema,
+            IEnumerable<string> columns
+        )
         {
             requestedColumns ??= new(PhysicalMemberComparer);
             foreach (var column in columns)
@@ -552,10 +655,15 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
     }
 
     /// <summary>Targets only missing metadata or the independently identified mutable native MVI boundary.</summary>
-    private static bool RequiresSparseLivePrerequisites(SafeMigrationProviderAnalysis analysis)
-        => analysis.ObservedState == SafeMigrationObservedState.PrerequisiteMissing
-            || analysis.ObservedState == SafeMigrationObservedState.Unsupported
-            && !analysis.IsInvariantUnsupported && analysis.Code == "foreign_key_multi_valued_supporting_index";
+    private static bool RequiresSparseLivePrerequisites(
+        SafeMigrationProviderAnalysis analysis
+    ) => analysis.ObservedState == SafeMigrationObservedState.PrerequisiteMissing
+        || analysis is
+        {
+            ObservedState: SafeMigrationObservedState.Unsupported,
+            IsInvariantUnsupported: false,
+            Code: "foreign_key_multi_valued_supporting_index"
+        };
 
     /// <summary>Requests retained-symbol replacement facts without adding matching-only capture overhead.</summary>
     private static bool HasSparseLivePrerequisiteRequests(
@@ -568,10 +676,12 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         {
             var intent = operations[ordinal].Intent;
             if (RequiresSparseLivePrerequisites(analyses[ordinal])
-                || intent is EnsureForeignKeyIntent
-                && (analyses[ordinal].ObservedState == SafeMigrationObservedState.Different
-                    || hasNamespaceMutation && analyses[ordinal].ObservedState is
-                        SafeMigrationObservedState.Missing or SafeMigrationObservedState.Matching))
+                || RequiresGeneratedSourceCapture(intent, analyses[ordinal])
+                || (intent is EnsureForeignKeyIntent
+                    && (analyses[ordinal].ObservedState == SafeMigrationObservedState.Different
+                        || (hasNamespaceMutation
+                            && analyses[ordinal].ObservedState is SafeMigrationObservedState.Missing
+                                or SafeMigrationObservedState.Matching))))
             {
                 return true;
             }
@@ -585,21 +695,27 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
     /// <summary>
     /// Skips independently matching create/no-op declarations on the ordinary matching-only fast path.
     /// </summary>
-    internal static bool MayMutateLiveNamespace(SafeMigrationIntent intent, SafeMigrationProviderAnalysis analysis)
-        => intent switch
-        {
-            EnsureIndexIntent or EnsurePrimaryKeyIntent or EnsureUniqueConstraintIntent
-                => analysis.ObservedState is not (SafeMigrationObservedState.Matching
-                    or SafeMigrationObservedState.Unsupported),
-            DropForeignKeyIntent or DropIndexIntent or RenameIndexIntent or DropPrimaryKeyIntent
-                or DropUniqueConstraintIntent
-                => analysis.ObservedState is SafeMigrationObservedState.Matching
-                    or SafeMigrationObservedState.Different,
-            _ => false,
-        };
+    internal static bool MayMutateLiveNamespace(
+        SafeMigrationIntent intent,
+        SafeMigrationProviderAnalysis analysis
+    ) => intent switch
+    {
+        EnsureIndexIntent or EnsurePrimaryKeyIntent or EnsureUniqueConstraintIntent =>
+            analysis.ObservedState is not (SafeMigrationObservedState.Matching or SafeMigrationObservedState.Unsupported
+                ),
+        DropForeignKeyIntent
+            or DropIndexIntent
+            or RenameIndexIntent
+            or DropPrimaryKeyIntent
+            or DropUniqueConstraintIntent => analysis.ObservedState is SafeMigrationObservedState.Matching
+                or SafeMigrationObservedState.Different,
+        _ => false,
+    };
 
     /// <summary>Gets the physical-key owner's qualifier without normalizing foreign database identities.</summary>
-    private static string? GetPhysicalKeySchema(SafeMigrationIntent intent) => intent switch
+    private static string? GetPhysicalKeySchema(
+        SafeMigrationIntent intent
+    ) => intent switch
     {
         EnsureIndexIntent value => value.Definition.Schema,
         EnsurePrimaryKeyIntent value => value.Definition.Schema,
@@ -630,8 +746,11 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
 
         var basePrefix = "SELECT requested.ordinal, t.TABLE_TYPE, t.ENGINE, t.TABLE_COLLATION, "
             + "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.PARTITIONS p WHERE p.TABLE_SCHEMA = DATABASE() "
-            + "AND " + MySqlSafeMigrationCatalogSqlBuilder.BuildRequiredColumnAddOwnerMatches(
-                "p.TABLE_NAME", "requested.table_name") + " "
+            + "AND "
+            + MySqlSafeMigrationCatalogSqlBuilder.BuildRequiredColumnAddOwnerMatches(
+                "p.TABLE_NAME",
+                "requested.table_name")
+            + " "
             + "AND p.PARTITION_NAME IS NOT NULL), "
             + "c.COLUMN_TYPE, c.COLLATION_NAME, c.IS_NULLABLE, c.GENERATION_EXPRESSION";
 
@@ -640,18 +759,24 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             : basePrefix + " FROM (";
 
         var suffix = ") requested LEFT JOIN INFORMATION_SCHEMA.TABLES t ON t.TABLE_SCHEMA = DATABASE() "
-            + "AND " + MySqlSafeMigrationCatalogSqlBuilder.BuildRequiredColumnAddOwnerMatches(
-                "t.TABLE_NAME", "requested.table_name") + " "
+            + "AND "
+            + MySqlSafeMigrationCatalogSqlBuilder.BuildRequiredColumnAddOwnerMatches(
+                "t.TABLE_NAME",
+                "requested.table_name")
+            + " "
             + "LEFT JOIN INFORMATION_SCHEMA.COLUMNS c "
             + "ON c.TABLE_SCHEMA = t.TABLE_SCHEMA AND c.TABLE_NAME = t.TABLE_NAME "
             + "AND CAST(c.TABLE_SCHEMA AS BINARY) = CAST(t.TABLE_SCHEMA AS BINARY) "
             + "AND CAST(c.TABLE_NAME AS BINARY) = CAST(t.TABLE_NAME AS BINARY) "
             + "AND c.COLUMN_NAME = requested.column_name AND "
             + MySqlSafeMigrationCatalogSqlBuilder.BuildNativeCaseInsensitiveIdentifierMatches(
-                "c.COLUMN_NAME", "requested.column_name") + " ORDER BY requested.ordinal;";
+                "c.COLUMN_NAME",
+                "requested.column_name")
+            + " ORDER BY requested.ordinal;";
 
         const string separator = " UNION ALL ";
-        var capacity = Math.Min(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement,
+        var capacity = Math.Min(
+            SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement,
             requests.Length - offset);
         var selections = new List<string>(capacity);
         var valueBytes = 0;
@@ -662,26 +787,38 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             var request = requests[offset + index];
             var originalParameters = command.Parameters.Count;
             var originalValueBytes = valueBytes;
-            var table = MySqlSafeMigrationCatalogSqlBuilder.AddLivePrerequisiteParameter(command,
-                request.Table, ref valueBytes);
+            var table = MySqlSafeMigrationCatalogSqlBuilder.AddLivePrerequisiteParameter(
+                command,
+                request.Table,
+                ref valueBytes);
 
-            var column = MySqlSafeMigrationCatalogSqlBuilder.AddLivePrerequisiteParameter(command,
-                request.Name, ref valueBytes);
+            var column =
+                MySqlSafeMigrationCatalogSqlBuilder.AddLivePrerequisiteParameter(command, request.Name, ref valueBytes);
 
-            var selection = "SELECT " + (offset + index).ToString(CultureInfo.InvariantCulture)
-                + " AS ordinal, " + table + " AS table_name, " + column + " AS column_name";
+            var selection = "SELECT "
+                + (offset + index).ToString(CultureInfo.InvariantCulture)
+                + " AS ordinal, "
+                + table
+                + " AS table_name, "
+                + column
+                + " AS column_name";
 
-            var prospectiveSqlBytes = checked(sqlBytes + Encoding.UTF8.GetByteCount(selection)
+            var prospectiveSqlBytes = checked(sqlBytes
+                + Encoding.UTF8.GetByteCount(selection)
                 + (selections.Count == 0 ? 0 : separator.Length));
 
             var prospectiveBytes = checked(prospectiveSqlBytes + valueBytes);
-            if (SafeMigrationCatalogQueryLimits.Exceeded(command.Parameters.Count, prospectiveBytes,
+            if (SafeMigrationCatalogQueryLimits.Exceeded(
+                    command.Parameters.Count,
+                    prospectiveBytes,
                     maximumPayloadBytes))
             {
                 if (selections.Count == 0)
                 {
-                    throw SafeMigrationCatalogQueryLimits.OversizedOperation(offset,
-                        command.Parameters.Count, prospectiveBytes);
+                    throw SafeMigrationCatalogQueryLimits.OversizedOperation(
+                        offset,
+                        command.Parameters.Count,
+                        prospectiveBytes);
                 }
 
                 // WHY: A large valid inventory may fit only part of this
@@ -712,14 +849,15 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
     /// <summary>Reads complete candidate identities under the same bounded, cancellable catalog transport.</summary>
     private static async Task<(Dictionary<ExpectedForeignKeyDefinition, LivePrerequisiteKeyProof> Keys, bool IsMariaDb)>
         ReadLiveCandidateKeysAsync(
-        DbContext context,
-        ExpectedForeignKeyDefinition[] requests,
-        int maximumPayloadBytes,
-        int? commandTimeout,
-        CancellationToken cancellationToken
-    )
+            DbContext context,
+            ExpectedForeignKeyDefinition[] requests,
+            int maximumPayloadBytes,
+            int? commandTimeout,
+            CancellationToken cancellationToken
+        )
     {
-        var version = MySqlServerVersion.AutoDetect(context.Database.GetDbConnection(),
+        var version = MySqlServerVersion.AutoDetect(
+            context.Database.GetDbConnection(),
             MySqlServerVersionCompatibilityMode.AllowUnsupported);
 
         var databaseScopedNames = !version.IsMariaDb || version.Version < new Version(12, 1);
@@ -727,15 +865,27 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             ReferenceEqualityComparer.Instance);
 
         await SafeMigrationCatalogProbeBatch.ReadAsync(
-            context.Database.GetDbConnection(), requests.Length, maximumPayloadBytes, commandTimeout,
-            (command, ordinal) => new SafeMigrationCatalogProbeStatement(1,
-                MySqlSafeMigrationCatalogSqlBuilder.BuildLiveForeignKeyCandidateProbe(command,
-                    requests[ordinal], databaseScopedNames, version.IsMariaDb), ordinal),
+            context.Database.GetDbConnection(),
+            requests.Length,
+            maximumPayloadBytes,
+            commandTimeout,
+            (
+                command,
+                ordinal
+            ) => new SafeMigrationCatalogProbeStatement(
+                1,
+                MySqlSafeMigrationCatalogSqlBuilder.BuildLiveForeignKeyCandidateProbe(
+                    command,
+                    requests[ordinal],
+                    databaseScopedNames,
+                    version.IsMariaDb),
+                ordinal),
             async (reader, ordinal, _, token) =>
             {
                 captured.Add(requests[ordinal], await ReadLiveCandidateKeyProofAsync(reader, token));
             },
-            cancellationToken, context.Database.CurrentTransaction?.GetDbTransaction());
+            cancellationToken,
+            context.Database.CurrentTransaction?.GetDbTransaction());
 
         return (captured, version.IsMariaDb);
     }
@@ -791,7 +941,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             multiValuedIndexRisk = unsafeNativeIndex;
             if (reader.IsDBNull(4))
             {
-                if (!reader.IsDBNull(5) || keys is not null || covering is not null || unsafeIndexes is not null
+                if (!reader.IsDBNull(5)
+                    || keys is not null
+                    || covering is not null
+                    || unsafeIndexes is not null
                     || matchingForeignKeys is not null
                     || sawSentinel)
                 {
@@ -808,12 +961,17 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             var isLocal = rawKind == "local_covering_index";
             var isUnsafe = rawKind == "local_multi_valued_index";
             var isForeignKey = rawKind == "local_matching_foreign_key";
-            var identities = isForeignKey ? foreignKeyNames ??= new(StringComparer.OrdinalIgnoreCase)
-                : isUnsafe ? unsafeNames ??= new(StringComparer.OrdinalIgnoreCase)
-                    : isLocal ? localNames ??= new(StringComparer.OrdinalIgnoreCase)
+            var identities = isForeignKey
+                ? foreignKeyNames ??= new(StringComparer.OrdinalIgnoreCase)
+                : isUnsafe
+                    ? unsafeNames ??= new(StringComparer.OrdinalIgnoreCase)
+                    : isLocal
+                        ? localNames ??= new(StringComparer.OrdinalIgnoreCase)
                         : names ??= new(StringComparer.OrdinalIgnoreCase);
 
-            if (name.Length == 0 || sawSentinel || !identities.Add(name))
+            if (name.Length == 0
+                || sawSentinel
+                || !identities.Add(name))
             {
                 throw new InvalidOperationException("MySQL returned an unowned or duplicate candidate key.");
             }
@@ -853,8 +1011,11 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                 throw new InvalidOperationException("MySQL returned an invalid native primary-key identity.");
             }
 
-            (keys ??= []).Add(new SafeMigrationLiveCandidateKey(kind, name,
-                kind == SafeMigrationDatabaseObjectKind.UniqueConstraint ? name : null));
+            (keys ??= []).Add(
+                new SafeMigrationLiveCandidateKey(
+                    kind,
+                    name,
+                    kind == SafeMigrationDatabaseObjectKind.UniqueConstraint ? name : null));
         }
 
         if (namesFree is null)
@@ -867,14 +1028,22 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             throw new InvalidOperationException("MySQL returned an incomplete multi-valued index certificate.");
         }
 
-        return new LivePrerequisiteKeyProof(namesFree.Value, ownedCollision!.Value, localIndexNameOccupied!.Value,
-            multiValuedIndexRisk!.Value, keys is null ? [] : keys.ToArray(), covering is null ? [] : covering.ToArray(),
+        return new LivePrerequisiteKeyProof(
+            namesFree.Value,
+            ownedCollision!.Value,
+            localIndexNameOccupied!.Value,
+            multiValuedIndexRisk!.Value,
+            keys is null ? [] : keys.ToArray(),
+            covering is null ? [] : covering.ToArray(),
             unsafeIndexes is null ? [] : unsafeIndexes.ToArray(),
             matchingForeignKeys is null ? [] : matchingForeignKeys.ToArray());
     }
 
     /// <summary>Rejects non-Boolean native flags rather than interpreting arbitrary nonzero values as proof.</summary>
-    private static bool ReadLivePrerequisiteBoolean(DbDataReader reader, int ordinal)
+    private static bool ReadLivePrerequisiteBoolean(
+        DbDataReader reader,
+        int ordinal
+    )
     {
         if (reader.IsDBNull(ordinal))
         {
@@ -910,20 +1079,28 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         bool IsNullable,
         bool IsGenerated,
         bool CreationEngineEligible,
-        string? CreationCollation);
+        string? CreationCollation
+    );
 
     /// <summary>Stores compatible physical endpoint storage without claiming row safety.</summary>
-    private readonly record struct LiveForeignKeyEndpoint(string StoreType, string? Collation, bool IsNullable);
+    private readonly record struct LiveForeignKeyEndpoint(
+        string StoreType,
+        string? Collation,
+        bool IsNullable
+    );
 
     /// <summary>Retains the actual creation-time defaults independently of later ambient changes.</summary>
-    private readonly record struct LivePrerequisiteCreation(bool Eligible, string? Collation);
+    private readonly record struct LivePrerequisiteCreation(
+        bool Eligible,
+        string? Collation
+    );
 
     /// <summary>Retains all independently surviving native candidates and the exact FK symbol boundary.</summary>
     /// <param name="NamesFree">Whether no native FK owns the requested symbol.</param>
     /// <param name="OwnedCollision">Whether only the exact requested table owns a releasable symbol.</param>
     /// <param name="LocalIndexNameOccupied">Whether a dependent index already owns the FK symbol.</param>
     /// <param name="MultiValuedIndexRisk">
-    /// Whether native FK prefix selection can use an unsafe multi-valued index.
+    /// Whether native FK prefix selection can use an unsafe multivalued index.
     /// </param>
     /// <param name="Keys">The complete independently captured native candidates.</param>
     /// <param name="CoveringIndexNames">Every independently captured usable dependent supporting-index alias.</param>
@@ -937,5 +1114,6 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         SafeMigrationLiveCandidateKey[] Keys,
         string[] CoveringIndexNames,
         string[] MultiValuedIndexNames,
-        string[] MatchingForeignKeyNames);
+        string[] MatchingForeignKeyNames
+    );
 }

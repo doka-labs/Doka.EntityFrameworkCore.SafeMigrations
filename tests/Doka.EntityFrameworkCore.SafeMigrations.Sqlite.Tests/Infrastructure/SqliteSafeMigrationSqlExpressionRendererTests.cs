@@ -1,6 +1,6 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
-public sealed class SqliteSafeMigrationSqlExpressionRendererTests
+public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
 {
     [Fact]
     public void Render_ProducesDeterministicSqlForEveryStructuredNode()

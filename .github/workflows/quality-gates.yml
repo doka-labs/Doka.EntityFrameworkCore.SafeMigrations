@@ -63,6 +63,7 @@ jobs:
           bash eng/tests/test-dependency-snapshot-headers.sh
           python3 -m unittest eng/tests/test_dependency_license_exceptions.py -v
           python3 -m unittest eng/tests/test_verify_package_contents.py -v
+          python3 -m unittest eng/tests/test_verify_package_consumer_sources.py -v
           bash eng/tests/test-dependency-maintenance.sh
           bash eng/tests/test-github-release-reconciliation.sh
           bash eng/tests/test-pre-tag-check.sh

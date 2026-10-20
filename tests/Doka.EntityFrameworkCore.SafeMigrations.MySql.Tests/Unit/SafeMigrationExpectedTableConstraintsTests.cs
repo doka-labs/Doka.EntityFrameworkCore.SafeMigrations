@@ -25,7 +25,13 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
 
         var check = Assert.Single(constraints.CheckConstraints);
         Assert.Equal("CK_constraint_contract_rows_TenantId", check.Name);
-        Assert.Equal("`TenantId` >= 0", check.Sql);
+        Assert.Null(check.Sql);
+        Assert.Equal("`TenantId` >= 0", check.CapturedSql);
+        var predicate = Assert.IsType<SafeMigrationSqlBinaryExpression>(check.Expression);
+        Assert.Equal(SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, predicate.Operator);
+        Assert.Equal("TenantId", Assert.Single(
+            Assert.IsType<SafeMigrationSqlIdentifierExpression>(predicate.Left).Parts));
+        Assert.Equal(0, Assert.IsType<int>(Assert.IsType<SafeMigrationSqlLiteralExpression>(predicate.Right).Value));
 
         var foreignKey = Assert.Single(constraints.ForeignKeys);
         Assert.Equal("FK_constraint_contract_rows_constraint_contract_rows_ParentId", foreignKey.Name);

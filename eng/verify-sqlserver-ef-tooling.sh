@@ -161,6 +161,17 @@ for mode in strict legacy; do
     grep -Fq 'migrationBuilder.EnsureModelManagedDataFromModel(' "$migration_file"
     grep -Fq 'includedColumns: ["DisplayName"]' "$migration_file"
 
+    for generated_contract in \
+        'scaffolding_generated_nodes' \
+        'HasDescendants' \
+        'CASE WHEN' \
+        'ck_scaffolding_generated_bounds'; do
+        if ! grep -Fq "$generated_contract" "$migration_file"; then
+            echo "SQL Server scaffolding is missing its generated expression contract: $generated_contract" >&2
+            exit 1
+        fi
+    done
+
     if grep -Fq 'migrationBuilder.CreateTable(' "$migration_file" \
         || grep -Fq '"SqlServer:Include"' "$migration_file"; then
         echo "SQL Server $version $mode EF tooling emitted ordinary DDL or leaked a provider annotation." >&2

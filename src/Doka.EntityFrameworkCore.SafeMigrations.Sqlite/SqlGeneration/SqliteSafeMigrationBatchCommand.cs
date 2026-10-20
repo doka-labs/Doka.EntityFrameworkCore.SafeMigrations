@@ -79,7 +79,7 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
     {
         if (connection.CurrentTransaction is not null)
         {
-            return ExecuteInCurrentTransaction(connection, parameterValues);
+            return ExecuteInCurrentTransaction(connection, parameterValues).Affected;
         }
 
         using var localTransaction = connection.BeginTransaction();
@@ -88,7 +88,7 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
             var affected = ExecuteInCurrentTransaction(connection, parameterValues);
             localTransaction.Commit();
 
-            return affected;
+            return affected.Affected;
         }
         catch
         {
@@ -121,7 +121,12 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
             try
             {
                 var affected = ExecuteInCurrentTransaction(connection, parameterValues);
-                if (foreignKeysEnabled)
+                // WHY: A batch containing only accepted no-ops never rebuilds
+                // an owner. Auditing unrelated pre-existing orphans would turn
+                // an idempotent absence into a rejection without any mutation.
+                // A real DDL statement can report zero affected rows, so use
+                // actual accepted execution rather than the provider row count.
+                if (foreignKeysEnabled && affected.Executed)
                 {
                     var postSnapshot = _executionState.GetSnapshot(connection);
                     VerifyForeignKeys(
@@ -133,7 +138,7 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
 
                 localTransaction.Commit();
 
-                return affected;
+                return affected.Affected;
             }
             catch
             {
@@ -150,17 +155,19 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
         }
     }
 
-    private int ExecuteInCurrentTransaction(
+    private (int Affected, bool Executed) ExecuteInCurrentTransaction(
         IRelationalConnection connection,
         IReadOnlyDictionary<string, object?>? parameterValues
     )
     {
         var transaction = connection.CurrentTransaction?.GetDbTransaction();
         var snapshot = _executionState.GetSnapshot(connection);
+        _analyzer.ResetDropOnlyProjection(snapshot);
         var projection = new SafeMigrationPreflightProjection(
             _analyzer,
             projectedKeyAnalyzer: null,
             _analyzer,
+            projectedDependencyAnalyzer: _analyzer,
             projectedColumnAnalyzer: _analyzer,
             livePrerequisiteSource: new SqliteLivePrerequisiteSource(snapshot));
 
@@ -210,7 +217,7 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
 
         if (acceptedOperations.Count == 0)
         {
-            return 0;
+            return (0, false);
         }
 
         var affected = ExecuteAcceptedOperations(connection, parameterValues, acceptedOperations);
@@ -228,6 +235,22 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
                     transaction,
                     safeOperation,
                     _rebuildArtifacts));
+            }
+        }
+
+        var renamedTables = SafeMigrationPostflightProjection.CreateRenamedTableProbes(
+            _operations, postconditions, _analyzer);
+
+        if (renamedTables is not null)
+        {
+            // WHY: This batch verifies its final state after all accepted DDL,
+            // unlike per-command guards. A verified rename changes the earlier
+            // complete table contract, not its unrelated facets. Reuse the fresh
+            // final snapshot so the stronger proof adds no catalog roundtrip.
+            foreach (var probe in renamedTables)
+            {
+                postconditions[probe.SafeOrdinal] = _analyzer.Analyze(
+                    postSnapshot, connection.DbConnection, transaction, probe.Operation, _rebuildArtifacts);
             }
         }
 
@@ -257,7 +280,7 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
             }
         }
 
-        return affected;
+        return (affected, true);
     }
 
     /// <summary>Preserves prerequisite column order when EF folds standalone FKs into new table operations.</summary>
@@ -309,7 +332,7 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
         IReadOnlyList<MigrationOperation> window = start == 0 && count == operations.Count
             ? operations : operations.GetRange(start, count);
 
-        var commands = _baselineGenerator.Generate(window, _model, _options);
+        var commands = _baselineGenerator.Generate(window, _model, _options, guardedOperations: _operations);
 
         return ExecuteCommands(connection, parameterValues, commands);
     }
@@ -422,7 +445,18 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
             }
         }
 
-        var result = new HashSet<string>(rebuilt, SqliteIdentifierComparer.Instance);
+        var result = new HashSet<string>(SqliteIdentifierComparer.Instance);
+        foreach (var table in rebuilt)
+        {
+            if (snapshot.Tables.ContainsKey(table))
+            {
+                _ = result.Add(table);
+            }
+        }
+
+        // WHY: An absent DROP is a no-op, not a surviving rebuild owner on
+        // which foreign_key_check can execute. Keep the original principal set
+        // below so retained children of removed owners are still validated.
         foreach (var table in snapshot.Tables.Values)
         {
             if (table.ForeignKeys.Any(foreignKey => rebuilt.Contains(foreignKey.PrincipalTable)))

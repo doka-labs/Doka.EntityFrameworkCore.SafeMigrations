@@ -31,6 +31,25 @@ internal abstract class ModelManagedDataIntent : SafeMigrationIntent
         ValidateDistinctKeys();
     }
 
+    /// <summary>Rebinds identifier metadata while sharing an already validated immutable row snapshot.</summary>
+    protected ModelManagedDataIntent(
+        ModelManagedDataIntent source,
+        IReadOnlyList<string> keyColumns,
+        IReadOnlyList<string> columns
+    ) : base(source.Kind)
+    {
+        // WHY: A certified injective member rename changes no cell, row order,
+        // store type or key uniqueness. Revalidating and cloning these immutable
+        // matrices would repeat quadratic key validation and duplicate row data.
+        Table = source.Table;
+        Schema = source.Schema;
+        KeyColumns = keyColumns;
+        KeyColumnTypes = source.KeyColumnTypes;
+        Columns = columns;
+        ColumnTypes = source.ColumnTypes;
+        KeyValues = source.KeyValues;
+    }
+
     public string Table { get; }
 
     public string? Schema { get; }
@@ -265,6 +284,18 @@ internal abstract class ModelManagedDataIntent : SafeMigrationIntent
 
 internal sealed class EnsureModelManagedDataIntent : ModelManagedDataIntent
 {
+    /// <summary>Creates an internal metadata-only final-catalog probe after a certified member rename.</summary>
+    internal EnsureModelManagedDataIntent(
+        EnsureModelManagedDataIntent source,
+        IReadOnlyList<string> keyColumns,
+        IReadOnlyList<string> columns,
+        IReadOnlyList<ExpectedModelManagedDataUniqueKeyDefinition> uniqueKeys
+    ) : base(source, keyColumns, columns)
+    {
+        Values = source.Values;
+        UniqueKeys = uniqueKeys;
+    }
+
     public EnsureModelManagedDataIntent(
         string table,
         string[] keyColumns,
@@ -331,6 +362,19 @@ internal sealed class EnsureModelManagedDataIntent : ModelManagedDataIntent
 
 internal sealed class UpdateModelManagedDataIntent : ModelManagedDataIntent
 {
+    /// <summary>Creates an internal metadata-only final-catalog probe after a certified member rename.</summary>
+    internal UpdateModelManagedDataIntent(
+        UpdateModelManagedDataIntent source,
+        IReadOnlyList<string> keyColumns,
+        IReadOnlyList<string> columns,
+        IReadOnlyList<ExpectedModelManagedDataUniqueKeyDefinition> uniqueKeys
+    ) : base(source, keyColumns, columns)
+    {
+        OldValues = source.OldValues;
+        NewValues = source.NewValues;
+        UniqueKeys = uniqueKeys;
+    }
+
     public UpdateModelManagedDataIntent(
         string table,
         string[] keyColumns,
@@ -384,6 +428,18 @@ internal sealed class UpdateModelManagedDataIntent : ModelManagedDataIntent
 
 internal sealed class DeleteModelManagedDataIntent : ModelManagedDataIntent
 {
+    /// <summary>Creates an internal metadata-only final-catalog probe after a certified member rename.</summary>
+    internal DeleteModelManagedDataIntent(
+        DeleteModelManagedDataIntent source,
+        IReadOnlyList<string> keyColumns,
+        IReadOnlyList<string> columns,
+        IReadOnlyList<ExpectedModelManagedDataForeignKeyDefinition> foreignKeys
+    ) : base(source, keyColumns, columns)
+    {
+        OldValues = source.OldValues;
+        ForeignKeys = foreignKeys;
+    }
+
     public DeleteModelManagedDataIntent(
         string table,
         string[] keyColumns,

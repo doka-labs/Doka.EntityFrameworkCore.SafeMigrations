@@ -59,6 +59,18 @@ internal interface ISafeMigrationProjectedKeyAnalyzer
 /// <summary>Provides exact ordered column definitions without allocating snapshots.</summary>
 internal interface ISafeMigrationProjectedColumnSource
 {
+    /// <summary>Reads accepted exact index identity without replacing it with historical native absence.</summary>
+    /// <param name="definition">The requested complete index definition.</param>
+    /// <param name="liveAnalysis">The original physical-alias evidence, not a fabricated Missing result.</param>
+    /// <param name="includeConstraintBackingIndexNames">Whether keys share their native backing-index name.</param>
+    /// <returns>The accepted identity state, or null when no ordered index evidence exists.</returns>
+    /// <remarks>The provider must still qualify dependency lifetimes, row effects and native feasibility.</remarks>
+    SafeMigrationProviderAnalysis? GetProjectedIndexIdentityAnalysis(
+        ExpectedIndexDefinition definition,
+        SafeMigrationProviderAnalysis liveAnalysis,
+        bool includeConstraintBackingIndexNames = false
+    ) => null;
+
     /// <summary>Checks whether the current accepted primary key contains a projected column.</summary>
     /// <param name="table">The projected table identity.</param>
     /// <param name="schema">The optional provider-normalized owner schema.</param>

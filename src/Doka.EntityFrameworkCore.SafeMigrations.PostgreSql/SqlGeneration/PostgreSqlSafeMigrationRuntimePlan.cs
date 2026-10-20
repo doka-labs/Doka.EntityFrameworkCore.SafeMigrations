@@ -41,6 +41,12 @@ internal sealed record PostgreSqlSafeMigrationRuntimePlan(
     /// <summary>Gets the parent table fenced before the complete source-frozen delete classifier is rerun.</summary>
     public string? ModelManagedDeleteLockTable { get; init; }
 
+    /// <summary>Gets the native exact-owner lock command expression used before reclassifying a source DROP.</summary>
+    public string? GeneratedDropLockSqlExpression { get; init; }
+
+    /// <summary>Gets runtime-only snapshot and lock eligibility, distinct from read-only analysis isolation.</summary>
+    public string? GeneratedDropRuntimeGuardExpression { get; init; }
+
     /// <summary>
     /// Gets the immediate postcondition for an applied operation when it
     /// differs from the terminal migration contract.
@@ -52,6 +58,9 @@ internal sealed record PostgreSqlSafeMigrationRuntimePlan(
 
     /// <summary>Gets the state expression used when the evaluation guard fails.</summary>
     public string? StateEvaluationGuardFailureExpression { get; init; }
+
+    /// <summary>Gets the bounded capability reason emitted by the preliminary catalog-only guard.</summary>
+    public string? StateEvaluationGuardFailureCodeExpression { get; init; }
 
     /// <summary>Gets an optional stable classification-code expression.</summary>
     public string? ClassificationCodeExpression { get; init; }

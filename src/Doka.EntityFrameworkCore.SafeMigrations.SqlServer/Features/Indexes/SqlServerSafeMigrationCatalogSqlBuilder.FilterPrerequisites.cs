@@ -88,18 +88,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             return null;
         }
 
-        return PreserveLiteralType(parsed);
-
-        SafeMigrationSqlExpression PreserveLiteralType(SafeMigrationSqlExpression expression) => expression switch
-        {
-            SafeMigrationSqlLiteralExpression { Value: string } literal
-                => new SafeMigrationSqlLiteralExpression(literal.Value, strings.Dequeue()),
-            SafeMigrationSqlBinaryExpression binary => new SafeMigrationSqlBinaryExpression(
-                PreserveLiteralType(binary.Left), binary.Operator, PreserveLiteralType(binary.Right)),
-            SafeMigrationSqlInExpression predicate => new SafeMigrationSqlInExpression(
-                predicate.Operand, predicate.Values.Select(PreserveLiteralType), predicate.Negated),
-            _ => expression,
-        };
+        return RewriteFilter(parsed, new LiteralTypeFilterRewriter(strings));
     }
 
     private static IEnumerable<string> IndexFilterColumns(

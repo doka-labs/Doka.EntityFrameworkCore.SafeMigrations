@@ -37,13 +37,14 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
         var legacyRepair = RenderLegacyActionSql(repairBaseline);
 
         // Assert
-        Assert.Contains("        IF doka_action = 'apply' THEN\n" + legacyApply
+        Assert.Contains("        IF doka_action OPERATOR(pg_catalog.=) 'apply' THEN\n" + legacyApply
             + "        ELSE\n" + legacyRepair + "        END IF;\n", guarded, StringComparison.Ordinal);
         Assert.StartsWith("DO " + expectedTag + "\nDECLARE\n", guarded, StringComparison.Ordinal);
         Assert.EndsWith("END\n" + expectedTag + ";", guarded, StringComparison.Ordinal);
         Assert.Equal(2, CountOccurrences(guarded, expectedTag));
         Assert.Contains("FOR doka_evaluation_pass IN 1..2 LOOP", guarded, StringComparison.Ordinal);
-        Assert.Contains("EXIT WHEN doka_action <> 'repair' OR doka_evaluation_pass = 2;", guarded,
+        Assert.Contains("EXIT WHEN doka_action OPERATOR(pg_catalog.<>) 'repair' "
+            + "OR doka_evaluation_pass OPERATOR(pg_catalog.=) 2;", guarded,
             StringComparison.Ordinal);
         Assert.Contains(" IN ACCESS EXCLUSIVE MODE;", guarded, StringComparison.Ordinal);
         Assert.Contains("        IF NOT COALESCE((\n            " + plan.Postcondition
@@ -338,7 +339,7 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
             appendActionCase(builder, operation, plan.RepairCapability);
         }
 
-        builder.Append(";\n        IF doka_action = 'apply' THEN\n");
+        builder.Append(";\n        IF doka_action OPERATOR(pg_catalog.=) 'apply' THEN\n");
         if (legacyCopies)
         {
             AppendLegacyCopiedBaseline(builder, baseline, indentation);
@@ -513,13 +514,13 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
                 + bodyIndentation + "doka_repair_ok := FALSE;\n";
     }
 
-    /// <summary>Reproduces legacy action-case bytes using every state from the canonical planner.</summary>
+    /// <summary>Uses the legacy-buffer strategy with current native-safe canonical policy syntax.</summary>
     private static string RenderLegacyActionCase(
         SafeMigrationOperation operation,
         SafeMigrationRepairCapability repairCapability
     )
     {
-        var builder = new StringBuilder("CASE doka_state ");
+        var builder = new StringBuilder("CASE ");
         foreach (var state in Enum.GetValues<SafeMigrationObservedState>())
         {
             var action = SafeMigrationDecisionPlanner.PlanAction(
@@ -536,7 +537,7 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
                 _ => throw new InvalidOperationException("The legacy oracle encountered an unknown observed state."),
             };
 
-            builder.Append("WHEN '").Append(stateCode).Append("' THEN ");
+            builder.Append("WHEN doka_state OPERATOR(pg_catalog.=) '").Append(stateCode).Append("' THEN ");
             if (action == SafeMigrationAction.Repair)
             {
                 builder.Append("CASE WHEN doka_repair_ok THEN 'repair' ELSE 'reject_different' END ");

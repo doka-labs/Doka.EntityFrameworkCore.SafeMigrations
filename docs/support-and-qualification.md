@@ -13,6 +13,19 @@ see [diagnostic compatibility](diagnostics.md#runtime-provider-differences).
 Native qualification still requires the complete blocking matrix; ARM SQL Server
 skips and offline SQL-shape tests are not substitutes for its x64 cells.
 
+The unreleased generated-expression support conditionally changes approved
+contract fingerprints: successfully parsed EF computed-column and CHECK SQL
+now includes original source spelling and numeric-token provenance. Review
+affected migration artifacts, regenerate stored
+`SafeMigrationContractFingerprint` values and reapprove them before use.
+Do not bypass mismatch checks or rewrite historical migrations. Ordinary
+SQL-default parsing, opaque/unparsed SQL, explicit uncaptured definitions and
+provider-owned operation fingerprint encoding are unchanged, as is the
+relational model-fingerprint format. Parsed CHECK equality also retains exact
+authored spelling; whitespace/parenthesis-only differences can be `Different`
+without being `Unsupported`. Computed-column source was already exact and
+does not gain automatic repair. See [expression compatibility](api-reference.md#sql-expressions-and-policy).
+
 All publishable projects target `net10.0`. The repository pins SDK 10.0.402
 with roll-forward disabled. SafeMigrations supports EF Core 10 only.
 
@@ -280,6 +293,9 @@ coverage. The provider-specific suites collectively cover:
   invalid-value enforcement, and independent user-check drift;
 - bounded EF-generated SQL defaults such as `CURRENT_TIMESTAMP(6)`, plus
   fail-closed retention of unbounded default SQL;
+- bounded generated-column and CHECK expressions, including ordered searched
+  `CASE` and overflow-guarded signed-integer branches; see the provider-specific
+  type, storage and non-NULL proofs in [generated columns](migration-authoring.md#generated-columns);
 - provider-specific index capabilities, generated MySQL/MariaDB prefix
   roundtrips, physical InnoDB key-limit boundaries, and unsupported branches;
 - ordered ordinary and safe index drop/create replacement, including preserved
@@ -435,6 +451,10 @@ cases stop before target DDL instead of being compared or applied heuristically:
   provider-generated check is excluded from strict child-object ownership.
 - EF-generated SQL defaults receive typed equivalence only when the bounded
   parser proves their structure. Arbitrary SQL strings remain unsupported.
+- The same structural boundary applies to EF computed-column and CHECK
+  metadata. A parsed expression alone does not establish native type binding,
+  required-result semantics or index eligibility; each provider must prove
+  those independently. SQL Server native qualification requires the x64 matrix.
 - Existing PostgreSQL indexes must be valid, ready, live, and independently
   owned. Partitioned parent indexes are supported; attached child indexes and
   constraint-owned backing indexes reject independent ensure, drop, or rename

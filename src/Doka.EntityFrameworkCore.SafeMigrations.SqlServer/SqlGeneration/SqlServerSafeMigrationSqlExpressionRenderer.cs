@@ -37,29 +37,72 @@ internal sealed class SqlServerSafeMigrationSqlExpressionRenderer
     {
         ArgumentNullException.ThrowIfNull(expression);
 
+        var pending = default(SafeMigrationWorkStack<ValidationFrame>);
+        var current = new ValidationFrame(expression, 0);
+        try
+        {
+            do
+            {
+                var feature = current.Index == 0 ? GetNodeFeature(current.Expression, current.CaseDepth) : null;
+                if (feature is not null)
+                {
+                    return feature;
+                }
+
+                // WHY: Resume lists one child at a time. A public expression can
+                // be arbitrarily deep or wide without consuming the call stack
+                // or reserving a second array for all its siblings.
+                if (TryGetValidationChild(current, out var child))
+                {
+                    var continuation = current with { Index = current.Index + 1 };
+                    if (TryGetValidationChild(continuation, out _))
+                    {
+                        pending.Push(continuation);
+                    }
+
+                    current = child;
+                    continue;
+                }
+
+                if (!pending.TryPop(out current))
+                {
+                    return null;
+                }
+            }
+            while (true);
+        }
+        finally
+        {
+            pending.Dispose();
+        }
+    }
+
+    /// <summary>Retains SQL Server's ten-level CASE limit across every nested expression role.</summary>
+    private string? GetNodeFeature(
+        SafeMigrationSqlExpression expression,
+        int caseDepth
+    )
+    {
+        if (caseDepth > 10)
+        {
+            return "structured_case_nesting";
+        }
+
         return expression switch
         {
             SafeMigrationSqlIdentifierExpression => null,
             SafeMigrationSqlLiteralExpression value => GetLiteralFeature(value),
-            SafeMigrationSqlUnaryExpression value => GetUnsupportedFeature(value.Operand),
-            SafeMigrationSqlBinaryExpression value =>
-                GetUnsupportedFeature(value.Left) ?? GetUnsupportedFeature(value.Right),
-            SafeMigrationSqlNullTestExpression value => GetUnsupportedFeature(value.Operand),
-            SafeMigrationSqlBetweenExpression value =>
-                GetUnsupportedFeature(value.Operand)
-                ?? GetUnsupportedFeature(value.Lower)
-                ?? GetUnsupportedFeature(value.Upper),
-            SafeMigrationSqlInExpression value =>
-                GetUnsupportedFeature(value.Operand)
-                ?? value.Values.Select(GetUnsupportedFeature).FirstOrDefault(static feature => feature is not null),
+            SafeMigrationSqlUnaryExpression or SafeMigrationSqlBinaryExpression
+                or SafeMigrationSqlNullTestExpression or SafeMigrationSqlBetweenExpression
+                or SafeMigrationSqlInExpression => null,
             SafeMigrationSqlFunctionExpression value => GetFunctionFeature(value),
+            SafeMigrationSqlCaseExpression => caseDepth >= 10 ? "structured_case_nesting" : null,
             SafeMigrationSqlCastExpression value => IsSupportedStoreType(value.StoreType)
-                ? GetUnsupportedFeature(value.Operand)
-                : "structured_cast_type",
+                ? null : "structured_cast_type",
             SafeMigrationSqlCollateExpression value => value.Schema is not null
                 ? "structured_collation_schema"
                 : IsSqlServerCollationName(value.Name)
-                    ? GetUnsupportedFeature(value.Operand)
+                    ? null
                     : "structured_collation_name",
             SafeMigrationSqlCurrentValueExpression => null,
             SafeMigrationSqlProviderFragmentExpression value =>
@@ -79,7 +122,7 @@ internal sealed class SqlServerSafeMigrationSqlExpressionRenderer
     ) => name.ToUpperInvariant() is "GETDATE" or "GETUTCDATE" or "SYSDATETIME"
         or "SYSUTCDATETIME" or "SYSDATETIMEOFFSET";
 
-    private string? GetFunctionFeature(
+    private static string? GetFunctionFeature(
         SafeMigrationSqlFunctionExpression expression
     )
     {
@@ -99,10 +142,56 @@ internal sealed class SqlServerSafeMigrationSqlExpressionRenderer
             _ => false,
         };
 
-        return valid
-            ? expression.Arguments.Select(GetUnsupportedFeature).FirstOrDefault(static feature => feature is not null)
-            : "structured_function_arity";
+        return valid ? null : "structured_function_arity";
     }
+
+    /// <summary>Enumerates native roles in their original left-to-right validation order.</summary>
+    private static bool TryGetValidationChild(
+        ValidationFrame frame,
+        out ValidationFrame child
+    )
+    {
+        var expression = frame.Expression;
+        var index = frame.Index;
+        var next = expression switch
+        {
+            SafeMigrationSqlUnaryExpression value when index == 0 => value.Operand,
+            SafeMigrationSqlBinaryExpression value when index < 2 => index == 0 ? value.Left : value.Right,
+            SafeMigrationSqlNullTestExpression value when index == 0 => value.Operand,
+            SafeMigrationSqlBetweenExpression value when index < 3
+                => index == 0 ? value.Operand : index == 1 ? value.Lower : value.Upper,
+            SafeMigrationSqlInExpression value when index == 0 => value.Operand,
+            SafeMigrationSqlInExpression value when index <= value.Values.Count => value.Values[index - 1],
+            SafeMigrationSqlFunctionExpression value when index < value.Arguments.Count => value.Arguments[index],
+            SafeMigrationSqlCastExpression value when index == 0 => value.Operand,
+            SafeMigrationSqlCollateExpression value when index == 0 => value.Operand,
+            SafeMigrationSqlCaseExpression value when index / 2 < value.WhenClauses.Count
+                => index % 2 == 0 ? value.WhenClauses[index / 2].Condition : value.WhenClauses[index / 2].Result,
+            SafeMigrationSqlCaseExpression value when index == value.WhenClauses.Count * 2 => value.ElseResult,
+            _ => null,
+        };
+
+        if (next is null)
+        {
+            child = default;
+
+            return false;
+        }
+
+        var depth = frame.CaseDepth;
+        if (expression is SafeMigrationSqlCaseExpression @case)
+        {
+            var result = index % 2 != 0 || index == @case.WhenClauses.Count * 2;
+            depth += 1 + (result && IsPredicate(next) ? 1 : 0);
+        }
+
+        child = new ValidationFrame(next, depth);
+
+        return true;
+    }
+
+    /// <summary>Retains one pending child and the native CASE depth without recursive calls.</summary>
+    private readonly record struct ValidationFrame(SafeMigrationSqlExpression Expression, int CaseDepth, int Index = 0);
 
     /// <summary>Validates and renders a supported expression without untrusted SQL substitution.</summary>
     /// <param name="expression">The immutable expression tree.</param>
@@ -225,95 +314,258 @@ internal sealed class SqlServerSafeMigrationSqlExpressionRenderer
         SafeMigrationSqlExpression expression
     )
     {
-        switch (expression)
+        var pending = default(SafeMigrationWorkStack<RenderFrame>);
+        var current = new RenderFrame(expression);
+        try
         {
-            case SafeMigrationSqlIdentifierExpression value:
-                for (var index = 0; index < value.Parts.Count; index++)
+            do
+            {
+                if (current.Text is { } text)
                 {
-                    if (index > 0)
+                    builder.Append(text);
+                }
+                else if (current.Role == RenderRole.List)
+                {
+                    var values = current.Expression is SafeMigrationSqlInExpression predicate
+                        ? predicate.Values : ((SafeMigrationSqlFunctionExpression)current.Expression!).Arguments;
+
+                    if (current.Index < values.Count)
                     {
-                        builder.Append('.');
+                        if (current.Index > 0)
+                        {
+                            builder.Append(", ");
+                        }
+
+                        pending.Push(current with { Index = current.Index + 1 });
+                        current = new RenderFrame(values[current.Index]);
+                        continue;
+                    }
+                }
+                else if (current.Role == RenderRole.Case)
+                {
+                    var conditional = (SafeMigrationSqlCaseExpression)current.Expression!;
+                    if (current.Index < conditional.WhenClauses.Count)
+                    {
+                        var clause = conditional.WhenClauses[current.Index];
+                        pending.Push(current with { Index = current.Index + 1 });
+                        pending.Push(new RenderFrame(clause.Result, Role: RenderRole.Scalar));
+                        pending.Push(new RenderFrame(Text: " THEN "));
+                        builder.Append(" WHEN ");
+                        current = new RenderFrame(clause.Condition, Role: RenderRole.Predicate);
+                        continue;
                     }
 
-                    builder.Append(_sqlGenerationHelper.DelimitIdentifier(value.Parts[index]));
+                    pending.Push(new RenderFrame(Text: " END"));
+                    if (conditional.ElseResult is { } alternative)
+                    {
+                        builder.Append(" ELSE ");
+                        current = new RenderFrame(alternative, Role: RenderRole.Scalar);
+                        continue;
+                    }
                 }
+                else if (current.Role == RenderRole.Predicate)
+                {
+                    if (current.Expression is SafeMigrationSqlUnaryExpression
+                        { Operator: SafeMigrationSqlUnaryOperator.Not } unary)
+                    {
+                        builder.Append("(NOT ");
+                        pending.Push(new RenderFrame(Text: ")"));
+                        current = new RenderFrame(unary.Operand, Role: RenderRole.Predicate);
+                        continue;
+                    }
 
-                break;
+                    if (current.Expression is SafeMigrationSqlBinaryExpression
+                        { Operator: SafeMigrationSqlBinaryOperator.And or SafeMigrationSqlBinaryOperator.Or } binary)
+                    {
+                        builder.Append('(');
+                        pending.Push(new RenderFrame(Text: ")"));
+                        pending.Push(new RenderFrame(binary.Right, Role: RenderRole.Predicate));
+                        pending.Push(new RenderFrame(Text: " "));
+                        pending.Push(new RenderFrame(Text: BinaryOperator(binary.Operator)));
+                        pending.Push(new RenderFrame(Text: " "));
+                        current = new RenderFrame(binary.Left, Role: RenderRole.Predicate);
+                        continue;
+                    }
 
-            case SafeMigrationSqlLiteralExpression value:
-                AppendLiteral(builder, value);
-                break;
+                    if (!IsPredicate(current.Expression!))
+                    {
+                        builder.Append('(');
+                        pending.Push(new RenderFrame(Text: " = CAST(1 AS bit))"));
+                    }
 
-            case SafeMigrationSqlUnaryExpression value:
-                builder.Append(value.Operator == SafeMigrationSqlUnaryOperator.Not ? "(NOT " : "(-");
-                Append(builder, value.Operand);
-                builder.Append(')');
-                break;
+                    current = current with { Role = RenderRole.Node };
+                    continue;
+                }
+                else if (current.Role == RenderRole.Scalar)
+                {
+                    if (IsPredicate(current.Expression!))
+                    {
+                        // WHY: T-SQL predicates require a scalar CASE conversion.
+                        // Render each occurrence independently, retaining UNKNOWN
+                        // and the original traversal and literal-mapping order.
+                        builder.Append("CASE WHEN ");
+                        pending.Push(new RenderFrame(Text: " THEN CAST(0 AS bit) ELSE NULL END"));
+                        pending.Push(new RenderFrame(current.Expression, Role: RenderRole.Predicate));
+                        pending.Push(new RenderFrame(Text: " THEN CAST(1 AS bit) WHEN NOT "));
+                        current = current with { Role = RenderRole.Predicate };
+                        continue;
+                    }
 
-            case SafeMigrationSqlBinaryExpression value:
-                builder.Append('(');
-                Append(builder, value.Left);
-                builder.Append(' ').Append(BinaryOperator(value.Operator)).Append(' ');
-                Append(builder, value.Right);
-                builder.Append(')');
-                break;
+                    current = current with { Role = RenderRole.Node };
+                    continue;
+                }
+                else
+                {
+                    switch (current.Expression)
+                    {
+                        case SafeMigrationSqlIdentifierExpression value:
+                            for (var index = 0; index < value.Parts.Count; index++)
+                            {
+                                if (index > 0)
+                                {
+                                    builder.Append('.');
+                                }
 
-            case SafeMigrationSqlNullTestExpression value:
-                builder.Append('(');
-                Append(builder, value.Operand);
-                builder.Append(value.Negated ? " IS NOT NULL)" : " IS NULL)");
-                break;
+                                builder.Append(_sqlGenerationHelper.DelimitIdentifier(value.Parts[index]));
+                            }
 
-            case SafeMigrationSqlBetweenExpression value:
-                builder.Append('(');
-                Append(builder, value.Operand);
-                builder.Append(value.Negated ? " NOT BETWEEN " : " BETWEEN ");
-                Append(builder, value.Lower);
-                builder.Append(" AND ");
-                Append(builder, value.Upper);
-                builder.Append(')');
-                break;
+                            break;
 
-            case SafeMigrationSqlInExpression value:
-                builder.Append('(');
-                Append(builder, value.Operand);
-                builder.Append(value.Negated ? " NOT IN (" : " IN (");
-                AppendList(builder, value.Values);
-                builder.Append("))");
-                break;
+                        case SafeMigrationSqlLiteralExpression value:
+                            if (!value.NumericSourceToken.IsEmpty)
+                            {
+                                builder.Append(value.NumericSourceToken.Span);
+                            }
+                            else
+                            {
+                                AppendLiteral(builder, value);
+                            }
 
-            case SafeMigrationSqlFunctionExpression value:
-                builder.Append(value.Name.ToUpperInvariant()).Append('(');
-                AppendList(builder, value.Arguments);
-                builder.Append(')');
-                break;
+                            break;
 
-            case SafeMigrationSqlCastExpression value:
-                builder.Append("CAST(");
-                Append(builder, value.Operand);
-                builder.Append(" AS ").Append(value.StoreType).Append(')');
-                break;
+                        case SafeMigrationSqlUnaryExpression value:
+                            builder.Append(value.Operator == SafeMigrationSqlUnaryOperator.Not ? "(NOT " : "(-");
+                            pending.Push(new RenderFrame(Text: ")"));
+                            current = new RenderFrame(value.Operand);
+                            continue;
 
-            case SafeMigrationSqlCollateExpression value:
-                builder.Append('(');
-                Append(builder, value.Operand);
-                // WHY: T-SQL COLLATE requires a literal collation token, not a
-                // delimited object identifier. The name was validated above.
-                builder.Append(" COLLATE ").Append(value.Name).Append(')');
-                break;
+                        case SafeMigrationSqlBinaryExpression value:
+                            builder.Append('(');
+                            pending.Push(new RenderFrame(Text: ")"));
+                            pending.Push(new RenderFrame(value.Right));
+                            pending.Push(new RenderFrame(Text: " "));
+                            pending.Push(new RenderFrame(Text: BinaryOperator(value.Operator)));
+                            pending.Push(new RenderFrame(Text: " "));
+                            current = new RenderFrame(value.Left);
+                            continue;
 
-            case SafeMigrationSqlCurrentValueExpression value:
-                AppendCurrentValue(builder, value);
-                break;
+                        case SafeMigrationSqlNullTestExpression value:
+                            builder.Append('(');
+                            pending.Push(new RenderFrame(Text: value.Negated ? " IS NOT NULL)" : " IS NULL)"));
+                            current = new RenderFrame(value.Operand);
+                            continue;
 
-            case SafeMigrationSqlProviderFragmentExpression value:
-                builder.Append(value.Sql);
-                break;
+                        case SafeMigrationSqlBetweenExpression value:
+                            builder.Append('(');
+                            pending.Push(new RenderFrame(Text: ")"));
+                            pending.Push(new RenderFrame(value.Upper));
+                            pending.Push(new RenderFrame(Text: " AND "));
+                            pending.Push(new RenderFrame(value.Lower));
+                            pending.Push(new RenderFrame(Text: value.Negated ? " NOT BETWEEN " : " BETWEEN "));
+                            current = new RenderFrame(value.Operand);
+                            continue;
 
-            default:
-                throw new UnreachableException();
+                        case SafeMigrationSqlInExpression value:
+                            builder.Append('(');
+                            pending.Push(new RenderFrame(Text: "))"));
+                            pending.Push(new RenderFrame(value, Role: RenderRole.List));
+                            pending.Push(new RenderFrame(Text: value.Negated ? " NOT IN (" : " IN ("));
+                            current = new RenderFrame(value.Operand);
+                            continue;
+
+                        case SafeMigrationSqlFunctionExpression value:
+                            builder.Append(value.Name.ToUpperInvariant()).Append('(');
+                            pending.Push(new RenderFrame(Text: ")"));
+                            current = new RenderFrame(value, Role: RenderRole.List);
+                            continue;
+
+                        case SafeMigrationSqlCaseExpression value:
+                            builder.Append("CASE");
+                            current = new RenderFrame(value, Role: RenderRole.Case);
+                            continue;
+
+                        case SafeMigrationSqlCastExpression value:
+                            builder.Append("CAST(");
+                            pending.Push(new RenderFrame(Text: ")"));
+                            pending.Push(new RenderFrame(Text: value.StoreType));
+                            pending.Push(new RenderFrame(Text: " AS "));
+                            current = new RenderFrame(value.Operand);
+                            continue;
+
+                        case SafeMigrationSqlCollateExpression value:
+                            builder.Append('(');
+                            // WHY: COLLATE is a validated literal token, not a
+                            // delimited identifier in the T-SQL grammar.
+                            pending.Push(new RenderFrame(Text: ")"));
+                            pending.Push(new RenderFrame(Text: value.Name));
+                            pending.Push(new RenderFrame(Text: " COLLATE "));
+                            current = new RenderFrame(value.Operand);
+                            continue;
+
+                        case SafeMigrationSqlCurrentValueExpression value:
+                            AppendCurrentValue(builder, value);
+                            break;
+
+                        case SafeMigrationSqlProviderFragmentExpression value:
+                            builder.Append(value.Sql);
+                            break;
+
+                        default:
+                            throw new UnreachableException();
+                    }
+                }
+                if (!pending.TryPop(out current))
+                {
+                    break;
+                }
+            }
+            while (true);
+        }
+        finally
+        {
+            pending.Dispose();
         }
     }
+
+    /// <summary>Distinguishes resumable native scalar, predicate, and collection rendering roles.</summary>
+    private enum RenderRole
+    {
+        Node,
+        Predicate,
+        Scalar,
+        List,
+        Case,
+    }
+
+    /// <summary>Keeps one output continuation without allocating a delegate or per-node object.</summary>
+    private readonly record struct RenderFrame(
+        SafeMigrationSqlExpression? Expression = null,
+        string? Text = null,
+        RenderRole Role = RenderRole.Node,
+        int Index = 0
+    );
+
+    /// <summary>Distinguishes T-SQL search conditions from scalar values.</summary>
+    private static bool IsPredicate(
+        SafeMigrationSqlExpression expression
+    ) => expression is SafeMigrationSqlNullTestExpression or SafeMigrationSqlBetweenExpression
+        or SafeMigrationSqlInExpression
+        or SafeMigrationSqlUnaryExpression { Operator: SafeMigrationSqlUnaryOperator.Not }
+        or SafeMigrationSqlBinaryExpression
+        {
+            Operator: >= SafeMigrationSqlBinaryOperator.And and <= SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
+        };
+
 
     private void AppendLiteral(
         StringBuilder builder,
@@ -357,22 +609,6 @@ internal sealed class SqlServerSafeMigrationSqlExpressionRenderer
         if (expression.StoreType is not null)
         {
             builder.Append(" AS ").Append(expression.StoreType).Append(')');
-        }
-    }
-
-    private void AppendList(
-        StringBuilder builder,
-        IReadOnlyList<SafeMigrationSqlExpression> values
-    )
-    {
-        for (var index = 0; index < values.Count; index++)
-        {
-            if (index > 0)
-            {
-                builder.Append(", ");
-            }
-
-            Append(builder, values[index]);
         }
     }
 

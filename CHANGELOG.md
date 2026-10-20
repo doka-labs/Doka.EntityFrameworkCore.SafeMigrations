@@ -6,14 +6,72 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
+### Added
+
+- Add immutable searched-CASE expressions and bounded EF computed-column SQL
+  capture. Preserve ordered conditions/results, optional ELSE, typed
+  two-argument SQL Server CONVERT and complete expression traversal instead of
+  retaining supported generated expressions as opaque SQL. Keep unsupported
+  grammar and provider-specific type, determinism, storage and index gates
+  fail-closed.
+- Retain validated original computed/CHECK SQL and numeric-token provenance
+  alongside its parsed structure. Native DDL, comparison and fingerprints do
+  not silently replace provider literal typing with CLR-derived casts.
+  Preserve dialect provenance and reject uncertified quoting, function/type
+  roles or lossy native catalog displays instead of trusting arbitrary SQL.
+- Support required MariaDB and SQL Server generated results only through
+  separate bounded semantic non-null proofs while retaining their actual
+  native nullable metadata. Verify supported operand/type bindings without
+  application-row scans; do not inject defaults, helper CHECKs or persistence.
+  Qualify PostgreSQL generated CASE operands against supported native built-in
+  types and SQL Server computed columns/indexes against native compilation,
+  physical metadata and effective session requirements.
+
 ### Changed
 
+- Change contract fingerprints for successfully parsed EF computed-column and
+  CHECK definitions by retaining their original SQL spelling and numeric-token
+  provenance. Review affected migration artifacts, regenerate their stored
+  `SafeMigrationContractFingerprint` values and reapprove them before use; do
+  not reuse earlier approvals, disable mismatch checks or rewrite historical
+  migrations. Ordinary SQL defaults, opaque/unparsed expressions, explicit
+  uncaptured definitions and provider-owned operation fingerprints retain
+  their existing encoding; this is not a relational model-fingerprint format
+  change.
+- Retain exact authored spelling when comparing parsed CHECK definitions.
+  Whitespace or redundant-parenthesis differences can therefore be
+  `Different`, not `Unsupported`, even when their parsed trees agree.
+  Computed-column source was already compared exactly and remains ineligible
+  for automatic repair when that source differs. Review the intended authored
+  contract; provider-certified native catalog normalization does not make
+  arbitrary source changes equivalent or authorize a policy bypass.
 - Raise the MySQL/MariaDB provider's published Doka dependency to
   `[10.6.0,10.7.0)` and qualify against public 10.6.0. Its complete physical
   index-budget convention can change implicit indexed string/binary lengths;
   review newly scaffolded model differences without rewriting existing
   migrations. Retain the public migration SPI and other providers' dependency
   isolation. Doka's transitive System.IO.Hashing minimum becomes 10.0.13.
+- Reject captured native expressions whose identifier keywords, cast targets,
+  function/operator bindings, dialect roles or catalog identity cannot be
+  proved. Pending operations previously accepted through weaker assumptions
+  can now be classified `Unsupported`; do not treat every refusal as invalid
+  native SQL or bypass it with another policy. MySQL/MariaDB generated clocks
+  remain outside the deterministic product contract, including MariaDB virtual
+  forms that native SQL permits. Ordinary clock defaults remain unchanged.
+  Preserve native source-dependency restrictions on MySQL generated-column
+  renames and SQL Server CHECK/computed dependencies instead of reporting a
+  projected rename as safe before a native refusal.
+- Reject source-column removal while a generated dependent survives, before
+  target DDL. Keep explicit dependent-first removal, unrelated removals and
+  missing-source no-ops; never cascade generated columns automatically.
+  Incomplete or opaque dependency evidence remains unsupported. This also
+  prevents PostgreSQL 14's native automatic removal of a generated dependent.
+  On MySQL/MariaDB, a pending DROP can now be unsupported when its owner has
+  generated members but neither a complete operation-bound model candidate nor an
+  earlier explicit generated contract can be certified against native metadata.
+  PostgreSQL repeats the DROP classifier under an explicit owner lock; missing
+  lock authority, stale runtime snapshot semantics or an inherited/partition
+  hierarchy remains unsupported without changing rights or isolation.
 - Raise EF Core and dependency-injection minimums to 10.0.13; these are visible
   in published NuGet dependency contracts. Update the SDK to 10.0.402,
   dotnet-ef to 10.0.13, FsCheck to 3.5.0, Microsoft.NET.Test.Sdk to 18.11.0,
@@ -24,6 +82,35 @@ the shared release identity described in [Release process](docs/release-process.
   the existing exact-version SNI license exception after confirming identical
   vendor license bytes; do not broaden its development/testing or no-bundling
   boundaries.
+
+### Fixed
+
+- Traverse deep public SQL expression trees without recursive managed-stack
+  growth in Core inspection, comparison, fingerprinting and renaming, and in
+  provider rendering and proof paths. Preserve SQL, hashes, operand order,
+  short-circuit behavior and existing parser/native capability limits rather
+  than imposing a new tree-depth rejection.
+- Preserve generated-column store type, collation and nullability in SQLite
+  fresh safe tables and owned rebuilds instead of rejecting the adapter's own
+  output at postcondition verification. Keep physical drift detection,
+  transactional rollback and the rejection of direct STORED-column additions.
+  Scope rewriting to accepted safe owners/lifetimes; ordinary provider-owned
+  DDL retains native behavior even in mixed streams.
+- Preserve successfully parsed generated CHECK structure through scaffolded
+  helpers, inline model constraints and normalized EF operations. Supported
+  comparisons no longer become opaque again between source generation and
+  runtime analysis. Unrecognized SQL and unrelated provider capability gates
+  remain rejected.
+- Verify certified column-renaming streams against the transformed complete
+  final table contract rather than requiring obsolete generated-expression
+  identifiers. Keep unrelated column, key, CHECK and provider drift visible;
+  an arbitrary add/alter or unproved owner lifetime cannot discard an earlier
+  strict-table postcondition.
+- Retain independent native DROP blockers after an unchanged source-column
+  confirmation. SQL Server constraint/index dependencies and SQLite retained-FK
+  rebuild violations cannot become applicable merely through projected source
+  presence. Exact accepted dependency removals and current owner/row lifetimes
+  remain separate evidence; expired facts require fresh runtime validation.
 
 ## [10.5.0] - 2026-10-15
 

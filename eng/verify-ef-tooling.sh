@@ -450,6 +450,17 @@ else
 fi
 
 for migration in "${strict_migration}" "${legacy_migration}"; do
+  for generated_contract in \
+    'scaffolding_generated_nodes' \
+    'HasDescendants' \
+    'CASE WHEN' \
+    'ck_scaffolding_generated_bounds'; do
+    if ! grep -Fq "${generated_contract}" "${migration}"; then
+      echo "Scaffolding output is missing its generated expression contract: ${generated_contract}" >&2
+      exit 1
+    fi
+  done
+
   for hierarchy_contract in \
     'scaffolding_work_items' \
     'Discriminator' \

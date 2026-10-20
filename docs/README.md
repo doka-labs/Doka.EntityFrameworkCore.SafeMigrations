@@ -20,6 +20,7 @@ external registries, not by source documentation alone.
 | --- | --- |
 | Install, register a provider, and scaffold strict or legacy-convergence migrations | [Project README](../README.md) and [runnable sample](../samples/Doka.EntityFrameworkCore.SafeMigrations.Sample/README.md) |
 | Compare generated strict, generated legacy-convergence, model-managed data, and hand-authored migration source | [Migration authoring paths](migration-authoring.md) |
+| Author computed values | [Generated columns](migration-authoring.md#generated-columns) |
 | Separate migration lineages | [Model-managed-data ownership](model-managed-data-ownership.md) |
 | Find public inputs, outputs, and failure boundaries | [API reference](api-reference.md) |
 | Check engines, dependency ranges, qualified boundaries, and evidence | [Support and qualification](support-and-qualification.md) |

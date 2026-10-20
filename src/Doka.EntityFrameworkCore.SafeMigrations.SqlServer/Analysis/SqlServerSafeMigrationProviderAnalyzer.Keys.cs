@@ -50,7 +50,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             ProjectedSeedKeyAnalysis(intent, columns),
             ProjectedIndexFilterAnalysis(intent, columns, snapshot, liveAnalysis),
             intent is EnsureIndexIntent index
-                ? SqlServerSafeMigrationCatalogSqlBuilder.GetStructuredIndexFilter(index.Definition) : null);
+                ? SqlServerSafeMigrationCatalogSqlBuilder.GetStructuredIndexFilter(index.Definition) : null,
+            _projectedComputedKeys);
     }
 
     /// <summary>Captures requested live key facets once per analysis, in bounded table groups.</summary>
@@ -263,6 +264,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         await ReadProjectedSeedKeyProofsAsync(
             connection, transaction, operations, commandTimeout, cancellationToken);
 
+        await ReadProjectedComputedKeyProofsAsync(
+            connection, transaction, operations, commandTimeout, cancellationToken);
+
         _projectedKeyTables = result;
     }
 
@@ -330,10 +334,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         IEnumerable<string> requested
     ) => "SELECT requested.ordinal, requested.name, ty.name, "
             + "CONVERT(int, c.max_length), c.is_nullable, "
-            + "CASE WHEN c.is_computed = 0 AND c.max_length > 0 AND ty.is_user_defined = 0 "
+            + "CASE WHEN " + SqlServerSafeMigrationCatalogSqlBuilder.ComputedIndexColumnEligibility("c")
+            + " AND c.max_length > 0 AND ty.is_user_defined = 0 "
             + "AND ty.name NOT IN (N'xml', N'text', N'ntext', N'image', "
             + "N'sql_variant', N'geography', N'geometry', N'json') "
-            + "THEN 1 ELSE 0 END, CASE WHEN c.is_computed = 0 AND ty.is_user_defined = 0 "
+            + "THEN 1 ELSE 0 END, CASE WHEN "
+            + SqlServerSafeMigrationCatalogSqlBuilder.ComputedIndexColumnEligibility("c", included: true)
+            + " AND ty.is_user_defined = 0 "
             + "AND ty.name NOT IN (N'text', N'ntext', N'image') THEN 1 ELSE 0 END, c.collation_name, "
             + "CASE WHEN c.collation_name = CONVERT(nvarchar(128), DATABASEPROPERTYEX(DB_NAME(), N'Collation')) "
             + "THEN 1 ELSE 0 END, CASE WHEN ty.is_user_defined=0 AND ty.is_assembly_type=0 "

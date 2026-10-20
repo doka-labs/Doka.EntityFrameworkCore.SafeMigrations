@@ -94,10 +94,18 @@ public sealed class SafeMigrationSqlLiteralExpression : SafeMigrationSqlExpressi
     public SafeMigrationSqlLiteralExpression(
         object? value,
         string? storeType = null
+    ) : this(value, storeType, numericSourceToken: default) { }
+
+    /// <summary>Retains a parsed numeric lexeme without allocating a copied numeric string.</summary>
+    internal SafeMigrationSqlLiteralExpression(
+        object? value,
+        string? storeType,
+        ReadOnlyMemory<char> numericSourceToken
     )
     {
         Value = value;
         StoreType = SafeMigrationDefinitionValidator.Optional(storeType, nameof(storeType));
+        NumericSourceToken = numericSourceToken;
     }
 
     /// <summary>Gets the CLR value.</summary>
@@ -105,6 +113,9 @@ public sealed class SafeMigrationSqlLiteralExpression : SafeMigrationSqlExpressi
 
     /// <summary>Gets the explicit provider store type when specified.</summary>
     public string? StoreType { get; }
+
+    /// <summary>Gets the original numeric token, or empty memory for an explicitly typed public literal.</summary>
+    internal ReadOnlyMemory<char> NumericSourceToken { get; }
 }
 
 /// <summary>Represents a unary operation.</summary>
@@ -169,6 +180,63 @@ public sealed class SafeMigrationSqlBinaryExpression : SafeMigrationSqlExpressio
 
     /// <summary>Gets the right operand.</summary>
     public SafeMigrationSqlExpression Right { get; }
+}
+
+/// <summary>Represents one ordered condition and result in a searched CASE expression.</summary>
+public sealed class SafeMigrationSqlCaseWhenClause
+{
+    /// <summary>Initializes an immutable WHEN/THEN clause.</summary>
+    /// <param name="condition">The predicate tested before selecting this result.</param>
+    /// <param name="result">The expression evaluated when the predicate is true.</param>
+    public SafeMigrationSqlCaseWhenClause(
+        SafeMigrationSqlExpression condition,
+        SafeMigrationSqlExpression result
+    )
+    {
+        ArgumentNullException.ThrowIfNull(condition);
+        ArgumentNullException.ThrowIfNull(result);
+
+        Condition = condition;
+        Result = result;
+    }
+
+    /// <summary>Gets the predicate tested for this clause.</summary>
+    public SafeMigrationSqlExpression Condition { get; }
+
+    /// <summary>Gets the result selected when the predicate is true.</summary>
+    public SafeMigrationSqlExpression Result { get; }
+}
+
+/// <summary>Represents an ordered searched CASE expression with an optional ELSE result.</summary>
+public sealed class SafeMigrationSqlCaseExpression : SafeMigrationSqlExpression
+{
+    /// <summary>Initializes a searched CASE and snapshots its ordered clauses.</summary>
+    /// <param name="whenClauses">The non-empty sequence of non-null WHEN/THEN clauses.</param>
+    /// <param name="elseResult">The fallback expression, or null for the SQL implicit NULL result.</param>
+    public SafeMigrationSqlCaseExpression(
+        IEnumerable<SafeMigrationSqlCaseWhenClause> whenClauses,
+        SafeMigrationSqlExpression? elseResult = null
+    )
+    {
+        ArgumentNullException.ThrowIfNull(whenClauses);
+
+        var clauses = whenClauses.ToArray();
+        if (clauses.Length == 0 || clauses.Any(static clause => clause is null))
+        {
+            throw new ArgumentException("A CASE expression requires non-null WHEN/THEN clauses.", nameof(whenClauses));
+        }
+
+        // WHY: Branch order is semantic, and caller-owned arrays must not
+        // mutate the expression after analysis or contract fingerprinting.
+        WhenClauses = Array.AsReadOnly(clauses);
+        ElseResult = elseResult;
+    }
+
+    /// <summary>Gets the clauses in their SQL evaluation order.</summary>
+    public IReadOnlyList<SafeMigrationSqlCaseWhenClause> WhenClauses { get; }
+
+    /// <summary>Gets the fallback expression, or null for an omitted ELSE.</summary>
+    public SafeMigrationSqlExpression? ElseResult { get; }
 }
 
 /// <summary>Represents an IS NULL or IS NOT NULL predicate.</summary>
@@ -316,12 +384,20 @@ public sealed class SafeMigrationSqlCastExpression : SafeMigrationSqlExpression
     public SafeMigrationSqlCastExpression(
         SafeMigrationSqlExpression operand,
         string storeType
+    ) : this(operand, storeType, usesSqlServerConvert: false) { }
+
+    /// <summary>Retains dialect provenance when metadata used SQL Server's reversed CONVERT argument roles.</summary>
+    internal SafeMigrationSqlCastExpression(
+        SafeMigrationSqlExpression operand,
+        string storeType,
+        bool usesSqlServerConvert
     )
     {
         ArgumentNullException.ThrowIfNull(operand);
 
         Operand = operand;
         StoreType = SafeMigrationDefinitionValidator.Required(storeType, nameof(storeType));
+        UsesSqlServerConvert = usesSqlServerConvert;
     }
 
     /// <summary>Gets the cast operand.</summary>
@@ -329,6 +405,9 @@ public sealed class SafeMigrationSqlCastExpression : SafeMigrationSqlExpression
 
     /// <summary>Gets the provider store type.</summary>
     public string StoreType { get; }
+
+    /// <summary>Gets whether parsing requires SQL Server's type-first CONVERT interpretation.</summary>
+    internal bool UsesSqlServerConvert { get; }
 }
 
 /// <summary>Represents an explicit collation clause.</summary>
@@ -479,6 +558,15 @@ public static class SafeMigrationSql
         SafeMigrationSqlUnaryOperator @operator,
         SafeMigrationSqlExpression operand
     ) => new SafeMigrationSqlUnaryExpression(@operator, operand);
+
+    /// <summary>Creates a searched CASE without changing branch order or its conditional evaluation.</summary>
+    /// <param name="whenClauses">The non-empty ordered WHEN/THEN clauses.</param>
+    /// <param name="elseResult">The fallback expression, or null for an omitted ELSE.</param>
+    /// <returns>The immutable searched CASE expression.</returns>
+    public static SafeMigrationSqlExpression Case(
+        IEnumerable<SafeMigrationSqlCaseWhenClause> whenClauses,
+        SafeMigrationSqlExpression? elseResult = null
+    ) => new SafeMigrationSqlCaseExpression(whenClauses, elseResult);
 
     /// <summary>Creates an IS NULL predicate.</summary>
     /// <param name="operand">The tested operand.</param>

@@ -62,7 +62,7 @@ public sealed class RepositoryWorkflowContractTests
             StringComparison.Ordinal);
         Assert.Contains("dependency-graph/compare/${BASE_SHA}...${HEAD_SHA}", workflow, StringComparison.Ordinal);
         Assert.Contains("verify-dependency-snapshot-headers.sh", workflow, StringComparison.Ordinal);
-        Assert.Contains("pkg:nuget/Microsoft.Data.SqlClient.SNI.runtime@6.0.2", workflow, StringComparison.Ordinal);
+        Assert.Contains("pkg:nuget/Microsoft.Data.SqlClient.SNI.runtime@6.0.3", workflow, StringComparison.Ordinal);
         Assert.Contains("pkg:nuget/Microsoft.Identity.Client.NativeInterop@0.20.6", workflow, StringComparison.Ordinal);
         Assert.Contains("gh api --paginate --slurp", workflow, StringComparison.Ordinal);
         Assert.Contains("python3 eng/verify-dependency-license-exceptions.py \"$response_body\"", workflow,
@@ -70,6 +70,8 @@ public sealed class RepositoryWorkflowContractTests
         Assert.Contains("persist-credentials: false", workflow, StringComparison.Ordinal);
 
         Assert.DoesNotContain("pull_request_target", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("pkg:nuget/Microsoft.Data.SqlClient.SNI.runtime@6.0.2", workflow,
+            StringComparison.Ordinal);
         Assert.DoesNotContain("contents: write", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("pull-requests: write", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("warn-only:", workflow, StringComparison.Ordinal);
@@ -150,6 +152,43 @@ public sealed class RepositoryWorkflowContractTests
         Assert.Contains("`foreign_key_column_order`", runbook, StringComparison.Ordinal);
         Assert.Contains("`foreign_key_principal_column_order`", runbook, StringComparison.Ordinal);
         Assert.Contains("`projected_dependency_handoff`", runbook, StringComparison.Ordinal);
+    }
+
+    /// <summary>Retains exact emitted generated-expression codes in the shared runbook across providers.</summary>
+    /// <param name="provider">The independent provider package containing the actual code producer.</param>
+    /// <param name="sourceFile">The producer path relative to that package.</param>
+    /// <param name="code">The stable emitted code whose documentation must not drift.</param>
+    [Theory]
+    [InlineData("PostgreSql", "Analysis/PostgreSqlSafeMigrationProviderAnalyzer.GeneratedCaseTypes.cs",
+        "projected_generated_case_target_occupied")]
+    [InlineData("PostgreSql", "Analysis/PostgreSqlSafeMigrationProviderAnalyzer.GeneratedCaseTypes.cs",
+        "projected_generated_case_binding_unproven")]
+    [InlineData("MySql", "Features/Columns/MySqlGeneratedColumnExpressionCapability.cs",
+        "generated_column_nondeterministic_expression")]
+    [InlineData("SqlServer", "Features/Columns/SqlServerSafeMigrationCatalogSqlBuilder.ComputedColumns.cs",
+        "computed_expression_unproven")]
+    public void FailureCodeRunbook_CoversEmittedGeneratedExpressionCodesAcrossProviders(
+        string provider, string sourceFile, string code)
+    {
+        // Arrange
+        var repositoryRoot = RepositoryRoot();
+        var sourcePath = Path.Combine(repositoryRoot, "src",
+            "Doka.EntityFrameworkCore.SafeMigrations." + provider,
+            sourceFile.Replace('/', Path.DirectorySeparatorChar));
+
+        var source = File.ReadAllText(sourcePath);
+        var runbook = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "runbooks", "failure-codes.md"));
+
+        // Act
+        var emittedCodes = Regex.Matches(source, "\"(?<code>" + Regex.Escape(code) + ")\"",
+                RegexOptions.CultureInvariant)
+            .Select(static match => match.Groups["code"].Value)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        // Assert
+        Assert.Equal([code], emittedCodes);
+        Assert.Contains("`" + code + "`", runbook, StringComparison.Ordinal);
     }
 
     private static string RepositoryRoot()

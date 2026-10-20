@@ -411,6 +411,74 @@ internal sealed class SqlServerProjectedDependencyGraph :
             && !_invalidatedStorage.Contains(new ColumnIdentity(identity, columnId));
     }
 
+    /// <summary>Reuses captured physical endpoints to exclude unrelated native FK-removal candidates.</summary>
+    /// <param name="drop">The exact authored native FK removal.</param>
+    /// <param name="source">The column owner whose dependency predicate is being qualified.</param>
+    /// <returns>Physical owner relevance, or null when this selective inventory did not bind both owners.</returns>
+    internal bool? IsNativeForeignKeyDropRelevant(DropForeignKeyIntent drop, DropColumnIntent source)
+    {
+        if (!_tables.TryGetValue(new TableKey(drop.Schema ?? "dbo", drop.Table), out var dependent)
+            || dependent <= 0
+            || !_tables.TryGetValue(new TableKey(source.Schema ?? "dbo", source.Table), out var owner)
+            || owner <= 0
+            || !_foreignKeyNames.TryGetValue(new ForeignKeyKey(dependent, drop.Name), out var identity)
+            || !_foreignKeys.TryGetValue(identity, out var edge))
+        {
+            return null;
+        }
+
+        return edge.Dependent == owner || edge.Principal == owner;
+    }
+
+    /// <summary>Returns only a captured native table identity, never a projected or missing owner.</summary>
+    internal int? GetNativeTableIdentity(string table, string? schema)
+        => _tables.TryGetValue(new TableKey(schema ?? "dbo", table), out var identity) && identity > 0
+            ? identity : null;
+
+    /// <summary>Resolves exact native FK endpoint ids for invocation-local predecessor routing.</summary>
+    internal (int Dependent, int Principal)? GetNativeForeignKeyDropEndpoints(DropForeignKeyIntent drop)
+        => GetNativeTableIdentity(drop.Table, drop.Schema) is { } owner
+            && _foreignKeyNames.TryGetValue(new ForeignKeyKey(owner, drop.Name), out var identity)
+            && identity > 0
+            && _foreignKeys.TryGetValue(identity, out var edge) ? (edge.Dependent, edge.Principal) : null;
+
+    /// <summary>Streams existing compact native endpoints without another retained metadata snapshot.</summary>
+    internal IEnumerable<(int Dependent, int Principal)> EnumerateNativeForeignKeyEndpoints()
+    {
+        foreach (var (identity, edge) in _foreignKeys)
+        {
+            if (identity > 0 && edge.Dependent > 0 && edge.Principal > 0)
+            {
+                yield return (edge.Dependent, edge.Principal);
+            }
+        }
+    }
+
+    /// <summary>Proves a native dependent-table removal affects the requested principal owner's FK blockers.</summary>
+    /// <param name="drop">The exact explicit dependent-table deletion.</param>
+    /// <param name="source">The source column owner whose incoming blockers are being qualified.</param>
+    /// <returns>Known native relevance, or null when either physical owner was not bound.</returns>
+    internal bool? IsNativeTableDropRelevant(DropTableIntent drop, DropColumnIntent source)
+    {
+        if (!_tables.TryGetValue(new TableKey(drop.Schema ?? "dbo", drop.Table), out var dependent)
+            || dependent <= 0
+            || !_tables.TryGetValue(new TableKey(source.Schema ?? "dbo", source.Table), out var owner)
+            || owner <= 0)
+        {
+            return null;
+        }
+
+        foreach (var edge in _foreignKeys.Values)
+        {
+            if (edge.Dependent == dependent && edge.Principal == owner)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /// <inheritdoc />
     public bool RequiresLiveForeignKeyQualification(EnsureForeignKeyIntent intent)
     {

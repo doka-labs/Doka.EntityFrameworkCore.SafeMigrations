@@ -651,9 +651,23 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     private string ExpressionMatches(
         string catalogExpression,
         SafeMigrationSqlExpression expected,
-        string? relationOid = null
+        string? relationOid = null,
+        string? capturedSql = null
     )
     {
+        if (capturedSql is not null)
+        {
+            // WHY: Captured EF SQL is the native source contract, not merely
+            // another spelling of an AST rendered through CLR literal types.
+            // Only the source-aware native deparser can certify its alternate.
+            var capturedNative = _expressionRenderer.RenderCatalogCapturedNativeDeparsedCandidateSql(
+                expected, Literal, relationOid);
+
+            return $"({ExpressionMatches(catalogExpression, capturedSql)} "
+                + $"OR {catalogExpression} = {capturedNative} "
+                + $"OR {catalogExpression} = ({Literal("(")} || {capturedNative} || {Literal(")")}))";
+        }
+
         var rendered = _expressionRenderer.Render(expected);
         var catalogCandidate = _expressionRenderer.RenderCatalogCandidateSql(expected, Literal);
         var deparsedCandidate = _expressionRenderer.RenderCatalogDeparsedCandidateSql(expected, Literal);

@@ -2,6 +2,27 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 
 internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 {
+    private static string? GetUnsupportedCheckSourceFeature(ExpectedCheckConstraintDefinition definition)
+    {
+        var source = definition.CapturedSql ?? definition.Sql;
+        if (source is null)
+        {
+            return null;
+        }
+
+        var expression = definition.Expression ?? (SafeMigrationSqlExpressionParser.TryParseCapturedSource(source,
+            out var parsed)
+            ? parsed : null);
+
+        // WHY: QUOTED_IDENTIFIER is caller-owned and is not forced by this
+        // provider. Only bracket-quoted native source is independent of that
+        // session option; quoted text inside literals is not an identifier.
+        return expression is not null && (!SqlServerSourceExpressionRoles.IsNativePredicate(expression)
+            || definition.CapturedSql is not null
+                && !SafeMigrationSqlExpressionParser.IsCapturedSourceDialectCompatible(source, '['))
+            ? "check_expression_unproven" : null;
+    }
+
     private SqlServerSafeMigrationRuntimePlan BuildEnsureCheck(
         EnsureCheckConstraintIntent intent,
         bool orderedCapture = false
@@ -21,9 +42,14 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         var safe = expression is not null && IsSafeIntegerCheckPredicate(expression);
         var columns = new HashSet<string>(StringComparer.Ordinal);
 
-        if (safe)
+        if (expression is not null && (safe || definition.Expression is not null))
         {
-            SafeMigrationSqlExpressionInspector.CollectIdentifiers(expression!, columns);
+            // WHY: Empty-only validation does not prove that a parsed member
+            // exists. Retain newly structured/captured operand existence even
+            // without the stronger row proof. Explicit raw SQL keeps its old
+            // empty-only boundary: unknown native functions may have type
+            // arguments that the portable function AST cannot identify.
+            SafeMigrationSqlExpressionInspector.CollectIdentifiers(expression, columns);
         }
 
         var support = safe ? BuildIntegerCheckColumnProof(definition, columns) : "1 = 1";
@@ -130,7 +156,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     private string CheckExpression(
         ExpectedCheckConstraintDefinition definition
     )
-        => definition.Sql ?? (definition.Expression is { } expression
+        => definition.CapturedSql ?? definition.Sql ?? (definition.Expression is { } expression
             ? _expressionRenderer.Render(expression)
             : null)
                 ?? throw new InvalidOperationException("A check constraint has no expression.");

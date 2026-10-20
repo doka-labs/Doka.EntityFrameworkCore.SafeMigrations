@@ -3,6 +3,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 /// <summary>Classifies bounded SQL Server catalog operations within the active analysis transaction.</summary>
 internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
     ISafeMigrationProviderAnalyzer,
+    ISafeMigrationProviderTargetModelAnalyzer,
     ISafeMigrationProviderObjectIdentityNormalizer,
     ISafeMigrationProviderOperationProjection,
     ISafeMigrationProjectedKeyAnalyzer,
@@ -50,6 +51,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
 
     /// <inheritdoc />
     public StringComparer IdentifierComparer => StringComparer.Ordinal;
+
+    /// <inheritdoc />
+    public char? CapturedSqlIdentifierDelimiter => '[';
 
     /// <inheritdoc />
     public string NormalizeIdentifier(string identifier) => identifier;
@@ -123,6 +127,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
     )
     {
         var transitionAnalysis = QualifyProjectedIntegerWidening(operation, projectedAnalysis, columns);
+        transitionAnalysis = QualifyProjectedComputedColumn(operation, transitionAnalysis, columns);
+        transitionAnalysis = QualifyProjectedNativeComputedDrop(operation, transitionAnalysis, columns);
         transitionAnalysis = QualifyProjectedCheckPredicate(operation, transitionAnalysis, columns);
         var dependencyAnalysis = _dependencyGraph?.ValidateProjectedOperation(operation, transitionAnalysis, columns)
             ?? transitionAnalysis;
@@ -147,6 +153,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
         _dependencyGraph?.ObserveAcceptedOperation(operation, liveAnalysis, analysis, decision);
         ObserveProjectedSeedOperation(operation, decision);
         ObserveProjectedIdentityOperation(operation, analysis, decision);
+        ObserveProjectedCheckDependencies(operation, decision);
+        ObserveProjectedComputedDropProofs(operation, liveAnalysis, analysis, decision);
+        ObserveProjectedComputedOwnerRename(operation, decision);
         ObserveProjectedColumnLayoutOperation(operation, analysis, decision);
         ObserveProjectedColumnTransition(operation, decision);
     }
@@ -162,8 +171,10 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
         }
 
         _dependencyGraph?.ObserveProviderOperation(operation);
+        InvalidateProjectedComputedDropProofs();
         InvalidateProjectedSeedProofs();
         InvalidateProjectedIdentityProofs();
+        ObserveProviderCheckDependencies(operation);
         ObserveProviderColumnLayoutOperation(operation);
         ResetProjectedColumnTransitions(retainInvalidatedCheckPredicates: true);
         ObserveProviderDdlRowEffects(operation);
@@ -316,10 +327,40 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<SafeMigrationProviderAnalysis>> AnalyzeAsync(
+    public Task<IReadOnlyList<SafeMigrationProviderAnalysis>> AnalyzeAsync(
         DbContext context,
         IReadOnlyList<SafeMigrationOperation> operations,
         CancellationToken cancellationToken = default
+    )
+        => AnalyzeCoreAsync(context, operations, operations, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<SafeMigrationProviderAnalysis>> AnalyzeAsync(
+        DbContext context,
+        IReadOnlyList<MigrationOperation> operations,
+        IReadOnlyList<IModel?>? targetModels,
+        CancellationToken cancellationToken = default
+    )
+    {
+        ArgumentNullException.ThrowIfNull(operations);
+        if (targetModels is not null && targetModels.Count != operations.Count)
+        {
+            throw new ArgumentException("Target models must match the operation count.", nameof(targetModels));
+        }
+
+        // WHY: Only typed ordered declarations inform CHECK dependency roles.
+        // Ordinary operations retain their provider boundary; target models do
+        // not certify their execution or make opaque SQL a proven declaration.
+        return AnalyzeCoreAsync(context, operations.OfType<SafeMigrationOperation>().ToArray(), operations,
+            cancellationToken);
+    }
+
+    /// <summary>Classifies the safe subset while retaining the original ordered CHECK declaration boundaries.</summary>
+    private async Task<IReadOnlyList<SafeMigrationProviderAnalysis>> AnalyzeCoreAsync(
+        DbContext context,
+        IReadOnlyList<SafeMigrationOperation> operations,
+        IReadOnlyList<MigrationOperation> orderedOperations,
+        CancellationToken cancellationToken
     )
     {
         _dependencyGraph = null;
@@ -329,6 +370,14 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
         ResetProjectedIdentityProofs();
         ResetProjectedColumnLayouts();
         ResetProjectedColumnTransitions();
+        _projectedComputedKeys.Clear();
+        _nativeComputedDropRefusals = null;
+        _nativeColumnDropOwnerRoutes = null;
+        _nativeColumnDropObserverEpoch = 0;
+        _computedDropIndexCandidates = null;
+        _columnDropConstraintCandidates = null;
+        _acceptedDeclaredChecks.Clear();
+        _checkRenameDependencies.Clear();
 
         ValidateContext(context);
         ArgumentNullException.ThrowIfNull(operations);
@@ -337,6 +386,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
         {
             return [];
         }
+
+        PrepareComputedDropIndexCandidates(operations);
 
         var connection = context.Database.GetDbConnection();
         var openedHere = connection.State != System.Data.ConnectionState.Open;
@@ -371,7 +422,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
             CaptureProjectedDdlRowEffects(environment.DdlRowEffectRisk);
             CaptureProjectedDmlEffects(environment.HasEnabledDmlTriggers);
 
-            var references = SqlServerIdentifierContract.Collect(operations);
+            var references = SqlServerIdentifierContract.IncludeCheckDeclarationReferences(orderedOperations,
+                SqlServerIdentifierContract.Collect(operations));
             var identifierSafe = await ReadIdentifierContractAsync(
                 connection,
                 transaction,
@@ -388,6 +440,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
                     operations,
                     context.Database.GetCommandTimeout(),
                     cancellationToken);
+
+                await ReadProjectedCheckRenameDependenciesAsync(connection, transaction, orderedOperations,
+                    context.Database.GetCommandTimeout(), cancellationToken);
 
                 await ReadProjectedKeySnapshotAsync(
                     connection,
@@ -410,9 +465,16 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
                     : null;
             }
 
+            PrepareColumnDropConstraintCandidates(operations);
+
+            // WHY: Native catalog guards own CHECK rename admission. Offline
+            // source collection must not approximate catalog case/accent rules.
             var expectedTables = SafeMigrationExpectedTableConstraints.FromOperations(
                 operations,
-                static schema => schema ?? "dbo");
+                static schema => schema ?? "dbo",
+                StringComparer.Ordinal,
+                '[',
+                foldUnquotedCapturedSqlIdentifiers: false);
 
             baselineActivity?.Dispose();
             using var classificationActivity = SafeMigrationTelemetry.StartAnalysisStage(
@@ -470,7 +532,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
                             _typeMappingSource, _sqlGenerationHelper,
                             sourceParameter: (value, _) => bindings.Add(value));
 
-                    var plan = builder.Build(operation, expected, absentTargets[index]);
+                    var plan = builder.Build(operation, expected, absentTargets[index],
+                        GetComputedDropIndexCandidateNames(operation, operations),
+                        GetColumnDropConstraintCandidates(operation));
                     if (plan.IsStaticallyUnsupported)
                     {
                         results[captureStart + index] = Unsupported(plan.UnsupportedCode ?? "classified_unsupported");
@@ -516,6 +580,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
             }
 
             CaptureIdentitySlotConflicts(operations, results);
+            CaptureProjectedComputedDropRefusals(operations, results);
             CaptureProjectedCheckPredicates(operations, results);
             if (identifierSafe)
             {

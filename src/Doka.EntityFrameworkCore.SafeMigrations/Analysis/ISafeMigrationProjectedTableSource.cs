@@ -3,6 +3,19 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// <summary>Exposes compact accepted table proofs to provider-specific validators.</summary>
 internal interface ISafeMigrationProjectedTableSource
 {
+    /// <summary>Checks current accepted generated dependencies; nondependency requires a complete owner.</summary>
+    /// <param name="table">The physical owner name.</param>
+    /// <param name="schema">The provider-qualified owner schema.</param>
+    /// <param name="column">The source member whose generated dependents must be checked.</param>
+    /// <param name="columnComparer">The provider's column-member equality, never its table-name policy.</param>
+    /// <returns>True for a dependency, false for complete comparable nondependency, or null if unproven.</returns>
+    bool? HasProjectedGeneratedColumnDependency(
+        string table,
+        string? schema,
+        string column,
+        IEqualityComparer<string> columnComparer
+    ) => null;
+
     /// <summary>Attempts to read the ordered proof associated with a known table.</summary>
     /// <param name="table">The table name.</param>
     /// <param name="schema">The optional provider schema.</param>

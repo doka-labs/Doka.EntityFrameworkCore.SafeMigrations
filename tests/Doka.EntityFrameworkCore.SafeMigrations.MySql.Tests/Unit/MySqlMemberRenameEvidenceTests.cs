@@ -148,6 +148,45 @@ public sealed class MySqlMemberRenameEvidenceTests
         Assert.All(analyses, result => Assert.Null(result.RenameTargetSupported));
     }
 
+    /// <summary>Only owned dynamic dependency refusals can receive independent destination evidence.</summary>
+    /// <param name="code">The existing native classification.</param>
+    /// <param name="invariant">Whether the refusal is independent of catalog state.</param>
+    /// <param name="expectedCapture">Whether ordered generated-member removal may requalify this result.</param>
+    [Theory]
+    [InlineData("generated_column_rename_dependency", false, true)]
+    [InlineData("generated_column_rename_unproven", false, true)]
+    [InlineData("generated_column_rename_dependency", true, false)]
+    [InlineData("unrelated_native_failure", false, false)]
+    public async Task GeneratedDependencyRefusalCapturesOnlyIndependentDestination(
+        string code, bool invariant, bool expectedCapture)
+    {
+        // Arrange
+        SafeMigrationOperation[] operations =
+        [
+            new(new RenameColumnIntent("source", "items", "target"), SafeMigrationPolicy.ThrowIfDifferent),
+        ];
+
+        SafeMigrationProviderAnalysis[] analyses =
+        [
+            new(SafeMigrationObservedState.Unsupported, SafeMigrationRepairCapability.None, false, code)
+            {
+                IsInvariantUnsupported = invariant,
+            },
+        ];
+
+        await using var connection = new CatalogStatementTestConnection(true, (sql, _) => Results(sql));
+
+        // Act
+        await MySqlSafeMigrationProviderAnalyzer.ReadMemberRenameTargetEvidenceAsync(connection, operations,
+            analyses, "catalog-test", 4 * 1024 * 1024, 71, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(expectedCapture ? 1 : 0, connection.Submissions.Count);
+        Assert.Equal(expectedCapture ? false : (bool?)null, analyses[0].RenameTargetExists);
+        Assert.Equal(SafeMigrationObservedState.Unsupported, analyses[0].ObservedState);
+        Assert.Equal(code, analyses[0].Code);
+    }
+
     /// <summary>Cancellation releases transport without publishing partially read facts.</summary>
     [Fact]
     public async Task CancelledCapturePublishesNothing()

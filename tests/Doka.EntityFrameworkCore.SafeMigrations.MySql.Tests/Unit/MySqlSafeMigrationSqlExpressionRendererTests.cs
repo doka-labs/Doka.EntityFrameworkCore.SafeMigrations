@@ -1,7 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Verifies ordinary-expression stability and default-specific SQL-mode independence.</summary>
-public sealed class MySqlSafeMigrationSqlExpressionRendererTests
+public sealed partial class MySqlSafeMigrationSqlExpressionRendererTests
 {
     [Fact]
     public void Render_ProducesDeterministicSqlForEveryStructuredNode()

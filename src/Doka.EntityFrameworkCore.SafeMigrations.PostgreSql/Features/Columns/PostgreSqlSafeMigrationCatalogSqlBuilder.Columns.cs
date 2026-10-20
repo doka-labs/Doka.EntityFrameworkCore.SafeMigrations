@@ -24,9 +24,40 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             return "provider_column_annotation";
         }
 
+        if (definitions.Any(static definition => definition.CapturedComputedSql is { } source
+                && !SafeMigrationSqlExpressionParser.IsCapturedSourceDialectCompatible(source, '"'))
+            || intent is AlterColumnIntent { OldDefinition.CapturedComputedSql: { } oldSource }
+                && !SafeMigrationSqlExpressionParser.IsCapturedSourceDialectCompatible(oldSource, '"'))
+        {
+            // WHY: A neutral identifier tree cannot turn foreign quote syntax
+            // or an uncertified quoted function/type role into native SQL.
+            return "opaque_sql_expression";
+        }
+
+        if (GetUnsupportedGeneratedCaseFeature(intent, definitions) is { } caseFeature)
+        {
+            return caseFeature;
+        }
+
+        foreach (var definition in definitions)
+        {
+            if (definition.CapturedComputedSql is not null
+                && definition.ComputedExpression is SafeMigrationSqlLiteralExpression { Value: string uuid }
+                && ColumnStoreType(definition, ColumnMapping(definition)) == "uuid"
+                && !Guid.TryParseExact(uuid, "D", out _))
+            {
+                // WHY: Only canonical UUID input is certified locally. A generic
+                // native input-function probe could run arbitrary conversion
+                // behavior and cannot authorize malformed or ambiguous source.
+                return "generated_expression_assignment";
+            }
+        }
+
         return definitions.Any(static definition =>
             (definition.ComputedColumnSql is not null || definition.ComputedExpression is not null)
-            && definition.IsStored == false)
+            // WHY: Npgsql 10 interprets an omitted storage argument as virtual;
+            // only explicit STORED belongs to this provider's certified grammar.
+            && definition.IsStored != true)
             ? "virtual_generated_column"
             : null;
     }
@@ -143,11 +174,43 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         var relation = RelationExists(intent.Table, intent.Schema);
         var table = TableExists(intent.Table, intent.Schema);
         var exists = ColumnExists(intent.Table, intent.Schema, intent.Name);
+        var dependency = GeneratedDropDependency(intent);
+        var lockPrivilege = GeneratedDropLockPrivilege(intent);
+        var standalone = GeneratedDropStandaloneOwner(intent);
+        var catalogsReadable = "pg_catalog.has_table_privilege('pg_catalog.pg_depend', 'SELECT') "
+            + "AND pg_catalog.has_table_privilege('pg_catalog.pg_attrdef', 'SELECT') "
+            + "AND pg_catalog.has_table_privilege('pg_catalog.pg_inherits', 'SELECT')";
+        var runtimeCapability = "(" + catalogsReadable + ") AND (" + lockPrivilege
+            + ") AND (pg_catalog.current_setting('transaction_isolation') OPERATOR(pg_catalog.=) 'read committed' "
+            + "OR pg_catalog.current_setting('transaction_isolation') OPERATOR(pg_catalog.=) 'read uncommitted')";
 
         return Plan(
             $"CASE WHEN NOT {relation} THEN 'missing' WHEN NOT {table} THEN 'different' "
-            + $"WHEN {exists} THEN 'matching' ELSE 'missing' END",
-            $"NOT {exists}");
+            + $"WHEN NOT {exists} THEN 'missing' WHEN NOT ({standalone}) THEN 'unsupported' "
+            + $"WHEN {dependency} THEN 'different' "
+            + $"WHEN NOT ({lockPrivilege}) THEN 'unsupported' ELSE 'matching' END",
+            $"NOT {exists}") with
+        {
+            // WHY: A revoked catalog privilege is not an empty dependency set.
+            // The preliminary phase prevents planning the dependency query;
+            // an independently absent target still remains an idempotent no-op.
+            StateEvaluationGuardExpression = catalogsReadable,
+            StateEvaluationGuardFailureExpression = $"CASE WHEN NOT {relation} THEN 'missing' "
+                + $"WHEN NOT {table} THEN 'different' WHEN NOT {exists} THEN 'missing' ELSE 'unsupported' END",
+            UnsupportedCode = "generated_column_drop_unproven",
+            GeneratedDropRuntimeGuardExpression = runtimeCapability,
+            // WHY: Lock only this exact owner before the fresh hierarchy
+            // check. Native DROP retains its original recursive semantics;
+            // newly appearing descendants are refused, never silently removed.
+            GeneratedDropLockSqlExpression = "pg_catalog.format('LOCK TABLE ONLY %I.%I IN ACCESS EXCLUSIVE MODE', "
+                + (intent.Schema is null ? "pg_catalog.current_schema()" : Literal(intent.Schema))
+                + ", " + Literal(intent.Table) + ")",
+            ClassificationCodeExpression = $"CASE WHEN ({table}) AND ({exists}) AND ({standalone}) "
+                + $"THEN CASE WHEN {dependency} "
+                + "THEN 'generated_column_drop_dependency' WHEN (" + lockPrivilege + ") AND "
+                + NoSurvivingGeneratedDropMembers(intent)
+                + " THEN '" + EmptyGeneratedDropSetCode + "' ELSE NULL END ELSE NULL END",
+        };
     }
 
     private PostgreSqlSafeMigrationRuntimePlan BuildRenameColumn(
@@ -665,6 +728,11 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             return DefaultKind(definition);
         }
 
+        if (definition.CapturedComputedSql is not null)
+        {
+            return definition.CapturedComputedSql;
+        }
+
         if (definition.ComputedColumnSql is not null)
         {
             return definition.ComputedColumnSql;
@@ -887,9 +955,24 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             || definition.ComputedExpression is not null)
         {
             var generation = definition.IsStored == false ? "'v'" : "'s'";
+            if (definition.CapturedComputedSql is not null
+                && definition.ComputedExpression is SafeMigrationSqlLiteralExpression { Value: string text }
+                && ColumnStoreType(definition, mapping) == "uuid"
+                && Guid.TryParseExact(text, "D", out var guid))
+            {
+                // WHY: Native assignment gives an unknown UUID literal its
+                // target type before storage. Certify the finite D-format input
+                // locally; never execute an arbitrary native input function or
+                // admit the unrelated TEXT candidate for this UUID contract.
+                return $"a.attidentity = '' AND a.attgenerated = {generation} AND d.oid IS NOT NULL AND "
+                    + "pg_catalog.pg_get_expr(d.adbin, d.adrelid) = "
+                    + Literal("'" + guid.ToString("D", CultureInfo.InvariantCulture) + "'::uuid");
+            }
+
             return $"a.attidentity = '' AND a.attgenerated = {generation} AND d.oid IS NOT NULL AND "
                 + (definition.ComputedExpression is not null
-                    ? ExpressionMatches("pg_catalog.pg_get_expr(d.adbin, d.adrelid)", definition.ComputedExpression)
+                    ? ExpressionMatches("pg_catalog.pg_get_expr(d.adbin, d.adrelid)", definition.ComputedExpression,
+                        relationOid: "d.adrelid", capturedSql: definition.CapturedComputedSql)
                     : ExpressionMatches("pg_catalog.pg_get_expr(d.adbin, d.adrelid)", definition.ComputedColumnSql!));
         }
 

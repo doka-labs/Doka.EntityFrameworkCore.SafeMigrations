@@ -70,7 +70,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
         var matching = KeyMatches(table, schema, name, columns, kind);
         var width = columns.Count <= 32
-            ? IndexKeysWithinLimit(table, schema, columns, kind == "PK" ? 900 : 1700)
+            ? IndexKeysWithinLimit(table, schema, columns, kind == "PK" ? 900 : 1700, allowComputed: true)
             : "1 = 0";
 
         var nullableColumns = kind == "PK"

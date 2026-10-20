@@ -858,16 +858,17 @@ classification for unknown type grammar. PostgreSQL `float` and `float(p)` are
 normalized according to their documented binary-precision ranges before type
 mapping, including array forms.
 
-MariaDB generated columns cannot preserve a `NOT NULL` facet; that
-unrepresentable definition fails before DDL with
-`generated_column_nullability`, while MySQL retains and verifies the facet.
-
 EF-scaffolded check constraints using this bounded grammar are converted to
 the same structured tree automatically. Unsupported SQL stops scaffolding
 before a migration file is accepted; use an explicit `FromExpression`
 definition for a reviewed equivalent. The complete authoring behavior and
 failure boundary are documented in
 [Migration authoring paths](docs/migration-authoring.md#generated-check-constraints).
+
+Computed columns captured from EF use the same bounded expression grammar,
+including searched `CASE`. Generated-column type, nullability, storage and
+index eligibility remain provider-specific; see
+[generated columns](docs/migration-authoring.md#generated-columns).
 
 Legacy raw SQL remains representable as opaque input, but opaque expressions
 cannot authorize `Matching`; they are classified with

@@ -13,6 +13,12 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     public void SetCurrentOperationOrdinal(int operationOrdinal) => _projectedOperationOrdinal = operationOrdinal;
 
     /// <inheritdoc />
+    public bool PreservesUnrelatedColumnAbsence(RenameColumnIntent operation)
+        => _eventTriggerRisk == PostgreSqlTriggerRisk.None
+            && !_generatedIndexHasOpaqueBoundary
+            && _triggerOriginOrdinal is null && _schemaIdentityOriginOrdinal is null;
+
+    /// <inheritdoc />
     public bool PreservesExistingTableState(MigrationOperation operation)
         => ProviderOperationPreservesTableState(operation);
 
@@ -30,7 +36,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         SafeMigrationProviderAnalysis liveAnalysis,
         ISafeMigrationProjectedColumnSource columns
     ) => QualifyProjectedSchemaIdentity(operation, liveAnalysis)
-        ?? QualifyProjectedTriggerEffects(operation, liveAnalysis);
+        ?? QualifyProjectedTriggerEffects(operation, liveAnalysis)
+        ?? QualifyGeneratedCaseIndex(operation, liveAnalysis, columns);
 
     /// <inheritdoc />
     public SafeMigrationProviderAnalysis ValidateProjectedOperation(
@@ -39,6 +46,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         ISafeMigrationProjectedColumnSource columns
     ) => QualifyProjectedSchemaIdentity(operation, projectedAnalysis)
         ?? QualifyProjectedTriggerEffects(operation, projectedAnalysis)
+        ?? QualifyProjectedGeneratedSourceDrop(operation, projectedAnalysis, columns)
+        ?? QualifyGeneratedCaseIndex(operation, projectedAnalysis, columns)
+        ?? QualifyProjectedGeneratedCaseTypes(operation, projectedAnalysis, columns)
         ?? QualifyProjectedCheckTypes(operation, projectedAnalysis, columns)
         ?? QualifyProjectedIndexTypes(operation, projectedAnalysis, columns) ?? projectedAnalysis;
 
@@ -56,6 +66,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         }
 
         ObserveAcceptedLiveConstraintName(operation, decision);
+        ObserveGeneratedSourceLifetime(operation, analysis);
 
         if (operation.Intent is EnsureSchemaIntent or DropSchemaIntent)
         {
@@ -91,6 +102,14 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         if (ProviderOperationPreservesTableState(operation))
         {
             return;
+        }
+
+        if (operation is not (InsertDataOperation or UpdateDataOperation or DeleteDataOperation))
+        {
+            // WHY: Only accepted safe lifetimes feed the narrow generated-index
+            // certificate. Raw or unmodeled native DDL cannot inherit old name
+            // absence merely because Core labels both boundaries unknown.
+            _generatedIndexHasOpaqueBoundary = true;
         }
 
         if (operation is SqlOperation or EnsureSchemaOperation or DropSchemaOperation)
@@ -188,6 +207,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         _triggerOriginCode = null;
         _triggerOriginIsDml = false;
         _projectedOperationOrdinal = null;
+        _generatedDropCatalogReadable = false;
     }
 
     /// <summary>Captures activation as two flags without retaining functions, names, owners, or user data.</summary>
@@ -202,22 +222,27 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     {
         await using var visibility = connection.CreateCommand();
         ApplyCommandTimeout(visibility, commandTimeout);
-        visibility.CommandText = "SELECT (CASE WHEN "
-            + "COALESCE(pg_catalog.current_setting('event_triggers', true), 'on')='off' "
+        visibility.CommandText = "SELECT ((CASE WHEN "
+            + "COALESCE(pg_catalog.current_setting('event_triggers', true), 'on') OPERATOR(pg_catalog.=) 'off' "
             + "THEN 0 WHEN pg_catalog.has_table_privilege('pg_catalog.pg_event_trigger', 'SELECT') THEN 1 ELSE 2 END) "
-            + "+ CASE WHEN pg_catalog.has_table_privilege('pg_catalog.pg_trigger', 'SELECT') THEN 4 ELSE 8 END;";
+            + "OPERATOR(pg_catalog.+) CASE WHEN pg_catalog.has_table_privilege('pg_catalog.pg_trigger', 'SELECT') "
+            + "THEN 4 ELSE 8 END) OPERATOR(pg_catalog.+) "
+            + "CASE WHEN pg_catalog.has_table_privilege('pg_catalog.pg_depend', 'SELECT') "
+            + "AND pg_catalog.has_table_privilege('pg_catalog.pg_attrdef', 'SELECT') "
+            + "AND pg_catalog.has_table_privilege('pg_catalog.pg_inherits', 'SELECT') THEN 16 ELSE 0 END;";
 
-        // WHY: This bounded scalar encodes event visibility in the low two bits and
-        // DML visibility in the next two. Two once-per-analysis reads serve both trigger
-        // families; no per-operation query or retained owner/function inventory is needed.
+        // WHY: Keep event/DML visibility in the low four bits and generated
+        // dependency-catalog readability in flag 0x10 of this existing scalar.
+        // The ordinary readable DROP path needs no new preliminary roundtrip.
         if (await visibility.ExecuteScalarAsync(cancellationToken) is not int access
-            || access is not (4 or 5 or 6 or 8 or 9 or 10))
+            || access < 0 || access > 31 || (access & 15) is not (4 or 5 or 6 or 8 or 9 or 10))
         {
             throw new InvalidOperationException(
                 "The PostgreSQL trigger visibility query returned invalid evidence.");
         }
 
         var eventAccess = access & 3;
+        _generatedDropCatalogReadable = (access & 16) != 0;
         var canReadDmlTriggers = (access & 4) != 0;
         if (eventAccess == 2)
         {
@@ -238,24 +263,36 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 
         await using var active = connection.CreateCommand();
         ApplyCommandTimeout(active, commandTimeout);
-        // WHY: Construct only catalog references the caller can bind. Conditional SQL
-        // evaluation cannot protect a SELECT against a catalog permission denial.
+        // WHY: Construct only catalogs the caller can bind. Native operators
+        // are pinned too: an application overload on the active search path
+        // must not execute while establishing the absence of callback risk.
         var activeEventTrigger = eventAccess == 1
             ? "EXISTS (SELECT 1 FROM pg_catalog.pg_event_trigger e "
-                + "WHERE e.evtevent IN ('ddl_command_start','ddl_command_end','sql_drop','table_rewrite') "
-                + "AND (e.evtenabled='A' OR e.evtenabled='R' "
-                + "AND pg_catalog.current_setting('session_replication_role')='replica' OR e.evtenabled='O' "
-                + "AND pg_catalog.current_setting('session_replication_role') IN ('origin','local')))"
+                + "WHERE (e.evtevent OPERATOR(pg_catalog.=) 'ddl_command_start' "
+                + "OR e.evtevent OPERATOR(pg_catalog.=) 'ddl_command_end' "
+                + "OR e.evtevent OPERATOR(pg_catalog.=) 'sql_drop' "
+                + "OR e.evtevent OPERATOR(pg_catalog.=) 'table_rewrite') "
+                + "AND (e.evtenabled OPERATOR(pg_catalog.=) 'A' OR e.evtenabled OPERATOR(pg_catalog.=) 'R' "
+                + "AND pg_catalog.current_setting('session_replication_role') OPERATOR(pg_catalog.=) 'replica' "
+                + "OR e.evtenabled OPERATOR(pg_catalog.=) 'O' "
+                + "AND (pg_catalog.current_setting('session_replication_role') OPERATOR(pg_catalog.=) 'origin' "
+                + "OR pg_catalog.current_setting('session_replication_role') OPERATOR(pg_catalog.=) 'local')))"
             : "FALSE";
 
         var activeDmlTrigger = canReadDmlTriggers
             ? "EXISTS (SELECT 1 FROM pg_catalog.pg_trigger t WHERE NOT t.tgisinternal "
-                + "AND (t.tgenabled='A' OR t.tgenabled='R' "
-                + "AND pg_catalog.current_setting('session_replication_role')='replica' OR t.tgenabled='O' "
-                + "AND pg_catalog.current_setting('session_replication_role') IN ('origin','local')))"
+                + "AND (t.tgenabled OPERATOR(pg_catalog.=) 'A' OR t.tgenabled OPERATOR(pg_catalog.=) 'R' "
+                + "AND pg_catalog.current_setting('session_replication_role') OPERATOR(pg_catalog.=) 'replica' "
+                + "OR t.tgenabled OPERATOR(pg_catalog.=) 'O' "
+                + "AND (pg_catalog.current_setting('session_replication_role') OPERATOR(pg_catalog.=) 'origin' "
+                + "OR pg_catalog.current_setting('session_replication_role') OPERATOR(pg_catalog.=) 'local')))"
             : "FALSE";
 
-        active.CommandText = "SELECT (" + activeEventTrigger + ")::integer + 2*(" + activeDmlTrigger + ")::integer;";
+        // WHY: Qualified OPERATOR syntax has generic precedence, not the
+        // builtin symbol's arithmetic precedence. Keep the independent DML
+        // bit grouped so its absence cannot erase an active event-trigger bit.
+        active.CommandText = "SELECT (" + activeEventTrigger + ")::integer OPERATOR(pg_catalog.+) "
+            + "(2 OPERATOR(pg_catalog.*) (" + activeDmlTrigger + ")::integer);";
 
         if (await active.ExecuteScalarAsync(cancellationToken) is not int activation || activation is < 0 or > 3)
         {

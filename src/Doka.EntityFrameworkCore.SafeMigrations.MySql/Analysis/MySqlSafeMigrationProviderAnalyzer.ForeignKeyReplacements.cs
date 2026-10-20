@@ -39,7 +39,12 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         _foreignKeyReplacementRowsInvalidated = false;
 
         await CaptureColumnDependenciesAsync(
-            context, operations, analyses, maximumPayloadBytes, commandTimeout, cancellationToken);
+            context,
+            operations,
+            analyses,
+            maximumPayloadBytes,
+            commandTimeout,
+            cancellationToken);
 
         HashSet<(string? Schema, string Table, string Name)>? removals = null;
         HashSet<(string? Schema, string Table)>? removalOwners = null;
@@ -53,14 +58,19 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             {
                 var schema = NormalizeProofSchema(drop.Schema);
 
-                (removals ??= new(PhysicalMemberComparer))
-                    .Add((schema, drop.Table, drop.Name));
+                (removals ??= new(PhysicalMemberComparer)).Add((schema, drop.Table, drop.Name));
                 (removalOwners ??= new(PhysicalOwnerComparer)).Add((schema, drop.Table));
             }
-            else if (operation.Intent is EnsureForeignKeyIntent ensure
-                && ensure.Definition.Columns.Count <= MySqlProjectedIndexPhysicalShape.MaximumKeyParts
-                && TryGetForeignKeyReplacementSource(
-                    ensure.Definition, analyses[index], removals, removalOwners, out var sourceExists))
+            else if (operation.Intent is EnsureForeignKeyIntent
+            {
+                Definition.Columns.Count: <= MySqlProjectedIndexPhysicalShape.MaximumKeyParts
+            } ensure
+                     && TryGetForeignKeyReplacementSource(
+                         ensure.Definition,
+                         analyses[index],
+                         removals,
+                         removalOwners,
+                         out var sourceExists))
             {
                 // WHY: A caller may reuse an immutable operation instance in a
                 // stream. Its source certificate is identical, not a second key.
@@ -77,7 +87,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         }
 
         var builder = new MySqlSafeMigrationCatalogSqlBuilder(
-            _typeMappingSource, context.GetService<ISqlGenerationHelper>());
+            _typeMappingSource,
+            context.GetService<ISqlGenerationHelper>());
 
         var captured = new Dictionary<SafeMigrationOperation, ForeignKeyReplacementProof>(
             ReferenceEqualityComparer.Instance);
@@ -85,7 +96,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         List<SafeMigrationOperation>? rowCandidates = null;
 
         await SafeMigrationCatalogProbeBatch.ReadAsync(
-            context.Database.GetDbConnection(), candidates.Count, maximumPayloadBytes, commandTimeout,
+            context.Database.GetDbConnection(),
+            candidates.Count,
+            maximumPayloadBytes,
+            commandTimeout,
             (command, ordinal) =>
             {
                 var candidate = candidates[ordinal];
@@ -122,15 +136,19 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
 
                         (matchingObjectNames ??= []).Add(reader.GetString(2));
                     }
-                }
-                while (await reader.ReadAsync(token));
+                } while (await reader.ReadAsync(token));
 
                 if (eligible)
                 {
                     var candidate = candidates[ordinal];
                     var operation = candidate.Operation;
-                    captured.Add(operation, new ForeignKeyReplacementProof(
-                        nullableMask, RowsSafe: false, matchingObjectNames?.ToArray(), candidate.SourceExists));
+                    captured.Add(
+                        operation,
+                        new ForeignKeyReplacementProof(
+                            nullableMask,
+                            RowsSafe: false,
+                            matchingObjectNames?.ToArray(),
+                            candidate.SourceExists));
 
                     (rowCandidates ??= []).Add(operation);
                 }
@@ -140,7 +158,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         if (rowCandidates is not null)
         {
             await SafeMigrationCatalogProbeBatch.ReadAsync(
-                context.Database.GetDbConnection(), rowCandidates.Count, maximumPayloadBytes, commandTimeout,
+                context.Database.GetDbConnection(),
+                rowCandidates.Count,
+                maximumPayloadBytes,
+                commandTimeout,
                 (command, ordinal) =>
                 {
                     var definition = ((EnsureForeignKeyIntent)rowCandidates[ordinal].Intent).Definition;
@@ -199,14 +220,12 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
 
         return liveAnalysis.ObservedState switch
         {
-            SafeMigrationObservedState.Different
-                => removals?.Contains((schema, definition.Table, definition.Name)) == true,
-            SafeMigrationObservedState.Missing
-                => removalOwners?.Contains((schema, definition.Table)) == true,
-            SafeMigrationObservedState.Matching when liveAnalysis.PostconditionSatisfied
-                => matchedName is not null
-                    ? removals?.Contains((schema, definition.Table, matchedName)) == true
-                    : removalOwners?.Contains((schema, definition.Table)) == true,
+            SafeMigrationObservedState.Different =>
+                removals?.Contains((schema, definition.Table, definition.Name)) == true,
+            SafeMigrationObservedState.Missing => removalOwners?.Contains((schema, definition.Table)) == true,
+            SafeMigrationObservedState.Matching when liveAnalysis.PostconditionSatisfied => matchedName is not null
+                ? removals?.Contains((schema, definition.Table, matchedName)) == true
+                : removalOwners?.Contains((schema, definition.Table)) == true,
             _ => false,
         };
     }
@@ -218,6 +237,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         ISafeMigrationProjectedColumnSource columns
     )
     {
+        projectedAnalysis = ValidateProjectedGeneratedColumn(operation, projectedAnalysis, columns);
+        projectedAnalysis = ValidateProjectedGeneratedDependency(operation, projectedAnalysis, columns);
+        projectedAnalysis = ValidateProjectedGeneratedIndex(operation, projectedAnalysis, columns);
+
         if (operation.Intent is EnsureForeignKeyIntent namespaceForeignKey
             && !_foreignKeyReplacementRowsInvalidated
             && _livePrerequisiteKeys?.TryGetValue(namespaceForeignKey.Definition, out var namespaceFacts) == true
@@ -241,7 +264,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                 // An independently missing full storage prerequisite retains
                 // its existing rejection before this namespace-only boundary.
                 return new SafeMigrationProviderAnalysis(
-                    SafeMigrationObservedState.Different, SafeMigrationRepairCapability.None, false,
+                    SafeMigrationObservedState.Different,
+                    SafeMigrationRepairCapability.None,
+                    false,
                     "projected_foreign_key_supporting_index_name_collision");
             }
 
@@ -272,7 +297,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         }
 
         var definition = ensure.Definition;
-        if (definition.OnDelete == ReferentialAction.SetNull || definition.OnUpdate == ReferentialAction.SetNull)
+        if (definition.OnDelete == ReferentialAction.SetNull
+            || definition.OnUpdate == ReferentialAction.SetNull)
         {
             for (var index = 0; index < definition.Columns.Count; index++)
             {
@@ -285,8 +311,11 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                     // transition supersedes the original nullable-bit snapshot.
                     isNullable = certifiedNullability;
                 }
-                else if (columns.TryGetProjectedColumn(definition.Table, definition.Schema,
-                        definition.Columns[index], out var column))
+                else if (columns.TryGetProjectedColumn(
+                             definition.Table,
+                             definition.Schema,
+                             definition.Columns[index],
+                             out var column))
                 {
                     isNullable = column.IsNullable;
                 }
@@ -297,7 +326,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                     // result would authorize an action despite this independent
                     // physical incompatibility. Required SET NULL remains refused.
                     return new SafeMigrationProviderAnalysis(
-                        SafeMigrationObservedState.Different, SafeMigrationRepairCapability.None, false,
+                        SafeMigrationObservedState.Different,
+                        SafeMigrationRepairCapability.None,
+                        false,
                         "projected_foreign_key_set_null_unrepresentable");
                 }
             }
@@ -313,7 +344,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             // physical FK. Returning Missing would misreport runtime's NoOp
             // and incorrectly bind the request to a nonexistent new object.
             return new SafeMigrationProviderAnalysis(
-                SafeMigrationObservedState.Matching, SafeMigrationRepairCapability.None, true,
+                SafeMigrationObservedState.Matching,
+                SafeMigrationRepairCapability.None,
+                true,
                 "projected_foreign_key_replacement_matching")
             {
                 MatchedObjectName = matchingObjectName,
@@ -321,11 +354,11 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         }
 
         if (projectedAnalysis.ObservedState == SafeMigrationObservedState.Matching
-            && (_acceptedForeignKeyCreations?.Contains((NormalizeProofSchema(definition.Schema),
-                    definition.Table, definition.Name)) == true
+            && (_acceptedForeignKeyCreations?.Contains(
+                    (NormalizeProofSchema(definition.Schema), definition.Table, definition.Name)) == true
                 || (projectedAnalysis.MatchedObjectName is { } physicalName
-                    && _acceptedForeignKeyCreations?.Contains((NormalizeProofSchema(definition.Schema),
-                        definition.Table, physicalName)) == true)))
+                    && _acceptedForeignKeyCreations?.Contains(
+                        (NormalizeProofSchema(definition.Schema), definition.Table, physicalName)) == true)))
         {
             // WHY: Only an accepted Apply establishes new physical presence.
             // A previous alias NoOp cannot survive a case-insensitive removal
@@ -342,13 +375,16 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             // remains authoritative; only an accepted covering index can
             // qualify a genuinely new replacement before native DDL.
             return new SafeMigrationProviderAnalysis(
-                SafeMigrationObservedState.Different, SafeMigrationRepairCapability.None, false,
+                SafeMigrationObservedState.Different,
+                SafeMigrationRepairCapability.None,
+                false,
                 "projected_foreign_key_supporting_index_name_collision");
         }
 
         return new SafeMigrationProviderAnalysis(
             proof.RowsSafe ? SafeMigrationObservedState.Missing : SafeMigrationObservedState.DataBlocked,
-            SafeMigrationRepairCapability.None, false,
+            SafeMigrationRepairCapability.None,
+            false,
             proof.RowsSafe
                 ? "projected_foreign_key_replacement_safe"
                 : "projected_foreign_key_replacement_data_blocked");
@@ -423,7 +459,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         if (columns is ISafeMigrationProjectedTableSource tables
             && ((tables.TryGetProjectedTableState(definition.Table, definition.Schema, out var localState)
                     && (localState.HasUnknownStructure || localState.HasDataMutation))
-                || (tables.TryGetProjectedTableState(definition.PrincipalTable, definition.PrincipalSchema,
+                || (tables.TryGetProjectedTableState(
+                        definition.PrincipalTable,
+                        definition.PrincipalSchema,
                         out var principalState)
                     && (principalState.HasUnknownStructure || principalState.HasDataMutation))))
         {
@@ -432,10 +470,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
 
         for (var index = 0; index < definition.Columns.Count; index++)
         {
-            if (_invalidatedForeignKeyColumns?.Contains((local.Item1, local.Item2,
-                    definition.Columns[index])) == true
-                || _invalidatedForeignKeyColumns?.Contains((principal.Item1, principal.Item2,
-                    definition.PrincipalColumns[index])) == true)
+            if (_invalidatedForeignKeyColumns?.Contains((local.Item1, local.Item2, definition.Columns[index])) == true
+                || _invalidatedForeignKeyColumns?.Contains(
+                    (principal.Item1, principal.Item2, definition.PrincipalColumns[index]))
+                == true)
             {
                 return false;
             }
@@ -452,17 +490,23 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         SafeMigrationDecision decision
     )
     {
+        ObserveGeneratedColumnSources(operation, decision);
+        ObserveGeneratedDependency(operation, decision);
+        ObserveGeneratedIndexIdentity(operation, decision);
         _livePrerequisiteSupportingIndexes?.ObserveAcceptedOperation(operation, analysis, decision);
 
-        if ((_foreignKeyReplacementProofs is null && _columnSetNullDependencies is null
-                && _columnPrimaryKeyDependencies is null && _livePrerequisiteKeys is null
+        if ((_foreignKeyReplacementProofs is null
+                && _columnSetNullDependencies is null
+                && _columnPrimaryKeyDependencies is null
+                && _livePrerequisiteKeys is null
                 && _multiValuedIndexDropProofs is null)
             || decision.Action is not (SafeMigrationAction.Apply or SafeMigrationAction.Repair))
         {
             return;
         }
 
-        if (analysis.RepairMutatesData || operation.Intent is ModelManagedDataIntent)
+        if (analysis.RepairMutatesData
+            || operation.Intent is ModelManagedDataIntent)
         {
             _foreignKeyReplacementRowsInvalidated = true;
 
@@ -482,24 +526,24 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                 var removedKey = (NormalizeProofSchema(drop.Schema), drop.Table, drop.Name);
 
                 (_acceptedForeignKeyRemovals ??= new(PhysicalMemberComparer)).Add(removedKey);
-                (_acceptedForeignKeyRemovalOwners ??= new(PhysicalOwnerComparer))
-                    .Add((removedKey.Item1, removedKey.Item2));
+                (_acceptedForeignKeyRemovalOwners ??= new(PhysicalOwnerComparer)).Add(
+                    (removedKey.Item1, removedKey.Item2));
                 _acceptedForeignKeyCreations?.Remove(removedKey);
                 break;
             case EnsureForeignKeyIntent ensure when decision.Action == SafeMigrationAction.Apply
-                && (_foreignKeyReplacementProofs is not null || _livePrerequisiteKeys is not null
+                && (_foreignKeyReplacementProofs is not null
+                    || _livePrerequisiteKeys is not null
                     || _multiValuedIndexDropProofs is not null):
-                (_acceptedForeignKeyCreations ??= new(PhysicalMemberComparer))
-                    .Add((NormalizeProofSchema(ensure.Definition.Schema),
-                        ensure.Definition.Table, ensure.Definition.Name));
+                (_acceptedForeignKeyCreations ??= new(PhysicalMemberComparer)).Add(
+                    (NormalizeProofSchema(ensure.Definition.Schema), ensure.Definition.Table, ensure.Definition.Name));
                 break;
-            case AlterColumnIntent alter when alter.OldDefinition is not null
-                && IsSameLayoutNullabilityTransition(alter.OldDefinition, alter.Definition):
+            case AlterColumnIntent { OldDefinition: not null } alter
+                when IsSameLayoutNullabilityTransition(alter.OldDefinition, alter.Definition):
                 if (_foreignKeyReplacementProofs is not null)
                 {
-                    (_projectedForeignKeyColumnNullability ??= new(PhysicalMemberComparer))
-                        [(NormalizeProofSchema(alter.Schema), alter.Table, alter.Definition.Name)]
-                        = alter.Definition.IsNullable;
+                    (_projectedForeignKeyColumnNullability ??= new(PhysicalMemberComparer))[(
+                            NormalizeProofSchema(alter.Schema), alter.Table, alter.Definition.Name)] =
+                        alter.Definition.IsNullable;
                 }
 
                 break;
@@ -508,7 +552,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                 break;
             case EnsureColumnIntent ensure:
                 if (decision.Action == SafeMigrationAction.Repair
-                    && analysis.RepairPreservesIntrinsicColumnLayout && !analysis.RepairMutatesData)
+                    && analysis is { RepairPreservesIntrinsicColumnLayout: true, RepairMutatesData: false })
                 {
                     // WHY: This narrow certificate binds an accepted source to
                     // a reviewed nullability-only target. It changes no row
@@ -516,9 +560,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                     // widening cannot retain this captured endpoint proof.
                     if (_foreignKeyReplacementProofs is not null)
                     {
-                        (_projectedForeignKeyColumnNullability ??= new(PhysicalMemberComparer))
-                            [(NormalizeProofSchema(ensure.Schema), ensure.Table, ensure.Definition.Name)]
-                            = ensure.Definition.IsNullable;
+                        (_projectedForeignKeyColumnNullability ??= new(PhysicalMemberComparer))[(
+                                NormalizeProofSchema(ensure.Schema), ensure.Table, ensure.Definition.Name)] =
+                            ensure.Definition.IsNullable;
                     }
 
                     break;
@@ -538,8 +582,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                 break;
             case RenameTableIntent rename:
                 _acceptedLivePrerequisiteTableCreations?.Remove((NormalizeProofSchema(rename.Schema), rename.Name));
-                _acceptedLivePrerequisiteTableCreations?.Remove((
-                    NormalizeProofSchema(rename.NewSchema ?? rename.Schema), rename.NewName ?? rename.Name));
+                _acceptedLivePrerequisiteTableCreations?.Remove(
+                    (NormalizeProofSchema(rename.NewSchema ?? rename.Schema), rename.NewName ?? rename.Name));
                 InvalidateForeignKeyTable(rename.Name, rename.Schema);
                 InvalidateForeignKeyTable(rename.NewName ?? rename.Name, rename.NewSchema ?? rename.Schema);
                 break;
@@ -559,8 +603,20 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
     }
 
     /// <inheritdoc />
-    void ISafeMigrationProjectedDependencyAnalyzer.ObserveProviderOperation(MigrationOperation operation)
+    void ISafeMigrationProjectedDependencyAnalyzer.ObserveProviderOperation(
+        MigrationOperation operation
+    )
     {
+        if (_generatedColumnSourceProofs is not null
+            && operation is not (AlterDatabaseOperation
+                or EnsureSchemaOperation
+                or InsertDataOperation
+                or UpdateDataOperation
+                or DeleteDataOperation))
+        {
+            _generatedColumnSourcesUnknown = true;
+        }
+
         _livePrerequisiteSupportingIndexes?.ObserveProviderOperation(operation);
 
         if (_multiValuedIndexDropProofs is not null
@@ -582,8 +638,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             _acceptedLivePrerequisiteTableCreations = null;
         }
 
-        if (_foreignKeyReplacementProofs is not null || _columnSetNullDependencies is not null
-            || _columnPrimaryKeyDependencies is not null || _liveNamespaceMissingAnalyses is not null)
+        if (_foreignKeyReplacementProofs is not null
+            || _columnSetNullDependencies is not null
+            || _columnPrimaryKeyDependencies is not null
+            || _liveNamespaceMissingAnalyses is not null)
         {
             // WHY: Ordinary operations have no accepted, source-bound safe
             // certificate here. DML may invoke unrelated triggers; raw SQL and
@@ -596,38 +654,48 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
     /// <param name="table">The changed physical owner.</param>
     /// <param name="schema">The authored database qualifier, when supplied.</param>
     /// <param name="column">The changed physical column.</param>
-    private void InvalidateForeignKeyColumn(string table, string? schema, string column)
-        => (_invalidatedForeignKeyColumns ??= new(PhysicalMemberComparer))
-            .Add((NormalizeProofSchema(schema), table, column));
+    private void InvalidateForeignKeyColumn(
+        string table,
+        string? schema,
+        string column
+    ) => (_invalidatedForeignKeyColumns ??= new HashSet<(string? Schema, string Table, string Column)>(PhysicalMemberComparer)).Add(
+        (NormalizeProofSchema(schema), table, column));
 
     /// <summary>Invalidates every replacement using a changed physical table.</summary>
     /// <param name="table">The changed physical table.</param>
     /// <param name="schema">The authored database qualifier, when supplied.</param>
-    private void InvalidateForeignKeyTable(string table, string? schema)
-        => (_invalidatedForeignKeyTables ??= new(PhysicalOwnerComparer)).Add((NormalizeProofSchema(schema), table));
+    private void InvalidateForeignKeyTable(
+        string table,
+        string? schema
+    ) => (_invalidatedForeignKeyTables ??= new HashSet<(string? Schema, string Table)>(PhysicalOwnerComparer)).Add((NormalizeProofSchema(schema), table));
 
     /// <summary>Invalidates captured principal candidate keys after their ordered removal or rename.</summary>
     /// <param name="table">The table whose candidate-key inventory changed.</param>
     /// <param name="schema">The authored database qualifier, when supplied.</param>
-    private void InvalidateForeignKeyPrincipalKey(string table, string? schema)
-        => (_invalidatedForeignKeyPrincipalKeys ??= new(PhysicalOwnerComparer))
-            .Add((NormalizeProofSchema(schema), table));
+    private void InvalidateForeignKeyPrincipalKey(
+        string table,
+        string? schema
+    ) => (_invalidatedForeignKeyPrincipalKeys ??= new HashSet<(string? Schema, string Table)>(PhysicalOwnerComparer)).Add(
+        (NormalizeProofSchema(schema), table));
 
     /// <summary>Uses the same verified database identity as ordinary provider analysis.</summary>
     /// <param name="schema">The authored database qualifier, when supplied.</param>
     /// <returns>The verified normalized database identity.</returns>
-    private string? NormalizeProofSchema(string? schema)
-        => MySqlTableIdentity.NormalizeDatabase(schema, _currentDatabase);
+    private string? NormalizeProofSchema(
+        string? schema
+    ) => MySqlTableIdentity.NormalizeDatabase(schema, _currentDatabase);
 
     /// <summary>Retains native member identity under the independently captured table-name profile.</summary>
-    private PhysicalForeignKeyMemberComparer PhysicalMemberComparer => _tableNamesIgnoreCase
-        ? PhysicalForeignKeyMemberComparer.IgnoreCaseInstance
-        : PhysicalForeignKeyMemberComparer.Instance;
+    private PhysicalForeignKeyMemberComparer PhysicalMemberComparer =>
+        _tableNamesIgnoreCase
+            ? PhysicalForeignKeyMemberComparer.IgnoreCaseInstance
+            : PhysicalForeignKeyMemberComparer.Instance;
 
     /// <summary>Retains native table identity under the same profile as provider-neutral projection.</summary>
-    private PhysicalForeignKeyOwnerComparer PhysicalOwnerComparer => _tableNamesIgnoreCase
-        ? PhysicalForeignKeyOwnerComparer.IgnoreCaseInstance
-        : PhysicalForeignKeyOwnerComparer.Instance;
+    private PhysicalForeignKeyOwnerComparer PhysicalOwnerComparer =>
+        _tableNamesIgnoreCase
+            ? PhysicalForeignKeyOwnerComparer.IgnoreCaseInstance
+            : PhysicalForeignKeyOwnerComparer.Instance;
 
     /// <summary>Shares native owner equality across sparse source and accepted physical-removal inventories.</summary>
     private sealed class PhysicalForeignKeyOwnerComparer(StringComparer tableComparer)
@@ -641,13 +709,17 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             new(StringComparer.OrdinalIgnoreCase);
 
         /// <inheritdoc />
-        public bool Equals((string? Schema, string Table) x, (string? Schema, string Table) y)
-            => StringComparer.Ordinal.Equals(x.Schema, y.Schema) && tableComparer.Equals(x.Table, y.Table);
+        public bool Equals(
+            (string? Schema, string Table) x,
+            (string? Schema, string Table) y
+        ) => StringComparer.Ordinal.Equals(x.Schema, y.Schema) && tableComparer.Equals(x.Table, y.Table);
 
         /// <inheritdoc />
-        public int GetHashCode((string? Schema, string Table) value)
-            => HashCode.Combine(value.Schema is null ? 0 : StringComparer.Ordinal.GetHashCode(value.Schema),
-                tableComparer.GetHashCode(value.Table));
+        public int GetHashCode(
+            (string? Schema, string Table) value
+        ) => HashCode.Combine(
+            value.Schema is null ? 0 : StringComparer.Ordinal.GetHashCode(value.Schema),
+            tableComparer.GetHashCode(value.Table));
     }
 
     /// <summary>
@@ -689,10 +761,11 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             && StringComparer.OrdinalIgnoreCase.Equals(x.Name, y.Name);
 
         /// <inheritdoc />
-        public int GetHashCode((string? Schema, string Table, string Name) value)
-            => HashCode.Combine(
-                value.Schema is null ? 0 : StringComparer.Ordinal.GetHashCode(value.Schema),
-                tableComparer.GetHashCode(value.Table),
-                StringComparer.OrdinalIgnoreCase.GetHashCode(value.Name));
+        public int GetHashCode(
+            (string? Schema, string Table, string Name) value
+        ) => HashCode.Combine(
+            value.Schema is null ? 0 : StringComparer.Ordinal.GetHashCode(value.Schema),
+            tableComparer.GetHashCode(value.Table),
+            StringComparer.OrdinalIgnoreCase.GetHashCode(value.Name));
     }
 }

@@ -1,7 +1,6 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
-internal sealed partial class SafeMigrationPreflightProjection :
-    ISafeMigrationProjectedColumnSource,
+internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationProjectedColumnSource,
     ISafeMigrationProjectedTableSource
 {
     private readonly ISafeMigrationProviderOperationProjection? _providerOperationProjection;
@@ -149,8 +148,11 @@ internal sealed partial class SafeMigrationPreflightProjection :
             // Later operations may depend on it, but recording it as accepted
             // would invent a physical prerequisite. Preserve the runtime boundary
             // and its real origin instead of misclassifying the dependency as absent.
-            return new SafeMigrationProviderAnalysis(SafeMigrationObservedState.PrerequisiteMissing,
-                SafeMigrationRepairCapability.None, false, "projected_provider_postcondition_unknown")
+            return new SafeMigrationProviderAnalysis(
+                SafeMigrationObservedState.PrerequisiteMissing,
+                SafeMigrationRepairCapability.None,
+                false,
+                "projected_provider_postcondition_unknown")
             {
                 ProviderDeferredOriginOrdinal = deferredOrdinal,
             };
@@ -163,8 +165,10 @@ internal sealed partial class SafeMigrationPreflightProjection :
             // WHY: An exact accepted removal can discharge a dynamic native
             // capability blocker. It proves neither the reference key nor rows;
             // continue through the ordinary structural and row-proof gates.
-            liveAnalysis = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.PrerequisiteMissing,
-                SafeMigrationRepairCapability.None, postconditionSatisfied: false,
+            liveAnalysis = new SafeMigrationProviderAnalysis(
+                SafeMigrationObservedState.PrerequisiteMissing,
+                SafeMigrationRepairCapability.None,
+                postconditionSatisfied: false,
                 "projected_live_foreign_key_prerequisites_requalified");
         }
 
@@ -175,13 +179,15 @@ internal sealed partial class SafeMigrationPreflightProjection :
             // WHY: Only certified removal of every affected physical dependency
             // discharges this native index-removal blocker. Presence is a metadata
             // fact; normal owner, tombstone and provider-risk checks still follow.
-            liveAnalysis = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Matching,
-                SafeMigrationRepairCapability.None, postconditionSatisfied: false,
+            liveAnalysis = new SafeMigrationProviderAnalysis(
+                SafeMigrationObservedState.Matching,
+                SafeMigrationRepairCapability.None,
+                postconditionSatisfied: false,
                 "projected_live_drop_index_prerequisites_requalified");
         }
 
-        if (_projectedDependencyAnalyzer?.ValidateCapturedProjection(operation, liveAnalysis, this)
-            is { } capturedAnalysis)
+        if (_projectedDependencyAnalyzer?.ValidateCapturedProjection(operation, liveAnalysis, this) is
+            { } capturedAnalysis)
         {
             // WHY: Executed DDL or DML may invoke triggers that recreate a dropped
             // owner or change unrelated dependencies. Neither an earlier tombstone
@@ -211,8 +217,7 @@ internal sealed partial class SafeMigrationPreflightProjection :
             liveAnalysis = renamedAnalysis!;
         }
 
-        if (_hasOpaqueProviderPostcondition
-            && !hasRenamedSourceProof)
+        if (_hasOpaqueProviderPostcondition && !hasRenamedSourceProof)
         {
             // WHY: A provider can retain physical identities across a safe
             // rename even when neutral projection cannot. Only an explicit
@@ -288,7 +293,8 @@ internal sealed partial class SafeMigrationPreflightProjection :
             _ => null,
         };
 
-        if (owner is { } ownedTable && _projectedMissingTables.Contains(ownedTable.Key))
+        if (owner is { } ownedTable
+            && _projectedMissingTables.Contains(ownedTable.Key))
         {
             return ownedTable.RequiresPresence
                 ? TablePrerequisiteMissing()
@@ -296,9 +302,8 @@ internal sealed partial class SafeMigrationPreflightProjection :
         }
 
         return intent is EnsureForeignKeyIntent foreignKey
-            && _projectedMissingTables.Contains(new TableKey(
-                foreignKey.Definition.PrincipalTable,
-                foreignKey.Definition.PrincipalSchema))
+            && _projectedMissingTables.Contains(
+                new TableKey(foreignKey.Definition.PrincipalTable, foreignKey.Definition.PrincipalSchema))
                 ? TablePrerequisiteMissing()
                 : null;
     }
@@ -341,14 +346,19 @@ internal sealed partial class SafeMigrationPreflightProjection :
 
         var preservesForeignKeyColumnProofs = decision.Action == SafeMigrationAction.Repair
             && liveAnalysis.ObservedState == SafeMigrationObservedState.Different
-            && analysis.ObservedState == SafeMigrationObservedState.Different
-            && analysis.RepairCapability == SafeMigrationRepairCapability.Safe
-            && !analysis.RepairMutatesData
+            && analysis is
+            {
+                ObservedState: SafeMigrationObservedState.Different,
+                RepairCapability: SafeMigrationRepairCapability.Safe,
+                RepairMutatesData: false
+            }
             && _projectedColumnAnalyzer is not null
             && (operation.Intent switch
             {
                 AlterColumnIntent alter => CanReuseColumnProofAfterColumnPreservingChanges(
-                    alter, liveAnalysis, new TableKey(alter.Table, alter.Schema)),
+                    alter,
+                    liveAnalysis,
+                    new TableKey(alter.Table, alter.Schema)),
                 EnsureColumnIntent => analysis.RepairPreservesIntrinsicColumnLayout,
                 _ => false,
             });
@@ -372,7 +382,7 @@ internal sealed partial class SafeMigrationPreflightProjection :
                 Observe(value, decision);
                 break;
             case EnsureTableIntent value:
-                Observe(value, liveAnalysis, analysis, decision);
+                Observe(value, liveAnalysis, analysis, decision, operation.Policy != SafeMigrationPolicy.ExistenceOnly);
                 break;
             case DropTableIntent value:
                 Observe(value, decision);
@@ -387,7 +397,7 @@ internal sealed partial class SafeMigrationPreflightProjection :
                 Observe(value, analysis, decision, preservesForeignKeyColumnProofs);
                 break;
             case DropColumnIntent value:
-                Observe(value, decision);
+                Observe(value, liveAnalysis, decision);
                 break;
             case RenameColumnIntent value:
                 Observe(value, decision);
@@ -436,14 +446,25 @@ internal sealed partial class SafeMigrationPreflightProjection :
             && operation.Intent is not EnsureTableIntent
             && operation.Intent is not DropTableIntent)
         {
-            MarkProjectedTableStructureChanged(operation.Intent, preservesForeignKeyColumnProofs);
+            MarkProjectedTableStructureChanged(
+                operation.Intent,
+                preservesForeignKeyColumnProofs,
+                preservesNativeGeneratedSnapshot: operation.Intent is DropIndexIntent
+                    or DropPrimaryKeyIntent
+                    or DropUniqueConstraintIntent
+                    or DropCheckConstraintIntent
+                    or DropForeignKeyIntent
+                && !operation
+                    .GetAnnotations()
+                    .Any());
         }
     }
 
     /// <summary>Retains uncertainty, not an accepted postcondition, after provider-specific deferred DDL.</summary>
     /// <param name="operationOrdinal">The complete-stream ordinal of the deferred structural operation.</param>
-    internal void ObserveDeferredProviderOperation(int operationOrdinal)
-        => _deferredProviderOperationOriginOrdinal ??= operationOrdinal;
+    internal void ObserveDeferredProviderOperation(
+        int operationOrdinal
+    ) => _deferredProviderOperationOriginOrdinal ??= operationOrdinal;
 
     /// <summary>
     /// Conservatively updates projected evidence after a non-safe operation.
@@ -498,6 +519,9 @@ internal sealed partial class SafeMigrationPreflightProjection :
             case DropIndexOperation value:
                 ObserveProviderPostcondition(value);
                 break;
+            case DropCheckConstraintOperation value:
+                ObserveProviderPostcondition(value);
+                break;
             case DropTableOperation value:
                 ObserveProviderPostcondition(value);
                 break;
@@ -541,9 +565,7 @@ internal sealed partial class SafeMigrationPreflightProjection :
         [NotNullWhen(true)] out ExpectedColumnDefinition? definition
     )
     {
-        definition = TryGetProjectedColumnState(table, schema, column, out var state)
-            ? state.Definition
-            : null;
+        definition = TryGetProjectedColumnState(table, schema, column, out var state) ? state.Definition : null;
 
         return definition is not null;
     }
@@ -573,8 +595,8 @@ internal sealed partial class SafeMigrationPreflightProjection :
         var key = new TableKey(table, schema);
         if (!_projectedColumnStates.TryGetValue(key, out var columns))
         {
-            columns = new Dictionary<string, ProjectedColumnState>(new IdentifierComparer(
-                _objectIdentityNormalizer, _objectIdentityNormalizer?.ColumnIdentifierComparer));
+            columns = new Dictionary<string, ProjectedColumnState>(
+                new IdentifierComparer(_objectIdentityNormalizer, _objectIdentityNormalizer?.ColumnIdentifierComparer));
             _projectedColumnStates.Add(key, columns);
         }
 
@@ -588,6 +610,102 @@ internal sealed partial class SafeMigrationPreflightProjection :
         [NotNullWhen(true)] out ExpectedColumnDefinition? definition
     ) => TryGetProjectedColumnDefinition(table, schema, column, out definition);
 
+    bool? ISafeMigrationProjectedTableSource.HasProjectedGeneratedColumnDependency(
+        string table,
+        string? schema,
+        string column,
+        IEqualityComparer<string> columnComparer
+    )
+    {
+        if (_hasOpaqueSqlPostcondition || _hasOpaqueProviderPostcondition)
+        {
+            return null;
+        }
+
+        var key = new TableKey(table, schema);
+        var comparable = true;
+        if (_projectedColumnStates.TryGetValue(key, out var acceptedColumns))
+        {
+            foreach (var state in acceptedColumns.Values)
+            {
+                if (state.Definition is null)
+                {
+                    comparable &= state.IsMissing;
+
+                    continue;
+                }
+
+                if (state.Definition.ComputedColumnSql is not null)
+                {
+                    comparable = false;
+                }
+
+                if (state.Definition.ComputedExpression is { } captured
+                    && !SafeMigrationSqlExpressionInspector.IsStructurallyComparable(captured))
+                {
+                    comparable = false;
+                }
+
+                if (state.Definition?.ComputedExpression is { } expression
+                    && SafeMigrationSqlExpressionInspector.IsStructurallyComparable(expression)
+                    && SafeMigrationSqlExpressionInspector.ReferencesColumnIdentifier(
+                        expression,
+                        column,
+                        columnComparer))
+                {
+                    // A current accepted generated member proves a positive
+                    // dependency even when the rest of its owner is sparse.
+                    return true;
+                }
+            }
+        }
+
+        if (_prerequisites.TryGetValue(key, out var prerequisites)
+            && prerequisites.GeneratedColumnsComplete)
+        {
+            // WHY: Known member removals invalidate physical keys and layout,
+            // but not this separately certified complete generated-member set.
+            // No creation, emptiness or row proof follows from this bit.
+            return comparable ? false : null;
+        }
+
+        if (IsProjectedTableStructureUnknown(table, schema)
+            || !_tables.TryGetValue(key, out var owner))
+        {
+            return null;
+        }
+
+        foreach (var definition in owner.Columns.Values)
+        {
+            if (definition.ComputedColumnSql is not null)
+            {
+                comparable = false;
+            }
+
+            if (definition.ComputedExpression is not { } expression)
+            {
+                continue;
+            }
+
+            if (!SafeMigrationSqlExpressionInspector.IsStructurallyComparable(expression))
+            {
+                comparable = false;
+
+                continue;
+            }
+
+            if (SafeMigrationSqlExpressionInspector.ReferencesColumnIdentifier(expression, column, columnComparer))
+            {
+                return true;
+            }
+        }
+
+        // WHY: Sparse accepted columns cannot prove that another generated
+        // member is absent. Only this complete, current owner view establishes
+        // nondependency; opaque nodes never become lexical absence evidence.
+        return comparable ? false : null;
+    }
+
     bool ISafeMigrationProjectedTableSource.TryGetProjectedTableState(
         string table,
         string? schema,
@@ -597,7 +715,8 @@ internal sealed partial class SafeMigrationPreflightProjection :
         var key = new TableKey(table, schema);
         var hasPrerequisites = _prerequisites.TryGetValue(key, out var prerequisites);
 
-        if (!hasPrerequisites && !_tables.ContainsKey(key))
+        if (!hasPrerequisites
+            && !_tables.ContainsKey(key))
         {
             state = default;
 
@@ -621,8 +740,17 @@ internal sealed partial class SafeMigrationPreflightProjection :
         string? schema,
         ExpectedColumnDefinition definition,
         bool preservesLiveValueDomain = false
-    ) => GetOrCreateProjectedColumnStates(table, schema)[definition.Name] =
-        new ProjectedColumnState(definition, IsMissing: false, preservesLiveValueDomain);
+    )
+    {
+        definition = SafeMigrationCapturedExpressionNormalization.NormalizeColumn(
+            definition,
+            _objectIdentityNormalizer?.FoldUnquotedCapturedSqlIdentifiers == true);
+
+        GetOrCreateProjectedColumnStates(table, schema)[definition.Name] = new ProjectedColumnState(
+            definition,
+            IsMissing: false,
+            preservesLiveValueDomain);
+    }
 
     private SafeMigrationProviderAnalysis SelectProjectedKeyEnvironment(
         string table,
@@ -669,7 +797,8 @@ internal sealed partial class SafeMigrationPreflightProjection :
 
     private void SetProjectedTableStructureUnknown(
         string table,
-        string? schema
+        string? schema,
+        bool preservesGeneratedColumns = false
     )
     {
         var key = new TableKey(table, schema);
@@ -677,6 +806,14 @@ internal sealed partial class SafeMigrationPreflightProjection :
         _tables.Remove(key);
         _projectedMissingTables.Remove(key);
         _projectedUnknownTableStructures.Add(key);
+        if (_prerequisites.TryGetValue(key, out var prerequisites))
+        {
+            prerequisites.CheckDefinitionsFollowKnownRename = false;
+            if (!preservesGeneratedColumns)
+            {
+                prerequisites.GeneratedColumnsComplete = false;
+            }
+        }
     }
 
     /// <summary>Invalidates live structure evidence while retaining bounded removal-only histories.</summary>
@@ -685,21 +822,39 @@ internal sealed partial class SafeMigrationPreflightProjection :
     /// <param name="safeColumnDrop">Whether this accepted mutation is a safe column drop, not an opaque change.</param>
     /// <param name="safeForeignKeyDrop">Whether this accepted mutation removes only a safe foreign key.</param>
     /// <param name="preservesForeignKeyColumnProofs">Whether certified nullability retains sibling proofs.</param>
-    /// <param name="preservesIntrinsicColumnSources">Whether the provider certifies unchanged intrinsic sources.</param>
+    /// <param name="preservesIntrinsicColumnSources">Whether native intrinsic sources remain unchanged.</param>
+    /// <param name="preservesRenamedCheckDefinitions">Whether this rename just rebound accepted CHECK shapes.</param>
+    /// <param name="preservesNativeGeneratedSnapshot">Whether only a guarded index or constraint was removed.</param>
     private void MarkProjectedTableStructureChanged(
         string table,
         string? schema,
         bool safeColumnDrop = false,
         bool safeForeignKeyDrop = false,
         bool preservesForeignKeyColumnProofs = false,
-        bool preservesIntrinsicColumnSources = false
+        bool preservesIntrinsicColumnSources = false,
+        bool preservesRenamedCheckDefinitions = false,
+        bool preservesNativeGeneratedSnapshot = false
     )
     {
         var key = new TableKey(table, schema);
+        if (!preservesRenamedCheckDefinitions
+            && _prerequisites.TryGetValue(key, out var prerequisites))
+        {
+            prerequisites.CheckDefinitionsFollowKnownRename = false;
+        }
+
         var firstMutation = _projectedStructurallyModifiedTables.Add(key);
-        if (safeColumnDrop
-            && (firstMutation
-                || _projectedColumnDropOnlyTables?.Contains(key) == true))
+        if (_prerequisites.TryGetValue(key, out var generatedOwner))
+        {
+            // WHY: Guarded index and named-constraint removal cannot add or
+            // rewrite generated members, but still invalidates independent
+            // physical layout and key evidence. No later removal may revive
+            // this narrow prefix after another structural or opaque effect.
+            generatedOwner.NativeGeneratedSnapshotPreservedByIndexOrConstraintRemoval = preservesNativeGeneratedSnapshot
+                && (firstMutation || generatedOwner.NativeGeneratedSnapshotPreservedByIndexOrConstraintRemoval);
+        }
+
+        if (safeColumnDrop && (firstMutation || _projectedColumnDropOnlyTables?.Contains(key) == true))
         {
             // WHY: SQLite can certify an unchanged column through a validated
             // rebuild after sibling drops, but no other mutation shares that proof.
@@ -714,9 +869,7 @@ internal sealed partial class SafeMigrationPreflightProjection :
             _projectedColumnDropOnlyTables?.Remove(key);
         }
 
-        if (safeForeignKeyDrop
-            && (firstMutation
-                || _projectedForeignKeyDropOnlyTables?.Contains(key) == true))
+        if (safeForeignKeyDrop && (firstMutation || _projectedForeignKeyDropOnlyTables?.Contains(key) == true))
         {
             // WHY: FK removal changes table structure without changing an exact
             // column's storage or values. Only provider opt-in may reuse that proof.
@@ -754,8 +907,8 @@ internal sealed partial class SafeMigrationPreflightProjection :
         var key = new TableKey(table, schema);
         if (!_projectedChangedColumns.TryGetValue(key, out var columns))
         {
-            columns = new HashSet<string>(new IdentifierComparer(
-                _objectIdentityNormalizer, _objectIdentityNormalizer?.ColumnIdentifierComparer));
+            columns = new HashSet<string>(
+                new IdentifierComparer(_objectIdentityNormalizer, _objectIdentityNormalizer?.ColumnIdentifierComparer));
             _projectedChangedColumns.Add(key, columns);
         }
 
@@ -801,11 +954,11 @@ internal sealed partial class SafeMigrationPreflightProjection :
 
     private void MarkProjectedTableStructureChanged(
         SafeMigrationIntent intent,
-        bool preservesForeignKeyColumnProofs = false
+        bool preservesForeignKeyColumnProofs = false,
+        bool preservesNativeGeneratedSnapshot = false
     )
     {
-        var preservesIntrinsicColumnSources =
-            _projectedColumnAnalyzer?.PreservesIntrinsicColumnSources(intent) == true;
+        var preservesIntrinsicColumnSources = _projectedColumnAnalyzer?.PreservesIntrinsicColumnSources(intent) == true;
 
         switch (intent)
         {
@@ -814,25 +967,34 @@ internal sealed partial class SafeMigrationPreflightProjection :
                 MarkProjectedTableStructureChanged(value.NewName ?? value.Name, value.NewSchema ?? value.Schema);
                 break;
             case EnsureColumnIntent value:
-                MarkProjectedTableStructureChanged(value.Table, value.Schema,
+                MarkProjectedTableStructureChanged(
+                    value.Table,
+                    value.Schema,
                     preservesForeignKeyColumnProofs: preservesForeignKeyColumnProofs);
                 break;
             case AlterColumnIntent value:
-                MarkProjectedTableStructureChanged(value.Table, value.Schema,
+                MarkProjectedTableStructureChanged(
+                    value.Table,
+                    value.Schema,
                     preservesForeignKeyColumnProofs: preservesForeignKeyColumnProofs);
                 break;
             case DropColumnIntent value:
                 MarkProjectedTableStructureChanged(value.Table, value.Schema, safeColumnDrop: true);
                 break;
             case RenameColumnIntent value:
-                MarkProjectedTableStructureChanged(value.Table, value.Schema);
+                MarkProjectedTableStructureChanged(value.Table, value.Schema, preservesRenamedCheckDefinitions: true);
                 break;
             case EnsureIndexIntent value:
-                MarkProjectedTableStructureChanged(value.Definition.Table, value.Definition.Schema,
+                MarkProjectedTableStructureChanged(
+                    value.Definition.Table,
+                    value.Definition.Schema,
                     preservesIntrinsicColumnSources: preservesIntrinsicColumnSources);
                 break;
             case DropIndexIntent value:
-                MarkProjectedTableStructureChanged(value.Table, value.Schema);
+                MarkProjectedTableStructureChanged(
+                    value.Table,
+                    value.Schema,
+                    preservesNativeGeneratedSnapshot: preservesNativeGeneratedSnapshot);
                 break;
             case RenameIndexIntent value:
                 MarkProjectedTableStructureChanged(value.Table, value.Schema);
@@ -841,27 +1003,40 @@ internal sealed partial class SafeMigrationPreflightProjection :
                 MarkProjectedTableStructureChanged(value.Definition.Table, value.Definition.Schema);
                 break;
             case DropPrimaryKeyIntent value:
-                MarkProjectedTableStructureChanged(value.Table, value.Schema,
-                    preservesIntrinsicColumnSources: preservesIntrinsicColumnSources);
+                MarkProjectedTableStructureChanged(
+                    value.Table,
+                    value.Schema,
+                    preservesIntrinsicColumnSources: preservesIntrinsicColumnSources,
+                    preservesNativeGeneratedSnapshot: preservesNativeGeneratedSnapshot);
                 break;
             case EnsureUniqueConstraintIntent value:
                 MarkProjectedTableStructureChanged(value.Definition.Table, value.Definition.Schema);
                 break;
             case DropUniqueConstraintIntent value:
-                MarkProjectedTableStructureChanged(value.Table, value.Schema);
+                MarkProjectedTableStructureChanged(
+                    value.Table,
+                    value.Schema,
+                    preservesNativeGeneratedSnapshot: preservesNativeGeneratedSnapshot);
                 break;
             case EnsureCheckConstraintIntent value:
                 MarkProjectedTableStructureChanged(value.Definition.Table, value.Definition.Schema);
                 break;
             case DropCheckConstraintIntent value:
-                MarkProjectedTableStructureChanged(value.Table, value.Schema);
+                MarkProjectedTableStructureChanged(
+                    value.Table,
+                    value.Schema,
+                    preservesNativeGeneratedSnapshot: preservesNativeGeneratedSnapshot);
                 break;
             case EnsureForeignKeyIntent value:
                 MarkProjectedTableStructureChanged(value.Definition.Table, value.Definition.Schema);
                 break;
             case DropForeignKeyIntent value:
-                MarkProjectedTableStructureChanged(value.Table, value.Schema, safeForeignKeyDrop: true,
-                    preservesIntrinsicColumnSources: preservesIntrinsicColumnSources);
+                MarkProjectedTableStructureChanged(
+                    value.Table,
+                    value.Schema,
+                    safeForeignKeyDrop: true,
+                    preservesIntrinsicColumnSources: preservesIntrinsicColumnSources,
+                    preservesNativeGeneratedSnapshot: preservesNativeGeneratedSnapshot);
                 break;
         }
     }
@@ -888,6 +1063,9 @@ internal sealed partial class SafeMigrationPreflightProjection :
                 MarkProjectedTableStructureChanged(value.Table, value.Schema);
                 break;
             case DropIndexOperation { Table: not null } value:
+                MarkProjectedTableStructureChanged(value.Table, value.Schema);
+                break;
+            case DropCheckConstraintOperation { Table: not null } value:
                 MarkProjectedTableStructureChanged(value.Table, value.Schema);
                 break;
             case RenameTableOperation value:
@@ -987,7 +1165,8 @@ internal sealed partial class SafeMigrationPreflightProjection :
         ? StringComparer.Ordinal.GetHashCode(identifier)
         : normalizer.IdentifierComparer.GetHashCode(identifier);
 
-    private static ExpectedColumnDefinition CopyProjectedColumn(
+    /// <summary>Copies every immutable column facet while changing only its certified physical member name.</summary>
+    internal static ExpectedColumnDefinition CopyProjectedColumn(
         ExpectedColumnDefinition value,
         string name
     ) => new(
@@ -1009,6 +1188,7 @@ internal sealed partial class SafeMigrationPreflightProjection :
         value.ComputedExpression)
     {
         ProviderAnnotations = value.ProviderAnnotations,
+        CapturedComputedSql = value.CapturedComputedSql,
     };
 
     private bool HasUnanalyzedDataChanges(
@@ -1023,9 +1203,7 @@ internal sealed partial class SafeMigrationPreflightProjection :
                 && projectedTable.DataMutationVersion < _providerDataMutationVersion)
             || (_prerequisites.TryGetValue(key, out var prerequisites)
                 && prerequisites.DataMutationVersion < _providerDataMutationVersion)
-            || (!_tables.ContainsKey(key)
-                && !_prerequisites.ContainsKey(key)
-                && _providerDataMutationVersion > 0);
+            || (!_tables.ContainsKey(key) && !_prerequisites.ContainsKey(key) && _providerDataMutationVersion > 0);
     }
 
     private bool HasProjectedModelManagedUniqueKey(
@@ -1044,7 +1222,8 @@ internal sealed partial class SafeMigrationPreflightProjection :
             return false;
         }
 
-        var columns = definition.Keys
+        var columns = definition
+            .Keys
             .Select(static key => key.Column!)
             .ToArray();
 
@@ -1057,7 +1236,9 @@ internal sealed partial class SafeMigrationPreflightProjection :
     {
         using var writer = new CanonicalHashWriter();
         var canonicalColumns = SafeMigrationModelManagedKeyIdentity.CanonicalizeColumns(
-            columns, _objectIdentityNormalizer, out var ordinals);
+            columns,
+            _objectIdentityNormalizer,
+            out var ordinals);
 
         writer.Add(canonicalColumns.Count);
         for (var column = 0; column < canonicalColumns.Count; column++)
@@ -1082,9 +1263,7 @@ internal sealed partial class SafeMigrationPreflightProjection :
         string table,
         string? schema,
         SafeMigrationProviderAnalysis analysis
-    ) => analysis.RequiresLiveDataProof && HasUnanalyzedDataChanges(table, schema)
-        ? DataStateUnknown()
-        : analysis;
+    ) => analysis.RequiresLiveDataProof && HasUnanalyzedDataChanges(table, schema) ? DataStateUnknown() : analysis;
 
     private static SafeMigrationProviderAnalysis TablePrerequisiteMissing() => new(
         SafeMigrationObservedState.PrerequisiteMissing,
@@ -1102,8 +1281,7 @@ internal sealed partial class SafeMigrationPreflightProjection :
         SafeMigrationObservedState.PrerequisiteMissing,
         SafeMigrationRepairCapability.None,
         postconditionSatisfied: false,
-        "projected_structure_state_unknown"
-    )
+        "projected_structure_state_unknown")
     {
         IsOpaqueProjectionUnknown = true,
     };
@@ -1169,9 +1347,8 @@ internal sealed partial class SafeMigrationPreflightProjection :
         string Name
     );
 
-    private sealed class TableKeyComparer(
-        ISafeMigrationProviderObjectIdentityNormalizer? normalizer
-    ) : IEqualityComparer<TableKey>
+    private sealed class TableKeyComparer(ISafeMigrationProviderObjectIdentityNormalizer? normalizer)
+        : IEqualityComparer<TableKey>
     {
         public bool Equals(
             TableKey left,
@@ -1190,9 +1367,8 @@ internal sealed partial class SafeMigrationPreflightProjection :
         ) => NormalizeSchema(normalizer, schema);
     }
 
-    private sealed class IndexKeyComparer(
-        ISafeMigrationProviderObjectIdentityNormalizer? normalizer
-    ) : IEqualityComparer<IndexKey>
+    private sealed class IndexKeyComparer(ISafeMigrationProviderObjectIdentityNormalizer? normalizer)
+        : IEqualityComparer<IndexKey>
     {
         private readonly TableKeyComparer _tableComparer = new(normalizer);
         private readonly StringComparer _nameComparer = normalizer?.IndexIdentifierComparer ?? StringComparer.Ordinal;
@@ -1200,9 +1376,7 @@ internal sealed partial class SafeMigrationPreflightProjection :
         public bool Equals(
             IndexKey left,
             IndexKey right
-        ) => _tableComparer.Equals(
-                new TableKey(left.Table, left.Schema),
-                new TableKey(right.Table, right.Schema))
+        ) => _tableComparer.Equals(new TableKey(left.Table, left.Schema), new TableKey(right.Table, right.Schema))
             && _nameComparer.Equals(left.Name, right.Name);
 
         public int GetHashCode(
@@ -1215,18 +1389,15 @@ internal sealed partial class SafeMigrationPreflightProjection :
     private sealed class IdentifierComparer(
         ISafeMigrationProviderObjectIdentityNormalizer? normalizer,
         StringComparer? memberComparer = null
-    )
-        : IEqualityComparer<string>
+    ) : IEqualityComparer<string>
     {
         private readonly StringComparer _comparer = memberComparer
-            ?? normalizer?.IdentifierComparer
-            ?? StringComparer.Ordinal;
+            ?? normalizer?.IdentifierComparer ?? StringComparer.Ordinal;
 
         public bool Equals(
             string? left,
             string? right
-        ) => ReferenceEquals(left, right)
-            || left is not null && right is not null && _comparer.Equals(left, right);
+        ) => ReferenceEquals(left, right) || (left is not null && right is not null && _comparer.Equals(left, right));
 
         public int GetHashCode(
             string value
@@ -1246,21 +1417,30 @@ internal sealed partial class SafeMigrationPreflightProjection :
         bool sharesUniqueIndexIdentity
     )
     {
-        private readonly ISafeMigrationProviderObjectIdentityNormalizer? _objectIdentityNormalizer
-            = objectIdentityNormalizer;
+        private readonly ISafeMigrationProviderObjectIdentityNormalizer? _objectIdentityNormalizer =
+            objectIdentityNormalizer;
 
         public ProjectedDefinitionSet<ExpectedCheckConstraintDefinition> CheckConstraints { get; } = new(
             SafeMigrationSemanticDefinitionComparers.CheckConstraint,
             objectIdentityNormalizer);
 
-        public Dictionary<string, ProjectedColumn> Columns { get; } =
-            new(new IdentifierComparer(objectIdentityNormalizer, objectIdentityNormalizer?.ColumnIdentifierComparer));
+        public Dictionary<string, ProjectedColumn> Columns { get; } = new(
+            new IdentifierComparer(objectIdentityNormalizer, objectIdentityNormalizer?.ColumnIdentifierComparer));
 
         public long DataMutationVersion { get; } = dataMutationVersion;
 
         public long ModelManagedDataMutationVersion { get; set; } = dataMutationVersion;
 
         public long? EmptyTableProofVersion { get; set; }
+
+        /// <summary>Gets whether a certified rename retained accepted CHECK shapes through unknown structure.</summary>
+        public bool CheckDefinitionsFollowKnownRename { get; set; }
+
+        /// <summary>Gets whether current states exhaust generated members, not physical layout or rows.</summary>
+        public bool GeneratedColumnsComplete { get; set; }
+
+        /// <summary>Gets whether only guarded index or constraint removals precede the native snapshot.</summary>
+        public bool NativeGeneratedSnapshotPreservedByIndexOrConstraintRemoval { get; set; }
 
         public ProjectedDefinitionSet<ExpectedForeignKeyDefinition> ForeignKeys { get; } = new(
             SafeMigrationSemanticDefinitionComparers.ForeignKey,
@@ -1287,11 +1467,11 @@ internal sealed partial class SafeMigrationPreflightProjection :
 
         public ExpectedPrimaryKeyDefinition? RemovedPrimaryKey { get; private set; }
 
-        public ProjectedDefinitionSet<ExpectedUniqueConstraintDefinition> UniqueConstraints { get; } =
-            new(SafeMigrationSemanticDefinitionComparers.UniqueForColumns(
-                    objectIdentityNormalizer?.ColumnIdentifierComparer ?? StringComparer.Ordinal),
-                objectIdentityNormalizer,
-                sharesUniqueIndexIdentity ? objectIdentityNormalizer?.IndexIdentifierComparer : null);
+        public ProjectedDefinitionSet<ExpectedUniqueConstraintDefinition> UniqueConstraints { get; } = new(
+            SafeMigrationSemanticDefinitionComparers.UniqueForColumns(
+                objectIdentityNormalizer?.ColumnIdentifierComparer ?? StringComparer.Ordinal),
+            objectIdentityNormalizer,
+            sharesUniqueIndexIdentity ? objectIdentityNormalizer?.IndexIdentifierComparer : null);
 
         /// <summary>Accepts key shape with separate authored-alias and physical-identity proof.</summary>
         /// <param name="definition">The accepted key shape.</param>
@@ -1304,7 +1484,8 @@ internal sealed partial class SafeMigrationPreflightProjection :
         )
         {
             PrimaryKeyCreatedByProjection = createdByProjection
-                || (PrimaryKeyCreatedByProjection && PrimaryKey is not null
+                || (PrimaryKeyCreatedByProjection
+                    && PrimaryKey is not null
                     && SameColumns(PrimaryKey.Columns, definition.Columns, _objectIdentityNormalizer)
                     && StringComparer.Ordinal.Equals(PrimaryKeyPhysicalName, physicalName));
             PrimaryKey = definition;
@@ -1328,15 +1509,28 @@ internal sealed partial class SafeMigrationPreflightProjection :
             string? schema
         )
         {
-            PrimaryKey = PrimaryKey is null ? null
+            PrimaryKey = PrimaryKey is null
+                ? null
                 : new ExpectedPrimaryKeyDefinition(PrimaryKey.Name, table, PrimaryKey.Columns, schema);
-            RemovedPrimaryKey = RemovedPrimaryKey is null ? null
+            RemovedPrimaryKey = RemovedPrimaryKey is null
+                ? null
                 : new ExpectedPrimaryKeyDefinition(RemovedPrimaryKey.Name, table, RemovedPrimaryKey.Columns, schema);
             UniqueConstraints.Rebind(value => new ExpectedUniqueConstraintDefinition(
-                value.Name, table, value.Columns, schema));
+                value.Name,
+                table,
+                value.Columns,
+                schema));
             Indexes.Rebind(value => new ExpectedIndexDefinition(
-                value.Name, table, value.Keys, schema, value.Unique, value.Filter,
-                value.IncludedColumns, value.Method, value.NullsDistinct, value.StructuredFilter));
+                value.Name,
+                table,
+                value.Keys,
+                schema,
+                value.Unique,
+                value.Filter,
+                value.IncludedColumns,
+                value.Method,
+                value.NullsDistinct,
+                value.StructuredFilter));
         }
 
         public bool HasCandidateKey(
@@ -1403,20 +1597,28 @@ internal sealed partial class SafeMigrationPreflightProjection :
         public bool HasAcceptedDefinitions => _physicalDefinitions.Count > 0 || _unboundDefinitions?.Count > 0;
 
         /// <summary>Enumerates physical and unbound semantic prerequisites without cloning either set.</summary>
-        public IEnumerable<T> Definitions => _unboundDefinitions is null
-            ? _physicalDefinitions.Values.Select(static value => value.Definition)
-            : _physicalDefinitions.Values.Select(static value => value.Definition).Concat(_unboundDefinitions);
+        public IEnumerable<T> Definitions =>
+            _unboundDefinitions is null
+                ? _physicalDefinitions.Values.Select(static value => value.Definition)
+                : _physicalDefinitions
+                    .Values
+                    .Select(static value => value.Definition)
+                    .Concat(_unboundDefinitions);
 
         /// <summary>Tests accepted prerequisite shapes without materializing a second collection.</summary>
-        public bool Any(Func<T, bool> predicate) =>
-            _physicalDefinitions.Values.Any(value => predicate(value.Definition))
+        public bool Any(
+            Func<T, bool> predicate
+        ) => _physicalDefinitions.Values.Any(value => predicate(value.Definition))
             || _unboundDefinitions?.Any(predicate) == true;
 
         /// <summary>Tests accepted shapes with explicit state instead of allocating a per-query closure.</summary>
         /// <typeparam name="TState">The immutable caller's lookup state.</typeparam>
         /// <param name="state">The state consumed by the static predicate.</param>
         /// <param name="predicate">The non-capturing accepted-shape predicate.</param>
-        public bool Any<TState>(TState state, Func<T, TState, bool> predicate)
+        public bool Any<TState>(
+            TState state,
+            Func<T, TState, bool> predicate
+        )
         {
             foreach (var physical in _physicalDefinitions.Values)
             {
@@ -1444,11 +1646,15 @@ internal sealed partial class SafeMigrationPreflightProjection :
         /// <typeparam name="TState">The immutable caller's lookup state.</typeparam>
         /// <param name="state">The state consumed by the static predicate.</param>
         /// <param name="predicate">The non-capturing current-shape predicate.</param>
-        public bool AnyCreated<TState>(TState state, Func<T, TState, bool> predicate)
+        public bool AnyCreated<TState>(
+            TState state,
+            Func<T, TState, bool> predicate
+        )
         {
             foreach (var physical in _physicalDefinitions.Values)
             {
-                if (physical.CreatedByProjection && predicate(physical.Definition, state))
+                if (physical.CreatedByProjection
+                    && predicate(physical.Definition, state))
                 {
                     return true;
                 }
@@ -1459,7 +1665,9 @@ internal sealed partial class SafeMigrationPreflightProjection :
 
         /// <summary>Retains semantic prerequisite shape without inventing a physical member name.</summary>
         /// <param name="definition">The shape proven by a matching existing-table contract.</param>
-        public void AcceptShapeOnly(T definition)
+        public void AcceptShapeOnly(
+            T definition
+        )
         {
             if (_unboundIdentityInvalidated || _semanticDefinitions.ContainsKey(definition))
             {
@@ -1474,13 +1682,16 @@ internal sealed partial class SafeMigrationPreflightProjection :
 
         /// <summary>Checks whether immutable live shape may describe an unresolved removed physical member.</summary>
         /// <param name="analysis">The original live analysis.</param>
-        public bool HasUnprovenMutatedIdentity(SafeMigrationProviderAnalysis analysis) =>
-            _unboundIdentityInvalidated
+        public bool HasUnprovenMutatedIdentity(
+            SafeMigrationProviderAnalysis analysis
+        ) => _unboundIdentityInvalidated
             && (analysis.ObservedState == SafeMigrationObservedState.Different
                 || analysis is { ObservedState: SafeMigrationObservedState.Matching, MatchedObjectName: null });
 
         /// <summary>Rebinds immutable identities without discarding accepted aliases or removal provenance.</summary>
-        public void Rebind(Func<T, T> transform)
+        public void Rebind(
+            Func<T, T> transform
+        )
         {
             _semanticDefinitions.Clear();
             foreach (var physical in _physicalDefinitions.Values)
@@ -1553,7 +1764,8 @@ internal sealed partial class SafeMigrationPreflightProjection :
             T definition
         )
         {
-            if (_missingNames.Contains(physicalName) && !_physicalDefinitions.ContainsKey(physicalName))
+            if (_missingNames.Contains(physicalName)
+                && !_physicalDefinitions.ContainsKey(physicalName))
             {
                 // WHY: Immutable native Matching can still name a removed
                 // candidate while a different semantic candidate survives.
@@ -1649,7 +1861,8 @@ internal sealed partial class SafeMigrationPreflightProjection :
 
             foreach (var candidate in candidates)
             {
-                if (physicalName is null || StringComparer.Ordinal.Compare(candidate.Name, physicalName) < 0)
+                if (physicalName is null
+                    || StringComparer.Ordinal.Compare(candidate.Name, physicalName) < 0)
                 {
                     physicalName = candidate.Name;
                 }
@@ -1674,7 +1887,10 @@ internal sealed partial class SafeMigrationPreflightProjection :
         /// <summary>Reads an accepted exact physical definition without following a logical alias.</summary>
         /// <param name="name">The independently certified physical key name.</param>
         /// <param name="definition">The definition of that accepted physical lifetime.</param>
-        public bool TryGetPhysicalDefinition(string name, [NotNullWhen(true)] out T? definition)
+        public bool TryGetPhysicalDefinition(
+            string name,
+            [NotNullWhen(true)] out T? definition
+        )
         {
             definition = _physicalDefinitions.TryGetValue(name, out var physical) ? physical.Definition : null;
 
@@ -1683,13 +1899,17 @@ internal sealed partial class SafeMigrationPreflightProjection :
 
         /// <summary>Checks whether an accepted physical creation proves the current object's fresh lifetime.</summary>
         /// <param name="name">The exact physical member name, not a semantic alias.</param>
-        public bool WasCreatedByProjection(string name) =>
-            _physicalDefinitions.TryGetValue(name, out var physical) && physical.CreatedByProjection;
+        public bool WasCreatedByProjection(
+            string name
+        ) => _physicalDefinitions.TryGetValue(name, out var physical) && physical.CreatedByProjection;
 
         /// <summary>Records actual known owned index names without allocating an iterator or a name snapshot.</summary>
         /// <param name="tombstones">The existing physical-key removal set.</param>
         /// <param name="owner">The physical owner whose lifetime is being removed.</param>
-        public void CaptureIndexTombstones(HashSet<IndexKey> tombstones, TableKey owner)
+        public void CaptureIndexTombstones(
+            HashSet<IndexKey> tombstones,
+            TableKey owner
+        )
         {
             foreach (var physical in _physicalDefinitions.Values)
             {
@@ -1703,8 +1923,7 @@ internal sealed partial class SafeMigrationPreflightProjection :
         public bool CanReuseExactLivePhysicalName(
             string name,
             string physicalName
-        ) => _identifierComparer.Equals(name, physicalName)
-            && !TryGetPhysicalState(physicalName, out _);
+        ) => _identifierComparer.Equals(name, physicalName) && !TryGetPhysicalState(physicalName, out _);
 
         public void MarkPhysicalMissing(
             string physicalName,
@@ -1781,10 +2000,9 @@ internal sealed partial class SafeMigrationPreflightProjection :
             SafeMigrationProviderAnalysis liveAnalysis
         )
         {
-            if (liveAnalysis.ObservedState is not (
-                    SafeMigrationObservedState.Missing
-                    or SafeMigrationObservedState.Matching
-                    or SafeMigrationObservedState.Different))
+            if (liveAnalysis.ObservedState is not (SafeMigrationObservedState.Missing
+                or SafeMigrationObservedState.Matching
+                or SafeMigrationObservedState.Different))
             {
                 return ProjectedDefinitionMutation.None;
             }
@@ -1798,7 +2016,9 @@ internal sealed partial class SafeMigrationPreflightProjection :
                 }
 
                 return liveAnalysis is
-                    { ObservedState: SafeMigrationObservedState.Matching, MatchedObjectName: not null }
+                    {
+                        ObservedState: SafeMigrationObservedState.Matching, MatchedObjectName: not null
+                    }
                     && _identifierComparer.Equals(liveAnalysis.MatchedObjectName, name)
                         ? ProjectedDefinitionMutation.Missing
                         : ProjectedDefinitionMutation.Unknown;
@@ -1817,8 +2037,7 @@ internal sealed partial class SafeMigrationPreflightProjection :
             // such candidate was mutated, the remaining live state is unknown.
 
             return liveAnalysis is { ObservedState: SafeMigrationObservedState.Matching, MatchedObjectName: null }
-                && (_unresolvedMissingNames.Count > 0
-                    || _mutatedSemanticDefinitions.Contains(expected))
+                && (_unresolvedMissingNames.Count > 0 || _mutatedSemanticDefinitions.Contains(expected))
                     ? ProjectedDefinitionMutation.Unknown
                     : ProjectedDefinitionMutation.None;
         }
@@ -1957,6 +2176,9 @@ internal sealed partial class SafeMigrationPreflightProjection :
             bool sharesUniqueIndexIdentity
         )
         {
+            definition = SafeMigrationCapturedExpressionNormalization.NormalizeTable(
+                definition,
+                objectIdentityNormalizer?.FoldUnquotedCapturedSqlIdentifiers == true);
             _objectIdentityNormalizer = objectIdentityNormalizer;
             _table = definition.Table;
             _schema = definition.Schema;
@@ -1976,12 +2198,11 @@ internal sealed partial class SafeMigrationPreflightProjection :
 
             UniqueConstraints = definition.UniqueConstraints.ToDictionary(
                 static value => value.Name,
-                new IdentifierComparer(objectIdentityNormalizer,
+                new IdentifierComparer(
+                    objectIdentityNormalizer,
                     sharesUniqueIndexIdentity ? objectIdentityNormalizer?.IndexIdentifierComparer : null));
 
-            CheckConstraints = definition.CheckConstraints.ToDictionary(
-                static value => value.Name,
-                identifierComparer);
+            CheckConstraints = definition.CheckConstraints.ToDictionary(static value => value.Name, identifierComparer);
 
             ForeignKeys = definition.ForeignKeys.ToDictionary(
                 static value => value.Name,
@@ -2073,6 +2294,7 @@ internal sealed partial class SafeMigrationPreflightProjection :
             string? name = null,
             string? computedColumnSql = null,
             SafeMigrationSqlExpression? computedExpression = null,
+            string? capturedComputedSql = null,
             bool replaceComputed = false
         ) => new(
             name ?? value.Name,
@@ -2093,6 +2315,7 @@ internal sealed partial class SafeMigrationPreflightProjection :
             replaceComputed ? computedExpression : computedExpression ?? value.ComputedExpression)
         {
             ProviderAnnotations = value.ProviderAnnotations,
+            CapturedComputedSql = replaceComputed ? capturedComputedSql : value.CapturedComputedSql,
         };
 
         private static ExpectedPrimaryKeyDefinition Copy(
@@ -2115,22 +2338,37 @@ internal sealed partial class SafeMigrationPreflightProjection :
             string? schema = null,
             string? sql = null,
             SafeMigrationSqlExpression? expression = null,
+            string? capturedSql = null,
             bool replaceExpression = false
         )
         {
             var selectedSql = replaceExpression ? sql : sql ?? value.Sql;
             var selectedExpression = replaceExpression ? expression : expression ?? value.Expression;
+            var selectedCapturedSql = replaceExpression ? capturedSql : value.CapturedSql;
 
-            return selectedSql is not null
-                ? new ExpectedCheckConstraintDefinition(
+            if (selectedSql is not null)
+            {
+                return new ExpectedCheckConstraintDefinition(
                     value.Name,
                     table ?? value.Table,
                     selectedSql,
+                    schema ?? value.Schema);
+            }
+
+            var structured = selectedExpression
+                ?? throw new InvalidOperationException("A check constraint has no expression.");
+
+            return selectedCapturedSql is not null
+                ? ExpectedCheckConstraintDefinition.FromCapturedExpression(
+                    value.Name,
+                    table ?? value.Table,
+                    structured,
+                    selectedCapturedSql,
                     schema ?? value.Schema)
                 : ExpectedCheckConstraintDefinition.FromExpression(
                     value.Name,
                     table ?? value.Table,
-                    selectedExpression ?? throw new InvalidOperationException("A check constraint has no expression."),
+                    structured,
                     schema ?? value.Schema);
         }
 

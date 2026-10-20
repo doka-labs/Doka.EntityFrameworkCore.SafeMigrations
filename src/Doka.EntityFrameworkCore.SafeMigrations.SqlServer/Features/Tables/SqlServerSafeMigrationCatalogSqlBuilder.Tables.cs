@@ -58,6 +58,31 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         var preamble = SqlServerForeignKeySafety.BuildCatalogPreamble(
             definition.ForeignKeys, Literal, onlyWhenTableMissing: true);
 
+        List<ExpectedColumnDefinition>? computed = null;
+        for (var ordinal = 0; ordinal < definition.Columns.Count; ordinal++)
+        {
+            var column = definition.Columns[ordinal];
+            if (SqlServerComputedColumnContract.IsComputed(column))
+            {
+                (computed ??= []).Add(column);
+            }
+        }
+
+        var computedPreamble = computed is null ? null
+            : BuildComputedColumnPreamble(definition.Table, definition.Schema, computed, definition);
+
+        var computedSupport = computed is null ? "1 = 1" : string.Join(" AND ", computed.Select(column
+            => ComputedVariable(column, "support") + " = 1"));
+
+        var computedIdentityFailure = computed is null ? "1 = 0" : string.Join(" OR ", computed.Select(column
+            => ComputedVariable(column, "support") + " = -1"));
+
+        var computedKeys = computed is null ? null : ComputedInlineKeySupport(definition);
+        if (computedKeys is not null)
+        {
+            computedSupport += " AND (" + computedKeys + ")";
+        }
+
         var topologyGuard = preamble is null ? string.Empty
             : $"WHEN NOT {occupied} AND NOT ({SqlServerForeignKeySafety.GraphSafePredicate}) "
                 + "THEN N'prerequisite_missing' ";
@@ -69,6 +94,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
         return Plan(
             "CASE " + topologyGuard
+            + $"WHEN NOT ({computedSupport}) THEN N'unsupported' "
             + $"WHEN NOT {occupied} AND NOT ({inlinePhysical}) THEN N'prerequisite_missing' "
             + $"WHEN NOT {occupied} AND NOT ({inlinePrerequisites}) THEN N'prerequisite_missing' "
             + $"WHEN NOT {occupied} THEN N'missing' WHEN NOT {table} THEN N'different' "
@@ -76,8 +102,14 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             Bit(matching)) with
         {
             ExecutionPostcondition = Bit(execution),
-            CatalogPreambleSql = preamble,
-            ClassificationCodeExpression = $"CASE WHEN NOT {occupied} AND NOT ({inlinePrerequisites}) "
+            CatalogPreambleSql = computedPreamble is null ? preamble
+                : preamble is null ? computedPreamble : preamble + "\n" + computedPreamble,
+            PostconditionPreambleSql = computedPreamble,
+            ClassificationCodeExpression = $"CASE WHEN ({computedIdentityFailure}) "
+                + "THEN N'computed_column_operand_identity_unproven' "
+                + $"WHEN NOT ({computedSupport}) "
+                + "THEN N'computed_column_native_type_unproven' "
+                + $"WHEN NOT {occupied} AND NOT ({inlinePrerequisites}) "
                 + "THEN N'inline_foreign_key_prerequisite' "
                 + (preamble is null ? string.Empty
                     : $"WHEN NOT ({SqlServerForeignKeySafety.GraphSafePredicate}) "
@@ -85,6 +117,43 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 + "ELSE NULL END",
             PostApplySql = stamps.Length == 0 ? null : string.Join("; ", stamps),
         };
+    }
+
+    private static string? ComputedInlineKeySupport(ExpectedTableDefinition definition)
+    {
+        var predicates = new List<string>();
+        if (definition.PrimaryKey is { } primary)
+        {
+            Add(primary.Columns, primary: true);
+        }
+
+        foreach (var unique in definition.UniqueConstraints)
+        {
+            Add(unique.Columns, primary: false);
+        }
+
+        return predicates.Count == 0 ? null : string.Join(" AND ", predicates)
+            + " AND (" + ComputedIndexSessionPredicate + ")";
+
+        void Add(IReadOnlyList<string> names, bool primary)
+        {
+            foreach (var name in names)
+            {
+                var column = definition.Columns.First(value => value.Name == name);
+                if (!SqlServerComputedColumnContract.IsComputed(column))
+                {
+                    continue;
+                }
+
+                predicates.Add(ComputedVariable(column, "indexable") + "=1");
+                if (primary)
+                {
+                    // WHY: A logical finite non-null proof does not turn the
+                    // native nullable catalog facet into a legal primary-key operand.
+                    predicates.Add(ComputedVariable(column, "nullable") + "=0");
+                }
+            }
+        }
     }
 
     private SqlServerSafeMigrationRuntimePlan BuildDropTable(DropTableIntent intent)

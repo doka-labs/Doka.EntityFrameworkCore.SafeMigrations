@@ -16,10 +16,18 @@ internal sealed class CanonicalHashWriter : IDisposable
             return;
         }
 
+        Add(value.AsSpan());
+    }
+
+    /// <summary>Hashes immutable source slices without allocating an intermediate token string.</summary>
+    internal void Add(
+        ReadOnlySpan<char> value
+    )
+    {
         var maximumLength = Encoding.UTF8.GetMaxByteCount(value.Length);
         EnsureBufferSize(maximumLength);
 
-        var length = Encoding.UTF8.GetBytes(value, _buffer);
+        var length = Encoding.UTF8.GetBytes(value, _buffer.AsSpan());
         Add(length);
         _hash.AppendData(_buffer.AsSpan(0, length));
     }

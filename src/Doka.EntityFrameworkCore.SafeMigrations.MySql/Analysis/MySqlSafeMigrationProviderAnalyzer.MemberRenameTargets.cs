@@ -27,8 +27,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             if (operations[ordinal].Intent is RenameColumnIntent or RenameIndexIntent
-                && results[ordinal].ObservedState is not (SafeMigrationObservedState.Unsupported
-                    or SafeMigrationObservedState.PrerequisiteMissing)
+                && (results[ordinal].ObservedState is not (SafeMigrationObservedState.Unsupported
+                        or SafeMigrationObservedState.PrerequisiteMissing)
+                    || (!results[ordinal].IsInvariantUnsupported
+                        && IsGeneratedDependencyRefusal(results[ordinal].Code)))
                 && TargetsCurrentDatabase(operations[ordinal].Intent, currentDatabase))
             {
                 (candidates ??= []).Add(ordinal);

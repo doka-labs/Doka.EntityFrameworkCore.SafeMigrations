@@ -87,6 +87,9 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
     /// <summary>Gets the largest number of statements submitted in one provider-native batch.</summary>
     public int LargestNativeBatchStatementCount { get; private set; }
 
+    /// <summary>Gets native catalog batch dispatches independently of result-set classifier width.</summary>
+    public int NativeBatchExecutionCount { get; private set; }
+
     /// <summary>Gets whether a real classifier result was replaced by the test-owned fault.</summary>
     public bool FaultWasInjected { get; private set; }
 
@@ -585,6 +588,7 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
 
         private void CountStatements()
         {
+            _owner.NativeBatchExecutionCount++;
             _owner.LargestNativeBatchStatementCount = Math.Max(
                 _owner.LargestNativeBatchStatementCount, _innerBatch.BatchCommands.Count);
 

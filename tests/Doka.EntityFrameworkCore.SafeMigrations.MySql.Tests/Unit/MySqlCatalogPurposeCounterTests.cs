@@ -3,6 +3,45 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 /// <summary>Verifies that catalog traffic counters distinguish purpose, not only a shared result width.</summary>
 public sealed class MySqlCatalogPurposeCounterTests
 {
+    /// <summary>Native batch accounting is independent of classifier, prerequisite or unrelated result shape.</summary>
+    /// <param name="fieldCount">The synthetic native result width.</param>
+    [Theory]
+    [InlineData(2)]
+    [InlineData(9)]
+    [InlineData(10)]
+    public async Task NativeBatchCounterCountsDispatchWithoutInventingSequentialClassifierFacts(int fieldCount)
+    {
+        // Arrange
+        await using var connection = new CatalogClassificationCountingConnection(
+            new CatalogStatementTestConnection(true, (_, _) =>
+            {
+                var result = new System.Data.DataTable();
+                for (var index = 0; index < fieldCount; index++)
+                {
+                    result.Columns.Add("field_" + index, typeof(int));
+                }
+
+                result.Rows.Add(new object[fieldCount]);
+
+                return result;
+            }), nativeBatch: true);
+
+        await using var batch = connection.CreateBatch();
+        var command = batch.CreateBatchCommand();
+        command.CommandText = "SELECT 17;";
+        batch.BatchCommands.Add(command);
+
+        // Act
+        await using var reader = await batch.ExecuteReaderAsync(CancellationToken.None);
+        var hasRow = await reader.ReadAsync(CancellationToken.None);
+
+        // Assert
+        Assert.True(hasRow);
+        Assert.Equal(1, connection.NativeBatchExecutionCount);
+        Assert.Equal(0, connection.ClassificationStatementCount);
+        Assert.Equal(0, connection.PrerequisiteStatementCount);
+    }
+
     /// <summary>Required-add and dependency facts have the same semantic counters on both transport paths.</summary>
     /// <param name="native">Whether the wrapper forwards a native batch.</param>
     /// <param name="purpose">The fixed catalog safety-fact purpose or unrelated control.</param>

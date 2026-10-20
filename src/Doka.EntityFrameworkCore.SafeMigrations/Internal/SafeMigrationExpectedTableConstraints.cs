@@ -91,11 +91,54 @@ internal sealed class SafeMigrationExpectedTableConstraints
             IReadOnlyList<MigrationOperation> operations,
             Func<string?, string?> normalizeSchema,
             StringComparer tableComparer
+        ) => FromOperations(operations, normalizeSchema, tableComparer, null, false);
+
+    /// <summary>Projects captured CHECK transitions with the provider's verified native identifier roles.</summary>
+    /// <param name="operations">The complete ordered migration direction.</param>
+    /// <param name="normalizeSchema">The provider qualifier normalizer.</param>
+    /// <param name="tableComparer">The physical table-name comparer.</param>
+    /// <param name="capturedSqlIdentifierDelimiter">The native quote for an originally unquoted renamed member.</param>
+    /// <param name="foldUnquotedCapturedSqlIdentifiers">
+    /// Whether native unquoted ASCII identifiers fold to lowercase.
+    /// </param>
+    /// <returns>The initial, allowed transitional, and terminal physical constraint contracts.</returns>
+    public static IReadOnlyDictionary<(string? Schema, string Table), SafeMigrationExpectedTableConstraints>
+        FromOperations(
+            IReadOnlyList<MigrationOperation> operations,
+            Func<string?, string?> normalizeSchema,
+            StringComparer tableComparer,
+            char? capturedSqlIdentifierDelimiter,
+            bool foldUnquotedCapturedSqlIdentifiers
+        ) => FromOperations(
+        operations,
+        normalizeSchema,
+        tableComparer,
+        capturedSqlIdentifierDelimiter,
+        foldUnquotedCapturedSqlIdentifiers,
+        StringComparer.Ordinal);
+
+    /// <summary>Separates certified column-member identity from physical table-name identity.</summary>
+    /// <param name="operations">The complete ordered migration direction.</param>
+    /// <param name="normalizeSchema">The provider qualifier normalizer.</param>
+    /// <param name="tableComparer">The physical table-name comparer.</param>
+    /// <param name="capturedSqlIdentifierDelimiter">The native quote for an originally unquoted renamed member.</param>
+    /// <param name="foldUnquotedCapturedSqlIdentifiers">Whether unquoted ASCII column roles fold to lowercase.</param>
+    /// <param name="columnComparer">The independently certified physical column-member comparer.</param>
+    /// <returns>The initial, allowed transitional, and terminal constraint contracts.</returns>
+    public static IReadOnlyDictionary<(string? Schema, string Table), SafeMigrationExpectedTableConstraints>
+        FromOperations(
+            IReadOnlyList<MigrationOperation> operations,
+            Func<string?, string?> normalizeSchema,
+            StringComparer tableComparer,
+            char? capturedSqlIdentifierDelimiter,
+            bool foldUnquotedCapturedSqlIdentifiers,
+            IEqualityComparer<string> columnComparer
         )
     {
         ArgumentNullException.ThrowIfNull(operations);
         ArgumentNullException.ThrowIfNull(normalizeSchema);
         ArgumentNullException.ThrowIfNull(tableComparer);
+        ArgumentNullException.ThrowIfNull(columnComparer);
 
         var comparer = new TableIdentityComparer(normalizeSchema, tableComparer);
         var tables = new Dictionary<(string? Schema, string Table), MutableConstraints>(comparer);
@@ -105,12 +148,19 @@ internal sealed class SafeMigrationExpectedTableConstraints
         // states without treating future constraints as already mandatory.
         foreach (var operation in operations.OfType<SafeMigrationOperation>())
         {
-            Apply(tables, operation.Intent, normalizeSchema);
+            Apply(
+                tables,
+                operation.Intent,
+                normalizeSchema,
+                capturedSqlIdentifierDelimiter,
+                foldUnquotedCapturedSqlIdentifiers,
+                columnComparer);
         }
 
-        var result = new Dictionary<
-            (string? Schema, string Table),
-            SafeMigrationExpectedTableConstraints>(tables.Count, comparer);
+        var result =
+            new Dictionary<(string? Schema, string Table), SafeMigrationExpectedTableConstraints>(
+                tables.Count,
+                comparer);
         foreach (var pair in tables)
         {
             result.Add(pair.Key, pair.Value.Snapshot());
@@ -139,7 +189,9 @@ internal sealed class SafeMigrationExpectedTableConstraints
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(table);
 
-        var relationalTable = model?.GetRelationalModel().FindTable(table, schema);
+        var relationalTable = model
+            ?.GetRelationalModel()
+            .FindTable(table, schema);
         if (relationalTable is null)
         {
             return null;
@@ -164,11 +216,7 @@ internal sealed class SafeMigrationExpectedTableConstraints
                 schema))
             .ToArray();
 
-        var checkConstraints = ReadCheckConstraints(
-            relationalTable,
-            table,
-            schema,
-            runtimeCheckConstraints);
+        var checkConstraints = ReadCheckConstraints(relationalTable, table, schema, runtimeCheckConstraints);
 
         var foreignKeys = relationalTable
             .ForeignKeyConstraints
@@ -222,10 +270,10 @@ internal sealed class SafeMigrationExpectedTableConstraints
 
         return checkConstraints
             .OrderBy(static constraint => constraint.Name, StringComparer.Ordinal)
-            .Select(constraint => new ExpectedCheckConstraintDefinition(
+            .Select(constraint => SafeMigrationExpectedDefinitionFactory.CheckConstraint(
                 constraint.Name
-                    ?? throw new InvalidOperationException(
-                        $"The relational check constraint on '{tableName}' has no database name."),
+                ?? throw new InvalidOperationException(
+                    $"The relational check constraint on '{tableName}' has no database name."),
                 tableName,
                 constraint.Sql,
                 schema))
@@ -235,14 +283,21 @@ internal sealed class SafeMigrationExpectedTableConstraints
     private static void Apply(
         Dictionary<(string? Schema, string Table), MutableConstraints> tables,
         SafeMigrationIntent intent,
-        Func<string?, string?> normalizeSchema
+        Func<string?, string?> normalizeSchema,
+        char? capturedSqlIdentifierDelimiter,
+        bool foldUnquotedCapturedSqlIdentifiers,
+        IEqualityComparer<string> columnComparer
     )
     {
         switch (intent)
         {
             case EnsureTableIntent value:
-                tables[(value.Definition.Schema, value.Definition.Table)] =
-                    MutableConstraints.From(value.Definition, normalizeSchema);
+                tables[(value.Definition.Schema, value.Definition.Table)] = MutableConstraints.From(
+                    value.Definition,
+                    normalizeSchema,
+                    capturedSqlIdentifierDelimiter,
+                    foldUnquotedCapturedSqlIdentifiers,
+                    columnComparer);
                 break;
             case DropTableIntent value:
                 tables.Remove((value.Schema, value.Table));
@@ -256,31 +311,31 @@ internal sealed class SafeMigrationExpectedTableConstraints
             case RenameColumnIntent value:
                 RenameColumn(tables, value, normalizeSchema);
                 break;
-            case EnsurePrimaryKeyIntent value when
-                Find(tables, value.Definition.Schema, value.Definition.Table) is { } table:
+            case EnsurePrimaryKeyIntent value
+                when Find(tables, value.Definition.Schema, value.Definition.Table) is { } table:
                 table.EnsurePrimaryKey(value.Definition);
                 break;
-            case DropPrimaryKeyIntent value when
-                Find(tables, value.Schema, value.Table) is { PrimaryKey: { } primaryKey } table
+            case DropPrimaryKeyIntent value
+                when Find(tables, value.Schema, value.Table) is { PrimaryKey: { } primaryKey } table
                 && StringComparer.Ordinal.Equals(primaryKey.Name, value.Name):
                 table.DropPrimaryKey();
                 break;
-            case EnsureUniqueConstraintIntent value when
-                Find(tables, value.Definition.Schema, value.Definition.Table) is { } table:
+            case EnsureUniqueConstraintIntent value
+                when Find(tables, value.Definition.Schema, value.Definition.Table) is { } table:
                 table.EnsureUniqueConstraint(value.Definition);
                 break;
             case DropUniqueConstraintIntent value when Find(tables, value.Schema, value.Table) is { } table:
                 table.DropUniqueConstraint(value.Name);
                 break;
-            case EnsureCheckConstraintIntent value when
-                Find(tables, value.Definition.Schema, value.Definition.Table) is { } table:
+            case EnsureCheckConstraintIntent value
+                when Find(tables, value.Definition.Schema, value.Definition.Table) is { } table:
                 table.EnsureCheckConstraint(value.Definition);
                 break;
             case DropCheckConstraintIntent value when Find(tables, value.Schema, value.Table) is { } table:
                 table.DropCheckConstraint(value.Name);
                 break;
-            case EnsureForeignKeyIntent value when
-                Find(tables, value.Definition.Schema, value.Definition.Table) is { } table:
+            case EnsureForeignKeyIntent value
+                when Find(tables, value.Definition.Schema, value.Definition.Table) is { } table:
                 table.EnsureForeignKey(value.Definition);
                 break;
             case DropForeignKeyIntent value when Find(tables, value.Schema, value.Table) is { } table:
@@ -313,11 +368,7 @@ internal sealed class SafeMigrationExpectedTableConstraints
 
         foreach (var candidate in tables.Values)
         {
-            candidate.RenamePrincipal(
-                intent.Name,
-                normalizeSchema(intent.Schema),
-                newTable,
-                newSchema);
+            candidate.RenamePrincipal(intent.Name, normalizeSchema(intent.Schema), newTable, newSchema);
         }
     }
 
@@ -327,15 +378,12 @@ internal sealed class SafeMigrationExpectedTableConstraints
         Func<string?, string?> normalizeSchema
     )
     {
-        Find(tables, intent.Schema, intent.Table)?.RenameLocalColumn(intent.Name, intent.NewName);
+        Find(tables, intent.Schema, intent.Table)
+            ?.RenameLocalColumn(intent.Name, intent.NewName);
 
         foreach (var candidate in tables.Values)
         {
-            candidate.RenamePrincipalColumn(
-                intent.Table,
-                normalizeSchema(intent.Schema),
-                intent.Name,
-                intent.NewName);
+            candidate.RenamePrincipalColumn(intent.Table, normalizeSchema(intent.Schema), intent.Name, intent.NewName);
         }
     }
 
@@ -345,20 +393,21 @@ internal sealed class SafeMigrationExpectedTableConstraints
         Func<string?, string?> normalizeSchema
     )
     {
-        Find(tables, intent.Schema, intent.Table)?.ValidateLocalColumnDrop(intent.Name);
+        Find(tables, intent.Schema, intent.Table)
+            ?.ValidateLocalColumnDrop(intent.Name);
 
         foreach (var candidate in tables.Values)
         {
-            candidate.ValidatePrincipalColumnDrop(
-                intent.Table,
-                normalizeSchema(intent.Schema),
-                intent.Name);
+            candidate.ValidatePrincipalColumnDrop(intent.Table, normalizeSchema(intent.Schema), intent.Name);
         }
     }
 
     private sealed class MutableConstraints
     {
         private readonly Func<string?, string?> _normalizeSchema;
+        private readonly char? _capturedSqlIdentifierDelimiter;
+        private readonly bool _foldUnquotedCapturedSqlIdentifiers;
+        private readonly IEqualityComparer<string> _columnComparer;
         private readonly List<ExpectedPrimaryKeyDefinition> _allowedPrimaryKeys = [];
         private readonly List<ExpectedUniqueConstraintDefinition> _allowedUniqueConstraints = [];
         private readonly List<ExpectedCheckConstraintDefinition> _allowedCheckConstraints = [];
@@ -373,10 +422,16 @@ internal sealed class SafeMigrationExpectedTableConstraints
             IEnumerable<ExpectedUniqueConstraintDefinition> uniqueConstraints,
             IEnumerable<ExpectedCheckConstraintDefinition> checkConstraints,
             IEnumerable<ExpectedForeignKeyDefinition> foreignKeys,
-            Func<string?, string?> normalizeSchema
+            Func<string?, string?> normalizeSchema,
+            char? capturedSqlIdentifierDelimiter,
+            bool foldUnquotedCapturedSqlIdentifiers,
+            IEqualityComparer<string> columnComparer
         )
         {
             _normalizeSchema = normalizeSchema;
+            _capturedSqlIdentifierDelimiter = capturedSqlIdentifierDelimiter;
+            _foldUnquotedCapturedSqlIdentifiers = foldUnquotedCapturedSqlIdentifiers;
+            _columnComparer = columnComparer;
 
             var uniqueConstraintSnapshot = uniqueConstraints
                 .Select(Normalize)
@@ -398,12 +453,8 @@ internal sealed class SafeMigrationExpectedTableConstraints
             UniqueConstraints = uniqueConstraintSnapshot.ToDictionary(
                 static value => value.Name,
                 StringComparer.Ordinal);
-            CheckConstraints = checkConstraintSnapshot.ToDictionary(
-                static value => value.Name,
-                StringComparer.Ordinal);
-            ForeignKeys = foreignKeySnapshot.ToDictionary(
-                static value => value.Name,
-                StringComparer.Ordinal);
+            CheckConstraints = checkConstraintSnapshot.ToDictionary(static value => value.Name, StringComparer.Ordinal);
+            ForeignKeys = foreignKeySnapshot.ToDictionary(static value => value.Name, StringComparer.Ordinal);
 
             _allowedUniqueConstraints.AddRange(uniqueConstraintSnapshot);
             _allowedCheckConstraints.AddRange(checkConstraintSnapshot);
@@ -429,19 +480,34 @@ internal sealed class SafeMigrationExpectedTableConstraints
 
         public static MutableConstraints From(
             ExpectedTableDefinition definition,
-            Func<string?, string?> normalizeSchema
+            Func<string?, string?> normalizeSchema,
+            char? capturedSqlIdentifierDelimiter,
+            bool foldUnquotedCapturedSqlIdentifiers,
+            IEqualityComparer<string> columnComparer
         ) => new(
             definition.PrimaryKey,
             definition.UniqueConstraints,
             definition.CheckConstraints,
             definition.ForeignKeys,
-            normalizeSchema);
+            normalizeSchema,
+            capturedSqlIdentifierDelimiter,
+            foldUnquotedCapturedSqlIdentifiers,
+            columnComparer);
 
         public SafeMigrationExpectedTableConstraints Snapshot() => new(
             PrimaryKey,
-            UniqueConstraints.Values.OrderBy(static value => value.Name, StringComparer.Ordinal).ToArray(),
-            CheckConstraints.Values.OrderBy(static value => value.Name, StringComparer.Ordinal).ToArray(),
-            ForeignKeys.Values.OrderBy(static value => value.Name, StringComparer.Ordinal).ToArray(),
+            UniqueConstraints
+                .Values
+                .OrderBy(static value => value.Name, StringComparer.Ordinal)
+                .ToArray(),
+            CheckConstraints
+                .Values
+                .OrderBy(static value => value.Name, StringComparer.Ordinal)
+                .ToArray(),
+            ForeignKeys
+                .Values
+                .OrderBy(static value => value.Name, StringComparer.Ordinal)
+                .ToArray(),
             _allowedPrimaryKeys.ToArray(),
             _primaryKeyMayBeAbsent,
             Order(_allowedUniqueConstraints),
@@ -464,10 +530,7 @@ internal sealed class SafeMigrationExpectedTableConstraints
             }
 
             PrimaryKey = definition;
-            AddAllowed(
-                _allowedPrimaryKeys,
-                definition,
-                SafeMigrationDefinitionEquivalence.PrimaryKey);
+            AddAllowed(_allowedPrimaryKeys, definition, SafeMigrationDefinitionEquivalence.PrimaryKey);
         }
 
         public void DropPrimaryKey()
@@ -539,11 +602,7 @@ internal sealed class SafeMigrationExpectedTableConstraints
 
             if (PrimaryKey is not null)
             {
-                var renamed = new ExpectedPrimaryKeyDefinition(
-                    PrimaryKey.Name,
-                    table,
-                    PrimaryKey.Columns,
-                    schema);
+                var renamed = new ExpectedPrimaryKeyDefinition(PrimaryKey.Name, table, PrimaryKey.Columns, schema);
 
                 EnsurePrimaryKey(renamed);
             }
@@ -553,11 +612,7 @@ internal sealed class SafeMigrationExpectedTableConstraints
                 _allowedUniqueConstraints,
                 _requiredUniqueConstraints,
                 SafeMigrationDefinitionEquivalence.UniqueConstraint,
-                value => new ExpectedUniqueConstraintDefinition(
-                    value.Name,
-                    table,
-                    value.Columns,
-                    schema));
+                value => new ExpectedUniqueConstraintDefinition(value.Name, table, value.Columns, schema));
 
             ReplaceValues(
                 CheckConstraints,
@@ -600,16 +655,6 @@ internal sealed class SafeMigrationExpectedTableConstraints
             string newColumn
         )
         {
-            if (CheckConstraints.Count > 0)
-            {
-                var table = CheckConstraints.Values.First().Table;
-
-                throw new InvalidOperationException(
-                    $"Cannot project column rename '{column}' to '{newColumn}' on table "
-                    + $"'{table}'. Drop and recreate owned check constraints "
-                    + "around the rename so their terminal expressions remain explicit.");
-            }
-
             if (PrimaryKey is not null)
             {
                 var renamed = new ExpectedPrimaryKeyDefinition(
@@ -633,13 +678,18 @@ internal sealed class SafeMigrationExpectedTableConstraints
                     value.Schema));
 
             ReplaceValues(
+                CheckConstraints,
+                _allowedCheckConstraints,
+                _requiredCheckConstraints,
+                SafeMigrationDefinitionEquivalence.CheckConstraint,
+                value => RenameCheckColumn(value, column, newColumn));
+
+            ReplaceValues(
                 ForeignKeys,
                 _allowedForeignKeys,
                 _requiredForeignKeys,
                 SafeMigrationDefinitionEquivalence.ForeignKey,
-                value => CopyForeignKey(
-                    value,
-                    columns: RenameColumns(value.Columns, column, newColumn)));
+                value => CopyForeignKey(value, columns: RenameColumns(value.Columns, column, newColumn)));
         }
 
         public void RenamePrincipalColumn(
@@ -671,44 +721,27 @@ internal sealed class SafeMigrationExpectedTableConstraints
             if (PrimaryKey is not null
                 && ContainsColumn(PrimaryKey.Columns, column))
             {
-                ThrowColumnDropDependency(
-                    column,
-                    PrimaryKey.Table,
-                    "primary key",
-                    PrimaryKey.Name);
+                ThrowColumnDropDependency(column, PrimaryKey.Table, "primary key", PrimaryKey.Name);
             }
 
-            var uniqueConstraint = UniqueConstraints.Values.FirstOrDefault(
-                value => ContainsColumn(value.Columns, column));
+            var uniqueConstraint =
+                UniqueConstraints.Values.FirstOrDefault(value => ContainsColumn(value.Columns, column));
             if (uniqueConstraint is not null)
             {
-                ThrowColumnDropDependency(
-                    column,
-                    uniqueConstraint.Table,
-                    "unique constraint",
-                    uniqueConstraint.Name);
+                ThrowColumnDropDependency(column, uniqueConstraint.Table, "unique constraint", uniqueConstraint.Name);
             }
 
-            var checkConstraint = CheckConstraints.Values.FirstOrDefault(
-                value => CheckConstraintMayReferenceColumn(value, column));
+            var checkConstraint =
+                CheckConstraints.Values.FirstOrDefault(value => CheckConstraintMayReferenceColumn(value, column));
             if (checkConstraint is not null)
             {
-                ThrowColumnDropDependency(
-                    column,
-                    checkConstraint.Table,
-                    "check constraint",
-                    checkConstraint.Name);
+                ThrowColumnDropDependency(column, checkConstraint.Table, "check constraint", checkConstraint.Name);
             }
 
-            var foreignKey = ForeignKeys.Values.FirstOrDefault(
-                value => ContainsColumn(value.Columns, column));
+            var foreignKey = ForeignKeys.Values.FirstOrDefault(value => ContainsColumn(value.Columns, column));
             if (foreignKey is not null)
             {
-                ThrowColumnDropDependency(
-                    column,
-                    foreignKey.Table,
-                    "foreign key",
-                    foreignKey.Name);
+                ThrowColumnDropDependency(column, foreignKey.Table, "foreign key", foreignKey.Name);
             }
         }
 
@@ -729,43 +762,88 @@ internal sealed class SafeMigrationExpectedTableConstraints
                 return;
             }
 
-            ThrowColumnDropDependency(
-                column,
-                table,
-                "referencing foreign key",
-                foreignKey.Name,
-                foreignKey.Table);
+            ThrowColumnDropDependency(column, table, "referencing foreign key", foreignKey.Name, foreignKey.Table);
         }
 
         private ExpectedPrimaryKeyDefinition Normalize(
             ExpectedPrimaryKeyDefinition definition
-        ) => new(
-            definition.Name,
-            definition.Table,
-            definition.Columns,
-            _normalizeSchema(definition.Schema));
+        ) => new(definition.Name, definition.Table, definition.Columns, _normalizeSchema(definition.Schema));
 
         private ExpectedUniqueConstraintDefinition Normalize(
             ExpectedUniqueConstraintDefinition definition
-        ) => new(
-            definition.Name,
-            definition.Table,
-            definition.Columns,
-            _normalizeSchema(definition.Schema));
+        ) => new(definition.Name, definition.Table, definition.Columns, _normalizeSchema(definition.Schema));
 
         private ExpectedCheckConstraintDefinition Normalize(
             ExpectedCheckConstraintDefinition definition
-        ) => definition.Expression is not null
-            ? ExpectedCheckConstraintDefinition.FromExpression(
+        ) => SafeMigrationCapturedExpressionNormalization.NormalizeCheck(
+            CopyCheck(definition, definition.Table, _normalizeSchema(definition.Schema)),
+            _foldUnquotedCapturedSqlIdentifiers);
+
+        /// <summary>Renames only certified column roles without re-rendering captured native SQL.</summary>
+        private ExpectedCheckConstraintDefinition RenameCheckColumn(
+            ExpectedCheckConstraintDefinition definition,
+            string column,
+            string newColumn
+        )
+        {
+            if (definition.Expression is not { } expression
+                || !SafeMigrationSqlExpressionInspector.IsStructurallyComparable(expression))
+            {
+                throw CheckColumnRenameUnproven(definition, column, newColumn);
+            }
+
+            if (!SafeMigrationSqlExpressionInspector.ReferencesColumnIdentifier(expression, column, _columnComparer))
+            {
+                return definition;
+            }
+
+            if (definition.CapturedSql is { } source)
+            {
+                // WHY: Native numeric domains and function/type spellings
+                // must survive a rename byte-for-byte. The bounded parser
+                // rewrites only terminal member tokens; absent native quote
+                // authority or opaque source retains the fail-closed boundary.
+                if (!SafeMigrationSqlExpressionParser.TryRenameColumnIdentifier(
+                        source,
+                        column,
+                        newColumn,
+                        _columnComparer,
+                        out var renamedSql,
+                        out var renamedExpression,
+                        _capturedSqlIdentifierDelimiter,
+                        _foldUnquotedCapturedSqlIdentifiers))
+                {
+                    throw CheckColumnRenameUnproven(definition, column, newColumn);
+                }
+
+                return ExpectedCheckConstraintDefinition.FromCapturedExpression(
+                    definition.Name,
+                    definition.Table,
+                    renamedExpression,
+                    renamedSql,
+                    definition.Schema);
+            }
+
+            return ExpectedCheckConstraintDefinition.FromExpression(
                 definition.Name,
                 definition.Table,
-                definition.Expression,
-                _normalizeSchema(definition.Schema))
-            : new ExpectedCheckConstraintDefinition(
-                definition.Name,
-                definition.Table,
-                definition.Sql!,
-                _normalizeSchema(definition.Schema));
+                SafeMigrationSqlExpressionInspector.RenameColumnIdentifier(
+                    expression,
+                    column,
+                    newColumn,
+                    _columnComparer),
+                definition.Schema);
+        }
+
+        /// <summary>Retains the explicit drop/recreate requirement when a CHECK rename cannot be proved.</summary>
+        private static InvalidOperationException CheckColumnRenameUnproven(
+            ExpectedCheckConstraintDefinition definition,
+            string column,
+            string newColumn
+        ) => new(
+            $"Cannot project column rename '{column}' to '{newColumn}' on table "
+            + $"'{definition.Table}'. Drop and recreate owned check constraints "
+            + "around the rename so their terminal expressions remain explicit.");
 
         private ExpectedForeignKeyDefinition Normalize(
             ExpectedForeignKeyDefinition definition
@@ -786,7 +864,8 @@ internal sealed class SafeMigrationExpectedTableConstraints
             Dictionary<string, T> required,
             Func<T, T, bool> equivalent,
             Func<T, T> replace
-        ) where T : class
+        )
+            where T : class
         {
             foreach (var pair in values.ToArray())
             {
@@ -808,7 +887,8 @@ internal sealed class SafeMigrationExpectedTableConstraints
             Dictionary<string, T> required,
             T definition,
             Func<T, T, bool> equivalent
-        ) where T : class
+        )
+            where T : class
         {
             var name = GetName(definition);
             if (!values.TryGetValue(name, out var current)
@@ -873,7 +953,7 @@ internal sealed class SafeMigrationExpectedTableConstraints
             string column
         ) => columns.Contains(column, StringComparer.Ordinal);
 
-        private static bool CheckConstraintMayReferenceColumn(
+        private bool CheckConstraintMayReferenceColumn(
             ExpectedCheckConstraintDefinition definition,
             string column
         )
@@ -884,9 +964,10 @@ internal sealed class SafeMigrationExpectedTableConstraints
                 return true;
             }
 
-            return SafeMigrationSqlExpressionInspector.ReferencesIdentifier(
+            return SafeMigrationSqlExpressionInspector.ReferencesColumnIdentifier(
                 definition.Expression,
-                column);
+                column,
+                _columnComparer);
         }
 
         private static void ThrowColumnDropDependency(
@@ -905,17 +986,20 @@ internal sealed class SafeMigrationExpectedTableConstraints
             ExpectedCheckConstraintDefinition definition,
             string table,
             string? schema
-        ) => definition.Expression is not null
-            ? ExpectedCheckConstraintDefinition.FromExpression(
+        ) => definition.CapturedSql is { } source
+            ? ExpectedCheckConstraintDefinition.FromCapturedExpression(
                 definition.Name,
                 table,
-                definition.Expression,
+                definition.Expression!,
+                source,
                 schema)
-            : new ExpectedCheckConstraintDefinition(
-                definition.Name,
-                table,
-                definition.Sql!,
-                schema);
+            : definition.Expression is not null
+                ? ExpectedCheckConstraintDefinition.FromExpression(
+                    definition.Name,
+                    table,
+                    definition.Expression,
+                    schema)
+                : new ExpectedCheckConstraintDefinition(definition.Name, table, definition.Sql!, schema);
 
         private static ExpectedForeignKeyDefinition CopyForeignKey(
             ExpectedForeignKeyDefinition definition,
@@ -946,16 +1030,12 @@ internal sealed class SafeMigrationExpectedTableConstraints
             (string? Schema, string Table) left,
             (string? Schema, string Table) right
         ) => tableComparer.Equals(left.Table, right.Table)
-            && StringComparer.Ordinal.Equals(
-                normalizeSchema(left.Schema),
-                normalizeSchema(right.Schema));
+            && StringComparer.Ordinal.Equals(normalizeSchema(left.Schema), normalizeSchema(right.Schema));
 
         public int GetHashCode(
             (string? Schema, string Table) value
         ) => HashCode.Combine(
             tableComparer.GetHashCode(value.Table),
-            normalizeSchema(value.Schema) is { } schema
-                ? StringComparer.Ordinal.GetHashCode(schema)
-                : 0);
+            normalizeSchema(value.Schema) is { } schema ? StringComparer.Ordinal.GetHashCode(schema) : 0);
     }
 }

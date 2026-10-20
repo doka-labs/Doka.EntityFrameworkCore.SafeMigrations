@@ -14,6 +14,7 @@ internal sealed class SqliteRebuildArtifactContract
     private readonly IReadOnlySet<string> _removedTables;
     private readonly IReadOnlyDictionary<string, RebuildTableContract> _tables;
     private readonly SqliteTableConstraintTransitions _tableConstraintTransitions;
+    private readonly HashSet<SafeMigrationOperation>? _potentialColumnRebuilds;
 
     private SqliteRebuildArtifactContract(
         IReadOnlyDictionary<string, RebuildTableContract> tables,
@@ -30,6 +31,7 @@ internal sealed class SqliteRebuildArtifactContract
         _removedArtifacts = removedArtifacts;
         _removedTables = removedTables;
         _tableConstraintTransitions = new SqliteTableConstraintTransitions(constraintOperations);
+        _potentialColumnRebuilds = ReadPotentialColumnRebuilds(operations);
     }
 
     /// <summary>Creates a rebuild contract from the target model and ordered operations.</summary>
@@ -131,6 +133,145 @@ internal sealed class SqliteRebuildArtifactContract
     /// <returns>The bounded transition contract, or null for a non-table operation.</returns>
     public SafeMigrationExpectedTableConstraints? GetTableConstraintTransitions(SafeMigrationOperation operation)
         => _tableConstraintTransitions.Find(operation);
+
+    /// <summary>
+    /// Checks whether an earlier authored source addition could make this native-missing DROP execute.
+    /// </summary>
+    /// <param name="operation">The exact authored operation whose conditional row proof is being captured.</param>
+    /// <returns>Whether row analysis is warranted, never whether execution is authorized.</returns>
+    public bool MayRebuildMissingColumn(SafeMigrationOperation operation)
+        => _potentialColumnRebuilds?.Contains(operation) == true;
+
+    /// <summary>
+    /// Indexes potential ADD-to-DROP transitions once instead of rescanning the stream per absent column.
+    /// </summary>
+    private static HashSet<SafeMigrationOperation>? ReadPotentialColumnRebuilds(
+        IReadOnlyList<MigrationOperation> operations
+    )
+    {
+        if (!operations.Any(static operation => operation is SafeMigrationOperation { Intent: DropColumnIntent }))
+        {
+            return null;
+        }
+
+        Dictionary<string, HashSet<string>>? added = null;
+        HashSet<SafeMigrationOperation>? candidates = null;
+        foreach (var operation in operations)
+        {
+            switch (operation)
+            {
+                case SafeMigrationOperation { Intent: EnsureColumnIntent value }:
+                    AddSource(ref added, value.Table, value.Definition.Name);
+                    break;
+                case AddColumnOperation value:
+                    AddSource(ref added, value.Table, value.Name);
+                    break;
+                case SafeMigrationOperation { Intent: DropColumnIntent value } safe
+                    when added?.TryGetValue(value.Table, out var columns) == true && columns.Contains(value.Name):
+                    candidates ??= new HashSet<SafeMigrationOperation>(ReferenceEqualityComparer.Instance);
+                    _ = candidates.Add(safe);
+                    break;
+                case DropTableOperation value:
+                    _ = added?.Remove(value.Name);
+                    break;
+                case CreateTableOperation value:
+                    _ = added?.Remove(value.Name);
+                    break;
+                case SafeMigrationOperation { Intent: RenameTableIntent value }:
+                    AliasOwner(added, value.Name, value.NewName ?? value.Name);
+                    break;
+                case RenameTableOperation value:
+                    MoveOwner(added, value.Name, value.NewName ?? value.Name);
+                    break;
+                case SafeMigrationOperation { Intent: RenameColumnIntent value }:
+                    AliasColumn(added, value.Table, value.Name, value.NewName);
+                    break;
+                case RenameColumnOperation value:
+                    AliasColumn(added, value.Table, value.Name, value.NewName);
+                    break;
+                case InsertDataOperation or UpdateDataOperation or DeleteDataOperation:
+                case SafeMigrationOperation:
+                    // WHY: Typed DML and known safe segment boundaries do not
+                    // erase source possibilities. Row evidence expires separately;
+                    // neutral projection still owns actual accepted presence.
+                    break;
+                default:
+                    if (!SqliteSafeMigrationOperationClassifier.CanParticipateInStructuralBatch(operation))
+                    {
+                        added?.Clear();
+                    }
+
+                    break;
+            }
+        }
+
+        return candidates;
+
+        static void AddSource(ref Dictionary<string, HashSet<string>>? added, string table, string column)
+        {
+            added ??= new Dictionary<string, HashSet<string>>(s_identifierComparer);
+            if (!added.TryGetValue(table, out var columns))
+            {
+                columns = new HashSet<string>(s_identifierComparer);
+                added.Add(table, columns);
+            }
+
+            // WHY: These are candidate wishes, not accepted effects. Retaining
+            // an earlier addition across a rejected DROP can only request a row
+            // probe; neutral projection still decides actual source presence.
+            _ = columns.Add(column);
+        }
+
+        static void MoveOwner(Dictionary<string, HashSet<string>>? added, string oldName, string newName)
+        {
+            if (added?.Remove(oldName, out var columns) == true)
+            {
+                added[newName] = columns;
+            }
+        }
+
+        static void AliasOwner(Dictionary<string, HashSet<string>>? added, string oldName, string newName)
+        {
+            if (added is null || !added.TryGetValue(oldName, out var columns))
+            {
+                return;
+            }
+
+            // WHY: A conditional rename is only an authored possibility. Its
+            // old owner may remain, and a destination may have independent ADD
+            // wishes. Sharing or merging sets over-approximates potential probes
+            // without claiming either alias has accepted physical ownership.
+            if (added.TryGetValue(newName, out var destination))
+            {
+                if (!ReferenceEquals(columns, destination))
+                {
+                    destination.UnionWith(columns);
+                }
+            }
+            else
+            {
+                added.Add(newName, columns);
+            }
+        }
+
+        static void AliasColumn(
+            Dictionary<string, HashSet<string>>? added,
+            string table,
+            string oldName,
+            string newName
+        )
+        {
+            if (added is null || !added.TryGetValue(table, out var columns) || !columns.Contains(oldName))
+            {
+                return;
+            }
+
+            // WHY: Only a previously authored source wish can flow through a
+            // rename. Retain the old candidate as well: a conditional rename
+            // may be rejected, and Core alone decides accepted column lineage.
+            _ = columns.Add(newName);
+        }
+    }
 
     /// <summary>Determines whether projected dependents still reference a principal table.</summary>
     public bool HasUnresolvedIncomingForeignKey(
@@ -318,15 +459,29 @@ internal sealed class SqliteRebuildArtifactContract
     }
 
     /// <summary>Gets the first live artifact that prevents a lossless table rebuild.</summary>
+    /// <param name="snapshot">The current physical database catalog.</param>
+    /// <param name="table">The target table name.</param>
+    /// <param name="columnMatches">The provider's exact model-column comparator.</param>
+    /// <param name="indexMatches">The provider's exact model-index comparator.</param>
+    /// <param name="modelExpressionMatches">
+    /// The provider's bounded model-expression proof, or null to retain textual comparison.
+    /// </param>
+    /// <returns>The first unsupported artifact code, or null when every artifact is owned.</returns>
     public string? GetUnsupportedRebuildFeature(
         SqliteCatalogSnapshot snapshot,
         string table,
         Func<SqliteColumnSnapshot, IColumn, bool> columnMatches,
-        Func<SqliteIndexSnapshot, ITableIndex, bool> indexMatches
+        Func<SqliteIndexSnapshot, ITableIndex, bool> indexMatches,
+        Func<string, string, bool>? modelExpressionMatches = null
     )
     {
         ArgumentNullException.ThrowIfNull(columnMatches);
         ArgumentNullException.ThrowIfNull(indexMatches);
+
+        // WHY: The analyzer can prove bounded model expressions across native
+        // identifier spellings. Callers without that provider proof retain the
+        // original textual contract rather than accepting arbitrary SQL.
+        var checkMatches = modelExpressionMatches ?? SqlEquivalent;
 
         if (!snapshot.Tables.TryGetValue(table, out var tableSnapshot))
         {
@@ -497,7 +652,7 @@ internal sealed class SqliteRebuildArtifactContract
 
         foreach (var check in tableSnapshot.Checks)
         {
-            var expectedCheck = expected.Checks.FirstOrDefault(shape => SqlEquivalent(check.Expression, shape.Sql));
+            var expectedCheck = expected.Checks.FirstOrDefault(shape => checkMatches(check.Expression, shape.Sql));
             if (expectedCheck is null)
             {
                 if (check.Name is null
@@ -546,7 +701,7 @@ internal sealed class SqliteRebuildArtifactContract
         }
 
         if (expected.Checks.Any(check =>
-                tableSnapshot.Checks.All(actual => !SqlEquivalent(actual.Expression, check.Sql))
+                tableSnapshot.Checks.All(actual => !checkMatches(actual.Expression, check.Sql))
                 && (check.Name is null || added?.Checks.Contains(check.Name) != true)))
         {
             return "table_rebuild_unmodeled_target_check_constraint";

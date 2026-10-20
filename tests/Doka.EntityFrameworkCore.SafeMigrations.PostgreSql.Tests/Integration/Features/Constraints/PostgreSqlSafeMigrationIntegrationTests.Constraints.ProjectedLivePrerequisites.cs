@@ -484,12 +484,15 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
         Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, report.Assessments[3].Action);
     }
 
-    /// <summary>Sparse live facts cannot bypass an existing uncertified safe-rename postcondition boundary.</summary>
+    /// <summary>Sparse live facts use only the native no-callback certificate for an unrelated safe rename.</summary>
     /// <param name="qualifiedChild">Whether dependent operations use the same explicit creation schema.</param>
+    /// <param name="callbacks">Whether event triggers prevent certification of the rename's global effects.</param>
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task ForeignKeyNewNullableColumnRetainsUncertifiedRenameBoundary(bool qualifiedChild)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task ForeignKeyNewNullableColumnUsesOnlyCertifiedRenameBoundary(bool qualifiedChild, bool callbacks)
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
@@ -497,6 +500,14 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
             "CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY); "
             + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES (1); "
             + "CREATE TABLE unrelated_owner (old_member integer NULL);");
+
+        if (callbacks)
+        {
+            await ExecuteSqlAsync(connectionString,
+                "CREATE FUNCTION fk_rename_callback() RETURNS event_trigger LANGUAGE plpgsql "
+                + "AS $$ BEGIN PERFORM 1; END $$; CREATE EVENT TRIGGER fk_rename_callback "
+                + "ON ddl_command_end EXECUTE FUNCTION fk_rename_callback();");
+        }
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -506,23 +517,53 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
 
         builder.AddForeignKeyIfNotExists("fk_live_child_parent", "live_child", ["parent_id"],
             "live_parent", ["id"], schema: qualifiedChild ? "public" : null, principalSchema: "public");
+        var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
+        var report = await runner.AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("sparse-live-fk-unrelated-rename"), CancellationToken.None);
 
-        // Assert
-        // WHY: PostgreSQL has no independent ordered certificate for this
-        // provider rename postcondition. Exact live member facts cannot erase
-        // that established boundary, even when all owners use one qualifier.
-        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
-        Assert.All(report.Assessments.Skip(1), static item =>
+        SafeMigrationRunReport? verified = null;
+        if (report.Status == SafeMigrationReportStatus.Ready)
         {
-            Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, item.Action);
-            Assert.Equal("projected_structure_state_unknown", item.AnalysisCode);
-            Assert.Null(item.DeferredOrigin);
-        });
+            await ExecuteOperationsAsync(context, builder.Operations);
+            verified = await runner.VerifyAsync(context, builder.Operations,
+                new SafeMigrationRunOptions("sparse-live-fk-unrelated-rename-final"), CancellationToken.None);
+        }
+
+        // Assert
+        Assert.Equal(callbacks ? SafeMigrationReportStatus.RuntimeValidationRequired : SafeMigrationReportStatus.Ready,
+            report.Status);
+        Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
+        if (callbacks)
+        {
+            Assert.Null(verified);
+            Assert.All(report.Assessments.Skip(1),
+                static item => Assert.Equal(SafeMigrationAction.ValidateAtRuntime, item.Action));
+
+            Assert.Equal("projected_event_trigger_state_unknown", report.Assessments[1].AnalysisCode);
+            Assert.Equal(0, Assert.IsType<SafeMigrationDeferredOrigin>(
+                report.Assessments[1].DeferredOrigin).OperationOrdinal);
+
+            // WHY: The FK depends on the deferred ADD, not directly on the
+            // rename's callback. Its immediate unproven producer is ordinal1.
+            Assert.Equal("projected_provider_postcondition_unknown", report.Assessments[2].AnalysisCode);
+            Assert.Equal(1, Assert.IsType<SafeMigrationDeferredOrigin>(
+                report.Assessments[2].DeferredOrigin).OperationOrdinal);
+        }
+        else
+        {
+            Assert.All(report.Assessments, static item => Assert.Equal(SafeMigrationAction.Apply, item.Action));
+            var postflight = Assert.IsType<SafeMigrationRunReport>(verified);
+            Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
+            Assert.All(postflight.Assessments, static item => Assert.True(item.PostconditionSatisfied));
+            Assert.Equal(1, await ScalarIntAsync(connectionString,
+                "SELECT COUNT(*) FROM live_child WHERE parent_id IS NULL;"));
+
+            Assert.Equal(1, await ScalarIntAsync(connectionString,
+                "SELECT COUNT(*) FROM pg_catalog.pg_constraint WHERE conrelid='live_child'::regclass "
+                + "AND conname='fk_live_child_parent' AND contype='f';"));
+        }
     }
 
     /// <summary>The native default integer equality family supports sparse FK endpoints across signed widths.</summary>

@@ -54,7 +54,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             var count = 0;
             foreach (var actual in table.Checks)
             {
-                if (sql is not null && SqlEquivalent(actual.Expression, sql))
+                if (sql is not null && ExpressionMatches(actual.Expression, sql, definition.Expression))
                 {
                     Observe(definition.Name, actual.Name, ref exact, ref candidate, ref count);
                 }

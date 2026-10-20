@@ -35,6 +35,22 @@ public abstract class SafeMigrationScaffoldingDbContext : DbContext
         ModelBuilder modelBuilder
     )
     {
+        // WHY: Both real scaffolding modes must preserve parsed CASE and CHECK
+        // definitions through compilation, scripts, bundles and native replay.
+        modelBuilder.Entity("ScaffoldingGeneratedNode", entity =>
+        {
+            entity.ToTable("scaffolding_generated_nodes", table =>
+                table.HasCheckConstraint("ck_scaffolding_generated_bounds", "\"RightBound\" > \"LeftBound\""));
+            entity.Property<int>("Id").ValueGeneratedNever();
+            entity.HasKey("Id");
+            entity.Property<long>("LeftBound");
+            entity.Property<long>("RightBound");
+            entity.Property<bool>("HasDescendants").HasComputedColumnSql(
+                "\"RightBound\" > CASE WHEN \"LeftBound\" = 9223372036854775807 "
+                + "THEN \"LeftBound\" ELSE \"LeftBound\" + 1 END", stored: true);
+            entity.HasIndex("HasDescendants", "LeftBound", "RightBound");
+        });
+
         modelBuilder.Entity<SafeMigrationScaffoldingUser>(entity =>
         {
             entity.ToTable("scaffolding_users");

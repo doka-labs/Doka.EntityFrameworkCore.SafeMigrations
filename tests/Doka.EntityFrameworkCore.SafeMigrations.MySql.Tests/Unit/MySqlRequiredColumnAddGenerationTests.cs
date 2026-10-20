@@ -469,6 +469,7 @@ public sealed class MySqlRequiredColumnAddGenerationTests
         // Arrange
         using var context = CreateContext(isMariaDb: false);
         var handler = CreateHandler(context);
+        var capture = context.GetService<MySqlSafeMigrationPlanCapture>();
         var authored = new AddColumnOperation
         {
             Name = "value",
@@ -497,6 +498,8 @@ public sealed class MySqlRequiredColumnAddGenerationTests
         // Assert
         var add = Assert.IsType<AddColumnOperation>(Assert.Single(rendered));
 
+        Assert.False(capture.IsActive);
+        Assert.False(capture.HasGenerationContract);
         Assert.False(add.IsNullable);
         Assert.Equal(MySqlValueGenerationStrategy.AutoIncrement,
             Assert.IsType<MySqlValueGenerationStrategy>(add["Doka:MySql:ValueGenerationStrategy"]));

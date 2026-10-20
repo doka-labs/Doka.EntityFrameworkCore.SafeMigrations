@@ -4,6 +4,10 @@
     <RootNamespace>Doka.EntityFrameworkCore.SafeMigrations.SqlServer.PackageConsumer</RootNamespace>
   </PropertyGroup>
 
+  <ItemGroup>
+    <Compile Include="../GeneratedExpressionConsumerContract.cs" Link="GeneratedExpressionConsumerContract.cs" />
+  </ItemGroup>
+
   <ItemGroup Label="Source"
              Condition="'$(SafeMigrationsPackageConsumerMode)' == 'Source'">
     <ProjectReference Include="../../../src/Doka.EntityFrameworkCore.SafeMigrations.SqlServer/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.csproj" />

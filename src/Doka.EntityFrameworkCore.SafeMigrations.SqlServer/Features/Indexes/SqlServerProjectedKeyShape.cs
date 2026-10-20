@@ -34,6 +34,79 @@ internal sealed record SqlServerProjectedKeyTable(
     bool PhysicalSupported = true
 );
 
+/// <summary>Retains a native computed-index proof together with its immutable operand bindings.</summary>
+/// <param name="Shape">The result shape proven by the current native compiler and SET contract.</param>
+/// <param name="Operands">Every referenced name and its authored binding, or null for unchanged live metadata.</param>
+/// <param name="Table">The exact qualified owner captured for this proof.</param>
+/// <param name="Schema">The captured owner schema, with null denoting dbo.</param>
+/// <param name="ColumnSupported">Whether native result facets support the column independently of indexing.</param>
+internal sealed record SqlServerProjectedComputedKeyProof(
+    SqlServerProjectedKeyColumn Shape,
+    IReadOnlyDictionary<string, ExpectedColumnDefinition?> Operands,
+    string Table,
+    string? Schema = null,
+    bool ColumnSupported = true
+)
+{
+    /// <summary>Gets exact original native identities only for operands absent from the authored stream.</summary>
+    internal IReadOnlyDictionary<string, int>? LiveOperandIdentities { get; init; }
+
+    /// <summary>Gets the invocation-owned bindings invalidated by accepted column operations.</summary>
+    internal IReadOnlyDictionary<string, int>? CurrentColumnBindings { get; init; }
+
+    /// <summary>Gets only immutable authored copies created by an explicit earlier source rename.</summary>
+    internal IReadOnlySet<ExpectedColumnDefinition>? RenamedOperandDefinitions { get; init; }
+
+    /// <summary>Rejects reuse after any accepted operand replacement or unknown owner recreation.</summary>
+    internal bool Matches(ISafeMigrationProjectedColumnSource source, string table, string? schema)
+    {
+        // WHY: The same immutable definition can be reused by several owners.
+        // A source id is table-local; another owner's precision or collation
+        // certificate cannot qualify this one merely because its ids match.
+        if (!StringComparer.Ordinal.Equals(Table, table)
+            || !StringComparer.Ordinal.Equals(Schema ?? "dbo", schema ?? "dbo"))
+        {
+            return false;
+        }
+
+        var state = default(SafeMigrationProjectedTableState);
+        var hasTableState = source is ISafeMigrationProjectedTableSource tables
+            && tables.TryGetProjectedTableState(table, schema, out state);
+        var recreated = hasTableState && state.IsNewlyCreated;
+
+        foreach (var (name, binding) in Operands)
+        {
+            if (source.TryGetProjectedColumn(table, schema, name, out var projected))
+            {
+                if (!ReferenceEquals(projected, binding)
+                    && (binding is null || RenamedOperandDefinitions?.Contains(binding) != true
+                        || !SafeMigrationDefinitionEquivalence.Column(projected, binding)))
+                {
+                    return false;
+                }
+            }
+            else if (binding is not null || recreated)
+            {
+                return false;
+            }
+            else if (LiveOperandIdentities is not null)
+            {
+                if (!LiveOperandIdentities.TryGetValue(name, out var original) || original <= 0
+                    || CurrentColumnBindings?.TryGetValue(name, out var current) != true || current != original)
+                {
+                    return false;
+                }
+            }
+            else if (hasTableState && state.HasUnknownStructure)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+}
+
 /// <summary>Qualifies Core's ordered key projection with SQL Server physical and row semantics.</summary>
 internal static class SqlServerProjectedKeyShape
 {
@@ -47,6 +120,10 @@ internal static class SqlServerProjectedKeyShape
     /// <param name="seedProof">A provider-proven, exactly bound authored insert lineage, when available.</param>
     /// <param name="filterFailure">An invalid or unresolved provider-qualified filter contract, when present.</param>
     /// <param name="normalizedFilter">The predicate with the actual emitted raw-SQL literal types preserved.</param>
+    /// <param name="computedColumns">Invocation-owned native proofs tied to exact authored operand bindings.</param>
+    /// <param name="structuralIdentityProven">
+    /// Whether a narrow native source proof replaced generic uncertainty.
+    /// </param>
     /// <returns>The provider-qualified analysis without weakening unknown-state boundaries.</returns>
     internal static SafeMigrationProviderAnalysis Validate(
         SafeMigrationIntent intent,
@@ -57,7 +134,9 @@ internal static class SqlServerProjectedKeyShape
         IRelationalTypeMappingSource mappingSource,
         SafeMigrationProviderAnalysis? seedProof = null,
         SafeMigrationProviderAnalysis? filterFailure = null,
-        SafeMigrationSqlExpression? normalizedFilter = null
+        SafeMigrationSqlExpression? normalizedFilter = null,
+        IReadOnlyDictionary<ExpectedColumnDefinition, List<SqlServerProjectedComputedKeyProof>>? computedColumns = null,
+        bool structuralIdentityProven = false
     )
     {
         // WHY: Only an exact accepted predicate-column replacement can make
@@ -92,7 +171,7 @@ internal static class SqlServerProjectedKeyShape
         var hasTableProof = source is ISafeMigrationProjectedTableSource tables
             && tables.TryGetProjectedTableState(request.Table, request.Schema, out tableState);
 
-        if (tableState.HasUnknownStructure
+        if (!structuralIdentityProven && tableState.HasUnknownStructure
             || projected.Code is "projected_structure_state_unknown" or "projected_data_state_unknown")
         {
             return projected;
@@ -112,7 +191,8 @@ internal static class SqlServerProjectedKeyShape
             SqlServerProjectedKeyColumn? original = null;
             _ = snapshot?.Columns.TryGetValue(name, out original);
             var hasProjected = source.TryGetProjectedColumn(request.Table, request.Schema, name, out var definition);
-            var physical = hasProjected ? Resolve(definition!, mappingSource) : original;
+            var physical = hasProjected ? ResolveProjected(definition!, mappingSource, computedColumns,
+                source, request.Table, request.Schema) : original;
             if (physical is null)
             {
                 return Unknown("projected_key_column_unknown");
@@ -156,7 +236,7 @@ internal static class SqlServerProjectedKeyShape
             SqlServerProjectedKeyColumn? original = null;
             _ = snapshot?.Columns.TryGetValue(name, out original);
             var physical = source.TryGetProjectedColumn(request.Table, request.Schema, name, out var definition)
-                ? Resolve(definition, mappingSource)
+                ? ResolveProjected(definition, mappingSource, computedColumns, source, request.Table, request.Schema)
                 : original;
 
             if (physical is null)
@@ -261,15 +341,21 @@ internal static class SqlServerProjectedKeyShape
 
     private static SqlServerProjectedKeyColumn? Resolve(
         ExpectedColumnDefinition definition,
-        IRelationalTypeMappingSource mappingSource
+        IRelationalTypeMappingSource mappingSource,
+        bool nativeComputedProof = false
     )
     {
+        if (SqlServerComputedColumnContract.IsComputed(definition) && !nativeComputedProof)
+        {
+            return null;
+        }
+
         var mapping = mappingSource.FindMapping(
             definition.ClrType, definition.StoreType, unicode: definition.IsUnicode,
             size: definition.MaxLength, rowVersion: definition.IsRowVersion,
             fixedLength: definition.IsFixedLength, precision: definition.Precision, scale: definition.Scale);
 
-        if (mapping is null || definition.ComputedColumnSql is not null || definition.ComputedExpression is not null)
+        if (mapping is null)
         {
             return null;
         }
@@ -304,6 +390,41 @@ internal static class SqlServerProjectedKeyShape
             definition.Collation?.Name, definition.Collation is null);
     }
 
+    private static SqlServerProjectedKeyColumn? ResolveProjected(
+        ExpectedColumnDefinition definition,
+        IRelationalTypeMappingSource mappingSource,
+        IReadOnlyDictionary<ExpectedColumnDefinition, List<SqlServerProjectedComputedKeyProof>>? computedColumns,
+        ISafeMigrationProjectedColumnSource source,
+        string table,
+        string? schema
+    )
+    {
+        if (!SqlServerComputedColumnContract.IsComputed(definition))
+        {
+            return Resolve(definition, mappingSource);
+        }
+
+        return computedColumns is not null && computedColumns.TryGetValue(definition, out var candidates)
+            ? candidates.FirstOrDefault(proof => proof.Matches(source, table, schema))?.Shape : null;
+    }
+
+    /// <summary>Retains mapped width only after native compilation proves the exact authored result type.</summary>
+    internal static SqlServerProjectedKeyColumn? CreateComputedColumnProof(
+        ExpectedColumnDefinition definition,
+        IRelationalTypeMappingSource mappingSource,
+        int nativeProof
+    )
+    {
+        var shape = Resolve(definition, mappingSource, nativeComputedProof: true);
+
+        return shape is null ? null : shape with
+        {
+            IsNullable = nativeProof is 2 or 4 or 6,
+            KeyEligible = nativeProof is 1 or 2 && shape.KeyEligible,
+            IncludeEligible = nativeProof is 1 or 2 or 5 or 6 && shape.IncludeEligible,
+        };
+    }
+
     private static int TemporalBytes(int scale) => scale <= 2 ? 3 : scale <= 4 ? 4 : 5;
 
     private static bool ValuesArePreserved(
@@ -322,16 +443,40 @@ internal static class SqlServerProjectedKeyShape
         SafeMigrationSqlExpression? filter,
         HashSet<string> addedColumns
     )
-        => filter switch
+    {
+        var pending = default(SafeMigrationWorkStack<SafeMigrationSqlExpression>);
+        try
         {
-            SafeMigrationSqlNullTestExpression
+            do
             {
-                Negated: true, Operand: SafeMigrationSqlIdentifierExpression { Parts.Count: 1, } identifier,
-            } => addedColumns.Contains(identifier.Parts[0]),
-            SafeMigrationSqlBinaryExpression { Operator: SafeMigrationSqlBinaryOperator.And, } binary
-                => RejectsAddedNull(binary.Left, addedColumns) || RejectsAddedNull(binary.Right, addedColumns),
-            _ => false,
-        };
+                if (filter is SafeMigrationSqlBinaryExpression { Operator: SafeMigrationSqlBinaryOperator.And } binary)
+                {
+                    pending.Push(binary.Right);
+                    filter = binary.Left;
+                    continue;
+                }
+
+                if (filter is SafeMigrationSqlNullTestExpression
+                    { Negated: true, Operand: SafeMigrationSqlIdentifierExpression { Parts.Count: 1 } identifier }
+                    && addedColumns.Contains(identifier.Parts[0]))
+                {
+                    return true;
+                }
+
+                if (!pending.TryPop(out var next))
+                {
+                    return false;
+                }
+
+                filter = next;
+            }
+            while (true);
+        }
+        finally
+        {
+            pending.Dispose();
+        }
+    }
 
     private static SafeMigrationProviderAnalysis Actionable(SafeMigrationProviderAnalysis analysis)
         => analysis.ObservedState is SafeMigrationObservedState.PrerequisiteMissing

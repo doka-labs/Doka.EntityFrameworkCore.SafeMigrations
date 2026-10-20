@@ -74,14 +74,26 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         string namePredicate
     )
     {
-        var expression = definition.Sql ?? _expressionRenderer.Render(definition.Expression!);
-        var candidates = new[] { expression, $"({expression})", }
+        var expression = definition.CapturedSql
+            ?? definition.Sql
+            ?? MySqlCapturedExpressionContract.RenderExecutable(definition.Expression!, _expressionRenderer);
+
+        var candidates = new[]
+            {
+                MySqlExpressionCanonicalizer.CreateComparisonCandidate(expression),
+                MySqlExpressionCanonicalizer.CreateComparisonCandidate($"({expression})")
+            }
             .Concat(
-                MySqlExpressionCanonicalizer.BuildCatalogDisplayCandidates(
+                MySqlExpressionCanonicalizer.BuildComparisonCandidates(
                     expression,
                     includeMySqlEncodedDisplay: !isMariaDb))
-            .Distinct(StringComparer.Ordinal)
-            .Select(Literal);
+            .Concat(
+                MySqlGeneratedExpressionDisplay.AdditionalNativeCandidates(
+                    definition.Expression,
+                    _expressionRenderer,
+                    isMariaDb,
+                    definition.CapturedSql is not null))
+            .DistinctBy(static candidate => candidate.Text, StringComparer.Ordinal);
 
         return "SELECT tc.CONSTRAINT_NAME AS candidate_name FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc "
             + "JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc "
@@ -96,7 +108,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             // A disabled MySQL check has the same catalog expression but does
             // not enforce the contract. MariaDB does not expose this facet.
             + (isMariaDb ? string.Empty : "AND tc.ENFORCED = 'YES' ")
-            + $"AND cc.CHECK_CLAUSE IN ({string.Join(", ", candidates)})";
+            + "AND " + MySqlExpressionCatalogComparison.Build("cc.CHECK_CLAUSE", candidates, Literal);
     }
 
     private string CheckConstraintSatisfied(
@@ -115,7 +127,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         ExpectedCheckConstraintDefinition definition
     )
     {
-        var expression = definition.Sql ?? _expressionRenderer.Render(definition.Expression!);
+        var expression = definition.CapturedSql ?? definition.Sql
+            ?? MySqlCapturedExpressionContract.RenderExecutable(definition.Expression!, _expressionRenderer);
 
         return $"EXISTS (SELECT 1 FROM {Delimited(definition.Table, definition.Schema)} "
             + $"WHERE NOT COALESCE(({expression}), TRUE) LIMIT 1)";

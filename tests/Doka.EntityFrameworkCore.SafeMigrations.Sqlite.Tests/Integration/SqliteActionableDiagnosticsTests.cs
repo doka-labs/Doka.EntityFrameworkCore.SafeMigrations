@@ -456,7 +456,8 @@ public sealed class SqliteActionableDiagnosticsTests : SqliteIntegrationTestBase
         public IReadOnlyList<MigrationCommand> Generate(
             IReadOnlyList<MigrationOperation> operations,
             IModel? model = null,
-            MigrationsSqlGenerationOptions options = MigrationsSqlGenerationOptions.Default) => [command];
+            MigrationsSqlGenerationOptions options = MigrationsSqlGenerationOptions.Default,
+            IReadOnlyList<MigrationOperation>? guardedOperations = null) => [command];
     }
 
     /// <summary>Has no provider type mapping and supplies no data-bearing object members.</summary>

@@ -42,7 +42,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         IReadOnlyList<string>? requiredDatabaseQualifiers = null,
         bool requiresNullFreeBackfill = false,
         MySqlTableContractAlternative? nativeTableAlternative = null,
-        string? nativeNullFreeBackfillCondition = null
+        string? nativeNullFreeBackfillCondition = null,
+        MySqlGeneratedColumnDependencyContract? generatedColumnDependency = null,
+        MySqlGeneratedColumnDependencyContract? foldedGeneratedColumnDependency = null,
+        bool bindFoldedGeneratedColumnDependency = false,
+        MySqlGeneratedColumnDependencyContract? generatedColumnModelCandidate = null,
+        MySqlGeneratedColumnDependencyContract? foldedGeneratedColumnModelCandidate = null
     )
     {
         ArgumentNullException.ThrowIfNull(operation);
@@ -88,8 +93,14 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                         includeAnalysisEvidence,
                         includeTransitionEvidence,
                         Supported(context.Features, MySqlMigrationFeature.CheckConstraints)),
-                    DropColumnIntent value => BuildDropColumn(value),
-                    RenameColumnIntent value => BuildRenameColumn(value),
+                    DropColumnIntent value => BuildDropColumn(value, context.ServerVersion.IsMariaDb,
+                        generatedColumnDependency, foldedGeneratedColumnDependency,
+                        bindFoldedGeneratedColumnDependency,
+                        generatedColumnModelCandidate, foldedGeneratedColumnModelCandidate),
+                    RenameColumnIntent value => BuildRenameColumn(value, context.ServerVersion.IsMariaDb,
+                        generatedColumnDependency, foldedGeneratedColumnDependency,
+                        bindFoldedGeneratedColumnDependency,
+                        generatedColumnModelCandidate, foldedGeneratedColumnModelCandidate),
                     AlterColumnIntent value => BuildAlterColumn(
                         value,
                         context.ServerVersion.IsMariaDb,
@@ -132,7 +143,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 plan = plan with
                 {
                     PrerequisiteExpression = operation.Intent is EnsureColumnIntent column
-                        && RequiresNativeRequiredColumnAddOwnerQualification(column.Definition)
+                        && (RequiresNativeRequiredColumnAddOwnerQualification(column.Definition)
+                            || column.Definition.ComputedExpression is not null)
                         ? plan.PrerequisiteExpression
                         : BuildPrerequisiteExpression(operation.Intent),
                     RequiresLazyStateEvaluation = RequiresLazyStateEvaluation(
@@ -143,6 +155,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 };
 
                 plan = ApplyNativeEnumModeQualification(operation.Intent, plan);
+                plan = ApplyGeneratedIdentityDependencyQualification(operation.Intent, plan, context.ServerVersion.IsMariaDb);
+                plan = ApplyCapturedSourceIdentifierQualification(operation.Intent, plan, context.ServerVersion.IsMariaDb);
             }
 
             // Identity qualification has precedence over feature and catalog
@@ -250,9 +264,57 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         MySqlMigrationFeatureSet features,
         MySqlServerVersion serverVersion
     ) => GetUnsupportedSqlExpressionFeature(intent)
+        ?? GetUnsupportedCapturedExpressionFeature(intent, serverVersion.IsMariaDb)
         ?? GetUnsupportedColumnFeature(intent, features, serverVersion)
         ?? GetUnsupportedTableFeature(intent, features)
         ?? GetUnsupportedIndexFeature(intent, features) ?? GetUnsupportedCheckConstraintFeature(intent, features);
+
+    /// <summary>Validates captured source before consulting AST-derived native displays or dependency proofs.</summary>
+    private static string? GetUnsupportedCapturedExpressionFeature(SafeMigrationIntent intent, bool isMariaDb) =>
+        intent switch
+        {
+            EnsureColumnIntent value => CapturedColumnFeature(value.Definition, isMariaDb),
+            AlterColumnIntent value => CapturedColumnFeature(value.Definition, isMariaDb)
+                ?? (value.OldDefinition is null ? null : CapturedColumnFeature(value.OldDefinition, isMariaDb)),
+            EnsureCheckConstraintIntent value => MySqlCapturedExpressionContract.GetUnsupportedFeature(
+                value.Definition.CapturedSql, value.Definition.Expression, isMariaDb),
+            EnsureTableIntent value => CapturedTableFeature(value.Definition, isMariaDb),
+            _ => null,
+        };
+
+    /// <summary>Retains a no-allocation fast path for ordinary noncaptured column definitions.</summary>
+    private static string? CapturedColumnFeature(ExpectedColumnDefinition definition, bool isMariaDb) =>
+        MySqlCapturedExpressionContract.GetUnsupportedFeature(definition.CapturedComputedSql,
+            definition.ComputedExpression, isMariaDb);
+
+    /// <summary>Validates complete contracts directly rather than materializing single-item traversal arrays.</summary>
+    private static string? CapturedTableFeature(ExpectedTableDefinition table, bool isMariaDb)
+    {
+        foreach (var column in table.Columns)
+        {
+            var failure = MySqlCapturedExpressionContract.GetUnsupportedFeature(column.CapturedComputedSql,
+                column.ComputedExpression, isMariaDb);
+            if (failure is not null)
+            {
+                return failure;
+            }
+        }
+
+        foreach (var check in table.CheckConstraints)
+        {
+            var failure = MySqlCapturedExpressionContract.GetUnsupportedFeature(
+                check.CapturedSql,
+                check.Expression,
+                isMariaDb);
+
+            if (failure is not null)
+            {
+                return failure;
+            }
+        }
+
+        return null;
+    }
 
     public string RenderExpression(
         SafeMigrationSqlExpression expression

@@ -69,7 +69,10 @@ internal sealed class SqliteTableConstraintTransitions
                 pending,
                 static schema => schema is null || SqliteIdentifierComparer.Instance.Equals(schema, "main")
                     ? null : schema,
-                SqliteIdentifierComparer.Instance);
+                SqliteIdentifierComparer.Instance,
+                capturedSqlIdentifierDelimiter: '"',
+                foldUnquotedCapturedSqlIdentifiers: false,
+                columnComparer: SqliteIdentifierComparer.Instance);
 
             foreach (var operation in pending)
             {

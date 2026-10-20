@@ -419,6 +419,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                         results,
                         plans,
                         dataProbeResults,
+                        operations,
                         operationOffset,
                         submittedOrdinals,
                         cancellationToken);
@@ -1007,7 +1008,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
 
             await using var batch = new SafeMigrationCatalogBatch(connection, commandTimeout);
 
-            var selectedOrdinals = new List<int>(
+            var selectedOrdinals = new List<StateEvaluationGuardRequest>(
                 Math.Min(
                     SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement
                     * SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch,
@@ -1027,7 +1028,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                     parameters.Add);
 
                 var selections = new List<string>(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement);
-                var statementOrdinals = new List<int>(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement);
+                var statementOrdinals = new List<StateEvaluationGuardRequest>(
+                    SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement);
                 var sqlBytes = trailerBytes;
                 while (ordinal < operations.Count
                        && selections.Count < SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
@@ -1036,6 +1038,16 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                         ?? throw new ArgumentException(
                             "The operation batch cannot contain null entries.",
                             nameof(operations));
+
+                    if (_generatedDropCatalogReadable && operation.Intent is DropColumnIntent)
+                    {
+                        // WHY: The same invocation already proved the required native
+                        // dependency catalogs readable in its always-run
+                        // visibility scalar. Runtime SQL keeps its fresh guard.
+                        ordinal++;
+
+                        continue;
+                    }
 
                     var checkpoint = parameters.Capture();
                     var plan = builder.Build(operation, includeRuntimeIndexInputGuard: false);
@@ -1048,9 +1060,14 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                         continue;
                     }
 
+                    var guardFailed = $"NOT COALESCE(({plan.StateEvaluationGuardExpression}), FALSE)";
+                    var defaultCode = plan.UnsupportedCode ?? "state_evaluation_guard";
+                    var failureCode = plan.StateEvaluationGuardFailureCodeExpression
+                        ?? parameters.AddString(defaultCode);
+
                     var selection = $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, CASE "
-                        + $"WHEN NOT COALESCE(({plan.StateEvaluationGuardExpression}), FALSE) THEN "
-                        + $"({plan.StateEvaluationGuardFailureExpression}) ELSE NULL END";
+                        + $"WHEN {guardFailed} THEN ({plan.StateEvaluationGuardFailureExpression}) ELSE NULL END, "
+                        + $"CASE WHEN {guardFailed} THEN ({failureCode}) ELSE NULL END";
 
                     var selectionBytes = Encoding.UTF8.GetByteCount(selection)
                         + (selections.Count == 0 ? 0 : separatorBytes);
@@ -1083,7 +1100,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                     }
 
                     selections.Add(selection);
-                    statementOrdinals.Add(ordinal);
+                    statementOrdinals.Add(new StateEvaluationGuardRequest(ordinal, defaultCode,
+                        plan.StateEvaluationGuardFailureCodeExpression is not null));
                     sqlBytes += selectionBytes;
                     ordinal++;
                 }
@@ -1107,7 +1125,14 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                 continue;
             }
 
-            await ReadStateEvaluationGuardBatchAsync(batch, states, selectedOrdinals, cancellationToken);
+            var reasons = await ReadStateEvaluationGuardBatchAsync(batch, states, selectedOrdinals, cancellationToken);
+            if (reasons is not null)
+            {
+                foreach (var (operationOrdinal, reason) in reasons)
+                {
+                    (_stateEvaluationGuardShortCircuitCodes ??= [])[operationOrdinal] = reason;
+                }
+            }
         }
     }
 
@@ -1116,6 +1141,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
         SafeMigrationProviderAnalysis[] results,
         PostgreSqlSafeMigrationRuntimePlan?[] plans,
         PostgreSqlDataProbeResult?[] dataProbeResults,
+        IReadOnlyList<SafeMigrationOperation> operations,
         int operationOffset,
         IReadOnlyList<int> submittedOrdinals,
         CancellationToken cancellationToken
@@ -1155,6 +1181,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                             ? plan.UnsupportedCode ?? "classified_unsupported"
                             : ClassificationCode(state)
                         : reader.GetString(4);
+
+                    var emptyGeneratedDropSet = DecodeGeneratedDropCompleteness(
+                        operations[ordinal].Intent, state, ref code);
 
                     var evidence = plan.ModelManagedRowEvidenceExpression is null
                         ? null
@@ -1211,6 +1240,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                                 ? reader.GetString(8)
                                 : null,
                         ModelManagedDataEvidence = evidence,
+                        DropLeavesNoGeneratedColumns = emptyGeneratedDropSet,
                         // WHY: Every VARCHAR transition carries a probe template,
                         // but widening is catalog-only. Only a catalog-confirmed
                         // narrowing or nullable-to-required result becomes stale
@@ -1286,29 +1316,65 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
         return indexInputOrdinals;
     }
 
-    private static async Task ReadStateEvaluationGuardBatchAsync(
+    internal static async Task<Dictionary<int, string>?> ReadStateEvaluationGuardBatchAsync(
         SafeMigrationCatalogBatch batch,
         SafeMigrationObservedState?[] states,
-        List<int> selectedOrdinals,
+        IReadOnlyList<StateEvaluationGuardRequest> selectedOrdinals,
         CancellationToken cancellationToken
     )
     {
         var row = 0;
+        Dictionary<int, string>? reasons = null;
         await batch.ForEachResultSetAsync(
             async (reader, token) =>
             {
                 while (await reader.ReadAsync(token))
                 {
-                    var resultOrdinal = reader.GetInt32(0);
-                    if (row >= selectedOrdinals.Count
-                        || resultOrdinal != selectedOrdinals[row])
+                    if (reader.FieldCount != 3 || row >= selectedOrdinals.Count
+                        || reader.GetValue(0) is not int resultOrdinal
+                        || resultOrdinal != selectedOrdinals[row].Ordinal)
                     {
                         throw new InvalidOperationException(
                             "The PostgreSQL SafeMigrations state-evaluation guard classifier "
                             + "returned an invalid ordinal.");
                     }
 
-                    states[resultOrdinal] = reader.IsDBNull(1) ? null : ParseState(reader.GetString(1));
+                    var request = selectedOrdinals[row];
+                    if (reader.IsDBNull(1))
+                    {
+                        if (!reader.IsDBNull(2))
+                        {
+                            throw InvalidStateEvaluationGuardEvidence();
+                        }
+
+                        states[resultOrdinal] = null;
+                    }
+                    else
+                    {
+                        if (reader.GetValue(1) is not string stateValue
+                            || reader.GetValue(2) is not string code
+                            || code != request.DefaultCode && !(request.HasCapturedBinding
+                                && code is "captured_sql_identifier" or "captured_sql_type_binding"
+                                    or "captured_sql_function_binding" or "captured_sql_operator_binding"))
+                        {
+                            throw InvalidStateEvaluationGuardEvidence();
+                        }
+
+                        var state = ParseState(stateValue);
+                        if (code is "captured_sql_identifier" or "captured_sql_type_binding"
+                                or "captured_sql_function_binding" or "captured_sql_operator_binding"
+                            && state != SafeMigrationObservedState.Unsupported)
+                        {
+                            throw InvalidStateEvaluationGuardEvidence();
+                        }
+
+                        states[resultOrdinal] = state;
+                        if (state == SafeMigrationObservedState.Unsupported)
+                        {
+                            (reasons ??= [])[resultOrdinal] = code;
+                        }
+                    }
+
                     row++;
                 }
             },
@@ -1320,7 +1386,23 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                 "The PostgreSQL SafeMigrations state-evaluation guard classifier returned "
                 + "an inconsistent row count.");
         }
+
+        return reasons;
     }
+
+    /// <summary>
+    /// Rejects malformed native proof rows without copying their untrusted contents into diagnostics.
+    /// </summary>
+    private static InvalidOperationException InvalidStateEvaluationGuardEvidence()
+        => new("The PostgreSQL SafeMigrations state-evaluation guard classifier "
+            + "returned invalid capability evidence.");
+
+    /// <summary>Scopes one ordered guard result to its exact expected bounded capability-code family.</summary>
+    /// <param name="Ordinal">The immutable operation-stream ordinal.</param>
+    /// <param name="DefaultCode">The existing reason retained when the earlier provider guard fails.</param>
+    /// <param name="HasCapturedBinding">Whether native source keyword/type binding reasons are permitted.</param>
+    internal readonly record struct StateEvaluationGuardRequest(
+        int Ordinal, string DefaultCode, bool HasCapturedBinding);
 
     private static void ApplyCommandTimeout(
         DbCommand command,

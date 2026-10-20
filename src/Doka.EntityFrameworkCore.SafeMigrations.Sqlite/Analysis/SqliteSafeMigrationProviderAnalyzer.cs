@@ -4,7 +4,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite;
 internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrationProviderAnalyzer,
     ISafeMigrationProviderTargetModelAnalyzer, ISafeMigrationProviderObjectIdentityNormalizer,
     ISafeMigrationProviderOperationProjection, ISafeMigrationProjectedColumnAnalyzer,
-    ISafeMigrationLivePrerequisiteSource
+    ISafeMigrationLivePrerequisiteSource, ISafeMigrationProjectedDependencyAnalyzer
 {
     private static readonly StringComparer s_identifierComparer = SqliteIdentifierComparer.Instance;
 
@@ -29,6 +29,9 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
 
     /// <inheritdoc />
     public StringComparer IdentifierComparer => s_identifierComparer;
+
+    /// <inheritdoc />
+    public char? CapturedSqlIdentifierDelimiter => '"';
 
     /// <inheritdoc />
     public bool IndexUsesSchemaScopedIdentity => true;
@@ -173,6 +176,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
         var connection = context.Database.GetDbConnection();
         var transaction = context.Database.CurrentTransaction?.GetDbTransaction();
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction);
+        ResetDropOnlyProjection(snapshot);
         var results = Analyze(context, operations, targetModels, snapshot, cancellationToken);
 
         // WHY: Publish only complete immutable capture, never partially analyzed
@@ -596,41 +600,73 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
             _ => InvariantUnsupported("operation_kind"),
         };
 
+        var generatedDropBlocker = operation.Intent is DropColumnIntent dropColumn
+            && analysis.ObservedState == SafeMigrationObservedState.Matching
+                ? AnalyzeGeneratedColumnDrop(snapshot.Tables[dropColumn.Table], dropColumn.Name, dropped: null)
+                : null;
+
         var decision = SafeMigrationDecisionPlanner.Plan(
             operation.Intent.Kind,
             analysis.ObservedState,
             operation.Policy,
             analysis.RepairCapability);
 
-        if (tableName is not null
-            && SqliteSafeMigrationOperationClassifier.RequiresTableRebuild(operation.Intent)
-            && decision.Action is SafeMigrationAction.Apply or SafeMigrationAction.Repair)
+        var rebuildTable = SqliteSafeMigrationOperationClassifier.RequiresTableRebuild(operation.Intent)
+            ? tableName : null;
+
+        var unsupportedRebuild = rebuildTable is not null
+            ? rebuildArtifacts.GetUnsupportedRebuildFeature(
+                snapshot, rebuildTable, ModelColumnMatches, ModelIndexMatches, ModelExpressionMatches)
+            : null;
+
+        if (unsupportedRebuild is not null)
         {
-            var unsupportedRebuild = rebuildArtifacts.GetUnsupportedRebuildFeature(
-                snapshot,
-                tableName,
-                ModelColumnMatches,
-                ModelIndexMatches);
+            // WHY: Native absence can become accepted presence earlier in this
+            // same batch. Keep the independent metadata-only rebuild refusal
+            // conditional on actual projected execution, not on initial state.
+            CaptureDropProjectionEvidence(operation, Unsupported(unsupportedRebuild));
+        }
 
-            if (unsupportedRebuild is not null)
-            {
-                return Unsupported(unsupportedRebuild);
-            }
+        var nativeRebuild = rebuildTable is not null
+            && decision.Action is SafeMigrationAction.Apply or SafeMigrationAction.Repair;
 
-            if (snapshot.ForeignKeysEnabled
-                && HasRetainedRebuildForeignKeyViolation(
-                    snapshot,
-                    connection,
-                    transaction,
-                    tableName,
-                    operation,
-                    rebuildArtifacts))
+        if (nativeRebuild && unsupportedRebuild is not null)
+        {
+            return generatedDropBlocker ?? Unsupported(unsupportedRebuild);
+        }
+
+        if (rebuildTable is not null && unsupportedRebuild is null && snapshot.ForeignKeysEnabled
+            && (nativeRebuild || (operation.Intent is DropColumnIntent drop
+                && analysis.ObservedState == SafeMigrationObservedState.Missing
+                && snapshot.Tables.ContainsKey(drop.Table)
+                && rebuildArtifacts.MayRebuildMissingColumn(operation)))
+            && HasRetainedRebuildForeignKeyViolation(
+                snapshot, connection, transaction, rebuildTable, operation, rebuildArtifacts))
+        {
+            var rowBlocker = DataBlocked("table_rebuild_foreign_key_violation");
+
+            // WHY: Exact projected column presence cannot discharge an
+            // independent violation in retained incoming or outgoing rows.
+            // A possible earlier ADD only requests this conditional proof;
+            // actual native absence must remain a no-op until accepted presence.
+            CaptureDropProjectionEvidence(operation, rowBlocker);
+            if (nativeRebuild)
             {
-                return DataBlocked("table_rebuild_foreign_key_violation");
+                return generatedDropBlocker ?? rowBlocker;
             }
         }
 
-        return analysis;
+        if (generatedDropBlocker is not null)
+        {
+            // WHY: Removing an earlier dependent can discharge this one native
+            // blocker, but cannot manufacture rebuild ownership or row safety.
+            // Retain the baseline only after those independent checks passed.
+            CaptureDropProjectionEvidence(operation, analysis);
+        }
+
+        CaptureDropOnlyProjection(operation, analysis);
+
+        return generatedDropBlocker ?? analysis;
     }
 
     private string? InvariantUnsupportedFeature(
@@ -667,12 +703,19 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
 
         if (!snapshot.Tables.TryGetValue(intent.Definition.Table, out var table))
         {
-            return Missing(postconditionSatisfied: false);
+            return HasMissingDeclaredExpressionColumns(intent.Definition)
+                ? InvariantUnsupported("expression_column_reference_unproven")
+                : Missing(postconditionSatisfied: false);
         }
 
         if (intent.Mode == SafeMigrationTableMode.ConvergenceContainer)
         {
             return Matching(postconditionSatisfied: true, matchedObjectName: table.Name);
+        }
+
+        if (HasMissingDeclaredExpressionColumns(intent.Definition))
+        {
+            return InvariantUnsupported("expression_column_reference_unproven");
         }
 
         var matching = TableMatches(
@@ -767,6 +810,11 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
 
         if (!table.Columns.TryGetValue(intent.Definition.Name, out var column))
         {
+            if (HasMissingLiveExpressionColumns(intent.Definition.ComputedExpression, table))
+            {
+                return PrerequisiteMissing();
+            }
+
             if (intent.Definition.IsStored == true)
             {
                 return Unsupported("stored_generated_column_add");
@@ -787,9 +835,17 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
             return Missing(postconditionSatisfied: false);
         }
 
-        return ColumnMatches(column, intent.Definition)
-            ? Matching(postconditionSatisfied: true, matchedObjectName: column.Name)
-            : ColumnDifferent(column, intent.Definition);
+        if (!ColumnMatches(column, intent.Definition))
+        {
+            // WHY: A prior accepted rename can establish a future operand.
+            // Preserve the actual intrinsic difference for that complete
+            // ordered proof rather than treating future live names as absent.
+            return ColumnDifferent(column, intent.Definition);
+        }
+
+        return HasMissingLiveExpressionColumns(intent.Definition.ComputedExpression, table)
+            ? PrerequisiteMissing()
+            : Matching(postconditionSatisfied: true, matchedObjectName: column.Name);
     }
 
     private SafeMigrationProviderAnalysis AnalyzeAlterColumn(
@@ -855,9 +911,24 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
             return Missing(postconditionSatisfied: true);
         }
 
-        return table.Columns.ContainsKey(intent.Name)
-            ? Matching(postconditionSatisfied: false, matchedObjectName: intent.Name)
-            : Missing(postconditionSatisfied: true);
+        if (!table.Columns.ContainsKey(intent.Name))
+        {
+            return Missing(postconditionSatisfied: true);
+        }
+
+        var hasSurvivingGeneratedColumn = false;
+        foreach (var candidate in table.Columns.Values)
+        {
+            if (!s_identifierComparer.Equals(candidate.Name, intent.Name)
+                && (candidate.GeneratedSql is not null || candidate.HiddenKind is 2 or 3))
+            {
+                hasSurvivingGeneratedColumn = true;
+                break;
+            }
+        }
+
+        return Matching(postconditionSatisfied: false, matchedObjectName: intent.Name,
+            dropLeavesNoGeneratedColumns: !hasSurvivingGeneratedColumn);
     }
 
     private static SafeMigrationProviderAnalysis AnalyzeRenameColumn(
@@ -1187,15 +1258,28 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
 
         if (named is not null)
         {
-            return SqlEquivalent(named.Expression, expectedSql)
-                ? Matching(postconditionSatisfied: true, matchedObjectName: named.Name)
-                : Different("check_expression", Bound(expectedSql), Bound(named.Expression));
+            if (!ExpressionMatches(named.Expression, expectedSql, intent.Definition.Expression))
+            {
+                return Different("check_expression", Bound(expectedSql), Bound(named.Expression));
+            }
+
+            return HasMissingLiveExpressionColumns(intent.Definition.Expression, table)
+                ? PrerequisiteMissing()
+                : Matching(postconditionSatisfied: true, matchedObjectName: named.Name);
         }
 
-        var semantic = table.Checks.FirstOrDefault(value => SqlEquivalent(value.Expression, expectedSql));
+        var semantic = table.Checks.FirstOrDefault(value =>
+            ExpressionMatches(value.Expression, expectedSql, intent.Definition.Expression));
         if (semantic is not null)
         {
-            return Matching(postconditionSatisfied: true, matchedObjectName: semantic.Name);
+            return HasMissingLiveExpressionColumns(intent.Definition.Expression, table)
+                ? PrerequisiteMissing()
+                : Matching(postconditionSatisfied: true, matchedObjectName: semantic.Name);
+        }
+
+        if (HasMissingLiveExpressionColumns(intent.Definition.Expression, table))
+        {
+            return PrerequisiteMissing();
         }
 
         if (rebuildArtifacts.HasUnmaterializedReferencedColumns(snapshot, intent.Definition.Table, expectedSql))
@@ -1452,7 +1536,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
                 definition.OnUpdate, definition.OnDelete);
 
         bool CheckMatches(SqliteCheckSnapshot actual, ExpectedCheckConstraintDefinition definition)
-            => RenderCheck(definition) is { } sql && SqlEquivalent(actual.Expression, sql);
+            => RenderCheck(definition) is { } sql && ExpressionMatches(actual.Expression, sql, definition.Expression);
     }
 
     private string? TableUnsupportedFeature(
@@ -1475,6 +1559,11 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
 
         foreach (var check in definition.CheckConstraints)
         {
+            if (!CapturedSourceDialectCompatible(check.CapturedSql))
+            {
+                return "check_expression";
+            }
+
             if (check.Expression is not null)
             {
                 var unsupported = _expressionRenderer.GetUnsupportedFeature(check.Expression);
@@ -1492,6 +1581,11 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
         ExpectedColumnDefinition definition
     )
     {
+        if (!CapturedSourceDialectCompatible(definition.CapturedComputedSql))
+        {
+            return "computed_expression";
+        }
+
         if (definition.Comment is not null)
         {
             return "column_comments";
@@ -1534,9 +1628,10 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
     {
         var expectedStoreType = ExpectedStoreType(expected);
         var expectedDefault = ExpectedDefaultSql(expected);
-        var expectedComputed = expected.ComputedExpression is null
-            ? expected.ComputedColumnSql
-            : _expressionRenderer.Render(expected.ComputedExpression);
+        var expectedComputed = expected.CapturedComputedSql
+            ?? (expected.ComputedExpression is null
+                ? expected.ComputedColumnSql
+                : _expressionRenderer.Render(expected.ComputedExpression));
 
         var expectedAutoincrement = expected.ProviderAnnotations
                 .FirstOrDefault(static annotation => annotation.Name == "Sqlite:Autoincrement")
@@ -1555,7 +1650,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
                 NormalizeStoreType(expectedStoreType))
             && actual.IsNullable == expected.IsNullable
             && SqlEquivalent(actual.DefaultSql, expectedDefault)
-            && SqlEquivalent(actual.GeneratedSql, expectedComputed)
+            && ExpressionMatches(actual.GeneratedSql, expectedComputed, expected.ComputedExpression)
             && (expectedComputed is null || actual.IsStored == (expected.IsStored ?? false))
             && CollationMatches(actual.Collation, expected.Collation)
             && actual.AutoIncrement == expectedAutoincrement;
@@ -1585,7 +1680,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
                 NormalizeStoreType(expected.StoreType))
             && actual.IsNullable == expected.IsNullable
             && ModelDefaultMatches(actual, expected, expectedDefault)
-            && SqlEquivalent(actual.GeneratedSql, expected.ComputedColumnSql)
+            && ModelExpressionMatches(actual.GeneratedSql, expected.ComputedColumnSql)
             && (expected.ComputedColumnSql is null || actual.IsStored == (expected.IsStored ?? false))
             && s_identifierComparer.Equals(actual.Collation ?? "BINARY", expected.Collation ?? "BINARY")
             && actual.AutoIncrement == expectedAutoincrement;
@@ -1756,11 +1851,12 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
                     Bound(actual.DefaultSql ?? "none")));
         }
 
-        var expectedComputed = expected.ComputedExpression is null
-            ? expected.ComputedColumnSql
-            : _expressionRenderer.Render(expected.ComputedExpression);
+        var expectedComputed = expected.CapturedComputedSql
+            ?? (expected.ComputedExpression is null
+                ? expected.ComputedColumnSql
+                : _expressionRenderer.Render(expected.ComputedExpression));
 
-        if (!SqlEquivalent(actual.GeneratedSql, expectedComputed))
+        if (!ExpressionMatches(actual.GeneratedSql, expectedComputed, expected.ComputedExpression))
         {
             result.Add(
                 new SafeMigrationFacetDifference(
@@ -1814,14 +1910,74 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
         ExpectedCheckConstraintDefinition definition
     )
     {
+        if (!CapturedSourceDialectCompatible(definition.CapturedSql))
+        {
+            return null;
+        }
+
         if (definition.Expression is not null)
         {
             return _expressionRenderer.GetUnsupportedFeature(definition.Expression) is null
-                ? _expressionRenderer.Render(definition.Expression)
+                ? definition.CapturedSql ?? _expressionRenderer.Render(definition.Expression)
                 : null;
         }
 
         return definition.Sql;
+    }
+
+    /// <summary>Compares native SQL only within an explicitly structured expected expression contract.</summary>
+    /// <param name="actual">The expression captured from the live SQLite catalog.</param>
+    /// <param name="renderedExpected">The captured native source, or rendered explicit expected expression.</param>
+    /// <param name="expectedExpression">The explicit structural proof, or null for an opaque contract.</param>
+    /// <returns>Whether the expression has the same bounded structure and literal values.</returns>
+    private static bool ExpressionMatches(
+        string? actual,
+        string? renderedExpected,
+        SafeMigrationSqlExpression? expectedExpression
+    )
+    {
+        if (expectedExpression is null)
+        {
+            return SqlEquivalent(actual, renderedExpected);
+        }
+
+        // WHY: Native rebuilds use the model's original identifier quoting and
+        // parentheses. Only an explicit structured proof permits normalization;
+        // numeric source tokens, literal bytes, and opaque authored text stay strict.
+        return SqliteSqlNormalizer.EquivalentCapturedSource(actual, renderedExpected);
+    }
+
+    /// <summary>Retains structured catalog proofs for provider-owned EF model expressions during rebuilds.</summary>
+    /// <param name="actual">The physical expression, or null when absent.</param>
+    /// <param name="expectedSql">The expression declared in the provider-owned target model.</param>
+    /// <returns>Whether exact text or a bounded model-expression proof establishes equivalence.</returns>
+    private bool ModelExpressionMatches(
+        string? actual,
+        string? expectedSql
+    )
+    {
+        if (!CapturedSourceDialectCompatible(expectedSql))
+        {
+            return false;
+        }
+
+        if (SqlEquivalent(actual, expectedSql))
+        {
+            return true;
+        }
+
+        if (expectedSql is null
+            || !SafeMigrationSqlExpressionParser.TryParseCapturedSource(expectedSql, out var expression)
+            || _expressionRenderer.GetUnsupportedFeature(expression) is not null)
+        {
+            return false;
+        }
+
+        // WHY: Model metadata is the same bounded provider input consumed by
+        // generated helpers, not an explicitly opaque expected definition.
+        // Rebuild ownership must survive the native model's original spelling.
+
+        return ExpressionMatches(actual, expectedSql, expression);
     }
 
     private bool IndexMatches(
@@ -2699,11 +2855,15 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
     /// <param name="tableConstraintIdentities">
     /// Optional named members certified from the matched immutable table snapshot.
     /// </param>
+    /// <param name="dropLeavesNoGeneratedColumns">
+    /// Whether complete native metadata proves no generated member survives this exact DROP.
+    /// </param>
     /// <returns>The immutable matching classification with only the supplied identity proofs.</returns>
     private static SafeMigrationProviderAnalysis Matching(
         bool postconditionSatisfied,
         string? matchedObjectName = null,
-        IReadOnlyList<SafeMigrationConstraintIdentityBinding>? tableConstraintIdentities = null
+        IReadOnlyList<SafeMigrationConstraintIdentityBinding>? tableConstraintIdentities = null,
+        bool dropLeavesNoGeneratedColumns = false
     ) => new(
         SafeMigrationObservedState.Matching,
         SafeMigrationRepairCapability.None,
@@ -2712,6 +2872,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
     {
         MatchedObjectName = matchedObjectName,
         TableConstraintIdentities = tableConstraintIdentities,
+        DropLeavesNoGeneratedColumns = dropLeavesNoGeneratedColumns,
     };
 
     private static SafeMigrationProviderAnalysis Different(

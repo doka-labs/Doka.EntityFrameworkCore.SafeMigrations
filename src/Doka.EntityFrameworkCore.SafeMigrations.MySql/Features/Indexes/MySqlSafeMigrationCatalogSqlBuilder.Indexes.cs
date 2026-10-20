@@ -90,8 +90,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             ? "index_too_many_key_parts"
             : definition.Keys.Any(
                     static key => key.Expression is not null || key.StructuredExpression is not null)
-                || definition.Method is not null
-                && !StringComparer.OrdinalIgnoreCase.Equals(definition.Method, "BTREE")
+                || (definition.Method is not null
+                && !StringComparer.OrdinalIgnoreCase.Equals(definition.Method, "BTREE"))
                     ? "index_key_length_unverifiable"
                     : "index_prefix_required_for_key_limit";
 
@@ -111,6 +111,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             + "ELSE 'missing' END",
             satisfied) with
         {
+            IndexNameExistsExpression = indexExists,
             DiagnosticEvidenceExpression = BuildIndexDiagnosticEvidence(definition),
             MatchedObjectNameExpression = ResolveMatchingObjectName(
                 matching,
@@ -422,8 +423,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     {
         if (definition.Keys.Count > MySqlProjectedIndexPhysicalShape.MaximumKeyParts
             || definition.Keys.Any(static key => key.Expression is not null || key.StructuredExpression is not null)
-            || definition.Method is not null
-            && !StringComparer.OrdinalIgnoreCase.Equals(definition.Method, "BTREE"))
+            || (definition.Method is not null
+                && !StringComparer.OrdinalIgnoreCase.Equals(definition.Method, "BTREE")))
         {
             // Catalog matching remains available for existing provider-supported
             // indexes. Creation is rejected because SafeMigrations cannot prove

@@ -20,7 +20,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         }
 
         var usesUnchangedLiveMember = false;
-        foreach (var column in SafeMigrationPrerequisiteColumns.Local(check))
+        foreach (var column in NativePrerequisiteColumns(check))
         {
             if (!columns.TryGetProjectedColumn(check.Definition.Table, check.Definition.Schema, column, out _)
                 && HasLiveColumn(check.Definition.Table, check.Definition.Schema, column))
@@ -39,6 +39,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             return null;
         }
 
+        expression = SafeMigrationCapturedExpressionNormalization.NormalizeCheck(check.Definition, true).Expression!;
         var resolved = ResolveCheckExpression(expression, check.Definition, columns);
         if (resolved.TypeOid is null && !resolved.Incompatible)
         {
@@ -101,13 +102,15 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             if (results[ordinal].ObservedState != SafeMigrationObservedState.PrerequisiteMissing
                 || operations[ordinal].Intent is not EnsureCheckConstraintIntent check
                 || check.Definition.Expression is not { } expression
-                || !SafeMigrationPrerequisiteColumns.Local(check).Any(column => members.Contains(
+                || !NativePrerequisiteColumns(check).Any(column => members.Contains(
                     LiveColumnKey(check.Definition.Table, check.Definition.Schema, column))))
             {
                 continue;
             }
 
             checks.Add(check.Definition);
+            expression = SafeMigrationCapturedExpressionNormalization.NormalizeCheck(
+                check.Definition, true).Expression!;
             foreach (var node in CheckExpressionNodes(expression))
             {
                 var identity = node switch
@@ -346,6 +349,272 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         ISafeMigrationProjectedColumnSource columns
     )
     {
+        var pending = new SafeMigrationWorkStack<CheckExpressionFrame>();
+        try
+        {
+            while (true)
+            {
+                var frame = new CheckExpressionFrame(expression);
+                if (TryBeginCheckExpression(ref frame, out var child))
+                {
+                    pending.Push(frame);
+                    expression = child!;
+
+                    continue;
+                }
+
+                var result = ResolveCheckLeafExpression(expression, owner, columns);
+                while (true)
+                {
+                    if (!pending.TryPop(out frame))
+                    {
+                        return result;
+                    }
+
+                    if (TryContinueCheckExpression(ref frame, ref result, out child))
+                    {
+                        // WHY: A continuation stores only an active ancestor.
+                        // Lists retain one cursor rather than one frame per sibling.
+                        pending.Push(frame);
+                        expression = child!;
+
+                        break;
+                    }
+                }
+            }
+        }
+        finally
+        {
+            pending.Dispose();
+        }
+    }
+
+    /// <summary>Starts only the child evaluation required by the original expression semantics.</summary>
+    private bool TryBeginCheckExpression(ref CheckExpressionFrame frame, out SafeMigrationSqlExpression? child)
+    {
+        switch (frame.Expression)
+        {
+            case SafeMigrationSqlCastExpression cast:
+                child = cast.Operand;
+
+                return true;
+            case SafeMigrationSqlCollateExpression collate:
+                child = collate.Operand;
+
+                return true;
+            case SafeMigrationSqlNullTestExpression nullTest:
+                child = nullTest.Operand;
+
+                return true;
+            case SafeMigrationSqlUnaryExpression unary when CheckExpressionTypeIdentity(unary) is null:
+                child = unary.Operand;
+
+                return true;
+            case SafeMigrationSqlBinaryExpression binary:
+                child = binary.Left;
+
+                return true;
+            case SafeMigrationSqlBetweenExpression between:
+                child = between.Operand;
+
+                return true;
+            case SafeMigrationSqlInExpression list:
+                child = list.Operand;
+
+                return true;
+            case SafeMigrationSqlFunctionExpression function when function.Arguments.Count != 0:
+                frame.Results = new CheckExpressionType[function.Arguments.Count];
+                child = function.Arguments[0];
+
+                return true;
+            case SafeMigrationSqlCaseExpression conditional:
+                frame.Results = new CheckExpressionType[conditional.WhenClauses.Count + 1];
+                if (conditional.ElseResult is { } otherwise)
+                {
+                    // WHY: Native CASE common-type selection starts with ELSE,
+                    // before any WHEN condition or THEN result is resolved.
+                    frame.Step = -1;
+                    child = otherwise;
+
+                    return true;
+                }
+
+                frame.Results[0] = new CheckExpressionType(705,
+                    UnknownLiteral: new SafeMigrationSqlLiteralExpression(null));
+
+                child = conditional.WhenClauses[0].Condition;
+
+                return true;
+        }
+
+        child = null;
+
+        return false;
+    }
+
+    /// <summary>Resumes one parent without recursively evaluating later or rejected operands.</summary>
+    private bool TryContinueCheckExpression(
+        ref CheckExpressionFrame frame,
+        ref CheckExpressionType result,
+        out SafeMigrationSqlExpression? child)
+    {
+        child = null;
+        switch (frame.Expression)
+        {
+            case SafeMigrationSqlCastExpression cast:
+                result = ResolveCheckCast(cast, result);
+
+                return false;
+            case SafeMigrationSqlCollateExpression collate:
+                result = ResolveCheckCollate(collate, result);
+
+                return false;
+            case SafeMigrationSqlNullTestExpression:
+                result = BooleanResult(result);
+
+                return false;
+            case SafeMigrationSqlUnaryExpression unary:
+                result = unary.Operator == SafeMigrationSqlUnaryOperator.Not
+                    ? BooleanOperands([result])
+                    : ResolveCheckCallable(new CheckCallableIdentity("-", 1, Function: false), [result]);
+
+                return false;
+            case SafeMigrationSqlBinaryExpression binary:
+                if (frame.Step++ == 0)
+                {
+                    frame.First = result;
+                    child = binary.Right;
+
+                    return true;
+                }
+
+                CheckExpressionType[] operands = [frame.First, result];
+                result = binary.Operator is SafeMigrationSqlBinaryOperator.And or SafeMigrationSqlBinaryOperator.Or
+                    ? BooleanOperands(operands)
+                    : ResolveCheckCallable(new CheckCallableIdentity(CheckOperator(binary.Operator),
+                        2, Function: false), operands);
+
+                return false;
+            case SafeMigrationSqlBetweenExpression between:
+                if (frame.Step == 0)
+                {
+                    frame.Step = 1;
+                    frame.First = result;
+                    child = between.Lower;
+
+                    return true;
+                }
+
+                if (frame.Step == 1)
+                {
+                    frame.Step = 2;
+                    frame.Second = ResolveCheckCallable(new CheckCallableIdentity(">=", 2, Function: false),
+                        [frame.First, result]);
+
+                    child = between.Upper;
+
+                    return true;
+                }
+
+                var upper = ResolveCheckCallable(new CheckCallableIdentity("<=", 2, Function: false),
+                    [frame.First, result]);
+
+                result = BooleanOperands([frame.Second, upper]);
+
+                return false;
+            case SafeMigrationSqlInExpression list:
+                if (frame.Step == 0)
+                {
+                    frame.First = result;
+                }
+                else
+                {
+                    result = ResolveCheckCallable(new CheckCallableIdentity("=", 2, Function: false),
+                        [frame.First, result]);
+
+                    if (result.Incompatible || result.TypeOid != 16)
+                    {
+                        return false;
+                    }
+                }
+
+                if (frame.Step < list.Values.Count)
+                {
+                    child = list.Values[frame.Step++];
+
+                    return true;
+                }
+
+                result = new CheckExpressionType(16);
+
+                return false;
+            case SafeMigrationSqlFunctionExpression function:
+                frame.Results![frame.Step++] = result;
+                if (frame.Step < function.Arguments.Count)
+                {
+                    child = function.Arguments[frame.Step];
+
+                    return true;
+                }
+
+                result = ResolveCheckFunction(function, frame.Results);
+
+                return false;
+            case SafeMigrationSqlCaseExpression conditional:
+                if (frame.Step < 0)
+                {
+                    frame.Results![0] = result;
+                    frame.Step = 0;
+                }
+                else if ((frame.Step & 1) == 0)
+                {
+                    if (result.Incompatible || result.TypeOid is { } conditionType
+                        && conditionType != 16 && !CanCoerceCheckOperand(result, 16))
+                    {
+                        result = new CheckExpressionType(null, Incompatible: true);
+
+                        return false;
+                    }
+
+                    if (result.TypeOid is null)
+                    {
+                        result = default;
+
+                        return false;
+                    }
+
+                    child = conditional.WhenClauses[frame.Step / 2].Result;
+                    frame.Step++;
+
+                    return true;
+                }
+                else
+                {
+                    frame.Results![frame.Step / 2 + 1] = result;
+                    frame.Step++;
+                }
+
+                if (frame.Step / 2 < conditional.WhenClauses.Count)
+                {
+                    child = conditional.WhenClauses[frame.Step / 2].Condition;
+
+                    return true;
+                }
+
+                result = ResolveCommonCheckType(frame.Results!);
+
+                return false;
+            default:
+                throw new UnreachableException();
+        }
+    }
+
+    /// <summary>Resolves leaf contracts without preparing native SQL or invoking application expressions.</summary>
+    private CheckExpressionType ResolveCheckLeafExpression(
+        SafeMigrationSqlExpression expression,
+        ExpectedCheckConstraintDefinition owner,
+        ISafeMigrationProjectedColumnSource columns)
+    {
         switch (expression)
         {
             case SafeMigrationSqlIdentifierExpression identifier:
@@ -387,133 +656,109 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                 }
 
                 return literalType;
-            case SafeMigrationSqlCastExpression cast:
-                var operand = ResolveCheckExpression(cast.Operand, owner, columns);
-                var target = CheckExpressionNativeType(cast);
-
-                if (operand.Incompatible)
-                {
-                    return operand;
-                }
-
-                if (operand.TypeOid is null || target.TypeOid is null)
-                {
-                    return default;
-                }
-
-                if (operand.TypeOid != target.TypeOid
-                    && (!IsBuiltinCheckScalar(operand.TypeOid.Value) && operand.TypeOid != 705
-                        || !IsBuiltinCheckScalar(target.TypeOid.Value)))
-                {
-                    return default;
-                }
-
-                if (cast.Operand is SafeMigrationSqlLiteralExpression { Value: string }
-                    && target.TypeOid is not (25 or 1042 or 1043))
-                {
-                    var integerTarget = target.TypeOid switch
-                    {
-                        21 => "smallint", 23 => "integer", 20 => "bigint", _ => string.Empty,
-                    };
-
-                    if (!PostgreSqlSafeMigrationSqlExpressionRenderer.TryGetNativeIntegerLiteralValue(
-                        cast, integerTarget, out _))
-                    {
-                        // WHY: A target OID does not prove an unknown string can
-                        // pass the native input function. Keep unproven constants
-                        // blocked rather than executing user or builtin converters.
-                        return default;
-                    }
-                }
-
-                // WHY: pg_cast deliberately omits legal explicit I/O casts.
-                // Resolve the approved canonical target; do not infer an
-                // implicit conversion from an explicit CAST or evaluate values.
-                if (operand.Incompatible || operand.TypeOid is not null && target.TypeOid is not null
-                    && !CanExplicitlyCast(operand.TypeOid.Value, target.TypeOid.Value, cast))
-                {
-                    return new CheckExpressionType(null, Incompatible: true);
-                }
-
-                return target;
-            case SafeMigrationSqlCollateExpression collate:
-                var collated = ResolveCheckExpression(collate.Operand, owner, columns);
-                if (collated.Incompatible || collated.TypeOid is null)
-                {
-                    return collated;
-                }
-
-                if (_sparseCheckTypeFacts is not { } collationFacts
-                    || !collationFacts.Signatures.TryGetValue(CheckCollationIdentity(collate),
-                        out var nativeCollation) || nativeCollation.Count == 0)
-                {
-                    return new CheckExpressionType(null, Incompatible: true);
-                }
-
-                if (collated.TypeOid == 705)
-                {
-                    return CanCoerceCheckOperand(collated, 25) ? new CheckExpressionType(25) : default;
-                }
-
-                return collated.TypeOid is 25 or 1042 or 1043 ? collated
-                    : IsBuiltinCheckScalar(collated.TypeOid.Value)
-                        ? new CheckExpressionType(null, Incompatible: true) : default;
             case SafeMigrationSqlCurrentValueExpression:
                 return CheckExpressionNativeType(expression);
-            case SafeMigrationSqlNullTestExpression nullTest:
-                return BooleanResult(ResolveCheckExpression(nullTest.Operand, owner, columns));
             case SafeMigrationSqlUnaryExpression unary:
-                var unaryOperand = ResolveCheckExpression(unary.Operand, owner, columns);
-
-                return unary.Operator == SafeMigrationSqlUnaryOperator.Not
-                    ? BooleanOperands([unaryOperand])
-                    : ResolveCheckCallable(new CheckCallableIdentity("-", 1, Function: false), [unaryOperand]);
-            case SafeMigrationSqlBinaryExpression binary:
-                CheckExpressionType[] operands = [ResolveCheckExpression(binary.Left, owner, columns),
-                    ResolveCheckExpression(binary.Right, owner, columns)];
-
-                return binary.Operator is SafeMigrationSqlBinaryOperator.And or SafeMigrationSqlBinaryOperator.Or
-                    ? BooleanOperands(operands)
-                    : ResolveCheckCallable(new CheckCallableIdentity(CheckOperator(binary.Operator),
-                        2, Function: false), operands);
-            case SafeMigrationSqlBetweenExpression between:
-                var middle = ResolveCheckExpression(between.Operand, owner, columns);
-                var lower = ResolveCheckCallable(new CheckCallableIdentity(">=", 2, Function: false),
-                    [middle, ResolveCheckExpression(between.Lower, owner, columns)]);
-
-                var upper = ResolveCheckCallable(new CheckCallableIdentity("<=", 2, Function: false),
-                    [middle, ResolveCheckExpression(between.Upper, owner, columns)]);
-
-                return BooleanOperands([lower, upper]);
-            case SafeMigrationSqlInExpression list:
-                var subject = ResolveCheckExpression(list.Operand, owner, columns);
-                foreach (var value in list.Values)
-                {
-                    var comparison = ResolveCheckCallable(new CheckCallableIdentity("=", 2, Function: false),
-                        [subject, ResolveCheckExpression(value, owner, columns)]);
-
-                    if (comparison.Incompatible || comparison.TypeOid != 16)
-                    {
-                        return comparison;
-                    }
-                }
-
-                return new CheckExpressionType(16);
+                // WHY: Signed scanner boundary constants are folded before
+                // native unary lookup; they deliberately bypass the child path.
+                return CheckExpressionNativeType(unary);
             case SafeMigrationSqlFunctionExpression function:
-                var arguments = function.Arguments.Select(argument => ResolveCheckExpression(argument,
-                    owner, columns)).ToArray();
-
-                return function.Name.Equals("NULLIF", StringComparison.OrdinalIgnoreCase)
-                    ? ResolveCheckNullIf(arguments)
-                    : IsCommonTypeFunction(function.Name) ? ResolveCommonCheckType(arguments)
-                    : ResolveCheckCallable(new CheckCallableIdentity(function.Name.ToLowerInvariant(),
-                        arguments.Length, Function: true), arguments);
+                return ResolveCheckFunction(function, []);
             default:
                 // WHY: Opaque/provider fragments remain under the existing
                 // expression eligibility contract. This bridge does not
                 // pretend to bind arbitrary SQL or call user code to inspect it.
                 return default;
         }
+    }
+
+    /// <summary>Preserves CAST's native target and bounded input checks after its operand has completed.</summary>
+    private CheckExpressionType ResolveCheckCast(SafeMigrationSqlCastExpression cast, CheckExpressionType operand)
+    {
+        var target = CheckExpressionNativeType(cast);
+        if (operand.Incompatible)
+        {
+            return operand;
+        }
+
+        if (operand.TypeOid is null || target.TypeOid is null)
+        {
+            return default;
+        }
+
+        if (operand.TypeOid != target.TypeOid
+            && (!IsBuiltinCheckScalar(operand.TypeOid.Value) && operand.TypeOid != 705
+                || !IsBuiltinCheckScalar(target.TypeOid.Value)))
+        {
+            return default;
+        }
+
+        if (cast.Operand is SafeMigrationSqlLiteralExpression { Value: string }
+            && target.TypeOid is not (25 or 1042 or 1043))
+        {
+            var integerTarget = target.TypeOid switch
+            {
+                21 => "smallint", 23 => "integer", 20 => "bigint", _ => string.Empty,
+            };
+
+            if (!PostgreSqlSafeMigrationSqlExpressionRenderer.TryGetNativeIntegerLiteralValue(
+                cast, integerTarget, out _))
+            {
+                // WHY: A target OID alone does not prove a string can pass a
+                // native input function; never execute it merely to inspect it.
+                return default;
+            }
+        }
+
+        // WHY: pg_cast omits legal explicit I/O casts. Explicit target approval
+        // is not evidence of an implicit conversion and never evaluates a value.
+        return !CanExplicitlyCast(operand.TypeOid.Value, target.TypeOid.Value, cast)
+            ? new CheckExpressionType(null, Incompatible: true) : target;
+    }
+
+    /// <summary>Resolves an approved collation only after retaining the operand's own failure priority.</summary>
+    private CheckExpressionType ResolveCheckCollate(
+        SafeMigrationSqlCollateExpression collate,
+        CheckExpressionType operand)
+    {
+        if (operand.Incompatible || operand.TypeOid is null)
+        {
+            return operand;
+        }
+
+        if (_sparseCheckTypeFacts is not { } facts
+            || !facts.Signatures.TryGetValue(CheckCollationIdentity(collate), out var nativeCollation)
+            || nativeCollation.Count == 0)
+        {
+            return new CheckExpressionType(null, Incompatible: true);
+        }
+
+        if (operand.TypeOid == 705)
+        {
+            return CanCoerceCheckOperand(operand, 25) ? new CheckExpressionType(25) : default;
+        }
+
+        return operand.TypeOid is 25 or 1042 or 1043 ? operand
+            : IsBuiltinCheckScalar(operand.TypeOid.Value) ? new CheckExpressionType(null, Incompatible: true) : default;
+    }
+
+    /// <summary>Distinguishes PostgreSQL's intrinsic common-type forms from catalog function overloads.</summary>
+    private CheckExpressionType ResolveCheckFunction(
+        SafeMigrationSqlFunctionExpression function,
+        CheckExpressionType[] arguments)
+        => function.Name.Equals("NULLIF", StringComparison.OrdinalIgnoreCase) ? ResolveCheckNullIf(arguments)
+            : IsCommonTypeFunction(function.Name) ? ResolveCommonCheckType(arguments)
+            : ResolveCheckCallable(new CheckCallableIdentity(function.Name.ToLowerInvariant(),
+                arguments.Length, Function: true), arguments);
+
+    /// <summary>Stores native inference state only while an ancestor awaits a child result.</summary>
+    private struct CheckExpressionFrame(SafeMigrationSqlExpression expression)
+    {
+        internal readonly SafeMigrationSqlExpression Expression = expression;
+        internal int Step;
+        internal CheckExpressionType First;
+        internal CheckExpressionType Second;
+        internal CheckExpressionType[]? Results;
     }
 
     /// <summary>Uses exact overloads first and only native expression-implicit casts for nonexact operands.</summary>
@@ -812,9 +1057,17 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     {
         var type = expression switch
         {
+            SafeMigrationSqlUnaryExpression { Operator: SafeMigrationSqlUnaryOperator.Negate,
+                Operand: SafeMigrationSqlLiteralExpression { Value: long value } literal }
+                when !literal.NumericSourceToken.IsEmpty && value == 2147483648L => "integer",
+            SafeMigrationSqlUnaryExpression { Operator: SafeMigrationSqlUnaryOperator.Negate,
+                Operand: SafeMigrationSqlLiteralExpression { Value: ulong value } literal }
+                when !literal.NumericSourceToken.IsEmpty && value == 9223372036854775808UL => "bigint",
             SafeMigrationSqlCastExpression cast => _typeMappingSource.FindMapping(cast.StoreType)?.StoreTypeNameBase,
             SafeMigrationSqlLiteralExpression { StoreType: { } storeType }
                 => _typeMappingSource.FindMapping(storeType)?.StoreTypeNameBase,
+            SafeMigrationSqlLiteralExpression literal when !literal.NumericSourceToken.IsEmpty
+                && literal.NumericSourceToken.Span.ContainsAny('.', 'e', 'E') => "numeric",
             SafeMigrationSqlLiteralExpression { Value: bool } => "boolean",
             SafeMigrationSqlLiteralExpression { Value: byte or sbyte or short or ushort or int } => "integer",
             SafeMigrationSqlLiteralExpression { Value: long value }
@@ -842,25 +1095,36 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     /// <summary>Walks only explicitly structured operands without parsing opaque SQL.</summary>
     private static IEnumerable<SafeMigrationSqlExpression> CheckExpressionNodes(SafeMigrationSqlExpression root)
     {
-        yield return root;
-        var children = root switch
+        // WHY: This lazy sequence crosses yield boundaries, so a ref-struct
+        // pooled walker cannot own its continuation. A single managed cursor
+        // stack avoids recursive iterators and stores only genuine branches.
+        Stack<(SafeMigrationSqlExpression Expression, int NextChild)>? pending = null;
+        var expression = root;
+        while (true)
         {
-            SafeMigrationSqlUnaryExpression value => [value.Operand],
-            SafeMigrationSqlBinaryExpression value => [value.Left, value.Right],
-            SafeMigrationSqlNullTestExpression value => [value.Operand],
-            SafeMigrationSqlBetweenExpression value => [value.Operand, value.Lower, value.Upper],
-            SafeMigrationSqlInExpression value => new[] { value.Operand }.Concat(value.Values),
-            SafeMigrationSqlFunctionExpression value => value.Arguments,
-            SafeMigrationSqlCastExpression value => [value.Operand],
-            SafeMigrationSqlCollateExpression value => [value.Operand],
-            _ => (IEnumerable<SafeMigrationSqlExpression>)[],
-        };
-
-        foreach (var child in children)
-        {
-            foreach (var descendant in CheckExpressionNodes(child))
+            yield return expression;
+            var nextChild = 0;
+            while (true)
             {
-                yield return descendant;
+                if (PostgreSqlSafeMigrationExpressionWalker.TryGetChild(expression, nextChild, out var child))
+                {
+                    if (PostgreSqlSafeMigrationExpressionWalker.TryGetChild(expression, nextChild + 1, out _))
+                    {
+                        (pending ??= new()).Push((expression, nextChild + 1));
+                    }
+
+                    expression = child;
+
+                    break;
+                }
+
+                if (pending is null || !pending.TryPop(out var parent))
+                {
+                    yield break;
+                }
+
+                expression = parent.Expression;
+                nextChild = parent.NextChild;
             }
         }
     }

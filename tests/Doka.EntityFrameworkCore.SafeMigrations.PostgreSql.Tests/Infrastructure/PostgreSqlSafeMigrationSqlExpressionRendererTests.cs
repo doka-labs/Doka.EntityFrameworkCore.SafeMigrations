@@ -1,6 +1,6 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed class PostgreSqlSafeMigrationSqlExpressionRendererTests
+public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
 {
     [Fact]
     public void Render_ProducesDeterministicSqlForEveryStructuredNode()

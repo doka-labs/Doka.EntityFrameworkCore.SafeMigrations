@@ -11,6 +11,32 @@ internal static class SqliteSqlNormalizer
         ? left is null && right is null
         : StringComparer.Ordinal.Equals(Normalize(left), Normalize(right));
 
+    /// <summary>Compares bounded expressions while retaining native numeric and string source tokens.</summary>
+    /// <param name="left">The live expression source.</param>
+    /// <param name="right">The validated expected expression source.</param>
+    /// <returns>Whether only identifier delimiters, trivia, or redundant parentheses differ.</returns>
+    public static bool EquivalentCapturedSource(string? left, string? right)
+    {
+        if (left is null || right is null)
+        {
+            return left is null && right is null;
+        }
+
+        var normalizedLeft = Normalize(left);
+        var normalizedRight = Normalize(right);
+        if (StringComparer.Ordinal.Equals(normalizedLeft, normalizedRight))
+        {
+            return true;
+        }
+
+        // WHY: SQLite treats -9223372036854775808 as INTEGER but the same
+        // token with .0 as REAL. Rendering a CLR decimal would erase that
+        // distinction; captured parsing keeps numeric lexemes and literal bytes.
+        return SafeMigrationSqlExpressionParser.TryParseCapturedSource(normalizedLeft, out var parsedLeft)
+            && SafeMigrationSqlExpressionParser.TryParseCapturedSource(normalizedRight, out var parsedRight)
+            && SafeMigrationSqlExpressionContract.Equivalent(parsedLeft, parsedRight);
+    }
+
     /// <summary>Produces the canonical comparison form of a SQLite expression.</summary>
     public static string Normalize(
         string value

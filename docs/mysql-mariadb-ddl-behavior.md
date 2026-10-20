@@ -699,7 +699,7 @@ Ensure repair. A captured replacement reports
 `projected_foreign_key_set_null_unrepresentable` instead of borrowing stale
 nullable metadata or promoting a previous matching/missing result.
 
-The Doka contract, established in 10.4.2 and retained by the locked 10.5.0,
+The Doka contract, established in 10.4.2 and retained by the locked 10.6.0,
 removes synthetic defaults and marks additions
 or nullable-to-required alterations requiring explicit backfill. Its provider
 generator rejects required additions without an explicit default, computed
@@ -951,6 +951,132 @@ SafeMigrations projection follows that order without mutating the database
 during preflight. See the EF Core 10
 [`MigrationBuilder.DropIndex` API](https://learn.microsoft.com/en-us/dotnet/api/microsoft.entityframeworkcore.migrations.migrationbuilder.dropindex?view=efcore-10.0)
 (retrieved 2026-09-01).
+
+## Generated columns
+
+EF-captured computed SQL and generated CHECKs use the bounded structured
+expression path described in
+[migration authoring](migration-authoring.md#generated-columns). Searched CASE
+keeps its branch order and optional ELSE, including conditional overflow
+guards. Catalog comparison accepts only the provider's finite native display
+forms for that exact tree. Identifier punctuation, operator/literal changes,
+source binding and virtual/stored identity remain significant; arbitrary SQL
+text is not normalized into equivalence. Comparison preserves byte-exact
+quoted literal ranges while handling supported native identifier casing and
+display forms; literal-case drift is not identifier equivalence. Typed string
+leaves needing stable escape or Unicode serialization use the bounded hex
+conversion renderer consistently in DDL, catalog candidates and CHECK probes.
+Validated captured native SQL is preserved rather than rewritten through that
+typed-literal path.
+
+Captured bracket or double-quoted identifiers that lack the MySQL/MariaDB
+native quoting contract reject with `captured_expression_dialect_unverified`.
+Captured supplementary Unicode literal text that MariaDB's native catalog
+cannot retain exactly rejects with
+`captured_expression_literal_catalog_unverifiable` before target DDL; lossy
+question-mark catalog text is not accepted as identity. A caller-authored
+typed expression can use stable serialization instead. SQL Server's captured
+type-first CONVERT syntax remains `structured_convert_dialect` here.
+
+Captured CAST text must itself use the native CAST grammar. Column-type aliases
+that the public typed API can translate, such as `BIGINT` or `VARCHAR`, do not
+therefore become valid native captured CAST targets; unproved targets reject
+with `captured_expression_cast_target_unverified`. Unquoted identifier roots
+also need native keyword qualification before source-bearing SQL is submitted.
+MySQL uses its catalog's reserved-keyword bit. MariaDB has no equivalent bit,
+so suspect roots require an owned operation/session-local native parse-only
+certificate rather than a blanket ban on legal names such as `id` or `value`.
+Unproved roots remain `captured_expression_identifier_keyword_unverified`.
+The certificate does not execute the authored application expression or scan
+application rows; failure and cancellation cannot transfer proof ownership to
+another operation or session.
+
+Generated expressions have a deterministic product capability boundary,
+separate from generic SQL rendering. CURRENT date/time values and clock calls
+such as NOW reject with `generated_column_nondeterministic_expression`.
+MySQL and MariaDB stored-generation rules prohibit the relevant clock forms;
+MariaDB can accept some virtual forms natively, but those do not establish this
+adapter's deterministic/indexed contract. This is not a claim that every
+rejected MariaDB virtual expression is invalid SQL. Ordinary clock defaults
+are unaffected. The finite generated-function contract admits supported
+`ABS`/`LOWER` arity-one calls and COALESCE forms; an unknown or unproved call
+remains `generated_column_function_unverified` rather than invoking a UDF to
+discover its behavior. Passing this capability check does not supply the
+separate non-null proof below.
+
+MySQL supports a physical `NOT NULL` generated-column facet and compares it
+normally. MariaDB's generated-column grammar does not expose that facet and
+its native catalog reports generated columns as nullable. SafeMigrations keeps
+that physical fact instead of ignoring `IS_NULLABLE` globally. A logically
+required MariaDB generated result is accepted only when a separate bounded
+semantic proof shows that every successful evaluation produces a non-NULL
+result using currently verified ordinary source columns.
+
+This proof is deliberately narrower than the expression renderer. The target
+must itself have a supported signed-integral storage type, including the
+Boolean alias; an integral result does not prove a safe arbitrary target
+conversion. It admits supported signed-integer operands, non-NULL integral
+literals and eligible arithmetic,
+comparisons and searched CASE branches. Every possible result branch needs the
+proof, including an explicit non-NULL ELSE. Nullable, unsigned or generated
+value-producing source dependencies, unknown functions/casts, division/modulo,
+NULL result branches and an omitted ELSE cannot establish it. A CASE condition
+need not itself be non-NULL: UNKNOWN can select ELSE, whose result is proved
+independently. An unproved required result remains
+`generated_column_nullability`. The proof reads structural source metadata,
+not application rows. A changed source type/nullability or an unproved ordered
+source replacement invalidates that certificate and requires requalification.
+
+Every referenced column in conditions, results and ELSE must separately bind
+to the current local owner. A missing dependency rejects with
+`generated_column_dependency_missing`; an unsupported cross-owner qualifier
+rejects with `generated_column_dependency_qualification`. A CASE result needing
+no value-producing source does not waive its condition's binding proof.
+
+MySQL additionally forbids generated references to an `AUTO_INCREMENT` source;
+`generated_column_identity_dependency` retains that restriction for both live
+and accepted projected operands. Nullable generated results do not waive it.
+
+A single MySQL source-column rename cannot redefine generated expressions
+that depend on that source. `generated_column_rename_dependency` rejects that
+case; `generated_column_rename_unproven` retains an unresolved complete
+dependency set. An unrelated rename needs either native absence of generated
+members or an exact current complete-set certificate for parsed definitions.
+`PREPARE` success alone does not certify ALTER dependencies. MariaDB's separate
+native rename behavior is not restricted by this MySQL-only gate. See
+[MySQL ALTER generated columns](https://dev.mysql.com/doc/refman/8.4/en/alter-table-generated-columns.html).
+
+Source-column DROP also checks surviving generated dependencies before DDL on
+both engines. A conditional authored prefix or model candidate must match the
+complete native surviving generated set, including expression and storage;
+the removed member is excluded. An empty native set needs no candidate.
+Incomplete or opaque evidence is `generated_column_drop_unproven`; a proven
+surviving reference is `generated_column_drop_dependency`. Explicitly dropping
+the generated member first remains supported. No generated column is removed
+automatically, and application rows are not scanned to prove nondependency.
+The guard uses the existing column catalog, not the virtual-only administrative
+dependency tables requiring `PROCESS`. It does not add temporary-clone rights
+or treat successful `PREPARE` as proof that an ALTER can execute.
+
+This can reject a previously attempted DROP on an unmapped owner with surviving
+generated members. An operation-bound model candidate or earlier explicit
+generated-member contract can supply a candidate, but native completeness and
+equality are still mandatory. Pending analysis uses each migration's historical
+target; manual SQL generation uses only its explicitly supplied model. A richer
+current design-time model is not silently substituted. EF runtime metadata that
+omits comment/collation cannot supply known-null facets. Authored-prefix and
+model candidates remain separate whole sets; partial candidates are not merged.
+A later declaration is not prior evidence. Keep
+published migration source and history unchanged; review the actual model and
+ordered contract instead of weakening the guard to make an unknown set pass.
+
+No helper CHECK, forced stored generation, default injection or application
+backfill substitutes for the proof. Other generated-column, index and FK
+capability/dependency gates remain independent. Native type, expression and
+storage drift still reject even when a result is provably non-NULL. See
+[MySQL generated columns](https://dev.mysql.com/doc/refman/8.4/en/create-table-generated-columns.html)
+and [MariaDB](https://mariadb.com/docs/server/reference/sql-statements/data-definition/create/generated-columns)
+(primary sources; retrieved 2026-10-20).
 
 ## JSON aliases and SQL defaults
 

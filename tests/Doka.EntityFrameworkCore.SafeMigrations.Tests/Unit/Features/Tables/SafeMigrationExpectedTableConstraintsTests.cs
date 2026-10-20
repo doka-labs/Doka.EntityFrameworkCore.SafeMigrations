@@ -127,7 +127,9 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
         // Arrange
         var primaryKey = new ExpectedPrimaryKeyDefinition("pk_records", "records", ["id"]);
         var uniqueConstraint = new ExpectedUniqueConstraintDefinition("uq_records_code", "records", ["code"]);
-        var checkConstraint = new ExpectedCheckConstraintDefinition("ck_records_code", "records", "code >= 0");
+        const string checkSql = "code >= 0";
+        var checkConstraint = SafeMigrationExpectedDefinitionFactory.CheckConstraint(
+            "ck_records_code", "records", checkSql, schema: null);
         var foreignKey = new ExpectedForeignKeyDefinition(
             "fk_records_parent",
             "records",
@@ -157,7 +159,7 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
             uniqueConstraint.Table,
             uniqueConstraint.Columns);
         builder.DropCheckConstraintIfExists(checkConstraint.Name, checkConstraint.Table);
-        builder.AddCheckConstraintIfNotExists(checkConstraint.Name, checkConstraint.Table, checkConstraint.Sql!);
+        builder.AddCheckConstraintIfNotExists(checkConstraint.Name, checkConstraint.Table, checkSql);
         builder.DropForeignKeyIfExists(foreignKey.Name, foreignKey.Table);
         builder.AddForeignKeyIfNotExists(
             foreignKey.Name,
@@ -281,6 +283,271 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
         // Assert
         var invalidOperation = Assert.IsType<InvalidOperationException>(exception);
         Assert.Contains("Drop and recreate owned check constraints", invalidOperation.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>Captured CHECK renames preserve native number, type, function, and literal token roles.</summary>
+    /// <param name="source">The complete quoted native CHECK expression.</param>
+    /// <param name="expected">The exact source after the one certified member rename.</param>
+    [Theory]
+    [InlineData("[value] + 2147483648 > 0 AND 'value' <> ''", "[score] + 2147483648 > 0 AND 'value' <> ''")]
+    [InlineData("`value` + 2147483648 > 0 AND 'value' <> ''", "`score` + 2147483648 > 0 AND 'value' <> ''")]
+    [InlineData("\"value\" + 2147483648 > 0 AND 'value' <> ''", "\"score\" + 2147483648 > 0 AND 'value' <> ''")]
+    public void CapturedCheckColumnRenamePreservesNativeRoles(string source, string expected)
+    {
+        // Arrange
+        var definition = SafeMigrationExpectedDefinitionFactory.CheckConstraint("ck_records_value", "records", source,
+            schema: null);
+        var builder = CreateBuilder(new ExpectedTableDefinition("records",
+            [new ExpectedColumnDefinition("value", typeof(int), isNullable: false, storeType: "integer")],
+            checkConstraints: [definition]));
+
+        builder.RenameColumnIfExists("value", "records", "score");
+
+        // Act
+        var constraints = Assert.Single(SafeMigrationExpectedTableConstraints.FromOperations(builder.Operations)).Value;
+
+        // Assert
+        var check = Assert.Single(constraints.CheckConstraints);
+        Assert.Equal(expected, check.CapturedSql);
+        Assert.True(SafeMigrationSqlExpressionInspector.ReferencesIdentifier(check.Expression!, "score"));
+        Assert.False(SafeMigrationSqlExpressionInspector.ReferencesIdentifier(check.Expression!, "value"));
+        Assert.Equal(2, constraints.AllowedCheckConstraints.Count);
+        Assert.Empty(constraints.RequiredCheckConstraints);
+    }
+
+    /// <summary>Explicit structured CHECKs can rename members without approving opaque source rewriting.</summary>
+    [Fact]
+    public void StructuredCheckColumnRenamePreservesOtherExpressionRoles()
+    {
+        // Arrange
+        var expression = SafeMigrationSql.Binary(SafeMigrationSql.Cast(SafeMigrationSql.Identifier("value"), "bigint"),
+            SafeMigrationSqlBinaryOperator.GreaterThan, SafeMigrationSql.Literal(0));
+
+        var definition = ExpectedCheckConstraintDefinition.FromExpression("ck_records_value", "records", expression);
+        var builder = CreateBuilder(new ExpectedTableDefinition("records",
+            [new ExpectedColumnDefinition("value", typeof(int), isNullable: false, storeType: "integer")],
+            checkConstraints: [definition]));
+
+        builder.RenameColumnIfExists("value", "records", "score");
+
+        // Act
+        var constraints = Assert.Single(SafeMigrationExpectedTableConstraints.FromOperations(builder.Operations)).Value;
+
+        // Assert
+        var check = Assert.Single(constraints.CheckConstraints);
+        var binary = Assert.IsType<SafeMigrationSqlBinaryExpression>(check.Expression);
+        var cast = Assert.IsType<SafeMigrationSqlCastExpression>(binary.Left);
+        Assert.Equal("bigint", cast.StoreType);
+        Assert.Equal("score", Assert.Single(Assert.IsType<SafeMigrationSqlIdentifierExpression>(cast.Operand).Parts));
+        Assert.Null(check.CapturedSql);
+    }
+
+    /// <summary>Owner copies and qualifier normalization never erase a captured CHECK's source contract.</summary>
+    [Fact]
+    public void CapturedCheckOwnerAndSchemaCopiesPreserveSource()
+    {
+        // Arrange
+        const string source = "CASE WHEN [value] > 0 THEN 2147483648 / 2147483647 ELSE 0 END >= 0";
+        var definition = SafeMigrationExpectedDefinitionFactory.CheckConstraint("ck_records_value", "records", source,
+            schema: null);
+        var builder = CreateBuilder(new ExpectedTableDefinition("records",
+            [new ExpectedColumnDefinition("value", typeof(int), isNullable: false, storeType: "integer")],
+            checkConstraints: [definition]));
+
+        builder.RenameTableIfExists("records", "renamed_records");
+
+        // Act
+        var constraints = Assert.Single(SafeMigrationExpectedTableConstraints.FromOperations(builder.Operations,
+            static schema => schema ?? "native")).Value;
+
+        // Assert
+        var check = Assert.Single(constraints.CheckConstraints);
+        Assert.Same(source, check.CapturedSql);
+        Assert.Equal("native", check.Schema);
+        Assert.Equal("renamed_records", check.Table);
+        Assert.True(SafeMigrationSqlExpressionContract.Equivalent(definition.Expression, check.Expression));
+    }
+
+    /// <summary>An unrelated member rename retains a captured CHECK's exact native source.</summary>
+    [Fact]
+    public void UnrelatedColumnRenamePreservesCapturedCheckSource()
+    {
+        // Arrange
+        const string source = "[value] > 2147483648";
+        var definition = SafeMigrationExpectedDefinitionFactory.CheckConstraint("ck_records_value", "records", source,
+            schema: null);
+        var builder = CreateBuilder(new ExpectedTableDefinition("records",
+            [new ExpectedColumnDefinition("other", typeof(int), isNullable: false, storeType: "integer")],
+            checkConstraints: [definition]));
+
+        builder.RenameColumnIfExists("other", "records", "renamed");
+
+        // Act
+        var constraints = Assert.Single(SafeMigrationExpectedTableConstraints.FromOperations(builder.Operations)).Value;
+
+        // Assert
+        var check = Assert.Single(constraints.CheckConstraints);
+        Assert.Same(source, check.CapturedSql);
+        Assert.Single(constraints.AllowedCheckConstraints);
+        Assert.Single(constraints.RequiredCheckConstraints);
+    }
+
+    /// <summary>Unquoted captured members use only the provider's verified quote and ASCII folding contract.</summary>
+    /// <param name="source">The original complete native expression.</param>
+    /// <param name="delimiter">The active provider's verified identifier quote.</param>
+    /// <param name="fold">Whether unquoted ASCII identifiers fold natively.</param>
+    /// <param name="target">The renamed physical column.</param>
+    /// <param name="expected">The exact rewritten native expression.</param>
+    [Theory]
+    [InlineData("value + 2147483648 > 0", '[', false, "new value", "[new value] + 2147483648 > 0")]
+    [InlineData("value + 2147483648 > 0", '`', false, "new`value", "`new``value` + 2147483648 > 0")]
+    [InlineData("VALUE + 2147483648 > 0", '"', true, "select", "\"select\" + 2147483648 > 0")]
+    public void CapturedCheckRenameUsesVerifiedNativeIdentifierRoles(
+        string source, char delimiter, bool fold, string target, string expected)
+    {
+        // Arrange
+        var definition = SafeMigrationExpectedDefinitionFactory.CheckConstraint("ck_records_value", "records", source,
+            schema: null);
+
+        var builder = CreateBuilder(new ExpectedTableDefinition("records",
+            [new ExpectedColumnDefinition("value", typeof(int), isNullable: false, storeType: "integer")],
+            checkConstraints: [definition]));
+
+        builder.RenameColumnIfExists("value", "records", target);
+
+        // Act
+        var constraints = Assert.Single(SafeMigrationExpectedTableConstraints.FromOperations(builder.Operations,
+            static schema => schema, StringComparer.Ordinal, delimiter, fold)).Value;
+
+        // Assert
+        var check = Assert.Single(constraints.CheckConstraints);
+        Assert.Equal(expected, check.CapturedSql);
+        Assert.True(SafeMigrationSqlExpressionInspector.ReferencesIdentifier(check.Expression!, target));
+    }
+
+    /// <summary>A portable transition catalog cannot invent a native quote for an affected unquoted source.</summary>
+    [Fact]
+    public void CapturedCheckRenameWithoutNativeQuoteAuthorityFailsClosed()
+    {
+        // Arrange
+        var definition = SafeMigrationExpectedDefinitionFactory.CheckConstraint("ck_records_value", "records",
+            "value > 0", schema: null);
+
+        var builder = CreateBuilder(new ExpectedTableDefinition("records",
+            [new ExpectedColumnDefinition("value", typeof(int), isNullable: false, storeType: "integer")],
+            checkConstraints: [definition]));
+
+        builder.RenameColumnIfExists("value", "records", "score");
+
+        // Act
+        var exception = Record.Exception(() =>
+            SafeMigrationExpectedTableConstraints.FromOperations(builder.Operations));
+
+        // Assert
+        Assert.IsType<InvalidOperationException>(exception);
+    }
+
+    /// <summary>A native case-insensitive CHECK member retains its identity through a physical column rename.</summary>
+    [Fact]
+    public void CapturedCheckRenameKeepsNativeCaseInsensitiveColumnIdentity()
+    {
+        // Arrange
+        const string source = "[VALUE] + 2147483648 > 0 AND 'VALUE' <> ''";
+        var definition = SafeMigrationExpectedDefinitionFactory.CheckConstraint("ck_records_value", "records", source,
+            schema: null);
+
+        var builder = CreateBuilder(new ExpectedTableDefinition("records",
+            [new ExpectedColumnDefinition("value", typeof(int), isNullable: false, storeType: "integer")],
+            checkConstraints: [definition]));
+
+        builder.RenameColumnIfExists("value", "records", "score");
+
+        // Act
+        var constraints = Assert.Single(SafeMigrationExpectedTableConstraints.FromOperations(builder.Operations,
+            static schema => schema, StringComparer.Ordinal, '[', false, StringComparer.OrdinalIgnoreCase)).Value;
+
+        // Assert
+        Assert.Equal("[score] + 2147483648 > 0 AND 'VALUE' <> ''",
+            Assert.Single(constraints.CheckConstraints).CapturedSql);
+    }
+
+    /// <summary>A CHECK dependency cannot disappear when its native member spelling differs only by case.</summary>
+    [Fact]
+    public void CapturedCheckDropKeepsNativeCaseInsensitiveColumnDependency()
+    {
+        // Arrange
+        var definition = SafeMigrationExpectedDefinitionFactory.CheckConstraint("ck_records_value", "records",
+            "[VALUE] >= 0", schema: null);
+
+        var builder = CreateBuilder(new ExpectedTableDefinition("records",
+            [new ExpectedColumnDefinition("value", typeof(int), isNullable: false, storeType: "integer")],
+            checkConstraints: [definition]));
+
+        builder.DropColumnIfExists("value", "records");
+
+        // Act
+        var exception = Record.Exception(() => SafeMigrationExpectedTableConstraints.FromOperations(builder.Operations,
+            static schema => schema, StringComparer.Ordinal, '[', false, StringComparer.OrdinalIgnoreCase));
+
+        // Assert
+        Assert.IsType<InvalidOperationException>(exception);
+    }
+
+    /// <summary>The column proof never inherits a table-name comparer or rewrites other native token roles.</summary>
+    /// <param name="caseSensitive">Whether the physical columns L and l have independent native identities.</param>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void CapturedCheckColumnIdentityIsIndependentFromTableIdentity(bool caseSensitive)
+    {
+        // Arrange
+        const string source = "ABS([l]) + CAST([l] AS bigint) > 0 AND 'L' <> ''";
+        var definition = SafeMigrationExpectedDefinitionFactory.CheckConstraint("ck_records_value", "records", source,
+            schema: null);
+
+        var columns = caseSensitive
+            ? new[]
+            {
+                new ExpectedColumnDefinition("L", typeof(int), isNullable: false, storeType: "integer"),
+                new ExpectedColumnDefinition("l", typeof(int), isNullable: false, storeType: "integer"),
+            }
+            : [new ExpectedColumnDefinition("L", typeof(int), isNullable: false, storeType: "integer")];
+
+        var builder = CreateBuilder(new ExpectedTableDefinition("records", columns, checkConstraints: [definition]));
+        builder.RenameColumnIfExists("L", "records", "score");
+        var columnComparer = caseSensitive ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase;
+
+        // Act
+        var constraints = Assert.Single(SafeMigrationExpectedTableConstraints.FromOperations(builder.Operations,
+            static schema => schema, StringComparer.OrdinalIgnoreCase, '[', false, columnComparer)).Value;
+
+        // Assert
+        var expected = caseSensitive ? source : "ABS([score]) + CAST([score] AS bigint) > 0 AND 'L' <> ''";
+        Assert.Equal(expected, Assert.Single(constraints.CheckConstraints).CapturedSql);
+    }
+
+    /// <summary>A case-sensitive CHECK on l does not prevent dropping the independent physical member L.</summary>
+    [Fact]
+    public void CaseSensitiveCheckDropKeepsDistinctColumnMembers()
+    {
+        // Arrange
+        var definition = SafeMigrationExpectedDefinitionFactory.CheckConstraint("ck_records_value", "records",
+            "[l] >= 0", schema: null);
+
+        var builder = CreateBuilder(new ExpectedTableDefinition("records",
+            [
+                new ExpectedColumnDefinition("L", typeof(int), isNullable: false, storeType: "integer"),
+                new ExpectedColumnDefinition("l", typeof(int), isNullable: false, storeType: "integer"),
+            ], checkConstraints: [definition]));
+
+        builder.DropColumnIfExists("L", "records");
+
+        // Act
+        var constraints = Assert.Single(SafeMigrationExpectedTableConstraints.FromOperations(builder.Operations,
+            static schema => schema, StringComparer.OrdinalIgnoreCase, '[', false, StringComparer.Ordinal)).Value;
+
+        // Assert
+        Assert.Equal("[l] >= 0", Assert.Single(constraints.CheckConstraints).CapturedSql);
     }
 
     [Fact]

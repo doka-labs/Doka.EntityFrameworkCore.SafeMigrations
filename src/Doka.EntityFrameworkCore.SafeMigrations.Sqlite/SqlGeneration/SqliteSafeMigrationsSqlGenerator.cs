@@ -207,7 +207,7 @@ public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
             _expressionRenderer.Render,
             static collation => collation.Schema is null ? collation.Name : null);
 
-        return _baselineGenerator.Generate([standardOperation], model, options);
+        return _baselineGenerator.Generate([standardOperation], model, options, guardedOperations: []);
     }
 
     private SqliteInvalidatingMigrationCommand WrapProviderCommand(
@@ -271,9 +271,10 @@ public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
             ?? throw new NotSupportedException(SafeMigrationDiagnosticMessages.FormatRuntime(
                 operation, "doka_sm_unsupported", operationOrdinal, "column_type_mapping"));
 
-        var expression = definition.ComputedExpression is null
-            ? definition.ComputedColumnSql!
-            : _expressionRenderer.Render(definition.ComputedExpression);
+        var expression = definition.CapturedComputedSql
+            ?? (definition.ComputedExpression is null
+                ? definition.ComputedColumnSql!
+                : _expressionRenderer.Render(definition.ComputedExpression));
 
         var collation = definition.Collation is null
             ? string.Empty

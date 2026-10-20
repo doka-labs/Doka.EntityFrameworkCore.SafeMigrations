@@ -327,11 +327,18 @@ internal static class SafeMigrationSemanticCandidateFactory
         string name
     ) => definition.Expression is null
         ? new ExpectedCheckConstraintDefinition(name, definition.Table, definition.Sql!, definition.Schema)
-        : ExpectedCheckConstraintDefinition.FromExpression(
-            name,
-            definition.Table,
-            definition.Expression,
-            definition.Schema);
+        : definition.CapturedSql is not null
+            ? ExpectedCheckConstraintDefinition.FromCapturedExpression(
+                name,
+                definition.Table,
+                definition.Expression,
+                definition.CapturedSql,
+                definition.Schema)
+            : ExpectedCheckConstraintDefinition.FromExpression(
+                name,
+                definition.Table,
+                definition.Expression,
+                definition.Schema);
 
     private static SafeMigrationOperation CreateOperation(
         SafeMigrationIntent intent

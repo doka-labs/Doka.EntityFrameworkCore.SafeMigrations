@@ -37,7 +37,8 @@ public sealed class PostgreSqlModelManagedDeleteFenceSqlTests
         Assert.True(fence > 0);
         Assert.True(mutation > fence);
         Assert.Contains("FOR doka_evaluation_pass IN 1..2 LOOP", command.CommandText, StringComparison.Ordinal);
-        Assert.Contains("EXIT WHEN doka_action <> 'apply' OR doka_evaluation_pass = 2;", command.CommandText,
+        Assert.Contains("EXIT WHEN doka_action OPERATOR(pg_catalog.<>) 'apply' "
+            + "OR doka_evaluation_pass OPERATOR(pg_catalog.=) 2;", command.CommandText,
             StringComparison.Ordinal);
         Assert.DoesNotContain("LOCK TABLE app.users", command.CommandText, StringComparison.Ordinal);
         Assert.DoesNotContain("FOR UPDATE", command.CommandText, StringComparison.Ordinal);
