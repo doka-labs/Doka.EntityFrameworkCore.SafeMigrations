@@ -14,7 +14,7 @@ from pathlib import Path
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 VERIFIER = REPOSITORY_ROOT / "eng/verify-dependency-license-exceptions.py"
 APPROVED_VERSIONS = {
-    "Microsoft.Data.SqlClient.SNI.runtime": "6.0.2",
+    "Microsoft.Data.SqlClient.SNI.runtime": "6.0.3",
     "Microsoft.Identity.Client.NativeInterop": "0.20.6",
 }
 
@@ -120,6 +120,14 @@ class DependencyLicenseExceptionTests(unittest.TestCase):
 
                     self.assertNotEqual(0, result.returncode)
                     self.assertIn(f"license exception requires NuGet {name.lower()}", result.stderr)
+
+    def test_previous_sni_exception_is_not_carried_forward(self):
+        pages = [[dependency("Microsoft.Data.SqlClient.SNI.runtime", "6.0.2")]]
+
+        result = verify(pages)
+
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("license exception requires NuGet microsoft.data.sqlclient.sni.runtime 6.0.3", result.stderr)
 
     def test_rejects_inconsistent_or_missing_excepted_metadata(self):
         mutations = (

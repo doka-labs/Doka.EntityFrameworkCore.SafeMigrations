@@ -33,7 +33,7 @@ def write_packages(
     """Create the exact five-package fixture without restoring or loading code."""
     for suffix, provider in PROVIDER_DEPENDENCIES.items():
         package_id = CORE_ID + suffix
-        dependencies = [(provider, "[10.0.12,10.1.0)")]
+        dependencies = [(provider, "[10.0.13,10.1.0)")]
         if suffix:
             dependencies.append((CORE_ID, PACKAGE_VERSION))
 

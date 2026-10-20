@@ -6,6 +6,25 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
+### Changed
+
+- Raise the MySQL/MariaDB provider's published Doka dependency to
+  `[10.6.0,10.7.0)` and qualify against public 10.6.0. Its complete physical
+  index-budget convention can change implicit indexed string/binary lengths;
+  review newly scaffolded model differences without rewriting existing
+  migrations. Retain the public migration SPI and other providers' dependency
+  isolation. Doka's transitive System.IO.Hashing minimum becomes 10.0.13.
+- Raise EF Core and dependency-injection minimums to 10.0.13; these are visible
+  in published NuGet dependency contracts. Update the SDK to 10.0.402,
+  dotnet-ef to 10.0.13, FsCheck to 3.5.0, Microsoft.NET.Test.Sdk to 18.11.0,
+  xUnit's Visual Studio runner to 4.0.1, Scorecard to 2.5.0 and CodeQL to
+  4.39.0. Keep product version selection separate from dependency maintenance.
+- Lock the SQL Server graph to SqlClient 6.1.7 and SNI.runtime 6.0.3. Retain
+  the patched PKCS 9.0.21 minimum and provider dependency isolation. Update only
+  the existing exact-version SNI license exception after confirming identical
+  vendor license bytes; do not broaden its development/testing or no-bundling
+  boundaries.
+
 ## [10.5.0] - 2026-10-15
 
 Prepare stable 10.5.0 for all five packages. This release adds actionable

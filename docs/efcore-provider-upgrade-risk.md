@@ -58,12 +58,28 @@ string path and validates borrowed inputs without mutation. Doka also requires
 The latter is a low-level wire contract and does not replace the independently
 configurable model-level `Binary16`, `Char36` or MariaDB `Uuid` storage contract.
 
-The reviewed Doka 10.5 line adds UUID only on MariaDB 10.7 or later, with
+The reviewed Doka 10.6 line retains UUID introduced in 10.5 only on MariaDB 10.7 or later, with
 unsized storage, text-bound Guid values and 16-byte physical budgets. It does
 not permit implicit GUID representation changes. It also changes implicit
 application-owned 16-byte binary mappings to `varbinary(17)` independently of
 GUID defaults; inspect new model differences and migrations during upgrade.
 See [GUID storage and native UUID](mysql-mariadb-ddl-behavior.md#guid-storage-and-native-uuid).
+
+Doka 10.6 budgets implicit indexed string/binary lengths against complete
+physical composite keys, overlapping indexes and compatible principal-derived
+FK lengths. Its packed-DECIMAL correction agrees with SafeMigrations' existing
+width formulas. Explicit application facets are not shortened to make a model
+valid. Inspect new snapshot/model/scaffolding differences without rewriting
+previous migrations. The public migration-handler SPI remains unchanged; new
+query-composition APIs do not require SafeMigrations wrappers. See the
+[versioned index-budget contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/d1e40a7b211c10b354e5aa6df80d9fea710d8f58/docs/provider-configuration.md#index-key-byte-fidelity).
+
+During Doka migration-lock acquisition, a driver `CommandTimeoutExpired` from
+`GET_LOCK` is now normalized to `TimeoutException` with the native
+`MySqlException` retained as its inner cause, synchronously and asynchronously.
+This affects lock-acquisition exception handling, not SafeMigrations guard codes
+or permission to bypass the migration lock. See the
+[versioned history repository](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/d1e40a7b211c10b354e5aa6df80d9fea710d8f58/src/Doka.EntityFrameworkCore.MySql/Internal/Migrations/MySqlHistoryRepository.cs).
 
 Doka 10.3.0 also exposes an immutable typed migration-operation metadata
 snapshot for Guid format, value-generation strategy, and ordered index prefix

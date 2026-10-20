@@ -30,7 +30,7 @@ equivalent.
 - `Doka.EntityFrameworkCore.SafeMigrations`: provider-neutral intent,
   definitions, planning, reports, and `MigrationBuilder` extensions
 - `Doka.EntityFrameworkCore.SafeMigrations.MySql`: MySQL and MariaDB adapter on
-  the public `Doka.EntityFrameworkCore.MySql` 10.5 operation-handler and
+  the public `Doka.EntityFrameworkCore.MySql` 10.6 operation-handler and
   typed migration-metadata SPI
 - `Doka.EntityFrameworkCore.SafeMigrations.PostgreSql`: PostgreSQL adapter on
   Npgsql 10
@@ -151,7 +151,7 @@ it after an attention or timeout; SQL Server `TRY/CATCH` does not catch those
 client interruptions.
 
 `UseMySqlSafeMigrations()` declares its user-variable requirement through the
-Doka 10.5 line. For a provider-owned connection string, Doka supplies
+Doka 10.6 line. For a provider-owned connection string, Doka supplies
 `AllowUserVariables=true` when it was omitted. An explicitly contradictory
 setting is rejected. Caller-owned `DbConnection` and `MySqlDataSource` inputs
 are never mutated and must already use `AllowUserVariables=true` and

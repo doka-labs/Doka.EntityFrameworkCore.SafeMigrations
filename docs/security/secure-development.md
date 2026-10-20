@@ -78,8 +78,16 @@ Only the following versions have a repository-specific license exception:
 
 | NuGet package | Approved version | Reviewed vendor terms |
 | --- | --- | --- |
-| Microsoft.Data.SqlClient.SNI.runtime | 6.0.2 | [Package license](https://www.nuget.org/packages/Microsoft.Data.SqlClient.SNI.runtime/6.0.2/License) |
+| Microsoft.Data.SqlClient.SNI.runtime | 6.0.3 | [Package license](https://www.nuget.org/packages/Microsoft.Data.SqlClient.SNI.runtime/6.0.3/License) |
 | Microsoft.Identity.Client.NativeInterop | 0.20.6 | [Package license](https://www.nuget.org/packages/Microsoft.Identity.Client.NativeInterop/0.20.6/License) |
+
+The 2026-10-20 EF Core 10.0.13 update resolves SqlClient 6.1.7 and SNI 6.0.3.
+The SNI 6.0.3 package's `LICENSE.txt` is byte-identical to the previously
+reviewed 6.0.2 file; both have SHA-256
+`9335e8bad875dd7be4eebd55d2335eb6433d1cea61aadb3817af7807bef8932a`.
+Only the exact SNI version changes; the exception's use and package-shape
+boundaries below remain unchanged. The earlier version is not retained as a
+second allowed version.
 
 These transitive dependencies belong to the EF Core SQL Server / SqlClient
 stack, not Core or the other providers. Their vendor terms allow the

@@ -7,7 +7,7 @@ unredacted migration reports in issues, pull requests, or test fixtures.
 
 ## Prerequisites
 
-- .NET SDK 10.0.401, selected by `global.json`
+- .NET SDK 10.0.402, selected by `global.json`
 - Docker for MySQL, MariaDB, PostgreSQL, and SQL Server tests; SQLite tests run
   in-process
 - Bash, `jq`, `curl`, `unzip`, and `rsync` for engineering gates

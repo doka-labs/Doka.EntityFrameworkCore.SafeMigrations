@@ -1225,7 +1225,7 @@ contract.
 
 ### GUID storage and native UUID
 
-The Doka dependency range is `[10.5.0,10.6.0)`. `Binary16` remains the default;
+The Doka dependency range is `[10.6.0,10.7.0)`. `Binary16` remains the default;
 `Char36` is unchanged. Native `uuid` is an explicit Doka model choice through
 `DefaultGuidFormat(MySqlGuidFormat.Uuid)` or a property's
 `HasMySqlGuidFormat(MySqlGuidFormat.Uuid)`. It requires MariaDB 10.7 or later;
