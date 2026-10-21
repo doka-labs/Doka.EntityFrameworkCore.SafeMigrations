@@ -287,6 +287,16 @@ owns independent consumer readback.
   Preserve migration source, policies, fingerprint formats and history; retain
   native qualification, coverage, tooling, provenance, SBOM and public readback.
 
+- 2026-10-21: Set the stable 10.6.0 release contract at the shared five-package
+  identity for additive public CASE APIs, certified generated/CHECK contracts, independent
+  DROP and stack-safe traversal fixes, and the reviewed Doka/EF dependency
+  baseline. Promote the nine CASE declarations and retain report schema 4/view 3,
+  diagnostic transport and historical migration source. Document conditional
+  contract-fingerprint reapproval and exact expression identity. Retain the full
+  native matrix, coverage, tooling, exact packages, provenance, SBOM and public
+  readback requirements; record release status in the publication runbook and
+  release evidence.
+
 ### Implementation References
 
 - [Release candidate workflow](../../.github/workflows/release-candidate.yml)

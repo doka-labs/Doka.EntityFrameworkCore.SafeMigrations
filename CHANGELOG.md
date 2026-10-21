@@ -6,6 +6,17 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
+## [10.6.0] - 2026-10-21
+
+Version 10.6.0 updates all five packages. This minor release adds public
+searched-CASE expressions and certified generated-column/CHECK support,
+corrects independent DROP proofs and deep-expression traversal, and updates
+the qualified dependency baseline. Captured computed/CHECK contract
+fingerprints can change: review and renew affected approval artifacts before
+use, without rewriting historical migration source or bypassing mismatch
+checks. See the [upgrade notes](docs/support-and-qualification.md#upgrade-to-1060).
+Timing evidence is informational.
+
 ### Added
 
 - Add immutable searched-CASE expressions and bounded EF computed-column SQL
@@ -2170,7 +2181,8 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.5.0...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.6.0...HEAD
+[10.6.0]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.5.0...v10.6.0
 [10.5.0]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.11...v10.5.0
 [10.4.11]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.10...v10.4.11
 [10.4.10]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.9...v10.4.10

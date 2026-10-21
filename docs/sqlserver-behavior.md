@@ -1,6 +1,11 @@
 # SQL Server behavior
 
-Prepared stable 10.5.0 runtime diagnostics retain the native guard error
+Version 10.6.0 adds certified computed/CHECK contracts and retains
+native DROP blockers across ordered source confirmations. Review the
+[upgrade notes](support-and-qualification.md#upgrade-to-1060) for conditional
+contract-fingerprint changes, dependency floors and conservative boundaries.
+
+Runtime diagnostics introduced in 10.5.0 retain the native guard error
 number/state while adding bounded owner/reason text. Identity-scope recovery and ordinary native
 errors remain separate; see [diagnostics](diagnostics.md#runtime-provider-differences).
 
@@ -19,14 +24,14 @@ cannot switch off inherited session state; uncertain acquisition quarantines
 the connection instead of guessing. Physical rename endpoints and canonical
 managed-key members retain independent provider identity. Proven integer
 widening, populated-table CHECK validation, permission-first catalog checks
-and trigger-aware freshness from 10.4.9 remain. Provider signatures, dependencies,
-migration source, policy selection and history are unchanged. Core diagnostic
-APIs and report schemas advance in 10.5.0 as described above.
+and trigger-aware freshness from 10.4.9 remain. Those earlier corrections
+preserved provider signatures, dependencies, migration source, policy selection
+and history. Report schemas and diagnostic transport remain as introduced in
+10.5.0; the separate 10.6.0 dependency and approval changes are described above.
 Native elapsed-time comparisons are informational; functional cancellation,
-ownership and evidence assertions remain blocking. Availability requires full
-qualification and verified five-package publication, not source preparation
-or skipped Apple Silicon tests. Selecting another provider does not introduce
-SQL Server runtime dependencies.
+ownership and evidence assertions remain blocking. Skipped Apple Silicon tests
+do not satisfy native x86-64 qualification. Selecting another provider does not
+introduce SQL Server runtime dependencies.
 
 ## Supported engine boundary
 

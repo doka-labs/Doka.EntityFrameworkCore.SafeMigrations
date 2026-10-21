@@ -1,6 +1,11 @@
 # SQLite behavior
 
-Prepared stable 10.5.0 managed diagnostics identify the affected owner and
+Version 10.6.0 preserves generated-column facets during safe creation
+and owned rebuilds, and corrects independent DROP/identifier proofs. Review the
+[upgrade notes](support-and-qualification.md#upgrade-to-1060) for conditional
+computed/CHECK contract-fingerprint changes and conservative boundaries.
+
+Managed diagnostics introduced in 10.5.0 identify the affected owner and
 proven cause without exposing `foreign_key_check` row identifiers or changing rollback.
 See [diagnostics](diagnostics.md#runtime-provider-differences) for readable reports;
 guarded SQL scripts remain explicitly unsupported.
@@ -19,9 +24,10 @@ endpoints retain independent evidence, including absent-source no-op
 postconditions; existence-only acceptance cannot install an authored matching
 definition. Canonical managed keys retain column/value ordinals. Earlier
 lossless affinity, CLR-domain and generation repair gates remain unchanged.
-Provider APIs, dependency ranges, migration source, policy selection and history
-are unchanged; no migration regeneration is required. Core diagnostic APIs and
-report schemas advance in 10.5.0 as described above.
+Those earlier corrections preserved provider APIs, dependency ranges, migration
+source, policy selection and history. Historical migration source is not
+regenerated; the 10.6.0 approval changes are described above. Report schemas
+and diagnostic transport remain as introduced in 10.5.0.
 
 ## Supported deployment shape
 

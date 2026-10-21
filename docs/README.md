@@ -1,18 +1,19 @@
 # Documentation
 
-This is the task-oriented entry point for SafeMigrations documentation. This
-source prepares stable 10.5.0 for all five packages. Start with the task table
+This is the task-oriented entry point for SafeMigrations 10.6.0 documentation
+covering all five packages. Start with the task table
 below; release changes and consumer upgrade notes belong in the
 [changelog](../CHANGELOG.md). The [diagnostics guide](diagnostics.md) explains
 readable errors, affected owners, text summaries and report-schema compatibility;
 [support and qualification](support-and-qualification.md) owns dependency and
-native UUID boundaries. Existing ordered proofs, concurrency guards and verified
+native UUID boundaries, including the
+[10.6.0 upgrade](support-and-qualification.md#upgrade-to-1060).
+Existing ordered proofs, concurrency guards and verified
 schema/session recovery remain. Deferred preflight states require runtime
 validation; unproved lossy conversions and independent permission refusals
 remain blocked. Timing comparisons are informational; functional and evidence
 failures remain blocking.
-Package availability and OpenSSF status are established by their linked
-external registries, not by source documentation alone.
+OpenSSF status is established by its linked external registry.
 
 ## Use and deploy
 

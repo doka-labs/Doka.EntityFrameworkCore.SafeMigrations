@@ -1,4 +1,13 @@
 #nullable enable
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlCaseExpression
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlCaseExpression.ElseResult.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression?
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlCaseExpression.SafeMigrationSqlCaseExpression(System.Collections.Generic.IEnumerable<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlCaseWhenClause!>! whenClauses, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression? elseResult = null) -> void
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlCaseExpression.WhenClauses.get -> System.Collections.Generic.IReadOnlyList<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlCaseWhenClause!>!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlCaseWhenClause
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlCaseWhenClause.Condition.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlCaseWhenClause.Result.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression!
+Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlCaseWhenClause.SafeMigrationSqlCaseWhenClause(Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression! condition, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression! result) -> void
+static Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSql.Case(System.Collections.Generic.IEnumerable<Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlCaseWhenClause!>! whenClauses, Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression? elseResult = null) -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationSqlExpression!
 const Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationRunReport.CurrentSchemaVersion = 4 -> int
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAssessment.Explanation.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDiagnosticExplanation
 Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAssessment.Identity.get -> Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationOperationIdentity?

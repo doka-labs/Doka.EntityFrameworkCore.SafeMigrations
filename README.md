@@ -55,35 +55,35 @@ evidence. See [Support and qualification](docs/support-and-qualification.md).
 ## Installation
 
 Install one provider package. The core package is included transitively. The
-examples target prepared stable 10.5.0 and select that version exactly, so
-restore does not move to another version implicitly. Verify public package
-availability before installation; source preparation is not publication
-evidence. Release changes and compatibility notes belong in the
-[changelog](CHANGELOG.md).
+examples target version 10.6.0 and select that version exactly, so
+restore does not move to another version implicitly. Release changes and
+compatibility notes belong in the [changelog](CHANGELOG.md). Review the
+[10.6.0 upgrade notes](docs/support-and-qualification.md#upgrade-to-1060)
+before adopting the new expression contracts.
 
 ```bash
-package_version='10.5.0'
+package_version='10.6.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.MySql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.5.0'
+package_version='10.6.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.5.0'
+package_version='10.6.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.Sqlite --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.5.0'
+package_version='10.6.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.SqlServer --version "$package_version"
 ```
 

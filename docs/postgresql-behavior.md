@@ -1,6 +1,11 @@
 # PostgreSQL behavior
 
-Prepared stable 10.5.0 runtime diagnostics put essential owner/reason context
+Version 10.6.0 adds certified generated/CHECK contracts and native
+generated-source DROP guards. Review the
+[upgrade notes](support-and-qualification.md#upgrade-to-1060) for conditional
+contract-fingerprint changes, dependency floors and conservative boundaries.
+
+Runtime diagnostics introduced in 10.5.0 put essential owner/reason context
 into native guard messages without enabling error-detail disclosure or changing SQLSTATE.
 See [diagnostics](diagnostics.md#runtime-provider-differences) for bounded text,
 privacy and report-schema compatibility.
@@ -20,9 +25,10 @@ Source-frozen managed deletes fence dependent writers and reclassify under the
 owned lock, requiring physically present enforced FK counterparts. Earlier
 column-contract and trigger-freshness fixes remain: supported unproven states
 need fresh runtime validation, while independent refusals remain blocking.
-Provider APIs, dependency ranges, migration source, policy selection and history
-are unchanged. Core diagnostic APIs and report schemas advance in 10.5.0 as
-described above. Prior bounded plan-lifetime and matching
+Those earlier corrections preserved provider APIs, dependency ranges, migration
+source, policy selection and history. Report schemas and diagnostic transport
+remain as introduced in 10.5.0; the separate 10.6.0 upgrade above does not claim
+unchanged computed/CHECK contract fingerprints. Prior bounded plan-lifetime and matching
 fast paths remain; native timing comparisons are informational.
 
 ## Operational summary

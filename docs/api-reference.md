@@ -61,9 +61,6 @@ provider-specific registration and generator composition. Core adds
 remain compatible. Reports accept `sqlserver` as an engine-family value
 without changing canonical schema v3, filtered-view schema v2, or histories.
 Consumers with exhaustive engine-family handling must recognize the new value.
-A successful release run and exact-version public package readback remain the
-authority for a published API; shipped baseline files record its prepared
-contract, not proof of publication.
 
 The 10.4.9 patch preserves the complete 10.4.6 public API and dependency
 ranges. SQL Server admits proven built-in integer widening and simple integer
@@ -98,27 +95,34 @@ target-model definitions; ordered projection still owns accepted physical
 lifetimes and independent current row proofs. Related owner-case, supporting-
 index, PRIMARY-removal column-source, native CHECK/index-input and SQLite
 key/capacity fixes do not require migration regeneration or API-baseline promotion.
-The SQL Server PKCS minimum is 9.0.21. Qualification and publication
-remain separate from these prepared contracts.
+The SQL Server PKCS minimum is 9.0.21.
 
-Prepared stable 10.5.0 adds operation identity, diagnostic explanation,
+Stable 10.5.0 introduced operation identity, diagnostic explanation,
 `SafeMigrationDiagnosticMessages`, `SafeMigrationReportText` and
 `SafeMigrationExecutionException`; existing public signatures remain available.
-The Core shipped baseline includes this prepared surface. Canonical report
-schema advances to 4 and selected-view schema to 3; update validators and rebuild
+The Core shipped baseline includes this surface. That release introduced
+canonical report schema 4 and selected-view schema 3; update validators and rebuild
 references to the compiled `CurrentSchemaVersion` constant. MySQL/MariaDB callers
 must handle positively correlated owned assertions through the new managed
 exception, whose inner exception preserves the exact native cause. Other native
-failures and cancellation retain their contracts. Doka moves to
+failures and cancellation retain their contracts. Its Doka range was
 `[10.5.0,10.6.0)`; native UUID is opt-in and persisted-default reclassification
 can require an explicitly eligible repair. See [diagnostics](diagnostics.md),
 [support and qualification](support-and-qualification.md) and the
-[10.5.0 changelog](../CHANGELOG.md#1050---2026-10-15). Migration source,
-policy selection, fingerprint formats and history do not change.
+[10.5.0 changelog](../CHANGELOG.md#1050---2026-10-15). That release preserved
+migration source, policy selection, fingerprint formats and history.
 
-The current unreleased MySQL/MariaDB adapter instead requires Doka
-`[10.6.0,10.7.0)`. This dependency amendment does not select a new SafeMigrations
-product version. Review the implicit indexed-length model changes described in
+Version 10.6.0 promotes the additive `SafeMigrationSql.Case`,
+`SafeMigrationSqlCaseExpression` and `SafeMigrationSqlCaseWhenClause` API to the
+Core shipped baseline and adds certified generated-column/CHECK contracts.
+Report schemas and diagnostic transport remain unchanged from 10.5.0.
+Successfully parsed EF computed/CHECK definitions can change approved contract
+fingerprints; see the [upgrade notes](support-and-qualification.md#upgrade-to-1060).
+Historical migration source is not regenerated or rewritten.
+
+The 10.6.0 MySQL/MariaDB adapter requires Doka `[10.6.0,10.7.0)`; EF Core and
+dependency-injection minimums are 10.0.13. Review implicit indexed-length model
+changes and renewed approval requirements in
 [support and qualification](support-and-qualification.md).
 
 ## Packages and registration

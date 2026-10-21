@@ -5,15 +5,23 @@ untagged `main` commit first, then waits at the protected `nuget` environment.
 Only after that wait begins does the operator create the signed tag and approve
 publication. Run every command separately and stop on the first failure.
 
-The current source prepares 10.5.0 for all five package IDs, retaining the
+The release target is stable 10.6.0 for all five package IDs, retaining the
 inventory introduced in 10.4.6. Review the
-[10.5.0 compatibility notes](../../CHANGELOG.md#1050---2026-10-15), including
-report schemas, owned MySQL/MariaDB exceptions, Doka 10.5 and persisted defaults.
-Existing migration source, policies, fingerprint formats, history, concurrency
-and recovery guards remain. Timing evidence is informational; functional and
+[10.6.0 compatibility notes](../../CHANGELOG.md#1060---2026-10-21) and
+[upgrade procedure](../support-and-qualification.md#upgrade-to-1060), including
+captured computed/CHECK contract-fingerprint reapproval, exact expression
+identity, conservative dependency proofs and the Doka 10.6/EF patch floors.
+Historical migration source, policies, report schemas, relational model-
+fingerprint format, history, concurrency and recovery guards remain. Timing
+evidence is informational; functional and
 evidence failures remain blocking. Do not publish a subset or treat preparation,
 earlier engine runs or native ARM skips as proof that this candidate's complete
 qualification or public readback has succeeded.
+
+Record actual qualification and publication status in the candidate run's
+release evidence, including the source commit, exact package identities,
+completed checks and public readback. Product version references describe the
+contract, not the workflow's current state.
 
 ## One-time configuration
 

@@ -16,12 +16,16 @@ SafeMigrations publishes these package IDs at one version:
 - `Doka.EntityFrameworkCore.SafeMigrations.SqlServer`.
 
 Stable 10.4.6 introduced this five-package inventory; releases 10.4.2 through
-10.4.5 retain their historical four-package set. Prepared stable 10.5.0 keeps
-the shared .NET/EF Core 10 identity, adds diagnostics and optional native UUID,
-and corrects persisted defaults. The [changelog](../CHANGELOG.md#1050---2026-10-15)
-records the diagnostic API/schema/exception and Doka dependency compatibility
-changes. Existing migration source, policies, fingerprint formats, history,
-concurrency and recovery guards remain. Timing comparisons stay informational;
+10.4.5 retain their historical four-package set. Version 10.6.0 keeps
+the shared .NET/EF Core 10 identity and adds CASE/generated-expression support
+with independent DROP and traversal corrections. The
+[changelog](../CHANGELOG.md#1060---2026-10-21) and
+[upgrade notes](support-and-qualification.md#upgrade-to-1060) record the
+conditional computed/CHECK contract-fingerprint changes, renewed approval
+requirements, exact expression comparison and dependency floors. Historical
+migration source, policy selection, report schemas, relational model-fingerprint
+format and history remain unchanged. Do not carry an obsolete contract approval
+forward or rewrite historical migrations. Timing comparisons stay informational;
 functional and evidence failures still block. Selecting another provider does
 not introduce SQL Server runtime dependencies.
 

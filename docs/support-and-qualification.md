@@ -2,8 +2,10 @@
 
 ## Support contract
 
-Prepared stable 10.5.0 adds actionable diagnostics with canonical report schema
-4, selected view schema 3 and contextual owned runtime errors. Older schema
+Version 10.6.0 adds public CASE expressions, certified generated-column
+and CHECK support, independent DROP corrections and stack-safe traversal.
+It retains the 10.5.0 diagnostics with canonical report schema 4, selected
+view schema 3 and contextual owned runtime errors. Older schema
 files remain packaged; update validators and rebuild references to the compiled
 `CurrentSchemaVersion` constant.
 Those diagnostics do not change migration decisions or the target framework.
@@ -13,7 +15,14 @@ see [diagnostic compatibility](diagnostics.md#runtime-provider-differences).
 Native qualification still requires the complete blocking matrix; ARM SQL Server
 skips and offline SQL-shape tests are not substitutes for its x64 cells.
 
-The unreleased generated-expression support conditionally changes approved
+## Upgrade to 10.6.0
+
+Keep every installed SafeMigrations package on the same 10.6.0 version; install
+only the provider adapters the application needs. Account for the dependency
+floors below and review newly scaffolded implicit index-length changes without
+rewriting historical migrations.
+
+The 10.6.0 generated-expression support conditionally changes approved
 contract fingerprints: successfully parsed EF computed-column and CHECK SQL
 now includes original source spelling and numeric-token provenance. Review
 affected migration artifacts, regenerate stored
@@ -25,6 +34,22 @@ relational model-fingerprint format. Parsed CHECK equality also retains exact
 authored spelling; whitespace/parenthesis-only differences can be `Different`
 without being `Unsupported`. Computed-column source was already exact and
 does not gain automatic repair. See [expression compatibility](api-reference.md#sql-expressions-and-policy).
+
+If an application stores no contract-fingerprint approval, this change does
+not require inventing one or regenerating migration source. Existing approval
+artifacts must be reviewed against the immutable migration with the selected
+library version; do not reuse an older fingerprint as though it proved the new
+contract. Valid native expressions can still be `Unsupported` when deterministic
+binding, source independence or a native capability cannot be proved. A policy
+change does not bypass that boundary. Review the intended dependency-removal
+order, native permissions and affected provider guidance before execution.
+
+Report schema 4 and view schema 3 are inherited from 10.5.0, not advanced again.
+The complete hosted/native matrix and package/readback gates remain mandatory;
+see the [publication runbook](operations/release-publication.md) for release
+status and evidence requirements.
+
+### Dependencies and package identity
 
 All publishable projects target `net10.0`. The repository pins SDK 10.0.402
 with roll-forward disabled. SafeMigrations supports EF Core 10 only.
@@ -73,8 +98,8 @@ tooling, coverage, and performance matrix remains the SafeMigrations release
 gate; a local Doka ProjectReference or locally packed candidate is not release
 evidence.
 
-The unreleased 10.6 integration raises the published dependency floor, not the
-SafeMigrations product version. Doka now budgets implicit indexed string/binary
+SafeMigrations 10.6.0 raises its Doka dependency floor to the 10.6 line.
+Doka now budgets implicit indexed string/binary
 lengths across every physical key part, overlapping indexes and compatible
 principal-derived FK lengths. Review newly scaffolded column-length changes;
 existing migrations and explicit application facets are not rewritten. Its
@@ -109,14 +134,13 @@ The SQL Server project supplies the fifth lockfile. Releases 10.4.2 through
 10.4.5 contain four package artifacts; their inventory remains unchanged.
 
 The five-package set began with stable 10.4.6, including the optional SQL Server
-provider. Prepared stable 10.5.0 retains that inventory and the SQL Server PKCS
-minimum of 9.0.21. The Core API baseline gains the diagnostic surface described
-above; that release moved the MySQL/MariaDB Doka range to the 10.5 line.
-The unreleased 10.6 integration is the current dependency contract above.
-Publication still requires
-the blocking workflow, including all three
-native x86-64 SQL Server cells, and exact public readback
-of all five package IDs. Source preparation alone does not establish availability.
+provider. Version 10.6.0 retains that inventory and the SQL Server PKCS
+minimum of 9.0.21. The Core API baseline promotes the additive CASE surface;
+the existing diagnostic surface was introduced in 10.5.0. The current Doka
+dependency contract is the 10.6 line above. Qualification requires the blocking
+workflow, including all three native x86-64 SQL Server cells. The
+[publication runbook](operations/release-publication.md) owns the five-package
+readback procedure and release evidence.
 
 The 10.4.11 changes qualify sparse live/projected constraints and indexes from
 actual native metadata, accepted physical lifetimes and current row proofs.
@@ -533,8 +557,8 @@ the block minimum gives very small cases more than 25% headroom.
 This capture is explicitly measurement-only and is not GitHub-hosted x64
 qualification. The quality workflow can retain a separate x64 capture in
 `sqlserver-baseline.json`; its ordinary benchmark report is also retained.
-Until the complete pinned x64 workflow passes, SQL Server qualification
-remains unestablished. SQL Server live workloads append timestamped stage markers
+SQL Server qualification requires the complete pinned x64 workflow.
+SQL Server live workloads append timestamped stage markers
 under `artifacts/performance/live/sqlserver-*-progress.log` before potentially
 long-running phases. The existing always-upload artifact preserves these markers
 even when a job does not produce its final TRX. They contain fixed workload/stage

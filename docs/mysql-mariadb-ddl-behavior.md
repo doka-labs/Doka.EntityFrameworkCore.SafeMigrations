@@ -1,6 +1,11 @@
 # MySQL and MariaDB DDL behavior
 
-Prepared stable 10.5.0 owned runtime diagnostics identify the authored owner
+Version 10.6.0 adds certified generated/CHECK contracts and native
+independent DROP proofs. Review the
+[upgrade notes](support-and-qualification.md#upgrade-to-1060) for conditional
+contract-fingerprint changes, dependency floors and conservative boundaries.
+
+Owned runtime diagnostics introduced in 10.5.0 identify the authored owner
 and established rejection reason after native cleanup. Their managed outer exception and script
 result transport are described in [diagnostics](diagnostics.md#runtime-provider-differences);
 ordinary native errors, decisions and forward-recovery requirements remain intact.
