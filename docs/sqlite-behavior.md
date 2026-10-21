@@ -221,8 +221,16 @@ implicit SQLite cast.
 
 Source-column DROP inspects surviving generated expressions from the native
 table snapshot before mutation. A retained reference rejects with
-`generated_column_drop_dependency`; an unparseable surviving expression remains
-`generated_column_drop_unproven`, not a guessed absence. Explicitly removing
+`generated_column_drop_dependency`. Outside the bounded expression grammar,
+native identifier scanning can prove source absence without interpreting an
+operator or executing SQL. A possible identifier occurrence remains
+`generated_column_drop_unproven`, not a guessed dependency. An owned rebuild
+can retain exactly identical native/model generated SQL; different opaque text
+does not become equivalent through normalization or waive physical facets.
+Scanning, catalog capture and comparison retain SQLite's native whitespace and
+identifier boundaries. Non-ASCII identifier content is not generic SQL trivia;
+the shared bounded parser is not used to erase or rebind it.
+Explicitly removing
 the generated member first and dropping an unrelated column remain subject to
 the existing rebuild-artifact and ownership checks. Runtime uses the same
 analyzer even without optional preflight, with no additional catalog roundtrip.

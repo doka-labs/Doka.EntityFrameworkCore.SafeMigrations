@@ -1674,13 +1674,17 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
                 ?.Value as bool?
             ?? false;
 
+        // WHY: Preserving existing generated source verbatim needs no grammar
+        // expansion. Nonidentical source still requires the bounded dialect
+        // and semantic proofs; other facets and CHECK contracts remain separate.
         return s_identifierComparer.Equals(actual.Name, expected.Name)
             && StringComparer.Ordinal.Equals(
                 NormalizeStoreType(actual.StoreType),
                 NormalizeStoreType(expected.StoreType))
             && actual.IsNullable == expected.IsNullable
             && ModelDefaultMatches(actual, expected, expectedDefault)
-            && ModelExpressionMatches(actual.GeneratedSql, expected.ComputedColumnSql)
+            && (StringComparer.Ordinal.Equals(actual.GeneratedSql, expected.ComputedColumnSql)
+                || ModelExpressionMatches(actual.GeneratedSql, expected.ComputedColumnSql))
             && (expected.ComputedColumnSql is null || actual.IsStored == (expected.IsStored ?? false))
             && s_identifierComparer.Equals(actual.Collation ?? "BINARY", expected.Collation ?? "BINARY")
             && actual.AutoIncrement == expectedAutoincrement;
@@ -1956,7 +1960,9 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
         string? expectedSql
     )
     {
-        if (!CapturedSourceDialectCompatible(expectedSql))
+        if ((actual is not null && SqliteSqlIdentifierScanner.HasNonNativeWhitespace(actual))
+            || (expectedSql is not null && SqliteSqlIdentifierScanner.HasNonNativeWhitespace(expectedSql))
+            || !CapturedSourceDialectCompatible(expectedSql))
         {
             return false;
         }

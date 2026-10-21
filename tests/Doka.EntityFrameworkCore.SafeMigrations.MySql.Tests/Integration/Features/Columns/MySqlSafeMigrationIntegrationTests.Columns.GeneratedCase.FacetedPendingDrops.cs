@@ -47,12 +47,12 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         Assert.Equal(2, retained);
     }
 
-    /// <summary>A complete historical target cannot hide native generated comment or collation drift.</summary>
+    /// <summary>Unrelated facet drift does not invalidate a separate native source-independence certificate.</summary>
     /// <param name="facet">The sole physical facet that differs from the historical target.</param>
     [Theory]
     [InlineData("comment")]
     [InlineData("collation")]
-    public async Task FacetedGeneratedPendingDropRejectsNativeFacetDrift(string facet)
+    public async Task FacetedGeneratedPendingDropPreservesNativeFacetDrift(string facet)
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
@@ -70,24 +70,34 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         var historyRows = await FacetedPendingHistoryRowsAsync(connectionString);
         var unrelated = await FacetedPendingUnrelatedColumnsAsync(connectionString);
-        var retained = await FacetedPendingRetainedRowsAsync(connectionString, includeUnrelated: true);
+        var retained = await FacetedPendingRetainedRowsAsync(connectionString, includeUnrelated: !Fixture.IsMariaDb);
         var unchanged = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
             + $"AND TABLE_NAME = '{GeneratedFacetPendingDropDbContext.TableName}' AND COLUMN_NAME = 'result' "
             + $"AND COLUMN_COMMENT = '{comment}' AND COLLATION_NAME = '{collation}';");
 
         // Assert
-        Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
-        Assert.Equal("generated_column_drop_unproven", Assert.Single(preflight.Assessments).AnalysisCode);
-        Assert.Equal(SafeMigrationAction.RejectUnsupported, preflight.Assessments[0].Action);
-        Assert.Equal("doka_sm_unsupported", Assert.IsType<SafeMigrationExecutionException>(failure).GuardCode);
-        Assert.Equal(0, historyRows);
-        Assert.Equal(1, unrelated);
+        Assert.Equal(Fixture.IsMariaDb ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked,
+            preflight.Status);
+        Assert.Equal(Fixture.IsMariaDb ? SafeMigrationAction.Apply : SafeMigrationAction.RejectUnsupported,
+            Assert.Single(preflight.Assessments).Action);
+        if (Fixture.IsMariaDb)
+        {
+            Assert.Null(failure);
+        }
+        else
+        {
+            Assert.Equal("generated_column_drop_unproven", preflight.Assessments[0].AnalysisCode);
+            Assert.Equal("doka_sm_unsupported", Assert.IsType<SafeMigrationExecutionException>(failure).GuardCode);
+        }
+
+        Assert.Equal(Fixture.IsMariaDb ? 1 : 0, historyRows);
+        Assert.Equal(Fixture.IsMariaDb ? 0 : 1, unrelated);
         Assert.Equal(2, retained);
         Assert.Equal(1, unchanged);
     }
 
-    /// <summary>A runtime model with omitted facets cannot become a complete native dependency certificate.</summary>
+    /// <summary>Unknown runtime facets stay unknown while MariaDB separately proves source independence.</summary>
     [Fact]
     public async Task FacetedGeneratedRuntimeOnlyDropRetainsUnknownFacets()
     {
@@ -114,17 +124,32 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         var historyRows = await FacetedPendingHistoryRowsAsync(connectionString);
         var unrelated = await FacetedPendingUnrelatedColumnsAsync(connectionString);
-        var retained = await FacetedPendingRetainedRowsAsync(connectionString, includeUnrelated: true);
+        var retained = await FacetedPendingRetainedRowsAsync(connectionString, includeUnrelated: !Fixture.IsMariaDb);
+        var unchanged = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
+            + $"AND TABLE_NAME = '{GeneratedFacetPendingDropDbContext.TableName}' AND COLUMN_NAME = 'result' "
+            + "AND COLUMN_COMMENT = 'candidate-marker' AND COLLATION_NAME = 'utf8mb4_bin';");
 
         // Assert
         Assert.IsAssignableFrom<Microsoft.EntityFrameworkCore.Metadata.RuntimeModel>(context.Model);
-        Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
-        Assert.Equal("generated_column_drop_unproven", Assert.Single(preflight.Assessments).AnalysisCode);
-        Assert.Equal(SafeMigrationAction.RejectUnsupported, preflight.Assessments[0].Action);
-        Assert.Equal("doka_sm_unsupported", Assert.IsType<SafeMigrationExecutionException>(failure).GuardCode);
+        Assert.Equal(Fixture.IsMariaDb ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked,
+            preflight.Status);
+        Assert.Equal(Fixture.IsMariaDb ? SafeMigrationAction.Apply : SafeMigrationAction.RejectUnsupported,
+            Assert.Single(preflight.Assessments).Action);
+        if (Fixture.IsMariaDb)
+        {
+            Assert.Null(failure);
+        }
+        else
+        {
+            Assert.Equal("generated_column_drop_unproven", preflight.Assessments[0].AnalysisCode);
+            Assert.Equal("doka_sm_unsupported", Assert.IsType<SafeMigrationExecutionException>(failure).GuardCode);
+        }
+
         Assert.Equal(0, historyRows);
-        Assert.Equal(1, unrelated);
+        Assert.Equal(Fixture.IsMariaDb ? 0 : 1, unrelated);
         Assert.Equal(2, retained);
+        Assert.Equal(1, unchanged);
     }
 
     /// <summary>Seeds native facets independently of EF's candidate model and migration target.</summary>

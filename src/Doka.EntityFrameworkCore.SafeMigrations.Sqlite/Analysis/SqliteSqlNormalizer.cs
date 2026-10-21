@@ -29,6 +29,15 @@ internal static class SqliteSqlNormalizer
             return true;
         }
 
+        // WHY: The shared bounded parser treats Unicode whitespace as trivia,
+        // but SQLite permits it in unquoted physical identifiers. Only exact
+        // native normalization can certify those sources without changing Core.
+        if (SqliteSqlIdentifierScanner.HasNonNativeWhitespace(normalizedLeft)
+            || SqliteSqlIdentifierScanner.HasNonNativeWhitespace(normalizedRight))
+        {
+            return false;
+        }
+
         // WHY: SQLite treats -9223372036854775808 as INTEGER but the same
         // token with .0 as REAL. Rendering a CLR decimal would erase that
         // distinction; captured parsing keeps numeric lexemes and literal bytes.
@@ -42,10 +51,10 @@ internal static class SqliteSqlNormalizer
         string value
     )
     {
-        var span = value.AsSpan().Trim();
+        var span = value.AsSpan().Trim(SqliteSqlIdentifierScanner.WhitespaceCharacters);
         while (HasSingleOuterParentheses(span))
         {
-            span = span[1..^1].Trim();
+            span = span[1..^1].Trim(SqliteSqlIdentifierScanner.WhitespaceCharacters);
         }
 
         var builder = new StringBuilder(span.Length);
@@ -69,7 +78,7 @@ internal static class SqliteSqlNormalizer
                     continue;
             }
 
-            if (char.IsWhiteSpace(character))
+            if (SqliteSqlIdentifierScanner.IsWhitespace(character))
             {
                 pendingSpace = builder.Length > 0;
                 continue;

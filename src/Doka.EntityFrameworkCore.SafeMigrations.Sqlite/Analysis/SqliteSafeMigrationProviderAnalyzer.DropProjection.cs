@@ -223,11 +223,22 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
                 continue;
             }
 
-            if (candidate.GeneratedSql is not { } sql
+            if (candidate.GeneratedSql is not { } sql)
+            {
+                unproven = true;
+                continue;
+            }
+
+            if (SqliteSqlIdentifierScanner.HasNonNativeWhitespace(sql)
                 || !SafeMigrationSqlExpressionParser.TryParseCapturedSource(sql, out var expression)
                 || !SafeMigrationSqlExpressionInspector.IsStructurallyComparable(expression))
             {
-                unproven = true;
+                // WHY: Complete expression semantics are unnecessary to prove
+                // an identifier absent from valid native SQL. SQLite's quoted
+                // identifiers and literals remain distinct scanner tokens;
+                // any occurrence stays unproven, while exact rebuild ownership
+                // independently protects every surviving expression and facet.
+                unproven |= SqliteSqlIdentifierScanner.ReferencesIdentifier(sql, column);
                 continue;
             }
 
@@ -366,7 +377,8 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             return true;
         }
 
-        if (!SafeMigrationSqlExpressionParser.TryParseCapturedSource(sql, out var expression))
+        if (SqliteSqlIdentifierScanner.HasNonNativeWhitespace(sql)
+            || !SafeMigrationSqlExpressionParser.TryParseCapturedSource(sql, out var expression))
         {
             return false;
         }

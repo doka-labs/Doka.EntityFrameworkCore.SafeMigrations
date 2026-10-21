@@ -64,11 +64,11 @@ the shared release identity described in [Release process](docs/release-process.
 - Reject source-column removal while a generated dependent survives, before
   target DDL. Keep explicit dependent-first removal, unrelated removals and
   missing-source no-ops; never cascade generated columns automatically.
-  Incomplete or opaque dependency evidence remains unsupported. This also
+  Unproved dependency evidence remains unsupported. This also
   prevents PostgreSQL 14's native automatic removal of a generated dependent.
-  On MySQL/MariaDB, a pending DROP can now be unsupported when its owner has
-  generated members but neither a complete operation-bound model candidate nor an
-  earlier explicit generated contract can be certified against native metadata.
+  On MySQL, a pending DROP can now be unsupported when its owner has generated
+  members but neither a complete operation-bound model candidate nor an earlier
+  explicit generated contract can be certified against native metadata.
   PostgreSQL repeats the DROP classifier under an explicit owner lock; missing
   lock authority, stale runtime snapshot semantics or an inherited/partition
   hierarchy remains unsupported without changing rights or isolation.
@@ -85,6 +85,23 @@ the shared release identity described in [Release process](docs/release-process.
 
 ### Fixed
 
+- Allow independent MariaDB column DROPs when the full native generated
+  expressions prove the physical source name absent, even without a complete
+  model candidate or with unrelated surviving-member facet drift. Keep all
+  native identifier encodings, actual dependencies, projection lifetimes and
+  runtime/script checks; never treat this as an empty generated set. Scope
+  generated-dependency catalog probes to the native owner without enumerating
+  unrelated databases or weakening exact owner identity.
+- Keep missing MariaDB column DROPs as no-ops when only an accent-distinct
+  physical identifier exists. Use the same native identity for classification,
+  dependency qualification and postconditions; retain native case aliases.
+- Preserve an exactly matching opaque SQLite generated expression during an
+  independent owned DROP rebuild when native identifier scanning proves no
+  source reference. Keep differing expressions, unknown bindings and all
+  physical ownership/facet checks blocking.
+- Preserve SQLite identifier boundaries next to comments and quoted tokens.
+  Use native whitespace rules in catalog capture, scanning and comparison so
+  high-byte identifier content cannot be erased or rebound by generic parsing.
 - Traverse deep public SQL expression trees without recursive managed-stack
   growth in Core inspection, comparison, fingerprinting and renaming, and in
   provider rendering and proof paths. Preserve SQL, hashes, operand order,

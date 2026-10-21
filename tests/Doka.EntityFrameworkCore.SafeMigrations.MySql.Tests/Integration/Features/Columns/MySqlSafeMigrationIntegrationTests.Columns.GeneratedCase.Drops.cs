@@ -341,16 +341,25 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
         var replay = new MigrationBuilder(context.Database.ProviderName!);
         replay.DropColumnIfExists("unrelated", Table);
+        var replayReport = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, replay.Operations,
+            new SafeMigrationRunOptions("generated-unrelated-member-drop-replay"), CancellationToken.None);
+
         var replayFailure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, replay.Operations));
+        var unrelated = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
+            + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{Table}' AND COLUMN_NAME = 'unrelated';");
+
         var rows = await CountExpectedCaseRowsAsync(connectionString);
 
         // Assert
         Assert.True(preflight.Status == SafeMigrationReportStatus.Ready, DescribeGeneratedReport(preflight));
         Assert.Equal(SafeMigrationAction.Apply, preflight.Assessments[^1].Action);
         Assert.Null(failure);
+        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(replayReport.Assessments).Action);
         Assert.Null(replayFailure);
+        Assert.Equal(0, unrelated);
         Assert.Equal(5, rows);
     }
+
     /// <summary>Supplies the same exact historical model to the established analyzer target-model contract.</summary>
     private static Task<IReadOnlyList<SafeMigrationProviderAnalysis>> AnalyzeGeneratedTargetAsync(DbContext context,
         List<MigrationOperation> operations, IModel model) =>

@@ -84,6 +84,15 @@ model candidates need complete fresh native equality before proving
 nondependency. Partial candidates are never merged into fabricated completeness;
 unknown facets and opaque effects are not known nulls or absence.
 
+MariaDB DROP has an additional metadata-only sufficient proof: the actual
+physical source name is absent in every native identifier encoding from all
+surviving bound expressions. It does not prove a model or generated-set
+emptiness, evaluate SQL, or override independent blockers. MySQL's persisted
+expression spelling does not borrow MariaDB's bound-rendering guarantee.
+SQLite likewise separates native identifier absence from full expression
+semantics. Rebuild ownership may retain exactly identical opaque native/model
+SQL; it does not normalize distinct opaque expressions into equality.
+
 Source presence and dependency absence are different facts. SQL Server must
 retain an independent native DROP refusal through a neutral column
 confirmation; only exact accepted native-qualified dependency removals can

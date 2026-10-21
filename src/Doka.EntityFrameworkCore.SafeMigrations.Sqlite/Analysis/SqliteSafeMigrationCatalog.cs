@@ -348,8 +348,11 @@ internal static partial class SqliteSafeMigrationCatalog
             }
 
             found = true;
-            var directionAndAction = action[(start + "ON".Length)..].TrimStart();
-            action = directionAndAction[direction.Length..].TrimStart();
+            var directionAndAction = action.AsSpan(start + "ON".Length)
+                .TrimStart(SqliteSqlIdentifierScanner.WhitespaceCharacters);
+
+            action = directionAndAction[direction.Length..]
+                .TrimStart(SqliteSqlIdentifierScanner.WhitespaceCharacters).ToString();
         }
 
         if (!found)
@@ -572,7 +575,8 @@ internal static partial class SqliteSafeMigrationCatalog
             else if (character == ')'
                      && --depth == 0)
             {
-                return sql.AsSpan(openParenthesis + 1, index - openParenthesis - 1).Trim().ToString();
+                return sql.AsSpan(openParenthesis + 1, index - openParenthesis - 1)
+                    .Trim(SqliteSqlIdentifierScanner.WhitespaceCharacters).ToString();
             }
         }
 
@@ -689,7 +693,8 @@ internal static partial class SqliteSafeMigrationCatalog
             {
                 if (depth == 0)
                 {
-                    yield return sql.AsSpan(start, index - start).Trim().ToString();
+                    yield return sql.AsSpan(start, index - start)
+                        .Trim(SqliteSqlIdentifierScanner.WhitespaceCharacters).ToString();
                     yield break;
                 }
 
@@ -698,14 +703,15 @@ internal static partial class SqliteSafeMigrationCatalog
             else if (character == ','
                      && depth == 0)
             {
-                yield return sql.AsSpan(start, index - start).Trim().ToString();
+                yield return sql.AsSpan(start, index - start)
+                    .Trim(SqliteSqlIdentifierScanner.WhitespaceCharacters).ToString();
                 start = index + 1;
             }
         }
 
         if (start < sql.Length)
         {
-            yield return sql.AsSpan(start).Trim().ToString();
+            yield return sql.AsSpan(start).Trim(SqliteSqlIdentifierScanner.WhitespaceCharacters).ToString();
         }
     }
 
@@ -736,7 +742,7 @@ internal static partial class SqliteSafeMigrationCatalog
 
         var length = 0;
         while (length < clause.Length
-               && !char.IsWhiteSpace(clause[length]))
+               && !SqliteSqlIdentifierScanner.IsWhitespace(clause[length]))
         {
             length++;
         }
@@ -805,7 +811,7 @@ internal static partial class SqliteSafeMigrationCatalog
         var where = SqliteSqlIdentifierScanner.IndexOfKeyword(sql, "WHERE");
 
         return where >= 0
-            ? sql.AsSpan(where + "WHERE".Length).Trim().ToString()
+            ? sql.AsSpan(where + "WHERE".Length).Trim(SqliteSqlIdentifierScanner.WhitespaceCharacters).ToString()
             : null;
     }
 
@@ -887,7 +893,7 @@ internal static partial class SqliteSafeMigrationCatalog
             {
                 index += 2;
                 while (index < sql.Length
-                       && sql[index] is not '\r' and not '\n')
+                       && sql[index] != '\n')
                 {
                     index++;
                 }
@@ -962,7 +968,8 @@ internal static partial class SqliteSafeMigrationCatalog
         string clause
     )
     {
-        var value = s_indexSortOrderPattern.Replace(clause.Trim(), string.Empty);
+        var value = s_indexSortOrderPattern.Replace(
+            clause.AsSpan().Trim(SqliteSqlIdentifierScanner.WhitespaceCharacters).ToString(), string.Empty);
 
         return s_indexCollationPattern.Replace(value, string.Empty);
     }

@@ -371,7 +371,13 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     {
         var objectExists = TableExists(intent.Table);
         var tableExists = BaseTableExists(intent.Table);
-        var columnExists = ColumnExists(intent.Table, intent.Name);
+        // WHY: MariaDB catalog collation can equate accent-distinct physical
+        // columns. The same exact native lookup must govern missing-state
+        // classification, dependency qualification and replay postconditions.
+        var columnExists = isMariaDb
+            ? BuildRequiredColumnAddColumnExists(intent.Table, intent.Name,
+                BuildNativeCaseInsensitiveIdentifierMatches("c.COLUMN_NAME", Literal(intent.Name)))
+            : ColumnExists(intent.Table, intent.Name);
 
         var plan = Plan(
             $"CASE WHEN NOT {objectExists} THEN 'missing' "

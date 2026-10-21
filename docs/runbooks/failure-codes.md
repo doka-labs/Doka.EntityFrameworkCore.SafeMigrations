@@ -102,6 +102,9 @@ Generated-column capability refusals are not data-violation reports:
   `generated_column_drop_unproven` means that the surviving generated set cannot
   be certified. Inspect current native definitions and ordered lifetimes; do
   not infer a particular dependency or offending application row from this code.
+  MariaDB's native source-name absence proof and SQLite's native identifier
+  scanner can establish independence outside the full expression grammar;
+  ambiguous occurrences still need stronger dependency evidence.
   PostgreSQL also uses it when required dependency visibility, explicit table
   locking, a fresh runtime snapshot or a supported non-hierarchical owner cannot
   be established. See the [PostgreSQL DROP contract](../postgresql-behavior.md#generated-columns);

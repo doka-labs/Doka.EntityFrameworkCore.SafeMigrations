@@ -347,7 +347,10 @@ row-layout or empty-table proof. Known removals update that set; opaque effects
 and unverified owner lifetimes cannot establish nondependency. MySQL/MariaDB
 also recheck the complete native surviving generated set before accepting an
 authored candidate. The terminal EF model is not evidence that the database
-already has that shape. These checks do not promise an atomic barrier against
+already has that shape. MariaDB can separately prove the physical source name
+absent from all surviving native expressions, without accepting unknown model
+facets or certifying an empty generated set. Possible textual occurrences still
+need complete dependency evidence. These checks do not promise an atomic barrier against
 arbitrary concurrent schema changes or make a whole migration transactional.
 
 ## Model-managed data from `HasData`

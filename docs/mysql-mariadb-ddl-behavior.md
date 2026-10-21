@@ -1058,7 +1058,29 @@ The guard uses the existing column catalog, not the virtual-only administrative
 dependency tables requiring `PROCESS`. It does not add temporary-clone rights
 or treat successful `PREPARE` as proof that an ALTER can execute.
 
-This can reject a previously attempted DROP on an unmapped owner with surviving
+MariaDB additionally accepts an independent DROP when none of its surviving
+native generated expressions contains the actual physical source name in any
+native identifier encoding (plain, doubled backtick or doubled double quote).
+This metadata-only sufficient proof does not parse or execute the expressions,
+require their unrelated facets to match a model, add a database roundtrip, or
+certify the absence of generated columns. A possible occurrence inside a string,
+function or longer identifier remains unproven without a complete certificate.
+Preflight, runtime and scripts use the same fresh catalog test. A concurrent
+dependent introduced after that observation still meets native ALTER's atomic
+dependency refusal; the observation is not an independent schema lock.
+MariaDB's bound expression printer uses the physical source identity; MySQL's
+persisted expression spelling is a different contract and does not use this
+fallback. See the native [identifier printer and catalog rendering](https://github.com/MariaDB/server/blob/mariadb-11.8.3/sql/sql_show.cc)
+and [bound field identity](https://github.com/MariaDB/server/blob/mariadb-11.8.3/sql/item.cc).
+
+MariaDB DROP source lookup folds case without merging accent-distinct names.
+A missing target therefore remains a no-op even when the catalog's collation
+equates it with another physical column. The same predicate qualifies runtime
+dependency checks and replay postconditions; it does not rename or remove that
+other column.
+
+The remaining certificate requirement can reject a previously attempted DROP
+on an unmapped owner with surviving
 generated members. An operation-bound model candidate or earlier explicit
 generated-member contract can supply a candidate, but native completeness and
 equality are still mandatory. Pending analysis uses each migration's historical
