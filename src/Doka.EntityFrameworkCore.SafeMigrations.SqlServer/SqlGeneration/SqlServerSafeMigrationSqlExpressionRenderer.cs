@@ -289,7 +289,8 @@ internal sealed class SqlServerSafeMigrationSqlExpressionRenderer
         or "smallmoney" or "time" or "tinyint" or "uniqueidentifier" or "varbinary"
         or "varchar";
 
-    private static bool IsSqlServerCollationName(
+    /// <summary>Validates the literal-token grammar shared by expressions and private compiler operands.</summary>
+    internal static bool IsSqlServerCollationName(
         string name
     )
     {

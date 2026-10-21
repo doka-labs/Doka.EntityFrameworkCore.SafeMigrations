@@ -1147,6 +1147,117 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
         Assert.Equal(1, collation);
     }
 
+    /// <summary>Fresh table creation and replay retain authored source and computed character collations.</summary>
+    /// <param name="explicitCollation">Whether the generated output overrides its authored source.</param>
+    [SqlServerLiveTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GeneratedCharacterTableConvergesWithAuthoredOperandCollation(bool explicitCollation)
+    {
+        // Arrange
+        var connectionString = await CreateDatabaseAsync();
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        var definition = new ExpectedColumnDefinition("Normalized", typeof(string), true, "nvarchar(80)",
+            collation: explicitCollation ? new SafeMigrationCollationIdentifier("Latin1_General_100_CI_AS") : null,
+            computedColumnSql: "LOWER([Code])");
+
+        builder.EnsureTable(new ExpectedTableDefinition("generated_nodes",
+            [new ExpectedColumnDefinition("Id", typeof(int), false, "int"),
+                new ExpectedColumnDefinition("Code", typeof(string), true, "nvarchar(80)",
+                    collation: new SafeMigrationCollationIdentifier("Latin1_General_100_BIN2")), definition]),
+            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+
+        // Act
+        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
+            new SafeMigrationRunOptions("generated-authored-collation"));
+
+        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteSqlAsync(connectionString, "INSERT dbo.generated_nodes(Id,Code)VALUES(1,N'A');");
+        var result = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM dbo.generated_nodes WHERE Normalized=N'a';");
+        var collation = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.generated_nodes') "
+            + "AND name=N'Normalized' AND is_computed=1 AND max_length=160 AND collation_name=N'"
+            + (explicitCollation ? "Latin1_General_100_CI_AS" : "Latin1_General_100_BIN2") + "';");
+
+        // Assert
+        Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
+        Assert.Equal(1, result);
+        Assert.Equal(1, collation);
+    }
+
+    /// <summary>Projected character-index proofs preserve authored operand and computed output collations.</summary>
+    /// <param name="explicitCollation">Whether the computed output overrides its authored operand.</param>
+    [SqlServerLiveTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GeneratedCharacterIndexProofUsesAuthoredOperandCollation(bool explicitCollation)
+    {
+        // Arrange
+        var connectionString = await CreateDatabaseAsync();
+        await using var context = CreateContext(connectionString);
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
+
+        var definition = new ExpectedColumnDefinition("Normalized", typeof(string), true, "nvarchar(80)",
+            collation: explicitCollation ? new SafeMigrationCollationIdentifier("Latin1_General_100_CI_AS") : null,
+            computedColumnSql: "LOWER([Code])");
+
+        var authored = new ExpectedTableDefinition("generated_nodes",
+            [new ExpectedColumnDefinition("Code", typeof(string), true, "nvarchar(80)",
+                collation: new SafeMigrationCollationIdentifier("Latin1_General_100_BIN2"))]);
+
+        var sql = catalog.BuildProjectedComputedKeyProofSql("generated_nodes", null, definition, authored, 7);
+        await using var connection = new SqlConnection(connectionString);
+        await connection.OpenAsync();
+
+        // Act
+        var proof = await ReadCompilerProofAsync(connection, sql);
+        var remaining = await CompilerScopeExistsAsync(connection, sql);
+
+        // Assert
+        Assert.NotEqual(0, proof);
+        Assert.False(remaining);
+    }
+
+    /// <summary>Rejected authored collation tokens never enter a successful projected compiler proof.</summary>
+    /// <param name="schema">An unsupported qualifier; a missing qualifier exercises an invalid token instead.</param>
+    [SqlServerLiveTheory]
+    [InlineData(null)]
+    [InlineData("dbo")]
+    public async Task GeneratedCharacterIndexProofRejectsUnvalidatedOperandCollation(string? schema)
+    {
+        // Arrange
+        var connectionString = await CreateDatabaseAsync();
+        await using var context = CreateContext(connectionString);
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
+
+        var definition = new ExpectedColumnDefinition("Normalized", typeof(string), true, "nvarchar(80)",
+            computedColumnSql: "LOWER([Code])");
+
+        var name = schema is null ? "Latin1_General_100_BIN2;THROW 51010,N'Untrusted token',1"
+            : "Latin1_General_100_BIN2";
+
+        var authored = new ExpectedTableDefinition("generated_nodes",
+            [new ExpectedColumnDefinition("Code", typeof(string), true, "nvarchar(80)",
+                collation: new SafeMigrationCollationIdentifier(name, schema))]);
+
+        var sql = catalog.BuildProjectedComputedKeyProofSql("generated_nodes", null, definition, authored, 7);
+        await using var connection = new SqlConnection(connectionString);
+        await connection.OpenAsync();
+
+        // Act
+        var proof = await ReadCompilerProofAsync(connection, sql);
+        var remaining = await CompilerScopeExistsAsync(connection, sql);
+
+        // Assert
+        Assert.Equal(0, proof);
+        Assert.False(remaining);
+    }
+
     private static MigrationBuilder GeneratedTable(DbContext context, bool stored)
     {
         var builder = new MigrationBuilder(context.Database.ProviderName!);

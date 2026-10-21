@@ -131,6 +131,14 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 result.Append("DECLARE ").Append(bindingsVariable).Append(" nvarchar(max)=N'';\n");
             }
 
+            if (!HasSupportedComputedCollation(column))
+            {
+                // WHY: Direct projected-index proofs can receive an authored
+                // output before operation validation. Retain support=0 without
+                // putting an unvalidated literal token in executable SQL.
+                continue;
+            }
+
             var probe = new StringBuilder("SET NOCOUNT ON; IF OBJECT_ID(N'tempdb..")
                 .Append(temporary).Append("') IS NOT NULL THROW 51004, N'Computed probe scope occupied', 1; ");
 
@@ -228,7 +236,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         destination.Append(Delimited(column.Name)).Append(" AS ").Append(ComputedSql(column, expression));
         if (column.Collation is not null)
         {
-            destination.Append(" COLLATE ").Append(Delimited(column.Collation.Name));
+            // WHY: COLLATE accepts a validated literal token, not a bracketed
+            // identifier. The caller rejects unsupported names before rendering.
+            destination.Append(" COLLATE ").Append(column.Collation.Name);
         }
 
         if (column.IsStored == true)
@@ -330,7 +340,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             .Append("WHEN ty.name IN (N'time',N'datetime2',N'datetimeoffset') ")
             .Append("THEN N'('+CONVERT(nvarchar(10),c.scale)+N')' ")
             .Append("WHEN ty.name=N'float' THEN N'('+CONVERT(nvarchar(10),c.precision)+N')' ELSE N'' END ")
-            .Append("+CASE WHEN c.collation_name IS NULL THEN N'' ELSE N' COLLATE '+QUOTENAME(c.collation_name) END ")
+            // WHY: SQL Server owns these built-in catalog names. COLLATE needs
+            // their literal-token spelling; QUOTENAME produces invalid grammar.
+            .Append("+CASE WHEN c.collation_name IS NULL THEN N'' ELSE N' COLLATE '+c.collation_name END ")
             .Append("+CASE WHEN c.is_nullable=1 THEN N' NULL' ELSE N' NOT NULL' END END AS definition ")
             .Append("FROM (VALUES ");
 
@@ -418,7 +430,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     private string RenderComputedOperand(ExpectedColumnDefinition definition)
     {
         var mapping = FindColumnTypeMapping(definition);
-        if (mapping is null || SqlServerComputedColumnContract.IsComputed(definition) || definition.IsRowVersion)
+        if (mapping is null || SqlServerComputedColumnContract.IsComputed(definition) || definition.IsRowVersion
+            || !HasSupportedComputedCollation(definition))
         {
             // WHY: A rejected prior authored column cannot become a fictitious
             // built-in operand in a later computed-index projection proof.
@@ -427,9 +440,15 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
         var type = definition.StoreType ?? mapping.StoreType;
         var collation = TryGetColumnType(definition, out var parsed) && parsed.IsCharacter
-            ? " COLLATE " + (definition.Collation is null ? "DATABASE_DEFAULT" : Delimited(definition.Collation.Name))
+            ? " COLLATE " + (definition.Collation?.Name ?? "DATABASE_DEFAULT")
             : string.Empty;
 
         return Delimited(definition.Name) + " " + type + collation + (definition.IsNullable ? " NULL" : " NOT NULL");
     }
+
+    /// <summary>Rejects authored collation qualifiers and untrusted tokens before private native compilation.</summary>
+    private static bool HasSupportedComputedCollation(ExpectedColumnDefinition definition)
+        => definition.Collation is not { } collation
+            || collation.Schema is null
+                && SqlServerSafeMigrationSqlExpressionRenderer.IsSqlServerCollationName(collation.Name);
 }

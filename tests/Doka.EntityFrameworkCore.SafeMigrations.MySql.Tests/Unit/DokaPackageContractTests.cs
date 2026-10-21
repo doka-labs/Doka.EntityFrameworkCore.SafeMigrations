@@ -1,7 +1,23 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-public sealed class DokaPackageContractTests
+/// <summary>Verifies public Doka contracts without retaining offline server profiles in EF's global cache.</summary>
+public sealed class DokaPackageContractTests : IDisposable
 {
+    private readonly ServiceProvider _services;
+
+    /// <summary>Owns one provider reused by all contexts within the current test case.</summary>
+    public DokaPackageContractTests()
+    {
+        // WHY: Offline versions differ from the concurrently selected live engine.
+        // Explicit ownership preserves exact native options without retaining global variants.
+        _services = new ServiceCollection()
+            .AddEntityFrameworkDokaMySql()
+            .BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+    }
+
+    /// <summary>Releases the provider after the test's contexts have left their using scopes.</summary>
+    public void Dispose() => _services.Dispose();
+
     [Fact]
     public void ApplicationConvertedGuidRelationship_EmitsCatalogNeutralClientGuidAnnotation()
     {
@@ -220,23 +236,25 @@ public sealed class DokaPackageContractTests
         Assert.Contains("MODIFY COLUMN `OccurredAt` timestamp(6) NOT NULL", sql, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static DbContext CreateContext(
+    private DbContext CreateContext(
         MySqlServerVersion serverVersion
     )
     {
         var options = new DbContextOptionsBuilder<DbContext>().UseMySql(
                 "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
                 serverVersion)
+            .UseInternalServiceProvider(_services)
             .Options;
 
         return new DbContext(options);
     }
 
-    private static ApplicationConvertedGuidContext CreateApplicationConvertedGuidContext()
+    private ApplicationConvertedGuidContext CreateApplicationConvertedGuidContext()
     {
         var options = new DbContextOptionsBuilder<ApplicationConvertedGuidContext>().UseMySql(
                 "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test",
                 MySqlServerVersion.MySql(new Version(8, 4, 11)))
+            .UseInternalServiceProvider(_services)
             .Options;
 
         return new ApplicationConvertedGuidContext(options);

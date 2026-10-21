@@ -40,6 +40,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         var sql = new StringBuilder(2048 + definition.Columns.Count * 192)
             .Append("NOT EXISTS (SELECT 1 FROM (VALUES ");
 
+        var hasIdentity = false;
+        var hasDefaults = false;
         for (var index = 0; index < definition.Columns.Count; index++)
         {
             var column = definition.Columns[index];
@@ -49,6 +51,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 return "1 = 0";
             }
 
+            hasIdentity |= identity;
             if (index != 0)
             {
                 sql.Append(", ");
@@ -84,6 +87,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             }
             else
             {
+                hasDefaults = true;
                 sql.Append(Literal(ContractFingerprint("default", definition.Schema, definition.Table, column.Name,
                     DefaultExpression(column))));
             }
@@ -96,17 +100,29 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             .Append("LEFT JOIN sys.columns c ON c.object_id = ")
             .Append(TableId(definition.Table, definition.Schema))
             .Append(" AND c.name = expected.name ")
-            .Append("LEFT JOIN sys.types ty ON ty.user_type_id = c.user_type_id ")
-            .Append("LEFT JOIN sys.identity_columns identity_column ON identity_column.object_id = c.object_id ")
-            .Append("AND identity_column.column_id = c.column_id ")
-            .Append("LEFT JOIN sys.default_constraints dc ON dc.parent_object_id = c.object_id ")
-            .Append("AND dc.parent_column_id = c.column_id ")
-            .Append("LEFT JOIN sys.extended_properties ep ON ep.class = 1 AND ep.major_id = dc.object_id ")
-            .Append("AND ep.minor_id = 0 AND ep.name = N'Doka:SafeMigrations:Contract' ")
-            // WHY: NOT(predicate) would discard UNKNOWN. CASE treats absent
-            // columns, missing identity metadata, and missing stamps as a
-            // mismatch, preserving the original positive EXISTS semantics.
-            .Append("WHERE CASE WHEN c.column_id IS NOT NULL ")
+            .Append("LEFT JOIN sys.types ty ON ty.user_type_id = c.user_type_id ");
+
+        // WHY: SQL Server expands these catalog views during compilation. Ordinary
+        // no-identity/no-default contracts need only the sys.columns absence facets,
+        // not optional metadata joins. Mixed authored contracts retain their proofs.
+        if (hasIdentity)
+        {
+            sql.Append("LEFT JOIN sys.identity_columns identity_column ON identity_column.object_id = c.object_id ")
+                .Append("AND identity_column.column_id = c.column_id ");
+        }
+
+        if (hasDefaults)
+        {
+            sql.Append("LEFT JOIN sys.default_constraints dc ON dc.parent_object_id = c.object_id ")
+                .Append("AND dc.parent_column_id = c.column_id ")
+                .Append("LEFT JOIN sys.extended_properties ep ON ep.class = 1 AND ep.major_id = dc.object_id ")
+                .Append("AND ep.minor_id = 0 AND ep.name = N'Doka:SafeMigrations:Contract' ");
+        }
+
+        // WHY: NOT(predicate) would discard UNKNOWN. CASE treats absent
+        // columns, missing identity metadata, and missing stamps as a
+        // mismatch, preserving the original positive EXISTS semantics.
+        sql.Append("WHERE CASE WHEN c.column_id IS NOT NULL ")
             .Append("AND ty.name = expected.type_name AND ty.is_user_defined = 0 AND ty.is_assembly_type = 0 ")
             .Append("AND c.is_nullable = expected.is_nullable AND c.is_identity = expected.is_identity ")
             .Append("AND c.is_computed = 0 AND c.is_sparse = 0 AND c.is_column_set = 0 AND c.is_rowguidcol = 0 ")
@@ -117,14 +133,29 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             .Append("AND (expected.max_length IS NULL OR c.max_length = expected.max_length) ")
             .Append("AND (expected.precision_value IS NULL OR c.precision = expected.precision_value) ")
             .Append("AND (expected.scale_value IS NULL OR c.scale = expected.scale_value) ")
-            .Append("AND (expected.is_character = 0 OR c.collation_name = expected.collation_name) ")
-            .Append("AND (expected.is_identity = 0 OR (identity_column.is_not_for_replication = 0 ")
-            .Append("AND TRY_CONVERT(decimal(38,0), identity_column.seed_value) = expected.identity_seed ")
-            .Append("AND TRY_CONVERT(decimal(38,0), identity_column.increment_value) = expected.identity_increment)) ")
-            .Append("AND ((expected.default_fingerprint IS NULL AND c.default_object_id = 0) ")
-            .Append("OR (expected.default_fingerprint IS NOT NULL AND dc.object_id IS NOT NULL ")
-            .Append("AND CONVERT(nvarchar(64), ep.value) = expected.default_fingerprint ")
-            .Append("COLLATE Latin1_General_100_BIN2)) THEN 0 ELSE 1 END = 1)");
+            .Append("AND (expected.is_character = 0 OR c.collation_name = expected.collation_name) ");
+
+        if (hasIdentity)
+        {
+            sql.Append("AND (expected.is_identity = 0 OR (identity_column.is_not_for_replication = 0 ")
+                .Append("AND TRY_CONVERT(decimal(38,0), identity_column.seed_value) = expected.identity_seed ")
+                .Append("AND TRY_CONVERT(decimal(38,0), identity_column.increment_value) ")
+                .Append("= expected.identity_increment)) ");
+        }
+
+        if (hasDefaults)
+        {
+            sql.Append("AND ((expected.default_fingerprint IS NULL AND c.default_object_id = 0) ")
+                .Append("OR (expected.default_fingerprint IS NOT NULL AND dc.object_id IS NOT NULL ")
+                .Append("AND CONVERT(nvarchar(64), ep.value) = expected.default_fingerprint ")
+                .Append("COLLATE Latin1_General_100_BIN2)) ");
+        }
+        else
+        {
+            sql.Append("AND c.default_object_id = 0 ");
+        }
+
+        sql.Append("THEN 0 ELSE 1 END = 1)");
 
         return sql.ToString();
     }

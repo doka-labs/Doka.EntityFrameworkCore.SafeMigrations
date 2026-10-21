@@ -679,6 +679,27 @@ subject to 2,000 parameters and 4 MiB of UTF-8 SQL plus source payload,
 including dynamic quote expansion. These are dispatch bounds, not measured
 compilation or execution-time improvements.
 
+Direct metadata-only `UNION ALL` statements containing a complex classifier
+additionally use a 64 KiB UTF-8 text budget for grouping. Combined existing-table
+matchers can have expensive compilation even when each classifier returns only
+one row. Splitting those groups bounds the combined optimizer input while
+retaining up to 32 cheap classifiers and up to eight statements per transport batch.
+Groups containing only certified simple missing-table classifiers retain their
+32-operation limit even above this soft text budget. Adding a complex classifier
+restores the budget for the entire group. An individual classifier may exceed
+this grouping budget: it still executes alone subject to the existing 4 MiB and
+parameter limits. Delayed classifiers, all original ordinals, result completeness,
+cancellation and report atomicity
+remain unchanged. This is a deterministic query-shape bound, not an elapsed-time
+CI threshold. Command failures and incomplete results remain errors.
+
+Ordinary whole-table column matching reads identity metadata only when an
+expected column is an identity, and default-constraint/stamp metadata only
+when an expected column declares a default. Native `sys.columns` identity and
+default-object facets still reject unexpected identities and defaults when
+those joins are omitted. Expected identity settings and default fingerprints
+retain their complete metadata checks.
+
 A baseline qualification run over the hundred-thousand-operation contract attributes
 almost all analysis time to this classifier capture: of its 392 `catalog-batch`
 entries, 195 four-statement groups accounted for 3,025 s of the 3,030 s spent in

@@ -96,6 +96,21 @@ Timing evidence is informational.
 
 ### Fixed
 
+- Bound large SQL Server direct catalog statements separately from transport
+  batches to avoid compiling oversized combined matchers. Keep all operations,
+  source limits, delayed scopes and exact result validation; omit identity and
+  default metadata joins only when native absence facets prove they are not
+  needed. Timing evidence remains informational, with no timeout increase.
+- Preserve validated SQL Server collation tokens in live, authored and computed
+  output compiler definitions instead of rejecting valid character expressions
+  through invalid bracketed COLLATE syntax. Keep malformed names and schema
+  qualifiers fail-closed, including direct projected-index proofs. Compile
+  case-sensitive test fixtures only after their database-collation command
+  completes.
+- Isolate generated-column test service providers from EF's process-wide
+  provider cache and declare UTF-8 only in tests whose literals require it.
+  Preserve native fixture defaults, distinct server/canonical profiles,
+  parallel ownership and warning enforcement across the engine matrix.
 - Allow independent MariaDB column DROPs when the full native generated
   expressions prove the physical source name absent, even without a complete
   model candidate or with unrelated surviving-member facet drift. Keep all

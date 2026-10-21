@@ -983,9 +983,12 @@ MariaDB capture provider plans in 512-operation windows while retaining the
 complete expected unique-index catalog. Every transport batch remains bounded
 by 16,000 parameters and 4 MiB of UTF-8 payload; MySQL/MariaDB additionally cap
 a batch at half the live `max_allowed_packet`.
+SQL Server additionally splits large direct catalog statements into smaller
+optimizer groups without reducing the supported size of an individual operation;
+see [catalog transport](docs/sqlserver-behavior.md#catalog-transport-and-opaque-sql).
 Configured EF command timeouts apply to catalog commands and batches. A single
-operation that exceeds a bound is rejected before query execution; a failed
-later batch never publishes a partial report. The live server-provider suites
+operation that exceeds a hard payload or parameter limit is rejected before
+query execution; a failed later batch never publishes a partial report. The live server-provider suites
 qualify 100,000 deterministically ordered mixed operations on every supported
 server profile. The workload covers every observed state and planned action across
 tables, columns, indexes, and primary-key, unique, check, and foreign-key

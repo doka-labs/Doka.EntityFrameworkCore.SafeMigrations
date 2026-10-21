@@ -140,8 +140,13 @@ public sealed class SqlServerSafeMigrationGeneratedDropIntegrationTests : SqlSer
         // Arrange
         var connectionString = await CreateDatabaseAsync();
         await ExecuteSqlAsync(connectionString,
-            "ALTER DATABASE CURRENT COLLATE Latin1_General_100_" + (sensitive ? "CS_AS" : "CI_AS") + ";"
-            + "CREATE TABLE dbo.drop_nodes(L bigint NOT NULL,R bigint NOT NULL"
+            "ALTER DATABASE CURRENT COLLATE Latin1_General_100_" + (sensitive ? "CS_AS" : "CI_AS") + ";");
+
+        // WHY: SQL Server compiles a complete batch before ALTER DATABASE runs.
+        // A separate command must acquire the new identifier collation before
+        // compiling legal CS-distinct L/l fields; no product gate is involved.
+        await ExecuteSqlAsync(connectionString,
+            "CREATE TABLE dbo.drop_nodes(L bigint NOT NULL,R bigint NOT NULL"
             + (sensitive ? ",l bigint NOT NULL" : string.Empty) + "); INSERT dbo.drop_nodes VALUES"
             + (sensitive ? "(1,4,99);" : "(1,4);"));
         await using var context = CreateContext(connectionString);

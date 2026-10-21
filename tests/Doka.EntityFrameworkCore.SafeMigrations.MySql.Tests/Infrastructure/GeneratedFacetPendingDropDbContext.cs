@@ -9,6 +9,7 @@ public sealed class GeneratedFacetPendingDropDbContext : DbContext
 
     private readonly string _connectionString;
     private readonly MySqlServerVersion _serverVersion;
+    private ServiceProvider? _ownedServices;
 
     /// <summary>Initializes the isolated native database and its provider version.</summary>
     /// <param name="connectionString">The database lease owned by the calling test.</param>
@@ -17,6 +18,12 @@ public sealed class GeneratedFacetPendingDropDbContext : DbContext
     {
         _connectionString = connectionString;
         _serverVersion = serverVersion;
+        // WHY: Historical-target tests legitimately vary the canonical context and server
+        // version. Their roots belong to this context, not EF's process-wide provider cache.
+        _ownedServices = new ServiceCollection()
+            .AddEntityFrameworkDokaMySql()
+            .AddEntityFrameworkDokaMySqlSafeMigrations<GeneratedFacetPendingDropDbContext>()
+            .BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
     }
 
     /// <inheritdoc />
@@ -27,6 +34,38 @@ public sealed class GeneratedFacetPendingDropDbContext : DbContext
                 .MigrationsHistoryTable(HistoryTable));
 
         optionsBuilder.UseMySqlSafeMigrations<GeneratedFacetPendingDropDbContext>();
+        optionsBuilder.UseInternalServiceProvider(_ownedServices
+            ?? throw new ObjectDisposedException(nameof(GeneratedFacetPendingDropDbContext)));
+    }
+
+    /// <inheritdoc />
+    public override void Dispose()
+    {
+        try
+        {
+            base.Dispose();
+        }
+        finally
+        {
+            // WHY: EF's scoped services may still need their root while the context is disposed.
+            Interlocked.Exchange(ref _ownedServices, null)?.Dispose();
+        }
+    }
+
+    /// <inheritdoc />
+    public override async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await base.DisposeAsync();
+        }
+        finally
+        {
+            if (Interlocked.Exchange(ref _ownedServices, null) is { } services)
+            {
+                await services.DisposeAsync();
+            }
+        }
     }
 
     /// <inheritdoc />

@@ -956,6 +956,15 @@ read-only queries, with preambles confined to their own dynamic invocation;
 they do not depend on another classifier's execution. Grouping prevents a
 binding-mode change from fragmenting every statement. Each result retains its
 original ordinal and captured plan; projection still runs in migration order.
+Complex direct `UNION ALL` statement text also has a 64 KiB grouping budget,
+independent of the eight-statement transport and 4 MiB aggregate/source limits. A classifier
+larger than this soft bound remains eligible alone; cheap direct classifiers
+still share a statement up to the existing 32-operation limit. A group containing
+only certified simple missing-table classifiers keeps that 32-operation limit
+without the soft text split; a complex member restores the full-group budget.
+Delayed scopes are not split by this direct-only bound. Whole-table matchers omit
+identity or default catalog joins only when no expected column needs that metadata, retaining
+the native identity/default-object absence checks for every ordinary column.
 Delayed classifiers bind that ordinal as an explicit `int` parameter to a
 complete isolated `sp_executesql` classifier. Rejection and successful branches
 return one nine-column result set directly instead of inserting into a shared

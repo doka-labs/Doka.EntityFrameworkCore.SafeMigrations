@@ -67,7 +67,9 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests : MySqlSafeMigrat
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
-        await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY); "
+        // WHY: Unicode result fidelity is this table's contract, not the selected server's database default.
+        await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY) "
+            + "DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
             + $"INSERT INTO `{Table}` VALUES (1);");
         var initial = new MigrationBuilder(context.Database.ProviderName!);
         initial.EnsureColumn(Table, StringCaseColumn(result, prefix: prefix), SafeMigrationPolicy.ThrowIfDifferent);

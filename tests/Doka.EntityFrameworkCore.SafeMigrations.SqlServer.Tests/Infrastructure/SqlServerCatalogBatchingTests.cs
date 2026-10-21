@@ -274,7 +274,7 @@ public sealed class SqlServerCatalogBatchingTests
 
         // Assert
         Assert.Equal(nativeBatch ? delayed ? 4 : 2 : 0, connection.BatchExecutions);
-        Assert.Equal(nativeBatch ? 0 : delayed ? 4 : 2, connection.CommandExecutions);
+        Assert.Equal(nativeBatch ? 0 : 4, connection.CommandExecutions);
         Assert.All(connection.BatchPayloadBytes, bytes => Assert.InRange(bytes, 1, 4 * 1024 * 1024));
         Assert.All(connection.RecordedStatements, statement => Assert.InRange(
             Encoding.UTF8.GetByteCount(statement), 1, 4 * 1024 * 1024));

@@ -97,7 +97,9 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
-        await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY); "
+        // WHY: The authored utf8mb4_bin CHECK must not inherit latin1 from an older image's database default.
+        await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY) "
+            + "DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
             + $"INSERT INTO `{Table}` VALUES (1);");
         var initial = new MigrationBuilder(context.Database.ProviderName!);
         initial.EnsureCheckConstraint(StringCaseCheck("Alpha", "id"), SafeMigrationPolicy.ThrowIfDifferent);

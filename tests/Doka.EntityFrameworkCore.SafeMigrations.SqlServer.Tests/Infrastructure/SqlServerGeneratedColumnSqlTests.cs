@@ -6,6 +6,123 @@ public sealed class SqlServerGeneratedColumnSqlTests
     private const string ConnectionString =
         "Server=127.0.0.1,1433;Database=generated;User ID=sa;Password=unused;TrustServerCertificate=True";
 
+    /// <summary>All compiler paths use native COLLATE tokens rather than invalid bracketed identifiers.</summary>
+    /// <param name="declared">Whether the character operand is authored instead of read from the live catalog.</param>
+    /// <param name="explicitCollation">Whether the computed output selects an explicit collation.</param>
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void ComputedCharacterCollationsRetainNativeTokenGrammar(bool declared, bool explicitCollation)
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext(ConnectionString);
+        var catalog = CreateCatalog(context);
+        var definition = new ExpectedColumnDefinition("Normalized", typeof(string), true, "nvarchar(80)",
+            collation: explicitCollation ? new SafeMigrationCollationIdentifier("Latin1_General_100_CI_AS") : null,
+            computedColumnSql: "LOWER([Code])");
+
+        var intent = declared
+            ? (SafeMigrationIntent)new EnsureTableIntent(new ExpectedTableDefinition("generated_nodes",
+                [new ExpectedColumnDefinition("Code", typeof(string), true, "nvarchar(80)",
+                    collation: new SafeMigrationCollationIdentifier("Latin1_General_100_BIN2")), definition]),
+                SafeMigrationTableMode.StrictDefinition)
+            : new EnsureColumnIntent("generated_nodes", definition);
+
+        // Act
+        var plan = catalog.Build(new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent));
+
+        // Assert
+        Assert.False(plan.IsStaticallyUnsupported);
+        Assert.DoesNotContain("QUOTENAME(c.collation_name)", plan.CatalogPreambleSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("COLLATE [Latin1_General_100_", plan.CatalogPreambleSql, StringComparison.Ordinal);
+        if (declared || explicitCollation)
+        {
+            Assert.Contains("COLLATE Latin1_General_100_", plan.CatalogPreambleSql, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>An unaccepted authored operand cannot introduce an unvalidated native collation token.</summary>
+    /// <param name="name">The malformed token that must never reach the private compiler text.</param>
+    /// <param name="schema">An unsupported schema qualifier, if present.</param>
+    [Theory]
+    [InlineData("Latin1_General_100_BIN2;WAITFOR DELAY", null)]
+    [InlineData("Latin1 General 100 BIN2", null)]
+    [InlineData("Latin1_General_100_BIN2--", null)]
+    [InlineData("Latin1_General_100_BIN2", "dbo")]
+    public void ComputedCharacterOperandsRejectUnvalidatedCollationTokens(string name, string? schema)
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext(ConnectionString);
+        var catalog = CreateCatalog(context);
+        var definition = new ExpectedColumnDefinition("Normalized", typeof(string), true, "nvarchar(80)",
+            computedColumnSql: "LOWER([Code])");
+
+        var authored = new ExpectedTableDefinition("generated_nodes",
+            [new ExpectedColumnDefinition("Code", typeof(string), true, "nvarchar(80)",
+                collation: new SafeMigrationCollationIdentifier(name, schema))]);
+
+        // Act
+        var sql = catalog.BuildProjectedComputedKeyProofSql("generated_nodes", null, definition, authored, 7);
+
+        // Assert
+        Assert.DoesNotContain(name, sql, StringComparison.Ordinal);
+        Assert.Contains("Computed operand metadata unavailable", sql, StringComparison.Ordinal);
+    }
+
+    /// <summary>Direct index proofs cannot bypass output-collation validation from the operation planner.</summary>
+    /// <param name="name">The untrusted output token.</param>
+    /// <param name="schema">An unsupported schema qualifier, if present.</param>
+    [Theory]
+    [InlineData("Latin1_General_100_BIN2;WAITFOR DELAY", null)]
+    [InlineData("Latin1_General_100_BIN2", "dbo")]
+    public void ComputedKeyProofRejectsUnvalidatedOutputCollation(string name, string? schema)
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext(ConnectionString);
+        var catalog = CreateCatalog(context);
+        var definition = new ExpectedColumnDefinition("Normalized", typeof(string), true, "nvarchar(80)",
+            collation: new SafeMigrationCollationIdentifier(name, schema), computedColumnSql: "LOWER([Code])");
+
+        // Act
+        var sql = catalog.BuildProjectedComputedKeyProofSql("generated_nodes", null, definition, null, 7);
+
+        // Assert
+        Assert.DoesNotContain(name, sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("ALTER TABLE", sql, StringComparison.Ordinal);
+        Assert.Contains("int = 0", sql, StringComparison.Ordinal);
+    }
+
+    /// <summary>Authored index operands and generated outputs share the validated native token grammar.</summary>
+    /// <param name="explicitOperandCollation">Whether the authored operand overrides DATABASE_DEFAULT.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ComputedKeyProofPreservesValidatedCharacterCollations(bool explicitOperandCollation)
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext(ConnectionString);
+        var catalog = CreateCatalog(context);
+        var definition = new ExpectedColumnDefinition("Normalized", typeof(string), true, "nvarchar(80)",
+            collation: new SafeMigrationCollationIdentifier("Latin1_General_100_CI_AS"),
+            computedColumnSql: "LOWER([Code])");
+
+        var authored = new ExpectedTableDefinition("generated_nodes",
+            [new ExpectedColumnDefinition("Code", typeof(string), true, "nvarchar(80)",
+                collation: explicitOperandCollation
+                    ? new SafeMigrationCollationIdentifier("Latin1_General_100_BIN2") : null)]);
+
+        // Act
+        var sql = catalog.BuildProjectedComputedKeyProofSql("generated_nodes", null, definition, authored, 7);
+
+        // Assert
+        Assert.Contains("COLLATE Latin1_General_100_CI_AS", sql, StringComparison.Ordinal);
+        Assert.Contains("COLLATE " + (explicitOperandCollation ? "Latin1_General_100_BIN2" : "DATABASE_DEFAULT"),
+            sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("COLLATE [", sql, StringComparison.Ordinal);
+    }
+
     /// <summary>Accepts an overflow-guarded generated flag and compares its native physical expression.</summary>
     /// <param name="stored">Whether the generated value is persisted.</param>
     [Theory]

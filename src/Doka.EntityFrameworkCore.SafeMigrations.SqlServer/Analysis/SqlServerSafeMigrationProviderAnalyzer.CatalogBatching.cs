@@ -2,6 +2,9 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 
 internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 {
+    /// <summary>Limits direct UNION compilation without rejecting larger standalone classifiers.</summary>
+    private const int MaximumDirectClassifierStatementUtf8Bytes = 64 * 1024;
+
     /// <summary>
     /// Reads one bounded immutable capture, grouping compatible classifiers without reordering projection.
     /// </summary>
@@ -137,6 +140,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             var separator = delayed ? "\n" : SafeMigrationCatalogQueryLimits.Separator;
             var fixedPayload = Encoding.UTF8.GetByteCount(prefix) + Encoding.UTF8.GetByteCount(trailer);
             var statementPayload = fixedPayload;
+            var statementSqlBytes = fixedPayload;
+            var hasComplexDirectClassifier = false;
             var separatorBytes = Encoding.UTF8.GetByteCount(separator);
             var selections = new List<string>(maximumOperationsPerStatement);
             var templates = delayed ? new DelayedCatalogTemplates() : null;
@@ -177,7 +182,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                         ordinal, planParameters, checked(fixedPayload + individualBytes + valueBytes));
                 }
 
-                var addition = bytes + valueBytes + (selections.Count == 0 ? 0 : separatorBytes);
+                var sqlAddition = bytes + (selections.Count == 0 ? 0 : separatorBytes);
+                var addition = sqlAddition + valueBytes;
                 if ((long)payload + statementPayload + addition
                     > SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes
                     || parameterCount + statementParameters + planParameters
@@ -185,6 +191,18 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 {
                     payloadFull = true;
 
+                    break;
+                }
+
+                // WHY: Native cold probes show superlinear UNION compilation even
+                // below the transport limit. Bound direct statement text separately;
+                // larger single classifiers remain legal and later statements still
+                // share the same eight-statement transport batch. Delayed templates
+                // compile independently and retain their existing packing contract.
+                if (!delayed && selections.Count != 0
+                    && (hasComplexDirectClassifier || !plan.IsSimpleAbsentTableClassifier)
+                    && (long)statementSqlBytes + sqlAddition > MaximumDirectClassifierStatementUtf8Bytes)
+                {
                     break;
                 }
 
@@ -203,6 +221,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 }
 
                 statementPayload += addition;
+                statementSqlBytes += sqlAddition;
+                hasComplexDirectClassifier |= !plan.IsSimpleAbsentTableClassifier;
                 next++;
             }
 

@@ -59,10 +59,17 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             definition.ForeignKeys, Literal, onlyWhenTableMissing: true);
 
         List<ExpectedColumnDefinition>? computed = null;
-        for (var ordinal = 0; ordinal < definition.Columns.Count; ordinal++)
+        var simpleAbsentClassifier = targetTableKnownAbsent && definition.PrimaryKey is null
+            && definition.UniqueConstraints.Count == 0 && definition.CheckConstraints.Count == 0
+            && definition.ForeignKeys.Count == 0;
+
+        foreach (var column in definition.Columns)
         {
-            var column = definition.Columns[ordinal];
-            if (SqlServerComputedColumnContract.IsComputed(column))
+            var isComputed = SqlServerComputedColumnContract.IsComputed(column);
+            simpleAbsentClassifier &= !isComputed && column.Collation is null
+                && column.DefaultValue.Kind == SafeMigrationDefaultValueKind.None;
+
+            if (isComputed)
             {
                 (computed ??= []).Add(column);
             }
@@ -101,6 +108,11 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             + $"WHEN {matching} THEN N'matching' ELSE N'different' END",
             Bit(matching)) with
         {
+            // WHY: Only the occupancy-certified ordinary missing fast path has
+            // no definition/default/collation/inline-constraint compiler work.
+            // Its inexpensive 32-way UNION need not inherit the complex budget.
+            IsSimpleAbsentTableClassifier = simpleAbsentClassifier
+                && preamble is null && computedPreamble is null,
             ExecutionPostcondition = Bit(execution),
             CatalogPreambleSql = computedPreamble is null ? preamble
                 : preamble is null ? computedPreamble : preamble + "\n" + computedPreamble,
