@@ -24,7 +24,7 @@ setup_count="$(
 )"
 global_json_count="$(
   grep -R -h --include='*.yml' --include='*.yaml' \
-    'global-json-file: global.json' .github/workflows \
+    -E 'global-json-file: (snapshot-source/)?global\.json[[:space:]]*$' .github/workflows \
     | wc -l \
     | tr -d ' '
 )"

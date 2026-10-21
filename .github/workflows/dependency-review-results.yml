@@ -1,0 +1,247 @@
+name: Dependency review results
+
+# Automatic triggering requires this receiver on main. Existing CI may call
+# the same pipeline manually from the reviewed PR head for its first startup.
+# Never execute contributor restore hooks with a write token.
+on:
+  workflow_run:
+    workflows: [dependency-review]
+    types: [completed]
+  workflow_call:
+    inputs:
+      dependency-review-pr:
+        description: Current same-repository PR whose reviewed head is executing the manual CI caller.
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  context:
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+      checks: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      base_sha: ${{ steps.context.outputs.base_sha }}
+      head_sha: ${{ steps.context.outputs.head_sha }}
+      base_ref: ${{ steps.context.outputs.base_ref }}
+      head_ref: ${{ steps.context.outputs.head_ref }}
+      ready: ${{ steps.context.outputs.ready }}
+      artifact_id: ${{ steps.upload.outputs.artifact-id }}
+    steps:
+      - name: Checkout trusted receiver
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: engineering
+          persist-credentials: false
+
+      - name: Validate source and begin PR-head check
+        id: context
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPENDENCY_REVIEW_PR: ${{ inputs.dependency-review-pr }}
+        run: python3 engineering/eng/dependency-review-handoff.py begin --context "$RUNNER_TEMP/dependency-context.json"
+
+      - name: Retain trusted context for this receiver attempt
+        id: upload
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dependency-context-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/dependency-context.json
+          if-no-files-found: error
+          retention-days: 1
+
+  prepare-base:
+    needs: context
+    if: ${{ needs.context.outputs.ready == 'true' }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/dependency-snapshot.yml
+    with:
+      sha: ${{ needs.context.outputs.base_sha }}
+      revision: base
+
+  prepare-head:
+    needs: context
+    if: ${{ needs.context.outputs.ready == 'true' }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/dependency-snapshot.yml
+    with:
+      sha: ${{ needs.context.outputs.head_sha }}
+      revision: head
+
+  submit-nuget:
+    name: Submit NuGet (${{ matrix.revision }})
+    needs: [context, prepare-base, prepare-head]
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - revision: base
+            sha: ${{ needs.context.outputs.base_sha }}
+            ref: ${{ needs.context.outputs.base_ref }}
+            artifact_id: ${{ needs.prepare-base.outputs.artifact-id }}
+          - revision: head
+            sha: ${{ needs.context.outputs.head_sha }}
+            ref: ${{ needs.context.outputs.head_ref }}
+            artifact_id: ${{ needs.prepare-head.outputs.artifact-id }}
+    steps:
+      - name: Checkout trusted data validator only
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: engineering
+          persist-credentials: false
+
+      # IDs, unlike mutable names, cannot be redirected by another restore job.
+      # Keep all received data outside the trusted checkout and Action cwd.
+      - name: Download exact restore artifact by immutable ID
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ matrix.artifact_id }}
+          path: ${{ runner.temp }}/dependency-inputs
+          merge-multiple: true
+
+      - name: Revalidate source-bound data before snapshot writes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SNAPSHOT_SHA: ${{ matrix.sha }}
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/git/trees/${SNAPSHOT_SHA}?recursive=1" > "$RUNNER_TEMP/dependency-tree.json"
+          python3 engineering/eng/prepare-dependency-snapshot-inputs.py receive \
+            "$RUNNER_TEMP/dependency-inputs" snapshot-source \
+            "$GITHUB_WORKSPACE/snapshot-source" "$RUNNER_TEMP/dependency-tree.json"
+
+      # Only validated metadata reaches the scanner. No PR checkout, restore,
+      # binlog, project configuration or script is executed with write access.
+      - name: Submit resolved NuGet snapshot
+        uses: actions/component-detection-dependency-submission-action@98beaea5a1227f3db476e4c9ca959a0cacd7ac4f
+        with:
+          filePath: snapshot-source
+          detectorsCategories: NuGet
+          detectorsFilter: MSBuildBinaryLog
+          correlator: safemigrations-nuget-resolved-v1
+          detector-name: SafeMigrations NuGet qualification
+          detector-version: '1'
+          detector-url: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations
+          snapshot-sha: ${{ matrix.sha }}
+          snapshot-ref: ${{ matrix.ref }}
+
+  review:
+    needs: [context, prepare-base, prepare-head, submit-nuget]
+    # A failed/cancelled capture still reaches the explicit PR-head finalizer.
+    if: ${{ always() && needs.context.result == 'success' }}
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+      checks: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout trusted review policy
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: engineering
+          persist-credentials: false
+
+      - name: Download this receiver context
+        id: context-download
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.context.outputs.artifact_id }}
+          path: ${{ runner.temp }}/dependency-context
+          merge-multiple: true
+
+      - name: Require both completed snapshot submissions
+        id: admission
+        env:
+          CONTEXT_RESULT: ${{ needs.context.result }}
+          BASE_RESULT: ${{ needs.prepare-base.result }}
+          HEAD_RESULT: ${{ needs.prepare-head.result }}
+          SNAPSHOT_RESULT: ${{ needs.submit-nuget.result }}
+        run: |
+          test "$CONTEXT_RESULT" = success
+          test "$BASE_RESULT" = success
+          test "$HEAD_RESULT" = success
+          test "$SNAPSHOT_RESULT" = success
+
+      - name: Review dependency changes
+        id: review
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          base-ref: ${{ needs.context.outputs.base_sha }}
+          head-ref: ${{ needs.context.outputs.head_sha }}
+          fail-on-severity: high
+          allow-licenses: >-
+            Apache-2.0,
+            BSD-2-Clause,
+            BSD-3-Clause,
+            CC0-1.0,
+            ISC,
+            MIT,
+            MIT-0,
+            PostgreSQL,
+            Unlicense
+          # v5.0.0 ignores PURL versions; the mandatory paginated guard below
+          # binds these two existing exceptions to their exact reviewed versions.
+          allow-dependencies-licenses: >-
+            pkg:nuget/Microsoft.Data.SqlClient.SNI.runtime@6.0.3,
+            pkg:nuget/Microsoft.Identity.Client.NativeInterop@0.20.6
+          comment-summary-in-pr: never
+          show-openssf-scorecard: true
+          retry-on-snapshot-warnings: true
+          retry-on-snapshot-warnings-timeout: 180
+
+      # The pinned Action proceeds after its retry timeout. Absence of its
+      # complete-snapshot header therefore remains a separate fail-closed gate.
+      - name: Require complete snapshots and exact license-exception versions
+        id: guards
+        working-directory: engineering
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ needs.context.outputs.base_sha }}
+          HEAD_SHA: ${{ needs.context.outputs.head_sha }}
+        run: |
+          response_headers="$(mktemp)"
+          response_body="$(mktemp)"
+          trap 'rm -f "$response_headers" "$response_body"' EXIT
+
+          gh api --include \
+            -H 'Accept: application/vnd.github+json' \
+            "repos/${GITHUB_REPOSITORY}/dependency-graph/compare/${BASE_SHA}...${HEAD_SHA}?per_page=5" \
+            --jq empty >"$response_headers"
+
+          bash eng/verify-dependency-snapshot-headers.sh "$response_headers"
+
+          gh api --paginate --slurp \
+            -H 'Accept: application/vnd.github+json' \
+            "repos/${GITHUB_REPOSITORY}/dependency-graph/compare/${BASE_SHA}...${HEAD_SHA}?per_page=100" \
+            >"$response_body"
+
+          python3 eng/verify-dependency-license-exceptions.py "$response_body"
+
+      - name: Finalize the exact PR-head check
+        if: ${{ always() && steps.context-download.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPENDENCY_REVIEW_PR: ${{ inputs.dependency-review-pr }}
+          RESULTS_JSON: >-
+            {"context":"${{ needs.context.result }}","prepare-base":"${{ needs.prepare-base.result }}","prepare-head":"${{ needs.prepare-head.result }}","submit-nuget":"${{ needs.submit-nuget.result }}"}
+          REVIEW_OUTCOME: ${{ steps.admission.outcome == 'success' && steps.review.outcome == 'success' && steps.guards.outcome == 'success' && 'success' || 'failure' }}
+        run: |
+          python3 engineering/eng/dependency-review-handoff.py finish \
+            --context "$RUNNER_TEMP/dependency-context/dependency-context.json"

@@ -1,0 +1,64 @@
+name: Resolve dependency inputs
+
+# Both revisions use this exact trusted workflow. Separate caller jobs retain
+# separate immutable artifact IDs; a matrix's last output cannot replace them.
+on:
+  workflow_call:
+    inputs:
+      sha:
+        required: true
+        type: string
+      revision:
+        required: true
+        type: string
+    outputs:
+      artifact-id:
+        value: ${{ jobs.restore.outputs.artifact-id }}
+
+permissions:
+  contents: read
+
+jobs:
+  restore:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+    steps:
+      - name: Checkout trusted staging helper
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: engineering
+          persist-credentials: false
+
+      - name: Checkout exact dependency revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.sha }}
+          path: snapshot-source
+          persist-credentials: false
+
+      - name: Setup revision SDK
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: snapshot-source/global.json
+
+      # Restore can execute MSBuild hooks, so this isolated job has no write
+      # token. Its data is validated again by fresh code in the publisher.
+      - name: Restore complete dependency graph
+        working-directory: snapshot-source
+        run: dotnet restore Doka.EntityFrameworkCore.SafeMigrations.slnx --locked-mode --disable-build-servers
+
+      - name: Stage data-only dependency inputs
+        run: python3 engineering/eng/prepare-dependency-snapshot-inputs.py snapshot-source snapshot-inputs
+
+      - name: Upload this exact revision data
+        id: upload
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dependency-inputs-${{ inputs.revision }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: snapshot-inputs
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
