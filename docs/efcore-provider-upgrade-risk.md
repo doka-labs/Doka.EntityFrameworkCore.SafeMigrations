@@ -81,6 +81,24 @@ This affects lock-acquisition exception handling, not SafeMigrations guard codes
 or permission to bypass the migration lock. See the
 [versioned history repository](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/d1e40a7b211c10b354e5aa6df80d9fea710d8f58/src/Doka.EntityFrameworkCore.MySql/Internal/Migrations/MySqlHistoryRepository.cs).
 
+### GUID SQL defaults
+
+The minimum Doka 10.6.1 corrects implicit client GUID generation for properties
+with an explicit store SQL default or computed expression, including shared
+table mappings. It retains the provider's effective generation/readback
+contract and restores explicit migration metadata in model differences.
+Explicit client-generation choices and historical snapshot annotations remain
+authoritative; this update does not rewrite them. Review unpublished model and
+scaffolding differences rather than editing deployed migration history.
+
+MariaDB supports readback of unknown server-generated GUID keys. MySQL rejects
+unsupported unknown generated-key inserts before execution. Separately, native
+MySQL can reject nondeterministic `ALTER ADD ... DEFAULT (UUID())` under its
+binary-logging rules; the metadata correction does not bypass that restriction.
+See Doka's [versioned GUID SQL-default contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/53c8fbd7ae8987b5c376250fe4d6296d729669cf/docs/operations/migrations.md#guid-sql-defaults).
+
+### Typed migration metadata
+
 Doka 10.3.0 also exposes an immutable typed migration-operation metadata
 snapshot for Guid format, value-generation strategy, and ordered index prefix
 lengths. SafeMigrations uses that public contract at both runtime and design

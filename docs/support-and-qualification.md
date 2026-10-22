@@ -57,7 +57,7 @@ with roll-forward disabled. SafeMigrations supports EF Core 10 only.
 | Package | Runtime dependency contract |
 | --- | --- |
 | Core | `Microsoft.EntityFrameworkCore.Relational` `[10.0.13,10.1.0)` |
-| MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` `[10.6.0,10.7.0)` |
+| MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` `[10.6.1,10.7.0)` |
 | PostgreSQL | `Npgsql.EntityFrameworkCore.PostgreSQL` `[10.0.3,11.0.0)` |
 | SQLite | EF Core SQLite Core `[10.0.13,10.1.0)`; application-owned native bundle |
 | SQL Server (available since 10.4.6) | `Microsoft.EntityFrameworkCore.SqlServer` `[10.0.13,10.1.0)`; `System.Security.Cryptography.Pkcs` minimum `9.0.21` |
@@ -87,16 +87,22 @@ The minimum is not an exact version lock or a claim that every higher major
 version is patched. Consumers selecting PKCS 10.x must use 10.0.13 or later
 for these advisories; NuGet audit remains enabled for the actual resolved graph.
 
-The current MySQL/MariaDB package requires Doka 10.6.0 or a compatible later 10.6 patch
+The current MySQL/MariaDB package requires Doka 10.6.1 or a compatible later 10.6 patch
 release and rejects the next minor line. This boundary avoids an exact
 transitive pin without claiming compatibility across an unqualified behavioral
 SPI revision. CI does not build Doka and never uses a cross-repository
 ProjectReference. The MySQL/MariaDB package lockfile resolves the public
-Doka 10.6.0 package. Its verified signed release tag identifies source commit
-`d1e40a7b211c10b354e5aa6df80d9fea710d8f58`. The complete package, engine,
+Doka 10.6.1 package. Its verified signed release tag identifies source commit
+`53c8fbd7ae8987b5c376250fe4d6296d729669cf`. The complete package, engine,
 tooling, coverage, and performance matrix remains the SafeMigrations release
 gate; a local Doka ProjectReference or locally packed candidate is not release
 evidence.
+
+The 10.6.1 minimum preserves explicit GUID SQL defaults in Doka's model and
+migration metadata; an implicit client GUID strategy no longer overrides them.
+Explicit application generation choices and historical snapshot annotations
+remain authoritative. Review new scaffolded differences without rewriting
+deployed history; see the [GUID SQL-default upgrade boundary](efcore-provider-upgrade-risk.md#guid-sql-defaults).
 
 SafeMigrations 10.6.0 raises its Doka dependency floor to the 10.6 line.
 Doka now budgets implicit indexed string/binary
@@ -754,6 +760,11 @@ and release-asset verification.
   [package catalog provenance](https://api.nuget.org/v3/catalog0/data/2026.10.20.06.45.24/doka.entityframeworkcore.mysql.10.6.0.json),
   and [physical index-budget contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/d1e40a7b211c10b354e5aa6df80d9fea710d8f58/docs/provider-configuration.md#index-key-byte-fidelity),
   retrieved 2026-10-20.
+- [Doka 10.6.1 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.6.1),
+  [verified signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.6.1),
+  [package catalog provenance](https://api.nuget.org/v3/catalog0/data/2026.10.22.06.05.55/doka.entityframeworkcore.mysql.10.6.1.json),
+  and [GUID SQL-default contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/53c8fbd7ae8987b5c376250fe4d6296d729669cf/docs/operations/migrations.md#guid-sql-defaults),
+  retrieved 2026-10-22.
 - [MySQL 8.4 InnoDB limits](https://dev.mysql.com/doc/refman/8.4/en/innodb-limits.html),
   [MySQL 8.4 CREATE INDEX](https://dev.mysql.com/doc/refman/8.4/en/create-index.html),
   [MySQL 8.4 invisible indexes](https://dev.mysql.com/doc/refman/8.4/en/invisible-indexes.html),

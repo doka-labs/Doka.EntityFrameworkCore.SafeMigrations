@@ -7,10 +7,10 @@ publication. Run every command separately and stop on the first failure.
 
 The release target is stable 10.6.0 for all five package IDs, retaining the
 inventory introduced in 10.4.6. Review the
-[10.6.0 compatibility notes](../../CHANGELOG.md#1060---2026-10-21) and
+[10.6.0 compatibility notes](../../CHANGELOG.md#1060---2026-10-22) and
 [upgrade procedure](../support-and-qualification.md#upgrade-to-1060), including
 captured computed/CHECK contract-fingerprint reapproval, exact expression
-identity, conservative dependency proofs and the Doka 10.6/EF patch floors.
+identity, conservative dependency proofs and the Doka 10.6.1/EF patch floors.
 Historical migration source, policies, report schemas, relational model-
 fingerprint format, history, concurrency and recovery guards remain. Timing
 evidence is informational; functional and

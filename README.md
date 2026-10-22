@@ -30,7 +30,7 @@ equivalent.
 - `Doka.EntityFrameworkCore.SafeMigrations`: provider-neutral intent,
   definitions, planning, reports, and `MigrationBuilder` extensions
 - `Doka.EntityFrameworkCore.SafeMigrations.MySql`: MySQL and MariaDB adapter on
-  the public `Doka.EntityFrameworkCore.MySql` 10.6 operation-handler and
+  the public `Doka.EntityFrameworkCore.MySql` 10.6 operation-handler (minimum 10.6.1) and
   typed migration-metadata SPI
 - `Doka.EntityFrameworkCore.SafeMigrations.PostgreSql`: PostgreSQL adapter on
   Npgsql 10

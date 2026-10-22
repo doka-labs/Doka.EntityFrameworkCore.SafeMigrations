@@ -6,7 +6,7 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
-## [10.6.0] - 2026-10-21
+## [10.6.0] - 2026-10-22
 
 Version 10.6.0 updates all five packages. This minor release adds public
 searched-CASE expressions and certified generated-column/CHECK support,
@@ -57,11 +57,15 @@ Timing evidence is informational.
   contract; provider-certified native catalog normalization does not make
   arbitrary source changes equivalent or authorize a policy bypass.
 - Raise the MySQL/MariaDB provider's published Doka dependency to
-  `[10.6.0,10.7.0)` and qualify against public 10.6.0. Its complete physical
+  `[10.6.1,10.7.0)` and qualify against public 10.6.1. Its complete physical
   index-budget convention can change implicit indexed string/binary lengths;
   review newly scaffolded model differences without rewriting existing
   migrations. Retain the public migration SPI and other providers' dependency
   isolation. Doka's transitive System.IO.Hashing minimum becomes 10.0.13.
+  The 10.6.1 floor also preserves explicit GUID SQL defaults through provider
+  model differences and scaffolding instead of layering implicit client GUID
+  generation over them. Explicit application generation choices and historical
+  migration metadata remain authoritative.
 - Reject captured native expressions whose identifier keywords, cast targets,
   function/operator bindings, dialect roles or catalog identity cannot be
   proved. Pending operations previously accepted through weaker assumptions

@@ -103,7 +103,7 @@ Its first release requires independent x64 Linux qualification on all three
 declared SQL Server majors; local ARM64 test skips are not qualification.
 
 The current MySQL/MariaDB adapter consumes Doka through the bounded
-`[10.6.0,10.7.0)` NuGet dependency range. Doka 10.3.0 introduced typed
+`[10.6.1,10.7.0)` NuGet dependency range. Doka 10.3.0 introduced typed
 read-only migration metadata for Guid storage, value generation, and index
 prefixes. Doka 10.4.0 adds an explicit commandless consumed result, which the
 internal design-time-services guard uses without emitting synthetic SQL.
@@ -263,6 +263,12 @@ being accepted through broad string normalization.
   SPI; verify complete physical index-budget model conventions, existing
   packed-DECIMAL accounting and native migration/tooling follow-effects.
   Keep prior release qualification separate from new 10.6 evidence.
+- 2026-10-22: Advance the Doka floor to `[10.6.1,10.7.0)` and restore the
+  published 10.6.1 package, commit
+  `53c8fbd7ae8987b5c376250fe4d6296d729669cf`, matching its verified signed
+  release tag and NuGet catalog. Preserve explicit GUID SQL defaults through
+  real model differences and compiled scaffolding; retain explicit client
+  generation choices, native engine restrictions and consumer isolation.
 
 ### 2026-09-22 Compatibility Amendment
 
@@ -332,3 +338,8 @@ where it is created instead of rejecting published migrations later.
   [verified signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.6.0),
   and [physical index-budget contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/d1e40a7b211c10b354e5aa6df80d9fea710d8f58/docs/provider-configuration.md#index-key-byte-fidelity)
   (primary sources; retrieved 2026-10-20)
+- [Doka 10.6.1 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.6.1),
+  [NuGet catalog provenance](https://api.nuget.org/v3/catalog0/data/2026.10.22.06.05.55/doka.entityframeworkcore.mysql.10.6.1.json),
+  [verified signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.6.1),
+  and [GUID SQL-default contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/53c8fbd7ae8987b5c376250fe4d6296d729669cf/docs/operations/migrations.md#guid-sql-defaults)
+  (primary sources; retrieved 2026-10-22)

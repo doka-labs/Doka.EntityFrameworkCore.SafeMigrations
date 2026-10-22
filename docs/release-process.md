@@ -19,7 +19,7 @@ Stable 10.4.6 introduced this five-package inventory; releases 10.4.2 through
 10.4.5 retain their historical four-package set. Version 10.6.0 keeps
 the shared .NET/EF Core 10 identity and adds CASE/generated-expression support
 with independent DROP and traversal corrections. The
-[changelog](../CHANGELOG.md#1060---2026-10-21) and
+[changelog](../CHANGELOG.md#1060---2026-10-22) and
 [upgrade notes](support-and-qualification.md#upgrade-to-1060) record the
 conditional computed/CHECK contract-fingerprint changes, renewed approval
 requirements, exact expression comparison and dependency floors. Historical
