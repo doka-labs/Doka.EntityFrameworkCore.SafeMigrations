@@ -204,6 +204,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
         var eligible = new List<string>(arguments.Count);
         var exact = new List<string>(arguments.Count);
+        // WHY: Bind each argument to the same positional entry in the native signature.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < arguments.Count; index++)
         {
             var position = index.ToString(CultureInfo.InvariantCulture);
@@ -278,6 +281,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     {
         if (intent is EnsureTableIntent table)
         {
+            // WHY: Inspect immutable column snapshots without an interface enumerator.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var index = 0; index < table.Definition.Columns.Count; index++)
             {
                 if (table.Definition.Columns[index].CapturedComputedSql is not null)
@@ -286,6 +292,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 }
             }
 
+            // WHY: Inspect immutable CHECK snapshots without an interface enumerator.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var index = 0; index < table.Definition.CheckConstraints.Count; index++)
             {
                 if (table.Definition.CheckConstraints[index].CapturedSql is not null)

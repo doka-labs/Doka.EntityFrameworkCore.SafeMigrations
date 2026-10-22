@@ -797,6 +797,9 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         int start
     )
     {
+        // WHY: Advance exact UTF-16 offsets across quoted tokens so escapes cannot expose a false SQL boundary.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = start; index < sql.Length; index++)
         {
             var next = sql[index..]

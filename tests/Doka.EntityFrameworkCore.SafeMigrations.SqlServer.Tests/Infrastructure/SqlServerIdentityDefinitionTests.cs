@@ -7,6 +7,10 @@ public sealed class SqlServerIdentityDefinitionTests
         + "User ID=sa;Password=unused;TrustServerCertificate=True";
 
     /// <summary>Retains only SQL Server's documented non-null, default-free identity column types.</summary>
+    /// <param name="storeType">The authored physical column type.</param>
+    /// <param name="nullable">Whether the authored identity column permits NULL.</param>
+    /// <param name="hasDefault">Whether the authored identity column also declares a default.</param>
+    /// <param name="supported">Whether the complete identity definition is supported.</param>
     [Theory]
     [InlineData("tinyint", false, false, true)]
     [InlineData("smallint", false, false, true)]
@@ -28,11 +32,7 @@ public sealed class SqlServerIdentityDefinitionTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var clrType = storeType.StartsWith("decimal", StringComparison.Ordinal)
-            || storeType.StartsWith("numeric", StringComparison.Ordinal) ? typeof(decimal)
-            : storeType == "float" ? typeof(double) : storeType == "uniqueidentifier" ? typeof(Guid)
-            : storeType == "tinyint" ? typeof(byte) : storeType == "smallint" ? typeof(short)
-            : storeType == "bigint" ? typeof(long) : typeof(int);
+        var clrType = IdentityClrType(storeType);
 
         var definition = new ExpectedColumnDefinition("Id", clrType, nullable, storeType,
             defaultValue: hasDefault ? SafeMigrationDefaultValue.Literal(1) : SafeMigrationDefaultValue.None)
@@ -93,6 +93,9 @@ public sealed class SqlServerIdentityDefinitionTests
     }
 
     /// <summary>Rejects identity seeds and increments outside the authored target's numeric range.</summary>
+    /// <param name="storeType">The authored physical column type and numeric range.</param>
+    /// <param name="identity">The authored seed and increment payload.</param>
+    /// <param name="supported">Whether the pair fits the authored physical type.</param>
     [Theory]
     [InlineData("tinyint", "255, 1", true)]
     [InlineData("tinyint", "256, 1", false)]
@@ -117,8 +120,7 @@ public sealed class SqlServerIdentityDefinitionTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var clr = storeType.StartsWith("decimal", StringComparison.Ordinal) ? typeof(decimal)
-            : storeType == "tinyint" ? typeof(byte) : storeType == "smallint" ? typeof(short) : typeof(int);
+        var clr = IdentityClrType(storeType);
 
         var column = new ExpectedColumnDefinition("Id", clr, false, storeType)
         {
@@ -134,6 +136,35 @@ public sealed class SqlServerIdentityDefinitionTests
         // Assert
         Assert.Equal(!supported, plan.IsStaticallyUnsupported);
         Assert.Equal(supported ? null : "identity_definition_unproven", plan.UnsupportedCode);
+    }
+
+    /// <summary>Preserves every identity fixture's exact CLR mapping and ordinal fallback behavior.</summary>
+    /// <param name="storeType">The physical type or prefix supplied to the fixture.</param>
+    /// <param name="expectedClrType">The CLR type selected by the original fixture mapping.</param>
+    [Theory]
+    [InlineData("tinyint", typeof(byte))]
+    [InlineData("smallint", typeof(short))]
+    [InlineData("int", typeof(int))]
+    [InlineData("bigint", typeof(long))]
+    [InlineData("decimal(18,0)", typeof(decimal))]
+    [InlineData("numeric(18,0)", typeof(decimal))]
+    [InlineData("decimal(18,2)", typeof(decimal))]
+    [InlineData("float", typeof(double))]
+    [InlineData("uniqueidentifier", typeof(Guid))]
+    [InlineData("decimal_suffix", typeof(decimal))]
+    [InlineData("numeric_suffix", typeof(decimal))]
+    [InlineData("Decimal(18,0)", typeof(int))]
+    [InlineData("FLOAT", typeof(int))]
+    [InlineData("unknown", typeof(int))]
+    public void IdentityStoreTypeMappingsPreserveExactClrTypes(string storeType, Type expectedClrType)
+    {
+        // Arrange: The theory supplies the original store-type and CLR-type pair.
+
+        // Act
+        var clrType = IdentityClrType(storeType);
+
+        // Assert
+        Assert.Equal(expectedClrType, clrType);
     }
 
     /// <summary>Identity argument slices retain signed values and reject missing or extra fields.</summary>
@@ -321,6 +352,28 @@ public sealed class SqlServerIdentityDefinitionTests
 
         // Assert
         Assert.Same(missing, result);
+    }
+
+    /// <summary>Maps the identity fixtures' authored store types without changing their ordinal matching.</summary>
+    /// <param name="storeType">The physical type supplied by a fixture.</param>
+    /// <returns>The exact CLR type used to construct the expected column.</returns>
+    private static Type IdentityClrType(string storeType)
+    {
+        if (storeType.StartsWith("decimal", StringComparison.Ordinal)
+            || storeType.StartsWith("numeric", StringComparison.Ordinal))
+        {
+            return typeof(decimal);
+        }
+
+        return storeType switch
+        {
+            "float" => typeof(double),
+            "uniqueidentifier" => typeof(Guid),
+            "tinyint" => typeof(byte),
+            "smallint" => typeof(short),
+            "bigint" => typeof(long),
+            _ => typeof(int),
+        };
     }
 
     private static SqlServerSafeMigrationProviderAnalyzer CreateIdentityAnalyzer(

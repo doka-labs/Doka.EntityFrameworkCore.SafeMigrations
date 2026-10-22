@@ -173,6 +173,9 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
 
         var acceptedOperations = new List<MigrationOperation>(_operations.Count);
 
+        // WHY: Keep operation ordinals aligned with projection and postflight result ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var operationIndex = 0; operationIndex < _operations.Count; operationIndex++)
         {
             var operation = _operations[operationIndex];
@@ -263,6 +266,9 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
 
         var safeOrdinal = 0;
 
+        // WHY: Keep operation ordinals aligned with projection and postflight result ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < _operations.Count; index++)
         {
             if (_operations[index] is not SafeMigrationOperation operation)
@@ -292,6 +298,10 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
         Dictionary<string, CreateTableOperation>? creators = null;
         var windowStart = 0;
         var affected = 0;
+
+        // WHY: Retain stream ordinals when folding an FK into its correct preceding table creator.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             if (operations[ordinal] is CreateTableOperation create)
@@ -342,9 +352,16 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
         CreateTableOperation creator,
         AddForeignKeyOperation foreignKey)
     {
+        // WHY: Check each required FK member against the creator's explicitly indexed column list.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < foreignKey.Columns.Length; ordinal++)
         {
             var present = false;
+
+            // WHY: Check each required FK member against the creator's explicitly indexed column list.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var candidate = 0; candidate < creator.Columns.Count; candidate++)
             {
                 if (SqliteIdentifierComparer.Instance.Equals(

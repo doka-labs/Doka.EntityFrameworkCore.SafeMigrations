@@ -218,6 +218,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             $"COUNT(*) = {columns.Count.ToString(CultureInfo.InvariantCulture)}",
         };
 
+        // WHY: Match declared key members to their one-based native catalog positions.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < columns.Count; ordinal++)
         {
             conditions.Add(

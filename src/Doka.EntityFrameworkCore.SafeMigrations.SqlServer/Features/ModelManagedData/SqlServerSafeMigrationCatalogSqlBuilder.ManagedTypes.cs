@@ -12,9 +12,12 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // WHY: A derived VALUES relation avoids compiling one correlated
         // metadata EXISTS per column in both delayed guard scopes. Duplicate
         // requirements remain rows, so every original conjunction is preserved.
-        var sql = new StringBuilder(768 + columns.Count * 96)
+        var sql = new StringBuilder(768 + (columns.Count * 96))
             .Append("NOT EXISTS (SELECT 1 FROM (VALUES ");
 
+        // WHY: Retain authored column order while placing VALUES separators.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < columns.Count; index++)
         {
             var column = columns[index];

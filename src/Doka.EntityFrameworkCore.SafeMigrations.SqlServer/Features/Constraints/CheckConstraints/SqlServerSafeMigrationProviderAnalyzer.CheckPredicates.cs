@@ -13,6 +13,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         SafeMigrationProviderAnalysis[] analyses
     )
     {
+        // WHY: Bind each accepted CHECK predicate to its corresponding analysis slot.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             var operation = operations[ordinal];
@@ -47,6 +50,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         var localDrops = new HashSet<TransitionDependency>();
         var candidates = new List<SafeMigrationOperation>();
 
+        // WHY: Capture replacements only after their preceding accepted CHECK removals.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             var operation = operations[ordinal];
@@ -68,6 +74,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         var uniqueCandidates = candidates.Distinct().ToArray();
         var proofs = new SafeMigrationProviderAnalysis[uniqueCandidates.Length];
 
+        // WHY: Retain capture offsets while enforcing the bounded CHECK proof window.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var offset = 0; offset < uniqueCandidates.Length;
             offset += SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture)
         {
@@ -82,6 +91,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 cancellationToken);
         }
 
+        // WHY: Pair each CHECK replacement candidate with its captured proof slot.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < uniqueCandidates.Length; ordinal++)
         {
             CaptureProjectedCheckReplacement(uniqueCandidates[ordinal], proofs[ordinal]);

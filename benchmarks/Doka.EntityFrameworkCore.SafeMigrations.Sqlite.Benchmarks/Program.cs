@@ -1,3 +1,8 @@
+if (args is ["--maintenance-attribution", "--output", var maintenanceOutput])
+{
+    return SqliteMaintenanceAttribution.Run(maintenanceOutput);
+}
+
 using var context = new SqliteGenerationContext();
 
 var generator = context.GetService<IMigrationsSqlGenerator>();
@@ -114,7 +119,10 @@ internal sealed class SqliteGenerationContext : DbContext
 
     public SqliteGenerationContext(
         SqliteConnection connection
-    ) => _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+    )
+    {
+        _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+    }
 
     protected override void OnConfiguring(
         DbContextOptionsBuilder optionsBuilder

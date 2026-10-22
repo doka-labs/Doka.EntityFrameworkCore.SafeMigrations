@@ -90,6 +90,34 @@ SAFE_MIGRATIONS_POSTGRES_VERSION=14.24 \
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.csproj --configuration Release
 ```
 
+### Test structure and formatting
+
+Use explicit Arrange, Act, and Assert sections once each, in that order. Each
+test exposes one independently observable contract; separate unrelated positive,
+negative, and validation cases. Keep actual execution in Act, including the
+delegate passed to an exception assertion, rather than hiding it in an assertion
+helper. Theory inputs need stable, discoverable case identities.
+
+A coherent migration, replay, recovery, mutation/snapshot, or concurrency
+scenario may contain multiple operations when their ordering is the contract.
+Do not split it into order-dependent tests. Share expensive immutable setup when
+safe, but keep database leases and mutable test state independently owned; a new
+assertion must not repeat a large seed or start another container unnecessarily.
+
+Document public APIs and internal helpers where XML documentation helps IDE
+users. Explain non-obvious safety, ownership, and performance decisions with
+focused WHY comments. Separate logical groups and AAA sections with blank lines;
+also leave a blank line after control-flow blocks, multiline initializations,
+and before returns except in tiny return-only blocks. Follow `.editorconfig`
+without running `dotnet format whitespace`; use the verify-only style/import
+checks below.
+
+Keep synchronous lifecycle tests synchronous when that is the behavior under
+test. If an IDE inspection suggests replacing that intentional path, use only a
+documented, single-use test-local inspection annotation such as
+`// ReSharper disable once UseAwaitUsing`. Do not suppress compiler/analyzer
+warnings or disable inspections across a file or test family.
+
 ## Required engineering gates
 
 Run the relevant focused tests while developing. Before review, run:
@@ -107,6 +135,7 @@ dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Be
 dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks.csproj --configuration Release --no-build --no-restore -- --report-only
 dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks.csproj --configuration Release --no-build --no-restore -- --report-only
 dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks.csproj --configuration Release --no-build --no-restore -- --report-only
+python3 -m unittest eng/tests/test_parallel_test_configuration.py -v
 python3 -m unittest eng/tests/test_verify_coverage.py -v
 bash eng/tests/test-release-version.sh
 bash -e -c 'while IFS= read -r -d "" script; do bash -n "$script"; done < <(find eng -type f -name "*.sh" -print0)'
@@ -120,6 +149,21 @@ and failed budget verdicts in JSON and console output without rejecting the run.
 Invalid configuration, incomplete measurements, execution exceptions, and output
 failures still fail. Omit `--report-only` for an explicitly strict local budget
 comparison; benchmark limits must not be raised merely to make a run pass.
+
+### Maintenance attribution
+
+The four provider benchmark projects also accept `--maintenance-attribution`.
+For example, after a fresh matching Release build:
+
+```bash
+SAFE_MIGRATIONS_ATTRIBUTION_SOURCE=candidate dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks.csproj --configuration Release --no-build --no-restore -- --maintenance-attribution --output artifacts/performance/maintenance-postgresql.json
+```
+
+Retain the baseline/candidate revision or diff alongside the source-labelled JSON.
+It records raw allocation, elapsed, checksum and provider-specific output/transport
+evidence for prepared client workloads. Deterministic ADO probes are not native
+engine qualification. Elapsed times are informational; invalid evidence,
+structural/output mismatches and execution failures still fail the command.
 
 Live pooled-runner p95 comparisons for server providers are also informational.
 Their 20 measured calls and `2 * clean p95 + 250 ms` comparison remain unchanged;

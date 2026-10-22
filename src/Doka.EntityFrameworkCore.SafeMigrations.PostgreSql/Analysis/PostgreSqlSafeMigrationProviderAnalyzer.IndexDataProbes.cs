@@ -8,6 +8,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         int? commandTimeout, CancellationToken cancellationToken)
     {
         List<int>? ordinals = null;
+        // WHY: Retain original operation ordinals for the selected index data probes.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -60,6 +63,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         // cancelled packet. A type/opclass proof permits binding, never rows.
         // Exact-name Different keeps its ordinary conflict while the code
         // retains duplicate evidence for an accepted ordered replacement.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < ordinals.Count; index++)
         {
             if (!blocked[index])

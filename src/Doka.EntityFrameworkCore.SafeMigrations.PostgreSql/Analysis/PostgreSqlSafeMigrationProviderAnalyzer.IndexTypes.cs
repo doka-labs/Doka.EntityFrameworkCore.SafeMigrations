@@ -78,6 +78,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     {
         HashSet<LiveColumnIdentity>? relevant = null;
         var hasIndex = false;
+        // WHY: Select index inputs using each operation's matching analysis ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -107,6 +110,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         HashSet<LiveColumnIdentity>? priorCases = null;
         var requested = new HashSet<IndexInputRequest>();
         var requests = new List<IndexInputRequest>();
+        // WHY: Advance authored column state in operation order before index capture.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -447,6 +453,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         }
 
         HashSet<LiveColumnIdentity>? relevant = null;
+        // WHY: Keep provider proposals bound to their requested operation ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var requestedOrdinal = 0; requestedOrdinal < operations.Count; requestedOrdinal++)
         {
             cancellationToken.ThrowIfCancellationRequested();

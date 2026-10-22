@@ -64,7 +64,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         return null;
     }
 
-    /// <summary>Reads accepted PK membership without allocating a column enumeration.</summary>
+    /// <summary>Reads accepted PK membership in the snapshot's declared column order.</summary>
     /// <param name="definition">The current accepted primary key, when present.</param>
     /// <param name="column">The requested column member.</param>
     /// <param name="comparer">The provider's column-only comparison rule.</param>
@@ -79,6 +79,8 @@ internal sealed partial class SafeMigrationPreflightProjection
             return false;
         }
 
+        // WHY: Direct snapshot traversal retains the measured late-match speed on larger accepted keys.
+        // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var t in definition.Columns)
         {
             if (comparer.Equals(t, column))

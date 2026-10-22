@@ -122,6 +122,9 @@ internal sealed class SafeMigrationCSharpMigrationsGenerator : IMigrationsCodeGe
         }
 
         var result = new MigrationOperation[operations.Count - 1];
+        // WHY: Copy only the operation suffix after consuming the single leading design-time guard.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 1; ordinal < operations.Count; ordinal++)
         {
             if (operations[ordinal] is SafeMigrationDesignTimeServicesRequiredOperation)

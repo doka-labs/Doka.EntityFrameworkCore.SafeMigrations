@@ -212,6 +212,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         conditions.Add(definition.NullsDistinct == false ? nullsNotDistinct : $"NOT ({nullsNotDistinct})");
 
         var plainKeys = new List<(int Position, ExpectedIndexKeyDefinition Key)>(definition.Keys.Count);
+        // WHY: Translate key ordinals to PostgreSQL's zero- and one-based catalog slots.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < definition.Keys.Count; index++)
         {
             var position = index + 1;
@@ -307,6 +310,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             conditions.Add(PlainIndexKeysMatch(plainKeys));
         }
 
+        // WHY: Place INCLUDE members after key members in native index ordinal order.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < definition.IncludedColumns.Count; index++)
         {
             var position = definition.Keys.Count + index + 1;

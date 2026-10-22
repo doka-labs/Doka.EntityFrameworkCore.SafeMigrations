@@ -172,6 +172,9 @@ internal static class SafeMigrationSqlExpressionParser
 
             var leftOffset = 0;
             var rightOffset = 0;
+            // WHY: Pair corresponding tokens while preserving each source's independent quoted-text offsets.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var index = 0; index < leftColumns.Count; index++)
             {
                 var first = leftColumns[index];
@@ -1026,6 +1029,10 @@ internal static class SafeMigrationSqlExpressionParser
                         original
                     ) =>
                     {
+                        // WHY: Write each folded ASCII code unit to the same destination offset without changing quoted
+                        // roles.
+                        // ReSharper disable once ForCanBeConvertedToForeach
+                        // ReSharper disable once LoopCanBeConvertedToQuery
                         for (var index = 0; index < original.Length; index++)
                         {
                             var character = original[index];

@@ -21,6 +21,9 @@ internal sealed partial class SafeMigrationPostflightProjection
 
         Dictionary<int, SafeMigrationPostflightRenameProbe>? rewritten = null;
         var safeOrdinal = 0;
+        // WHY: Keep whole-stream positions aligned with safe-only analysis positions across rename boundaries.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             if (operations[ordinal] is not SafeMigrationOperation operation)
@@ -205,6 +208,9 @@ internal sealed partial class SafeMigrationPostflightProjection
         if (ownColumns && uniqueKeys is not null)
         {
             ExpectedModelManagedDataUniqueKeyDefinition[]? rewrittenKeys = null;
+            // WHY: Replace only changed unique-key entries at their original snapshot positions.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var index = 0; index < uniqueKeys.Count; index++)
             {
                 var key = uniqueKeys[index];
@@ -230,6 +236,9 @@ internal sealed partial class SafeMigrationPostflightProjection
         if (foreignKeys is not null)
         {
             ExpectedModelManagedDataForeignKeyDefinition[]? rewrittenKeys = null;
+            // WHY: Replace only changed foreign-key entries without reordering the retained snapshot.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var index = 0; index < foreignKeys.Count; index++)
             {
                 var key = foreignKeys[index];
@@ -303,6 +312,9 @@ internal sealed partial class SafeMigrationPostflightProjection
     {
         result = members;
         string[]? rewritten = null;
+        // WHY: Rewrite the matching member in its original position without reordering composite keys.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < members.Count; index++)
         {
             if (!comparer.Equals(members[index], rename.Name))

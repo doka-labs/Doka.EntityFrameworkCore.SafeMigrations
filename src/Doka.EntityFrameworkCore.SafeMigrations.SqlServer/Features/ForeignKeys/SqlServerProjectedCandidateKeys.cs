@@ -127,6 +127,9 @@ internal sealed class SqlServerProjectedCandidateKeys
             }
 
             var matching = true;
+            // WHY: Compare each candidate column identity with the same requested key position.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var ordinal = 0; ordinal < columns.Count; ordinal++)
             {
                 if (pair.Value[ordinal].Id <= 0 || pair.Value[ordinal].Id != columnIds[ordinal])
@@ -143,7 +146,7 @@ internal sealed class SqlServerProjectedCandidateKeys
             }
         }
 
-        return result is null ? [] : result;
+        return result ?? [];
     }
 
     /// <summary>Matches live columns by their resolved physical ids and new columns by exact authored names.</summary>
@@ -171,6 +174,9 @@ internal sealed class SqlServerProjectedCandidateKeys
 
             var matching = true;
 
+            // WHY: Match each candidate key position with its requested identity or name.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var ordinal = 0; ordinal < key.Count; ordinal++)
             {
                 if (key[ordinal].Id > 0
@@ -214,6 +220,9 @@ internal sealed class SqlServerProjectedCandidateKeys
 
         var key = new List<KeyColumn>(columns.Count);
 
+        // WHY: Pair each authored key name with its optional physical column identity.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < columns.Count; ordinal++)
         {
             key.Add(new KeyColumn(columns[ordinal], columnIds.Length == columns.Count ? columnIds[ordinal] : 0));
@@ -272,9 +281,12 @@ internal sealed class SqlServerProjectedCandidateKeys
 
         foreach (var columns in keys.Values)
         {
+            // WHY: Replace renamed key members in their existing ordered slots.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var ordinal = 0; ordinal < columns.Count; ordinal++)
             {
-                if (columnId > 0 && columns[ordinal].Id == columnId || columns[ordinal].Name == name)
+                if ((columnId > 0 && columns[ordinal].Id == columnId) || columns[ordinal].Name == name)
                 {
                     columns[ordinal] = columns[ordinal] with { Name = newName };
                 }
@@ -298,7 +310,7 @@ internal sealed class SqlServerProjectedCandidateKeys
         }
 
         foreach (var index in keys.Where(pair => pair.Value.Any(column => column.Name == name
-                || columnId > 0 && column.Id == columnId)).Select(static pair => pair.Key).ToArray())
+                || (columnId > 0 && column.Id == columnId))).Select(static pair => pair.Key).ToArray())
         {
             keys.Remove(index);
         }

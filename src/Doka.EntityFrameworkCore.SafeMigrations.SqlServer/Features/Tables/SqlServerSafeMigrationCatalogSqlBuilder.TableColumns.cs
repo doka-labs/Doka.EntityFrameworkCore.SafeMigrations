@@ -8,6 +8,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     )
     {
         List<ExpectedColumnDefinition>? computed = null;
+        // WHY: Scan immutable column definitions without an interface enumerator.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < definition.Columns.Count; ordinal++)
         {
             var column = definition.Columns[ordinal];
@@ -42,6 +45,10 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
         var hasIdentity = false;
         var hasDefaults = false;
+
+        // WHY: Preserve expected column order while placing VALUES separators.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < definition.Columns.Count; index++)
         {
             var column = definition.Columns[index];

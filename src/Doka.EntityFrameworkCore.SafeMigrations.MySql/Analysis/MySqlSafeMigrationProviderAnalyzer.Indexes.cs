@@ -271,6 +271,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         IReadOnlyDictionary<string, SafeMigrationIndexPhysicalEnvironment> environments
     )
     {
+        // WHY: Attach captured environment facts to the plan or analysis for the same operation ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Length; ordinal++)
         {
             var table = GetPhysicalKeyTable(operations[ordinal].Intent);
@@ -369,6 +372,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                 var count = Math.Min(SafeMigrationCatalogQueryLimits.MaximumInventoryValues, tables.Length - offset);
                 var parameterNames = new string[count];
                 var valueBytes = 0;
+                // WHY: Keep bounded owner parameters aligned with their generated parameter-name slots.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var index = 0; index < count; index++)
                 {
                     var parameter = command.CreateParameter();

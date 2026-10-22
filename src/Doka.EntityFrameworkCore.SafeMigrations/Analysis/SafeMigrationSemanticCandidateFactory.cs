@@ -41,6 +41,9 @@ internal static class SafeMigrationSemanticCandidateFactory
     {
         var expected = IndexExpectedOperations(operations, defaultSchema, projectUniqueIndexesAsUniqueConstraints);
 
+        // WHY: Keep candidate correlation tied to the original unexpected-object ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < unexpectedObjects.Count; index++)
         {
             var unexpected = unexpectedObjects[index];

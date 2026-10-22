@@ -337,6 +337,9 @@ internal static class SqlServerIdentifierContract
         // grouped names. Stop at the first repeat while leaving every original
         // reference available to the unchanged catalog guard after validation.
         var scopes = new HashSet<(SqlServerIdentifierScope Scope, string Schema, string? Table)>();
+        // WHY: Scan the captured reference list without an interface enumerator.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < references.Count; index++)
         {
             var reference = references[index];
@@ -370,6 +373,9 @@ internal static class SqlServerIdentifierContract
             return false;
         }
 
+        // WHY: Advance over UTF-16 surrogate pairs as one valid identifier character.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < value.Length; index++)
         {
             if (char.IsHighSurrogate(value[index]))

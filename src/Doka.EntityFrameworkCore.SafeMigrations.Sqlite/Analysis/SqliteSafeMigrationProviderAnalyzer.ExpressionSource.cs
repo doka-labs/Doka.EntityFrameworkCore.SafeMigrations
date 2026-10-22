@@ -10,8 +10,15 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
     private static bool HasMissingDeclaredExpressionColumns(ExpectedTableDefinition definition)
     {
         HashSet<string>? references = null;
-        foreach (var column in definition.Columns)
+        var columns = definition.Columns;
+        var columnCount = columns.Count;
+
+        // WHY: Ordinary immutable columns need no enumerator merely to discover expression sources.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var columnIndex = 0; columnIndex < columnCount; columnIndex++)
         {
+            var column = columns[columnIndex];
             if (column.ComputedExpression is { } expression)
             {
                 references ??= new HashSet<string>(s_identifierComparer);
@@ -19,8 +26,15 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             }
         }
 
-        foreach (var check in definition.CheckConstraints)
+        var checks = definition.CheckConstraints;
+        var checkCount = checks.Count;
+
+        // WHY: Keep immutable CHECK source collection ordered without a separate enumerator.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var checkIndex = 0; checkIndex < checkCount; checkIndex++)
         {
+            var check = checks[checkIndex];
             if (check.Expression is { } expression)
             {
                 references ??= new HashSet<string>(s_identifierComparer);
@@ -33,9 +47,12 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             return false;
         }
 
-        foreach (var column in definition.Columns)
+        // WHY: Reuse the same column snapshot while removing each declared physical source name.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var columnIndex = 0; columnIndex < columnCount; columnIndex++)
         {
-            _ = references.Remove(column.Name);
+            _ = references.Remove(columns[columnIndex].Name);
         }
 
         // WHY: SQLite can reinterpret a double-quoted unknown name as a string
@@ -57,6 +74,8 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
 
         var references = new HashSet<string>(s_identifierComparer);
         SafeMigrationSqlExpressionInspector.CollectIdentifiers(expression, references);
+
+        // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
         foreach (var reference in references)
         {
             if (!table.Columns.ContainsKey(reference))

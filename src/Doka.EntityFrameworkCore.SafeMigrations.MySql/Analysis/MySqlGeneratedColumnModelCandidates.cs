@@ -23,6 +23,9 @@ internal static class MySqlGeneratedColumnModelCandidates
         }
 
         Dictionary<IModel, List<MigrationOperation>>? requests = null;
+        // WHY: Keep captured proofs and plan slots tied to the exact owning operation ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < operations.Count; index++)
         {
             if (operations[index] is not SafeMigrationOperation { Intent: DropColumnIntent or RenameColumnIntent }

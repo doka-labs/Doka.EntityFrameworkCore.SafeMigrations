@@ -105,6 +105,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         }
 
         var predicates = new string[sources.Count];
+        // WHY: Store dependency predicates in their reserved slots without changing source-member order.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < sources.Count; index++)
         {
             predicates[index] = StringComparer.OrdinalIgnoreCase.Equals(sources[index], intent.Definition.Name)

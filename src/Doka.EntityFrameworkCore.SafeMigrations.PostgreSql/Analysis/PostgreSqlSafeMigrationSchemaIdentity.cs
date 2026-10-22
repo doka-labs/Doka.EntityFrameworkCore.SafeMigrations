@@ -84,6 +84,9 @@ internal static class PostgreSqlSafeMigrationSchemaIdentity
             case EnsureForeignKeyIntent foreignKey:
                 return foreignKey.Definition.PrincipalSchema is null;
             case EnsureTableIntent table:
+                // WHY: Indexing avoids an interface enumerator for this immutable FK snapshot.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var index = 0; index < table.Definition.ForeignKeys.Count; index++)
                 {
                     if (table.Definition.ForeignKeys[index].PrincipalSchema is null)
@@ -94,6 +97,9 @@ internal static class PostgreSqlSafeMigrationSchemaIdentity
 
                 break;
             case DeleteModelManagedDataIntent delete:
+                // WHY: Indexing avoids an interface enumerator for this immutable FK snapshot.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var index = 0; index < delete.ForeignKeys.Count; index++)
                 {
                     if (delete.ForeignKeys[index].Schema is null)
@@ -155,6 +161,8 @@ internal static class PostgreSqlSafeMigrationSchemaIdentity
         {
             // WHY: This guard is captured for every generated table plan.
             // An indexed scan avoids a captured delegate and iterator allocation.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var index = 0; index < table.Definition.ForeignKeys.Count; index++)
             {
                 var foreignKey = table.Definition.ForeignKeys[index];
@@ -183,9 +191,8 @@ internal static class PostgreSqlSafeMigrationSchemaIdentity
         // fallback. DROP/RENAME never execute their native baseline when the
         // exact current-schema source is absent. Other references still need
         // native ownership proof before any row query or executable baseline.
-
-        return binding.Schema is null || currentSchemaCandidate is not null
-            && StringComparer.Ordinal.Equals(binding.Schema, currentSchemaCandidate) ? binding.Name : null;
+        return binding.Schema is null || (currentSchemaCandidate is not null
+            && StringComparer.Ordinal.Equals(binding.Schema, currentSchemaCandidate)) ? binding.Name : null;
     }
 
     /// <summary>Removes consumed sources and adds surviving native destination bindings after accepted DDL.</summary>
@@ -198,9 +205,6 @@ internal static class PostgreSqlSafeMigrationSchemaIdentity
         string? currentSchemaCandidate = null
     )
     {
-        static bool IsCurrentAlias(string? schema, string? candidate)
-            => schema is null || candidate is not null && StringComparer.Ordinal.Equals(schema, candidate);
-
         switch (intent)
         {
             case DropTableIntent value when IsCurrentAlias(value.Schema, currentSchemaCandidate):
@@ -229,6 +233,11 @@ internal static class PostgreSqlSafeMigrationSchemaIdentity
                 Add(value.Definition.Name, value.Definition.Schema, tables);
                 break;
         }
+
+        return;
+
+        static bool IsCurrentAlias(string? schema, string? candidate)
+            => schema is null || (candidate is not null && StringComparer.Ordinal.Equals(schema, candidate));
     }
 
     /// <summary>Records only actual unqualified bindings; explicit schemas never enter a native-path guard.</summary>

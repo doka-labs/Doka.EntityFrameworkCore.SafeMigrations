@@ -53,6 +53,9 @@ public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
         if ((options & MigrationsSqlGenerationOptions.Script) != 0
             && operations.Any(static operation => operation is SafeMigrationOperation))
         {
+            // WHY: Report the rejected script operation at its original stream ordinal.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var ordinal = 0; ordinal < operations.Count; ordinal++)
             {
                 if (operations[ordinal] is SafeMigrationOperation safeOperation)
@@ -70,6 +73,10 @@ public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
             : model;
 
         var result = new List<MigrationCommand>(operations.Count);
+
+        // WHY: Advance structural batch boundaries while retaining original stream ordinals for diagnostics.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count;)
         {
             var operation = operations[ordinal];

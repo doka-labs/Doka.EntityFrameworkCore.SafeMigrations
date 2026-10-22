@@ -47,6 +47,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         bool[]? unproven = null;
         var laterIdentityBoundary = false;
         HashSet<string>? bindings = null;
+        // WHY: Walk backward so later identity boundaries invalidate only earlier evidence.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = operations.Count - 1; ordinal >= 0; ordinal--)
         {
             var operation = operations[ordinal];
@@ -231,6 +234,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 
                 if (operation is CreateTableOperation table)
                 {
+                    // WHY: Read both qualifier flags from the same provider-owned FK list.
+                    // ReSharper disable once ForCanBeConvertedToForeach
+                    // ReSharper disable once LoopCanBeConvertedToQuery
                     for (var index = 0; index < table.ForeignKeys.Count; index++)
                     {
                         hasUnqualifiedOwner |= table.ForeignKeys[index].PrincipalSchema is null;

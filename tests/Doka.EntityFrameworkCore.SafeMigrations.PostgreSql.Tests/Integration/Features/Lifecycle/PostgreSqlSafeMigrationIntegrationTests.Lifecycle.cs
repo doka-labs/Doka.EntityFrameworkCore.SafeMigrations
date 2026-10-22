@@ -1,7 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
 /// <summary>Runs the Lifecycle PostgreSQL feature cases independently.</summary>
-public sealed class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
+public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned container for this feature.</summary>
     /// <param name="fixture">The shared PostgreSQL container fixture.</param>
@@ -140,91 +140,46 @@ public sealed class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafeMigratio
                 + "AND column_name = 'payload';"));
     }
 
-    [Fact]
-    public async Task MigrationScripts_ExecuteNormalIdempotentAndNoTransactionPaths()
+    /// <summary>Applies one script mode and retains its original replay/history contract.</summary>
+    /// <param name="caseId">The independently selectable generation mode.</param>
+    [Theory]
+    [InlineData("normal")]
+    [InlineData("idempotent")]
+    [InlineData("idempotent-no-transactions")]
+    public async Task MigrationScripts_ExecuteSelectedMode(string caseId)
     {
-        var generationConnectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await using var generationContext = CreateContext(generationConnectionString);
-        var migrator = generationContext.GetService<IMigrator>();
-        var scripts = new[]
+        // Arrange
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
+        await using var context = CreateContext(connectionString);
+        var options = caseId switch
         {
-            migrator.GenerateScript(), migrator.GenerateScript(options: MigrationsSqlGenerationOptions.Idempotent),
-            migrator.GenerateScript(
-                options: MigrationsSqlGenerationOptions.Idempotent | MigrationsSqlGenerationOptions.NoTransactions),
+            "normal" => default(MigrationsSqlGenerationOptions),
+            "idempotent" => MigrationsSqlGenerationOptions.Idempotent,
+            "idempotent-no-transactions" => MigrationsSqlGenerationOptions.Idempotent
+                | MigrationsSqlGenerationOptions.NoTransactions,
+            _ => throw new ArgumentOutOfRangeException(nameof(caseId), caseId, "Unknown script mode."),
         };
 
-        foreach (var script in scripts)
+        // Act
+        var script = context.GetService<IMigrator>().GenerateScript(options: options);
+        await ExecuteSqlAsync(connectionString, script);
+        if (caseId != "normal")
         {
-            Assert.Contains(CoreConvergenceMigration.MigrationIdentifier, script, StringComparison.Ordinal);
-            var connectionString = await CreateDatabaseAsync(CancellationToken.None);
             await ExecuteSqlAsync(connectionString, script);
-            if (script != scripts[0])
-            {
-                await ExecuteSqlAsync(connectionString, script);
-            }
-
-            Assert.Equal(
-                1,
-                await ScalarIntAsync(
-                    connectionString,
-                    "SELECT COUNT(*) FROM information_schema.columns "
-                    + "WHERE table_schema = current_schema() AND table_name = 'pipeline_state' "
-                    + "AND column_name = 'payload';"));
-            Assert.Equal(
-                1,
-                await ScalarIntAsync(
-                    connectionString,
-                    $"SELECT COUNT(*) FROM \"__ApplicationDbContextMigrationsHistory\" "
-                    + $"WHERE \"MigrationId\" = '{CoreConvergenceMigration.MigrationIdentifier}';"));
         }
-    }
 
-    [Fact]
-    public async Task ConcurrentMigrators_SerializePerDatabaseAndRunDifferentDatabasesInParallel()
-    {
-        var sharedConnectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(
-            sharedConnectionString,
-            "CREATE TABLE \"__LegacyMigrationsHistory\" (\"MigrationId\" text NOT NULL); "
-            + "INSERT INTO \"__LegacyMigrationsHistory\" VALUES ('legacy-unchanged');");
-        await using var first = CreateContext(sharedConnectionString);
-        await using var second = CreateContext(sharedConnectionString);
-        await Task.WhenAll(
-            first.Database.MigrateAsync(cancellationToken: CancellationToken.None),
-            second
-                .GetService<IMigrator>()
-                .MigrateAsync(cancellationToken: CancellationToken.None));
+        var payloadColumns = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM information_schema.columns "
+            + "WHERE table_schema = current_schema() AND table_name = 'pipeline_state' "
+            + "AND column_name = 'payload';");
+        var historyRows = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM \"__ApplicationDbContextMigrationsHistory\" "
+            + $"WHERE \"MigrationId\" = '{CoreConvergenceMigration.MigrationIdentifier}';");
 
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                sharedConnectionString,
-                $"SELECT COUNT(*) FROM \"__ApplicationDbContextMigrationsHistory\" "
-                + $"WHERE \"MigrationId\" = '{CoreConvergenceMigration.MigrationIdentifier}';"));
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                sharedConnectionString,
-                "SELECT COUNT(*) FROM \"__LegacyMigrationsHistory\" " + "WHERE \"MigrationId\" = 'legacy-unchanged';"));
-
-        var leftConnectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var rightConnectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await using var left = CreateContext(leftConnectionString);
-        await using var right = CreateContext(rightConnectionString);
-        await Task.WhenAll(left.Database.MigrateAsync(cancellationToken: CancellationToken.None), right.Database.MigrateAsync(cancellationToken: CancellationToken.None));
-
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                leftConnectionString,
-                "SELECT COUNT(*) FROM information_schema.tables "
-                + "WHERE table_schema = current_schema() AND table_name = 'pipeline_state';"));
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                rightConnectionString,
-                "SELECT COUNT(*) FROM information_schema.tables "
-                + "WHERE table_schema = current_schema() AND table_name = 'pipeline_state';"));
+        // Assert
+        Assert.Contains(CoreConvergenceMigration.MigrationIdentifier, script, StringComparison.Ordinal);
+        Assert.Equal(1, payloadColumns);
+        Assert.Equal(1, historyRows);
     }
 
     [Fact]

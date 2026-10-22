@@ -40,6 +40,8 @@ internal readonly record struct MySqlSafeMigrationColumnMetadata(
         };
 
         var explicitBackfillAnnotationCount = 0;
+        // WHY: Captured annotations are an array; indexed replay showed no whole-method allocation benefit.
+        // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var annotation in definition.ProviderAnnotations)
         {
             var value = annotation.CreateValueSnapshot();

@@ -45,7 +45,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         if (isIdentity && (definition.IsNullable || definition.IsRowVersion
             || definition.DefaultValue.Kind != SafeMigrationDefaultValueKind.None
             || type.Name is not ("tinyint" or "smallint" or "int" or "bigint" or "decimal" or "numeric")
-            || type.Name is "decimal" or "numeric" && type.Scale != 0
+            || (type.Name is "decimal" or "numeric" && type.Scale != 0)
             || !IdentityValueFitsType(seed, type) || increment == 0 || !IdentityValueFitsType(increment, type)))
         {
             return "identity_definition_unproven";
@@ -472,6 +472,10 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         if (type.Name is "decimal" or "numeric" && type.Precision is < 19)
         {
             var limit = 1L;
+
+            // WHY: Build the exact identity precision bound without floating-point powers.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var digit = 0; digit < type.Precision; digit++)
             {
                 limit *= 10;

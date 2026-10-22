@@ -60,8 +60,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         {
             if (GetUnsupportedModelManagedDataFeature(seed) is not null
                 || !seed.KeyColumns.SequenceEqual(primaryColumns, StringComparer.Ordinal)
-                || requireCapturedUniqueKey && !seed.KeyColumns.SequenceEqual(uniqueColumns, StringComparer.Ordinal)
-                && !seed.UniqueKeys.Any(key => key.Columns.SequenceEqual(uniqueColumns, StringComparer.Ordinal)))
+                || (requireCapturedUniqueKey && !seed.KeyColumns.SequenceEqual(uniqueColumns, StringComparer.Ordinal)
+                && !seed.UniqueKeys.Any(key => key.Columns.SequenceEqual(uniqueColumns, StringComparer.Ordinal))))
             {
                 return null;
             }
@@ -111,6 +111,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 }
             }
 
+            // WHY: Pair each seed column with its captured store type and matrix ordinal.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var ordinal = 0; ordinal < seed.Columns.Count; ordinal++)
             {
                 if (!projected.TryGetValue(seed.Columns[ordinal], out var definition)
@@ -132,6 +135,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                     return null;
                 }
 
+                // WHY: Validate every value at the current column ordinal against that column type.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var row = 0; row < seed.RowCount; row++)
                 {
                     var value = seed.Values.GetUnsafeValue(row, ordinal);
@@ -196,6 +202,10 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
             var types = new string[selectedColumns.Length];
             var ordinals = new int[selectedColumns.Length];
+
+            // WHY: Keep projected types and captured matrix ordinals aligned by key position.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var ordinal = 0; ordinal < selectedColumns.Length; ordinal++)
             {
                 var name = selectedColumns[ordinal];
@@ -227,10 +237,17 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 }
             }
 
+            // WHY: Read each seed row by matrix ordinal while retaining its row fingerprint.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var row = 0; row < seed.RowCount; row++)
             {
                 var values = new string[selectedColumns.Length + 1];
                 values[0] = $"0x{AuthoredRowFingerprint(seed, row)}";
+
+                // WHY: Align selected key names, types, matrix ordinals and output value slots.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var ordinal = 0; ordinal < selectedColumns.Length; ordinal++)
                 {
                     var value = seed.Values.GetUnsafeValue(row, ordinals[ordinal]);
@@ -311,6 +328,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         string name
     )
     {
+        // WHY: Return the actual captured column position without a temporary projection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < columns.Count; ordinal++)
         {
             if (StringComparer.Ordinal.Equals(columns[ordinal], name))

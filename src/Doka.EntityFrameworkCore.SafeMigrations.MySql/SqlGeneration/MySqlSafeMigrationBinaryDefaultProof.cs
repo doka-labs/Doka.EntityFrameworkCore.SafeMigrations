@@ -52,6 +52,9 @@ internal sealed record MySqlSafeMigrationBinaryDefaultProof(
         builder.Append(BuildResetSql(proofs.Count, variableOffset, clear: false));
         builder.Append("SET ").Append(sqlVariable).Append(" = CASE WHEN ").Append(executionGuard)
             .Append(" THEN CONCAT('SELECT '");
+        // WHY: Preserve binary-proof variable slots and their ordered bounded selection ranges.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < proofs.Count; ordinal++)
         {
             var query = proofs[ordinal].QueryExpression;
@@ -73,6 +76,9 @@ internal sealed record MySqlSafeMigrationBinaryDefaultProof(
         }
 
         builder.Append(", ' INTO ");
+        // WHY: Preserve binary-proof variable slots and their ordered bounded selection ranges.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < proofs.Count; ordinal++)
         {
             if (ordinal > 0)
@@ -103,6 +109,9 @@ internal sealed record MySqlSafeMigrationBinaryDefaultProof(
         }
 
         var builder = new StringBuilder("SET ");
+        // WHY: Preserve binary-proof variable slots and their ordered bounded selection ranges.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < count; ordinal++)
         {
             if (ordinal > 0)

@@ -44,6 +44,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     )
     {
         var hasComputed = false;
+        // WHY: Stop the indexed stream scan as soon as a computed column is found.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count && !hasComputed; ordinal++)
         {
             switch (operations[ordinal].Intent)
@@ -52,6 +55,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     hasComputed = SqlServerComputedColumnContract.IsComputed(column.Definition);
                     break;
                 case EnsureTableIntent table:
+                    // WHY: Stop the immutable column scan at its first computed member.
+                    // ReSharper disable once ForCanBeConvertedToForeach
+                    // ReSharper disable once LoopCanBeConvertedToQuery
                     for (var index = 0; index < table.Definition.Columns.Count && !hasComputed; index++)
                     {
                         hasComputed = SqlServerComputedColumnContract.IsComputed(table.Definition.Columns[index]);
@@ -239,6 +245,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
         foreach (var proofs in _projectedComputedKeys.Values)
         {
+            // WHY: Replace matching proof records in their existing collection slots.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var index = 0; index < proofs.Count; index++)
             {
                 var proof = proofs[index];

@@ -15,6 +15,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
     private readonly ISqlGenerationHelper _sqlGenerationHelper;
     private readonly PostgreSqlSafeMigrationCatalogSqlBuilder _catalogSqlBuilder;
 
+    /// <summary>Shares native mapping and identifier services across invocation-local analysis phases.</summary>
+    /// <param name="typeMappingSource">The active provider's type mapping source.</param>
+    /// <param name="sqlGenerationHelper">The active provider's identifier delimiter.</param>
     public PostgreSqlSafeMigrationProviderAnalyzer(
         IRelationalTypeMappingSource typeMappingSource,
         ISqlGenerationHelper sqlGenerationHelper
@@ -28,6 +31,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
         _catalogSqlBuilder = new PostgreSqlSafeMigrationCatalogSqlBuilder(typeMappingSource, sqlGenerationHelper);
     }
 
+    /// <inheritdoc />
     public string ProviderId => "npgsql_postgresql";
 
     /// <summary>Shares provider-certified index dependencies with ordered Core state projection.</summary>
@@ -67,10 +71,12 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
             differences: null);
     }
 
+    /// <inheritdoc />
     public void ValidateContext(
         DbContext context
     ) => ArgumentNullException.ThrowIfNull(context);
 
+    /// <inheritdoc />
     public async Task<SafeMigrationProviderEnvironment> GetEnvironmentAsync(
         DbContext context,
         CancellationToken cancellationToken = default
@@ -98,6 +104,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
         }
     }
 
+    /// <inheritdoc />
     public async Task<IAsyncDisposable> AcquireAnalysisScopeAsync(
         DbContext context,
         CancellationToken cancellationToken = default
@@ -181,6 +188,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
         }
     }
 
+    /// <inheritdoc />
     public async Task<IReadOnlyList<SafeMigrationProviderAnalysis>> AnalyzeAsync(
         DbContext context,
         IReadOnlyList<SafeMigrationOperation> operations,
@@ -239,6 +247,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                          SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture))
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                // WHY: Map window-local ordinals back to their original analysis slots.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var localOrdinal = 0; localOrdinal < operationWindow.Length; localOrdinal++)
                 {
                     if (shortCircuitStates[operationOffset + localOrdinal] is { } shortCircuitState)
@@ -463,371 +474,6 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                 await connection.CloseAsync();
             }
         }
-    }
-
-    private async Task<PostgreSqlDataProbeResult?[]> ResolveDataProbeResultsAsync(
-        DbConnection connection,
-        IReadOnlyList<SafeMigrationOperation> operations,
-        SafeMigrationObservedState?[] shortCircuitStates,
-        int? commandTimeout,
-        CancellationToken cancellationToken
-    )
-    {
-        var results = new PostgreSqlDataProbeResult?[operations.Count];
-        var identities = new PostgreSqlDataProbeIdentity?[operations.Count];
-        var candidates = new Dictionary<PostgreSqlDataProbeIdentity, PostgreSqlDataProbeCandidate>();
-        for (var ordinal = 0; ordinal < operations.Count; ordinal++)
-        {
-            if (shortCircuitStates[ordinal] is not null)
-            {
-                continue;
-            }
-
-            var operation = operations[ordinal]
-                ?? throw new ArgumentException(
-                    "The operation batch cannot contain null entries.",
-                    nameof(operations));
-
-            var plan = _catalogSqlBuilder.Build(operation);
-            var probe = plan.DataProbe;
-            if (probe is null)
-            {
-                continue;
-            }
-
-            var identity = new PostgreSqlDataProbeIdentity(
-                probe.Schema,
-                probe.Table,
-                probe.Column,
-                probe.TargetLength,
-                operation.Intent switch
-                {
-                    EnsureColumnIntent value => value.Definition,
-                    AlterColumnIntent value => value.Definition,
-                    _ => throw new UnreachableException(),
-                },
-                (operation.Intent as AlterColumnIntent)?.OldDefinition);
-
-            identities[ordinal] = identity;
-            // WHY: Row probes consume only the immutable column/length identity.
-            // Keeping the discarded plan's rendered narrowing predicate here
-            // would retain SQL for every candidate beyond the bounded window.
-            candidates.TryAdd(identity, new PostgreSqlDataProbeCandidate(identity, operation, ordinal));
-        }
-
-        var cache = new Dictionary<PostgreSqlDataProbeIdentity, PostgreSqlDataProbeResult>(candidates.Count);
-        if (candidates.Count > 0)
-        {
-            var values = candidates.Values.ToArray();
-            var resolved = await FindRequiredDataProbesAsync(
-                connection,
-                values,
-                commandTimeout,
-                cancellationToken);
-
-            foreach (var entry in resolved)
-            {
-                cache.Add(entry.Key, entry.Value);
-            }
-
-            await FindBlockingDataAsync(
-                connection,
-                values.Where(candidate => cache[candidate.Identity].IsRequired),
-                cache,
-                commandTimeout,
-                cancellationToken);
-        }
-
-        for (var ordinal = 0; ordinal < operations.Count; ordinal++)
-        {
-            if (shortCircuitStates[ordinal] is not null)
-            {
-                continue;
-            }
-
-            if (identities[ordinal] is not { } identity)
-            {
-                continue;
-            }
-
-            results[ordinal] = cache.TryGetValue(identity, out var result)
-                ? result
-                : throw new InvalidOperationException(
-                    "The PostgreSQL narrowing probe did not resolve every candidate.");
-        }
-
-        return results;
-    }
-
-    private async Task PopulateColumnDiagnosticsAsync(
-        DbConnection connection,
-        IReadOnlyList<SafeMigrationOperation> operations,
-        SafeMigrationProviderAnalysis[] results,
-        int? commandTimeout,
-        CancellationToken cancellationToken
-    )
-    {
-        var candidates = new List<int>();
-        for (var ordinal = 0; ordinal < operations.Count; ordinal++)
-        {
-            var analysis = results[ordinal];
-            if (operations[ordinal].Intent is EnsureColumnIntent or AlterColumnIntent
-                && analysis.Differences.Count == 0
-                && analysis.ObservedState is SafeMigrationObservedState.Different
-                    or SafeMigrationObservedState.DataBlocked)
-            {
-                candidates.Add(ordinal);
-            }
-        }
-
-        // WHY: Diagnostics need only this scalar proof flag after reading.
-        // Retaining every generated SQL plan would defeat bounded transport.
-        var nullabilityProofs = new bool[candidates.Count];
-        await SafeMigrationCatalogProbeBatch.ReadAsync(
-            connection,
-            candidates.Count,
-            SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes,
-            commandTimeout,
-            (command, offset) =>
-            {
-                var count = Math.Min(
-                    SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement, candidates.Count - offset);
-
-                var parameters = new PostgreSqlCatalogQueryParameters(command, _typeMappingSource);
-                var builder = new PostgreSqlSafeMigrationCatalogSqlBuilder(
-                    _typeMappingSource, _sqlGenerationHelper, parameters.AddString, parameters.Add);
-
-                var selections = new List<string>(count);
-                for (var index = 0; index < count; index++)
-                {
-                    var ordinal = candidates[offset + index];
-                    var plan = builder.Build(
-                        operations[ordinal], includeAnalysisEvidence: true, includeTransitionEvidence: false);
-
-                    // WHY: Alter eligibility includes the exact old definition.
-                    // A diagnostic mismatch alone cannot establish that gate;
-                    // retain its catalog-qualified proof flag from classification.
-                    nullabilityProofs[offset + index] = plan.MayRequireNullabilityDataProof
-                        && operations[ordinal].Intent is not AlterColumnIntent;
-                    selections.Add(
-                        $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, "
-                        + $"({plan.DiagnosticEvidenceExpression ?? "NULL"})");
-                }
-
-                command.CommandText = string.Join(SafeMigrationCatalogQueryLimits.Separator, selections)
-                    + SafeMigrationCatalogQueryLimits.Trailer;
-
-                return new SafeMigrationCatalogProbeStatement(
-                    count, parameters.Utf8PayloadBytes, candidates[offset]);
-            },
-            async (reader, offset, count, token) =>
-            {
-                var row = 0;
-                while (await reader.ReadAsync(token))
-                {
-                    if (row >= count || reader.GetInt32(0) != candidates[offset + row])
-                    {
-                        throw new InvalidOperationException(
-                            "The PostgreSQL diagnostic query returned an invalid ordinal.");
-                    }
-
-                    var differences = reader.IsDBNull(1)
-                        ? []
-                        : SafeMigrationFacetDifferenceParser.Parse(reader.GetString(1), "PostgreSQL");
-
-                    ReplaceAnalysisWithDifferences(
-                        results, candidates[offset + row], nullabilityProofs[offset + row], differences);
-
-                    row++;
-                }
-
-                if (row != count)
-                {
-                    throw new InvalidOperationException(
-                        "The PostgreSQL diagnostic query returned an inconsistent row count.");
-                }
-            },
-            cancellationToken);
-    }
-
-    private static void ReplaceAnalysisWithDifferences(
-        SafeMigrationProviderAnalysis[] results,
-        int ordinal,
-        bool mayRequireNullabilityDataProof,
-        IReadOnlyList<SafeMigrationFacetDifference> differences
-    )
-    {
-        var current = results[ordinal];
-
-        results[ordinal] = current.WithDifferences(
-            differences,
-            mayRequireNullabilityDataProof
-                && differences.Any(static difference =>
-                    StringComparer.Ordinal.Equals(difference.Facet, "column_nullability")));
-    }
-
-    private async Task<Dictionary<PostgreSqlDataProbeIdentity, PostgreSqlDataProbeResult>>
-        FindRequiredDataProbesAsync(
-        DbConnection connection,
-        IReadOnlyList<PostgreSqlDataProbeCandidate> candidates,
-        int? commandTimeout,
-        CancellationToken cancellationToken
-    )
-    {
-        var results = new Dictionary<PostgreSqlDataProbeIdentity, PostgreSqlDataProbeResult>(candidates.Count);
-        await SafeMigrationCatalogProbeBatch.ReadAsync(
-            connection,
-            candidates.Count,
-            SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes,
-            commandTimeout,
-            (command, offset) =>
-            {
-                var count = Math.Min(
-                    SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement, candidates.Count - offset);
-
-                var selections = new List<string>(count);
-                for (var index = 0; index < count; index++)
-                {
-                    // WHY: Eligibility needs only this candidate's predicates.
-                    // Holding every full plan until transport finishes retains
-                    // unused SQL proportional to the entire migration stream.
-                    var probe = _catalogSqlBuilder.Build(
-                        candidates[offset + index].Operation,
-                        includeAnalysisEvidence: false,
-                        includeTransitionEvidence: true).DataProbe
-                        ?? throw new InvalidOperationException(
-                            "The PostgreSQL transition build returned no data-probe plan.");
-
-                    selections.Add(
-                        $"SELECT {candidates[offset + index].Ordinal.ToString(CultureInfo.InvariantCulture)}, "
-                        + $"COALESCE(({probe.TransitionInvariantExpression}), FALSE), "
-                        + $"COALESCE(({probe.NarrowingExpression}), FALSE)");
-                }
-
-                command.CommandText = string.Join(SafeMigrationCatalogQueryLimits.Separator, selections)
-                    + SafeMigrationCatalogQueryLimits.Trailer;
-
-                return new SafeMigrationCatalogProbeStatement(
-                    count, ParameterPayloadBytes: 0, candidates[offset].Ordinal);
-            },
-            async (reader, offset, count, token) =>
-            {
-                var row = 0;
-                while (await reader.ReadAsync(token))
-                {
-                    if (row >= count || reader.GetInt32(0) != candidates[offset + row].Ordinal)
-                    {
-                        throw new InvalidOperationException(
-                            "The PostgreSQL narrowing prerequisite query returned an invalid ordinal.");
-                    }
-
-                    var transitionEligible = reader.GetBoolean(1);
-                    var narrowing = reader.GetBoolean(2);
-
-                    results.Add(
-                        candidates[offset + row].Identity,
-                        new PostgreSqlDataProbeResult(
-                            transitionEligible, IsRequired: transitionEligible && narrowing, IsBlocked: false));
-
-                    row++;
-                }
-
-                if (row != count)
-                {
-                    throw new InvalidOperationException(
-                        "The PostgreSQL narrowing prerequisite query returned an inconsistent row count.");
-                }
-            },
-            cancellationToken);
-
-        return results;
-    }
-
-    private async Task FindBlockingDataAsync(
-        DbConnection connection,
-        IEnumerable<PostgreSqlDataProbeCandidate> requiredCandidates,
-        Dictionary<PostgreSqlDataProbeIdentity, PostgreSqlDataProbeResult> cache,
-        int? commandTimeout,
-        CancellationToken cancellationToken
-    )
-    {
-        // WHY: Physical eligibility belongs to a complete old/target contract,
-        // while the same column/limit row fact is safe to share after that gate.
-        var rowGroups = requiredCandidates
-            .GroupBy(static candidate => candidate.RowIdentity)
-            .ToDictionary(static group => group.Key, static group => group.ToArray());
-
-        var statements = rowGroups.Values
-            .Select(static candidates => candidates[0])
-            .GroupBy(static candidate => new PostgreSqlTableIdentity(candidate.Identity.Schema, candidate.Identity.Table))
-            .SelectMany(static group => group.Chunk(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement))
-            .ToArray();
-
-        // WHY: Only catalog-qualified relations reach this phase. Packing
-        // independent row probes must not combine them with prerequisite SQL,
-        // which PostgreSQL plans before evaluating conditional expressions.
-        await SafeMigrationCatalogProbeBatch.ReadAsync(
-            connection,
-            statements.Length,
-            SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes,
-            commandTimeout,
-            (command, offset) =>
-            {
-                var candidates = statements[offset];
-                var identity = candidates[0].Identity;
-                var table = identity.Schema is null
-                    ? _sqlGenerationHelper.DelimitIdentifier(identity.Table)
-                    : _sqlGenerationHelper.DelimitIdentifier(identity.Table, identity.Schema);
-
-                if (candidates.Length == 1)
-                {
-                    var column = _sqlGenerationHelper.DelimitIdentifier(identity.Column);
-                    command.CommandText = "SELECT EXISTS(SELECT 1 FROM "
-                        + $"{table} WHERE {column} IS NOT NULL AND char_length({column}) "
-                        + $"> {identity.TargetLength.ToString(CultureInfo.InvariantCulture)} LIMIT 1);";
-                }
-                else
-                {
-                    var selections = new List<string>(candidates.Length);
-                    foreach (var candidate in candidates)
-                    {
-                        var column = _sqlGenerationHelper.DelimitIdentifier(candidate.Identity.Column);
-                        selections.Add(
-                            "COALESCE(bool_or("
-                            + $"{column} IS NOT NULL AND char_length({column}) "
-                            + $"> {candidate.Identity.TargetLength.ToString(CultureInfo.InvariantCulture)}), FALSE)");
-                    }
-
-                    command.CommandText = $"SELECT {string.Join(", ", selections)} FROM {table};";
-                }
-
-                return new SafeMigrationCatalogProbeStatement(1, ParameterPayloadBytes: 0, candidates[0].Ordinal);
-            },
-            async (reader, offset, _, token) =>
-            {
-                var candidates = statements[offset];
-
-                if (reader.FieldCount != candidates.Length || !await reader.ReadAsync(token))
-                {
-                    throw new InvalidOperationException("The PostgreSQL narrowing data query returned an invalid result.");
-                }
-
-                for (var index = 0; index < candidates.Length; index++)
-                {
-                    var blocked = reader.GetBoolean(index);
-                    foreach (var candidate in rowGroups[candidates[index].RowIdentity])
-                    {
-                        cache[candidate.Identity] = cache[candidate.Identity] with { IsBlocked = blocked };
-                    }
-                }
-
-                if (await reader.ReadAsync(token))
-                {
-                    throw new InvalidOperationException(
-                        "The PostgreSQL narrowing data query returned more than one result row.");
-                }
-            },
-            cancellationToken);
     }
 
     private async Task<SafeMigrationObservedState?[]> FindShortCircuitStatesAsync(
@@ -1294,7 +940,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                         {
                             (_indexInputShortCircuitCodes ??= []).Add(resultOrdinal, state);
                             states[resultOrdinal] = state == "index_input_operator_class"
-                                ? SafeMigrationObservedState.Unsupported : SafeMigrationObservedState.PrerequisiteMissing;
+                        ? SafeMigrationObservedState.Unsupported
+                        : SafeMigrationObservedState.PrerequisiteMissing;
                         }
                         else
                         {
@@ -1415,160 +1062,6 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
         }
     }
 
-    public async Task<IReadOnlyList<SafeMigrationUnexpectedObject>> FindUnexpectedObjectsAsync(
-        DbContext context,
-        IReadOnlyList<MigrationOperation> operations,
-        CancellationToken cancellationToken = default
-    )
-    {
-        ArgumentNullException.ThrowIfNull(context);
-        ArgumentNullException.ThrowIfNull(operations);
-
-        var expected = SafeMigrationExpectedCatalog.Create(operations);
-        if (expected.Count == 0)
-        {
-            return [];
-        }
-
-        var connection = context.Database.GetDbConnection();
-        var openedHere = connection.State != System.Data.ConnectionState.Open;
-        if (openedHere)
-        {
-            await connection.OpenAsync(cancellationToken);
-        }
-
-        try
-        {
-            var commandTimeout = context.Database.GetCommandTimeout();
-            var findings = await ReadUnexpectedInventoryAsync(connection, expected, commandTimeout, cancellationToken);
-
-            return await RemoveSemanticAliasesAsync(context, operations, findings, cancellationToken);
-        }
-        finally
-        {
-            if (openedHere)
-            {
-                await connection.CloseAsync();
-            }
-        }
-    }
-
-    /// <summary>Reads complete immutable schema and child inventory chunks through the bounded transport.</summary>
-    /// <param name="connection">The open analysis connection.</param>
-    /// <param name="expected">The invocation's expected table inventory.</param>
-    /// <param name="commandTimeout">The caller's command timeout.</param>
-    /// <param name="cancellationToken">The token that cancels construction and reading.</param>
-    /// <returns>The complete invocation-local inventory evidence.</returns>
-    internal static async Task<List<SafeMigrationUnexpectedObject>> ReadUnexpectedInventoryAsync(
-        DbConnection connection,
-        IReadOnlyList<SafeMigrationExpectedTableInventory> expected,
-        int? commandTimeout,
-        CancellationToken cancellationToken
-    )
-    {
-        var findings = new List<SafeMigrationUnexpectedObject>();
-        var lookup = new ExpectedTableLookup(expected);
-        var seen = new HashSet<(SafeMigrationDatabaseObjectKind Kind, string Schema, string Table, string Name)>();
-        var schemaScopes = BuildSchemaScopeBatches(expected);
-        using var chunks = expected.Chunk(SafeMigrationCatalogQueryLimits.MaximumInventoryValues).GetEnumerator();
-        var pending = new Dictionary<int, SafeMigrationExpectedTableInventory[]>();
-
-        await SafeMigrationCatalogProbeBatch.ReadAsync(
-            connection,
-            schemaScopes.Length + (expected.Count + SafeMigrationCatalogQueryLimits.MaximumInventoryValues - 1)
-                / SafeMigrationCatalogQueryLimits.MaximumInventoryValues,
-            SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes, commandTimeout,
-            (command, slot) =>
-            {
-                var parameters = new PostgreSqlCatalogQueryParameters(command);
-                if (slot < schemaScopes.Length)
-                {
-                    command.CommandText = BuildUnexpectedTableSql(BuildSchemaScope(schemaScopes[slot], parameters));
-                }
-                else
-                {
-                    if (!pending.TryGetValue(slot, out var chunk))
-                    {
-                        if (!chunks.MoveNext())
-                        {
-                            throw new InvalidOperationException("PostgreSQL table inventory is incomplete.");
-                        }
-
-                        chunk = chunks.Current;
-                        pending.Add(slot, chunk);
-                    }
-
-                    var childScope = BuildExpectedTableScope(chunk, parameters, "n.nspname", "c.relname");
-                    var indexScope = BuildExpectedTableScope(chunk, parameters, "n.nspname", "tbl.relname");
-                    command.CommandText = BuildUnexpectedChildObjectSql(childScope, indexScope);
-                }
-
-                return new SafeMigrationCatalogProbeStatement(1, parameters.Utf8PayloadBytes, slot);
-            },
-            async (reader, slot, _, token) =>
-            {
-                var tablesOnly = slot < schemaScopes.Length;
-                var scope = tablesOnly ? schemaScopes[slot] : pending[slot];
-                pending.Remove(slot);
-                await ReadUnexpectedAsync(reader, lookup, findings, seen, scope, tablesOnly, token);
-            },
-            cancellationToken);
-
-        return findings;
-    }
-
-    private async Task<IReadOnlyList<SafeMigrationUnexpectedObject>> RemoveSemanticAliasesAsync(
-        DbContext context,
-        IReadOnlyList<MigrationOperation> operations,
-        List<SafeMigrationUnexpectedObject> findings,
-        CancellationToken cancellationToken
-    )
-    {
-        if (findings.Count == 0)
-        {
-            return findings.AsReadOnly();
-        }
-
-        // Reuse the provider's complete catalog comparator instead of
-        // maintaining a weaker second definition of semantic equivalence in
-        // the inventory path. Candidates are consumed in bounded windows so a
-        // large legacy catalog cannot materialize a cross-product in memory.
-        var currentSchema = await GetCurrentSchemaAsync(
-            context.Database.GetDbConnection(),
-            context.Database.GetCommandTimeout(),
-            cancellationToken);
-
-        var semanticAliases = new HashSet<int>();
-        foreach (var candidates in SafeMigrationSemanticCandidateFactory
-                     .Create(operations, findings, currentSchema)
-                     .Chunk(SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture))
-        {
-            var analyses = await AnalyzeAsync(
-                context,
-                candidates
-                    .Select(static candidate => candidate.Operation)
-                    .ToArray(),
-                cancellationToken);
-
-            for (var index = 0; index < candidates.Length; index++)
-            {
-                if (analyses[index].ObservedState == SafeMigrationObservedState.Matching)
-                {
-                    semanticAliases.Add(candidates[index].UnexpectedObjectIndex);
-                }
-            }
-        }
-
-        if (semanticAliases.Count == 0)
-        {
-            return findings.AsReadOnly();
-        }
-
-        return findings
-            .Where((_, index) => !semanticAliases.Contains(index))
-            .ToArray();
-    }
-
     /// <summary>Reads an optional effective default without rejecting explicitly qualified inventory.</summary>
     private static async Task<string?> GetCurrentSchemaAsync(
         DbConnection connection,
@@ -1587,85 +1080,6 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
         // an empty identifier or rejecting their semantic-alias inventory.
         return value is null or DBNull ? null : value as string
             ?? throw new InvalidOperationException("PostgreSQL returned invalid current-schema identity evidence.");
-    }
-
-    private static async Task ReadUnexpectedAsync(
-        DbDataReader reader,
-        ExpectedTableLookup lookup,
-        List<SafeMigrationUnexpectedObject> findings,
-        HashSet<(SafeMigrationDatabaseObjectKind Kind, string Schema, string Table, string Name)> seen,
-        IReadOnlyList<SafeMigrationExpectedTableInventory> scope,
-        bool tablesOnly,
-        CancellationToken cancellationToken
-    )
-    {
-        var permittedSchemas = scope.Select(static table => table.Schema).ToHashSet(StringComparer.Ordinal);
-        var permittedTables = scope.Select(static table => (table.Schema, table.Table)).ToHashSet();
-
-        // Unexpected objects are evidence only. They are never folded into
-        // the expected catalog and never authorize destructive cleanup.
-        while (await reader.ReadAsync(cancellationToken))
-        {
-            var kind = ParseObjectKind(reader.GetString(0));
-            var schema = reader.GetString(1);
-            var tableName = reader.GetString(2);
-            var objectName = reader.GetString(3);
-            var currentSchema = reader.IsDBNull(4) ? null : reader.GetString(4);
-            if ((kind == SafeMigrationDatabaseObjectKind.Table) != tablesOnly
-                || (tablesOnly
-                    ? !permittedSchemas.Contains(schema)
-                        && !(StringComparer.Ordinal.Equals(schema, currentSchema) && permittedSchemas.Contains(null))
-                    : !permittedTables.Contains((schema, tableName))
-                        && !(StringComparer.Ordinal.Equals(schema, currentSchema)
-                            && permittedTables.Contains((null, tableName)))))
-            {
-                throw new InvalidOperationException("PostgreSQL returned an unowned inventory object.");
-            }
-
-            if (!seen.Add((kind, schema, tableName, objectName)))
-            {
-                continue;
-            }
-
-            var table = lookup.Find(schema, tableName, currentSchema);
-            if (table is null)
-            {
-                if (kind == SafeMigrationDatabaseObjectKind.Table)
-                {
-                    findings.Add(Unexpected(kind, schema, table: null, objectName));
-                }
-
-                continue;
-            }
-
-            if (kind == SafeMigrationDatabaseObjectKind.Table
-                || IsExpected(table, kind, objectName))
-            {
-                continue;
-            }
-
-            findings.Add(Unexpected(kind, schema, tableName, objectName));
-        }
-    }
-
-    private static SafeMigrationExpectedTableInventory[][] BuildSchemaScopeBatches(
-        IReadOnlyList<SafeMigrationExpectedTableInventory> expected
-    )
-    {
-        var representatives = new List<SafeMigrationExpectedTableInventory>();
-        if (expected.FirstOrDefault(static table => table.Schema is null) is { } providerDefault)
-        {
-            representatives.Add(providerDefault);
-        }
-
-        representatives.AddRange(
-            expected
-                .Where(static table => table.Schema is not null)
-                .DistinctBy(static table => table.Schema, StringComparer.Ordinal));
-
-        return representatives
-            .Chunk(SafeMigrationCatalogQueryLimits.MaximumInventoryValues)
-            .ToArray();
     }
 
     private static SafeMigrationObservedState ParseState(
@@ -1695,212 +1109,6 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
         SafeMigrationObservedState.TransitionReady => "classified_transition_ready",
         _ => throw new ArgumentOutOfRangeException(nameof(state)),
     };
-
-    private static string BuildSchemaScope(
-        IReadOnlyList<SafeMigrationExpectedTableInventory> expected,
-        PostgreSqlCatalogQueryParameters parameters
-    )
-    {
-        var conditions = new List<string>();
-        if (expected.Any(static table => table.Schema is null))
-        {
-            conditions.Add("n.nspname = current_schema()");
-        }
-
-        conditions.AddRange(
-            expected
-                .Select(static table => table.Schema)
-                .Where(static schema => schema is not null)
-                .Distinct(StringComparer.Ordinal)
-                .Select(schema => $"n.nspname = {parameters.AddString(schema!)}"));
-
-        return $"({string.Join(" OR ", conditions)})";
-    }
-
-    private static string BuildExpectedTableScope(
-        IReadOnlyList<SafeMigrationExpectedTableInventory> expected,
-        PostgreSqlCatalogQueryParameters parameters,
-        string schemaExpression,
-        string tableExpression
-    )
-    {
-        var conditions = expected
-            .Select(table => "("
-                + (table.Schema is null
-                    ? $"{schemaExpression} = current_schema()"
-                    : $"{schemaExpression} = {parameters.AddString(table.Schema)}")
-                + $" AND {tableExpression} = {parameters.AddString(table.Table)})")
-            .ToArray();
-
-        return $"({string.Join(" OR ", conditions)})";
-    }
-
-    private static bool IsExpected(
-        SafeMigrationExpectedTableInventory table,
-        SafeMigrationDatabaseObjectKind kind,
-        string name
-    ) => kind switch
-    {
-        SafeMigrationDatabaseObjectKind.Column => table.Columns.Contains(name),
-        SafeMigrationDatabaseObjectKind.Index => table.Indexes.Contains(name),
-        _ => table.Constraints.TryGetValue(name, out var expectedKind) && expectedKind == kind
-    };
-
-    private static SafeMigrationUnexpectedObject Unexpected(
-        SafeMigrationDatabaseObjectKind kind,
-        string schema,
-        string? table,
-        string name
-    ) => new(kind, schema, table, name, UnexpectedObjectCode(kind));
-
-    private static SafeMigrationDatabaseObjectKind ParseObjectKind(
-        string value
-    ) => value switch
-    {
-        "table" => SafeMigrationDatabaseObjectKind.Table,
-        "column" => SafeMigrationDatabaseObjectKind.Column,
-        "index" => SafeMigrationDatabaseObjectKind.Index,
-        "primary_key" => SafeMigrationDatabaseObjectKind.PrimaryKey,
-        "unique_constraint" => SafeMigrationDatabaseObjectKind.UniqueConstraint,
-        "check_constraint" => SafeMigrationDatabaseObjectKind.CheckConstraint,
-        "foreign_key" => SafeMigrationDatabaseObjectKind.ForeignKey,
-        _ => throw new InvalidOperationException(
-            "The PostgreSQL unexpected-object inventory returned an unknown object kind."),
-    };
-
-    private static string UnexpectedObjectCode(
-        SafeMigrationDatabaseObjectKind kind
-    ) => kind switch
-    {
-        SafeMigrationDatabaseObjectKind.Table => "unexpected_table",
-        SafeMigrationDatabaseObjectKind.Column => "unexpected_column",
-        SafeMigrationDatabaseObjectKind.Index => "unexpected_index",
-        SafeMigrationDatabaseObjectKind.PrimaryKey => "unexpected_primary_key",
-        SafeMigrationDatabaseObjectKind.UniqueConstraint => "unexpected_unique_constraint",
-        SafeMigrationDatabaseObjectKind.CheckConstraint => "unexpected_check_constraint",
-        SafeMigrationDatabaseObjectKind.ForeignKey => "unexpected_foreign_key",
-        _ => throw new ArgumentOutOfRangeException(nameof(kind)),
-    };
-
-    private static string BuildUnexpectedTableSql(
-        string schemaScope
-    ) => $"""
-          SELECT 'table', n.nspname, c.relname, c.relname, current_schema()
-          FROM pg_catalog.pg_class c
-          JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-          WHERE {schemaScope} AND c.relkind IN ('r', 'p')
-          ORDER BY 1, 2, 3, 4;
-          """;
-
-    private static string BuildUnexpectedChildObjectSql(
-        string childScope,
-        string indexScope
-    ) => $"""
-          SELECT 'column', n.nspname, c.relname, a.attname, current_schema()
-          FROM pg_catalog.pg_attribute a
-          JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
-          JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-          WHERE {childScope} AND c.relkind IN ('r', 'p')
-            AND a.attnum > 0 AND NOT a.attisdropped
-          UNION ALL
-          SELECT CASE co.contype
-              WHEN 'p' THEN 'primary_key'
-              WHEN 'u' THEN 'unique_constraint'
-              WHEN 'c' THEN 'check_constraint'
-              WHEN 'f' THEN 'foreign_key'
-              END,
-              n.nspname,
-              c.relname,
-              co.conname,
-              current_schema()
-          FROM pg_catalog.pg_constraint co
-          JOIN pg_catalog.pg_class c ON c.oid = co.conrelid
-          JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-          WHERE {childScope} AND co.contype IN ('p', 'u', 'c', 'f')
-          UNION ALL
-          SELECT 'index', n.nspname, tbl.relname, idx.relname, current_schema()
-          FROM pg_catalog.pg_index i
-          JOIN pg_catalog.pg_class idx ON idx.oid = i.indexrelid
-          JOIN pg_catalog.pg_class tbl ON tbl.oid = i.indrelid
-          JOIN pg_catalog.pg_namespace n ON n.oid = tbl.relnamespace
-          WHERE {indexScope}
-            AND NOT EXISTS (
-                SELECT 1 FROM pg_catalog.pg_constraint co WHERE co.conindid = idx.oid)
-          ORDER BY 1, 2, 3, 4;
-          """;
-
-    private readonly record struct PostgreSqlDataProbeIdentity(
-        string? Schema,
-        string Table,
-        string Column,
-        int TargetLength,
-        ExpectedColumnDefinition Definition,
-        ExpectedColumnDefinition? OldDefinition
-    );
-
-    private readonly record struct PostgreSqlDataProbeRowIdentity(
-        string? Schema,
-        string Table,
-        string Column,
-        int TargetLength
-    );
-
-    private readonly record struct PostgreSqlDataProbeResult(
-        bool IsTransitionEligible,
-        bool IsRequired,
-        bool IsBlocked
-    );
-
-    private readonly record struct PostgreSqlTableIdentity(
-        string? Schema,
-        string Table
-    );
-
-    private sealed record PostgreSqlDataProbeCandidate(
-        PostgreSqlDataProbeIdentity Identity,
-        SafeMigrationOperation Operation,
-        int Ordinal
-    )
-    {
-        public PostgreSqlDataProbeRowIdentity RowIdentity => new(
-            Identity.Schema, Identity.Table, Identity.Column, Identity.TargetLength);
-    }
-
-    private sealed class ExpectedTableLookup
-    {
-        private readonly Dictionary<(string Schema, string Table), SafeMigrationExpectedTableInventory> _explicit;
-        private readonly Dictionary<string, SafeMigrationExpectedTableInventory> _providerDefault;
-
-        public ExpectedTableLookup(
-            IReadOnlyList<SafeMigrationExpectedTableInventory> expected
-        )
-        {
-            _explicit = expected
-                .Where(static table => table.Schema is not null)
-                .ToDictionary(static table => (table.Schema!, table.Table));
-
-            _providerDefault = expected
-                .Where(static table => table.Schema is null)
-                .ToDictionary(static table => table.Table, StringComparer.Ordinal);
-        }
-
-        public SafeMigrationExpectedTableInventory? Find(
-            string schema,
-            string table,
-            string? currentSchema
-        )
-        {
-            if (_explicit.TryGetValue((schema, table), out var exact))
-            {
-                return exact;
-            }
-
-            return StringComparer.Ordinal.Equals(schema, currentSchema)
-                && _providerDefault.TryGetValue(table, out var providerDefault)
-                    ? providerDefault
-                    : null;
-        }
-    }
 
     private sealed class AnalysisScope : IAsyncDisposable
     {

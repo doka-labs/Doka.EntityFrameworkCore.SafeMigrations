@@ -13,6 +13,9 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
         }
 
         var bound = new MySqlSafeMigrationIdentifierReferenceProof[plan.IdentifierReferenceProofs.Count];
+        // WHY: Fill each bound proof slot using the matching original proof ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < bound.Length; index++)
         {
             var proof = plan.IdentifierReferenceProofs[index];

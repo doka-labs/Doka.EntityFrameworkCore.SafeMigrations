@@ -65,6 +65,7 @@ jobs:
           python3 -m unittest eng/tests/test_dependency_snapshot_inputs.py -v
           python3 -m unittest eng/tests/test_dependency_review_workflow.py -v
           python3 -m unittest eng/tests/test_dependency_review_handoff.py -v
+          python3 -m unittest eng/tests/test_parallel_test_configuration.py -v
           python3 -m unittest eng/tests/test_verify_package_contents.py -v
           python3 -m unittest eng/tests/test_verify_package_consumer_sources.py -v
           bash eng/tests/test-dependency-maintenance.sh

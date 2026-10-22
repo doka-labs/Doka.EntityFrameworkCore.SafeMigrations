@@ -99,6 +99,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             return false;
         }
 
+        // WHY: Restrict duplicate checks to earlier key parts while retaining native key order.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < definition.Keys.Count; ordinal++)
         {
             var key = definition.Keys[ordinal];
@@ -112,6 +115,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                 return false;
             }
 
+            // WHY: Restrict duplicate checks to earlier key parts while retaining native key order.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var prior = 0; prior < ordinal; prior++)
             {
                 if (StringComparer.OrdinalIgnoreCase.Equals(key.Column, definition.Keys[prior].Column))
@@ -141,6 +147,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             return;
         }
 
+        // WHY: Keep captured proofs and plan slots tied to the exact owning operation ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Length; ordinal++)
         {
             if (_generatedIndexIdentityProofs.ContainsKey(operations[ordinal])
@@ -162,6 +171,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             return;
         }
 
+        // WHY: Keep captured proofs and plan slots tied to the exact owning operation ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Length; ordinal++)
         {
             if (_generatedIndexIdentityProofs.TryGetValue(operations[ordinal], out var proof))
@@ -182,6 +194,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             return;
         }
 
+        // WHY: Keep captured proofs and plan slots tied to the exact owning operation ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             if (_generatedIndexIdentityProofs.TryGetValue(operations[ordinal], out var proof))

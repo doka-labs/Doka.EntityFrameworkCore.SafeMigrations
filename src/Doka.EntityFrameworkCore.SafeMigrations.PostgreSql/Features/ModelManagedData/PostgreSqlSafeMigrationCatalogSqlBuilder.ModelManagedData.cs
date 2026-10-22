@@ -257,6 +257,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         }
 
         var rows = new string[intent.RowCount];
+        // WHY: Keep each authored row's protocol ordinal and output position aligned.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var row = 0; row < intent.RowCount; row++)
         {
             var values = new List<string>(aliases.Count)
@@ -264,6 +267,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 row.ToString(CultureInfo.InvariantCulture),
             };
 
+            // WHY: Read each key matrix cell with its corresponding declared store type.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var column = 0; column < intent.KeyColumns.Count; column++)
             {
                 values.Add(TypedValue(intent.KeyValues.GetUnsafeValue(row, column), intent.KeyColumnTypes[column]));
@@ -271,6 +277,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
             foreach (var matrix in matrices)
             {
+                // WHY: Keep matrix values and declared types aligned by column ordinal.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var column = 0; column < matrix.Columns.Count; column++)
                 {
                     values.Add(TypedValue(matrix.Values.GetUnsafeValue(row, column), matrix.Types[column]));
@@ -541,6 +550,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         string column
     )
     {
+        // WHY: Return the actual matching column ordinal without a temporary projection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < columns.Count; ordinal++)
         {
             if (StringComparer.Ordinal.Equals(columns[ordinal], column))

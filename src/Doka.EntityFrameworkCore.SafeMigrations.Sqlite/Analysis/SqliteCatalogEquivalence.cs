@@ -40,6 +40,9 @@ internal static class SqliteCatalogEquivalence
             return false;
         }
 
+        // WHY: Compare ordered identifier members at matching offsets to preserve native identity semantics.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < left.Count; ordinal++)
         {
             if (!s_identifierComparer.Equals(left[ordinal], right[ordinal]))

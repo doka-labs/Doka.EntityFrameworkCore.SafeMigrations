@@ -58,6 +58,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     {
         HashSet<SafeMigrationOperation>? captured = null;
         HashSet<SafeMigrationOperation>? capabilities = null;
+        // WHY: Bind each native DROP observation to the operation at the same ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             if (operations[ordinal].Intent is DropColumnIntent

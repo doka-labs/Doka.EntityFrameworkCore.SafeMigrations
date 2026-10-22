@@ -101,6 +101,33 @@ internal sealed class SqliteRebuildArtifactContract
             }
         }
 
+        return CreateWithOperationHistory(tables, operations, constraintOperations);
+    }
+
+    /// <summary>Shares captured model artifacts while creating fresh evidence for another ordered window.</summary>
+    /// <param name="operations">The cumulative operation history to snapshot independently.</param>
+    /// <param name="constraintOperations">The current structural window, or null to use the captured history.</param>
+    /// <returns>A new reference-bound contract without reused operation or transition evidence.</returns>
+    internal SqliteRebuildArtifactContract WithOperationHistory(
+        IReadOnlyList<MigrationOperation> operations,
+        IReadOnlyList<MigrationOperation>? constraintOperations = null
+    )
+    {
+        ArgumentNullException.ThrowIfNull(operations);
+
+        // WHY: Initialized EF model artifacts are immutable, but operation
+        // snapshots, authored additions/removals and transition certificates
+        // belong to one cumulative prefix and its exact current window.
+        return CreateWithOperationHistory(_tables, operations, constraintOperations);
+    }
+
+    /// <summary>Captures all operation-bound state independently of the immutable model table substrate.</summary>
+    private static SqliteRebuildArtifactContract CreateWithOperationHistory(
+        IReadOnlyDictionary<string, RebuildTableContract> tables,
+        IReadOnlyList<MigrationOperation>? operations,
+        IReadOnlyList<MigrationOperation>? constraintOperations
+    )
+    {
         var operationSnapshot = operations?.ToArray() ?? [];
 
         return new SqliteRebuildArtifactContract(
@@ -390,6 +417,9 @@ internal sealed class SqliteRebuildArtifactContract
             _ = tables.Add(target);
         }
 
+        // WHY: Replace each projected FK in its existing list slot without invalidating enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < foreignKeys.Count; index++)
         {
             var foreignKey = foreignKeys[index];
@@ -426,6 +456,9 @@ internal sealed class SqliteRebuildArtifactContract
     )
     {
         var currentIndex = -1;
+        // WHY: Locate the exact current operation before walking its earlier rename history.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < _operations.Count; index++)
         {
             if (ReferenceEquals(_operations[index], currentOperation))
@@ -441,6 +474,9 @@ internal sealed class SqliteRebuildArtifactContract
         }
 
         var result = projectedTable;
+        // WHY: Undo earlier table renames in reverse stream order to recover the live source name.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = currentIndex - 1; index >= 0; index--)
         {
             switch (_operations[index])
@@ -734,6 +770,9 @@ internal sealed class SqliteRebuildArtifactContract
             return false;
         }
 
+        // WHY: Compare actual and expected key facets at the same ordered key position.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < actual.Count; ordinal++)
         {
             var actualKey = actual[ordinal];
@@ -870,7 +909,7 @@ internal sealed class SqliteRebuildArtifactContract
                         .Indexes
                         .Add(value.Name);
                     break;
-                case RenameIndexOperation value when value.Table is { } table:
+                case RenameIndexOperation { Table: { } table } value:
                     _ = Add(result, table)
                         .Indexes
                         .Add(value.NewName);
@@ -969,12 +1008,12 @@ internal sealed class SqliteRebuildArtifactContract
                         .Columns
                         .Add(value.Name);
                     break;
-                case DropIndexOperation value when value.Table is { } table:
+                case DropIndexOperation { Table: { } table } value:
                     _ = Remove(result, table)
                         .Indexes
                         .Add(value.Name);
                     break;
-                case RenameIndexOperation value when value.Table is { } table:
+                case RenameIndexOperation { Table: { } table } value:
                     _ = Remove(result, table)
                         .Indexes
                         .Add(value.Name);

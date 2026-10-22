@@ -45,6 +45,9 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         var commands = new List<MigrationCommand>();
         var identityContract = PostgreSqlSafeMigrationGenerationIdentityContract.Create(operations);
 
+        // WHY: Preserve authored operation ordinals in guard generation and diagnostics.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             var operation = operations[ordinal];
@@ -721,6 +724,8 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         // WHY: Flattening both baseline lists creates two chunk chains and
         // complete SQL strings. Each command can preserve the same bytes
         // directly: trim trailing whitespace, terminate, then indent lines.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < commands.Count; index++)
         {
             AppendIndentedLines(builder, commands[index].CommandText.AsSpan().TrimEnd(), indentation);
@@ -820,6 +825,9 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         params ReadOnlySpan<string> sqlParts
     )
     {
+        // WHY: Try deterministic suffixes until the whole SQL scope has no tag collision.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var suffix = 0; ; suffix++)
         {
             var tag = suffix == 0 ? "$doka_safe_migration$" : $"$doka_safe_migration_{suffix}$";
@@ -855,6 +863,9 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         string tag
     )
     {
+        // WHY: Scan completed command snapshots without an interface enumerator.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < commands.Count; index++)
         {
             if (commands[index].CommandText.Contains(tag, StringComparison.Ordinal))

@@ -112,6 +112,9 @@ internal static partial class SafeMigrationDefinitionEquivalence
             return false;
         }
 
+        // WHY: Compare annotation names and fingerprints at corresponding snapshot ordinals.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < left.Count; index++)
         {
             if (!StringComparer.Ordinal.Equals(left[index].Name, right[index].Name)

@@ -48,6 +48,9 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
                 writer.Append(step.Text!);
                 return;
             case RenderStepKind.CloseParentheses:
+                // WHY: Close exactly the parenthesis count retained by this render step.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var index = 0; index < step.Index; index++)
                 {
                     writer.Append(')');

@@ -89,6 +89,9 @@ internal sealed partial class SafeMigrationPreflightProjection
         var keyColumns = SafeMigrationModelManagedKeyIdentity.CanonicalizeColumns(
             intent.KeyColumns, _objectIdentityNormalizer, out var keyOrdinals);
 
+        // WHY: Classify each authored row into the state array at the same row ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var row = 0; row < intent.RowCount; row++)
         {
             if (_modelManagedRows.TryGetValue(
@@ -170,6 +173,9 @@ internal sealed partial class SafeMigrationPreflightProjection
         IReadOnlyList<string> columns
     )
     {
+        // WHY: Index the immutable column snapshot without allocating an interface enumerator.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var column = 0; column < columns.Count; column++)
         {
             if (!prerequisites.Columns.ContainsKey(columns[column]))
@@ -329,6 +335,9 @@ internal sealed partial class SafeMigrationPreflightProjection
             return false;
         }
 
+        // WHY: Keep projected key identities and target matrix values tied to the same authored row.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var row = 0; row < intent.RowCount; row++)
         {
             var currentKey = ModelManagedRowKey.Create(intent, row, normalizedKeyColumns, canonicalKeyOrdinals);
@@ -395,6 +404,9 @@ internal sealed partial class SafeMigrationPreflightProjection
         var keyColumns = SafeMigrationModelManagedKeyIdentity.CanonicalizeColumns(
             intent.KeyColumns, _objectIdentityNormalizer, out var keyOrdinals);
 
+        // WHY: Project each authored row using its own key and value matrix coordinates.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var row = 0; row < intent.RowCount; row++)
         {
             var key = ModelManagedRowKey.Create(intent, row, keyColumns, keyOrdinals);
@@ -409,6 +421,9 @@ internal sealed partial class SafeMigrationPreflightProjection
                 ? existing.Copy()
                 : new ProjectedModelManagedRow(exists: true, _objectIdentityNormalizer);
 
+            // WHY: Associate each declared key label with the value in its matching matrix column.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var column = 0; column < intent.KeyColumns.Count; column++)
             {
                 projected.Values[intent.KeyColumns[column]] = intent.KeyValues.GetValue(row, column);
@@ -421,6 +436,9 @@ internal sealed partial class SafeMigrationPreflightProjection
                 _ => throw new UnreachableException(),
             };
 
+            // WHY: Associate each declared value label with its matching row and column coordinates.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var column = 0; column < intent.Columns.Count; column++)
             {
                 projected.Values[intent.Columns[column]] = values.GetValue(row, column);
@@ -479,6 +497,9 @@ internal sealed partial class SafeMigrationPreflightProjection
                 return false;
             }
 
+            // WHY: Index the immutable key snapshot without allocating an interface enumerator.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var ordinal = 0; ordinal < index.Keys.Count; ordinal++)
             {
                 var part = index.Keys[ordinal];
@@ -647,6 +668,9 @@ internal sealed partial class SafeMigrationPreflightProjection
     {
         allKnown = true;
 
+        // WHY: Compare each projected column value with the matrix cell at its declared ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var column = 0; column < columns.Count; column++)
         {
             if (!projected.Values.TryGetValue(columns[column], out var actual))
@@ -728,6 +752,9 @@ internal sealed partial class SafeMigrationPreflightProjection
 
             writer.Add(intent.KeyColumns.Count);
 
+            // WHY: Pair canonical key labels and row values through the same authored ordinal mapping.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var column = 0; column < intent.KeyColumns.Count; column++)
             {
                 var ordinal = canonicalKeyOrdinals?[column] ?? column;
@@ -765,6 +792,9 @@ internal sealed partial class SafeMigrationPreflightProjection
         string column
     )
     {
+        // WHY: Return the physical column ordinal used to address the associated row matrix.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < columns.Count; ordinal++)
         {
             if (IdentifierEquals(_objectIdentityNormalizer, columns[ordinal], column))

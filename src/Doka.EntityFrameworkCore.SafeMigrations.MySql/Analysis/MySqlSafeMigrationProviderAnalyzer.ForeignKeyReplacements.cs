@@ -51,6 +51,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         List<(SafeMigrationOperation Operation, bool SourceExists)>? candidates = null;
         HashSet<SafeMigrationOperation>? candidateIdentities = null;
 
+        // WHY: Pair each operation with its own analysis before requesting dependency evidence.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < operations.Count; index++)
         {
             var operation = operations[index];
@@ -300,6 +303,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         if (definition.OnDelete == ReferentialAction.SetNull
             || definition.OnUpdate == ReferentialAction.SetNull)
         {
+            // WHY: Compare dependent and principal FK endpoints at the same ordered key position.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var index = 0; index < definition.Columns.Count; index++)
             {
                 var columnKey = (NormalizeProofSchema(definition.Schema), definition.Table, definition.Columns[index]);
@@ -468,6 +474,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             return false;
         }
 
+        // WHY: Compare dependent and principal FK endpoints at the same ordered key position.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < definition.Columns.Count; index++)
         {
             if (_invalidatedForeignKeyColumns?.Contains((local.Item1, local.Item2, definition.Columns[index])) == true

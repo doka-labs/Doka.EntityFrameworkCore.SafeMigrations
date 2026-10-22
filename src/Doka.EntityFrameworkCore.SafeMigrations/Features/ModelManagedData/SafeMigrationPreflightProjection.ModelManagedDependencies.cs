@@ -75,6 +75,8 @@ internal sealed partial class SafeMigrationPreflightProjection
             // ordinal, even when a reordered pair list is semantically similar.
             // Column-member identity is independent of table and schema casing;
             // preserve the owner checks above rather than broadening their comparer.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var column = 0; column < definition.Columns.Count; column++)
             {
                 if (!columnComparer.Equals(definition.Columns[column], modeled.Columns[column])

@@ -124,6 +124,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             return null;
         }
 
+        // WHY: Compare dependent and principal FK endpoints at the same ordered key position.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < definition.Columns.Count; index++)
         {
             if (!TryGetLiveForeignKeyEndpoint(
@@ -388,6 +391,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         Dictionary<ExpectedForeignKeyDefinition, SafeMigrationProviderAnalysis>? namespaceMissing = null;
         var captureCreationDefaults = false;
 
+        // WHY: Pair analyses with operations in stream order so prior namespace changes remain visible.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             var intent = operations[ordinal].Intent;
@@ -672,6 +678,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
     )
     {
         var hasNamespaceMutation = false;
+        // WHY: Pair analyses with operations in stream order so prior namespace changes remain visible.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             var intent = operations[ordinal].Intent;
@@ -782,6 +791,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         var valueBytes = 0;
         var sqlBytes = Encoding.UTF8.GetByteCount(prefix) + Encoding.UTF8.GetByteCount(suffix);
 
+        // WHY: Keep the bounded request window and emitted result ordinals aligned.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < capacity; index++)
         {
             var request = requests[offset + index];

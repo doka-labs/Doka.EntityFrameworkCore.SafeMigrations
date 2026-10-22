@@ -549,6 +549,9 @@ internal sealed record PostgreSqlSafeMigrationRuntimePlan(
         int start
     )
     {
+        // WHY: Track UTF-16 offsets while skipping quoted tokens and escaped delimiters.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = start; index < source.Length; index++)
         {
             if (source[index] is '\'' or '"')

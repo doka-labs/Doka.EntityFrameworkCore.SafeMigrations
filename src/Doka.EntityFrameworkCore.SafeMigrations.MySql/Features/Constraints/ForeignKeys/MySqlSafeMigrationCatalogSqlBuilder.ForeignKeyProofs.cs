@@ -10,6 +10,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var pairs = new List<string>(definition.Columns.Count);
         var keyParts = new List<string>(definition.PrincipalColumns.Count);
 
+        // WHY: Compare dependent and principal FK endpoints at the same ordered key position.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < definition.Columns.Count; index++)
         {
             pairs.Add($"(dependent_column.COLUMN_NAME = {Literal(definition.Columns[index])} "
@@ -133,6 +136,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
         var nullableBits = new List<string>(definition.Columns.Count);
 
+        // WHY: Assign nullable-column bits from stable ordered FK positions.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < definition.Columns.Count; index++)
         {
             nullableBits.Add($"WHEN {Literal(definition.Columns[index])} "

@@ -32,6 +32,10 @@ internal sealed class SqliteIdentifierComparer : StringComparer
         }
 
         var commonLength = Math.Min(left.Length, right.Length);
+
+        // WHY: Compare ordered identifier members at matching offsets to preserve native identity semantics.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < commonLength; index++)
         {
             var difference = FoldAscii(left[index]) - FoldAscii(right[index]);
@@ -62,6 +66,9 @@ internal sealed class SqliteIdentifierComparer : StringComparer
             return false;
         }
 
+        // WHY: Compare ordered identifier members at matching offsets to preserve native identity semantics.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < left.Length; index++)
         {
             if (FoldAscii(left[index]) != FoldAscii(right[index]))
@@ -99,6 +106,10 @@ internal sealed class SqliteIdentifierComparer : StringComparer
         ArgumentNullException.ThrowIfNull(value);
 
         var firstUppercase = -1;
+
+        // WHY: Preserve exact UTF-16 positions when folding and copying identifier characters.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < value.Length; index++)
         {
             if (value[index] is >= 'A' and <= 'Z')
@@ -116,11 +127,11 @@ internal sealed class SqliteIdentifierComparer : StringComparer
         return string.Create(
             value.Length,
             value,
-            static (
-                destination,
-                source
-            ) =>
+            static (destination, source) =>
             {
+                // WHY: Preserve exact UTF-16 positions when folding and copying identifier characters.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var index = 0; index < source.Length; index++)
                 {
                     destination[index] = FoldAscii(source[index]);

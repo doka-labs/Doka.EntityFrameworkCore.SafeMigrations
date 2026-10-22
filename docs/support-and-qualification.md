@@ -261,18 +261,15 @@ to be revisited.
 Dependabot proposes dependency and lockfile updates through ordinary pull
 requests. Every accepted update therefore runs the same complete CI workflow as
 product code, including all provider cells, package consumers, coverage,
-performance, and SBOM validation. GitHub Automatic Dependency Submission
-publishes resolved base and head snapshots to the Dependency Graph. The
-independent, read-only Dependency Review workflow compares those snapshots,
-rejects newly introduced high-or-critical vulnerabilities and licenses outside
-the approved SPDX set, and runs the official bounded retry. Because action
-v5.0.0 proceeds after that timeout even when GitHub still reports a snapshot
-warning, a final comparison header check requires the warning to be present and
-empty. The public REST reference did not specify this header on 2026-08-28; its
-verified contract comes from the immutable action source, and absence fails
-closed. There is no second repository-owned polling state machine or
-dynamically restored dependency profile whose results can diverge from the
-central declarations tested by CI.
+performance, and SBOM validation. Dependency Review compares explicitly submitted
+base/head snapshots bound to the current pull-request commit. Contributor code
+runs only in separate read-only jobs; the trusted receiver validates immutable
+evidence before submitting snapshots and publishing the required check. Forks
+and Dependabot use the same validation path. Missing, stale, or incomplete
+evidence fails closed; automatic GitHub submissions are not the authority for
+this check. The canonical [secure-development guide](security/secure-development.md)
+defines the trust boundaries, bootstrap path, license/vulnerability policy,
+bounded retry, and required comparison-header validation.
 
 ## Behavioral evidence
 
@@ -549,6 +546,10 @@ database latency. Parsed evidence owns its final arrays and field strings;
 caller-owned evidence still receives defensive snapshots. These checks do not
 measure disk flush latency, establish an end-to-end migration latency claim,
 or replace live migration, recovery and native SQL Server qualification.
+
+For source-labelled raw samples and exact output/transport counterprobes, use the
+provider projects' [maintenance attribution mode](../CONTRIBUTING.md#maintenance-attribution).
+These prepared client measurements do not establish native engine performance.
 
 The SQL Server set declares eleven generation, analyzer-plan, model-managed
 data, repair, and canonical-model cases. Its initial duration values are the

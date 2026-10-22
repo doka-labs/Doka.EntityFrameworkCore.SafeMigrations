@@ -158,6 +158,9 @@ public static partial class SafeMigrationDiagnosticMessages
 
         builder.Append("; analysis=").Append(BoundForDisplay(assessment.AnalysisCode));
         builder.Append("; decision=").Append(BoundForDisplay(assessment.DecisionCode));
+        // WHY: Emit only the first two differences so exception messages remain bounded.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < Math.Min(assessment.Differences.Count, 2); index++)
         {
             var difference = assessment.Differences[index];
@@ -448,6 +451,9 @@ public static partial class SafeMigrationDiagnosticMessages
         }
 
         builder.Append(label).Append('(');
+        // WHY: Retain ordered members and comma positions while enforcing the diagnostic column limit.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < Math.Min(columns.Count, MaximumDisplayedColumns); index++)
         {
             if (index != 0)
@@ -522,6 +528,8 @@ public static partial class SafeMigrationDiagnosticMessages
         // WHY: A Unicode display unit contains six ASCII characters. Only the
         // last five positions can contain its incomplete start. Backslash-run
         // parity distinguishes an escape from text after a literal backslash.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var offset = end - 1; offset >= Math.Max(start, end - 5); offset--)
         {
             if (message[offset] != '\\')

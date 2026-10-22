@@ -1,3 +1,8 @@
+if (args is ["--maintenance-attribution", "--output", var maintenanceOutput])
+{
+    return SqlServerMaintenanceAttribution.Run(maintenanceOutput);
+}
+
 if (args.Length > 0
     && args[0] == "--column-attribution")
 {

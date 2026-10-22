@@ -15,6 +15,10 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         _computedDropIndexCandidates = null;
         _columnDropConstraintCandidates = null;
         Dictionary<(string Schema, string Table), ComputedDropIndexPrefix>? predecessors = null;
+
+        // WHY: Retain predecessor operation ordinals while advancing the DROP prefix.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             if (operations[ordinal].Intent is DropIndexIntent index)
@@ -125,6 +129,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         }
 
         var prefixes = new Dictionary<(string Schema, string Table), ColumnDropConstraintPrefix>();
+        // WHY: Observe only dependency removals preceding the current column DROP.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             var operation = operations[ordinal];
@@ -217,6 +224,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         {
             Ordinals = ordinals;
             Operations = new SafeMigrationOperation[ordinals.Length];
+            // WHY: Keep each captured predecessor reference at its selected output ordinal.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var index = 0; index < ordinals.Length; index++)
             {
                 Operations[index] = operations[ordinals[index]];
@@ -265,6 +275,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         _nativeComputedDropRefusals = null;
         _nativeColumnDropOwnerRoutes = null;
         _nativeColumnDropObserverEpoch = 0;
+        // WHY: Bind DROP proof transport to the matching original operation and verdict.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             var analysis = results[ordinal];
@@ -334,9 +347,11 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                         }
 
                         if (native.ObservedState == SafeMigrationObservedState.Matching
-                            || native.ObservedState == SafeMigrationObservedState.Different
-                                && native.Code is "incoming_foreign_key_key_dependency"
-                                    or "incoming_foreign_key_dependency")
+                            || native is
+                            {
+                                ObservedState: SafeMigrationObservedState.Different,
+                                Code: "incoming_foreign_key_key_dependency" or "incoming_foreign_key_dependency"
+                            })
                         {
                             (constraints ??= []).Add(new ColumnDropConstraintIdentity(candidate, native));
                         }

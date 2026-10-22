@@ -38,6 +38,9 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
         builder.Append("ELSE NULL END AS guardCode, CASE ").Append(ScriptReasonSlotExpression)
             .Append(" WHEN 0 THEN ")
             .Append(genericReason).Append(' ');
+        // WHY: Render the fixed reason-slot protocol in numeric order without materializing a range.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var slot = 1; slot <= 9; slot++)
         {
             if (diagnostic.GetReasonCode(slot) is { } code)
@@ -61,6 +64,9 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
             var genericMessage = MessageLiteral(diagnostic, guard, reasonCode: null);
             builder.Append("WHEN '").Append(ActionForGuard(guard)).Append("' THEN ");
             var hasPreciseReason = false;
+            // WHY: Render the fixed reason-slot protocol in numeric order without materializing a range.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var slot = 1; slot <= 9; slot++)
             {
                 if (MySqlSafeMigrationRuntimeDiagnostic.ReasonSlotAppliesToGuard(slot, guard)

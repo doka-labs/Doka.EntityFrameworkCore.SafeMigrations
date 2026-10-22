@@ -1104,6 +1104,9 @@ internal sealed partial class SafeMigrationPreflightProjection
             string name
         )
         {
+            // WHY: Return the retained physical column position without changing the ordered ledger.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var ordinal = 0; ordinal < _columnOrder.Count; ordinal++)
             {
                 if (Columns.Comparer.Equals(_columnOrder[ordinal], name))

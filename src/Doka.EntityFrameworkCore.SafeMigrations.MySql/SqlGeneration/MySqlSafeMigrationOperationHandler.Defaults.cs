@@ -18,6 +18,9 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
         switch (operation, intent)
         {
             case (CreateTableOperation table, EnsureTableIntent ensure):
+                // WHY: Pair each native column operation with its expected default at the same declared column ordinal.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var index = 0; index < table.Columns.Count; index++)
                 {
                     ApplyPersistedDefault(table.Columns[index], ensure.Definition.Columns[index],

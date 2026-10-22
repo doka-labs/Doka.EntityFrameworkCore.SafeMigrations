@@ -36,19 +36,34 @@ public abstract class SqlServerIntegrationTestBase : IAsyncLifetime, IClassFixtu
     /// </remarks>
     public async Task DisposeAsync()
     {
-        foreach (var connectionString in _ownedDatabases)
+        List<Exception>? cleanupFailures = null;
+
+        foreach (var connectionString in _ownedDatabases.ToArray())
         {
-            await Fixture.ReleaseDatabaseAsync(connectionString, CancellationToken.None);
+            try
+            {
+                await Fixture.ReleaseDatabaseAsync(connectionString, CancellationToken.None);
+                _ownedDatabases.Remove(connectionString);
+            }
+            catch (Exception exception)
+            {
+                // WHY: One failed local release must not abandon independent leases. Keep failed
+                // leases in both owners for a local retry or the shared fixture's final sweep.
+                (cleanupFailures ??= []).Add(exception);
+            }
         }
 
-        _ownedDatabases.Clear();
+        if (cleanupFailures is not null)
+        {
+            throw new AggregateException("SQL Server test-local database cleanup failed.", cleanupFailures);
+        }
     }
 
     /// <summary>
     /// Creates an isolated database that is dropped when the test finishes.
     /// </summary>
     /// <param name="cancellationToken">The token cancelling database creation.</param>
-    /// <returns>The pooled connection string scoped to the new database.</returns>
+    /// <returns>The unpooled connection string scoped to the new database.</returns>
     protected async Task<string> CreateDatabaseAsync(
         CancellationToken cancellationToken = default
     )

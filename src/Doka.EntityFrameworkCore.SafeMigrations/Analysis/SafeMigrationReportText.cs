@@ -129,6 +129,9 @@ public static class SafeMigrationReportText
         writer.Write("Unexpected objects (informational): ");
         writer.WriteLine(report.UnexpectedObjects.Count.ToString(CultureInfo.InvariantCulture));
         var displayedCount = Math.Min(report.UnexpectedObjects.Count, MaximumDisplayedUnexpectedObjects);
+        // WHY: Emit only the bounded prefix and compute omitted objects from the untouched snapshot.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < displayedCount; index++)
         {
             var value = report.UnexpectedObjects[index];

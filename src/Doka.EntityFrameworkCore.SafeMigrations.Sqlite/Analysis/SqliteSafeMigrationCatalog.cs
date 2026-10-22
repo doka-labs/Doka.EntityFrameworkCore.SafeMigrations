@@ -109,6 +109,9 @@ internal static partial class SqliteSafeMigrationCatalog
 
         var uniqueConstraints = new SqliteUniqueSnapshot[uniqueIndexes.Length];
 
+        // WHY: Fill unique-constraint slots from the corresponding ordered catalog index entries.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < uniqueIndexes.Length; index++)
         {
             var uniqueIndex = uniqueIndexes[index];
@@ -405,6 +408,9 @@ internal static partial class SqliteSafeMigrationCatalog
     )
     {
         var quote = '\0';
+        // WHY: Respect escaped quotes before selecting a structural parenthesis offset.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < sql.Length; index++)
         {
             var character = sql[index];
@@ -534,6 +540,9 @@ internal static partial class SqliteSafeMigrationCatalog
     {
         var depth = 0;
         var quote = '\0';
+        // WHY: Track quote escapes and parenthesis depth at exact UTF-16 offsets before slicing SQL.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = openParenthesis; index < sql.Length; index++)
         {
             var character = sql[index];
@@ -590,6 +599,9 @@ internal static partial class SqliteSafeMigrationCatalog
     {
         var depth = 0;
         var quote = '\0';
+        // WHY: Track quote escapes and parenthesis depth at exact UTF-16 offsets before slicing SQL.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = openParenthesis; index < sql.Length; index++)
         {
             var character = sql[index];
@@ -658,6 +670,9 @@ internal static partial class SqliteSafeMigrationCatalog
         var start = 0;
         var depth = 0;
         var quote = '\0';
+        // WHY: Track quote escapes and parenthesis depth at exact UTF-16 offsets before slicing SQL.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < sql.Length; index++)
         {
             var character = sql[index];
@@ -756,6 +771,9 @@ internal static partial class SqliteSafeMigrationCatalog
     )
     {
         var builder = new StringBuilder(value.Length);
+        // WHY: Consume escaped delimiters together while retaining the quoted token's exact source offsets.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 1; index < value.Length; index++)
         {
             if (value[index] != quote)
@@ -850,6 +868,9 @@ internal static partial class SqliteSafeMigrationCatalog
 
         var builder = new StringBuilder(sql.Length);
         var quote = '\0';
+        // WHY: Keep quote-aware lookahead aligned while removing comment-delimiter ranges.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < sql.Length; index++)
         {
             var character = sql[index];
@@ -984,6 +1005,9 @@ internal static partial class SqliteSafeMigrationCatalog
             return false;
         }
 
+        // WHY: Compare ordered identifier members at matching offsets to preserve native identity semantics.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < left.Length; index++)
         {
             if (!s_identifierComparer.Equals(left[index], right[index]))

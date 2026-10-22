@@ -18,6 +18,9 @@ internal static class SafeMigrationModelManagedDataOwnershipFilter
         var targetTables = IndexTables(target);
         List<MigrationOperation>? retained = null;
 
+        // WHY: Retain the exclusion boundary's ordinal so the unchanged prefix can be copied lazily.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             var operation = operations[ordinal]
@@ -31,6 +34,9 @@ internal static class SafeMigrationModelManagedDataOwnershipFilter
                 {
                     retained = new List<MigrationOperation>(operations.Count - 1);
 
+                    // WHY: Copy only operations preceding the first excluded operation, in their original order.
+                    // ReSharper disable once ForCanBeConvertedToForeach
+                    // ReSharper disable once LoopCanBeConvertedToQuery
                     for (var retainedOrdinal = 0; retainedOrdinal < ordinal; retainedOrdinal++)
                     {
                         retained.Add(operations[retainedOrdinal]);

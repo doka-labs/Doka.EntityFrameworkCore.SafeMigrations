@@ -102,6 +102,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     {
         var rows = new List<string>(required.Length);
         var arms = new List<string>(required.Length);
+        // WHY: Give each expected CHECK row and its CASE arm the same one-based ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < required.Length; index++)
         {
             var ordinal = (index + 1).ToString(CultureInfo.InvariantCulture);

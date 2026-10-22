@@ -70,6 +70,8 @@ internal static class SqlServerSourceExpressionRoles
     /// <summary>Every WHEN is native predicate SQL; every selected result is native scalar SQL.</summary>
     private static bool IsCase(SafeMigrationSqlCaseExpression expression, int depth)
     {
+        // WHY: Whole-method role checks measured faster with snapshot enumeration for larger CASE branches.
+        // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var clause in expression.WhenClauses)
         {
             if (!IsPredicate(clause.Condition, depth) || !IsScalar(clause.Result, depth))
@@ -86,6 +88,9 @@ internal static class SqlServerSourceExpressionRoles
     /// </summary>
     private static bool AreScalars(IReadOnlyList<SafeMigrationSqlExpression> expressions, int depth)
     {
+        // WHY: Indexing avoids an interface enumerator at each recursive argument-list check.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < expressions.Count; index++)
         {
             if (!IsScalar(expressions[index], depth))

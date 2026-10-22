@@ -59,6 +59,10 @@ internal static class SqliteSqlNormalizer
 
         var builder = new StringBuilder(span.Length);
         var pendingSpace = false;
+
+        // WHY: Track SQL offsets so quote escapes and token boundaries remain intact.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < span.Length; index++)
         {
             var character = span[index];
@@ -116,6 +120,10 @@ internal static class SqliteSqlNormalizer
     )
     {
         builder.Append(quote);
+
+        // WHY: Consume escaped delimiters together while retaining the quoted token's exact source offsets.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = start + 1; index < value.Length; index++)
         {
             var character = value[index];
@@ -146,6 +154,10 @@ internal static class SqliteSqlNormalizer
     )
     {
         builder.Append('[');
+
+        // WHY: Consume escaped delimiters together while retaining the quoted token's exact source offsets.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = start + 1; index < value.Length; index++)
         {
             var character = value[index];
@@ -172,6 +184,10 @@ internal static class SqliteSqlNormalizer
 
         var depth = 0;
         var closingQuote = '\0';
+
+        // WHY: Track quote escapes and parenthesis depth at exact UTF-16 offsets before slicing SQL.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < value.Length; index++)
         {
             var character = value[index];

@@ -84,6 +84,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         // WHY: The immutable key list is an Array.AsReadOnly snapshot. This
         // cache-key hot path must not allocate its LINQ enumerator merely to
         // detect one explicitly requested ordering flag.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < definition.Keys.Count; ordinal++)
         {
             var key = definition.Keys[ordinal];

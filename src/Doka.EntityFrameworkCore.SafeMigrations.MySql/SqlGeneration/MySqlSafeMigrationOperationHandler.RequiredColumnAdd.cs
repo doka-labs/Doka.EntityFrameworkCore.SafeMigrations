@@ -154,6 +154,9 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
         // never replace text or split literals to attach the owned clause.
         var quote = '\0';
         var depth = 0;
+        // WHY: Advance exact UTF-16 offsets across quoted tokens so escapes cannot expose a false SQL boundary.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < body.Length; index++)
         {
             var token = body[index];

@@ -40,6 +40,9 @@ internal static class SafeMigrationCapturedExpressionNormalization
         }
 
         ExpectedColumnDefinition[]? columns = null;
+        // WHY: Replace normalized columns at their original table ordinals without reordering the snapshot.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < definition.Columns.Count; ordinal++)
         {
             var original = definition.Columns[ordinal];
@@ -52,6 +55,9 @@ internal static class SafeMigrationCapturedExpressionNormalization
         }
 
         ExpectedCheckConstraintDefinition[]? checks = null;
+        // WHY: Replace normalized checks at their original positions while retaining unchanged entries.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < definition.CheckConstraints.Count; ordinal++)
         {
             var original = definition.CheckConstraints[ordinal];

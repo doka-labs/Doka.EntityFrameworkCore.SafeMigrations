@@ -29,4 +29,38 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <ProjectReference Include="..\Doka.EntityFrameworkCore.SafeMigrations\Doka.EntityFrameworkCore.SafeMigrations.csproj" />
   </ItemGroup>
+
+  <!-- WHY: Update-only navigation preserves SDK Compile ownership. Every parent
+       is a real same-folder source; feature locations and runnable identities remain intact. -->
+  <ItemGroup Label="PartialFamilyNesting">
+    <Compile Update="Analysis\SqlServerSafeMigrationProviderAnalyzer.*.cs;
+                     Analysis\SqlServerProjectedIndexFilterProof.cs;
+                     Analysis\SqlServerProjectedSeedKeyProof.cs">
+      <DependentUpon>SqlServerSafeMigrationProviderAnalyzer.cs</DependentUpon>
+    </Compile>
+    <Compile Update="Features\Columns\SqlServerSafeMigrationCatalogSqlBuilder.*.cs">
+      <DependentUpon Condition="'%(Filename)' != 'SqlServerSafeMigrationCatalogSqlBuilder.Columns'">SqlServerSafeMigrationCatalogSqlBuilder.Columns.cs</DependentUpon>
+    </Compile>
+    <Compile Update="Features\Columns\SqlServerSafeMigrationProviderAnalyzer.*.cs">
+      <DependentUpon Condition="'%(Filename)' != 'SqlServerSafeMigrationProviderAnalyzer.ColumnTransitions'">SqlServerSafeMigrationProviderAnalyzer.ColumnTransitions.cs</DependentUpon>
+    </Compile>
+    <Compile Update="Features\Constraints\CheckConstraints\SqlServerSafeMigrationCatalogSqlBuilder.*.cs">
+      <DependentUpon Condition="'%(Filename)' != 'SqlServerSafeMigrationCatalogSqlBuilder.CheckConstraints'">SqlServerSafeMigrationCatalogSqlBuilder.CheckConstraints.cs</DependentUpon>
+    </Compile>
+    <Compile Update="Features\ForeignKeys\SqlServerProjectedDependencyGraph.*.cs">
+      <DependentUpon>SqlServerProjectedDependencyGraph.cs</DependentUpon>
+    </Compile>
+    <Compile Update="Features\Indexes\SqlServerSafeMigrationCatalogSqlBuilder.*.cs">
+      <DependentUpon Condition="'%(Filename)' != 'SqlServerSafeMigrationCatalogSqlBuilder.Indexes'">SqlServerSafeMigrationCatalogSqlBuilder.Indexes.cs</DependentUpon>
+    </Compile>
+    <Compile Update="Features\ModelManagedData\SqlServerSafeMigrationCatalogSqlBuilder.*.cs">
+      <DependentUpon Condition="'%(Filename)' != 'SqlServerSafeMigrationCatalogSqlBuilder.ModelManagedData'">SqlServerSafeMigrationCatalogSqlBuilder.ModelManagedData.cs</DependentUpon>
+    </Compile>
+    <Compile Update="Features\Tables\SqlServerSafeMigrationCatalogSqlBuilder.*.cs">
+      <DependentUpon Condition="'%(Filename)' != 'SqlServerSafeMigrationCatalogSqlBuilder.Tables'">SqlServerSafeMigrationCatalogSqlBuilder.Tables.cs</DependentUpon>
+    </Compile>
+    <Compile Update="SqlGeneration\SqlServerSafeMigrationsSqlGenerator.*.cs">
+      <DependentUpon>SqlServerSafeMigrationsSqlGenerator.cs</DependentUpon>
+    </Compile>
+  </ItemGroup>
 </Project>

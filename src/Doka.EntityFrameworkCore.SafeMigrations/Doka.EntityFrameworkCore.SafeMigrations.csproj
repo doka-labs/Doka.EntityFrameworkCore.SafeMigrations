@@ -46,4 +46,51 @@
                       IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive; compile" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
   </ItemGroup>
+
+  <!-- WHY: Update-only navigation preserves SDK Compile ownership. Every parent
+       is a real same-folder source; feature locations and runnable identities remain intact. -->
+  <ItemGroup Label="PartialFamilyNesting">
+    <Compile Update="Analysis\SafeMigrationModelFingerprint.*.cs">
+      <DependentUpon>SafeMigrationModelFingerprint.cs</DependentUpon>
+    </Compile>
+    <Compile Update="Analysis\SafeMigrationPostflightProjection.*.cs">
+      <DependentUpon>SafeMigrationPostflightProjection.cs</DependentUpon>
+    </Compile>
+    <Compile Update="Analysis\SafeMigrationPreflightProjection.*.cs">
+      <DependentUpon>SafeMigrationPreflightProjection.cs</DependentUpon>
+    </Compile>
+    <Compile Update="Analysis\SafeMigrationRunner.*.cs">
+      <DependentUpon>SafeMigrationRunner.cs</DependentUpon>
+    </Compile>
+    <Compile Update="Diagnostics\SafeMigrationDiagnosticMessages.*.cs">
+      <DependentUpon>SafeMigrationDiagnosticMessages.cs</DependentUpon>
+    </Compile>
+    <Compile Update="Expressions\SafeMigrationSqlExpressionInspector.*.cs">
+      <DependentUpon>SafeMigrationSqlExpressionInspector.cs</DependentUpon>
+    </Compile>
+    <Compile Update="Features\Columns\SafeMigrationPreflightProjection.*.cs">
+      <DependentUpon Condition="'%(Filename)' != 'SafeMigrationPreflightProjection.Columns'">SafeMigrationPreflightProjection.Columns.cs</DependentUpon>
+    </Compile>
+    <Compile Update="Features\Constraints\SafeMigrationPreflightProjection.*.cs">
+      <DependentUpon Condition="'%(Filename)' != 'SafeMigrationPreflightProjection.ConstraintPrerequisites'">SafeMigrationPreflightProjection.ConstraintPrerequisites.cs</DependentUpon>
+    </Compile>
+    <Compile Update="Features\Constraints\ForeignKeys\SafeMigrationPreflightProjection.*.cs">
+      <DependentUpon Condition="'%(Filename)' != 'SafeMigrationPreflightProjection.ForeignKeys'">SafeMigrationPreflightProjection.ForeignKeys.cs</DependentUpon>
+    </Compile>
+    <Compile Update="Features\Indexes\SafeMigrationPreflightProjection.*.cs">
+      <DependentUpon Condition="'%(Filename)' != 'SafeMigrationPreflightProjection.Indexes'">SafeMigrationPreflightProjection.Indexes.cs</DependentUpon>
+    </Compile>
+    <Compile Update="Features\ModelManagedData\SafeMigrationPreflightProjection.*.cs">
+      <DependentUpon Condition="'%(Filename)' != 'SafeMigrationPreflightProjection.ModelManagedData'">SafeMigrationPreflightProjection.ModelManagedData.cs</DependentUpon>
+    </Compile>
+    <Compile Update="Internal\SafeMigrationExpectedTableConstraints.*.cs">
+      <DependentUpon>SafeMigrationExpectedTableConstraints.cs</DependentUpon>
+    </Compile>
+    <Compile Update="Scaffolding\SafeMigrationCSharpMigrationOperationGenerator.*.cs">
+      <DependentUpon>SafeMigrationCSharpMigrationOperationGenerator.cs</DependentUpon>
+    </Compile>
+    <Compile Update="Scaffolding\SafeMigrationModelManagedDataPairer.*.cs">
+      <DependentUpon>SafeMigrationModelManagedDataPairer.cs</DependentUpon>
+    </Compile>
+  </ItemGroup>
 </Project>

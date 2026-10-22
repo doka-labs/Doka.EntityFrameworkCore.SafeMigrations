@@ -258,8 +258,8 @@ internal sealed class SqlServerSafeMigrationSqlExpressionRenderer
             var content = facet[1..^1].Trim();
             if (!content.Equals("max", StringComparison.OrdinalIgnoreCase)
                 && (content.Length == 0
-                    || content.IndexOfAnyExceptInRange('0', '9') >= 0
-                    && !IsDecimalFacet(content)))
+                    || (content.IndexOfAnyExceptInRange('0', '9') >= 0
+                        && !IsDecimalFacet(content))))
             {
                 return false;
             }
@@ -299,6 +299,9 @@ internal sealed class SqlServerSafeMigrationSqlExpressionRenderer
             return false;
         }
 
+        // WHY: Validate only the identifier tail after its separately checked first character.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 1; index < name.Length; index++)
         {
             if (!char.IsAsciiLetterOrDigit(name[index]) && name[index] != '_')
@@ -420,6 +423,9 @@ internal sealed class SqlServerSafeMigrationSqlExpressionRenderer
                     switch (current.Expression)
                     {
                         case SafeMigrationSqlIdentifierExpression value:
+                            // WHY: Write separators only between the ordered identifier parts.
+                            // ReSharper disable once ForCanBeConvertedToForeach
+                            // ReSharper disable once LoopCanBeConvertedToQuery
                             for (var index = 0; index < value.Parts.Count; index++)
                             {
                                 if (index > 0)

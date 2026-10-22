@@ -40,6 +40,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         }
 
         await CaptureRenameTargetPresenceAsync(context, renames, cancellationToken);
+        // WHY: Keep rename operations, physical identities and returned evidence aligned by ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < operations.Count; index++)
         {
             if (operations[index].Intent is RenameTableIntent rename)
@@ -105,6 +108,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             var analyses = await AnalyzeCoreAsync(context, rebound, captureRenameSources: false, cancellationToken,
                 backfillConstraints.Rebind(originals, rebound));
 
+            // WHY: Keep rename operations, physical identities and returned evidence aligned by ordinal.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var index = 0; index < originals.Count; index++)
             {
                 _renamedSourceAnalyses.Add(
@@ -170,6 +176,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                 var count = Math.Min(SafeMigrationCatalogQueryLimits.MaximumInventoryValues, targets.Length - offset);
                 var parameters = new string[count];
                 var valueBytes = 0;
+                // WHY: Keep bounded owner parameters aligned with their generated parameter-name slots.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var index = 0; index < count; index++)
                 {
                     var parameter = command.CreateParameter();

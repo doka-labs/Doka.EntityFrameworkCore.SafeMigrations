@@ -29,6 +29,9 @@ internal sealed class MySqlBackfillConstraintCatalog(HashSet<SafeMigrationOperat
         }
 
         var result = new HashSet<SafeMigrationOperation>(ReferenceEqualityComparer.Instance);
+        // WHY: Select the rebound operation at the original operation's matching ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < originals.Count; index++)
         {
             if (constrained.Contains(originals[index]))

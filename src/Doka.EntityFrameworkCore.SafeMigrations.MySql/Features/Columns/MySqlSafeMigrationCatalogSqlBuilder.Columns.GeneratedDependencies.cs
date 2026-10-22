@@ -111,6 +111,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
             var conditions = new string[members.Count + 1];
             conditions[0] = $"{count} = {members.Count.ToString(CultureInfo.InvariantCulture)}";
+            // WHY: Store dependency predicates in their reserved slots without changing source-member order.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var index = 0; index < members.Count; index++)
             {
                 conditions[index + 1] = BuildColumnMatches(

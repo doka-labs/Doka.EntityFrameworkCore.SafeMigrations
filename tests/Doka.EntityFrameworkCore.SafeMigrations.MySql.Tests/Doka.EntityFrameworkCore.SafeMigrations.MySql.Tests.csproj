@@ -36,4 +36,30 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
   </ItemGroup>
+
+  <!-- WHY: Update-only navigation preserves SDK Compile ownership. Every parent
+       is a real same-folder source; feature locations and runnable identities remain intact. -->
+  <ItemGroup Label="PartialFamilyNesting">
+    <Compile Update="Integration\Features\Columns\MySqlGeneratedCaseIntegrationTests.*.cs">
+      <DependentUpon>MySqlGeneratedCaseIntegrationTests.cs</DependentUpon>
+    </Compile>
+    <Compile Update="Integration\Features\Columns\MySqlIndependentColumnDropIntegrationTests.*.cs">
+      <DependentUpon>MySqlIndependentColumnDropIntegrationTests.cs</DependentUpon>
+    </Compile>
+    <Compile Update="Integration\Features\Lifecycle\MySqlLifecycleIntegrationTests.*.cs">
+      <DependentUpon>MySqlLifecycleIntegrationTests.cs</DependentUpon>
+    </Compile>
+    <Compile Update="Unit\MySqlCatalogSnapshotTests.*.cs">
+      <DependentUpon>MySqlCatalogSnapshotTests.cs</DependentUpon>
+    </Compile>
+    <Compile Update="Unit\MySqlProofMarkerRenderingTests.*.cs">
+      <DependentUpon>MySqlProofMarkerRenderingTests.cs</DependentUpon>
+    </Compile>
+    <Compile Update="Unit\MySqlProviderAnalysisCleanupTests.*.cs">
+      <DependentUpon>MySqlProviderAnalysisCleanupTests.cs</DependentUpon>
+    </Compile>
+    <Compile Update="Unit\MySqlSafeMigrationSqlExpressionRendererTests.*.cs">
+      <DependentUpon>MySqlSafeMigrationSqlExpressionRendererTests.cs</DependentUpon>
+    </Compile>
+  </ItemGroup>
 </Project>

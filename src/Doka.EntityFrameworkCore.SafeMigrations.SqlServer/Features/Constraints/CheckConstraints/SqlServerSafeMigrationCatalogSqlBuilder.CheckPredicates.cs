@@ -43,6 +43,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // may contain either character and must retain their exact identity.
         var bracketed = false;
 
+        // WHY: Track bracket escape lookahead without treating quoted content as syntax.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < sql.Length; index++)
         {
             if (bracketed)

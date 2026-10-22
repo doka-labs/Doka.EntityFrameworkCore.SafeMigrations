@@ -52,6 +52,8 @@ internal static class SqlServerComputedColumnContract
 
     private static bool AreDeterministic(IReadOnlyList<SafeMigrationSqlExpression> expressions, int depth)
     {
+        // WHY: Whole-method validation measured faster with snapshot enumeration for larger argument lists.
+        // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var expression in expressions)
         {
             if (!IsDeterministic(expression, depth))
@@ -65,6 +67,8 @@ internal static class SqlServerComputedColumnContract
 
     private static bool IsDeterministicCase(SafeMigrationSqlCaseExpression expression, int depth)
     {
+        // WHY: Whole-method CASE validation measured faster with snapshot enumeration for larger branches.
+        // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var clause in expression.WhenClauses)
         {
             if (!IsDeterministic(clause.Condition, depth) || !IsDeterministic(clause.Result, depth))

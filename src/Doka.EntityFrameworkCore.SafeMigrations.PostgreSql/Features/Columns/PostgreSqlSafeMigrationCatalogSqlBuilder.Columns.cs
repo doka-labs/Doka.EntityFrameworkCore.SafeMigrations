@@ -26,8 +26,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
         if (definitions.Any(static definition => definition.CapturedComputedSql is { } source
                 && !SafeMigrationSqlExpressionParser.IsCapturedSourceDialectCompatible(source, '"'))
-            || intent is AlterColumnIntent { OldDefinition.CapturedComputedSql: { } oldSource }
-                && !SafeMigrationSqlExpressionParser.IsCapturedSourceDialectCompatible(oldSource, '"'))
+            || (intent is AlterColumnIntent { OldDefinition.CapturedComputedSql: { } oldSource }
+                && !SafeMigrationSqlExpressionParser.IsCapturedSourceDialectCompatible(oldSource, '"')))
         {
             // WHY: A neutral identifier tree cannot turn foreign quote syntax
             // or an uncertified quoted function/type role into native SQL.
@@ -39,8 +39,13 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             return caseFeature;
         }
 
-        foreach (var definition in definitions)
+        var definitionCount = definitions.Count;
+        // WHY: Scan the immutable capability snapshot without adding an interface enumerator.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var definitionIndex = 0; definitionIndex < definitionCount; definitionIndex++)
         {
+            var definition = definitions[definitionIndex];
             if (definition.CapturedComputedSql is not null
                 && definition.ComputedExpression is SafeMigrationSqlLiteralExpression { Value: string uuid }
                 && ColumnStoreType(definition, ColumnMapping(definition)) == "uuid"
@@ -73,18 +78,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         var exists = ColumnExists(intent.Table, intent.Schema, intent.Definition.Name);
         var matching = ColumnMatches(intent.Table, intent.Schema, intent.Definition);
         var unsafeAdd = !SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(intent.Definition);
-        var repairCapability = repairRequested
-            && PostgreSqlSafeMigrationColumnMetadata.CanSafelyConverge(intent.Definition)
-            ? SafeMigrationRepairCapability.Safe
-            : SafeMigrationRepairCapability.None;
-
-        var transition = repairCapability == SafeMigrationRepairCapability.Safe
-            ? BuildColumnRepairTransition(
-                intent.Table,
-                intent.Schema,
-                intent.Definition,
-                includeTransitionEvidence)
-            : PostgreSqlColumnRepairTransition.None;
+        var repairCapability = EnsureColumnRepairCapability(intent, repairRequested);
+        var transition = BuildEnsureColumnRepairTransition(intent, repairCapability, includeTransitionEvidence);
 
         var repairInvariant = repairCapability == SafeMigrationRepairCapability.Safe
             ? $"({ColumnRepairInvariantMatches(intent.Table, intent.Schema, intent.Definition)}) "
@@ -236,21 +231,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     {
         var exists = ColumnExists(intent.Table, intent.Schema, intent.Definition.Name);
         var matching = ColumnMatches(intent.Table, intent.Schema, intent.Definition);
-        var sameTypeRepair = repairRequested
-            && intent.OldDefinition is not null
-            && SafeMigrationColumnRepairHelper.CanSafelyAlterColumn(intent.OldDefinition, intent.Definition);
-
-        var transition = repairRequested
-            && !sameTypeRepair
-            && intent.OldDefinition is not null
-            && CanAlterVarcharLength(intent.OldDefinition, intent.Definition)
-                ? BuildColumnRepairTransition(
-                    intent.Table,
-                    intent.Schema,
-                    intent.Definition,
-                    includeTransitionEvidence,
-                    intent.OldDefinition)
-                : PostgreSqlColumnRepairTransition.None;
+        var sameTypeRepair = IsSameTypeAlterRepair(intent, repairRequested);
+        var transition = BuildAlterColumnRepairTransition(
+            intent, repairRequested, sameTypeRepair, includeTransitionEvidence);
 
         var repair = sameTypeRepair || transition.HasDataProbe
             ? SafeMigrationRepairCapability.Safe
@@ -494,6 +477,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             .Append("JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace ")
             .Append("CROSS JOIN (VALUES ");
 
+        // WHY: Assign stable one-based column ordinals and delimit the expected rows.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < definition.Columns.Count; index++)
         {
             var column = definition.Columns[index];
@@ -532,11 +518,17 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             .Append(" END, FALSE)")
             .Append(" OR NOT COALESCE(CASE expected.attnum");
 
+        // WHY: Keep each structural CASE arm aligned with its expected column ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < definition.Columns.Count; index++)
         {
             var column = definition.Columns[index];
             var structural = ColumnStructuralFacetConditions(column, ColumnMapping(column), true);
             sql.Append(" WHEN ").Append(index + 1).Append(" THEN (");
+            // WHY: Insert conjunctions only between the structural facet predicates.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var facet = 0; facet < structural.Count; facet++)
             {
                 if (facet != 0)

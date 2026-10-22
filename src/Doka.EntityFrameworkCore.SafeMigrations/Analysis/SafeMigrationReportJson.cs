@@ -443,6 +443,9 @@ public static class SafeMigrationReportJson
 
         writer.WriteStartArray(propertyName);
         var count = Math.Min(columns.Count, MaximumIdentityColumnCount);
+        // WHY: Bound identifier output by count while retaining the original ordered snapshot.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < count; index++)
         {
             var value = columns[index];

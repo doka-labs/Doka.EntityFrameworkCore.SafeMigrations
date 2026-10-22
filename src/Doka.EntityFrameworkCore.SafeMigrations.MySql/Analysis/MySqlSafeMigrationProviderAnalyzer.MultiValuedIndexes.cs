@@ -60,6 +60,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         HashSet<(string? Schema, string Table)>? removalOwners = null;
         Dictionary<(string? Schema, string Table, string Name), DropIndexIntent>? requests = null;
 
+        // WHY: Keep captured proofs and plan slots tied to the exact owning operation ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             var intent = operations[ordinal].Intent;

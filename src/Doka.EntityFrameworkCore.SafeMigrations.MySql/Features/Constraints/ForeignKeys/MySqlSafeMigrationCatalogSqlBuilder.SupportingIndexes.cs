@@ -9,6 +9,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     private string ForeignKeyAutoIndexNameCollision(ExpectedForeignKeyDefinition definition, bool isMariaDb)
     {
         var columns = new string[definition.Columns.Count];
+        // WHY: Store each rendered column literal at its declared key ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < columns.Length; index++)
         {
             columns[index] = Literal(definition.Columns[index]);
@@ -37,6 +40,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         }
 
         var columns = new string[definition.Columns.Count];
+        // WHY: Store each rendered column literal at its declared key ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < columns.Length; index++)
         {
             columns[index] = Literal(definition.Columns[index]);
@@ -286,6 +292,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             .Append("HAVING COUNT(*) >= ")
             .Append(renderedColumns.Count.ToString(CultureInfo.InvariantCulture));
 
+        // WHY: Match declared key members to their one-based native catalog positions.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < renderedColumns.Count; index++)
         {
             ArgumentException.ThrowIfNullOrEmpty(renderedColumns[index], nameof(renderedColumns));

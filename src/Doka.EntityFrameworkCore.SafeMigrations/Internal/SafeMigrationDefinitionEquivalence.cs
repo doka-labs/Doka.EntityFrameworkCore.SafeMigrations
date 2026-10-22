@@ -26,6 +26,9 @@ internal static partial class SafeMigrationDefinitionEquivalence
             return false;
         }
 
+        // WHY: Compare both ordered identifier snapshots at the same ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < left.Count; index++)
         {
             if (!comparer.Equals(left[index], right[index]))
@@ -64,6 +67,9 @@ internal static partial class SafeMigrationDefinitionEquivalence
             return false;
         }
 
+        // WHY: Compare corresponding definition entries without changing sequence-sensitive semantics.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < left.Count; index++)
         {
             if (!equals(left[index], right[index]))

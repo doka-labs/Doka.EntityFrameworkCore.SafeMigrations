@@ -37,6 +37,9 @@ internal sealed partial class SafeMigrationPostflightProjection
         // earlier transient states cannot make an ordered replacement fail.
         // Provider-certified pass-through operations never enter this
         // reduction because they own no SafeMigrations catalog resource.
+        // WHY: Reverse traversal gives the final operation precedence when proving final catalog state.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = operations.Count - 1; ordinal >= 0; ordinal--)
         {
             if (operations[ordinal] is not SafeMigrationOperation safeOperation)
@@ -387,9 +390,15 @@ internal sealed partial class SafeMigrationPostflightProjection
             intent.KeyColumns, objectIdentityNormalizer, out var keyOrdinals);
 
         var rowFingerprints = new string[intent.RowCount];
+        // WHY: Build one canonical fingerprint for each authored row without copying the matrix.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var row = 0; row < intent.RowCount; row++)
         {
             using var rowWriter = new CanonicalHashWriter();
+            // WHY: Pair each canonical key label with its value through the same ordinal mapping.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var column = 0; column < intent.KeyColumns.Count; column++)
             {
                 var ordinal = keyOrdinals?[column] ?? column;

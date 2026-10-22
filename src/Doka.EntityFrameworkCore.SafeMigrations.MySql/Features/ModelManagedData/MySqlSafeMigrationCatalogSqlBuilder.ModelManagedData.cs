@@ -197,6 +197,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     )
     {
         var rows = new string[intent.RowCount];
+        // WHY: Keep row selectors, declared column types and matrix values aligned by their original ordinals.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var row = 0; row < intent.RowCount; row++)
         {
             var values = new List<string>(
@@ -205,6 +208,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 $"{row.ToString(CultureInfo.InvariantCulture)} AS {Delimited("r")}",
             };
 
+            // WHY: Keep row selectors, declared column types and matrix values aligned by their original ordinals.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var column = 0; column < intent.KeyColumns.Count; column++)
             {
                 values.Add(
@@ -214,6 +220,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
             foreach (var matrix in matrices)
             {
+                // WHY: Keep row selectors, declared column types and matrix values aligned by their original ordinals.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var column = 0; column < matrix.Columns.Count; column++)
                 {
                     values.Add(
@@ -435,6 +444,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         string column
     )
     {
+        // WHY: Return the exact column ordinal needed to address the matching matrix value.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < columns.Count; ordinal++)
         {
             if (StringComparer.Ordinal.Equals(columns[ordinal], column))

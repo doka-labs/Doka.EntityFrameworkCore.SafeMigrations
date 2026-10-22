@@ -14,6 +14,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
     )
     {
         Dictionary<string, (MySqlSafeMigrationIdentifierReferenceProof Proof, int OperationOrdinal)>? unique = null;
+        // WHY: Keep window-local plans and result slots aligned with their original operation ordinals.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < plans.Length; ordinal++)
         {
             if (states[ordinal] is { State: not SafeMigrationObservedState.PrerequisiteMissing }
@@ -172,6 +175,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             }
         }
 
+        // WHY: Keep window-local plans and result slots aligned with their original operation ordinals.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var planIndex = 0; planIndex < plans.Length; planIndex++)
         {
             var plan = plans[planIndex];
@@ -184,6 +190,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
             var bound = new MySqlSafeMigrationIdentifierReferenceProof[plan.IdentifierReferenceProofs.Count];
             var valid = true;
+            // WHY: Keep window-local plans and result slots aligned with their original operation ordinals.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var index = 0; index < bound.Length; index++)
             {
                 var proof = plan.IdentifierReferenceProofs[index];

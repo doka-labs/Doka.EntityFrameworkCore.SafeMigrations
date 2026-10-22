@@ -38,6 +38,9 @@ internal static class MySqlExpressionCanonicalizer
         var builder = new StringBuilder(expression.Length);
         List<MySqlExpressionCatalogLiteral>? literals = null;
         var bytes = 0;
+        // WHY: Advance exact UTF-16 offsets across quoted tokens so escapes cannot expose a false SQL boundary.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < expression.Length;)
         {
             var start = index;
@@ -189,6 +192,9 @@ internal static class MySqlExpressionCanonicalizer
 
         // Boolean terms are regrouped only at depth zero; nested predicates
         // must retain their original parenthesis structure.
+        // WHY: Advance exact UTF-16 offsets across quoted tokens so escapes cannot expose a false SQL boundary.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < expression.Length;)
         {
             var current = expression[index];
@@ -370,6 +376,9 @@ internal static class MySqlExpressionCanonicalizer
     {
         var depth = 0;
         var quote = '\0';
+        // WHY: Track quote escapes and parenthesis depth at exact UTF-16 offsets before slicing SQL.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < expression.Length; index++)
         {
             var current = expression[index];

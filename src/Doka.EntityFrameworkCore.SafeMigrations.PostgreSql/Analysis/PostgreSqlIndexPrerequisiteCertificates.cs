@@ -86,6 +86,9 @@ internal sealed class PostgreSqlIndexPrerequisiteCertificates
         // repeated full-stream scan per statement; only 32 aliases survive.
         var names = new string[SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement];
         var candidate = 0;
+        // WHY: Assign each reserved identifier to its stable output slot.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < names.Length; ordinal++)
         {
             string name;
@@ -153,6 +156,9 @@ internal sealed class PostgreSqlIndexPrerequisiteCertificates
             hash.Add(input.Schema, StringComparer.Ordinal);
             hash.Add(input.Method ?? "btree", StringComparer.Ordinal);
             hash.Add(PostgreSqlSafeMigrationCatalogSqlBuilder.IndexRequiredFlags(input));
+            // WHY: Hash immutable key snapshots without an interface enumerator.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var ordinal = 0; ordinal < input.Keys.Count; ordinal++)
             {
                 var key = input.Keys[ordinal];

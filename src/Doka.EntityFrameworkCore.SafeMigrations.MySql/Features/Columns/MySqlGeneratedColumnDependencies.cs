@@ -59,8 +59,13 @@ internal static class MySqlGeneratedColumnDependencies
             }
 
             var count = 0;
-            foreach (var candidate in table.Columns)
+            var columnCount = table.Columns.Count;
+            // WHY: Check every immutable column for ambiguity without an inner-loop enumerator.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var columnIndex = 0; columnIndex < columnCount; columnIndex++)
             {
+                var candidate = table.Columns[columnIndex];
                 if (StringComparer.OrdinalIgnoreCase.Equals(source, candidate.Name))
                 {
                     count++;

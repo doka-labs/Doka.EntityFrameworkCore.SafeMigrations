@@ -121,6 +121,10 @@ internal sealed class SqlServerSafeMigrationRuntimeDiagnostic
         foreach (var chunk in message.GetChunks())
         {
             var length = Math.Min(chunk.Length, end - offset);
+
+            // WHY: Preserve the chunk offset when enforcing the native display-width budget.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var index = 0; index < length; index++)
             {
                 var width = GetNativeWidth(chunk.Span[index]);
@@ -160,6 +164,8 @@ internal sealed class SqlServerSafeMigrationRuntimeDiagnostic
         // WHY: Core appends the real typed policy after every authored identifier.
         // Its later explanation contains only constants and machine codes. An
         // identifier containing the same marker must not become the trusted suffix.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var offset = message.Length - PolicySuffix.Length; offset >= 0; offset--)
         {
             if (!Matches(message, offset, PolicySuffix))
@@ -192,6 +198,9 @@ internal sealed class SqlServerSafeMigrationRuntimeDiagnostic
     /// <returns>Whether every expected character matches at the candidate offset.</returns>
     private static bool Matches(StringBuilder message, int offset, ReadOnlySpan<char> expected)
     {
+        // WHY: Compare the expected token with the message at the exact candidate offset.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < expected.Length; index++)
         {
             if (message[offset + index] != expected[index])

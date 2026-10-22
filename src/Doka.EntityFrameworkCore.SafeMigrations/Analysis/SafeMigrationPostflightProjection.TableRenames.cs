@@ -21,6 +21,9 @@ internal sealed partial class SafeMigrationPostflightProjection
         Dictionary<PostflightResource, PendingTable>? tables = null;
         Dictionary<int, SafeMigrationPostflightRenameProbe>? rewritten = null;
         var safeOrdinal = 0;
+        // WHY: Keep whole-stream positions aligned with safe-only analyses when tracking rename lineage.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             if (operations[ordinal] is not SafeMigrationOperation operation)

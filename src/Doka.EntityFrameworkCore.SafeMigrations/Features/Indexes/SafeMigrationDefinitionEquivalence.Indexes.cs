@@ -35,6 +35,9 @@ internal static partial class SafeMigrationDefinitionEquivalence
             return false;
         }
 
+        // WHY: Compare corresponding index key parts because composite-key order is semantic.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < left.Keys.Count; index++)
         {
             if (!IndexKey(left.Keys[index], right.Keys[index], columnComparer))

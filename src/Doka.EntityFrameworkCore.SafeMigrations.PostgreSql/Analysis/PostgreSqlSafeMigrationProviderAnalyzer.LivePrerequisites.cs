@@ -41,6 +41,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         }
 
         var definition = intent.Definition;
+        // WHY: Compare dependent and principal FK storage at the same key position.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < definition.Columns.Count; ordinal++)
         {
             if (!TryGetCurrentForeignKeyStorage(definition.Table, definition.Schema,
@@ -452,6 +455,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             .ToHashSet();
 
         HashSet<int>? caseCandidates = null;
+        // WHY: Capture missing-member evidence for the matching operation and result.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -516,6 +522,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     )
     {
         var hasMissingPrerequisite = false;
+        // WHY: Check prerequisite observations against their corresponding operations.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < results.Count; ordinal++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -538,6 +547,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         }
 
         var relevantColumns = new HashSet<LiveColumnIdentity>();
+        // WHY: Collect each operation's requests using its own prerequisite verdict.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -578,6 +590,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 
         CaptureProviderIndexColumnProposals(operations, results, cancellationToken);
 
+        // WHY: Resolve rename chains backward from requested targets to prior sources.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = operations.Count - 1; ordinal >= 0; ordinal--)
         {
             if (operations[ordinal].Intent is RenameColumnIntent rename && relevantColumns.Contains(
@@ -598,6 +613,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         var requestedForeignKeys = new HashSet<ExpectedForeignKeyDefinition>(
             new LiveForeignKeyComparer(_currentSchema));
 
+        // WHY: Apply authored column transitions in their original operation order.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             cancellationToken.ThrowIfCancellationRequested();

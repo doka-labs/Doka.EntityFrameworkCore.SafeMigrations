@@ -20,6 +20,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         cancellationToken.ThrowIfCancellationRequested();
 
         List<int>? candidates = null;
+        // WHY: Keep rename candidates aligned with their original analysis ordinals.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             if (operations[ordinal].Intent is RenameTableIntent or RenameColumnIntent or RenameIndexIntent
@@ -149,6 +152,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 
         // WHY: A later malformed result or cancellation cannot expose a
         // partially certified destination set to ordered projection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < candidates.Count; index++)
         {
             var ordinal = candidates[index];

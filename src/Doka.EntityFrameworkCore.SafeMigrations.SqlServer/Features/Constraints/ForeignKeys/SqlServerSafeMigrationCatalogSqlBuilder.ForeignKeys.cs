@@ -183,6 +183,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             targetKey,
         };
 
+        // WHY: Compare corresponding dependent and principal storage at each FK position.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < foreignKey.Columns.Count; ordinal++)
         {
             var column = table.Columns.First(value => value.Name == foreignKey.Columns[ordinal]);
@@ -244,7 +247,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         {
             if ((column.ComputedColumnSql is not null || column.ComputedExpression is not null)
                 && (foreignKey.Columns.Contains(column.Name)
-                    || self && foreignKey.PrincipalColumns.Contains(column.Name)))
+                    || (self && foreignKey.PrincipalColumns.Contains(column.Name))))
             {
                 // WHY: Runtime IndexKeysWithinLimit explicitly excludes
                 // computed FK operands. An empty row set or declared scalar
@@ -307,6 +310,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
         var start = operandOrdinal ?? 0;
         var end = operandOrdinal is { } single ? single + 1 : foreignKey.Columns.Count;
+        // WHY: Inspect only the requested FK operand range without losing pair alignment.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = start; ordinal < end; ordinal++)
         {
             var name = foreignKey.Columns[ordinal];

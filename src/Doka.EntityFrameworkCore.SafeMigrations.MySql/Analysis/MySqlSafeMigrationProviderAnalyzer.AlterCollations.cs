@@ -53,6 +53,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                 var count = Math.Min(SafeMigrationCatalogQueryLimits.MaximumInventoryValues, names.Length - offset);
                 var parameters = new string[count];
                 var valueBytes = 0;
+                // WHY: Keep bounded owner parameters aligned with their generated parameter-name slots.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var index = 0; index < count; index++)
                 {
                     var parameter = command.CreateParameter();

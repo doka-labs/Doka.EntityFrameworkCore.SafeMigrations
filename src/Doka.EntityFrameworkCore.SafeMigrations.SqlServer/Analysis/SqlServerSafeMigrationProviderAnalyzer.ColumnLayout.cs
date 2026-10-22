@@ -45,6 +45,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         // WHY: A later column target can be absent in the immutable catalog
         // because an earlier rename creates its identity. Read that source,
         // not every unrelated table in a large initial migration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = operations.Count - 1; ordinal >= 0; ordinal--)
         {
             if (operations[ordinal].Intent is RenameTableIntent table

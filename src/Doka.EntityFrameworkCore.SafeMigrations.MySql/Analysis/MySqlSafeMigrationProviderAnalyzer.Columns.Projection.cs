@@ -224,6 +224,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         // Its removal by a certified non-DML Ensure repair changes no stored
         // values. The exact kind proves SQL NULL regardless of its digest;
         // arbitrary default, storage and generation drift remain ineligible.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < differences.Count; index++)
         {
             var difference = differences[index];
@@ -750,6 +752,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             return;
         }
 
+        // WHY: Attach captured environment facts to the plan or analysis for the same operation ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             if (operations[ordinal].Intent is AlterColumnIntent intent
@@ -802,6 +807,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         MySqlSafeMigrationRuntimePlan[] plans
     )
     {
+        // WHY: Attach captured environment facts to the plan or analysis for the same operation ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Length; ordinal++)
         {
             if (plans[ordinal].RequiredColumnAddPlan is { } protocol)

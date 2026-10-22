@@ -5,7 +5,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     /// <summary>Captures scalar guards independently of the delayed relation's local parameter scope.</summary>
     /// <param name="intent">The authored managed-data contract.</param>
     /// <returns>The pre-binding guard and its failure classification, without accessing destination rows.</returns>
-    internal (string Guard, string Failure) BuildModelManagedDataAnalysisGuard(ModelManagedDataIntent intent)
+    internal (string Guard, string Failure) BuildModelManagedDataAnalysisGuard(
+        ModelManagedDataIntent intent
+    )
     {
         var commonGuard = BuildModelManagedDataCommonGuard(intent);
 
@@ -22,7 +24,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         var targetMatch = ColumnMatch(intent.Columns, "doka_actual", "doka_expected", "t");
         var found = $"doka_actual.{Delimited(intent.KeyColumns[0])} IS NOT NULL";
         var collision = UniqueCollision(intent, intent.UniqueKeys, relation, "t")
-            + " OR " + ExpectedSelfCollision(intent, intent.UniqueKeys, relation, "t", intent.Values);
+            + " OR "
+            + ExpectedSelfCollision(intent, intent.UniqueKeys, relation, "t", intent.Values);
 
         var state = "(SELECT CASE "
             + $"WHEN MAX(CASE WHEN {found} AND NOT ({targetMatch}) THEN 1 ELSE 0 END) = 1 THEN N'different' "
@@ -68,7 +71,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         var targetMatch = ColumnMatch(intent.Columns, "doka_actual", "doka_expected", "n");
         var found = $"doka_actual.{Delimited(intent.KeyColumns[0])} IS NOT NULL";
         var collision = UniqueCollision(intent, intent.UniqueKeys, relation, "n")
-            + " OR " + ExpectedSelfCollision(intent, intent.UniqueKeys, relation, "n", intent.NewValues);
+            + " OR "
+            + ExpectedSelfCollision(intent, intent.UniqueKeys, relation, "n", intent.NewValues);
 
         var state = "(SELECT CASE "
             + $"WHEN MAX(CASE WHEN NOT ({found}) THEN 1 ELSE 0 END) = 1 THEN N'prerequisite_missing' "
@@ -121,8 +125,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             + "ELSE N'transition_ready' END "
             + $"FROM {relation} LEFT JOIN {table} AS doka_actual ON {keyMatch})";
 
-        var postcondition = $"NOT EXISTS (SELECT 1 FROM {relation} "
-            + $"JOIN {table} AS doka_actual ON {keyMatch})";
+        var postcondition = $"NOT EXISTS (SELECT 1 FROM {relation} " + $"JOIN {table} AS doka_actual ON {keyMatch})";
 
         var evidence = $"(SELECT STRING_AGG(CONVERT(varchar(max), CASE WHEN NOT ({found}) THEN '0' "
             + $"WHEN ({sourceMatch}) THEN '1' ELSE '3' END), '') "
@@ -165,15 +168,21 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         _ => throw new ArgumentOutOfRangeException(nameof(intent)),
     };
 
-    private string BuildEnsureMutation(EnsureModelManagedDataIntent intent, bool scriptIdentityScope,
-        string? scopeInUseMessage)
+    private string BuildEnsureMutation(
+        EnsureModelManagedDataIntent intent,
+        bool scriptIdentityScope,
+        string? scopeInUseMessage
+    )
     {
         var relation = ExpectedRelation(intent, ("t", intent.Columns, intent.ColumnTypes, intent.Values));
         var table = QualifiedTable(intent.Table, intent.Schema);
         var keyMatch = KeyMatch(intent, "doka_actual", "doka_expected");
         var columns = string.Join(", ", intent.Columns.Select(Delimited));
-        var values = string.Join(", ", Enumerable.Range(0, intent.Columns.Count)
-            .Select(index => $"doka_expected.{Delimited($"t{index}")}"));
+        var values = string.Join(
+            ", ",
+            Enumerable
+                .Range(0, intent.Columns.Count)
+                .Select(index => $"doka_expected.{Delimited($"t{index}")}"));
 
         var mutation = $"INSERT INTO {table} ({columns}) SELECT {values} FROM {relation} "
             + $"WHERE NOT EXISTS (SELECT 1 FROM {table} AS doka_actual WHERE {keyMatch})";
@@ -191,15 +200,22 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             + $"@key = N'{SqlServerSafeMigrationIdentityInsertScope.ContextKey}', @value = NULL;";
 
         return $"DECLARE @doka_identity_insert bit = CASE WHEN {hasExplicitIdentity} THEN 1 ELSE 0 END; "
-            + SqlServerSafeMigrationIdentityInsertScope.BuildAcquisitionSql(table, scriptIdentityScope, scopeInUseMessage)
+            + SqlServerSafeMigrationIdentityInsertScope.BuildAcquisitionSql(
+                table,
+                scriptIdentityScope,
+                scopeInUseMessage)
             + $"BEGIN TRY {mutation}; END TRY "
             + $"BEGIN CATCH IF @doka_identity_insert = 1 BEGIN SET IDENTITY_INSERT {table} OFF; "
-            + clearOwnership + " END; THROW; END CATCH; "
+            + clearOwnership
+            + " END; THROW; END CATCH; "
             + $"IF @doka_identity_insert = 1 BEGIN SET IDENTITY_INSERT {table} OFF; "
-            + clearOwnership + " END";
+            + clearOwnership
+            + " END";
     }
 
-    private string BuildUpdateMutation(UpdateModelManagedDataIntent intent)
+    private string BuildUpdateMutation(
+        UpdateModelManagedDataIntent intent
+    )
     {
         var relation = ExpectedRelation(
             intent,
@@ -210,14 +226,17 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         var keyMatch = KeyMatch(intent, "doka_actual", "doka_expected");
         var sourceMatch = ColumnMatch(intent.Columns, "doka_actual", "doka_expected", "o");
         var targetMatch = ColumnMatch(intent.Columns, "doka_actual", "doka_expected", "n");
-        var assignments = string.Join(", ", intent.Columns.Select((column, index) =>
-            $"{Delimited(column)} = doka_expected.{Delimited($"n{index}")}"));
+        var assignments = string.Join(
+            ", ",
+            intent.Columns.Select((column, index) => $"{Delimited(column)} = doka_expected.{Delimited($"n{index}")}"));
 
         return $"UPDATE doka_actual SET {assignments} FROM {table} AS doka_actual "
             + $"JOIN {relation} ON {keyMatch} WHERE ({sourceMatch}) AND NOT ({targetMatch})";
     }
 
-    private string BuildDeleteMutation(DeleteModelManagedDataIntent intent)
+    private string BuildDeleteMutation(
+        DeleteModelManagedDataIntent intent
+    )
     {
         var relation = ExpectedRelation(intent, ("o", intent.Columns, intent.ColumnTypes, intent.OldValues));
         var table = QualifiedTable(intent.Table, intent.Schema);
@@ -229,15 +248,25 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             + $"JOIN {relation} ON {keyMatch} WHERE ({sourceMatch}) AND NOT ({dependent})";
     }
 
-    private string BuildModelManagedDataPrerequisite(ModelManagedDataIntent intent)
+    private string BuildModelManagedDataPrerequisite(
+        ModelManagedDataIntent intent
+    )
     {
-        var columns = intent.KeyColumns.Concat(intent.Columns).Distinct(StringComparer.Ordinal).ToArray();
+        var columns = intent
+            .KeyColumns
+            .Concat(intent.Columns)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
         var predicates = new List<string> { TableAndColumnsExist(intent.Table, intent.Schema, columns) };
 
         if (intent is DeleteModelManagedDataIntent deletion)
         {
-            predicates.AddRange(deletion.ForeignKeys.Select(foreignKey =>
-                TableAndColumnsExist(foreignKey.Table, foreignKey.Schema, foreignKey.Columns)));
+            predicates.AddRange(
+                deletion.ForeignKeys.Select(foreignKey => TableAndColumnsExist(
+                    foreignKey.Table,
+                    foreignKey.Schema,
+                    foreignKey.Columns)));
         }
 
         return string.Join(" AND ", predicates.Select(static predicate => $"({predicate})"));
@@ -259,6 +288,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // key-first ordinal de-duplication without applying it to FK contracts.
         var seen = new HashSet<string>(StringComparer.Ordinal);
 
+        // WHY: Pair each key name with the declared type at the same key ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < intent.KeyColumns.Count; index++)
         {
             if (seen.Add(intent.KeyColumns[index]))
@@ -267,6 +299,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             }
         }
 
+        // WHY: Pair each authored value-column name with its declared store type.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < intent.Columns.Count; index++)
         {
             if (seen.Add(intent.Columns[index]))
@@ -286,6 +321,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                     tables.Add(table, dependentColumns);
                 }
 
+                // WHY: Align dependent FK members with their corresponding principal types.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var index = 0; index < foreignKey.Columns.Count; index++)
                 {
                     var principalOrdinal = ColumnOrdinal(intent.Columns, foreignKey.PrincipalColumns[index]);
@@ -301,10 +339,15 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // WHY: Physical type mismatches remain Different, while unsupported
         // values, triggers, and server semantics share the same rejection proof.
 
-        var guard = new StringBuilder(commonGuard.Length + 1024).Append('(').Append(commonGuard).Append(')');
+        var guard = new StringBuilder(commonGuard.Length + 1024)
+            .Append('(')
+            .Append(commonGuard)
+            .Append(')');
+
         foreach (var table in tables)
         {
-            guard.Append(" AND (")
+            guard
+                .Append(" AND (")
                 .Append(ModelManagedTableStoreTypesMatch(table.Key.Table, table.Key.Schema, table.Value))
                 .Append(')');
         }
@@ -327,16 +370,16 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             + $"AND ({BuildModelManagedDataWritableColumnGuard(intent)})";
     }
 
-    private static string SqlServerCompatibilityLevel()
-        => "(SELECT compatibility_level FROM sys.databases WHERE name = DB_NAME())";
+    private static string SqlServerCompatibilityLevel() =>
+        "(SELECT compatibility_level FROM sys.databases WHERE name = DB_NAME())";
 
     private static string ModelManagedDataGuardFailure(
         string commonGuard
-    )
-        => $"CASE WHEN NOT ({commonGuard}) "
-            + "THEN N'unsupported' ELSE N'different' END";
+    ) => $"CASE WHEN NOT ({commonGuard}) " + "THEN N'unsupported' ELSE N'different' END";
 
-    private string BuildModelManagedDataTriggerGuard(ModelManagedDataIntent intent)
+    private string BuildModelManagedDataTriggerGuard(
+        ModelManagedDataIntent intent
+    )
     {
         // WHY: DML triggers can mutate rows outside the captured model-managed
         // contract, including SQL/CLR INSTEAD OF triggers that suppress the
@@ -346,7 +389,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             + "AND tr.is_disabled = 0)";
     }
 
-    private string BuildModelManagedDataWritableColumnGuard(ModelManagedDataIntent intent)
+    private string BuildModelManagedDataWritableColumnGuard(
+        ModelManagedDataIntent intent
+    )
     {
         if (intent is DeleteModelManagedDataIntent)
         {
@@ -366,7 +411,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             + $"AND (c.is_computed = 1 OR c.generated_always_type <> 0{identity}))";
     }
 
-    private string BuildSourceCollisionCollationGuard(ModelManagedDataIntent intent)
+    private string BuildSourceCollisionCollationGuard(
+        ModelManagedDataIntent intent
+    )
     {
         if (intent.RowCount == 1)
         {
@@ -374,6 +421,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         }
 
         var columns = new HashSet<string>(StringComparer.Ordinal);
+        // WHY: Inspect each key name together with its corresponding declared type.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < intent.KeyColumns.Count; index++)
         {
             if (IsCharacterManagedStoreType(intent.KeyColumnTypes[index]))
@@ -420,11 +470,16 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             + "CONVERT(sysname, DATABASEPROPERTYEX(DB_NAME(), 'Collation'))))";
     }
 
-    private static bool IsCharacterManagedStoreType(string storeType)
+    private static bool IsCharacterManagedStoreType(
+        string storeType
+    )
     {
         var value = storeType.Trim();
         var opening = value.IndexOf('(');
-        var type = opening < 0 ? value : value[..opening].TrimEnd();
+        var type = opening < 0
+            ? value
+            : value[..opening]
+                .TrimEnd();
 
         return type.Equals("char", StringComparison.OrdinalIgnoreCase)
             || type.Equals("varchar", StringComparison.OrdinalIgnoreCase)
@@ -432,13 +487,16 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             || type.Equals("nvarchar", StringComparison.OrdinalIgnoreCase);
     }
 
-    private string? GetUnsupportedModelManagedDataFeature(ModelManagedDataIntent intent)
+    private string? GetUnsupportedModelManagedDataFeature(
+        ModelManagedDataIntent intent
+    )
     {
         // WHY: Captured store-type text becomes a T-SQL CAST target. Only known
         // built-in mappings may be embedded; opaque provider types fail closed.
         foreach (var storeType in intent.KeyColumnTypes.Concat(intent.ColumnTypes))
         {
-            if (!IsSupportedManagedStoreType(storeType) || _typeMappingSource.FindMapping(storeType) is null)
+            if (!IsSupportedManagedStoreType(storeType)
+                || _typeMappingSource.FindMapping(storeType) is null)
             {
                 return "model_managed_store_type";
             }
@@ -454,14 +512,18 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
         foreach (var matrix in matrices)
         {
+            // WHY: Traverse the authored matrix by row while preserving failure precedence.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var row = 0; row < matrix.RowCount; row++)
             {
+                // WHY: Read each matrix cell with its corresponding declared column type.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var column = 0; column < matrix.ColumnCount; column++)
                 {
                     var value = matrix.GetUnsafeValue(row, column);
-                    var types = ReferenceEquals(matrix, intent.KeyValues)
-                        ? intent.KeyColumnTypes
-                        : intent.ColumnTypes;
+                    var types = ReferenceEquals(matrix, intent.KeyValues) ? intent.KeyColumnTypes : intent.ColumnTypes;
 
                     if (!FitsManagedValueSize(value, types[column]))
                     {
@@ -485,7 +547,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         return null;
     }
 
-    private string BuildModelManagedValueGuard(ModelManagedDataIntent intent)
+    private string BuildModelManagedValueGuard(
+        ModelManagedDataIntent intent
+    )
     {
         var predicates = new HashSet<string>(StringComparer.Ordinal);
         var rendered = new HashSet<(object? Value, string Type, string Column)>();
@@ -518,8 +582,14 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             ModelManagedDataMatrix matrix
         )
         {
+            // WHY: Keep each matrix column aligned with its name and declared type.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var column = 0; column < matrix.ColumnCount; column++)
             {
+                // WHY: Read every row at the current typed-column ordinal before deduplication.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var row = 0; row < matrix.RowCount; row++)
                 {
                     var value = matrix.GetUnsafeValue(row, column);
@@ -545,23 +615,22 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
                     var text = value switch
                     {
-                        string stringValue => stringValue,
-                        char character => character.ToString(),
-                        _ => null,
+                        string stringValue => stringValue, char character => character.ToString(), _ => null,
                     };
 
-                    if (text is null || text.All(static character => character <= 127))
+                    if (text is null
+                        || text.All(static character => character <= 127))
                     {
                         continue;
                     }
 
                     // WHY: The expected row relation uses database-default
                     // literals; a different physical code page cannot borrow it.
-                    predicates.Add("EXISTS (SELECT 1 FROM sys.columns c "
+                    predicates.Add(
+                        "EXISTS (SELECT 1 FROM sys.columns c "
                         + $"WHERE c.object_id = {TableId(intent.Table, intent.Schema)} "
                         + $"AND c.name = {Literal(columns[column])} "
                         + "AND c.collation_name = CONVERT(sysname, DATABASEPROPERTYEX(DB_NAME(), 'Collation')))");
-
                 }
             }
         }
@@ -574,10 +643,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     {
         var length = value switch
         {
-            string text => text.Length,
-            char => 1,
-            byte[] bytes => bytes.Length,
-            _ => 0,
+            string text => text.Length, char => 1, byte[] bytes => bytes.Length, _ => 0,
         };
 
         return !TryManagedValueMaximum(storeType, out var maximum) || length <= maximum;
@@ -588,28 +654,48 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         out int maximum
     )
     {
-        var value = storeType.Trim().ToLowerInvariant();
+        var value = storeType
+            .Trim()
+            .ToLowerInvariant();
+
         var opening = value.IndexOf('(');
-        var type = opening < 0 ? value : value[..opening].TrimEnd();
+        var type = opening < 0
+            ? value
+            : value[..opening]
+                .TrimEnd();
+
         maximum = 0;
 
         return (type is "char" or "varchar" or "nchar" or "nvarchar" or "binary" or "varbinary")
-            && opening >= 0 && value.EndsWith(')')
-            && int.TryParse(value[(opening + 1)..^1].Trim(), NumberStyles.None,
-                CultureInfo.InvariantCulture, out maximum);
+            && opening >= 0
+            && value.EndsWith(')')
+            && int.TryParse(
+                value[(opening + 1)..^1]
+                    .Trim(),
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out maximum);
     }
 
-    private static bool IsAnsiManagedStoreType(string storeType)
+    private static bool IsAnsiManagedStoreType(
+        string storeType
+    )
     {
         var value = storeType.Trim();
         var opening = value.IndexOf('(');
-        var type = opening < 0 ? value : value[..opening].TrimEnd();
+        var type = opening < 0
+            ? value
+            : value[..opening]
+                .TrimEnd();
 
         return type.Equals("char", StringComparison.OrdinalIgnoreCase)
             || type.Equals("varchar", StringComparison.OrdinalIgnoreCase);
     }
 
-    private string UnicodeManagedLiteral(string value, bool externalParameter = false)
+    private string UnicodeManagedLiteral(
+        string value,
+        bool externalParameter = false
+    )
     {
         if (_sourceParameter is not null)
         {
@@ -622,16 +708,26 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         return mapping.GenerateSqlLiteral(value);
     }
 
-    private static bool IsSupportedManagedStoreType(string storeType)
+    private static bool IsSupportedManagedStoreType(
+        string storeType
+    )
     {
-        var value = storeType.Trim().ToLowerInvariant();
+        var value = storeType
+            .Trim()
+            .ToLowerInvariant();
+
         var opening = value.IndexOf('(');
-        var type = opening < 0 ? value : value[..opening].TrimEnd();
+        var type = opening < 0
+            ? value
+            : value[..opening].TrimEnd();
+
         var args = opening < 0 || !value.EndsWith(')')
             ? null
-            : value[(opening + 1)..^1].Trim();
+            : value[(opening + 1)..^1]
+                .Trim();
 
-        if (opening >= 0 && (args is null || args.Contains('(') || args.Contains(')')))
+        if (opening >= 0
+            && (args is null || args.Contains('(') || args.Contains(')')))
         {
             return false;
         }
@@ -651,7 +747,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             var maximum = type is "nchar" or "nvarchar" ? 4_000 : 8_000;
 
             return int.TryParse(args, NumberStyles.None, CultureInfo.InvariantCulture, out var length)
-                && length is > 0 && length <= maximum;
+                && length is > 0
+                && length <= maximum;
         }
 
         if (type is "decimal" or "numeric")
@@ -667,68 +764,93 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 && int.TryParse(parts[0], NumberStyles.None, CultureInfo.InvariantCulture, out var precision)
                 && precision is >= 1 and <= 38
                 && int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var scale)
-                && scale >= 0 && scale <= precision;
+                && scale >= 0
+                && scale <= precision;
         }
 
         if (type is "datetime2" or "datetimeoffset" or "time")
         {
             return args is null
-                || int.TryParse(args, NumberStyles.None, CultureInfo.InvariantCulture, out var scale)
-                && scale is >= 0 and <= 7;
+                || (int.TryParse(args, NumberStyles.None, CultureInfo.InvariantCulture, out var scale)
+                    && scale is >= 0 and <= 7);
         }
 
         if (type == "float")
         {
             return args is null
-                || int.TryParse(args, NumberStyles.None, CultureInfo.InvariantCulture, out var precision)
-                && precision is >= 25 and <= 53;
+                || (int.TryParse(args, NumberStyles.None, CultureInfo.InvariantCulture, out var precision)
+                    && precision is >= 25 and <= 53);
         }
 
-        return args is null && type is ("bigint" or "bit" or "date" or "datetime" or "int"
-            or "money" or "real" or "smalldatetime" or "smallint" or "smallmoney"
-            or "tinyint" or "uniqueidentifier");
+        return args is null
+            && type is "bigint"
+                or "bit"
+                or "date"
+                or "datetime"
+                or "int"
+                or "money"
+                or "real"
+                or "smalldatetime"
+                or "smallint"
+                or "smallmoney"
+                or "tinyint"
+                or "uniqueidentifier";
     }
 
     private string ExpectedRelation(
         ModelManagedDataIntent intent,
-        params (string Prefix, IReadOnlyList<string> Columns, IReadOnlyList<string> Types,
-            ModelManagedDataMatrix Values)[] matrices
-    )
-        => ExpectedRelationNamed(intent, "doka_expected", matrices);
+        params (string Prefix, IReadOnlyList<string> Columns, IReadOnlyList<string> Types, ModelManagedDataMatrix Values
+            )[] matrices
+    ) => ExpectedRelationNamed(intent, "doka_expected", matrices);
 
     private string ExpectedRelationNamed(
         ModelManagedDataIntent intent,
         string alias,
-        params (string Prefix, IReadOnlyList<string> Columns, IReadOnlyList<string> Types,
-            ModelManagedDataMatrix Values)[] matrices
+        params (string Prefix, IReadOnlyList<string> Columns, IReadOnlyList<string> Types, ModelManagedDataMatrix Values
+            )[] matrices
     )
     {
-        var aliases = new List<string>(1 + intent.KeyColumns.Count
-            + matrices.Sum(static matrix => matrix.Columns.Count)) { "r" };
+        var aliases =
+            new List<string>(1 + intent.KeyColumns.Count + matrices.Sum(static matrix => matrix.Columns.Count)) { "r" };
 
-        aliases.AddRange(Enumerable.Range(0, intent.KeyColumns.Count).Select(static index => $"k{index}"));
+        aliases.AddRange(
+            Enumerable
+                .Range(0, intent.KeyColumns.Count)
+                .Select(static index => $"k{index}"));
 
         foreach (var matrix in matrices)
         {
-            aliases.AddRange(Enumerable.Range(0, matrix.Columns.Count)
-                .Select(index => $"{matrix.Prefix}{index}"));
+            aliases.AddRange(
+                Enumerable
+                    .Range(0, matrix.Columns.Count)
+                    .Select(index => $"{matrix.Prefix}{index}"));
         }
 
         var rows = new string[intent.RowCount];
+        // WHY: Keep authored matrix row ordinals aligned with emitted VALUES rows.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var row = 0; row < intent.RowCount; row++)
         {
             var values = new string[aliases.Count];
             values[0] = row.ToString(CultureInfo.InvariantCulture);
             var position = 1;
 
+            // WHY: Read each key matrix cell with its corresponding declared store type.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var column = 0; column < intent.KeyColumns.Count; column++)
             {
-                values[position++] = TypedValue(intent.KeyValues.GetUnsafeValue(row, column),
+                values[position++] = TypedValue(
+                    intent.KeyValues.GetUnsafeValue(row, column),
                     intent.KeyColumnTypes[column]);
             }
 
             foreach (var matrix in matrices)
             {
+                // WHY: Read each value matrix cell with its corresponding declared store type.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var column = 0; column < matrix.Columns.Count; column++)
                 {
                     values[position++] = TypedValue(matrix.Values.GetUnsafeValue(row, column), matrix.Types[column]);
@@ -738,8 +860,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             rows[row] = $"({string.Join(", ", values)})";
         }
 
-        return $"(VALUES {string.Join(", ", rows)}) AS {alias}("
-            + $"{string.Join(", ", aliases.Select(Delimited))})";
+        return $"(VALUES {string.Join(", ", rows)}) AS {alias}(" + $"{string.Join(", ", aliases.Select(Delimited))})";
     }
 
     private string TypedValue(
@@ -751,8 +872,10 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             ? _typeMappingSource.FindMapping(storeType)
             : _typeMappingSource.FindMapping(value.GetType(), storeType);
 
-        if (mapping is null || !IsSupportedManagedStoreType(mapping.StoreType)
-            || !FitsManagedValueSize(value, storeType) || !IsManagedValueRepresentable(value, storeType))
+        if (mapping is null
+            || !IsSupportedManagedStoreType(mapping.StoreType)
+            || !FitsManagedValueSize(value, storeType)
+            || !IsManagedValueRepresentable(value, storeType))
         {
             throw new NotSupportedException($"SQL Server has no safe mapping for '{storeType}'.");
         }
@@ -766,24 +889,29 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         ModelManagedDataIntent intent,
         string actual,
         string expected
-    )
-        => string.Join(" AND ", intent.KeyColumns.Select((column, index) =>
-            NullSafeSqlEqual($"{actual}.{Delimited(column)}", $"{expected}.{Delimited($"k{index}")}")));
+    ) => string.Join(
+        " AND ",
+        intent.KeyColumns.Select((
+            column,
+            index
+        ) => NullSafeSqlEqual($"{actual}.{Delimited(column)}", $"{expected}.{Delimited($"k{index}")}")));
 
     private string ColumnMatch(
         IReadOnlyList<string> columns,
         string actual,
         string expected,
         string prefix
-    )
-        => string.Join(" AND ", columns.Select((column, index) =>
-            ExactValueMatch($"{actual}.{Delimited(column)}", $"{expected}.{Delimited($"{prefix}{index}")}")));
+    ) => string.Join(
+        " AND ",
+        columns.Select((
+            column,
+            index
+        ) => ExactValueMatch($"{actual}.{Delimited(column)}", $"{expected}.{Delimited($"{prefix}{index}")}")));
 
     private static string NullSafeSqlEqual(
         string left,
         string right
-    )
-        => $"({left} = {right} OR ({left} IS NULL AND {right} IS NULL))";
+    ) => $"({left} = {right} OR ({left} IS NULL AND {right} IS NULL))";
 
     private static string ExactValueMatch(
         string actual,
@@ -812,16 +940,19 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
         var checks = uniqueKeys.Select(uniqueKey =>
         {
-            var columns = string.Join(" AND ", uniqueKey.Columns.Select(column =>
-            {
-                var ordinal = ColumnOrdinal(intent.Columns, column);
+            var columns = string.Join(
+                " AND ",
+                uniqueKey.Columns.Select(column =>
+                {
+                    var ordinal = ColumnOrdinal(intent.Columns, column);
 
-                // WHY: Unlike PostgreSQL, SQL Server's ordinary unique keys
-                // consider duplicate NULL combinations conflicting.
+                    // WHY: Unlike PostgreSQL, SQL Server's ordinary unique keys
+                    // consider duplicate NULL combinations conflicting.
 
-                return NullSafeSqlEqual($"doka_conflict.{Delimited(column)}",
-                    $"doka_expected.{Delimited($"{targetPrefix}{ordinal}")}");
-            }));
+                    return NullSafeSqlEqual(
+                        $"doka_conflict.{Delimited(column)}",
+                        $"doka_expected.{Delimited($"{targetPrefix}{ordinal}")}");
+                }));
 
             var key = KeyMatch(intent, "doka_conflict", "doka_expected");
 
@@ -846,25 +977,36 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             return "1 = 0";
         }
 
-        var other = ExpectedRelationNamed(intent, "doka_other",
+        var other = ExpectedRelationNamed(
+            intent,
+            "doka_other",
             (targetPrefix, intent.Columns, intent.ColumnTypes, targetValues));
 
         var collisionKeys = new List<string>(uniqueKeys.Count + 1)
         {
-            string.Join(" AND ", intent.KeyColumns.Select((_, index) =>
-                NullSafeSqlEqual($"doka_expected.{Delimited($"k{index}")}",
+            string.Join(
+                " AND ",
+                intent.KeyColumns.Select((
+                    _,
+                    index
+                ) => NullSafeSqlEqual(
+                    $"doka_expected.{Delimited($"k{index}")}",
                     $"doka_other.{Delimited($"k{index}")}"))),
         };
 
         foreach (var uniqueKey in uniqueKeys)
         {
-            collisionKeys.Add(string.Join(" AND ", uniqueKey.Columns.Select(column =>
-            {
-                var ordinal = ColumnOrdinal(intent.Columns, column);
+            collisionKeys.Add(
+                string.Join(
+                    " AND ",
+                    uniqueKey.Columns.Select(column =>
+                    {
+                        var ordinal = ColumnOrdinal(intent.Columns, column);
 
-                return NullSafeSqlEqual($"doka_expected.{Delimited($"{targetPrefix}{ordinal}")}",
-                    $"doka_other.{Delimited($"{targetPrefix}{ordinal}")}");
-            })));
+                        return NullSafeSqlEqual(
+                            $"doka_expected.{Delimited($"{targetPrefix}{ordinal}")}",
+                            $"doka_other.{Delimited($"{targetPrefix}{ordinal}")}");
+                    })));
         }
 
         // WHY: CLR equality cannot model the live database collation. Two
@@ -887,13 +1029,17 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
         var checks = intent.ForeignKeys.Select(foreignKey =>
         {
-            var match = string.Join(" AND ", foreignKey.Columns.Select((column, index) =>
-            {
-                var ordinal = ColumnOrdinal(intent.Columns, foreignKey.PrincipalColumns[index]);
+            var match = string.Join(
+                " AND ",
+                foreignKey.Columns.Select((
+                    column,
+                    index
+                ) =>
+                {
+                    var ordinal = ColumnOrdinal(intent.Columns, foreignKey.PrincipalColumns[index]);
 
-                return $"doka_dependent.{Delimited(column)} = "
-                    + $"doka_expected.{Delimited($"o{ordinal}")}";
-            }));
+                    return $"doka_dependent.{Delimited(column)} = " + $"doka_expected.{Delimited($"o{ordinal}")}";
+                }));
 
             return $"EXISTS (SELECT 1 FROM {relation} "
                 + $"JOIN {QualifiedTable(foreignKey.Table, foreignKey.Schema)} AS doka_dependent ON {match})";
@@ -914,13 +1060,14 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
         var counts = intent.ForeignKeys.Select(foreignKey =>
         {
-            var match = string.Join(" AND ", foreignKey.Columns.Select((column, index) =>
-            {
-                var ordinal = ColumnOrdinal(intent.Columns, foreignKey.PrincipalColumns[index]);
+            var match = string.Join(
+                " AND ",
+                foreignKey.Columns.Select((column, index) =>
+                {
+                    var ordinal = ColumnOrdinal(intent.Columns, foreignKey.PrincipalColumns[index]);
 
-                return $"doka_dependent.{Delimited(column)} = "
-                    + $"doka_expected.{Delimited($"o{ordinal}")}";
-            }));
+                    return $"doka_dependent.{Delimited(column)} = " + $"doka_expected.{Delimited($"o{ordinal}")}";
+                }));
 
             return $"CONVERT(varchar(20), (SELECT COUNT_BIG(*) FROM {relation} "
                 + $"JOIN {QualifiedTable(foreignKey.Table, foreignKey.Schema)} AS doka_dependent ON {match}))";
@@ -928,16 +1075,28 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
         // WHY: COUNT_BIG is never NULL. Concatenation covers a single dependency
         // and avoids CONCAT_WS's 254-argument limit; varchar(max) prevents truncation.
-        return "(" + string.Join(" + ',' + ", counts.Select(static (count, index) =>
-            index == 0 ? $"CONVERT(varchar(max), {count})" : count)) + ")";
+        return "("
+            + string.Join(
+                " + ',' + ",
+                counts.Select(static (
+                    count,
+                    index
+                ) => index == 0 ? $"CONVERT(varchar(max), {count})" : count))
+            + ")";
     }
 
-    private string UnmodeledIncomingForeignKey(DeleteModelManagedDataIntent intent)
+    private string UnmodeledIncomingForeignKey(
+        DeleteModelManagedDataIntent intent
+    )
     {
         var modeled = intent.ForeignKeys.Select(foreignKey =>
         {
-            var expected = string.Join(", ", foreignKey.Columns.Select((column, index) =>
-                $"({index + 1}, {Literal(column)}, {Literal(foreignKey.PrincipalColumns[index])})"));
+            var expected = string.Join(
+                ", ",
+                foreignKey.Columns.Select((
+                        column,
+                        index
+                    ) => $"({index + 1}, {Literal(column)}, {Literal(foreignKey.PrincipalColumns[index])})"));
 
             return $"(fk.parent_object_id = {TableId(foreignKey.Table, foreignKey.Schema)} "
                 + $"AND (SELECT COUNT(*) FROM sys.foreign_key_columns fkc "
@@ -966,16 +1125,20 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     private string QualifiedTable(
         string table,
         string? schema
-    )
-        => _sqlGenerationHelper.DelimitIdentifier(table, schema ?? "dbo");
+    ) => _sqlGenerationHelper.DelimitIdentifier(table, schema ?? "dbo");
 
-    private string Delimited(string name) => _sqlGenerationHelper.DelimitIdentifier(name);
+    private string Delimited(
+        string name
+    ) => _sqlGenerationHelper.DelimitIdentifier(name);
 
     private static int ColumnOrdinal(
         IReadOnlyList<string> columns,
         string column
     )
     {
+        // WHY: Return the actual matching column position without a temporary projection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < columns.Count; index++)
         {
             if (StringComparer.Ordinal.Equals(columns[index], column))
@@ -989,5 +1152,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     }
 
     private static SafeMigrationFacetDifference ModelManagedRowContentDifference() => new(
-        "model_managed_row_content", "modeled", "different_or_conflicting");
+        "model_managed_row_content",
+        "modeled",
+        "different_or_conflicting");
 }

@@ -49,8 +49,13 @@ internal static class MariaDbGeneratedColumnNullability
         foreach (var source in sources)
         {
             ExpectedColumnDefinition? resolved = null;
-            foreach (var candidate in table.Columns)
+            var columnCount = table.Columns.Count;
+            // WHY: Prove uniqueness across the immutable source columns without an inner enumerator.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var columnIndex = 0; columnIndex < columnCount; columnIndex++)
             {
+                var candidate = table.Columns[columnIndex];
                 if (!StringComparer.OrdinalIgnoreCase.Equals(source, candidate.Name))
                 {
                     continue;

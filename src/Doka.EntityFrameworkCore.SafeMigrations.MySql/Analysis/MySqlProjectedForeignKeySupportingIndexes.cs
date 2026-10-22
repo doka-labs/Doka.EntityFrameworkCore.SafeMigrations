@@ -549,6 +549,9 @@ internal sealed class MySqlProjectedForeignKeySupportingIndexes
             return false;
         }
 
+        // WHY: Compare actual and expected key facets at the same ordered key position.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < columns.Count; ordinal++)
         {
             if (keys[ordinal].PrefixLength is not null

@@ -14,6 +14,9 @@ internal sealed class PostgreSqlSafeMigrationGenerationIdentityContract
     {
         var segments = new Segment?[operations.Count];
         var pending = new List<(int Ordinal, SafeMigrationOperation Operation)>();
+        // WHY: Retain original operation ordinals when forming identity segments.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             var operation = operations[ordinal];

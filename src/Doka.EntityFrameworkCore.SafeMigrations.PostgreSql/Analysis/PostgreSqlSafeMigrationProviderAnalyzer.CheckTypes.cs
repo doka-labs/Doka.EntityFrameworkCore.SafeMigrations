@@ -76,6 +76,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     )
     {
         var hasSparseCheck = false;
+        // WHY: Inspect each CHECK together with its own prerequisite observation.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             if (results[ordinal].ObservedState == SafeMigrationObservedState.PrerequisiteMissing
@@ -96,6 +99,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         var checks = new HashSet<ExpectedCheckConstraintDefinition>();
         var requests = new List<CheckCallableIdentity>();
         var requested = new HashSet<CheckCallableIdentity>();
+        // WHY: Keep CHECK capability requests tied to their matching analysis slots.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -785,6 +791,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         foreach (var signature in signatures)
         {
             var exact = true;
+            // WHY: Compare each operand with the signature argument at the same position.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var index = 0; index < operands.Length; index++)
             {
                 var source = operands[index].TypeOid;
@@ -851,6 +860,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             }
 
             var compatible = true;
+            // WHY: Check coercion against the corresponding native signature argument.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var index = 0; index < operands.Length; index++)
             {
                 compatible &= CanCoerceCheckOperand(operands[index], signature.Arguments[index]);
@@ -859,6 +871,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             if (compatible)
             {
                 var exactArguments = 0;
+                // WHY: Count exact matches only between corresponding argument positions.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var index = 0; index < operands.Length; index++)
                 {
                     exactArguments += operands[index].TypeOid == signature.Arguments[index] ? 1 : 0;
@@ -1162,6 +1177,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 
         var parts = value.Split(',');
         var result = new long[parts.Length];
+        // WHY: Parse each native OID directly into its corresponding output slot.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < parts.Length; ordinal++)
         {
             if (!long.TryParse(parts[ordinal], NumberStyles.None, CultureInfo.InvariantCulture,

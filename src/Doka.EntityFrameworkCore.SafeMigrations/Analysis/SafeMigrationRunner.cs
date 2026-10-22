@@ -368,6 +368,9 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
                 : null;
 
             var safeOperationOrdinal = 0;
+            // WHY: Retain original operation ordinals for projection ownership and report evidence.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var ordinal = 0; ordinal < operations.Count; ordinal++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -759,6 +762,8 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
 
         // WHY: These retained snapshots expose indexed immutable reads. Enumerating
         // IReadOnlyList allocates an iterator, including the one-column metadata view.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < identifiers.Count; index++)
         {
             if (string.IsNullOrWhiteSpace(identifiers[index]))

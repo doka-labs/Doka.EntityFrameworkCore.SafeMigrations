@@ -7,6 +7,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     private readonly Dictionary<TransitionDependency, TransitionDependency> _transitionDropIdentities = [];
     private readonly Dictionary<(string Schema, string Table), Dictionary<string, ExpectedColumnDefinition>>
         _acceptedTransitionColumns = [];
+
     private readonly HashSet<(string Schema, string Table)> _transitionStructureChanged = [];
     private bool _transitionDataChangedGlobally;
 
@@ -92,6 +93,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
         var analyses = new SafeMigrationProviderAnalysis[candidates.Length];
 
+        // WHY: Retain capture offsets while enforcing the bounded operation window.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var offset = 0; offset < candidates.Length;
             offset += SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture)
         {
@@ -187,6 +191,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 }
             }, cancellationToken, transaction, SqlServerCatalogParameterBindings.MaximumParameters);
 
+        // WHY: Pair each transition candidate with its analysis and dependency snapshot.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < candidates.Length; index++)
         {
             CaptureProjectedIntegerWidening(candidates[index], analyses[index],
@@ -295,11 +302,11 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
         var key = (column.Schema ?? "dbo", column.Table);
         if (_transitionStructureChanged.Contains(key)
-            || _acceptedTransitionColumns.TryGetValue(key, out var accepted)
+            || (_acceptedTransitionColumns.TryGetValue(key, out var accepted)
                 && accepted.TryGetValue(column.Definition.Name, out var changed)
-                && !SafeMigrationDefinitionEquivalence.Column(changed, column.OldDefinition!)
-            || columns.TryGetProjectedColumn(column.Table, column.Schema, column.Definition.Name, out var projected)
-                && !SafeMigrationDefinitionEquivalence.Column(projected, column.OldDefinition!))
+                && !SafeMigrationDefinitionEquivalence.Column(changed, column.OldDefinition!))
+            || (columns.TryGetProjectedColumn(column.Table, column.Schema, column.Definition.Name, out var projected)
+                && !SafeMigrationDefinitionEquivalence.Column(projected, column.OldDefinition!)))
         {
             return analysis;
         }
@@ -346,9 +353,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         SafeMigrationDecision decision
     )
     {
-        if (!decision.ShouldExecute || operation.Intent is RenameTableIntent rename
+        if (!decision.ShouldExecute || (operation.Intent is RenameTableIntent rename
             && (rename.NewName ?? rename.Name) == rename.Name
-            && (rename.NewSchema ?? rename.Schema ?? "dbo") == (rename.Schema ?? "dbo"))
+            && (rename.NewSchema ?? rename.Schema ?? "dbo") == (rename.Schema ?? "dbo")))
         {
             return;
         }

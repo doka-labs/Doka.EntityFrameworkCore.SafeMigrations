@@ -40,6 +40,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         var order = new int[plans.Length];
         var representatives = new int[plans.Length];
         var distinct = new Dictionary<SqlServerSafeMigrationRuntimePlan, int>(plans.Length);
+        // WHY: Retain each plan's original slot while recording its shared representative.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < plans.Length; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -64,6 +67,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         }
 
         var count = 0;
+        // WHY: Schedule direct bindings before delayed bindings without mixing phases.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var mode = 0; mode < 2; mode++)
         {
             var delayed = mode == 1;
@@ -86,6 +92,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 captureStart, order, count, next, results, cancellationToken);
         }
 
+        // WHY: Copy each shared verdict back into its original capture result slot.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < plans.Length; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -243,6 +252,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             using var parameterFactory = statementParameters == 0 || command.SequentialCommand is not null
                 ? null : connection.CreateCommand();
 
+            // WHY: Keep delayed parameter namespaces tied to their classifier statement slot.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var slot = 0; slot < statementPlans.Count; slot++)
             {
                 var item = statementPlans[slot];
@@ -257,6 +269,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     command.Parameters.Add(ordinalParameter);
                 }
 
+                // WHY: Retain each source parameter's ordinal inside its delayed statement slot.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var index = 0; index < item.Plan.AnalysisParameters.Count; index++)
                 {
                     var value = item.Plan.AnalysisParameters[index];
@@ -348,6 +363,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         int ordinal
     )
     {
+        // WHY: Match an unconsumed classifier slot to its original operation ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var slot = 0; slot < expectedRows; slot++)
         {
             if (!consumed[slot] && resultPlans[resultSetStart + slot].Ordinal == ordinal)
@@ -370,6 +388,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         var length = checked(prefix.Length + trailer.Length
             + (Math.Max(0, selections.Count - 1) * separator.Length));
 
+        // WHY: Size the final SQL directly from indexed selections without an iterator.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < selections.Count; index++)
         {
             length = checked(length + selections[index].Length);
@@ -381,6 +402,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         {
             state.prefix.AsSpan().CopyTo(destination);
             destination = destination[state.prefix.Length..];
+            // WHY: Write separators only between selections in the exact-sized destination.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var index = 0; index < state.selections.Count; index++)
             {
                 if (index > 0)

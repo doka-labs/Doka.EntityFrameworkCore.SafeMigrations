@@ -346,6 +346,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             .Append("+CASE WHEN c.is_nullable=1 THEN N' NULL' ELSE N' NOT NULL' END END AS definition ")
             .Append("FROM (VALUES ");
 
+        // WHY: Keep operand names aligned with the emitted compiler-probe ordinals.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < names.Length; ordinal++)
         {
             if (ordinal != 0)
@@ -362,6 +365,10 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         if (authoredTable is { Columns.Count: > 0 })
         {
             probe.Append("(VALUES ");
+
+            // WHY: Keep authored operand definitions aligned with compiler-probe ordinals.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var ordinal = 0; ordinal < authoredTable.Columns.Count; ordinal++)
             {
                 if (ordinal != 0)

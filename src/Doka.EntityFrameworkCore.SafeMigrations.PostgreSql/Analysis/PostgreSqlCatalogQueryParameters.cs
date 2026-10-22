@@ -71,6 +71,9 @@ internal sealed class PostgreSqlCatalogQueryParameters
         }
 
         var retained = new DbParameter[checkpoint.Count];
+        // WHY: Restore each retained parameter at its original collection ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < retained.Length; index++)
         {
             retained[index] = _parametersCollection[index];

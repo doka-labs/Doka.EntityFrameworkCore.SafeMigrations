@@ -62,6 +62,9 @@ internal sealed class MySqlCatalogSnapshot : IAsyncDisposable
         _connection = connection;
         _commandTimeout = commandTimeout;
         var identity = Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture);
+        // WHY: Pair each catalog view with the private snapshot table at the same ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < s_views.Length; index++)
         {
             // WHY: A unique, bounded identifier isolates this snapshot from caller-owned temporary
@@ -98,6 +101,9 @@ internal sealed class MySqlCatalogSnapshot : IAsyncDisposable
         try
         {
             var builder = new StringBuilder(512);
+            // WHY: Pair each catalog view with the private snapshot table at the same ordinal.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var index = 0; index < s_views.Length; index++)
             {
                 var (view, predicate, keys) = s_views[index];
@@ -164,6 +170,9 @@ internal sealed class MySqlCatalogSnapshot : IAsyncDisposable
         // WHY: One statement drops every copy, because the analyzer's catalog round trips are
         // bounded by tests and a drop per view would spend that budget on cleanup.
         var builder = new StringBuilder(512).Append("DROP TEMPORARY TABLE IF EXISTS ");
+        // WHY: Emit only acknowledged snapshot-table slots and separate their names in order.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < _ownedCount; index++)
         {
             builder.Append(index == 0 ? string.Empty : ", ").Append(_tables[index]);

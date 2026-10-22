@@ -53,6 +53,9 @@ internal sealed class MySqlSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
 
         MigrationCommand[]? decorated = null;
         IRelationalCommand? metadataCommand = null;
+        // WHY: Keep execution wrappers and provider command slots in the original command order.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < commands.Count; index++)
         {
             var command = commands[index];

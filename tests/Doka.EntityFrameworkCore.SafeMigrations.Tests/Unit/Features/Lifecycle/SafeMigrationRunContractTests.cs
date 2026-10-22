@@ -1,6 +1,6 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
-public sealed class SafeMigrationRunContractTests
+public sealed partial class SafeMigrationRunContractTests
 {
     private static readonly HashSet<string> s_supportedSchemaKeywords = new(StringComparer.Ordinal)
     {
@@ -24,15 +24,40 @@ public sealed class SafeMigrationRunContractTests
         "minimum",
     };
 
-    [Fact]
-    public void RunOptions_RequireExplicitNonEmptyPseudonymousIdentity()
+    /// <summary>Requires each caller-supplied identity component to contain a non-whitespace value.</summary>
+    /// <param name="instanceId">The pseudonymous instance identity.</param>
+    /// <param name="targetMigrationId">The optional target migration identity.</param>
+    [Theory]
+    [InlineData(" ", null)]
+    [InlineData("instance", " ")]
+    public void RunOptions_RejectWhitespaceIdentity(
+        string instanceId,
+        string? targetMigrationId
+    )
     {
-        Assert.Throws<ArgumentException>(() => new SafeMigrationRunOptions(" "));
-        Assert.Throws<ArgumentException>(() => new SafeMigrationRunOptions("instance", " "));
+        // Arrange: The theory supplies the instance and target identities.
 
+        // Act
+        var exception = Record.Exception(() =>
+        {
+            _ = new SafeMigrationRunOptions(instanceId, targetMigrationId);
+        });
+
+        // Assert
+        Assert.IsType<ArgumentException>(exception);
+    }
+
+    /// <summary>Retains the accepted pseudonymous identity, migration and expected fingerprint.</summary>
+    [Fact]
+    public void RunOptions_RetainExplicitPseudonymousIdentity()
+    {
+        // Arrange
         var expectedFingerprint = ModelFingerprint();
+
+        // Act
         var options = new SafeMigrationRunOptions("instance-7f3a", "202608170101_Core", expectedFingerprint);
 
+        // Assert
         Assert.Equal("instance-7f3a", options.InstanceId);
         Assert.Equal("202608170101_Core", options.TargetMigrationId);
         Assert.Equal(expectedFingerprint, options.ExpectedModelFingerprint);
@@ -139,15 +164,25 @@ public sealed class SafeMigrationRunContractTests
         Assert.Equal("202608170101_Core", report.TargetMigrationId);
     }
 
+    /// <summary>Serializes the complete report identically through the buffer and caller-owned writer APIs.</summary>
     [Fact]
     public void ReportJson_IsStableCompleteAndCanWriteToACallerOwnedBuffer()
     {
+        // Arrange
         var report = CreateReport();
 
+        // Act
         var bytes = SafeMigrationReportJson.SerializeToUtf8Bytes(report);
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            SafeMigrationReportJson.Write(writer, report);
+        }
+
         using var document = JsonDocument.Parse(bytes);
         var root = document.RootElement;
 
+        // Assert
         Assert.Equal(
             SafeMigrationRunReport.CurrentSchemaVersion,
             root
@@ -182,317 +217,7 @@ public sealed class SafeMigrationRunContractTests
                 .GetProperty("objectKind")
                 .GetString());
 
-        using var stream = new MemoryStream();
-        using (var writer = new Utf8JsonWriter(stream))
-        {
-            SafeMigrationReportJson.Write(writer, report);
-        }
-
         Assert.Equal(Encoding.UTF8.GetString(bytes), Encoding.UTF8.GetString(stream.ToArray()));
-    }
-
-    [Fact]
-    public void ReportJsonCoversEveryStableWireCodeAndNullableField()
-    {
-        var modes = new[]
-        {
-            (Value: SafeMigrationReportMode.Preflight, Code: "preflight"),
-            (Value: SafeMigrationReportMode.Postflight, Code: "postflight"),
-        };
-
-        var statuses = new[]
-        {
-            (Value: SafeMigrationReportStatus.NoOperations, Code: "no_operations"),
-            (Value: SafeMigrationReportStatus.Ready, Code: "ready"),
-            (Value: SafeMigrationReportStatus.ReadyWithProviderOperations, Code: "ready_with_provider_operations"),
-            (Value: SafeMigrationReportStatus.Blocked, Code: "blocked"),
-            (Value: SafeMigrationReportStatus.RuntimeValidationRequired, Code: "runtime_validation_required"),
-        };
-
-        foreach (var mode in modes)
-        {
-            foreach (var status in statuses)
-            {
-                var report = CreateReport(mode.Value, status.Value, targetMigrationId: null);
-                using var document = JsonDocument.Parse(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
-                var root = document.RootElement;
-
-                Assert.Equal(
-                    mode.Code,
-                    root
-                        .GetProperty("mode")
-                        .GetString());
-                Assert.Equal(
-                    status.Code,
-                    root
-                        .GetProperty("status")
-                        .GetString());
-                Assert.Equal(
-                    JsonValueKind.Null,
-                    root.GetProperty("targetMigrationId")
-                        .ValueKind);
-            }
-        }
-
-        var operationKinds = new[]
-        {
-            (Value: SafeMigrationOperationKind.EnsureSchema, Code: "ensure_schema"),
-            (Value: SafeMigrationOperationKind.DropSchema, Code: "drop_schema"),
-            (Value: SafeMigrationOperationKind.EnsureTable, Code: "ensure_table"),
-            (Value: SafeMigrationOperationKind.DropTable, Code: "drop_table"),
-            (Value: SafeMigrationOperationKind.RenameTable, Code: "rename_table"),
-            (Value: SafeMigrationOperationKind.EnsureColumn, Code: "ensure_column"),
-            (Value: SafeMigrationOperationKind.DropColumn, Code: "drop_column"),
-            (Value: SafeMigrationOperationKind.RenameColumn, Code: "rename_column"),
-            (Value: SafeMigrationOperationKind.AlterColumn, Code: "alter_column"),
-            (Value: SafeMigrationOperationKind.EnsureIndex, Code: "ensure_index"),
-            (Value: SafeMigrationOperationKind.DropIndex, Code: "drop_index"),
-            (Value: SafeMigrationOperationKind.RenameIndex, Code: "rename_index"),
-            (Value: SafeMigrationOperationKind.EnsurePrimaryKey, Code: "ensure_primary_key"),
-            (Value: SafeMigrationOperationKind.DropPrimaryKey, Code: "drop_primary_key"),
-            (Value: SafeMigrationOperationKind.EnsureUniqueConstraint, Code: "ensure_unique_constraint"),
-            (Value: SafeMigrationOperationKind.DropUniqueConstraint, Code: "drop_unique_constraint"),
-            (Value: SafeMigrationOperationKind.EnsureCheckConstraint, Code: "ensure_check_constraint"),
-            (Value: SafeMigrationOperationKind.DropCheckConstraint, Code: "drop_check_constraint"),
-            (Value: SafeMigrationOperationKind.EnsureForeignKey, Code: "ensure_foreign_key"),
-            (Value: SafeMigrationOperationKind.DropForeignKey, Code: "drop_foreign_key"),
-            (Value: SafeMigrationOperationKind.EnsureModelManagedData, Code: "ensure_model_managed_data"),
-            (Value: SafeMigrationOperationKind.UpdateModelManagedData, Code: "update_model_managed_data"),
-            (Value: SafeMigrationOperationKind.DeleteModelManagedData, Code: "delete_model_managed_data"),
-        };
-
-        var states = new[]
-        {
-            (Value: SafeMigrationObservedState.Missing, Code: "missing"),
-            (Value: SafeMigrationObservedState.Matching, Code: "matching"),
-            (Value: SafeMigrationObservedState.Different, Code: "different"),
-            (Value: SafeMigrationObservedState.Unsupported, Code: "unsupported"),
-            (Value: SafeMigrationObservedState.DataBlocked, Code: "data_blocked"),
-            (Value: SafeMigrationObservedState.PrerequisiteMissing, Code: "prerequisite_missing"),
-            (Value: SafeMigrationObservedState.TransitionReady, Code: "transition_ready"),
-        };
-
-        var actions = new[]
-        {
-            (Value: SafeMigrationAction.Apply, Code: "apply"), (Value: SafeMigrationAction.NoOp, Code: "no_op"),
-            (Value: SafeMigrationAction.Repair, Code: "repair"),
-            (Value: SafeMigrationAction.RejectUnsupported, Code: "reject_unsupported"),
-            (Value: SafeMigrationAction.RejectDifferent, Code: "reject_different"),
-            (Value: SafeMigrationAction.RejectDataBlocked, Code: "reject_data_blocked"),
-            (Value: SafeMigrationAction.RejectPrerequisiteMissing, Code: "reject_prerequisite_missing"),
-            (Value: SafeMigrationAction.ValidateAtRuntime, Code: "validate_at_runtime"),
-        };
-
-        var operationalImpacts = new[]
-        {
-            (Value: SafeMigrationOperationalImpact.NotApplicable, Code: "not_applicable"),
-            (Value: SafeMigrationOperationalImpact.TableRewritePossible, Code: "table_rewrite_possible"),
-            (Value: SafeMigrationOperationalImpact.Unknown, Code: "unknown"),
-        };
-
-        var objectKinds = new[]
-        {
-            (Value: SafeMigrationDatabaseObjectKind.Table, Code: "table"),
-            (Value: SafeMigrationDatabaseObjectKind.Column, Code: "column"),
-            (Value: SafeMigrationDatabaseObjectKind.Index, Code: "index"),
-            (Value: SafeMigrationDatabaseObjectKind.PrimaryKey, Code: "primary_key"),
-            (Value: SafeMigrationDatabaseObjectKind.UniqueConstraint, Code: "unique_constraint"),
-            (Value: SafeMigrationDatabaseObjectKind.CheckConstraint, Code: "check_constraint"),
-            (Value: SafeMigrationDatabaseObjectKind.ForeignKey, Code: "foreign_key"),
-        };
-
-        var assessments = operationKinds
-            .Select((
-                value,
-                index
-            ) => new SafeMigrationAssessment(
-                index,
-                typeof(SafeMigrationOperation).FullName!,
-                isSafeOperation: true,
-                value.Value,
-                $"object_{index}",
-                states[index % states.Length].Value,
-                actions[index % actions.Length].Value,
-                actions[index % actions.Length].Value == SafeMigrationAction.ValidateAtRuntime
-                    ? null
-                    : index % 2 == 0,
-                "stable_code",
-                "provider_analysis",
-                "policy_decision",
-                operationalImpacts[index % operationalImpacts.Length].Value,
-                index == 0
-                    ? [new SafeMigrationFacetDifference("column_max_length", "200", "10")]
-                    : null,
-                actions[index % actions.Length].Value == SafeMigrationAction.ValidateAtRuntime
-                    ? new SafeMigrationDeferredOrigin(null, 0, typeof(SqlOperation).FullName!)
-                    : null))
-            .Append(
-                new SafeMigrationAssessment(
-                    operationKinds.Length,
-                    typeof(MigrationOperation).FullName!,
-                    isSafeOperation: false,
-                    operationKind: null,
-                    objectName: null,
-                    observedState: null,
-                    action: null,
-                    postconditionSatisfied: null,
-                    "provider_operation"))
-            .ToArray();
-
-        var unexpectedObjects = objectKinds
-            .Select(value => new SafeMigrationUnexpectedObject(value.Value, null, null, value.Code, "unexpected"))
-            .ToArray();
-
-        var completeReport = CreateReport(
-            SafeMigrationReportMode.Postflight,
-            SafeMigrationReportStatus.Blocked,
-            assessments: assessments,
-            unexpectedObjects: unexpectedObjects);
-
-        using var completeDocument = JsonDocument.Parse(SafeMigrationReportJson.SerializeToUtf8Bytes(completeReport));
-        var assessmentElements = completeDocument.RootElement.GetProperty("assessments");
-        var unexpectedElements = completeDocument.RootElement.GetProperty("unexpectedObjects");
-
-        Assert.Equal(
-            operationKinds.Select(static value => value.Code),
-            assessmentElements
-                .EnumerateArray()
-                .Take(operationKinds.Length)
-                .Select(static value => value
-                    .GetProperty("operationKind")
-                    .GetString()));
-        Assert.Equal(
-            states.Select(static value => value.Code),
-            assessmentElements
-                .EnumerateArray()
-                .Take(states.Length)
-                .Select(static value => value
-                    .GetProperty("observedState")
-                    .GetString()));
-        Assert.Equal(
-            actions.Select(static value => value.Code),
-            assessmentElements
-                .EnumerateArray()
-                .Take(actions.Length)
-                .Select(static value => value
-                    .GetProperty("action")
-                    .GetString()));
-        Assert.Equal(
-            operationalImpacts.Select(static value => value.Code),
-            assessmentElements
-                .EnumerateArray()
-                .Take(operationalImpacts.Length)
-                .Select(static value => value
-                    .GetProperty("operationalImpact")
-                    .GetString()));
-        Assert.Equal(
-            objectKinds.Select(static value => value.Code),
-            unexpectedElements
-                .EnumerateArray()
-                .Select(static value => value
-                    .GetProperty("objectKind")
-                    .GetString()));
-
-        using var schema = LoadReportSchema();
-        var schemaRoot = schema.RootElement;
-        var definitions = schemaRoot.GetProperty("$defs");
-
-        AssertSchemaEnum(
-            schemaRoot
-                .GetProperty("properties")
-                .GetProperty("mode"),
-            modes.Select(static value => value.Code));
-        AssertSchemaEnum(
-            schemaRoot
-                .GetProperty("properties")
-                .GetProperty("status"),
-            statuses.Select(static value => value.Code));
-        AssertSchemaEnum(
-            definitions
-                .GetProperty("environment")
-                .GetProperty("properties")
-                .GetProperty("engineFamily"),
-            ["mysql", "mariadb", "postgresql", "sqlite", "sqlserver"]);
-        AssertSchemaEnum(
-            definitions
-                .GetProperty("assessment")
-                .GetProperty("properties")
-                .GetProperty("operationKind"),
-            operationKinds.Select(static value => value.Code));
-        AssertSchemaEnum(
-            definitions
-                .GetProperty("assessment")
-                .GetProperty("properties")
-                .GetProperty("observedState"),
-            states.Select(static value => value.Code));
-        AssertSchemaEnum(
-            definitions
-                .GetProperty("assessment")
-                .GetProperty("properties")
-                .GetProperty("action"),
-            actions.Select(static value => value.Code));
-        AssertSchemaEnum(
-            definitions
-                .GetProperty("assessment")
-                .GetProperty("properties")
-                .GetProperty("operationalImpact"),
-            operationalImpacts.Select(static value => value.Code));
-        AssertSchemaEnum(
-            definitions
-                .GetProperty("unexpectedObject")
-                .GetProperty("properties")
-                .GetProperty("objectKind"),
-            objectKinds.Select(static value => value.Code));
-
-        AssertClosedObjectSurface(schemaRoot, completeDocument.RootElement);
-        AssertClosedObjectSurface(
-            definitions.GetProperty("environment"),
-            completeDocument.RootElement.GetProperty("environment"));
-        AssertClosedObjectSurface(definitions.GetProperty("assessment"), assessmentElements[0]);
-        AssertClosedObjectSurface(
-            definitions.GetProperty("difference"),
-            assessmentElements[0]
-                .GetProperty("differences")[0]);
-        AssertClosedObjectSurface(definitions.GetProperty("unexpectedObject"), unexpectedElements[0]);
-
-        var modelPattern = schemaRoot
-            .GetProperty("properties")
-            .GetProperty("modelFingerprint")
-            .GetProperty("pattern")
-            .GetString()!;
-
-        var contractPattern = schemaRoot
-            .GetProperty("properties")
-            .GetProperty("contractFingerprint")
-            .GetProperty("pattern")
-            .GetString()!;
-
-        Assert.Matches(new Regex(modelPattern, RegexOptions.CultureInvariant), completeReport.ModelFingerprint);
-        Assert.Matches(new Regex(contractPattern, RegexOptions.CultureInvariant), completeReport.ContractFingerprint);
-        AssertMatchesSchema(schemaRoot, completeDocument.RootElement, schemaRoot);
-
-        var providerAssessment = assessmentElements[operationKinds.Length];
-
-        Assert.Equal(
-            JsonValueKind.Null,
-            providerAssessment.GetProperty("operationKind")
-                .ValueKind);
-        Assert.Equal(
-            JsonValueKind.Null,
-            providerAssessment.GetProperty("objectName")
-                .ValueKind);
-        Assert.Equal(
-            JsonValueKind.Null,
-            providerAssessment.GetProperty("observedState")
-                .ValueKind);
-        Assert.Equal(
-            JsonValueKind.Null,
-            providerAssessment.GetProperty("action")
-                .ValueKind);
-        Assert.Equal(
-            JsonValueKind.Null,
-            providerAssessment.GetProperty("postconditionSatisfied")
-                .ValueKind);
     }
 
     [Fact]
@@ -549,7 +274,7 @@ public sealed class SafeMigrationRunContractTests
         AssertMatchesSchema(schemaRoot, root, schemaRoot);
     }
 
-    /// <summary>Current schema files match both newly captured and compatibility-constructed assessment shapes.</summary>
+    /// <summary>Matches current schemas to both captured and compatibility-constructed assessment shapes.</summary>
     [Fact]
     public void CurrentSchemasMatchKnownAndUnknownDiagnosticIdentityShapes()
     {
@@ -610,56 +335,91 @@ public sealed class SafeMigrationRunContractTests
         Assert.Equal("sqlserver", environment.EngineFamily);
     }
 
+    /// <summary>Rejects an engine family that is absent from the packaged schema.</summary>
     [Fact]
-    public void ReportAndEnvironmentRejectValuesOutsideThePackagedSchemaContract()
+    public void EnvironmentRejectsUnknownEngineFamily()
     {
-        Assert.Throws<ArgumentException>(() => new SafeMigrationProviderEnvironment("provider", "oracle", "1.0"));
-        Assert.Throws<ArgumentException>(() => CreateReport(modelFingerprint: new string('a', 64)));
-        Assert.Throws<ArgumentException>(() => CreateReport(contractFingerprint: "ABC"));
-        Assert.Throws<ArgumentOutOfRangeException>(() => new SafeMigrationAssessment(
-            0,
-            "operation",
-            isSafeOperation: true,
-            (SafeMigrationOperationKind)int.MaxValue,
-            "object",
-            SafeMigrationObservedState.Matching,
-            SafeMigrationAction.NoOp,
-            postconditionSatisfied: true,
-            "invalid_operation_kind"));
-        Assert.Throws<ArgumentOutOfRangeException>(() => new SafeMigrationAssessment(
-            0,
-            "operation",
-            isSafeOperation: true,
-            SafeMigrationOperationKind.EnsureTable,
-            "object",
-            (SafeMigrationObservedState)int.MaxValue,
-            SafeMigrationAction.NoOp,
-            postconditionSatisfied: true,
-            "invalid_observed_state"));
-        Assert.Throws<ArgumentOutOfRangeException>(() => new SafeMigrationAssessment(
-            0,
-            "operation",
-            isSafeOperation: true,
-            SafeMigrationOperationKind.EnsureTable,
-            "object",
-            SafeMigrationObservedState.Matching,
-            (SafeMigrationAction)int.MaxValue,
-            postconditionSatisfied: true,
-            "invalid_action"));
-        Assert.Throws<ArgumentOutOfRangeException>(() => new SafeMigrationAssessment(
-            0,
-            "operation",
-            isSafeOperation: true,
-            SafeMigrationOperationKind.EnsureTable,
-            "object",
-            SafeMigrationObservedState.Matching,
-            SafeMigrationAction.NoOp,
-            postconditionSatisfied: true,
-            "invalid_impact",
-            "classified_matching",
-            "matching_no_op",
-            (SafeMigrationOperationalImpact)int.MaxValue,
-            differences: null));
+        // Arrange
+        const string engineFamily = "oracle";
+
+        // Act
+        var exception = Record.Exception(() =>
+            new SafeMigrationProviderEnvironment("provider", engineFamily, "1.0"));
+
+        // Assert
+        Assert.IsType<ArgumentException>(exception);
+    }
+
+    /// <summary>Rejects malformed report fingerprints independently of each other.</summary>
+    /// <param name="model">Whether the invalid value is the model rather than contract fingerprint.</param>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ReportRejectsMalformedFingerprint(
+        bool model
+    )
+    {
+        // Arrange
+        var modelFingerprint = model ? new string('a', 64) : null;
+        var contractFingerprint = model ? null : "ABC";
+
+        // Act
+        var exception = Record.Exception(() => CreateReport(
+            modelFingerprint: modelFingerprint,
+            contractFingerprint: contractFingerprint));
+
+        // Assert
+        Assert.IsType<ArgumentException>(exception);
+    }
+
+    /// <summary>Rejects each undefined assessment enum independently at the public construction boundary.</summary>
+    /// <param name="field">The serializable invalid-enum field identifier.</param>
+    [Theory]
+    [InlineData("operation_kind")]
+    [InlineData("observed_state")]
+    [InlineData("action")]
+    [InlineData("impact")]
+    public void AssessmentRejectsUndefinedEnum(
+        string field
+    )
+    {
+        // Arrange
+        var kind = field == "operation_kind"
+            ? (SafeMigrationOperationKind)int.MaxValue
+            : SafeMigrationOperationKind.EnsureTable;
+
+        var state = field == "observed_state"
+            ? (SafeMigrationObservedState)int.MaxValue
+            : SafeMigrationObservedState.Matching;
+
+        var action = field == "action" ? (SafeMigrationAction)int.MaxValue : SafeMigrationAction.NoOp;
+        var impact = field == "impact"
+            ? (SafeMigrationOperationalImpact)int.MaxValue
+            : SafeMigrationOperationalImpact.NotApplicable;
+
+        var code = "invalid_" + field;
+
+        // Act
+        var exception = Record.Exception(() =>
+        {
+            _ = new SafeMigrationAssessment(
+                0,
+                "operation",
+                isSafeOperation: true,
+                kind,
+                "object",
+                state,
+                action,
+                postconditionSatisfied: true,
+                code,
+                field == "impact" ? "classified_matching" : code,
+                field == "impact" ? "matching_no_op" : code,
+                impact,
+                differences: null);
+        });
+
+        // Assert
+        Assert.IsType<ArgumentOutOfRangeException>(exception);
     }
 
     private static SafeMigrationRunReport CreateReport(

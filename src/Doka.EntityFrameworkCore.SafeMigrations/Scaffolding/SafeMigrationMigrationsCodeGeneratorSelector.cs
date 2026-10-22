@@ -34,6 +34,9 @@ internal sealed class SafeMigrationMigrationsCodeGeneratorSelector : IMigrations
         _providerGenerators = providerGenerators.ToArray();
         _decoratedGenerators = new IMigrationsCodeGenerator[_providerGenerators.Length];
 
+        // WHY: Keep each provider generator paired with the decorator stored at the same ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < _providerGenerators.Length; index++)
         {
             _decoratedGenerators[index] = new SafeMigrationCSharpMigrationsGenerator(
@@ -62,6 +65,9 @@ internal sealed class SafeMigrationMigrationsCodeGeneratorSelector : IMigrations
         // case-insensitive last-match rule for C# generators. SafeMigrations
         // rewrites C# source and must not decorate an explicitly different
         // language even when that provider generator is registered.
+        // WHY: Reverse registration order preserves EF's last-registered generator precedence.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = _providerGenerators.Length - 1; index >= 0; index--)
         {
             if (_providerGenerators[index].Language is null)
@@ -70,6 +76,9 @@ internal sealed class SafeMigrationMigrationsCodeGeneratorSelector : IMigrations
             }
         }
 
+        // WHY: Reverse registration order preserves EF's language-specific generator precedence.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = _providerGenerators.Length - 1; index >= 0; index--)
         {
             if (string.Equals(

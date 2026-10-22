@@ -6,6 +6,22 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
+### Changed
+
+- Organize provider and Core responsibilities into same-type partials with
+  repository-owned IDE nesting. Separate independent test contracts while
+  retaining shared container lifetimes, isolated database ownership and
+  migration/replay scenarios.
+- Reduce prerequisite, MySQL/MariaDB backfill, PostgreSQL data-probe and repeated
+  SQLite model-artifact construction allocations without changing SQL, policy,
+  report, history or proof-lifetime contracts. Performance timing remains
+  informational; source-bound attribution is documented in CONTRIBUTING.
+
+### Fixed
+
+- Attempt every SQL Server test-local database release when cleanup fails,
+  preserving aggregate errors and ownership of failed leases for retry.
+
 ## [10.6.0] - 2026-10-22
 
 Version 10.6.0 updates all five packages. This minor release adds public

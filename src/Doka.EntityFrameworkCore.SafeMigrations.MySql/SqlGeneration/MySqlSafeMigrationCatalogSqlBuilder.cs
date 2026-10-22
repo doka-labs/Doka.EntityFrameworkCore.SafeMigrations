@@ -17,6 +17,21 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     private bool _renderValuesInline;
     private List<MySqlSafeMigrationBinaryDefaultProof>? _binaryDefaultProofs;
 
+    // WHY: This is immutable grammar data, not per-operation proof state. Keeping its canonical
+    // order avoids repeating the array allocation while preserving Literal parameter registration.
+    private static readonly string[] s_backfillCharacterSets =
+    [
+        "ascii",
+        "latin1",
+        "utf8",
+        "utf8mb3",
+        "utf8mb4",
+        "ucs2",
+        "utf16",
+        "utf16le",
+        "utf32",
+    ];
+
     public MySqlSafeMigrationCatalogSqlBuilder(
         IRelationalTypeMappingSource typeMappingSource,
         ISqlGenerationHelper sqlGenerationHelper

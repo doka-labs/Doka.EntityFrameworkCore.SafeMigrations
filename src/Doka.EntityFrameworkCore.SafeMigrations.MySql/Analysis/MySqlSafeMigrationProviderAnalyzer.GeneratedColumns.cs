@@ -18,6 +18,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         _changedGeneratedColumnSources = null;
         _changedGeneratedColumnOwners = null;
         _generatedColumnSourcesUnknown = false;
+        // WHY: Keep captured proofs and plan slots tied to the exact owning operation ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < operations.Count; index++)
         {
             if (!TryGetColumnDependencyTarget(
