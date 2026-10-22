@@ -30,9 +30,9 @@ public sealed class MySqlParallelTestStructureTests
         Assert.True(helperOwner.IsAbstract);
         Assert.Empty(inheritedTests);
         // WHY: Exact feature-family coverage includes custom Fact subclasses; approximate counts can hide omissions.
-        Assert.Equal(77, featureClasses.Length);
-        Assert.Equal(602, declaredTests.Length);
-        Assert.Equal(602, declaredTests.Select(method => method.Name).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(78, featureClasses.Length);
+        Assert.Equal(615, declaredTests.Length);
+        Assert.Equal(615, declaredTests.Select(method => method.Name).Distinct(StringComparer.Ordinal).Count());
         Assert.NotNull(checkBypassMethod);
         Assert.Equal(typeof(MySqlColumnsAtomicRequiredAddConcurrencyIntegrationTests), checkBypassMethod.DeclaringType);
         Assert.NotNull(projectedProtectionMethod);
@@ -42,6 +42,7 @@ public sealed class MySqlParallelTestStructureTests
         Assert.Contains(typeof(MySqlPerformanceIntegrationTests), featureClasses);
         Assert.Contains(typeof(MySqlGeneratedCaseIntegrationTests), featureClasses);
         Assert.Contains(typeof(MySqlProvider106IntegrationTests), featureClasses);
+        Assert.Contains(typeof(MySqlIndependentColumnDropIntegrationTests), featureClasses);
         Assert.All(featureClasses, type =>
         {
             Assert.Contains(typeof(IClassFixture<MySqlEngineContainerFixture>), type.GetInterfaces());

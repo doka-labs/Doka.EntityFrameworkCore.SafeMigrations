@@ -24,6 +24,19 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         if (IsProjectedTableStructureUnknown(intent.Definition.Table, intent.Definition.Schema))
         {
+            if (CanValidateKeyAfterColumnDrop(intent.Definition.Table, intent.Definition.Schema)
+                && !HasUnavailableKeyMember(
+                    intent.Definition.Table,
+                    intent.Definition.Schema,
+                    intent.Definition.Columns))
+            {
+                return _projectedKeyAnalyzer!.ValidateProjectedUniqueConstraint(
+                    intent,
+                    this,
+                    SelectProjectedKeyEnvironment(intent.Definition.Table, intent.Definition.Schema, liveAnalysis),
+                    KeyAfterColumnDropUnproven());
+            }
+
             return StructureStateUnknown();
         }
 

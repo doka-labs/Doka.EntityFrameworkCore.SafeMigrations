@@ -10,6 +10,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         // before this operation. The epoch invalidates generic table proofs in
         // O(1); exact rows are cleared only at these unconfined boundaries.
         _providerDataMutationVersion++;
+        _certifiedColumnDropOrigins?.Clear();
         InvalidateModelManagedDataProjection();
     }
 

@@ -365,6 +365,8 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
 
         _projectedDependencyAnalyzer?.ObserveAcceptedOperation(operation, liveAnalysis, analysis, decision);
 
+        UpdateIndependentColumnDropLineage(operation.Intent, decision, preservesForeignKeyColumnProofs);
+
         if (decision.Action == SafeMigrationAction.Repair
             && analysis.RepairMutatesData)
         {
@@ -415,7 +417,7 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
                 Observe(value, liveAnalysis, analysis, decision);
                 break;
             case DropPrimaryKeyIntent value:
-                Observe(value, decision);
+                Observe(value, analysis, decision);
                 break;
             case EnsureUniqueConstraintIntent value:
                 Observe(value, liveAnalysis, decision);
@@ -495,6 +497,9 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
 
             return;
         }
+
+        // WHY: Ordinary DDL has no accepted safe-DROP lineage certificate.
+        _certifiedColumnDropOrigins?.Clear();
 
         switch (operation)
         {
@@ -730,7 +735,12 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
             prerequisites?.NewlyCreated == true,
             HasUnanalyzedDataChanges(table, schema),
             prerequisites?.PrimaryKeyWasDropped == true,
-            IsProjectedTableStructureUnknown(table, schema));
+            IsProjectedTableStructureUnknown(table, schema))
+        {
+            ColumnDropOriginOrdinal = _certifiedColumnDropOrigins?.TryGetValue(key, out var origin) == true
+                ? origin
+                : null,
+        };
 
         return true;
     }
@@ -739,7 +749,8 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
         string table,
         string? schema,
         ExpectedColumnDefinition definition,
-        bool preservesLiveValueDomain = false
+        bool preservesLiveValueDomain = false,
+        int valueMutationOriginOrdinal = -1
     )
     {
         definition = SafeMigrationCapturedExpressionNormalization.NormalizeColumn(
@@ -749,7 +760,8 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
         GetOrCreateProjectedColumnStates(table, schema)[definition.Name] = new ProjectedColumnState(
             definition,
             IsMissing: false,
-            preservesLiveValueDomain);
+            preservesLiveValueDomain,
+            valueMutationOriginOrdinal);
     }
 
     private SafeMigrationProviderAnalysis SelectProjectedKeyEnvironment(
@@ -882,7 +894,8 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
         }
 
         if (preservesIntrinsicColumnSources
-            && (firstMutation || _projectedIntrinsicColumnSourceTables?.Contains(key) == true))
+            && (firstMutation || _projectedIntrinsicColumnSourceTables?.Contains(key) == true
+                || (safeColumnDrop && _certifiedColumnDropOrigins?.ContainsKey(key) == true)))
         {
             // WHY: Removing a PRIMARY or creating an ordinary index can preserve
             // column storage while invalidating candidate-key proofs. Keep those
@@ -979,7 +992,8 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
                     preservesForeignKeyColumnProofs: preservesForeignKeyColumnProofs);
                 break;
             case DropColumnIntent value:
-                MarkProjectedTableStructureChanged(value.Table, value.Schema, safeColumnDrop: true);
+                MarkProjectedTableStructureChanged(value.Table, value.Schema, safeColumnDrop: true,
+                    preservesIntrinsicColumnSources: preservesIntrinsicColumnSources);
                 break;
             case RenameColumnIntent value:
                 MarkProjectedTableStructureChanged(value.Table, value.Schema, preservesRenamedCheckDefinitions: true);
@@ -1407,7 +1421,8 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
     private readonly record struct ProjectedColumnState(
         ExpectedColumnDefinition? Definition,
         bool IsMissing,
-        bool PreservesLiveValueDomain = false
+        bool PreservesLiveValueDomain = false,
+        int ValueMutationOriginOrdinal = -1
     );
 
     private sealed class ProjectedPrerequisites(

@@ -96,6 +96,13 @@ Timing evidence is informational.
 
 ### Fixed
 
+- Preserve provider-certified unchanged MySQL/MariaDB column facts across
+  independent sibling-column removal instead of rejecting every later alter,
+  replacement primary key or index as unknown. Check replacement key NULLs
+  and duplicates independently of the old primary key before destructive
+  removals. Keep unknown dependent-index identities and prospective generated
+  values explicitly runtime-validated, with their actual preceding operation
+  origin and all mandatory execution guards; do not assume UUID uniqueness.
 - Bound large SQL Server direct catalog statements separately from transport
   batches to avoid compiling oversized combined matchers. Keep all operations,
   source limits, delayed scopes and exact result validation; omit identity and

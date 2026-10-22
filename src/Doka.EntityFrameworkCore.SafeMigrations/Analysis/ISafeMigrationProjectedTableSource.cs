@@ -36,4 +36,11 @@ internal readonly record struct SafeMigrationProjectedTableState(
     bool IsNewlyCreated,
     bool HasDataMutation,
     bool PrimaryKeyWasDropped,
-    bool HasUnknownStructure);
+    bool HasUnknownStructure)
+{
+    /// <summary>Gets the original accepted certified column-DROP position in the complete stream.</summary>
+    /// <remarks>
+    /// This is provenance for provider qualification, never proof of a complete owner or unique rows.
+    /// </remarks>
+    public int? ColumnDropOriginOrdinal { get; init; }
+}

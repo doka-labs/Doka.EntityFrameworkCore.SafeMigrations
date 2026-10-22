@@ -79,9 +79,9 @@ internal sealed partial class SafeMigrationPreflightProjection
             return false;
         }
 
-        for (var ordinal = 0; ordinal < definition.Columns.Count; ordinal++)
+        foreach (var t in definition.Columns)
         {
-            if (comparer.Equals(definition.Columns[ordinal], column))
+            if (comparer.Equals(t, column))
             {
                 return true;
             }
@@ -97,6 +97,23 @@ internal sealed partial class SafeMigrationPreflightProjection
     {
         if (IsProjectedTableStructureUnknown(intent.Definition.Table, intent.Definition.Schema))
         {
+            if (CanValidateKeyAfterColumnDrop(intent.Definition.Table, intent.Definition.Schema)
+                && !HasUnavailableKeyMember(
+                    intent.Definition.Table,
+                    intent.Definition.Schema,
+                    intent.Definition.Columns)
+                && _prerequisites.TryGetValue(
+                    new TableKey(intent.Definition.Table, intent.Definition.Schema),
+                    out var droppedOwner)
+                && droppedOwner.PrimaryKeyWasDropped)
+            {
+                return _projectedKeyAnalyzer!.ValidateProjectedPrimaryKey(
+                    intent,
+                    this,
+                    SelectProjectedKeyEnvironment(intent.Definition.Table, intent.Definition.Schema, liveAnalysis),
+                    KeyAfterColumnDropUnproven());
+            }
+
             return StructureStateUnknown();
         }
 
@@ -355,20 +372,28 @@ internal sealed partial class SafeMigrationPreflightProjection
 
     private void Observe(
         DropPrimaryKeyIntent intent,
+        SafeMigrationProviderAnalysis analysis,
         SafeMigrationDecision decision
     )
     {
-        if (decision.Action == SafeMigrationAction.Apply)
+        var provesAbsent = decision.Action == SafeMigrationAction.NoOp
+            && analysis.ObservedState == SafeMigrationObservedState.Missing
+            && PrimaryKeyUsesNameIndependentIdentity;
+
+        if (decision.Action == SafeMigrationAction.Apply || provesAbsent)
         {
             var prerequisites = GetOrCreateProviderPrerequisites(intent.Table, intent.Schema);
             var physicalName = PrimaryKeyUsesNameIndependentIdentity ? "PRIMARY" : intent.Name;
 
+            // WHY: A singleton PRIMARY can already be absent after an interrupted
+            // prefix. Missing a named alias does not prove that another key is
+            // absent; existence-only Different is not an absence certificate.
             prerequisites.DropPrimaryKey();
             _droppedPhysicalKeys.Add(new IndexKey(intent.Table, intent.Schema, physicalName));
             _projectedCandidateKeyMutationTables.Add(new TableKey(intent.Table, intent.Schema));
         }
 
-        if (decision.Action == SafeMigrationAction.Apply
+        if ((decision.Action == SafeMigrationAction.Apply || provesAbsent)
             && TryGet(intent.Table, intent.Schema, out var table))
         {
             table.PrimaryKey = null;

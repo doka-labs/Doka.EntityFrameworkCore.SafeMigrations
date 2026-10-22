@@ -3,7 +3,8 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 {
     private MySqlSafeMigrationRuntimePlan BuildEnsurePrimaryKey(
-        EnsurePrimaryKeyIntent intent
+        EnsurePrimaryKeyIntent intent,
+        bool requiresReplacementRows
     )
     {
         var definition = intent.Definition;
@@ -25,6 +26,15 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             UnsupportedCode = definition.Columns.Count > MySqlProjectedIndexPhysicalShape.MaximumKeyParts
                 ? "primary_key_too_many_columns"
                 : "primary_key_exceeds_physical_limit",
+
+            // WHY: The old PRIMARY can conceal invalid rows for a different
+            // replacement. Capture that independent evidence before any DROP;
+            // matching keys and absent keys do not scan their rows again here.
+            ClassificationCodeExpression = requiresReplacementRows
+                ? $"CASE WHEN {exists} AND NOT ({matching}) THEN "
+                    + $"CASE WHEN {dataBlocked} THEN 'primary_key_replacement_data_blocked' "
+                    + "ELSE 'key_replacement_data_safe' END ELSE NULL END"
+                : null,
         };
     }
 

@@ -73,6 +73,11 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             return null;
         }
 
+        var certifiedSurvivingSource = columns is ISafeMigrationProjectedTableSource dropTables
+            && dropTables.TryGetProjectedTableState(table, schema, out var dropState)
+            && dropState is { IsNewlyCreated: false, HasDataMutation: false, ColumnDropOriginOrdinal: >= 0 }
+            && columns.PreservesLiveColumnValues(table, schema, column.Name);
+
         if (column.IsNullable)
         {
             var primaryMembership = columns.IsProjectedPrimaryKeyColumn(
@@ -93,14 +98,15 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
             if (_foreignKeyReplacementRowsInvalidated
                 || _columnPrimaryKeyDependencies?.Contains(operation) != true
-                || _invalidatedForeignKeyTables?.Contains((NormalizeProofSchema(schema), table)) == true)
+                || (!certifiedSurvivingSource
+                    && _invalidatedForeignKeyTables?.Contains((NormalizeProofSchema(schema), table)) == true))
             {
                 return null;
             }
 
             if (columns is ISafeMigrationProjectedTableSource primaryTables
                 && primaryTables.TryGetProjectedTableState(table, schema, out var primaryState)
-                && (primaryState.IsNewlyCreated || primaryState.HasUnknownStructure
+                && (primaryState.IsNewlyCreated || (primaryState.HasUnknownStructure && !certifiedSurvivingSource)
                     || primaryState.HasDataMutation || primaryState.PrimaryKeyWasDropped))
             {
                 return null;
@@ -121,10 +127,11 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         if (_foreignKeyReplacementRowsInvalidated
             || _columnSetNullDependencies is null
             || !_columnSetNullDependencies.TryGetValue(operation, out var dependencies)
-            || _invalidatedForeignKeyTables?.Contains((NormalizeProofSchema(schema), table)) == true
+            || (!certifiedSurvivingSource
+                && _invalidatedForeignKeyTables?.Contains((NormalizeProofSchema(schema), table)) == true)
             || (columns is ISafeMigrationProjectedTableSource tables
                 && tables.TryGetProjectedTableState(table, schema, out var state)
-                && (state.IsNewlyCreated || state.HasUnknownStructure)))
+                && (state.IsNewlyCreated || (state.HasUnknownStructure && !certifiedSurvivingSource))))
         {
             return null;
         }

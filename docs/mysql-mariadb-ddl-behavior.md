@@ -1242,8 +1242,43 @@ accepted non-nullable target columns can prove a different replacement key's
 row prerequisites. A successfully guarded required-column addition without a
 default can establish that certificate on an empty table. Ordered writes or
 unknown row state invalidate it, nullable key parts cannot use it, and the
-provider still validates physical key feasibility. This does not authorize
-adding generated identifiers to populated tables or replacing an unproven key.
+provider still validates physical key feasibility.
+
+An accepted independent sibling-column DROP can retain an unchanged ordinary
+column's intrinsic source and NULL-free nullability-transition proof. This
+certificate does not restore complete table, index or constraint knowledge.
+Existing replacement-key members need their own current NULL and duplicate
+checks: uniqueness of `(event_id, old_value)` does not establish uniqueness of
+`(event_id, tag_id)`. The analyzer checks those replacement rows even while the
+old PRIMARY still exists, so a known data conflict blocks before the destructive
+prefix is applied. Removed members, changed value domains, unresolved native
+dependencies, opaque operations and data mutations cannot borrow that evidence.
+
+Adding a required column with an ordinary SQL default such as `UUID()` is a
+separate native addition contract, not a structural proof of prospective key
+uniqueness. The default's engine/session and target-column checks still apply.
+When a replacement key depends on values not yet generated, preflight records
+`RuntimeValidationRequired` and the actual prior accepted operation in
+`DeferredOrigin`; it does not reject solely because those values do not exist
+yet or claim that they have already been checked. Runtime and emitted scripts
+must inspect the ordered live key, rows and dependencies before target DDL.
+Existing duplicate IDs are not excused by a UUID default. Index identities
+changed by DROP likewise require revalidation: removing one member can shrink
+a composite index into a different semantic alias. No policy, row check or
+physical-key limit is bypassed by deferral.
+
+MariaDB documents [function defaults](https://mariadb.com/docs/server/server-usage/tables/create-table#default-column-option)
+and the intended uniqueness and replication limits of
+[`UUID()`](https://mariadb.com/docs/server/reference/sql-functions/secondary-functions/miscellaneous-functions/uuid).
+Those contracts are not an application data-repair policy or permission to
+rewrite historical migrations.
+
+Do not infer identical UUID-default DDL support on MySQL. With binary logging
+and `ROW`/`MIXED` format, MySQL rejects an `ALTER TABLE` that evaluates a
+non-deterministic expression default. The native engine can therefore refuse
+the same addition independently of SafeMigrations projection. SafeMigrations
+does not change replication settings to admit it. See MySQL's
+[unsafe-statement contract](https://dev.mysql.com/doc/refman/8.4/en/replication-rbr-safe-unsafe.html).
 
 ## Scoped cleanup in Doka 10.4.0
 

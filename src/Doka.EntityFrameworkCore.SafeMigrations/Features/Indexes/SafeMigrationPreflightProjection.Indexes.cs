@@ -93,6 +93,17 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         if (IsProjectedTableStructureUnknown(intent.Definition.Table, intent.Definition.Schema))
         {
+            if (CanValidateKeyAfterColumnDrop(intent.Definition.Table, intent.Definition.Schema)
+                && !HasUnavailableKeyMember(intent.Definition.Table, intent.Definition.Schema, requiredColumns)
+                && !RequiresIndependentIndexDependencyProof(intent.Definition, requiredColumns, liveAnalysis))
+            {
+                return _projectedKeyAnalyzer!.ValidateProjectedIndex(
+                    intent,
+                    this,
+                    SelectProjectedKeyEnvironment(intent.Definition.Table, intent.Definition.Schema, liveAnalysis),
+                    KeyAfterColumnDropUnproven());
+            }
+
             // WHY: An earlier column or provider operation may have removed or
             // rewritten the accepted index. No historical semantic alias can
             // override that newer unknown-state boundary.
@@ -193,6 +204,41 @@ internal sealed partial class SafeMigrationPreflightProjection
             : projectedAnalysis;
 
         return ValidateProjectedIndex(intent, liveAnalysis, result, requiredColumns);
+    }
+
+    /// <summary>Keeps unresolved or generated member proofs ahead of generic DROP revalidation.</summary>
+    private bool RequiresIndependentIndexDependencyProof(
+        ExpectedIndexDefinition definition,
+        IReadOnlyList<string> requiredColumns,
+        SafeMigrationProviderAnalysis liveAnalysis
+    )
+    {
+        foreach (var name in requiredColumns)
+        {
+            var hasProjected = TryGetProjectedColumnDefinition(
+                definition.Table,
+                definition.Schema,
+                name,
+                out var column);
+
+            if (column is { ComputedExpression: not null } or { ComputedColumnSql: not null })
+            {
+                // WHY: The ordinary surviving-value certificate knows neither
+                // generated dependencies nor their physical index-alias lifetime.
+                return true;
+            }
+
+            if (!hasProjected
+                && liveAnalysis.ObservedState == SafeMigrationObservedState.PrerequisiteMissing
+                && liveAnalysis.IndexPhysicalEnvironment?.Columns?.ContainsKey(name) != true)
+            {
+                // WHY: A rejected generated ADD supplies no accepted member.
+                // The generic key callback cannot replace that dependency failure.
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private SafeMigrationProviderAnalysis Project(

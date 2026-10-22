@@ -9,6 +9,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     private readonly Dictionary<string, string> _identifierScratch = new(StringComparer.Ordinal);
     private readonly Dictionary<MySqlCatalogParameterValue, string> _valueScratch =
         new(MySqlCatalogParameterValueComparer.Instance);
+
     private readonly List<MySqlCatalogParameterValue> _parameterScratch = [];
     private Dictionary<string, string>? _identifierMarkers;
     private Dictionary<MySqlCatalogParameterValue, string>? _valueMarkers;
@@ -47,7 +48,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         MySqlGeneratedColumnDependencyContract? foldedGeneratedColumnDependency = null,
         bool bindFoldedGeneratedColumnDependency = false,
         MySqlGeneratedColumnDependencyContract? generatedColumnModelCandidate = null,
-        MySqlGeneratedColumnDependencyContract? foldedGeneratedColumnModelCandidate = null
+        MySqlGeneratedColumnDependencyContract? foldedGeneratedColumnModelCandidate = null,
+        bool requiresPrimaryKeyReplacementRows = false
     )
     {
         ArgumentNullException.ThrowIfNull(operation);
@@ -112,7 +114,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                     EnsureIndexIntent value => BuildEnsureIndex(value, context.ServerVersion.IsMariaDb),
                     DropIndexIntent value => BuildDropIndex(value, context.ServerVersion.IsMariaDb),
                     RenameIndexIntent value => BuildRenameIndex(value),
-                    EnsurePrimaryKeyIntent value => BuildEnsurePrimaryKey(value),
+                    EnsurePrimaryKeyIntent value => BuildEnsurePrimaryKey(value, requiresPrimaryKeyReplacementRows),
                     DropPrimaryKeyIntent value => BuildDropPrimaryKey(value),
                     EnsureUniqueConstraintIntent value => BuildEnsureUniqueConstraint(value),
                     DropUniqueConstraintIntent value => BuildDropUniqueConstraint(value),

@@ -306,8 +306,10 @@ internal sealed partial class SafeMigrationPreflightProjection
                 RepairCapability: SafeMigrationRepairCapability.Safe
             })
         && (!_prerequisites.TryGetValue(key, out var prerequisites) || !prerequisites.NewlyCreated)
-        && !IsProjectedTableStructureUnknown(key.Table, key.Schema)
-        && !_projectedUnknownPhysicalKeys.Contains(key)
+        && (!IsProjectedTableStructureUnknown(key.Table, key.Schema)
+            || _certifiedColumnDropOrigins?.ContainsKey(key) == true)
+        && (!_projectedUnknownPhysicalKeys.Contains(key)
+            || _certifiedColumnDropOrigins?.ContainsKey(key) == true)
         && _providerDataMutationVersion == 0
         && !HasUnanalyzedDataChanges(key.Table, key.Schema)
         && !IsProjectedColumnMissing(key.Table, key.Schema, column)
@@ -474,7 +476,13 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         if (decision.Action is SafeMigrationAction.Apply or SafeMigrationAction.NoOp or SafeMigrationAction.Repair)
         {
-            ObserveAcceptedColumnDefinition(intent.Table, intent.Schema, intent.Definition, analysis, decision);
+            ObserveAcceptedColumnDefinition(
+                intent.Table,
+                intent.Schema,
+                intent.Definition,
+                analysis,
+                decision,
+                preservesForeignKeyColumnProofs);
         }
 
         if (decision.Action is SafeMigrationAction.Apply or SafeMigrationAction.Repair
@@ -513,7 +521,13 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         if (decision.Action is SafeMigrationAction.NoOp or SafeMigrationAction.Repair)
         {
-            ObserveAcceptedColumnDefinition(intent.Table, intent.Schema, intent.Definition, analysis, decision);
+            ObserveAcceptedColumnDefinition(
+                intent.Table,
+                intent.Schema,
+                intent.Definition,
+                analysis,
+                decision,
+                preservesForeignKeyColumnProofs);
         }
 
         if (decision.Action == SafeMigrationAction.Repair
@@ -542,6 +556,7 @@ internal sealed partial class SafeMigrationPreflightProjection
     {
         if (decision.Action == SafeMigrationAction.Apply)
         {
+            ObserveIndependentColumnDrop(intent);
             var key = new TableKey(intent.Table, intent.Schema);
             _ = _prerequisites.TryGetValue(key, out var nativeOwner);
             var nativeEmptyGeneratedSet =
@@ -828,21 +843,40 @@ internal sealed partial class SafeMigrationPreflightProjection
         string? schema,
         ExpectedColumnDefinition definition,
         SafeMigrationProviderAnalysis analysis,
-        SafeMigrationDecision decision
+        SafeMigrationDecision decision,
+        bool preservesOriginalValues = false
     )
     {
         var hasPrevious = TryGetProjectedColumnState(table, schema, definition.Name, out var previous);
+        var hadUnchangedSource = !_projectedChangedColumns.TryGetValue(new TableKey(table, schema), out var changes)
+            || !changes.Contains(definition.Name);
+
+        // WHY: Owned staging completion changes nullability without adding or
+        // backfilling values; only its exact native certificate preserves them.
         var preservesDomain = decision.Action switch
         {
             SafeMigrationAction.NoOp => hasPrevious && previous.PreservesLiveValueDomain,
-            SafeMigrationAction.Repair => analysis is { RepairPreservesLiveValueDomain: true, RepairMutatesData: false }
-                && (!hasPrevious || previous.PreservesLiveValueDomain),
+            SafeMigrationAction.Apply =>
+                analysis is { RequiredColumnAddResumesOwnedStaging: true, RepairMutatesData: false }
+                && (hadUnchangedSource || (hasPrevious && previous.PreservesLiveValueDomain)),
+            SafeMigrationAction.Repair => !analysis.RepairMutatesData
+                && (analysis.RepairPreservesLiveValueDomain || preservesOriginalValues)
+                && (!hasPrevious
+                    || previous.PreservesLiveValueDomain
+                    || (preservesOriginalValues && hadUnchangedSource)),
             _ => false,
         };
 
         // WHY: A later certificate cannot erase an earlier uncertified conversion.
         // Row epochs are checked separately because triggers can mutate another table.
-        SetProjectedColumnDefinition(table, schema, definition, preservesDomain);
+        var mutationOrigin = decision.Action is SafeMigrationAction.Apply or SafeMigrationAction.Repair
+            && !preservesDomain
+                ? CurrentOperationOrdinal
+                : hasPrevious
+                    ? previous.ValueMutationOriginOrdinal
+                    : -1;
+
+        SetProjectedColumnDefinition(table, schema, definition, preservesDomain, mutationOrigin);
     }
 
     /// <summary>Reads accepted facts for an incomplete table without inventing missing live definitions.</summary>

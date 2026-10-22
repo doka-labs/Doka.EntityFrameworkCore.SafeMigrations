@@ -3,7 +3,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 /// <summary>Verifies narrow provider column certificates and their lifetime across physical key changes.</summary>
 public sealed class MySqlKeyChangeColumnProofTests
 {
-    /// <summary>Only key removals and ordinary nonunique BTREE creation retain intrinsic column sources.</summary>
+    /// <summary>Qualified key changes and column DROP retain surviving intrinsic column sources.</summary>
     /// <param name="change">The independently classified structural operation.</param>
     /// <param name="expected">Whether the provider certifies intrinsic column preservation.</param>
     [Theory]
@@ -29,7 +29,7 @@ public sealed class MySqlKeyChangeColumnProofTests
     [InlineData("primary-create", false)]
     [InlineData("foreign-create", false)]
     [InlineData("index-drop", false)]
-    [InlineData("column-drop", false)]
+    [InlineData("column-drop", true)]
     public void IntrinsicColumnSourceCertificateAcceptsOnlyQualifiedKeyChanges(string change, bool expected)
     {
         // Arrange
@@ -44,7 +44,7 @@ public sealed class MySqlKeyChangeColumnProofTests
         Assert.Equal(expected, result);
     }
 
-    /// <summary>Ensure requires satisfied matching or complete nullability-only non-data repair diagnostics.</summary>
+    /// <summary>Ensure requires to be satisfied matching or complete nullability-only non-data repair diagnostics.</summary>
     /// <param name="evidence">The captured provider state, facets or independent blocker.</param>
     /// <param name="expected">Whether the exact captured Ensure certificate is reusable.</param>
     [Theory]

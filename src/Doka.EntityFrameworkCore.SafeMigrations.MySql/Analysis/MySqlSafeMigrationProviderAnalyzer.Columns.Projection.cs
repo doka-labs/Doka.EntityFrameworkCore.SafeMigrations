@@ -9,6 +9,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         _projectedColumnSessionEnvironments = new(ReferenceEqualityComparer.Instance);
 
     private Dictionary<SafeMigrationOperation, RequiredColumnAddCapabilities>? _projectedRequiredAddCapsByOperation;
+
     private Dictionary<SafeMigrationProviderAnalysis, RequiredColumnAddCapabilities>?
         _projectedRequiredAddCapsByAnalysis;
 
@@ -23,8 +24,11 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             && (!_projectedColumnSessionEnvironments.TryGetValue(liveAnalysis, out var nativeEnvironment)
                 || !nativeEnvironment.NoBackslashEscapes))
         {
-            return new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Unsupported,
-                SafeMigrationRepairCapability.None, false, "column_native_enum_mode_conflict");
+            return new SafeMigrationProviderAnalysis(
+                SafeMigrationObservedState.Unsupported,
+                SafeMigrationRepairCapability.None,
+                false,
+                "column_native_enum_mode_conflict");
         }
 
         if (!RequiresProjectedMissingAddQualification(intent.Definition))
@@ -32,63 +36,96 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             return projectedAnalysis;
         }
 
-        var sqlDefault = MySqlSafeMigrationCatalogSqlBuilder.RequiresRequiredSqlDefaultAddQualification(
-            intent.Definition);
+        var sqlDefault = MySqlSafeMigrationCatalogSqlBuilder.RequiresRequiredSqlDefaultAddQualification(intent.Definition);
         var unavailable = sqlDefault ? "column_required_sql_add_unavailable" : "column_atomic_add_unavailable";
         if (!SupportsRetainedColumnProof(intent.Definition)
             || MySqlSafeMigrationCatalogSqlBuilder.RequiresUnsupportedMissingRequiredAdd(intent.Definition)
             || (!sqlDefault && RequiresProjectedTimestampDefaults(intent.Definition))
             || !_projectedColumnSessionEnvironments.TryGetValue(liveAnalysis, out var environment))
         {
-            return new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Unsupported,
-                SafeMigrationRepairCapability.None, false, unavailable);
+            return new SafeMigrationProviderAnalysis(
+                SafeMigrationObservedState.Unsupported,
+                SafeMigrationRepairCapability.None,
+                false,
+                unavailable);
         }
 
-        var innoDb = context.TableWasCreated ? environment.DefaultEngineIsInnoDb
+        var innoDb = context.TableWasCreated
+            ? environment.DefaultEngineIsInnoDb
             : environment.ExistingInnoDbTables.Contains(intent.Table);
+
         var sessionIsSafe = sqlDefault
-            ? MySqlProjectedColumnTransition.HasSafeRequiredSqlDefaultAddEnvironment(intent.Definition,
-                _typeMappingSource, innoDb, environment.StrictSqlMode, environment.ExplicitTimestampDefaults)
-                && MySqlProjectedColumnTransition.HasSafeRequiredAddLiteralMode(intent.Definition,
-                    requiresBackslashEscapes: false, environment.BackslashEscapesEnabled,
-                    environment.DoubleQuotesAreLiteral)
+            ? MySqlProjectedColumnTransition.HasSafeRequiredSqlDefaultAddEnvironment(
+                intent.Definition,
+                _typeMappingSource,
+                innoDb,
+                environment.StrictSqlMode,
+                environment.ExplicitTimestampDefaults)
+            && MySqlProjectedColumnTransition.HasSafeRequiredAddLiteralMode(
+                intent.Definition,
+                requiresBackslashEscapes: false,
+                environment.BackslashEscapesEnabled,
+                environment.DoubleQuotesAreLiteral)
             : _projectedRequiredAddCapsByAnalysis is { } capabilities
-                && capabilities.TryGetValue(liveAnalysis, out var protocol)
-                && MySqlProjectedColumnTransition.HasSafeAtomicRequiredColumnAddEnvironment(innoDb,
-                    environment.StrictSqlMode, environment.ChecksEnforced, protocol.SupportsCheck)
-                && MySqlProjectedColumnTransition.HasSafeRequiredAddLiteralMode(intent.Definition,
-                    protocol.BackslashEscapes, environment.BackslashEscapesEnabled, environment.DoubleQuotesAreLiteral);
+            && capabilities.TryGetValue(liveAnalysis, out var protocol)
+            && MySqlProjectedColumnTransition.HasSafeAtomicRequiredColumnAddEnvironment(
+                innoDb,
+                environment.StrictSqlMode,
+                environment.ChecksEnforced,
+                protocol.SupportsCheck)
+            && MySqlProjectedColumnTransition.HasSafeRequiredAddLiteralMode(
+                intent.Definition,
+                protocol.BackslashEscapes,
+                environment.BackslashEscapesEnabled,
+                environment.DoubleQuotesAreLiteral);
         if (!sessionIsSafe)
         {
-            return new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Unsupported,
-                SafeMigrationRepairCapability.None, false, unavailable);
+            return new SafeMigrationProviderAnalysis(
+                SafeMigrationObservedState.Unsupported,
+                SafeMigrationRepairCapability.None,
+                false,
+                unavailable);
         }
 
         // WHY: Atomic strict DDL prevents fabricated values, but it does not
         // prove that a required absent or SQL NULL default can populate rows.
-        if (!SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(intent.Definition) && !context.ProvesEmpty)
+        if (!SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(intent.Definition)
+            && !context.ProvesEmpty)
         {
             if (liveAnalysis.ObservedState == SafeMigrationObservedState.DataBlocked
-                && !context.TableWasCreated && !context.HasDataMutation)
+                && context is { TableWasCreated: false, HasDataMutation: false })
             {
                 return liveAnalysis;
             }
 
-            var currentOwnedStage = liveAnalysis.ObservedState == SafeMigrationObservedState.Missing
-                && liveAnalysis.RequiredColumnAddResumesOwnedStaging
-                && !context.TableWasCreated && !context.ColumnWasDropped && !context.HasDataMutation;
-            if (!currentOwnedStage && (liveAnalysis.ObservedState != SafeMigrationObservedState.Missing
-                || !liveAnalysis.RequiresLiveDataProof || context.HasDataMutation || context.TableWasCreated))
+            var currentOwnedStage =
+                liveAnalysis is
+                {
+                    ObservedState: SafeMigrationObservedState.Missing, RequiredColumnAddResumesOwnedStaging: true
+                }
+                && context is { TableWasCreated: false, ColumnWasDropped: false, HasDataMutation: false };
+
+            if (!currentOwnedStage
+                && (liveAnalysis.ObservedState != SafeMigrationObservedState.Missing
+                    || !liveAnalysis.RequiresLiveDataProof
+                    || context.HasDataMutation
+                    || context.TableWasCreated))
             {
-                return new SafeMigrationProviderAnalysis(SafeMigrationObservedState.PrerequisiteMissing,
-                    SafeMigrationRepairCapability.None, false, "projected_required_add_rows_unproven");
+                return new SafeMigrationProviderAnalysis(
+                    SafeMigrationObservedState.PrerequisiteMissing,
+                    SafeMigrationRepairCapability.None,
+                    false,
+                    "projected_required_add_rows_unproven");
             }
 
             if (liveAnalysis.RequiredColumnAddResumesOwnedStaging
                 && (context.TableWasCreated || context.ColumnWasDropped))
             {
-                return new SafeMigrationProviderAnalysis(SafeMigrationObservedState.PrerequisiteMissing,
-                    SafeMigrationRepairCapability.None, false, "projected_required_add_rows_unproven");
+                return new SafeMigrationProviderAnalysis(
+                    SafeMigrationObservedState.PrerequisiteMissing,
+                    SafeMigrationRepairCapability.None,
+                    false,
+                    "projected_required_add_rows_unproven");
             }
         }
 
@@ -96,20 +133,26 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
     }
 
     /// <inheritdoc />
-    bool ISafeMigrationProjectedColumnAnalyzer.PreservesIntrinsicColumnSources(SafeMigrationIntent intent)
+    bool ISafeMigrationProjectedColumnAnalyzer.PreservesIntrinsicColumnSources(
+        SafeMigrationIntent intent
+    )
     {
-        // WHY: Native PRIMARY/FK removal and ordinary nonunique BTREE creation
-        // preserve column values and intrinsic facets. Constraint creation,
-        // functional/unique indexes and arbitrary DDL carry no such certificate.
+        // WHY: Native PRIMARY/FK and sibling-column removal preserve surviving
+        // column values and intrinsic facets, not the complete key namespace.
+        // Constraint creation, functional/unique indexes and arbitrary DDL
+        // carry no such certificate.
 
-        return intent is DropPrimaryKeyIntent or DropForeignKeyIntent
-            || (intent is EnsureIndexIntent { Definition: var index }
-                && !index.Unique
+        return intent is DropPrimaryKeyIntent or DropForeignKeyIntent or DropColumnIntent
+            || (intent is EnsureIndexIntent { Definition: { Unique: false } index }
                 && (index.Method is null || StringComparer.OrdinalIgnoreCase.Equals(index.Method, "BTREE"))
-                && index.Filter is null && index.StructuredFilter is null
+                && index.Filter is null
+                && index.StructuredFilter is null
                 && index.IncludedColumns.Count == 0
-                && index.Keys.All(static key => key.Column is not null && key.Collation is null
-                    && key.OperatorClass is null && key.PrefixLength is null
+                && index.Keys.All(static key =>
+                    key.Column is not null
+                    && key.Collation is null
+                    && key.OperatorClass is null
+                    && key.PrefixLength is null
                     && key.NullOrder == SafeMigrationIndexNullOrder.ProviderDefault));
     }
 
@@ -119,7 +162,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         SafeMigrationProviderAnalysis liveAnalysis
     ) => !liveAnalysis.RepairMutatesData
         && ((ISafeMigrationProjectedColumnAnalyzer)this).CanReuseLiveColumnProofAfterForeignKeyDrops(
-            intent, liveAnalysis);
+            intent,
+            liveAnalysis);
 
     /// <inheritdoc />
     bool ISafeMigrationProjectedColumnAnalyzer.CanReuseLiveColumnProofAfterKeyChanges(
@@ -159,17 +203,23 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         EnsureColumnIntent intent,
         SafeMigrationProviderAnalysis liveAnalysis
     ) => SupportsRetainedColumnProof(intent.Definition)
-        && ((liveAnalysis.ObservedState == SafeMigrationObservedState.Matching && liveAnalysis.PostconditionSatisfied)
-            || (liveAnalysis.ObservedState == SafeMigrationObservedState.Different
-                && liveAnalysis.RepairCapability == SafeMigrationRepairCapability.Safe));
+        && liveAnalysis is { ObservedState: SafeMigrationObservedState.Matching, PostconditionSatisfied: true }
+            or
+        {
+            ObservedState: SafeMigrationObservedState.Different,
+            RepairCapability: SafeMigrationRepairCapability.Safe
+        };
 
     bool ISafeMigrationProjectedColumnAnalyzer.PreservesSiblingColumnProofsAfterForeignKeyDrops(
         EnsureColumnIntent intent,
         ExpectedColumnDefinition source,
         SafeMigrationProviderAnalysis liveAnalysis
-    ) => liveAnalysis.ObservedState == SafeMigrationObservedState.Different
-        && liveAnalysis.RepairCapability == SafeMigrationRepairCapability.Safe
-        && !liveAnalysis.RepairMutatesData
+    ) => liveAnalysis is
+    {
+        ObservedState: SafeMigrationObservedState.Different,
+        RepairCapability: SafeMigrationRepairCapability.Safe,
+        RepairMutatesData: false
+    }
         && source.IsNullable != intent.Definition.IsNullable
         && HasSameReviewedColumnLayout(source, intent.Definition, StringComparer.OrdinalIgnoreCase);
 
@@ -180,17 +230,23 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
     {
         if (liveAnalysis.ObservedState == SafeMigrationObservedState.Matching)
         {
-            return liveAnalysis.PostconditionSatisfied
-                && SupportsRetainedColumnProof(intent.Definition);
+            return liveAnalysis.PostconditionSatisfied && SupportsRetainedColumnProof(intent.Definition);
         }
 
         // WHY: Authored old metadata is not a live-source proof. The captured
         // Safe result must independently bind this exact unchanged-layout transition.
-        return liveAnalysis.ObservedState == SafeMigrationObservedState.Different
-            && liveAnalysis.RepairCapability == SafeMigrationRepairCapability.Safe
+        return liveAnalysis is
+        {
+            ObservedState: SafeMigrationObservedState.Different,
+            RepairCapability: SafeMigrationRepairCapability.Safe
+        }
             && intent.OldDefinition is { } source
-            && HasSafeProjectedColumnSession(source, intent.Definition, liveAnalysis,
-                canReuseLiveProof: true, useCreationEnvironment: false)
+            && HasSafeProjectedColumnSession(
+                source,
+                intent.Definition,
+                liveAnalysis,
+                canReuseLiveProof: true,
+                useCreationEnvironment: false)
             && (liveAnalysis.RepairMutatesData
                 ? IsCapturedGuidBackfillTransition(source, intent.Definition)
                 : IsSameLayoutNullabilityTransition(source, intent.Definition));
@@ -209,8 +265,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
     internal static bool IsSameLayoutNullabilityTransition(
         ExpectedColumnDefinition source,
         ExpectedColumnDefinition target
-    ) => source.IsNullable != target.IsNullable
-        && HasSameReviewedColumnLayout(source, target);
+    ) => source.IsNullable != target.IsNullable && HasSameReviewedColumnLayout(source, target);
 
     /// <summary>Compares intrinsic facets and validated physical metadata without copying column definitions.</summary>
     private static bool HasSameReviewedColumnLayout(
@@ -242,7 +297,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         ExpectedColumnDefinition target
     )
     {
-        if (source.ProviderAnnotations.Count == 0 && target.ProviderAnnotations.Count == 0)
+        if (source.ProviderAnnotations.Count == 0
+            && target.ProviderAnnotations.Count == 0)
         {
             return true;
         }
@@ -259,8 +315,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
     private static bool SupportsRetainedColumnProof(
         ExpectedColumnDefinition definition
     ) => SafeMigrationColumnRepairHelper.HasRepairableIntrinsicShape(definition)
-        && (definition.ProviderAnnotations.Count == 0
-            || MySqlSafeMigrationColumnMetadata.TryCreate(definition, out _));
+        && (definition.ProviderAnnotations.Count == 0 || MySqlSafeMigrationColumnMetadata.TryCreate(definition, out _));
 
     SafeMigrationProviderAnalysis ISafeMigrationProjectedColumnAnalyzer.ValidateProjectedAlterColumn(
         AlterColumnIntent intent,
@@ -275,15 +330,21 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             return projectedAnalysis;
         }
 
-        if (!HasSafeProjectedColumnSession(source, intent.Definition, liveAnalysis,
-                context.CanReuseLiveProof, context.HasCompleteTable))
+        if (!HasSafeProjectedColumnSession(
+                source,
+                intent.Definition,
+                liveAnalysis,
+                context.CanReuseLiveProof,
+                context.HasCompleteTable))
         {
             return DifferentProjectedTransition();
         }
 
         if (!context.HasCompleteTable)
         {
-            if (SafeMigrationColumnRepairHelper.CanSafelyAlterColumn(source, intent.Definition,
+            if (SafeMigrationColumnRepairHelper.CanSafelyAlterColumn(
+                    source,
+                    intent.Definition,
                     StringComparer.OrdinalIgnoreCase)
                 && context.CanReuseLiveProof)
             {
@@ -292,9 +353,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                     : projectedAnalysis;
             }
 
-            if (context.PreservesLiveValueDomain
-                && !context.HasDataMutation
-                && !context.HasForeignKeyDependency
+            if (context is { PreservesLiveValueDomain: true, HasDataMutation: false, HasForeignKeyDependency: false }
                 && HasSafeRetainedAlterValueDomain(intent, source, context.Table, liveAnalysis))
             {
                 // WHY: A certified widening does not populate the larger
@@ -315,8 +374,11 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             // WHY: Independent source-bound proofs do not compose by themselves:
             // earlier VARCHAR targets also consume row and composite-key bytes.
             // Recheck their cumulative shape without repeating row scans.
-            return liveAnalysis.ObservedState == SafeMigrationObservedState.Different
-                && liveAnalysis.RepairCapability == SafeMigrationRepairCapability.Safe
+            return liveAnalysis is
+            {
+                ObservedState: SafeMigrationObservedState.Different,
+                RepairCapability: SafeMigrationRepairCapability.Safe
+            }
                 && !(context.HasDataMutation && liveAnalysis.RequiresLiveDataProof)
                 && !context.HasForeignKeyDependency
                 && HasSafeCumulativeAlterPhysicalShape(intent, context.Table, liveAnalysis)
@@ -324,7 +386,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                     : DifferentProjectedTransition();
         }
 
-        if (SafeMigrationColumnRepairHelper.CanSafelyAlterColumn(source, intent.Definition,
+        if (SafeMigrationColumnRepairHelper.CanSafelyAlterColumn(
+                source,
+                intent.Definition,
                 StringComparer.OrdinalIgnoreCase))
         {
             return projectedAnalysis.RepairCapability == SafeMigrationRepairCapability.Safe
@@ -335,7 +399,11 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         if (!context.ProvesEmpty
             || context.HasForeignKeyDependency
             || !MySqlProjectedColumnTransition.IsSafe(
-                intent, source, context.Table, liveAnalysis.IndexPhysicalEnvironment, _typeMappingSource,
+                intent,
+                source,
+                context.Table,
+                liveAnalysis.IndexPhysicalEnvironment,
+                _typeMappingSource,
                 context.CanReuseCreationCharacterSet))
         {
             return DifferentProjectedTransition();
@@ -360,16 +428,21 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
     )
     {
         var capturedSafeSource = canReuseLiveProof
-            && liveAnalysis.ObservedState == SafeMigrationObservedState.Different
-            && liveAnalysis.RepairCapability == SafeMigrationRepairCapability.Safe;
+            && liveAnalysis is
+            {
+                ObservedState: SafeMigrationObservedState.Different,
+                RepairCapability: SafeMigrationRepairCapability.Safe
+            };
+
         var environment = useCreationEnvironment
             ? liveAnalysis.IndexPhysicalEnvironment?.NewTableEnvironment ?? liveAnalysis.IndexPhysicalEnvironment
             : liveAnalysis.IndexPhysicalEnvironment;
 
         // WHY: Empty and retained-domain proofs do not exclude rows arriving
         // before MODIFY. Permissive engines can fabricate an unintended value.
-        if (source.IsNullable && !target.IsNullable
-            && (environment is not null ? !environment.StrictSqlMode : !capturedSafeSource))
+        if (source.IsNullable
+            && !target.IsNullable
+            && (!environment?.StrictSqlMode ?? !capturedSafeSource))
         {
             return false;
         }
@@ -379,20 +452,24 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         // facts, or a still-current source-bound Safe result, qualify repair.
         if (RequiresProjectedTimestampDefaults(target)
             && !(_projectedExplicitTimestampDefaults.TryGetValue(liveAnalysis, out var explicitDefaults)
-                ? explicitDefaults : capturedSafeSource))
+                ? explicitDefaults
+                : capturedSafeSource))
         {
             return false;
         }
 
         return !MySqlSafeMigrationCatalogSqlBuilder.RequiresNativeEnumNoBackslashEscapes(target)
             || (_projectedColumnSessionEnvironments.TryGetValue(liveAnalysis, out var nativeEnvironment)
-                ? nativeEnvironment.NoBackslashEscapes : capturedSafeSource);
+                ? nativeEnvironment.NoBackslashEscapes
+                : capturedSafeSource);
     }
 
     /// <summary>Qualifies resolved temporal types without extending the public index environment.</summary>
-    private bool RequiresProjectedTimestampDefaults(ExpectedColumnDefinition definition) =>
-        MySqlSafeMigrationCatalogSqlBuilder.RequiresExplicitTimestampDefaults(definition,
-            MySqlProjectedColumnTransition.ResolveStoreType(definition, _typeMappingSource));
+    private bool RequiresProjectedTimestampDefaults(
+        ExpectedColumnDefinition definition
+    ) => MySqlSafeMigrationCatalogSqlBuilder.RequiresExplicitTimestampDefaults(
+        definition,
+        MySqlProjectedColumnTransition.ResolveStoreType(definition, _typeMappingSource));
 
     /// <summary>Reads bounded storage/session facts on the connection that owns the immutable analysis.</summary>
     private async Task<ProjectedColumnSessionEnvironment?> ReadProjectedColumnSessionEnvironmentAsync(
@@ -403,10 +480,13 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         CancellationToken cancellationToken
     )
     {
-        var requiredAddTables = operations.Where(static operation => operation.Intent is EnsureColumnIntent intent
+        var requiredAddTables = operations
+            .Where(static operation => operation.Intent is EnsureColumnIntent intent
                 && RequiresProjectedMissingAddQualification(intent.Definition))
             .Select(static operation => ((EnsureColumnIntent)operation.Intent).Table)
-            .Distinct(StringComparer.Ordinal).ToArray();
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
         if (requiredAddTables.Length == 0
             && !operations.Any(operation => operation.Intent is AlterColumnIntent intent
                 && (RequiresProjectedTimestampDefaults(intent.Definition)
@@ -419,11 +499,13 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
 
         await using var command = connection.CreateCommand();
         ApplyCommandTimeout(command, commandTimeout);
-        var isMariaDb = MySqlServerVersion.AutoDetect(connection,
-            MySqlServerVersionCompatibilityMode.AllowUnsupported).IsMariaDb;
+        var isMariaDb = MySqlServerVersion.AutoDetect(connection, MySqlServerVersionCompatibilityMode.AllowUnsupported)
+            .IsMariaDb;
+
         command.CommandText = "SELECT @@default_storage_engine, @@SESSION.sql_mode, "
             + "@@SESSION.explicit_defaults_for_timestamp, "
             + (isMariaDb ? "@@SESSION.check_constraint_checks;" : "1;");
+
         bool defaultEngineIsInnoDb;
         bool strict;
         bool explicitTimestampDefaults;
@@ -432,52 +514,80 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         bool doubleQuotesAreLiteral;
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
         {
-            if (!await reader.ReadAsync(cancellationToken) || reader.IsDBNull(0) || reader.IsDBNull(2))
+            if (!await reader.ReadAsync(cancellationToken)
+                || reader.IsDBNull(0)
+                || reader.IsDBNull(2))
             {
                 throw new InvalidOperationException("MySQL did not return its column repair environment.");
             }
 
             defaultEngineIsInnoDb = StringComparer.OrdinalIgnoreCase.Equals(reader.GetString(0), "InnoDB");
             var sqlMode = reader.IsDBNull(1) ? string.Empty : reader.GetString(1);
-            strict = sqlMode.Split(',').Any(static mode =>
-                mode.AsSpan().Trim().Equals("STRICT_TRANS_TABLES", StringComparison.OrdinalIgnoreCase)
-                || mode.AsSpan().Trim().Equals("STRICT_ALL_TABLES", StringComparison.OrdinalIgnoreCase));
+            strict = sqlMode
+                .Split(',')
+                .Any(static mode => mode
+                        .AsSpan()
+                        .Trim()
+                        .Equals("STRICT_TRANS_TABLES", StringComparison.OrdinalIgnoreCase)
+                    || mode
+                        .AsSpan()
+                        .Trim()
+                        .Equals("STRICT_ALL_TABLES", StringComparison.OrdinalIgnoreCase));
+
             var enabled = Convert.ToInt32(reader.GetValue(2), CultureInfo.InvariantCulture);
             var checks = reader.IsDBNull(3) ? -1 : Convert.ToInt32(reader.GetValue(3), CultureInfo.InvariantCulture);
-            if (enabled is not 0 and not 1 || checks is not 0 and not 1 || await reader.ReadAsync(cancellationToken))
+            if (enabled is not 0 and not 1
+                || checks is not 0 and not 1
+                || await reader.ReadAsync(cancellationToken))
             {
                 throw new InvalidOperationException("MySQL returned an unknown column repair environment.");
             }
 
             explicitTimestampDefaults = enabled == 1;
             checksEnforced = checks == 1;
-            backslashEscapesEnabled = !sqlMode.Split(',').Any(static mode =>
-                mode.AsSpan().Trim().Equals("NO_BACKSLASH_ESCAPES", StringComparison.OrdinalIgnoreCase));
-            doubleQuotesAreLiteral = !sqlMode.Split(',').Any(static mode =>
-                mode.AsSpan().Trim().Equals("ANSI_QUOTES", StringComparison.OrdinalIgnoreCase));
+            backslashEscapesEnabled = !sqlMode
+                .Split(',')
+                .Any(static mode => mode
+                    .AsSpan()
+                    .Trim()
+                    .Equals("NO_BACKSLASH_ESCAPES", StringComparison.OrdinalIgnoreCase));
+
+            doubleQuotesAreLiteral = !sqlMode
+                .Split(',')
+                .Any(static mode => mode
+                    .AsSpan()
+                    .Trim()
+                    .Equals("ANSI_QUOTES", StringComparison.OrdinalIgnoreCase));
         }
 
         var innoDbTables = new HashSet<string>(StringComparer.Ordinal);
-        await SafeMigrationCatalogProbeBatch.ReadAsync(connection, requiredAddTables.Length, maximumPayloadBytes,
-            commandTimeout, (probe, offset) =>
+        await SafeMigrationCatalogProbeBatch.ReadAsync(
+            connection,
+            requiredAddTables.Length,
+            maximumPayloadBytes,
+            commandTimeout,
+            (probe, offset) =>
             {
                 var parameterizer = new MySqlCatalogQueryParameterizer(probe, _typeMappingSource);
                 var selections = new List<string>();
                 var ownerParameters = new List<string>();
                 var separatorBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Separator);
-                var sqlBytes = Encoding.UTF8.GetByteCount(BuildRequiredColumnAddOwnerEngineQuery(
-                    string.Empty, string.Empty));
+                var sqlBytes = Encoding.UTF8.GetByteCount(
+                    BuildRequiredColumnAddOwnerEngineQuery(string.Empty, string.Empty));
+
                 while (offset + selections.Count < requiredAddTables.Length
-                    && selections.Count < SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
+                       && selections.Count < SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
                 {
                     var checkpoint = parameterizer.Capture();
                     var ordinal = offset + selections.Count;
                     var ownerParameter = parameterizer.AddString(requiredAddTables[ordinal]);
                     var selection = $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)} AS ordinal, "
                         + $"{ownerParameter} AS owner";
+
                     var selectionBytes = Encoding.UTF8.GetByteCount(selection)
                         + Encoding.UTF8.GetByteCount(ownerParameter)
                         + (selections.Count == 0 ? 0 : separatorBytes + 2);
+
                     var payload = checked(sqlBytes + selectionBytes + parameterizer.Utf8PayloadBytes);
                     if (!SafeMigrationCatalogQueryLimits.Exceeded(parameterizer.Count, payload, maximumPayloadBytes))
                     {
@@ -503,12 +613,15 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                     string.Join(", ", ownerParameters));
 
                 return new SafeMigrationCatalogProbeStatement(selections.Count, parameterizer.Utf8PayloadBytes, offset);
-            }, async (reader, offset, count, token) =>
+            },
+            async (reader, offset, count, token) =>
             {
                 var row = 0;
                 while (await reader.ReadAsync(token))
                 {
-                    if (row >= count || reader.GetInt32(0) != offset + row || reader.IsDBNull(1))
+                    if (row >= count
+                        || reader.GetInt32(0) != offset + row
+                        || reader.IsDBNull(1))
                     {
                         throw new InvalidOperationException("MySQL returned an unowned column-add engine fact.");
                     }
@@ -531,25 +644,38 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                 {
                     throw new InvalidOperationException("MySQL returned an incomplete column-add engine inventory.");
                 }
-            }, cancellationToken);
+            },
+            cancellationToken);
 
-        return new ProjectedColumnSessionEnvironment(strict, defaultEngineIsInnoDb,
-            explicitTimestampDefaults, checksEnforced, backslashEscapesEnabled, doubleQuotesAreLiteral, innoDbTables);
+        return new ProjectedColumnSessionEnvironment(
+            strict,
+            defaultEngineIsInnoDb,
+            explicitTimestampDefaults,
+            checksEnforced,
+            backslashEscapesEnabled,
+            doubleQuotesAreLiteral,
+            innoDbTables);
     }
 
     /// <summary>Binds native engine evidence to authored ordinals without folding unrelated owner identities.</summary>
     /// <param name="authoredOwners">The trusted bounded SELECT of fixed ordinals and bound owner parameters.</param>
     /// <param name="ownerParameters">The same bounded owner parameter names for the indexed catalog prefilter.</param>
     /// <returns>Exactly one engine fact per request, retaining native mode-zero/one/two owner semantics.</returns>
-    internal static string BuildRequiredColumnAddOwnerEngineQuery(string authoredOwners, string ownerParameters)
+    internal static string BuildRequiredColumnAddOwnerEngineQuery(
+        string authoredOwners,
+        string ownerParameters
+    )
     {
         ArgumentNullException.ThrowIfNull(authoredOwners);
         ArgumentNullException.ThrowIfNull(ownerParameters);
 
         var tableMatches = MySqlSafeMigrationCatalogSqlBuilder.BuildRequiredColumnAddOwnerMatches(
-            "physical_owner.TABLE_NAME", "source_owner.owner");
+            "physical_owner.TABLE_NAME",
+            "source_owner.owner");
+
         var schemaMatches = MySqlSafeMigrationCatalogSqlBuilder.BuildRequiredColumnAddOwnerMatches(
-            "physical_owner.TABLE_SCHEMA", "DATABASE()");
+            "physical_owner.TABLE_SCHEMA",
+            "DATABASE()");
 
         // WHY: Native folding can change catalog spelling. Return the fixed
         // request ordinal, not a physical name used as an authored cache key.
@@ -589,8 +715,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                 if (_projectedRequiredAddCapsByOperation is { } capabilities
                     && capabilities.TryGetValue(operations[ordinal], out var protocol))
                 {
-                    (_projectedRequiredAddCapsByAnalysis ??= new(ReferenceEqualityComparer.Instance))[
-                        analyses[ordinal]] = protocol;
+                    (_projectedRequiredAddCapsByAnalysis ??=
+                        new Dictionary<SafeMigrationProviderAnalysis, RequiredColumnAddCapabilities>(
+                            ReferenceEqualityComparer.Instance))[analyses[ordinal]] = protocol;
                 }
             }
 
@@ -628,23 +755,29 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         {
             if (plans[ordinal].RequiredColumnAddPlan is { } protocol)
             {
-                (_projectedRequiredAddCapsByOperation ??= new(ReferenceEqualityComparer.Instance))[
-                    operations[ordinal]] = new RequiredColumnAddCapabilities(protocol.SupportsCheck,
-                        protocol.BackslashEscapes);
+                (_projectedRequiredAddCapsByOperation ??=
+                    new Dictionary<SafeMigrationOperation, RequiredColumnAddCapabilities>(
+                        ReferenceEqualityComparer.Instance))[operations[ordinal]] = new RequiredColumnAddCapabilities(
+                    protocol.SupportsCheck,
+                    protocol.BackslashEscapes);
             }
         }
     }
 
     /// <summary>Limits environmental capture to the provider's missing-only qualification families.</summary>
-    private static bool RequiresProjectedMissingAddQualification(ExpectedColumnDefinition definition) =>
-        MySqlSafeMigrationCatalogSqlBuilder.RequiresRequiredSqlDefaultAddQualification(definition)
+    private static bool RequiresProjectedMissingAddQualification(
+        ExpectedColumnDefinition definition
+    ) => MySqlSafeMigrationCatalogSqlBuilder.RequiresRequiredSqlDefaultAddQualification(definition)
         || MySqlSafeMigrationCatalogSqlBuilder.CanUseRequiredColumnAddProtocol(definition)
         || MySqlSafeMigrationCatalogSqlBuilder.RequiresUnsupportedMissingRequiredAdd(definition);
 
     /// <summary>Retains only the two consumed canonical flags, never a protocol's SQL or staging identities.</summary>
     /// <param name="SupportsCheck">Whether canonical provider features enforce CHECK constraints.</param>
     /// <param name="BackslashEscapes">Whether the native member declaration requires standard escape decoding.</param>
-    private readonly record struct RequiredColumnAddCapabilities(bool SupportsCheck, bool BackslashEscapes);
+    private readonly record struct RequiredColumnAddCapabilities(
+        bool SupportsCheck,
+        bool BackslashEscapes
+    );
 
     private static SafeMigrationProviderAnalysis DifferentProjectedTransition() => new(
         SafeMigrationObservedState.Different,

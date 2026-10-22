@@ -11,10 +11,14 @@ internal sealed class MySqlSafeMigrationPlanCapture
 {
     private static readonly IReadOnlyList<ExpectedIndexDefinition> s_emptyUniqueIndexes = [];
 
+    private static readonly IReadOnlySet<SafeMigrationOperation> s_emptyPrimaryKeyReplacements =
+        new HashSet<SafeMigrationOperation>(ReferenceEqualityComparer.Instance);
+
     private static readonly IReadOnlyDictionary<MySqlTableIdentity, IReadOnlyList<ExpectedIndexDefinition>>
         s_emptyUniqueIndexCatalog = new Dictionary<MySqlTableIdentity, IReadOnlyList<ExpectedIndexDefinition>>();
 
     private SafeMigrationOperation[]? _expected;
+    private IReadOnlySet<SafeMigrationOperation>? _expectedPrimaryKeyReplacements;
 
     private IReadOnlyDictionary<(string? Schema, string Table), SafeMigrationExpectedTableConstraints>?
         _expectedTableConstraints;
@@ -97,6 +101,13 @@ internal sealed class MySqlSafeMigrationPlanCapture
     /// <summary>Gets whether the active capture requests physical transition SQL.</summary>
     public bool IncludeTransitionEvidence => IsActive && _includeTransitionEvidence;
 
+    /// <summary>Requests independent replacement rows only for a planned old-PK removal in active analysis.</summary>
+    /// <param name="operation">The exact immutable target being captured.</param>
+    /// <returns>Whether this capture, never ordinary runtime SQL, needs replacement-row evidence.</returns>
+    internal bool RequiresPrimaryKeyReplacementRows(
+        SafeMigrationOperation operation
+    ) => IsActive && _expectedPrimaryKeyReplacements?.Contains(operation) == true;
+
     /// <summary>Begins an ordered capture for one immutable operation batch.</summary>
     /// <param name="operations">The safe operations expected from Doka's handler pipeline.</param>
     /// <returns>A lease that owns capture completion and cleanup.</returns>
@@ -152,6 +163,7 @@ internal sealed class MySqlSafeMigrationPlanCapture
     /// <param name="includeTransitionEvidence">Whether to build physical transition SQL.</param>
     /// <param name="backfillConstraints">Complete-stream constraint hazards retained across bounded windows.</param>
     /// <param name="generatedColumnDependencies">Untrusted candidates for exact rename/drop instances.</param>
+    /// <param name="primaryKeyReplacements">Full-stream replacement targets retained across bounded windows.</param>
     /// <returns>A lease that owns capture completion and cleanup.</returns>
     public Lease Begin(
         IReadOnlyList<SafeMigrationOperation> operations,
@@ -161,7 +173,8 @@ internal sealed class MySqlSafeMigrationPlanCapture
         bool includeAnalysisEvidence = false,
         bool includeTransitionEvidence = false,
         MySqlBackfillConstraintCatalog? backfillConstraints = null,
-        MySqlGeneratedColumnDependencyContractCatalog? generatedColumnDependencies = null
+        MySqlGeneratedColumnDependencyContractCatalog? generatedColumnDependencies = null,
+        IReadOnlySet<SafeMigrationOperation>? primaryKeyReplacements = null
     )
     {
         ArgumentNullException.ThrowIfNull(operations);
@@ -182,17 +195,23 @@ internal sealed class MySqlSafeMigrationPlanCapture
 
         _plans = new MySqlSafeMigrationRuntimePlan?[_expected.Length];
         _expectedUniqueIndexes = expectedUniqueIndexes;
+        _expectedPrimaryKeyReplacements = primaryKeyReplacements
+            ?? CreatePrimaryKeyReplacementTargets(operations, expectedUniqueIndexes.CurrentDatabase,
+                expectedUniqueIndexes.TableComparer);
+
         _expectedTableConstraints = expectedTableConstraints;
         _expectedBackfillConstraints = backfillConstraints
             ?? MySqlBackfillConstraintCatalog.Create(
                 operations,
                 expectedUniqueIndexes.CurrentDatabase,
                 expectedUniqueIndexes.TableComparer);
+
         _expectedGeneratedColumnDependencies = generatedColumnDependencies
             ?? MySqlGeneratedColumnDependencyContractCatalog.Create(
                 operations,
                 expectedUniqueIndexes.CurrentDatabase,
                 expectedUniqueIndexes.TableComparer);
+
         _includeAnalysisEvidence = includeAnalysisEvidence;
         _includeTransitionEvidence = includeTransitionEvidence;
 
@@ -659,8 +678,59 @@ internal sealed class MySqlSafeMigrationPlanCapture
         return result;
     }
 
+    /// <summary>Requests row evidence only for exact replacement targets preceded by an old-PK removal.</summary>
+    /// <param name="operations">The complete ordered safe-operation analysis stream.</param>
+    /// <param name="currentDatabase">The native selected database used to normalize explicit qualifiers.</param>
+    /// <param name="tableComparer">The independently captured physical owner identity.</param>
+    /// <returns>The bounded exact target set, shared across capture windows without copying.</returns>
+    internal static IReadOnlySet<SafeMigrationOperation> CreatePrimaryKeyReplacementTargets(
+        IReadOnlyList<SafeMigrationOperation> operations,
+        string? currentDatabase,
+        StringComparer tableComparer
+    )
+    {
+        HashSet<MySqlTableIdentity>? dropped = null;
+        HashSet<SafeMigrationOperation>? result = null;
+        foreach (var operation in operations)
+        {
+            switch (operation.Intent)
+            {
+                case DropPrimaryKeyIntent drop:
+                    (dropped ??= new HashSet<MySqlTableIdentity>(new MySqlTableIdentityComparer(tableComparer))).Add(
+                        MySqlTableIdentity.Create(drop.Table, drop.Schema, currentDatabase));
+                    break;
+                case EnsurePrimaryKeyIntent ensure when dropped is not null:
+                    if (dropped.Remove(MySqlTableIdentity.Create(
+                            ensure.Definition.Table, ensure.Definition.Schema, currentDatabase)))
+                    {
+                        // WHY: This is probe selection, not acceptance. Core
+                        // independently requires the actual removal decision
+                        // before the captured rows can authorize a new key.
+                        (result ??= new HashSet<SafeMigrationOperation>(ReferenceEqualityComparer.Instance)).Add(operation);
+                    }
+
+                    break;
+                case DropTableIntent drop when dropped is not null:
+                    dropped.Remove(MySqlTableIdentity.Create(drop.Table, drop.Schema, currentDatabase));
+                    break;
+                case EnsureTableIntent ensure when dropped is not null:
+                    dropped.Remove(MySqlTableIdentity.Create(
+                        ensure.Definition.Table, ensure.Definition.Schema, currentDatabase));
+                    break;
+                case RenameTableIntent rename when dropped is not null:
+                    dropped.Remove(MySqlTableIdentity.Create(rename.Name, rename.Schema, currentDatabase));
+                    dropped.Remove(MySqlTableIdentity.Create(rename.NewName ?? rename.Name,
+                        rename.NewSchema ?? rename.Schema, currentDatabase));
+                    break;
+            }
+        }
+
+        return result ?? s_emptyPrimaryKeyReplacements;
+    }
+
     private void Clear()
     {
+        _expectedPrimaryKeyReplacements = null;
         _expectedBackfillConstraints = null;
         _expectedGeneratedColumnDependencies = null;
         if (_expected is not null)

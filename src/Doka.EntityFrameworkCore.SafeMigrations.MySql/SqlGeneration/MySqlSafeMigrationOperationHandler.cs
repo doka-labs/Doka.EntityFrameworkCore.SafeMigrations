@@ -11,13 +11,17 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
 
     private const string PreparedApplySqlPrefix =
         "SET @doka_sm_sql = CASE WHEN @doka_sm_action = 'apply' THEN CONVERT(0x";
+
     private const string PreparedRepairSqlPrefix =
         " USING utf8mb4) WHEN @doka_sm_action = 'repair' THEN CONVERT(0x";
+
     private const string PreparedSqlAssignmentSuffix = " USING utf8mb4) ELSE 'DO 0' END;";
     private const string PostconditionBodyPrefix = "SET @doka_sm_post_ok = CASE "
         + "WHEN @doka_sm_action IN ('apply', 'repair') THEN COALESCE((";
+
     private const string PostconditionAssertionSql = "INSERT INTO `__doka_sm_assert` "
         + "SELECT 4, 5, 6, 7, @doka_sm_diag WHERE NOT COALESCE(@doka_sm_post_ok, FALSE);\n";
+
     private const string PostconditionAssignmentSuffix = "), FALSE) ELSE TRUE END;\n";
     private const string PostconditionBodySuffix = PostconditionAssignmentSuffix + PostconditionAssertionSql;
     private const string DecisionAssertionSql = "INSERT INTO `__doka_sm_assert` "
@@ -129,7 +133,9 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             generatedColumnModelCandidate: hasGeneratedDependencyContract
                 ? _planCapture.GetGenerationGeneratedColumnModelCandidate(operation) : null,
             foldedGeneratedColumnModelCandidate: hasGeneratedDependencyContract
-                ? _planCapture.GetGenerationFoldedGeneratedColumnModelCandidate(operation) : null);
+                ? _planCapture.GetGenerationFoldedGeneratedColumnModelCandidate(operation) : null,
+            requiresPrimaryKeyReplacementRows: _planCapture.RequiresPrimaryKeyReplacementRows(operation));
+
         if (_planCapture.IsActive)
         {
             _planCapture.Record(context.OperationOrdinal, operation, runtimePlan);
@@ -454,11 +460,8 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             // Doka's migration contract exposes prefix lengths through this
             // stable provider annotation. Reading the relational model avoids
             // coupling SafeMigrations to Doka's internal metadata extensions.
-            var mappedPrefixLengths = mappedIndex
-                .FindAnnotation(IndexPrefixLengthAnnotation)
-                ?.Value as IReadOnlyList<int>;
-
-            if (mappedPrefixLengths is null)
+            if (mappedIndex.FindAnnotation(IndexPrefixLengthAnnotation)
+                    ?.Value is not IReadOnlyList<int> mappedPrefixLengths)
             {
                 continue;
             }

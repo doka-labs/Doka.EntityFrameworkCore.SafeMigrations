@@ -298,6 +298,11 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             var trailerBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Trailer);
             var dataProbeCache = new Dictionary<MySqlDataProbeContract, MySqlDataProbeResult>();
             var blockingDataCache = new Dictionary<MySqlDataProbeIdentity, bool>();
+            var primaryKeyReplacements = MySqlSafeMigrationPlanCapture.CreatePrimaryKeyReplacementTargets(
+                operations,
+                _currentDatabase,
+                TableIdentifierComparer);
+
             var operationOffset = 0;
             foreach (var operationWindow in operations.Chunk(
                          SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture))
@@ -307,7 +312,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                     context.Model,
                     expectedUniqueIndexes,
                     expectedTableConstraints,
-                    backfillConstraints);
+                    backfillConstraints,
+                    primaryKeyReplacements: primaryKeyReplacements);
 
                 AttachIndexPhysicalEnvironments(operationWindow, plans, indexEnvironments);
                 AttachGeneratedIndexIdentityCapture(operationWindow, plans);
@@ -742,7 +748,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             expectedTableConstraints,
         MySqlBackfillConstraintCatalog backfillConstraints,
         bool includeAnalysisEvidence = false,
-        bool includeTransitionEvidence = false
+        bool includeTransitionEvidence = false,
+        IReadOnlySet<SafeMigrationOperation>? primaryKeyReplacements = null
     )
     {
         // Doka returns one placeholder command per captured operation. The
@@ -755,7 +762,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             includeAnalysisEvidence,
             includeTransitionEvidence,
             backfillConstraints,
-            _generatedColumnDependencyContracts);
+            _generatedColumnDependencyContracts,
+            primaryKeyReplacements);
 
         _ = _sqlGenerator.Generate(operations, model);
 

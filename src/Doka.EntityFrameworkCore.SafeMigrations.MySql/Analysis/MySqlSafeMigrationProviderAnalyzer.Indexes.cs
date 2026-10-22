@@ -41,6 +41,33 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             liveAnalysis.IndexPhysicalEnvironment,
             _typeMappingSource);
 
+        if (result == MySqlProjectedIndexPhysicalShapeResult.Feasible
+            && projectedAnalysis.Code == "projected_key_after_column_drop_unproven")
+        {
+            var valuesPreserved = true;
+            foreach (var key in intent.Definition.Keys)
+            {
+                if (key.Column is null
+                    || !HasCurrentProjectedKeyMember(
+                        intent.Definition.Table,
+                        intent.Definition.Schema,
+                        key.Column,
+                        columns,
+                        ref valuesPreserved))
+                {
+                    return projectedAnalysis;
+                }
+            }
+
+            return QualifyKeyAfterColumnDrop(
+                intent.Definition.Table,
+                intent.Definition.Schema,
+                columns,
+                liveAnalysis,
+                projectedAnalysis,
+                valuesPreserved);
+        }
+
         // Physical feasibility is evaluated after duplicate-row evidence in the
         // immutable live plan. An Unsupported result therefore also proves that
         // a projected unique replacement is not already data-blocked.
@@ -92,6 +119,25 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             liveAnalysis.IndexPhysicalEnvironment,
             _typeMappingSource);
 
+        if (IsUnprovenProjectedKey(projectedAnalysis))
+        {
+            if (liveAnalysis.ObservedState == SafeMigrationObservedState.Unsupported
+                && liveAnalysis.Code != "primary_key_exceeds_physical_limit")
+            {
+                return liveAnalysis;
+            }
+
+            // WHY: Feasibility never proves uniqueness, but infeasible native
+            // storage remains a refusal even when row validation is deferred.
+            var physical = QualifyProjectedConstraint(result, liveAnalysis, ProjectedKeyMissing(), "primary_key");
+            if (physical.ObservedState != SafeMigrationObservedState.Missing)
+            {
+                return physical;
+            }
+
+            return QualifyReplacementPrimaryKey(intent, columns, liveAnalysis, projectedAnalysis);
+        }
+
         return QualifyProjectedConstraint(
             result,
             liveAnalysis,
@@ -116,6 +162,43 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             columns,
             liveAnalysis.IndexPhysicalEnvironment,
             _typeMappingSource);
+
+        if (projectedAnalysis.Code == "projected_key_after_column_drop_unproven")
+        {
+            if (liveAnalysis.ObservedState == SafeMigrationObservedState.Unsupported
+                && liveAnalysis.Code != "unique_constraint_exceeds_physical_limit")
+            {
+                return liveAnalysis;
+            }
+
+            var valuesPreserved = true;
+            foreach (var name in intent.Definition.Columns)
+            {
+                if (!HasCurrentProjectedKeyMember(
+                        intent.Definition.Table,
+                        intent.Definition.Schema,
+                        name,
+                        columns,
+                        ref valuesPreserved))
+                {
+                    return projectedAnalysis;
+                }
+            }
+
+            var physical = QualifyProjectedConstraint(result, liveAnalysis, ProjectedKeyMissing(), "unique_constraint");
+            if (physical.ObservedState != SafeMigrationObservedState.Missing)
+            {
+                return physical;
+            }
+
+            return QualifyKeyAfterColumnDrop(
+                intent.Definition.Table,
+                intent.Definition.Schema,
+                columns,
+                liveAnalysis,
+                projectedAnalysis,
+                valuesPreserved);
+        }
 
         return QualifyProjectedConstraint(
             result,
