@@ -107,6 +107,12 @@ Timing evidence is informational.
   removals. Keep unknown dependent-index identities and prospective generated
   values explicitly runtime-validated, with their actual preceding operation
   origin and all mandatory execution guards; do not assume UUID uniqueness.
+  Retain independently certified nullability-only source facts when resuming
+  after the old key and sibling column were already removed; recheck invalid
+  replacement NULLs and duplicates rather than borrowing the removed key.
+  Recognize MariaDB's implicit NULL-default removal only with exact source
+  nullability/default-kind evidence and a safe non-data Ensure repair; keep
+  arbitrary default, type, collation and generation changes ineligible.
 - Bound large SQL Server direct catalog statements separately from transport
   batches to avoid compiling oversized combined matchers. Keep all operations,
   source limits, delayed scopes and exact result validation; omit identity and

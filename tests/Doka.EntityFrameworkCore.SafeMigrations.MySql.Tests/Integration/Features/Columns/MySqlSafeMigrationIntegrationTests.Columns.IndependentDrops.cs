@@ -1,7 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Qualifies replacement keys without discarding independent surviving-column evidence.</summary>
-public sealed class MySqlIndependentColumnDropIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Shares the engine while keeping each synthetic schema independently owned.</summary>
     /// <param name="fixture">The assembly-owned native engine.</param>

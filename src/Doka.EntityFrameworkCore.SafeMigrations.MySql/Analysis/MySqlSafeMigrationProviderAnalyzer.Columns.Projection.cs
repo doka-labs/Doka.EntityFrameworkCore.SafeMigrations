@@ -188,15 +188,66 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         // WHY: Ensure has no authored source. Complete native facet evidence must
         // prove a nullability-only change; an earlier widening certificate can
         // become invalid when a new physical index constrains the column width.
+        var removesImplicitNullDefault = RemovesImplicitNullableDefault(intent.Definition, liveAnalysis.Differences);
         foreach (var difference in liveAnalysis.Differences)
         {
-            if (!StringComparer.Ordinal.Equals(difference.Facet, "column_nullability"))
+            if (!StringComparer.Ordinal.Equals(difference.Facet, "column_nullability")
+                && !(removesImplicitNullDefault
+                    && difference.Facet is "column_default_kind" or "column_default_digest"))
             {
                 return false;
             }
         }
 
         return true;
+    }
+
+    /// <summary>Recognizes only the native implicit NULL-default removal accompanying a required target.</summary>
+    /// <param name="target">The unchanged required target with no explicit default.</param>
+    /// <param name="differences">The independently captured native facet evidence.</param>
+    /// <returns>Whether both source nullability and exact SQL NULL identity are proved.</returns>
+    private static bool RemovesImplicitNullableDefault(
+        ExpectedColumnDefinition target,
+        IReadOnlyList<SafeMigrationFacetDifference> differences
+    )
+    {
+        if (target.IsNullable || target.DefaultValue.Kind != SafeMigrationDefaultValueKind.None
+            || differences.Count < 2)
+        {
+            return false;
+        }
+
+        var tightensNullability = false;
+        var removesNullDefault = false;
+
+        // WHY: MariaDB exposes an implicit DEFAULT NULL on nullable columns.
+        // Its removal by a certified non-DML Ensure repair changes no stored
+        // values. The exact kind proves SQL NULL regardless of its digest;
+        // arbitrary default, storage and generation drift remain ineligible.
+        for (var index = 0; index < differences.Count; index++)
+        {
+            var difference = differences[index];
+            if (difference.Facet == "column_nullability")
+            {
+                if (difference.Expected != "not_nullable" || difference.Actual != "nullable")
+                {
+                    return false;
+                }
+
+                tightensNullability = true;
+            }
+            else if (difference.Facet == "column_default_kind")
+            {
+                if (difference.Expected != "none" || difference.Actual != "null")
+                {
+                    return false;
+                }
+
+                removesNullDefault = true;
+            }
+        }
+
+        return tightensNullability && removesNullDefault;
     }
 
     bool ISafeMigrationProjectedColumnAnalyzer.CanReuseLiveColumnProofAfterForeignKeyDrops(

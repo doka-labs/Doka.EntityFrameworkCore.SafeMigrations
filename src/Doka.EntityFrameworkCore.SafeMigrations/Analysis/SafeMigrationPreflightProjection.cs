@@ -358,8 +358,15 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
                 AlterColumnIntent alter => CanReuseColumnProofAfterColumnPreservingChanges(
                     alter,
                     liveAnalysis,
-                    new TableKey(alter.Table, alter.Schema)),
-                EnsureColumnIntent => analysis.RepairPreservesIntrinsicColumnLayout,
+                    new TableKey(alter.Table, alter.Schema),
+                    allowUntouchedSource: true),
+                EnsureColumnIntent ensure => analysis.RepairPreservesIntrinsicColumnLayout
+                    || (!_projectedStructurallyModifiedTables.Contains(new TableKey(ensure.Table, ensure.Schema))
+                        && CanReuseColumnProofAfterColumnPreservingChanges(
+                            ensure,
+                            liveAnalysis,
+                            new TableKey(ensure.Table, ensure.Schema),
+                            allowUntouchedSource: true)),
                 _ => false,
             });
 
@@ -983,13 +990,15 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
                 MarkProjectedTableStructureChanged(
                     value.Table,
                     value.Schema,
-                    preservesForeignKeyColumnProofs: preservesForeignKeyColumnProofs);
+                    preservesForeignKeyColumnProofs: preservesForeignKeyColumnProofs,
+                    preservesIntrinsicColumnSources: preservesForeignKeyColumnProofs);
                 break;
             case AlterColumnIntent value:
                 MarkProjectedTableStructureChanged(
                     value.Table,
                     value.Schema,
-                    preservesForeignKeyColumnProofs: preservesForeignKeyColumnProofs);
+                    preservesForeignKeyColumnProofs: preservesForeignKeyColumnProofs,
+                    preservesIntrinsicColumnSources: preservesForeignKeyColumnProofs);
                 break;
             case DropColumnIntent value:
                 MarkProjectedTableStructureChanged(value.Table, value.Schema, safeColumnDrop: true,

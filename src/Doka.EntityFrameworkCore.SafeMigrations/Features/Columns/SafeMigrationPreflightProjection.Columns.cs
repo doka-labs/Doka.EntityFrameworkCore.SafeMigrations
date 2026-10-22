@@ -263,9 +263,11 @@ internal sealed partial class SafeMigrationPreflightProjection
     private bool CanReuseColumnProofAfterColumnPreservingChanges(
         AlterColumnIntent intent,
         SafeMigrationProviderAnalysis liveAnalysis,
-        TableKey key
+        TableKey key,
+        bool allowUntouchedSource = false
     ) => _projectedColumnAnalyzer is { } provider
-        && HasCurrentColumnProofAfterColumnPreservingChanges(key, intent.Definition.Name, liveAnalysis)
+        && HasCurrentColumnProofAfterColumnPreservingChanges(
+            key, intent.Definition.Name, liveAnalysis, allowUntouchedSource)
         && (_projectedForeignKeyDropOnlyTables?.Contains(key) == true
             ? provider.CanReuseLiveColumnProofAfterForeignKeyDrops(intent, liveAnalysis)
             : provider.CanReuseLiveColumnProofAfterKeyChanges(intent, liveAnalysis))
@@ -280,9 +282,11 @@ internal sealed partial class SafeMigrationPreflightProjection
     private bool CanReuseColumnProofAfterColumnPreservingChanges(
         EnsureColumnIntent intent,
         SafeMigrationProviderAnalysis liveAnalysis,
-        TableKey key
+        TableKey key,
+        bool allowUntouchedSource = false
     ) => _projectedColumnAnalyzer is { } provider
-        && HasCurrentColumnProofAfterColumnPreservingChanges(key, intent.Definition.Name, liveAnalysis)
+        && HasCurrentColumnProofAfterColumnPreservingChanges(
+            key, intent.Definition.Name, liveAnalysis, allowUntouchedSource)
         && (_projectedForeignKeyDropOnlyTables?.Contains(key) == true
             ? provider.CanReuseLiveColumnProofAfterForeignKeyDrops(intent, liveAnalysis)
             : provider.CanReuseLiveColumnProofAfterKeyChanges(intent, liveAnalysis));
@@ -293,12 +297,18 @@ internal sealed partial class SafeMigrationPreflightProjection
     ) => _projectedForeignKeyDropOnlyTables?.Contains(key) == true
         || _projectedIntrinsicColumnSourceTables?.Contains(key) == true;
 
-    /// <summary>Checks shared column-proof lifetimes without changing table or schema identity.</summary>
+    /// <summary>Checks an untouched source or retained column-proof lifetime without changing owner identity.</summary>
+    /// <remarks>
+    /// An interrupted stream can begin with no-op removals. Its first independently certified repair
+    /// may establish intrinsic lineage, but a later certificate must not revive an invalidated history.
+    /// </remarks>
     private bool HasCurrentColumnProofAfterColumnPreservingChanges(
         TableKey key,
         string column,
-        SafeMigrationProviderAnalysis liveAnalysis
-    ) => HasColumnPreservingHistory(key)
+        SafeMigrationProviderAnalysis liveAnalysis,
+        bool allowUntouchedSource
+    ) => (HasColumnPreservingHistory(key)
+            || (allowUntouchedSource && !_projectedStructurallyModifiedTables.Contains(key)))
         && (liveAnalysis.ObservedState == SafeMigrationObservedState.Matching
             || liveAnalysis is
             {

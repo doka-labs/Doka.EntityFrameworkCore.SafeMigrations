@@ -116,6 +116,86 @@ public sealed class MySqlKeyChangeColumnProofTests
         Assert.Equal(expected, result);
     }
 
+    /// <summary>Only an exact implicit SQL NULL default may accompany a proven non-data tightening.</summary>
+    /// <param name="boundary">The complete native evidence or independent rejection boundary.</param>
+    /// <param name="expected">Whether the captured source values remain reusable.</param>
+    [Theory]
+    [InlineData("complete", true)]
+    [InlineData("without-digest", true)]
+    [InlineData("nullable-target", false)]
+    [InlineData("explicit-default", false)]
+    [InlineData("missing-kind", false)]
+    [InlineData("missing-nullability", false)]
+    [InlineData("other-default", false)]
+    [InlineData("wrong-expected-kind", false)]
+    [InlineData("wrong-nullability", false)]
+    [InlineData("conflicting-kind", false)]
+    [InlineData("type", false)]
+    [InlineData("collation", false)]
+    [InlineData("generation", false)]
+    [InlineData("mutates-data", false)]
+    [InlineData("unsafe", false)]
+    [InlineData("blocked", false)]
+    public void ImplicitNullDefaultCertificateRequiresExactNativePair(string boundary, bool expected)
+    {
+        // Arrange
+        using var context = CreateContext();
+        var provider = GetColumnAnalyzer(context);
+        var intent = new EnsureColumnIntent("items", Column("reference_id", boundary == "nullable-target",
+            boundary == "explicit-default" ? "default" : "none"));
+
+        var differences = new List<SafeMigrationFacetDifference>();
+        if (boundary != "missing-nullability")
+        {
+            differences.Add(new SafeMigrationFacetDifference("column_nullability", "not_nullable",
+                boundary == "wrong-nullability" ? "not_nullable" : "nullable"));
+        }
+
+        if (boundary != "missing-kind")
+        {
+            differences.Add(new SafeMigrationFacetDifference("column_default_kind",
+                boundary == "wrong-expected-kind" ? "present" : "none",
+                boundary == "other-default" ? "present" : "null"));
+        }
+
+        if (boundary != "without-digest")
+        {
+            differences.Add(Difference("column_default_digest"));
+        }
+
+        switch (boundary)
+        {
+            case "type":
+                differences.Add(Difference("column_store_type"));
+                break;
+            case "collation":
+                differences.Add(Difference("column_collation"));
+                break;
+            case "generation":
+                differences.Add(Difference("column_value_generation"));
+                break;
+            case "conflicting-kind":
+                differences.Add(new SafeMigrationFacetDifference("column_default_kind", "none", "present"));
+                break;
+        }
+
+        var live = new SafeMigrationProviderAnalysis(
+            boundary == "blocked" ? SafeMigrationObservedState.DataBlocked : SafeMigrationObservedState.Different,
+            boundary == "unsafe" ? SafeMigrationRepairCapability.None : SafeMigrationRepairCapability.Safe,
+            false, "captured_implicit_null_default", SafeMigrationOperationalImpact.TableRewritePossible,
+            differences)
+        {
+            RepairMutatesData = boundary == "mutates-data",
+            RequiresLiveDataProof = true,
+        };
+
+        // Act
+        var result = provider.CanReuseLiveColumnProofAfterKeyChanges(intent, live);
+
+        // Assert
+        Assert.Equal(expected, result);
+    }
+
     /// <summary>Alter certificates permit exact nullability changes but never widening or data backfill.</summary>
     /// <param name="transition">The source, target or captured provider boundary under examination.</param>
     /// <param name="expected">Whether the independently analyzed Alter certificate is reusable.</param>
