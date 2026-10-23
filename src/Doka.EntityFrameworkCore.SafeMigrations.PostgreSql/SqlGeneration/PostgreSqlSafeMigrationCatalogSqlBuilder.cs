@@ -35,13 +35,17 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     /// <param name="includeAnalysisEvidence">Whether to retain analysis-only diagnostic facts.</param>
     /// <param name="includeTransitionEvidence">Whether to retain analysis-only column-transition facts.</param>
     /// <param name="includeRuntimeIndexInputGuard">Whether native execution must fence index input/data planning.</param>
+    /// <param name="includeIndexDropColumnProof">
+    /// Whether visible optional catalogs may certify index-only effects.
+    /// </param>
     /// <returns>The finite native plan with its actual independent prerequisites and postconditions.</returns>
     public PostgreSqlSafeMigrationRuntimePlan Build(
         SafeMigrationOperation operation,
         SafeMigrationExpectedTableConstraints? expectedTableConstraints = null,
         bool includeAnalysisEvidence = false,
         bool includeTransitionEvidence = false,
-        bool includeRuntimeIndexInputGuard = true
+        bool includeRuntimeIndexInputGuard = true,
+        bool includeIndexDropColumnProof = false
     )
     {
         ArgumentNullException.ThrowIfNull(operation);
@@ -79,7 +83,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 includeAnalysisEvidence,
                 includeTransitionEvidence),
             EnsureIndexIntent value => BuildEnsureIndex(value, includeRuntimeIndexInputGuard),
-            DropIndexIntent value => BuildDropIndex(value),
+            DropIndexIntent value => BuildDropIndex(value, includeIndexDropColumnProof),
             RenameIndexIntent value => BuildRenameIndex(value),
             EnsurePrimaryKeyIntent value => BuildEnsurePrimaryKey(value),
             DropPrimaryKeyIntent value => BuildDropPrimaryKey(value),

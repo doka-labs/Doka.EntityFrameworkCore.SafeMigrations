@@ -398,6 +398,48 @@ TABLE`; operators must review table size and the maintenance window. PostgreSQL
 has no SafeMigrations equivalent of the MySQL/MariaDB `BIT(1) -> TINYINT(1)`
 Boolean repair.
 
+### Lossless signed-integer alterations
+
+Explicit `RepairIfSafe` alterations additionally admit the built-in
+`smallint -> integer -> bigint` widening lattice, including `smallint -> bigint`.
+The CLR/store declarations, native source type identity and complete old column
+contract must agree. Nullability and ancillary facets remain unchanged; defaults,
+identity/generated values, domains, user casts and numeric narrowing are not
+part of this integer-specific path. Source/target matching and native dependency
+checks remain required even after a successful earlier preflight.
+
+A qualified ordinary index removal preserves only intrinsic column/value
+evidence, never the complete index/key namespace. Later independent widenings
+consume their own exact source proofs. An interrupted prefix whose indexes are
+already absent can establish sibling provenance only from the first independently
+qualified non-data repair on an otherwise untouched owner. Changed owners,
+opaque SQL, unqualified mutations and relevant callback effects expire this
+authority; a later index removal cannot restore it.
+
+Integer range inclusion requires no application-row range scan, but native
+`ALTER TABLE` can rewrite storage and acquire blocking locks. Dependency, type
+and catalog-visibility boundaries remain fail-closed. An actual integer repair
+locks only its exact owner in ACCESS EXCLUSIVE mode and repeats the complete
+source/identity/dependency classifier before DDL. The transaction retains that
+lock through execution. READ COMMITTED and explicit native lock authority are
+required; unsupported catalog, permission or snapshot conditions report
+`integer_widening_unproven` without changing rights or isolation. An already
+matching target needs neither this repair lock nor repair-only catalog rights.
+It still needs the catalogs required to establish target equality, including
+`pg_constraint` for the complete required-column contract.
+
+Column-dependent CHECKs, generated values, views, routines, trigger predicates,
+row-security policies and publication filters do not borrow the widening proof.
+For owner-level CHECKs, only native canonical Boolean constants and direct
+whole-row `IS NULL` / `IS NOT NULL` tests are qualified. More complex owner-level
+predicates remain unproven: native ALTER can succeed while a width-sensitive
+CHECK becomes false for a retained row. No application-row probe executes such
+predicates. Independent readers, other-column checks and independently safe
+whole-row index rebuilds are not blanket-rejected.
+See the
+[PostgreSQL integer domains](https://www.postgresql.org/docs/18/datatype-numeric.html)
+and [ALTER TABLE](https://www.postgresql.org/docs/18/sql-altertable.html) contracts.
+
 ## Analysis consistency
 
 ### DDL event-trigger freshness

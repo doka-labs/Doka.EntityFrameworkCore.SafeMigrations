@@ -5,6 +5,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
     private readonly Dictionary<SafeMigrationProviderAnalysis, MySqlProjectedAlterPhysicalSnapshot>
         _projectedAlterPhysicalSnapshots = new(ReferenceEqualityComparer.Instance);
 
+    private Dictionary<SafeMigrationProviderAnalysis, IndexDropColumnSourceProof>? _indexDropPhysicalSnapshots;
+
     /// <summary>Checks cumulative physical capacity against the exact source-bound analysis.</summary>
     private bool HasSafeCumulativeAlterPhysicalShape(
         AlterColumnIntent intent,
@@ -42,8 +44,24 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             {
                 _projectedAlterPhysicalSnapshots[analyses[index]] = snapshot;
             }
+            else if (operations[index].Intent is DropIndexIntent drop
+                     && snapshots.TryGetValue(drop.Table, out var dropSnapshot))
+            {
+                // WHY: A proof is tied to the captured physical owner and member,
+                // not merely to a caller-supplied index name on another table.
+                (_indexDropPhysicalSnapshots ??= new(ReferenceEqualityComparer.Instance))[analyses[index]] =
+                    new IndexDropColumnSourceProof(
+                        drop.Table,
+                        NormalizeProofSchema(drop.Schema),
+                        drop.Name,
+                        dropSnapshot);
+            }
         }
     }
+
+    /// <summary>Binds one immutable native index snapshot to its exact qualified owner and physical member.</summary>
+    private readonly record struct IndexDropColumnSourceProof(string Table, string? Schema, string Name,
+        MySqlProjectedAlterPhysicalSnapshot Snapshot);
 
     /// <summary>Captures row contributors and index parts once per table needing type-transition projection.</summary>
     /// <param name="connection">The open connection that owns this analysis snapshot.</param>
@@ -81,7 +99,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
         var columns = tables.ToDictionary(
             static table => table,
-            static _ => new Dictionary<string, MySqlAlterColumnPhysicalShape>(StringComparer.Ordinal),
+            // WHY: Native column identity is case-insensitive on both engines,
+            // independently of the verified table/database owner-name profile.
+            static _ => new Dictionary<string, MySqlAlterColumnPhysicalShape>(StringComparer.OrdinalIgnoreCase),
             StringComparer.Ordinal);
 
         var indexes = tables.ToDictionary(
@@ -175,14 +195,22 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                     var name = reader.GetString(1);
                     var fullText = StringComparer.OrdinalIgnoreCase.Equals(reader.GetString(2), "FULLTEXT");
                     var unique = Convert.ToInt32(reader.GetValue(6), CultureInfo.InvariantCulture) == 0;
-                    if (!indexes[table].TryGetValue(name, out var index))
+                    if (!indexes[table]
+                            .TryGetValue(name, out var index))
                     {
-                        index = new AlterPhysicalIndexBuilder(fullText, unique);
-                        indexes[table].Add(name, index);
+                        index = new AlterPhysicalIndexBuilder(
+                            fullText,
+                            unique,
+                            StringComparer.OrdinalIgnoreCase.Equals(reader.GetString(2), "BTREE"));
+
+                        indexes[table]
+                            .Add(name, index);
                     }
 
                     if (index.IsFullText != fullText
                         || index.IsUnique != unique
+                        || index.IsOrdinaryBtree
+                        != StringComparer.OrdinalIgnoreCase.Equals(reader.GetString(2), "BTREE")
                         || Convert.ToInt32(reader.GetValue(3), CultureInfo.InvariantCulture) != index.Parts.Count + 1)
                     {
                         throw new InvalidOperationException("MySQL returned inconsistent alter physical index parts.");
@@ -210,7 +238,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                 columns[table],
                 indexes[table].Select(static index => new MySqlAlterIndexPhysicalShape(
                     index.Value.IsFullText, index.Value.Parts,
-                    StringComparer.Ordinal.Equals(index.Key, "PRIMARY"), index.Value.IsUnique)).ToArray(),
+                    StringComparer.Ordinal.Equals(index.Key, "PRIMARY"), index.Value.IsUnique,
+                    index.Key, index.Value.IsOrdinaryBtree)).ToArray(),
                 environment));
         }
 
@@ -219,12 +248,15 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
     private sealed class AlterPhysicalIndexBuilder(
         bool isFullText,
-        bool isUnique
+        bool isUnique,
+        bool isOrdinaryBtree
     )
     {
         internal bool IsFullText { get; } = isFullText;
 
         internal bool IsUnique { get; } = isUnique;
+
+        internal bool IsOrdinaryBtree { get; } = isOrdinaryBtree;
 
         internal List<MySqlAlterIndexPart> Parts { get; } = [];
     }

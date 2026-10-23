@@ -345,6 +345,14 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             return "LOWER(c.DATA_TYPE) = 'longtext'";
         }
 
+        if (!isMariaDb && typeExpression.Equals("integer", StringComparison.OrdinalIgnoreCase))
+        {
+            // WHY: MySQL persists the documented INTEGER synonym as INT.
+            // Normalize only this exact signed spelling; modifier, unsigned
+            // and display-width contracts retain their separate comparisons.
+            return "LOWER(c.COLUMN_TYPE) = 'int'";
+        }
+
         if (!isMariaDb
             || storeType.Contains('(', StringComparison.Ordinal))
         {

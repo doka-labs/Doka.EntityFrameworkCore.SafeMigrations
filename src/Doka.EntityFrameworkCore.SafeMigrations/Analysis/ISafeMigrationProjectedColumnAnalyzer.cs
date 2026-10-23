@@ -3,6 +3,35 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// <summary>Qualifies exact projected column transitions with provider physical rules.</summary>
 internal interface ISafeMigrationProjectedColumnAnalyzer
 {
+    /// <summary>Certifies the exact native index removal without certifying its owner's keys.</summary>
+    /// <param name="intent">The accepted, unannotated physical index removal.</param>
+    /// <param name="liveAnalysis">The independently captured native presence and index-role evidence.</param>
+    /// <returns>Whether this removal preserves existing intrinsic column definitions and values.</returns>
+    /// <remarks>Core consumes this only for an accepted physical removal, never an absent-object no-op.</remarks>
+    bool PreservesColumnSourcesAfterIndexDrop(
+        DropIndexIntent intent,
+        SafeMigrationProviderAnalysis liveAnalysis
+    ) => false;
+
+    /// <summary>Requalifies an exact captured column result after certified ordinary index removals.</summary>
+    /// <param name="intent">The unchanged source and target transition.</param>
+    /// <param name="liveAnalysis">The source-bound native result, not an authored-source assumption.</param>
+    /// <param name="columns">The callback-scoped accepted column and physical-index observations.</param>
+    /// <returns>Whether the result survives the accepted removals and earlier certified sibling transitions.</returns>
+    /// <remarks>
+    /// Core checks owner, row, opaque-operation and source lifetimes first. A first certified non-data
+    /// repair on an untouched owner can establish sibling lineage after interrupted no-op removals.
+    /// Providers must additionally
+    /// qualify native row/key capacity and dependency rules against the current projected columns.
+    /// A positive non-data repair preserves sibling sources and values, never complete physical-key evidence.
+    /// Do not retain or enumerate the borrowed source concurrently with projection.
+    /// </remarks>
+    bool CanReuseLiveColumnProofAfterIndexDrops(
+        AlterColumnIntent intent,
+        SafeMigrationProviderAnalysis liveAnalysis,
+        ISafeMigrationProjectedColumnSource columns
+    ) => false;
+
     /// <summary>Certifies an accepted structural mutation that preserves existing intrinsic column sources.</summary>
     /// <param name="intent">The unchanged, accepted mutation contract.</param>
     /// <returns>True only for provider-qualified metadata changes, never a complete key or row proof.</returns>
@@ -166,12 +195,12 @@ internal interface ISafeMigrationProjectedAlterTable : ISafeMigrationProjectedCo
     IEnumerable<ExpectedIndexDefinition> Indexes { get; }
 }
 
-/// <summary>Exposes immutable analyses captured against a candidate rename's physical source.</summary>
+/// <summary>Exposes immutable analyses captured against a candidate renames physical source.</summary>
 internal interface ISafeMigrationRenamedTableAnalyzer
 {
     /// <summary>Looks up evidence only after Core accepted the corresponding physical rename.</summary>
     /// <param name="operation">The unchanged operation contract.</param>
-    /// <param name="sourceTable">The accepted rename's original physical table.</param>
+    /// <param name="sourceTable">The accepted renames original physical table.</param>
     /// <param name="sourceSchema">The original physical schema.</param>
     /// <param name="analysis">The source-bound evidence when available.</param>
     /// <returns>Whether evidence exists for this exact operation and source identity.</returns>

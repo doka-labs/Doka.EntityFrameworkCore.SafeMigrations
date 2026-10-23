@@ -13,6 +13,44 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
     private Dictionary<SafeMigrationProviderAnalysis, RequiredColumnAddCapabilities>?
         _projectedRequiredAddCapsByAnalysis;
 
+    /// <inheritdoc />
+    bool ISafeMigrationProjectedColumnAnalyzer.PreservesColumnSourcesAfterIndexDrop(
+        DropIndexIntent intent,
+        SafeMigrationProviderAnalysis liveAnalysis
+    ) => liveAnalysis.ObservedState == SafeMigrationObservedState.Matching
+        && TargetsCurrentDatabase(intent, _currentDatabase)
+        && _indexDropPhysicalSnapshots?.TryGetValue(liveAnalysis, out var captured) == true
+        && TableIdentifierComparer.Equals(captured.Table, intent.Table)
+        && TableIdentifierComparer.Equals(captured.Schema, NormalizeProofSchema(intent.Schema))
+        && StringComparer.OrdinalIgnoreCase.Equals(captured.Name, intent.Name)
+        && captured.Snapshot.HasOrdinaryIndex(intent.Name);
+
+    /// <inheritdoc />
+    bool ISafeMigrationProjectedColumnAnalyzer.CanReuseLiveColumnProofAfterIndexDrops(
+        AlterColumnIntent intent,
+        SafeMigrationProviderAnalysis liveAnalysis,
+        ISafeMigrationProjectedColumnSource columns
+    )
+    {
+        if (liveAnalysis.ObservedState == SafeMigrationObservedState.Matching)
+        {
+            return liveAnalysis.PostconditionSatisfied && SupportsRetainedColumnProof(intent.Definition);
+        }
+
+        // WHY: An ordinary accepted removal preserves values but not complete
+        // key authority. Earlier sibling widenings consume the same row/key
+        // budget, so source-bound Safe evidence alone is insufficient.
+        return liveAnalysis is
+            {
+                ObservedState: SafeMigrationObservedState.Different,
+                RepairCapability: SafeMigrationRepairCapability.Safe,
+                RepairMutatesData: false
+            }
+            && intent.OldDefinition is not null
+            && _projectedAlterPhysicalSnapshots.TryGetValue(liveAnalysis, out var snapshot)
+            && snapshot.IsSafeAfterIndexDrops(intent, columns, _typeMappingSource);
+    }
+
     SafeMigrationProviderAnalysis ISafeMigrationProjectedColumnAnalyzer.ValidateProjectedMissingColumnAdd(
         EnsureColumnIntent intent,
         SafeMigrationProjectedMissingColumnContext context,

@@ -823,6 +823,73 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
         _nativeServices?.Dispose();
     }
 
+    /// <summary>Sibling signed widenings also share the captured inline-row budget, not just key capacity.</summary>
+    /// <param name="earlierWidening">Whether an earlier accepted sibling already consumed four bytes.</param>
+    /// <param name="columnAliases">Whether accepted and current native member references use alternate casing.</param>
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void IndexDropWideningsRetainTheCumulativeInlineRowBudget(bool earlierWidening, bool columnAliases)
+    {
+        // Arrange
+        var original = Enumerable.Range(0, 10).ToDictionary(
+            static index => "padding_" + index.ToString(CultureInfo.InvariantCulture),
+            static _ => Catalog("char", 251), StringComparer.OrdinalIgnoreCase);
+
+        original.Add("binary_padding", Catalog("binary", 220, 1));
+        original.Add("first", Catalog("int"));
+        original.Add("second", Catalog("int"));
+        original.Add("third", Catalog("int"));
+        var snapshot = new MySqlProjectedAlterPhysicalSnapshot(original, [], Environment());
+        var source = new TableView(new ExpectedColumnDefinition(columnAliases ? "FIRST" : "first",
+            earlierWidening ? typeof(long) : typeof(int), false, earlierWidening ? "bigint" : "int"));
+
+        var intent = new AlterColumnIntent("records",
+            new ExpectedColumnDefinition(columnAliases ? "SECOND" : "second", typeof(long), false, "bigint"),
+            new ExpectedColumnDefinition(columnAliases ? "SECOND" : "second", typeof(int), false, "int"));
+
+        // Act
+        var result = snapshot.IsSafeAfterIndexDrops(intent, source, Mappings);
+
+        // Assert
+        Assert.Equal(!earlierWidening, result);
+    }
+
+    /// <summary>Complete-table member aliases retain the target's full row and key costs.</summary>
+    /// <param name="columnAliases">Whether the target has alternate valid column-member casing.</param>
+    /// <param name="boundary">The independent complete-table capacity boundary.</param>
+    [Theory]
+    [InlineData(false, "fits")]
+    [InlineData(true, "fits")]
+    [InlineData(false, "row")]
+    [InlineData(true, "row")]
+    [InlineData(false, "key")]
+    [InlineData(true, "key")]
+    public void CompleteProjectedColumnAliasesRetainRowAndKeyBudgets(bool columnAliases, string boundary)
+    {
+        // Arrange
+        var source = Varchar("value", 100);
+        var target = Varchar(columnAliases ? "VALUE" : "value",
+            boundary == "row" ? 8000 : boundary == "key" ? 900 : 200);
+        var table = new TableView(source, Varchar("companion", boundary == "row" ? 9000 : 100))
+        {
+            Indexes = boundary == "key"
+                ? [new ExpectedIndexDefinition("ix_value", "records", [new ExpectedIndexKeyDefinition("value")])]
+                : [],
+        };
+
+        var intent = new AlterColumnIntent("records", target, Varchar(target.Name, 100));
+
+        // Act
+        var result = MySqlProjectedColumnTransition.IsSafe(intent, source, table, Environment(), Mappings,
+            canReuseCreationCharacterSet: true);
+
+        // Assert
+        Assert.Equal(boundary == "fits", result);
+    }
+
     private IRelationalTypeMappingSource Mappings => _context.GetService<IRelationalTypeMappingSource>();
 
     private static MySqlProjectedAlterPhysicalSnapshot Snapshot(
@@ -917,7 +984,7 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
     private sealed class TableView(params ExpectedColumnDefinition[] definitions) : ISafeMigrationProjectedAlterTable
     {
         private readonly Dictionary<string, ExpectedColumnDefinition> _columns = definitions
-            .ToDictionary(static definition => definition.Name, StringComparer.Ordinal);
+            .ToDictionary(static definition => definition.Name, StringComparer.OrdinalIgnoreCase);
 
         public IEnumerable<ExpectedColumnDefinition> Columns => _columns.Values;
 

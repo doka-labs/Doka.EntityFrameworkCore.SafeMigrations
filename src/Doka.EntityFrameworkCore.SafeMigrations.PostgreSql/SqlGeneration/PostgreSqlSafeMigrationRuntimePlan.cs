@@ -47,6 +47,17 @@ internal sealed record PostgreSqlSafeMigrationRuntimePlan(
     /// <summary>Gets runtime-only snapshot and lock eligibility, distinct from read-only analysis isolation.</summary>
     public string? GeneratedDropRuntimeGuardExpression { get; init; }
 
+    /// <summary>Gets the exact owner fence acquired before repeating a catalog-only column transition proof.</summary>
+    public string? ColumnTransitionLockSqlExpression { get; init; }
+
+    /// <summary>Gets operation-local lock and fresh-snapshot eligibility without changing caller isolation.</summary>
+    public string? ColumnTransitionRuntimeGuardExpression { get; init; }
+
+    /// <summary>
+    /// Gets equality-catalog admission checked before an integer transition's matching-target fallback.
+    /// </summary>
+    public string? ColumnTransitionTargetCatalogGuardExpression { get; init; }
+
     /// <summary>
     /// Gets the immediate postcondition for an applied operation when it
     /// differs from the terminal migration contract.

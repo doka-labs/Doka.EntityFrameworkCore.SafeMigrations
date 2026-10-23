@@ -30,11 +30,11 @@ public sealed class MySqlParallelTestStructureTests
         Assert.True(helperOwner.IsAbstract);
         Assert.Empty(inheritedTests);
         // WHY: Exact feature-family coverage includes custom Fact subclasses; approximate counts can hide omissions.
-        Assert.Equal(78, featureClasses.Length);
+        Assert.Equal(79, featureClasses.Length);
         // WHY: Serialization/independent admission and transitions/drift each have their own selectable fact.
         // Generated tooling facts are not integration-helper subclasses and do not belong to this count.
-        Assert.Equal(621, declaredTests.Length);
-        Assert.Equal(621, declaredTests.Select(method => method.Name).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(632, declaredTests.Length);
+        Assert.Equal(632, declaredTests.Select(method => method.Name).Distinct(StringComparer.Ordinal).Count());
         Assert.NotNull(checkBypassMethod);
         Assert.Equal(typeof(MySqlColumnsAtomicRequiredAddConcurrencyIntegrationTests), checkBypassMethod.DeclaringType);
         Assert.NotNull(projectedProtectionMethod);
@@ -45,6 +45,7 @@ public sealed class MySqlParallelTestStructureTests
         Assert.Contains(typeof(MySqlGeneratedCaseIntegrationTests), featureClasses);
         Assert.Contains(typeof(MySqlProvider106IntegrationTests), featureClasses);
         Assert.Contains(typeof(MySqlIndependentColumnDropIntegrationTests), featureClasses);
+        Assert.Contains(typeof(MySqlIndexDropIntegerWideningIntegrationTests), featureClasses);
         Assert.All(featureClasses, type =>
         {
             Assert.Contains(typeof(IClassFixture<MySqlEngineContainerFixture>), type.GetInterfaces());
@@ -61,6 +62,8 @@ public sealed class MySqlParallelTestStructureTests
     [Theory]
     [InlineData(typeof(MySqlTablesIntegrationTests), null, true)]
     [InlineData(typeof(MySqlColumnsIntegrationTests), "", true)]
+    [InlineData(typeof(MySqlIndexDropIntegerWideningIntegrationTests), null, true)]
+    [InlineData(typeof(MySqlIndexDropIntegerWideningIntegrationTests), "native unavailable", false)]
     [InlineData(typeof(MySqlTablesIntegrationTests), "native unavailable", false)]
     [InlineData(typeof(MySqlRuntimeDiagnosticsTests), null, false)]
     [InlineData(typeof(MySqlSafeMigrationIntegrationTests), null, false)]

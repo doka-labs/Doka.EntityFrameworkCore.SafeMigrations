@@ -85,10 +85,10 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             InvalidateProjectedDmlTriggerEffects();
         }
 
-        if (operation.Intent is RenameTableIntent table
+        if ((operation.Intent is RenameTableIntent table
                 && (table.NewName is null || table.Name == table.NewName)
-                && (table.NewSchema is null || table.Schema == table.NewSchema)
-            || operation.Intent is RenameIndexIntent index && index.Name == index.NewName)
+                && (table.NewSchema is null || table.Schema == table.NewSchema))
+            || (operation.Intent is RenameIndexIntent index && index.Name == index.NewName))
         {
             return;
         }
@@ -155,13 +155,13 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             or UpdateDataOperation { KeyValues.Length: 0 }
             or DeleteDataOperation { KeyValues.Length: 0 }
             or EnsureSchemaOperation { Name: "public" }
-            || operation is RenameTableOperation table
+            || (operation is RenameTableOperation table
                 && (table.NewName is null || table.Name == table.NewName)
-                && (table.NewSchema is null || table.Schema == table.NewSchema)
-            || operation is RenameIndexOperation index && index.Name == index.NewName
-            || operation is RenameSequenceOperation sequence
+                && (table.NewSchema is null || table.Schema == table.NewSchema))
+            || (operation is RenameIndexOperation index && index.Name == index.NewName)
+            || (operation is RenameSequenceOperation sequence
                 && (sequence.NewName is null || sequence.Name == sequence.NewName)
-                && (sequence.NewSchema is null || sequence.Schema == sequence.NewSchema);
+                && (sequence.NewSchema is null || sequence.Schema == sequence.NewSchema));
     }
 
     /// <summary>Recognizes UPDATE emitted inside an accepted safe column baseline.</summary>
@@ -208,6 +208,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         _triggerOriginIsDml = false;
         _projectedOperationOrdinal = null;
         _generatedDropCatalogReadable = false;
+        _indexDropCatalogReadable = false;
+        _columnConstraintCatalogReadable = false;
     }
 
     /// <summary>Captures activation as two flags without retaining functions, names, owners, or user data.</summary>
@@ -229,13 +231,18 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             + "THEN 4 ELSE 8 END) OPERATOR(pg_catalog.+) "
             + "CASE WHEN pg_catalog.has_table_privilege('pg_catalog.pg_depend', 'SELECT') "
             + "AND pg_catalog.has_table_privilege('pg_catalog.pg_attrdef', 'SELECT') "
-            + "AND pg_catalog.has_table_privilege('pg_catalog.pg_inherits', 'SELECT') THEN 16 ELSE 0 END;";
+            + "AND pg_catalog.has_table_privilege('pg_catalog.pg_inherits', 'SELECT') THEN 16 ELSE 0 END "
+            + "OPERATOR(pg_catalog.+) CASE WHEN pg_catalog.has_table_privilege('pg_catalog.pg_am', 'SELECT') "
+            + "AND pg_catalog.has_table_privilege('pg_catalog.pg_opclass', 'SELECT') THEN 32 ELSE 0 END "
+            + "OPERATOR(pg_catalog.+) CASE WHEN pg_catalog.has_table_privilege('pg_catalog.pg_constraint', 'SELECT') "
+            + "THEN 64 ELSE 0 END;";
 
-        // WHY: Keep event/DML visibility in the low four bits and generated
-        // dependency-catalog readability in flag 0x10 of this existing scalar.
-        // The ordinary readable DROP path needs no new preliminary roundtrip.
+        // WHY: Keep callback visibility in the low four bits, generated
+        // dependencies in 0x10, optional index-role capture in 0x20 and
+        // required-column equality admission in 0x40.
+        // Unreadable optional role catalogs must not bind into DROP SQL.
         if (await visibility.ExecuteScalarAsync(cancellationToken) is not int access
-            || access < 0 || access > 31 || (access & 15) is not (4 or 5 or 6 or 8 or 9 or 10))
+            || access < 0 || access > 127 || (access & 15) is not (4 or 5 or 6 or 8 or 9 or 10))
         {
             throw new InvalidOperationException(
                 "The PostgreSQL trigger visibility query returned invalid evidence.");
@@ -243,6 +250,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 
         var eventAccess = access & 3;
         _generatedDropCatalogReadable = (access & 16) != 0;
+        _indexDropCatalogReadable = _generatedDropCatalogReadable && (access & 32) != 0;
+        _columnConstraintCatalogReadable = (access & 64) != 0;
         var canReadDmlTriggers = (access & 4) != 0;
         if (eventAccess == 2)
         {

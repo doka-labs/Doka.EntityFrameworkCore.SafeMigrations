@@ -61,6 +61,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         _projectedColumnDropOnlyTables?.Remove(key);
         _projectedForeignKeyDropOnlyTables?.Remove(key);
         _projectedIntrinsicColumnSourceTables?.Remove(key);
+        _projectedIndexDropOnlyTables?.Remove(key);
         _projectedChangedColumns.Remove(key);
 
         foreach (var column in operation.Columns)
@@ -284,6 +285,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         _projectedColumnDropOnlyTables?.Remove(key);
         _projectedForeignKeyDropOnlyTables?.Remove(key);
         _projectedIntrinsicColumnSourceTables?.Remove(key);
+        _projectedIndexDropOnlyTables?.Remove(key);
         _projectedChangedColumns.Remove(key);
         RemoveProjectedColumnDefinitions(operation.Name, operation.Schema);
         RemoveDroppedPhysicalKeys(operation.Name, operation.Schema);
@@ -512,6 +514,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         _projectedColumnDropOnlyTables?.Clear();
         _projectedForeignKeyDropOnlyTables?.Clear();
         _projectedIntrinsicColumnSourceTables?.Clear();
+        _projectedIndexDropOnlyTables?.Clear();
         _projectedChangedColumns.Clear();
         _hasOpaqueProviderPostcondition = true;
         InvalidateModelManagedDataProjection();

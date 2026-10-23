@@ -270,7 +270,8 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         var blockedExpression = runtimePlan.DataProbe?.BuildBlockedExpression() ?? string.Empty;
         var proofTable = runtimePlan.DataProbe?.QualifiedTable ?? runtimePlan.NullabilityDataProbe?.QualifiedTable;
         var requiresLockedRecheck = proofTable is not null || runtimePlan.ModelManagedDeleteLockTable is not null
-            || runtimePlan.GeneratedDropLockSqlExpression is not null;
+            || runtimePlan.GeneratedDropLockSqlExpression is not null
+            || runtimePlan.ColumnTransitionLockSqlExpression is not null;
         var hasObjectIdentityGuard = !StringComparer.Ordinal.Equals(runtimePlan.ObjectIdentityGuardExpression, "TRUE");
         var evaluationIndentation = requiresLockedRecheck ? "        " : "    ";
         var evaluationBodyIndentation = evaluationIndentation + "    ";
@@ -289,6 +290,9 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             runtimePlan.ModelManagedDeleteLockTable ?? string.Empty,
             runtimePlan.GeneratedDropLockSqlExpression ?? string.Empty,
             runtimePlan.GeneratedDropRuntimeGuardExpression ?? string.Empty,
+            runtimePlan.ColumnTransitionLockSqlExpression ?? string.Empty,
+            runtimePlan.ColumnTransitionRuntimeGuardExpression ?? string.Empty,
+            runtimePlan.ColumnTransitionTargetCatalogGuardExpression ?? string.Empty,
             runtimePlan.PrerequisiteExpression,
             runtimePlan.StateEvaluationGuardExpression,
             runtimePlan.StateEvaluationGuardFailureExpression ?? string.Empty,
@@ -365,13 +369,33 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             builder
                 .Append(evaluationIndentation)
                 .Append("ELSIF NOT COALESCE((")
-                .Append(runtimePlan.GeneratedDropRuntimeGuardExpression ?? runtimePlan.StateEvaluationGuardExpression)
-                .Append("), FALSE) THEN\n")
-                .Append(evaluationBodyIndentation)
+                .Append(runtimePlan.ColumnTransitionRuntimeGuardExpression
+                    ?? runtimePlan.GeneratedDropRuntimeGuardExpression ?? runtimePlan.StateEvaluationGuardExpression)
+                .Append("), FALSE) THEN\n");
+
+            if (runtimePlan.ColumnTransitionTargetCatalogGuardExpression is not null)
+            {
+                // WHY: PostgreSQL checks relation privileges before CASE arms.
+                // Admit equality metadata before binding the target fallback;
+                // repair-only missing catalogs can still permit an exact no-op.
+                builder.Append(evaluationBodyIndentation).Append("IF NOT COALESCE((")
+                    .Append(runtimePlan.ColumnTransitionTargetCatalogGuardExpression)
+                    .Append("), FALSE) THEN\n").Append(evaluationBodyIndentation)
+                    .Append("    doka_state := 'unsupported';\n")
+                    .Append(evaluationBodyIndentation).Append("ELSE\n");
+            }
+
+            builder.Append(evaluationBodyIndentation)
                 .Append("doka_state := (")
                 .Append(runtimePlan.StateEvaluationGuardFailureExpression)
-                .Append(");\n")
-                .Append(evaluationBodyIndentation)
+                .Append(");\n");
+
+            if (runtimePlan.ColumnTransitionTargetCatalogGuardExpression is not null)
+            {
+                builder.Append(evaluationBodyIndentation).Append("END IF;\n");
+            }
+
+            builder.Append(evaluationBodyIndentation)
                 .Append("doka_repair_ok := FALSE;\n");
         }
 
@@ -506,6 +530,27 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
                 .Append(runtimePlan.ModelManagedDeleteLockTable)
                 .Append(" IN EXCLUSIVE MODE;\n")
                 .Append("    END LOOP;\n");
+        }
+        else if (runtimePlan.ColumnTransitionLockSqlExpression is not null)
+        {
+            // WHY: A lossless integer value range does not freeze the source's
+            // default, dependencies or owner epoch. Lock only an actual repair,
+            // then repeat every source/identity check under a fresh snapshot.
+            builder
+                .Append(evaluationIndentation)
+                .Append("EXIT WHEN doka_action OPERATOR(pg_catalog.<>) 'repair' ")
+                .Append("OR doka_evaluation_pass OPERATOR(pg_catalog.=) 2;\n");
+
+            if (hasObjectIdentityGuard)
+            {
+                AppendObjectIdentityGuardSql(builder, runtimePlan, diagnostic, evaluationIndentation);
+            }
+
+            builder
+                .Append(evaluationIndentation)
+                .Append("EXECUTE ")
+                .Append(runtimePlan.ColumnTransitionLockSqlExpression)
+                .Append(";\n    END LOOP;\n");
         }
         else if (runtimePlan.GeneratedDropLockSqlExpression is not null)
         {

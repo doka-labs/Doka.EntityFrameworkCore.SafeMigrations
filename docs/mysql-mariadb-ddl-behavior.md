@@ -447,6 +447,40 @@ operations documented in [MariaDB ALTER TABLE](https://mariadb.com/docs/server/r
 and the required PRIMARY nullability contract in
 [MySQL CREATE TABLE](https://dev.mysql.com/doc/refman/8.4/en/create-table.html).
 
+### Lossless signed-integer alterations
+
+Explicit `AlterColumnIfDifferent` and generated model-bound alterations with
+`RepairIfSafe` can widen the supported signed built-in integer domain. The
+source/target CLR types must agree with their declared native storage family;
+nullability, collation, comment, generation and other non-type facets remain
+unchanged. Only an absent default or the same supported signed literal default
+is admitted. This does not authorize unsigned/zerofill conversion, arbitrary SQL
+defaults, numeric narrowing, identity changes or a source-free Ensure repair.
+
+The exact native old definition, InnoDB/strict-session prerequisites, row and
+inline-record limits, composite-index capacity and FK dependencies, including
+incoming FKs owned by another database, are checked independently. Three
+individually fitting alterations cannot borrow three copies
+of the same remaining row budget: accepted sibling targets participate in the
+cumulative physical proof. Runtime repeats the native guards before DDL.
+These checks retain the existing [single-DDL-writer contract](#concurrency);
+they are not a lock against out-of-band schema changes.
+Native column-name aliases use the same case-insensitive identity for target
+overlays and key membership; table/schema identity retains its verified native
+profile and is not folded by this column rule.
+
+A captured ordinary index removal may preserve intrinsic source/value evidence,
+not the complete index/key namespace. Unsupported index roles receive no such
+certificate. Earlier opaque or unqualified mutations, replaced owners and stale
+row/source proofs cannot acquire one from a later removal. An interrupted prefix
+with already absent indexes can start a new sibling lifetime only from an
+independently certified non-data alteration on the unchanged owner.
+
+Widening proves range inclusion, not online or metadata-only execution; review
+the maintenance window for native table/index rebuilds. The signed storage
+domains are documented by [MySQL](https://dev.mysql.com/doc/refman/8.4/en/integer-types.html)
+and [MariaDB](https://mariadb.com/docs/server/reference/data-types/numeric-data-types/numeric-data-type-overview).
+
 Type-changing explicit alterations additionally require a conservative InnoDB
 in-page row bound for the captured row format and page size, as well as the
 declared row and dependent-key limits. Ordered projection checks the cumulative

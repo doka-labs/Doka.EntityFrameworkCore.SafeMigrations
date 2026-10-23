@@ -286,8 +286,11 @@ internal sealed partial class SafeMigrationPreflightProjection
     /// <param name="safeForeignKeyDrop">Whether this accepted mutation removes only a safe foreign key.</param>
     /// <param name="preservesForeignKeyColumnProofs">Whether certified nullability retains sibling proofs.</param>
     /// <param name="preservesIntrinsicColumnSources">Whether native intrinsic sources remain unchanged.</param>
-    /// <param name="preservesRenamedCheckDefinitions">Whether this rename just rebound accepted CHECK shapes.</param>
+    /// <param name="preservesRenamedCheckDefinitions">Whether this renames just rebound accepted CHECK shapes.</param>
     /// <param name="preservesNativeGeneratedSnapshot">Whether only a guarded index or constraint was removed.</param>
+    /// <param name="preservesIndexDropColumnSources">
+    /// Whether a provider-qualified index-only lineage remains current.
+    /// </param>
     private void MarkProjectedTableStructureChanged(
         string table,
         string? schema,
@@ -296,7 +299,8 @@ internal sealed partial class SafeMigrationPreflightProjection
         bool preservesForeignKeyColumnProofs = false,
         bool preservesIntrinsicColumnSources = false,
         bool preservesRenamedCheckDefinitions = false,
-        bool preservesNativeGeneratedSnapshot = false
+        bool preservesNativeGeneratedSnapshot = false,
+        bool preservesIndexDropColumnSources = false
     )
     {
         var key = new TableKey(table, schema);
@@ -307,6 +311,20 @@ internal sealed partial class SafeMigrationPreflightProjection
         }
 
         var firstMutation = _projectedStructurallyModifiedTables.Add(key);
+        if (preservesIndexDropColumnSources
+            && (firstMutation || _projectedIndexDropOnlyTables?.Contains(key) == true))
+        {
+            // WHY: Column values survive a qualified index removal, not arbitrary
+            // table DDL. Keep this lineage separate from PRIMARY/FK certificates
+            // and from the index/key definitions which still expire normally.
+            _projectedIndexDropOnlyTables ??= new HashSet<TableKey>(_projectedStructurallyModifiedTables.Comparer);
+            _projectedIndexDropOnlyTables.Add(key);
+        }
+        else
+        {
+            _projectedIndexDropOnlyTables?.Remove(key);
+        }
+
         if (_prerequisites.TryGetValue(key, out var generatedOwner))
         {
             // WHY: Guarded index and named-constraint removal cannot add or
@@ -420,7 +438,9 @@ internal sealed partial class SafeMigrationPreflightProjection
     private void MarkProjectedTableStructureChanged(
         SafeMigrationIntent intent,
         bool preservesForeignKeyColumnProofs = false,
-        bool preservesNativeGeneratedSnapshot = false
+        bool preservesNativeGeneratedSnapshot = false,
+        bool preservesIndexDropColumnProofs = false,
+        bool preservesIndexDropSources = false
     )
     {
         var preservesIntrinsicColumnSources = _projectedColumnAnalyzer?.PreservesIntrinsicColumnSources(intent) == true;
@@ -443,7 +463,8 @@ internal sealed partial class SafeMigrationPreflightProjection
                     value.Table,
                     value.Schema,
                     preservesForeignKeyColumnProofs: preservesForeignKeyColumnProofs,
-                    preservesIntrinsicColumnSources: preservesForeignKeyColumnProofs);
+                    preservesIntrinsicColumnSources: preservesForeignKeyColumnProofs,
+                    preservesIndexDropColumnSources: preservesIndexDropColumnProofs);
                 break;
             case DropColumnIntent value:
                 MarkProjectedTableStructureChanged(
@@ -465,7 +486,8 @@ internal sealed partial class SafeMigrationPreflightProjection
                 MarkProjectedTableStructureChanged(
                     value.Table,
                     value.Schema,
-                    preservesNativeGeneratedSnapshot: preservesNativeGeneratedSnapshot);
+                    preservesNativeGeneratedSnapshot: preservesNativeGeneratedSnapshot,
+                    preservesIndexDropColumnSources: preservesIndexDropSources);
                 break;
             case RenameIndexIntent value:
                 MarkProjectedTableStructureChanged(value.Table, value.Schema);

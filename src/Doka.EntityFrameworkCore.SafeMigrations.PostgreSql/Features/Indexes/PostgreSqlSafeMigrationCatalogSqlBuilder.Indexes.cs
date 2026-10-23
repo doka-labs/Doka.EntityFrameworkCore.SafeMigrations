@@ -133,7 +133,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     }
 
     private PostgreSqlSafeMigrationRuntimePlan BuildDropIndex(
-        DropIndexIntent intent
+        DropIndexIntent intent,
+        bool includeColumnProof
     )
     {
         var exists = IndexExists(intent.Name, intent.Schema);
@@ -143,8 +144,40 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         return Plan(
             $"CASE WHEN NOT {exists} THEN 'missing' "
             + $"WHEN {belongsToTable} AND {independentlyOwned} THEN 'matching' ELSE 'different' END",
-            $"NOT {exists}");
+            $"NOT {exists}") with
+        {
+            // WHY: Core needs a private physical-role certificate, not an
+            // inference that every accepted DROP preserves unrelated sources.
+            ClassificationCodeExpression = includeColumnProof
+                ? "CASE WHEN " + OrdinaryIndependentIndexExists(intent)
+                    + " THEN '" + OrdinaryIndexDropProofCode + "' ELSE NULL END"
+                : null,
+        };
     }
+
+    /// <summary>Transports one exact ordinary DROP role proof without exposing a new report contract.</summary>
+    internal const string OrdinaryIndexDropProofCode = "doka_internal_ordinary_index_drop";
+
+    /// <summary>Recognizes only an independently owned ordinary built-in Btree without expression roles.</summary>
+    private string OrdinaryIndependentIndexExists(DropIndexIntent intent)
+        => "EXISTS (SELECT 1 FROM pg_catalog.pg_index i "
+            + "JOIN pg_catalog.pg_class idx ON idx.oid = i.indexrelid "
+            + "JOIN pg_catalog.pg_class tbl ON tbl.oid = i.indrelid "
+            + "JOIN pg_catalog.pg_namespace n ON n.oid = idx.relnamespace "
+            + "JOIN pg_catalog.pg_am am ON am.oid = idx.relam "
+            + $"WHERE n.nspname = {SchemaExpression(intent.Schema)} AND idx.relname = {Literal(intent.Name)} "
+            + $"AND tbl.relname = {Literal(intent.Table)} AND tbl.relkind = 'r' AND idx.relkind = 'i' "
+            + "AND am.amname = 'btree' AND i.indisvalid AND i.indisready AND i.indislive "
+            + "AND NOT i.indisunique AND NOT i.indisprimary AND NOT i.indisexclusion "
+            + "AND NOT i.indisreplident AND NOT i.indisclustered "
+            + "AND i.indexprs IS NULL AND i.indpred IS NULL AND i.indnatts = i.indnkeyatts "
+            + "AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_inherits inh "
+            + "WHERE inh.inhrelid IN (i.indexrelid, i.indrelid) OR inh.inhparent = i.indrelid) "
+            + "AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint co WHERE co.conindid = i.indexrelid) "
+            + "AND NOT EXISTS (SELECT 1 FROM pg_catalog.unnest(i.indclass) role(opclass) "
+            + "JOIN pg_catalog.pg_opclass op ON op.oid = role.opclass "
+            + "JOIN pg_catalog.pg_namespace op_schema ON op_schema.oid = op.opcnamespace "
+            + "WHERE NOT op.opcdefault OR op_schema.nspname <> 'pg_catalog'))";
 
     private PostgreSqlSafeMigrationRuntimePlan BuildRenameIndex(
         RenameIndexIntent intent

@@ -20,8 +20,12 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
     /// <summary>Checks explicit native LOCK rights without assuming ownership grants revoked DML privileges.</summary>
     private string GeneratedDropLockPrivilege(DropColumnIntent intent)
+        => ExplicitExclusiveLockPrivilege(intent.Table, intent.Schema);
+
+    /// <summary>Checks explicit owner-fence authority without implicitly granting table privileges.</summary>
+    private string ExplicitExclusiveLockPrivilege(string table, string? schema)
     {
-        var owner = QualifiedRegclass(intent.Table, intent.Schema);
+        var owner = QualifiedRegclass(table, schema);
 
         // WHY: Ownership alone authorizes DROP but not an explicit LOCK after
         // self-revoking table privileges. MAINTAIN is available from PostgreSQL17;

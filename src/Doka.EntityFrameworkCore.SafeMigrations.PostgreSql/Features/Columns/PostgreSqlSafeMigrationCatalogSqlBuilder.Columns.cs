@@ -232,15 +232,22 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         var exists = ColumnExists(intent.Table, intent.Schema, intent.Definition.Name);
         var matching = ColumnMatches(intent.Table, intent.Schema, intent.Definition);
         var sameTypeRepair = IsSameTypeAlterRepair(intent, repairRequested);
+        var integerWidening = repairRequested && IsIntegerWidening(intent);
+        var integerCatalogsReadable = integerWidening ? IntegerWideningCatalogsReadable : "TRUE";
+        var integerLockPrivilege = integerWidening
+            ? ExplicitExclusiveLockPrivilege(intent.Table, intent.Schema)
+            : "TRUE";
+
         var transition = BuildAlterColumnRepairTransition(
             intent, repairRequested, sameTypeRepair, includeTransitionEvidence);
 
-        var repair = sameTypeRepair || transition.HasDataProbe
+        var repair = sameTypeRepair || integerWidening || transition.HasDataProbe
             ? SafeMigrationRepairCapability.Safe
             : SafeMigrationRepairCapability.None;
 
-        var repairPrecondition = sameTypeRepair
+        var repairPrecondition = sameTypeRepair || integerWidening
             ? ColumnMatches(intent.Table, intent.Schema, intent.OldDefinition!)
+                + (integerWidening ? " AND (" + IntegerWideningDependenciesAllow(intent) + ")" : string.Empty)
             : transition.InvariantExpression;
 
         var nullabilityDataProbe =
@@ -276,6 +283,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
         return Plan(
             $"CASE WHEN NOT {exists} THEN 'different' "
+            + (integerWidening ? $"WHEN NOT ({matching}) AND NOT ({integerLockPrivilege}) THEN 'unsupported' "
+                : string.Empty)
             + $"WHEN ({repairInvariantExpression}) AND ({dataBlocked}) THEN 'data_blocked' "
             + $"WHEN {stateMatching} THEN 'matching' ELSE 'different' END",
             matching,
@@ -283,16 +292,41 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             $"({repairInvariantExpression}) AND NOT ({dataBlocked})") with
         {
             DataProbe = transition.DataProbe,
-            ClassificationCodeExpression = transition.HasDataProbe
+            ClassificationCodeExpression = integerWidening
+                ? $"CASE WHEN NOT ({matching}) AND NOT ({integerLockPrivilege}) "
+                    + "THEN 'integer_widening_unproven' ELSE NULL END"
+                : transition.HasDataProbe
                 ? $"CASE WHEN {transition.DataBlockedExpression} "
                     + "THEN 'varchar_narrowing_value_too_long' ELSE NULL END"
                 : null,
-            RepairOperationalImpact = transition.HasDataProbe
+            RepairOperationalImpact = integerWidening
+                ? SafeMigrationOperationalImpact.TableRewritePossible
+                : transition.HasDataProbe
                 ? transition.OperationalImpact
                 : SafeMigrationOperationalImpact.Unknown,
             NullabilityDataProbe = nullabilityDataProbe,
-            StateEvaluationGuardExpression = exists,
-            StateEvaluationGuardFailureExpression = "'different'",
+            // WHY: PostgreSQL checks catalog privileges before CASE branches.
+            // The preliminary guard must reject before the dependency query binds.
+            StateEvaluationGuardExpression = integerWidening
+                ? $"({exists}) AND ({integerCatalogsReadable})"
+                : exists,
+            StateEvaluationGuardFailureExpression = integerWidening
+                ? $"CASE WHEN ({matching}) THEN 'matching' "
+                    + $"WHEN NOT ({exists}) THEN 'different' ELSE 'unsupported' END"
+                : "'different'",
+            UnsupportedCode = integerWidening ? "integer_widening_unproven" : null,
+            ColumnTransitionRuntimeGuardExpression = integerWidening
+                ? $"({integerCatalogsReadable}) AND ({integerLockPrivilege}) "
+                    + "AND pg_catalog.current_setting('transaction_isolation') "
+                    + "IN ('read committed', 'read uncommitted')"
+                : null,
+            ColumnTransitionTargetCatalogGuardExpression = integerWidening && !intent.Definition.IsNullable
+                ? "pg_catalog.has_table_privilege('pg_catalog.pg_constraint', 'SELECT')"
+                : null,
+            ColumnTransitionLockSqlExpression = integerWidening
+                ? "pg_catalog.format('LOCK TABLE ONLY %I.%I IN ACCESS EXCLUSIVE MODE', "
+                    + SchemaExpression(intent.Schema) + ", " + Literal(intent.Table) + ")"
+                : null,
             MayRequireNullabilityDataProof = repair == SafeMigrationRepairCapability.Safe
                 && intent.OldDefinition!.IsNullable
                 && !intent.Definition.IsNullable,

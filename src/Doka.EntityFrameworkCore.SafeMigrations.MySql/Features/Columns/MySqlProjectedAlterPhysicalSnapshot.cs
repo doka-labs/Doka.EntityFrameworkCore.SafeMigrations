@@ -1,7 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 
 /// <summary>Retains bounded catalog shapes for cumulative ordered column transitions.</summary>
-/// <param name="columns">The original physical column shapes, keyed by exact column name.</param>
+/// <param name="columns">The original physical column shapes, keyed by native case-insensitive member identity.</param>
 /// <param name="indexes">The original ordered physical index parts.</param>
 /// <param name="environment">The captured storage limits for the original table.</param>
 internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
@@ -10,6 +10,28 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
     SafeMigrationIndexPhysicalEnvironment environment
 )
 {
+    /// <summary>Certifies captured ordinary owned indexes, never functional or special forms.</summary>
+    /// <param name="name">The native index member requested for removal.</param>
+    /// <returns>Whether the exact captured index has ordinary BTREE column parts.</returns>
+    internal bool HasOrdinaryIndex(
+        string name
+    ) => indexes.Any(index => StringComparer.OrdinalIgnoreCase.Equals(index.Name, name)
+        && index is { IsOrdinaryBtree: true, IsPrimary: false, IsFullText: false, Parts.Count: > 0 }
+        && index.Parts.All(static part => part.Column is not null));
+
+    /// <summary>Checks source-preserving index-only streams against every original physical row and key.</summary>
+    /// <param name="intent">The exact currently requested alteration.</param>
+    /// <param name="source">The callback-scoped accepted column view.</param>
+    /// <param name="mappings">The current provider type mappings.</param>
+    /// <returns>Whether current and earlier sibling targets jointly fit the captured physical budgets.</returns>
+    internal bool IsSafeAfterIndexDrops(
+        AlterColumnIntent intent,
+        ISafeMigrationProjectedColumnSource source,
+        IRelationalTypeMappingSource mappings
+    ) => columns.TryGetValue(intent.Definition.Name, out var original)
+        && !original.HasForeignKey
+        && IsSafe(intent, new IndexDropColumnView(source), mappings);
+
     /// <summary>Checks the complete physical row and keys after overlaying accepted changes.</summary>
     /// <param name="intent">The current exact-source transition.</param>
     /// <param name="table">The accepted columns and keys in the ordered stream.</param>
@@ -371,8 +393,8 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
         if ((!dynamic
                 && !compact)
             || environment.StoragePageSize is not (4096 or 8192 or 16384 or 32768 or 65536)
-            || primaryKey
-                && shape.IndexShape.FullWidthBytes is null)
+            || (primaryKey
+                && shape.IndexShape.FullWidthBytes is null))
         {
             bytes = 0;
 
@@ -423,7 +445,7 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
         IRelationalTypeMappingSource mappings
     )
     {
-        if (table.PrimaryKey?.Columns.Contains(name, StringComparer.Ordinal) == true)
+        if (table.PrimaryKey?.Columns.Contains(name, StringComparer.OrdinalIgnoreCase) == true)
         {
             return true;
         }
@@ -431,7 +453,7 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
         foreach (var index in indexes)
         {
             if (index.IsPrimary
-                && index.Parts.Any(part => StringComparer.Ordinal.Equals(part.Column, name)))
+                && index.Parts.Any(part => StringComparer.OrdinalIgnoreCase.Equals(part.Column, name)))
             {
                 return true;
             }
@@ -445,7 +467,7 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
         foreach (var index in indexes)
         {
             if (index.IsUnique
-                && index.Parts.Any(part => StringComparer.Ordinal.Equals(part.Column, name))
+                && index.Parts.Any(part => StringComparer.OrdinalIgnoreCase.Equals(part.Column, name))
                 && index.Parts.All(part => part.Column is not null
                     && TryGetColumn(part.Column, intent, table, mappings, out var shape)
                     && !shape.IsNullable))
@@ -469,14 +491,14 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
     )
     {
         var target = intent.Definition;
-        if (table.PrimaryKey?.Columns.Contains(name, StringComparer.Ordinal) == true)
+        if (table.PrimaryKey?.Columns.Contains(name, StringComparer.OrdinalIgnoreCase) == true)
         {
             return true;
         }
 
         foreach (var key in table.UniqueConstraints)
         {
-            if (key.Columns.Contains(name, StringComparer.Ordinal)
+            if (key.Columns.Contains(name, StringComparer.OrdinalIgnoreCase)
                 && key.Columns.All(IsRequired))
             {
                 return true;
@@ -486,7 +508,7 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
         foreach (var key in table.Indexes)
         {
             if (key.Unique
-                && key.Keys.Any(part => StringComparer.Ordinal.Equals(part.Column, name))
+                && key.Keys.Any(part => StringComparer.OrdinalIgnoreCase.Equals(part.Column, name))
                 && key.Keys.All(part => part.Column is not null
                     && IsRequired(part.Column)))
             {
@@ -496,7 +518,7 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
 
         return false;
 
-        bool IsRequired(string column) => StringComparer.Ordinal.Equals(column, target.Name)
+        bool IsRequired(string column) => StringComparer.OrdinalIgnoreCase.Equals(column, target.Name)
             ? !target.IsNullable
             : table.TryGetProjectedColumn(intent.Table, intent.Schema, column, out var definition)
                 && !definition.IsNullable;
@@ -522,8 +544,8 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
         {
             if (!shape.IndexShape.SupportsPrefix
                 || units <= 0
-                || shape.IndexShape.MaximumPrefixUnits is { } maximum
-                    && units > maximum)
+                || (shape.IndexShape.MaximumPrefixUnits is { } maximum
+                    && units > maximum))
             {
                 return false;
             }
@@ -552,7 +574,7 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
     )
     {
         var exists = columns.TryGetValue(name, out shape);
-        var definition = StringComparer.Ordinal.Equals(name, intent.Definition.Name)
+        var definition = StringComparer.OrdinalIgnoreCase.Equals(name, intent.Definition.Name)
             ? intent.Definition
             : table.TryGetProjectedColumn(intent.Table, intent.Schema, name, out var accepted) ? accepted : null;
 
@@ -566,12 +588,38 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
         // still applies. The current target has a separate exact-source and
         // target-collation proof in its source-bound provider analysis.
         var retainsEncoding = exists
-            && (StringComparer.Ordinal.Equals(name, intent.Definition.Name)
-            || definition.Collation is not null
+            && (StringComparer.OrdinalIgnoreCase.Equals(name, intent.Definition.Name)
+            || (definition.Collation is not null
                 && definition.Collation.Schema is null
-                && StringComparer.OrdinalIgnoreCase.Equals(definition.Collation.Name, shape.Collation));
+                && StringComparer.OrdinalIgnoreCase.Equals(definition.Collation.Name, shape.Collation)));
 
         return TryCreateProjectedColumn(definition, mappings, retainsEncoding ? shape.CharacterBytes : 4, out shape);
+    }
+
+    /// <summary>Exposes no fabricated key or newly added-column authority for a narrow index-only lifetime.</summary>
+    /// <param name="source">The callback-scoped Core view with accepted sibling target definitions.</param>
+    private sealed class IndexDropColumnView(ISafeMigrationProjectedColumnSource source)
+        : ISafeMigrationProjectedAlterTable
+    {
+        /// <inheritdoc />
+        public IEnumerable<ExpectedColumnDefinition> Columns => [];
+
+        /// <inheritdoc />
+        public ExpectedPrimaryKeyDefinition? PrimaryKey => null;
+
+        /// <inheritdoc />
+        public IEnumerable<ExpectedUniqueConstraintDefinition> UniqueConstraints => [];
+
+        /// <inheritdoc />
+        public IEnumerable<ExpectedIndexDefinition> Indexes => [];
+
+        /// <inheritdoc />
+        public bool TryGetProjectedColumn(
+            string table,
+            string? schema,
+            string column,
+            [NotNullWhen(true)] out ExpectedColumnDefinition? definition
+        ) => source.TryGetProjectedColumn(table, schema, column, out definition);
     }
 }
 
@@ -606,11 +654,15 @@ internal readonly record struct MySqlAlterColumnPhysicalShape(
 /// <param name="Parts">The ordered captured parts, retaining null column names for unresolvable expressions.</param>
 /// <param name="IsPrimary">Whether the physical index is the primary key.</param>
 /// <param name="IsUnique">Whether the index enforces uniqueness.</param>
+/// <param name="Name">The independently captured physical index identity, when available.</param>
+/// <param name="IsOrdinaryBtree">Whether native metadata proves an ordinary BTREE index.</param>
 internal sealed record MySqlAlterIndexPhysicalShape(
     bool IsFullText,
     IReadOnlyList<MySqlAlterIndexPart> Parts,
     bool IsPrimary = false,
-    bool IsUnique = false
+    bool IsUnique = false,
+    string? Name = null,
+    bool IsOrdinaryBtree = false
 );
 
 /// <summary>Stores one live index column and its optional prefix in character units.</summary>

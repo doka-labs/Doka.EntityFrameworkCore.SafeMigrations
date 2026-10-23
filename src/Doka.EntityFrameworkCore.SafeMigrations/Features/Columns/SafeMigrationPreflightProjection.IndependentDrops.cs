@@ -140,6 +140,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         if ((_projectedStructurallyModifiedTables.Contains(key)
                 && _certifiedColumnDropOrigins?.ContainsKey(key) != true
                 && !HasColumnPreservingHistory(key)
+                && _projectedIndexDropOnlyTables?.Contains(key) != true
                 && (!hasState || !state.PreservesLiveValueDomain))
             || _hasOpaqueProviderPostcondition
             || _hasOpaqueSqlPostcondition

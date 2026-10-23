@@ -567,6 +567,13 @@ an already matching target remains a no-op. This applies to ordinary strict
 migrations as well as legacy-convergence streams. SQLite and SQL Server keep
 their own provider-specific alteration contracts.
 
+MySQL/MariaDB and PostgreSQL also qualify explicit built-in signed-integer
+widening with exact old-source and native storage/dependency proofs. Accepted
+ordinary index removals and certified sibling transitions retain only bounded
+column evidence, not complete key authority. See the provider-specific
+[MySQL/MariaDB](docs/mysql-mariadb-ddl-behavior.md#lossless-signed-integer-alterations)
+and [PostgreSQL](docs/postgresql-behavior.md#lossless-signed-integer-alterations) boundaries.
+
 SQL Server also supports explicit lossless `tinyint -> smallint/int/bigint`,
 `smallint -> int/bigint`, and `int -> bigint` alterations under `RepairIfSafe`.
 The exact source, unchanged defaults and identity semantics, supported storage,

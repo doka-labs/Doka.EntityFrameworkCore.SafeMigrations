@@ -686,6 +686,14 @@ For a MySQL/MariaDB type-changing default backfill, the literal replacement must
 also fit both the old and target domains under strict conversion. PostgreSQL
 does not backfill existing null rows through this repair path.
 
+For supported MySQL/MariaDB and PostgreSQL signed-integer widenings, use explicit
+old/target definitions with `RepairIfSafe` and unchanged non-type facets. Remove
+blocking native dependencies before the alteration and declare reviewed
+replacement indexes/CHECKs afterward. Already absent removals do not certify a
+changed source: each resumed alteration needs its own native source proof.
+See the [MySQL/MariaDB](mysql-mariadb-ddl-behavior.md#lossless-signed-integer-alterations)
+and [PostgreSQL](postgresql-behavior.md#lossless-signed-integer-alterations) limits.
+
 For SQL Server integer widenings, use explicit old/target definitions and
 `RepairIfSafe`; preserve identity and default semantics. Drop blocking keys,
 indexes and constraints before changing their columns, then ensure their

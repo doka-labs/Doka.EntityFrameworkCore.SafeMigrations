@@ -6,6 +6,13 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
+### Added
+
+- Qualify explicit lossless signed-integer widening on MySQL/MariaDB and
+  PostgreSQL under `RepairIfSafe`, with exact native source, unchanged ancillary
+  facets and provider-specific storage/dependency checks. Keep narrowing,
+  unsigned conversion, generated values and unproven sources outside this path.
+
 ### Changed
 
 - Organize provider and Core responsibilities into same-type partials with
@@ -19,6 +26,15 @@ the shared release identity described in [Release process](docs/release-process.
 
 ### Fixed
 
+- Retain independently qualified column-source evidence across accepted index
+  removals and safe sibling transitions. Support interrupted upgrade prefixes
+  and idempotent replay without restoring invalidated index/key evidence or
+  weakening opaque-operation, data, foreign-key and trigger boundaries. SQLite
+  retains exact physical `INTEGER` matches without authorizing a store-type change.
+- Include incoming foreign keys owned by another database in MySQL/MariaDB's
+  column-transition dependency guard, including existing string and Boolean paths.
+- Preserve SQL Server's existing null-as-empty wrapped-predicate rendering while
+  still rejecting null required scalar expressions before guard generation.
 - Attempt every SQL Server test-local database release when cleanup fails,
   preserving aggregate errors and ownership of failed leases for retry.
 

@@ -128,9 +128,11 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         // coupled transition, so ownership remains with an explicit migration.
         builder
             .Append("NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE dependency ")
-            .Append("WHERE dependency.CONSTRAINT_SCHEMA = DATABASE() ")
-            .Append("AND dependency.REFERENCED_TABLE_NAME IS NOT NULL AND ((")
-            .Append("dependency.TABLE_NAME = ")
+            // WHY: Incoming FKs can belong to another database. Restrict only
+            // the dependent owner of the outgoing arm, never the complete
+            // inventory before testing this database's referenced owner.
+            .Append("WHERE dependency.REFERENCED_TABLE_NAME IS NOT NULL AND ((")
+            .Append("dependency.TABLE_SCHEMA = DATABASE() AND dependency.TABLE_NAME = ")
             .Append(Literal(table))
             .Append(" AND dependency.COLUMN_NAME = ")
             .Append(Literal(column))
@@ -272,7 +274,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         StringBuilder builder,
         string table,
         string column,
-        int? targetLength
+        int? targetLength,
+        int? targetScalarBytes = null
     )
     {
         // WHY: MySQL rejects a declared row above 65,535 bytes before
@@ -284,7 +287,11 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             .Append(Literal(column))
             .Append(" THEN ");
 
-        if (targetLength is { } varcharLength)
+        if (targetScalarBytes is { } scalarBytes)
+        {
+            builder.Append(scalarBytes.ToString(CultureInfo.InvariantCulture)).Append(' ');
+        }
+        else if (targetLength is { } varcharLength)
         {
             var targetLengthSql = varcharLength.ToString(CultureInfo.InvariantCulture);
 
@@ -339,7 +346,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         StringBuilder builder,
         string table,
         string column,
-        int? targetLength
+        int? targetLength,
+        int? targetScalarBytes = null
     )
     {
         builder
@@ -349,7 +357,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             .Append(" AND ti.COLUMN_NAME = ")
             .Append(Literal(column));
 
-        if (targetLength is null)
+        if (targetLength is null && targetScalarBytes is null)
         {
             // MySQL and MariaDB require a prefix for non-FULLTEXT indexes over
             // a TEXT column. Existing prefix and FULLTEXT indexes retain their
@@ -369,8 +377,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             .Append("WHEN ip.COLUMN_NAME = ")
             .Append(Literal(column))
             .Append(" AND ip.SUB_PART IS NULL THEN ")
-            .Append(targetLength.Value.ToString(CultureInfo.InvariantCulture))
-            .Append(" * COALESCE(cs.MAXLEN, 1) ")
+            .Append(targetScalarBytes is { } scalarBytes
+                ? scalarBytes.ToString(CultureInfo.InvariantCulture)
+                : targetLength!.Value.ToString(CultureInfo.InvariantCulture) + " * COALESCE(cs.MAXLEN, 1)")
+            .Append(' ')
             .Append("WHEN ip.SUB_PART IS NOT NULL ")
             .Append("THEN ip.SUB_PART * CASE WHEN ic.COLLATION_NAME IS NULL ")
             .Append("THEN 1 ELSE COALESCE(cs.MAXLEN, 1) END ")

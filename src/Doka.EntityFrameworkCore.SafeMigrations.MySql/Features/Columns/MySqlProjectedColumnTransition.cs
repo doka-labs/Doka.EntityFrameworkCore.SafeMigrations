@@ -91,12 +91,12 @@ internal static class MySqlProjectedColumnTransition
             || !MySqlSafeMigrationColumnMetadata.CanSafelyConverge(source)
             || !MySqlSafeMigrationColumnMetadata.CanSafelyConverge(target)
             || !Equals(source.Collation, target.Collation)
-            || source.ClrType != target.ClrType
+            || (source.ClrType != target.ClrType && !MySqlSignedIntegerWidening.IsSafe(source, target))
             || !SupportedFamily(source, target, mappings)
             || !BackfillIsRepresentable(source, target, environment, mappings, canReuseCreationCharacterSet)
-            || (source.IsNullable && !target.IsNullable
-                || RequiresStrictConversion(ResolveStoreType(source, mappings), ResolveStoreType(target, mappings)))
-                && !environment.StrictSqlMode)
+            || (((source.IsNullable && !target.IsNullable)
+                    || RequiresStrictConversion(ResolveStoreType(source, mappings), ResolveStoreType(target, mappings)))
+                && !environment.StrictSqlMode))
         {
             return false;
         }
@@ -107,7 +107,7 @@ internal static class MySqlProjectedColumnTransition
         var nullableColumns = 0;
         foreach (var column in table.Columns)
         {
-            var definition = StringComparer.Ordinal.Equals(column.Name, target.Name) ? target : column;
+            var definition = StringComparer.OrdinalIgnoreCase.Equals(column.Name, target.Name) ? target : column;
             if (!MySqlProjectedAlterPhysicalSnapshot.TryCreateProjectedColumn(definition, mappings, 4, out var shape)
                 || !MySqlProjectedAlterPhysicalSnapshot.TryGetInlineBytes(
                     shape,
@@ -152,6 +152,11 @@ internal static class MySqlProjectedColumnTransition
     {
         var sourceType = ResolveStoreType(source, mappings);
         var targetType = ResolveStoreType(target, mappings);
+        if (MySqlSignedIntegerWidening.IsSafe(source, target))
+        {
+            return true;
+        }
+
         if (sourceType is null
             || targetType is null)
         {
@@ -263,7 +268,7 @@ internal static class MySqlProjectedColumnTransition
             [NotNullWhen(true)] out ExpectedColumnDefinition? definition
         )
         {
-            if (StringComparer.Ordinal.Equals(column, target.Name))
+            if (StringComparer.OrdinalIgnoreCase.Equals(column, target.Name))
             {
                 definition = target;
 

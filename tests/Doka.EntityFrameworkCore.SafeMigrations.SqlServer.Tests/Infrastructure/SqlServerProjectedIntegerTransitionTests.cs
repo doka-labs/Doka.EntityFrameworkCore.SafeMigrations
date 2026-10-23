@@ -65,6 +65,39 @@ public sealed class SqlServerProjectedIntegerTransitionTests
         Assert.Equal(SafeMigrationAction.Repair, Decision(widening, analysis).Action);
     }
 
+    /// <summary>Interrupted removal reuses independent evidence, never an invented dependency removal.</summary>
+    /// <param name="capturedDependency">Whether the independently captured source still has a physical blocker.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CoreProjection_AbsentIndexDropRequiresAnIndependentlyUnblockedSource(bool capturedDependency)
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext(ConnectionString);
+        var analyzer = Analyzer(context);
+        var widening = Widening();
+        analyzer.CaptureProjectedIntegerWidening(widening, SafeSource(), capturedDependency
+            ? [new SqlServerSafeMigrationProviderAnalyzer.TransitionDependency("index", "dbo", "items", "owned")]
+            : []);
+
+        var projection = new SafeMigrationPreflightProjection(providerOperationProjection: analyzer,
+            projectedDependencyAnalyzer: analyzer, projectedColumnAnalyzer: analyzer);
+
+        var drop = Drop("index", "owned");
+        var missing = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Missing,
+            SafeMigrationRepairCapability.None, true, "classified_missing");
+
+        // Act
+        projection.Observe(drop, missing, missing, Decision(drop, missing));
+        var analysis = projection.Project(widening, Different());
+
+        // Assert
+        Assert.Equal(capturedDependency ? SafeMigrationRepairCapability.None : SafeMigrationRepairCapability.Safe,
+            analysis.RepairCapability);
+        Assert.Equal(capturedDependency ? SafeMigrationAction.RejectDifferent : SafeMigrationAction.Repair,
+            Decision(widening, analysis).Action);
+    }
+
     /// <summary>A catalog-resolved alias discharges only the physical dependency removed by an accepted drop.</summary>
     /// <param name="accepted">Whether the authored drop was physically executable, not an absent-object NoOp.</param>
     [Theory]

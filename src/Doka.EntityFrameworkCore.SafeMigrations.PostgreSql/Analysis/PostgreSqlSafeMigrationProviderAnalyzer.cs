@@ -61,7 +61,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
         // WHY: An accepted complete empty table has no values to truncate.
         // PostgreSQL supports VARCHAR length changes with its ordinary indexes
         // and foreign keys; the static provider gate still excludes other types,
-        // collation changes and generation. No absent live row fact is reused.
+        // collation changes and generation. No, absent live row fact is reused.
         return new SafeMigrationProviderAnalysis(
             SafeMigrationObservedState.Different,
             SafeMigrationRepairCapability.Safe,
@@ -200,6 +200,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
 
         ResetProjectedEventTriggerEffects();
         ResetLivePrerequisiteEvidence();
+        _columnPreservingIndexDrops = null;
         _currentSchema = null;
         _schemaIdentityMismatchOrdinals.Clear();
         _schemaIdentityOriginOrdinal = null;
@@ -255,7 +256,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                     if (shortCircuitStates[operationOffset + localOrdinal] is { } shortCircuitState)
                     {
                         results[operationOffset + localOrdinal] = ShortCircuitAnalysis(
-                            operationOffset + localOrdinal, shortCircuitState);
+                            operationOffset + localOrdinal, shortCircuitState, operationWindow[localOrdinal].Intent);
                     }
                 }
 
@@ -310,7 +311,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                             var plan = builder.Build(
                                 operation,
                                 expectedTableConstraints.Find(ordinal, operation),
-                                includeRuntimeIndexInputGuard: false);
+                                includeRuntimeIndexInputGuard: false,
+                                includeIndexDropColumnProof: _indexDropCatalogReadable);
 
                             plans[localOrdinal] = plan;
                             PostgreSqlDataProbeResult? dataProbeResult = plan.DataProbe is null
@@ -697,6 +699,20 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
 
                     var checkpoint = parameters.Capture();
                     var plan = builder.Build(operation, includeRuntimeIndexInputGuard: false);
+                    if (states[ordinal] is null && !_columnConstraintCatalogReadable
+                        && plan.ColumnTransitionTargetCatalogGuardExpression is not null)
+                    {
+                        // WHY: Required-target equality itself needs pg_constraint.
+                        // Skip SQL binding only after earlier owner/prerequisite
+                        // refusals have retained their original precedence.
+                        parameters.Rollback(checkpoint);
+                        states[ordinal] = SafeMigrationObservedState.Unsupported;
+                        (_stateEvaluationGuardShortCircuitCodes ??= [])[ordinal] = "integer_widening_unproven";
+                        ordinal++;
+
+                        continue;
+                    }
+
                     if (states[ordinal] is not null
                         || plan.StateEvaluationGuardFailureExpression is null)
                     {
@@ -782,7 +798,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
         }
     }
 
-    private static async Task ReadAnalysisAsync(
+    private async Task ReadAnalysisAsync(
         SafeMigrationCatalogBatch batch,
         SafeMigrationProviderAnalysis[] results,
         PostgreSqlSafeMigrationRuntimePlan?[] plans,
@@ -830,6 +846,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
 
                     var emptyGeneratedDropSet = DecodeGeneratedDropCompleteness(
                         operations[ordinal].Intent, state, ref code);
+                    CaptureColumnPreservingIndexDrop(operations[ordinal].Intent, state, ref code);
 
                     var evidence = plan.ModelManagedRowEvidenceExpression is null
                         ? null
@@ -1000,9 +1017,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                     {
                         if (reader.GetValue(1) is not string stateValue
                             || reader.GetValue(2) is not string code
-                            || code != request.DefaultCode && !(request.HasCapturedBinding
+                            || (code != request.DefaultCode && !(request.HasCapturedBinding
                                 && code is "captured_sql_identifier" or "captured_sql_type_binding"
-                                    or "captured_sql_function_binding" or "captured_sql_operator_binding"))
+                                    or "captured_sql_function_binding" or "captured_sql_operator_binding")))
                         {
                             throw InvalidStateEvaluationGuardEvidence();
                         }

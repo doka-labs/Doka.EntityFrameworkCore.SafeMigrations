@@ -36,6 +36,7 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
     private HashSet<TableKey>? _projectedColumnDropOnlyTables;
     private HashSet<TableKey>? _projectedForeignKeyDropOnlyTables;
     private HashSet<TableKey>? _projectedIntrinsicColumnSourceTables;
+    private HashSet<TableKey>? _projectedIndexDropOnlyTables;
     private readonly Dictionary<TableKey, HashSet<string>> _projectedChangedColumns;
     private bool _hasOpaqueProviderPostcondition;
     private bool _hasOpaqueSqlPostcondition;
@@ -371,6 +372,16 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
                 _ => false,
             });
 
+        var preservesIndexDropColumnProofs = decision.Action == SafeMigrationAction.Repair
+            && analysis is
+            {
+                ObservedState: SafeMigrationObservedState.Different,
+                RepairCapability: SafeMigrationRepairCapability.Safe,
+                RepairMutatesData: false,
+            }
+            && operation.Intent is AlterColumnIntent indexDropAlter
+            && CanReuseColumnProofAfterIndexDrops(indexDropAlter, liveAnalysis, allowUntouchedSource: true);
+
         _projectedDependencyAnalyzer?.ObserveAcceptedOperation(operation, liveAnalysis, analysis, decision);
 
         UpdateIndependentColumnDropLineage(operation.Intent, decision, preservesForeignKeyColumnProofs);
@@ -404,7 +415,7 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
                 Observe(value, liveAnalysis, analysis, decision, preservesForeignKeyColumnProofs);
                 break;
             case AlterColumnIntent value:
-                Observe(value, analysis, decision, preservesForeignKeyColumnProofs);
+                Observe(value, analysis, decision, preservesForeignKeyColumnProofs, preservesIndexDropColumnProofs);
                 break;
             case DropColumnIntent value:
                 Observe(value, liveAnalysis, decision);
@@ -466,7 +477,12 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
                     or DropForeignKeyIntent
                 && !operation
                     .GetAnnotations()
-                    .Any());
+                    .Any(),
+                preservesIndexDropColumnProofs: preservesIndexDropColumnProofs,
+                preservesIndexDropSources: operation.Intent is DropIndexIntent indexDrop
+                    && liveAnalysis.ObservedState == SafeMigrationObservedState.Matching
+                    && !operation.GetAnnotations().Any()
+                    && _projectedColumnAnalyzer?.PreservesColumnSourcesAfterIndexDrop(indexDrop, liveAnalysis) == true);
         }
     }
 
@@ -508,6 +524,7 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
 
         // WHY: Ordinary DDL has no accepted safe-DROP lineage certificate.
         _certifiedColumnDropOrigins?.Clear();
+        _projectedIndexDropOnlyTables?.Clear();
 
         switch (operation)
         {

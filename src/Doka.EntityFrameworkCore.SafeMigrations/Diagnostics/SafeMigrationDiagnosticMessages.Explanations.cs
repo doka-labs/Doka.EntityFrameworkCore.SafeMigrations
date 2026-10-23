@@ -312,6 +312,11 @@ public static partial class SafeMigrationDiagnosticMessages
         "column_layout_unproven" => Explain(code,
             "The requested column's physical-layout and capacity contract could not be proven.",
             "Inspect the existing layout and the provider's bounded storage contract; no capacity is assumed."),
+        "integer_widening_unproven" => Explain(code,
+            "The integer alteration lacks a proven native catalog, lock-authority or fresh-snapshot contract.",
+            "Review metadata visibility, explicit table-lock authority and READ COMMITTED isolation; "
+            + "matching targets need no repair lock, and no privileges or isolation settings "
+            + "are changed automatically."),
         "baseline_transaction_suppressed" => Explain(code,
             "A transaction-suppressed baseline cannot be executed under this provider's guarded transaction contract.",
             "Use a supported transactional EF Core or migration-bundle baseline; do not bypass transaction ownership."),

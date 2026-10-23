@@ -427,10 +427,10 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator
     /// <param name="indentation">The indentation before the nested scope.</param>
     /// <param name="preambleSql">Optional catalog setup retained in the same scalar scope.</param>
     /// <param name="coalesce">Wraps a repair or postcondition predicate in the existing null-to-zero template.</param>
-    /// <exception cref="ArgumentNullException">The required scalar expression is null.</exception>
+    /// <exception cref="ArgumentNullException">An unwrapped, required scalar expression is null.</exception>
     private static void AppendDelayedScalar(
         StringBuilder builder,
-        string expression,
+        string? expression,
         string type,
         string targetVariable,
         string indentation,
@@ -438,9 +438,13 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator
         bool coalesce = false
     )
     {
-        // WHY: Only the optional preamble treats null as empty. A malformed
-        // required expression must still fail before any guard can be emitted.
-        ArgumentNullException.ThrowIfNull(expression);
+        // WHY: Wrapped predicates historically use interpolation's null-as-empty
+        // contract. Preserve those exact bytes without weakening the distinct
+        // unwrapped required-expression guard or allocating a replacement string.
+        if (!coalesce)
+        {
+            ArgumentNullException.ThrowIfNull(expression);
+        }
 
         builder
             .Append(indentation)

@@ -20,6 +20,54 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 : SafeMigrationRepairCapability.None;
 
         if (repairRequested
+            && intent.OldDefinition is { } integerSource
+            && MySqlSignedIntegerWidening.IsSafe(integerSource, intent.Definition))
+        {
+            var physical = new StringBuilder();
+            AppendSupportedStringRepairTable(physical, intent.Table);
+            physical.Append(" AND ");
+            AppendTargetDeclaredRowSizeFits(
+                physical,
+                intent.Table,
+                intent.Definition.Name,
+                null,
+                MySqlSignedIntegerWidening.Width(intent.Definition));
+            physical.Append(" AND ");
+            AppendDependentIndexesRemainRepresentable(
+                physical,
+                intent.Table,
+                intent.Definition.Name,
+                null,
+                MySqlSignedIntegerWidening.Width(intent.Definition));
+            physical
+                .Append(" AND ")
+                .Append(NoForeignKeyDependency(intent.Table, intent.Definition.Name));
+            physical
+                .Append(" AND ")
+                .Append(StrictSqlModeExpression);
+            physical
+                .Append(" AND ")
+                .Append(ColumnWithInvariantExists(intent.Table, intent.Definition.Name, OrdinaryColumnExtraMatches()));
+
+            // WHY: Injective value conversion still enlarges physical rows and
+            // composite keys; exact source, fresh FK, strict mode and cumulative
+            // native budgets remain mandatory even for already populated tables.
+            return BuildAlterColumnTransitionPlan(
+                intent,
+                isMariaDb,
+                matching,
+                new MySqlColumnRepairTransition(
+                    physical.ToString(),
+                    "FALSE",
+                    StrictSqlModeExpression,
+                    null,
+                    SafeMigrationOperationalImpact.TableRewritePossible),
+                includeAnalysisEvidence,
+                requiresNullFreeBackfill,
+                nativeNullFreeBackfillCondition);
+        }
+
+        if (repairRequested
             && repairCapability == SafeMigrationRepairCapability.None
             && intent.OldDefinition is { ClrType: var sourceClrType } oldDefinition
             && (sourceClrType == typeof(string) || sourceClrType == typeof(bool) || sourceClrType == typeof(bool?))
@@ -328,7 +376,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         }
         else
         {
-            targetWidth = IsBooleanTinyInt(targetType, intent.Definition.ClrType) ? "1" : "65536";
+            var integerBytes = MySqlSignedIntegerWidening.Width(intent.Definition);
+            targetWidth = integerBytes > 0
+                ? integerBytes.ToString(CultureInfo.InvariantCulture)
+                : IsBooleanTinyInt(targetType, intent.Definition.ClrType)
+                    ? "1"
+                    : "65536";
         }
 
         // WHY: The SQL-layer 65,535-byte limit does not prove that an InnoDB

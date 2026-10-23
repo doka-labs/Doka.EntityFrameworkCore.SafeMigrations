@@ -3,6 +3,40 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 /// <summary>Protects script-visible guard identities without depending on client error-detail settings.</summary>
 public sealed class PostgreSqlRuntimeDiagnosticTests
 {
+    /// <summary>New transition-fence text participates in delimiter selection independently of baseline SQL.</summary>
+    /// <param name="placement">The transition property containing the delimiter candidate.</param>
+    [Theory]
+    [InlineData("lock")]
+    [InlineData("guard")]
+    [InlineData("target-catalog-guard")]
+    public void IntegerTransitionFenceCannotTerminateTheAnonymousBlock(string placement)
+    {
+        // Arrange
+        var operation = new SafeMigrationOperation(new AlterColumnIntent("rows",
+            new ExpectedColumnDefinition("value", typeof(long), false, "bigint"),
+            new ExpectedColumnDefinition("value", typeof(int), false, "integer")),
+            SafeMigrationPolicy.RepairIfSafe);
+        var plan = new PostgreSqlSafeMigrationRuntimePlan("'different'", "TRUE",
+            SafeMigrationRepairCapability.Safe, "TRUE")
+        {
+            StateEvaluationGuardFailureExpression = "'unsupported'",
+            ColumnTransitionLockSqlExpression = placement == "lock"
+                ? "'$doka_safe_migration$'" : "'SELECT 1'",
+            ColumnTransitionRuntimeGuardExpression = placement == "guard"
+                ? "TRUE /* $doka_safe_migration$ */" : "TRUE",
+            ColumnTransitionTargetCatalogGuardExpression = placement == "target-catalog-guard"
+                ? "TRUE /* $doka_safe_migration$ */" : "TRUE",
+        };
+
+        // Act
+        var sql = Render(operation, plan);
+
+        // Assert
+        Assert.StartsWith("DO $doka_safe_migration_1$", sql, StringComparison.Ordinal);
+        Assert.EndsWith("$doka_safe_migration_1$;", sql, StringComparison.Ordinal);
+        Assert.Contains("$doka_safe_migration$", sql, StringComparison.Ordinal);
+    }
+
     /// <summary>Every native rejection carries its unchanged code and an actionable operation identity.</summary>
     /// <param name="code">The existing SafeMigrations native guard token.</param>
     /// <param name="sqlState">The unchanged PostgreSQL SQLSTATE.</param>

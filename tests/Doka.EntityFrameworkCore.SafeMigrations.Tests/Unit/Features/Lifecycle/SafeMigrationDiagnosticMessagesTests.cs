@@ -3,6 +3,43 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 /// <summary>Guards actionable reasons, bounded formatting, privacy and evidence-preserving fallbacks.</summary>
 public sealed class SafeMigrationDiagnosticMessagesTests
 {
+    /// <summary>Explains the missing atomic widening contract without guessing that data violates a target.</summary>
+    [Fact]
+    public void IntegerWideningRefusalExplainsLockAndSnapshotAuthority()
+    {
+        // Arrange
+        const string code = "integer_widening_unproven";
+
+        // Act
+        var explanation = SafeMigrationDiagnosticMessages.GetExplanation(SafeMigrationOperationKind.AlterColumn,
+            SafeMigrationObservedState.Unsupported, code, "unsupported");
+
+        // Assert
+        Assert.Equal(code, explanation.ReasonCode);
+        Assert.Contains("lock-authority", explanation.Reason, StringComparison.Ordinal);
+        Assert.Contains("READ COMMITTED", explanation.NextStep, StringComparison.Ordinal);
+        Assert.Contains("no privileges or isolation settings are changed automatically", explanation.NextStep,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("offending", explanation.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Does not accept a similar caller payload as a proven native widening diagnostic.</summary>
+    [Fact]
+    public void IntegerWideningLookalikeRetainsPayloadFreeFallback()
+    {
+        // Arrange
+        const string unknown = "integer_widening_unproven_private_payload";
+
+        // Act
+        var explanation = SafeMigrationDiagnosticMessages.GetExplanation(SafeMigrationOperationKind.AlterColumn,
+            SafeMigrationObservedState.Unsupported, unknown, "unsupported");
+
+        // Assert
+        Assert.NotEqual(unknown, explanation.ReasonCode);
+        Assert.DoesNotContain("private_payload", explanation.Reason, StringComparison.Ordinal);
+        Assert.DoesNotContain("private_payload", explanation.NextStep, StringComparison.Ordinal);
+    }
+
     /// <summary>Guard identities survive formatting without substituting a different native error category.</summary>
     /// <param name="guardCode">The supported native guard token.</param>
     [Theory]

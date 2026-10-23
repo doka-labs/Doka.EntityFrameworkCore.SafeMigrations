@@ -34,8 +34,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     bool ISafeMigrationProviderObjectIdentityNormalizer.IsObjectIdentityMismatch(SafeMigrationProviderAnalysis analysis)
         => analysis.Code == SchemaIdentityMismatchCode
             && (analysis.IsInvariantUnsupported
-                || !(_schemaIdentityOriginOrdinal is { } origin && _projectedOperationOrdinal > origin
-                    || _triggerOriginOrdinal is { } triggerOrigin && _projectedOperationOrdinal > triggerOrigin));
+                || !((_schemaIdentityOriginOrdinal is { } origin && _projectedOperationOrdinal > origin)
+                    || (_triggerOriginOrdinal is { } triggerOrigin && _projectedOperationOrdinal > triggerOrigin)));
 
     /// <summary>Scopes postflight aliases to the final stable path without guessing historical owners.</summary>
     /// <param name="operations">The complete executed stream, including ordinary provider boundaries.</param>
@@ -103,10 +103,10 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             return _dmlTriggerRisk != PostgreSqlTriggerRisk.None;
         }
 
-        if (operation.Intent is RenameTableIntent table
+        if ((operation.Intent is RenameTableIntent table
                 && (table.NewName is null || table.NewName == table.Name)
-                && (table.NewSchema is null || table.NewSchema == table.Schema)
-            || operation.Intent is RenameIndexIntent index && index.Name == index.NewName)
+                && (table.NewSchema is null || table.NewSchema == table.Schema))
+            || (operation.Intent is RenameIndexIntent index && index.Name == index.NewName))
         {
             return false;
         }
@@ -118,7 +118,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         // certified command-free operations do not introduce a boundary.
 
         return _eventTriggerRisk != PostgreSqlTriggerRisk.None
-            || _dmlTriggerRisk != PostgreSqlTriggerRisk.None && (operation.Intent switch
+            || (_dmlTriggerRisk != PostgreSqlTriggerRisk.None && (operation.Intent switch
             {
                 EnsureColumnIntent column => operation.Policy == SafeMigrationPolicy.RepairIfSafe
                     && !column.Definition.IsNullable
@@ -127,7 +127,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                     && !column.Definition.IsNullable
                     && column.Definition.DefaultValue.Kind != SafeMigrationDefaultValueKind.None,
                 _ => false,
-            });
+            }));
     }
 
     /// <inheritdoc />
@@ -258,7 +258,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     }
 
     /// <summary>Preserves the identity-first diagnostic from the catalog-only prerequisite phase.</summary>
-    private SafeMigrationProviderAnalysis ShortCircuitAnalysis(int ordinal, SafeMigrationObservedState state)
+    private SafeMigrationProviderAnalysis ShortCircuitAnalysis(
+        int ordinal, SafeMigrationObservedState state, SafeMigrationIntent intent)
     {
         var code = _schemaIdentityMismatchOrdinals.Contains(ordinal) ? SchemaIdentityMismatchCode
                 : _indexInputShortCircuitCodes?.TryGetValue(ordinal, out var indexCode) == true ? indexCode
@@ -267,7 +268,11 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                     ? guardCode
                 : ClassificationCode(state);
 
-        return new SafeMigrationProviderAnalysis(state, SafeMigrationRepairCapability.None, false, code)
+        // WHY: A guarded exact ALTER target is already its terminal contract.
+        // Matching DROP/RENAME sources still require their distinct postcondition.
+        var postcondition = state == SafeMigrationObservedState.Matching && intent is AlterColumnIntent;
+
+        return new SafeMigrationProviderAnalysis(state, SafeMigrationRepairCapability.None, postcondition, code)
         {
             // WHY: Accepted DDL cannot make a reserved bare source token into
             // valid PostgreSQL grammar. This refusal is not a mutable row proof.
@@ -286,8 +291,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             ?? (analysis.Code == SchemaIdentityMismatchCode ? _triggerOriginOrdinal : null);
 
         if (origin is not { } ordinal || analysis.IsInvariantUnsupported
-            || analysis.ObservedState == SafeMigrationObservedState.Unsupported
-                && analysis.Code != SchemaIdentityMismatchCode)
+            || (analysis.ObservedState == SafeMigrationObservedState.Unsupported
+                && analysis.Code != SchemaIdentityMismatchCode))
         {
             return null;
         }

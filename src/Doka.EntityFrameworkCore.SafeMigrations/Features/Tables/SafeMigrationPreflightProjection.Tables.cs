@@ -169,6 +169,7 @@ internal sealed partial class SafeMigrationPreflightProjection
             _projectedColumnDropOnlyTables?.Remove(key);
             _projectedForeignKeyDropOnlyTables?.Remove(key);
             _projectedIntrinsicColumnSourceTables?.Remove(key);
+            _projectedIndexDropOnlyTables?.Remove(key);
             _projectedChangedColumns.Remove(key);
             RemoveProjectedColumnDefinitions(intent.Definition.Table, intent.Definition.Schema);
             foreach (var column in intent.Definition.Columns)
@@ -273,6 +274,7 @@ internal sealed partial class SafeMigrationPreflightProjection
             _projectedColumnDropOnlyTables?.Remove(key);
             _projectedForeignKeyDropOnlyTables?.Remove(key);
             _projectedIntrinsicColumnSourceTables?.Remove(key);
+            _projectedIndexDropOnlyTables?.Remove(key);
             _projectedChangedColumns.Remove(key);
             RemoveProjectedColumnDefinitions(intent.Table, intent.Schema);
             _projectedMissingTables.Add(key);

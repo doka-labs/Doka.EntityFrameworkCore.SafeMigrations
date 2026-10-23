@@ -483,7 +483,18 @@ target. Narrowing requires a current row proof, and a matching target requires
 no repair scan. Alter never creates a missing source column. A successful
 preflight does not replace execution-time guards or permit truncation.
 
-SQL Server additionally admits the documented lossless built-in integer
+MySQL/MariaDB and PostgreSQL also admit documented lossless built-in signed-
+integer widening with unchanged non-type facets. The provider must prove the
+exact live old definition, native dependency and storage rules; an authored old
+definition alone does not grant that authority. A qualified ordinary index
+removal can preserve intrinsic column evidence, but never complete index/key
+evidence. Safe sibling transitions can retain that bounded lifetime, including
+an interrupted prefix whose index removals are already no-ops. Opaque SQL,
+unqualified structural effects, changed source values and callback boundaries
+cannot revive it. See [MySQL/MariaDB](mysql-mariadb-ddl-behavior.md#lossless-signed-integer-alterations)
+and [PostgreSQL](postgresql-behavior.md#lossless-signed-integer-alterations).
+
+SQL Server admits its separately documented lossless built-in integer
 widenings for explicit alterations with exact old-definition, storage, and
 dependency proofs. This is not a general numeric conversion or automatic
 constraint replacement. Its populated-table integer CHECK validation and

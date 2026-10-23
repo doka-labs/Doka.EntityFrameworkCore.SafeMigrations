@@ -176,6 +176,13 @@ Generated columns follow the [generated-column contract](#generated-columns)
 below. A model-owned full rebuild may retain a STORED generated column already
 represented by the terminal model.
 
+An accepted standalone index removal can preserve an independently captured,
+fully matching column target. In particular, CLR `int -> long` needs no physical
+widening when both declarations map to SQLite `INTEGER`; execution and replay
+remain no-ops for that column. This does not add support for changing the declared
+store type to `BIGINT`, discharge NULL rows or bypass rebuild artifact checks.
+Automatic constraint-backed indexes cannot grant this standalone-removal proof.
+
 An exact old column definition alone does not prove a lossless alteration.
 `RepairIfSafe` rebuilds require the same declared store type, CLR value domain,
 collation, generation and supported intrinsic facets. Only compatible default

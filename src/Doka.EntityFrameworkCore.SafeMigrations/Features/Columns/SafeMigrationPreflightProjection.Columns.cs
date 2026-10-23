@@ -15,7 +15,7 @@ internal sealed partial class SafeMigrationPreflightProjection
             return liveAnalysis;
         }
 
-        if (_projectedColumnAnalyzer is { } provider
+        if (_projectedColumnAnalyzer != null
             && CanReuseColumnProofAfterColumnPreservingChanges(intent, liveAnalysis, key))
         {
             // WHY: Ensure has no authored old definition. Complete native
@@ -24,9 +24,9 @@ internal sealed partial class SafeMigrationPreflightProjection
             return liveAnalysis is { ObservedState: SafeMigrationObservedState.Different, RepairMutatesData: false }
                 && ((_projectedIntrinsicColumnSourceTables?.Contains(key) == true
                         && _projectedForeignKeyDropOnlyTables?.Contains(key) != true
-                        && provider.CanReuseLiveColumnProofAfterKeyChanges(intent, liveAnalysis))
+                        && _projectedColumnAnalyzer.CanReuseLiveColumnProofAfterKeyChanges(intent, liveAnalysis))
                     || (TryGetAcceptedColumnSource(intent, out var source)
-                        && provider.PreservesSiblingColumnProofsAfterForeignKeyDrops(intent, source, liveAnalysis)))
+                        && _projectedColumnAnalyzer.PreservesSiblingColumnProofsAfterForeignKeyDrops(intent, source, liveAnalysis)))
                     ? liveAnalysis.WithRepairPreservesIntrinsicColumnLayout()
                     : liveAnalysis;
         }
@@ -178,7 +178,7 @@ internal sealed partial class SafeMigrationPreflightProjection
     )
     {
         var key = new TableKey(intent.Table, intent.Schema);
-        if (HasColumnPreservingHistory(key)
+        if ((HasColumnPreservingHistory(key) || _projectedIndexDropOnlyTables?.Contains(key) == true)
             && liveAnalysis.ObservedState is SafeMigrationObservedState.DataBlocked
                 or SafeMigrationObservedState.Unsupported)
         {
@@ -187,7 +187,8 @@ internal sealed partial class SafeMigrationPreflightProjection
             return liveAnalysis;
         }
 
-        if (CanReuseColumnProofAfterColumnPreservingChanges(intent, liveAnalysis, key))
+        if (CanReuseColumnProofAfterIndexDrops(intent, liveAnalysis)
+            || CanReuseColumnProofAfterColumnPreservingChanges(intent, liveAnalysis, key))
         {
             return liveAnalysis;
         }
@@ -517,7 +518,8 @@ internal sealed partial class SafeMigrationPreflightProjection
         AlterColumnIntent intent,
         SafeMigrationProviderAnalysis analysis,
         SafeMigrationDecision decision,
-        bool preservesForeignKeyColumnProofs
+        bool preservesForeignKeyColumnProofs,
+        bool preservesIndexDropColumnProofs
     )
     {
         if (decision.Action is SafeMigrationAction.NoOp or SafeMigrationAction.Repair)
@@ -537,7 +539,7 @@ internal sealed partial class SafeMigrationPreflightProjection
                 intent.Definition,
                 analysis,
                 decision,
-                preservesForeignKeyColumnProofs);
+                preservesForeignKeyColumnProofs || preservesIndexDropColumnProofs);
         }
 
         if (decision.Action == SafeMigrationAction.Repair

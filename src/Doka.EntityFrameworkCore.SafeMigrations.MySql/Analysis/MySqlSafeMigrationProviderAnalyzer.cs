@@ -173,6 +173,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         if (captureRenameSources)
         {
             _projectedAlterPhysicalSnapshots.Clear();
+            _indexDropPhysicalSnapshots?.Clear();
             _projectedExplicitTimestampDefaults.Clear();
             _projectedColumnSessionEnvironments.Clear();
             _projectedRequiredAddCapsByOperation?.Clear();
