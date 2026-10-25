@@ -9,6 +9,144 @@ public sealed class SqlServerSafeMigrationScriptScopesIntegrationTests : SqlServ
         SqlServerContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Compiler, provenance and analysis paths preserve continuation-shaped identities.</summary>
+    [SqlServerLiveFact]
+    public async Task ContinuationNamesPreserveCompilerProvenanceAnalysisAndReplay()
+    {
+        // Arrange
+        var connectionString = await CreateDatabaseAsync();
+
+        // Act
+        var actual = await ObserveContinuationContractsAsync(connectionString);
+
+        // Assert
+        Assert.True(actual.Matching);
+        Assert.Equal(SafeMigrationObservedState.Different, actual.Drift);
+        Assert.Equal(2, actual.Columns);
+        Assert.Equal(5, actual.Stamps);
+    }
+
+    /// <summary>Newline-bearing column, index and table renames retain identities and individually replay.</summary>
+    [SqlServerLiveFact]
+    public async Task ContinuationRenamesPreserveIdentitiesAndReplay()
+    {
+        // Arrange
+        var connectionString = await CreateDatabaseAsync();
+
+        // Act
+        var actual = await ObserveContinuationRenamesAsync(connectionString);
+
+        // Assert
+        Assert.Equal(3, actual);
+    }
+
+    /// <summary>Runs all three guarded rename forms plus schema-only transfer against one owned database.</summary>
+    /// <param name="connectionString">The initially empty disposable database.</param>
+    /// <returns>The independent physical table, column and index witness count.</returns>
+    internal static async Task<int> ObserveContinuationRenamesAsync(string connectionString)
+    {
+        const string schema = "rename\\\nsource";
+        const string targetSchema = "rename\\\rtarget";
+        const string table = "old\\\ntable";
+        const string newTable = "new\\\r\ntable";
+        const string column = "old\\\ncolumn";
+        const string newColumn = "new\\\rcolumn";
+        const string index = "old\\\nindex";
+        const string newIndex = "new\\\r\nindex";
+        await using var context = CreateContext(connectionString);
+        var setup = new MigrationBuilder(context.Database.ProviderName!);
+        setup.EnsureSchemaExists(schema);
+        setup.EnsureSchemaExists(targetSchema);
+        setup.Operations.Add(new SafeMigrationOperation(new EnsureTableIntent(new ExpectedTableDefinition(table,
+        [
+            new ExpectedColumnDefinition("Id", typeof(int), false, "int"),
+            new ExpectedColumnDefinition(column, typeof(int), true, "int"),
+        ], schema), SafeMigrationTableMode.StrictDefinition), SafeMigrationPolicy.ThrowIfDifferent));
+        setup.CreateIndexIfNotExists(index, table, ["Id"], schema: schema);
+        await ExecuteOperationsAsync(context, setup.Operations);
+        var renames = new MigrationBuilder(context.Database.ProviderName!);
+        renames.RenameColumnIfExists(column, table, newColumn, schema);
+        renames.RenameIndexIfExists(index, table, newIndex, schema);
+        renames.RenameTableIfExists(table, newTable, schema, targetSchema);
+        renames.RenameTableIfExists(newTable, newTable, targetSchema, schema);
+        foreach (var operation in renames.Operations)
+        {
+            await ExecuteOperationsAsync(context, [operation]);
+            await ExecuteOperationsAsync(context, [operation]);
+        }
+
+        await using var connection = new SqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandTimeout = SafeMigrationDbContext.CommandTimeoutSeconds;
+        command.CommandText = "SELECT (SELECT COUNT(*) FROM sys.tables WHERE object_id=OBJECT_ID(@table)), "
+            + "(SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(@table) AND name=@column), "
+            + "(SELECT COUNT(*) FROM sys.indexes WHERE object_id=OBJECT_ID(@table) AND name=@index);";
+        command.Parameters.Add("@table", SqlDbType.NVarChar, 512).Value =
+            context.GetService<ISqlGenerationHelper>().DelimitIdentifier(newTable, schema);
+        command.Parameters.Add("@column", SqlDbType.NVarChar, 128).Value = newColumn;
+        command.Parameters.Add("@index", SqlDbType.NVarChar, 128).Value = newIndex;
+        await using var reader = await command.ExecuteReaderAsync();
+        await reader.ReadAsync();
+
+        return reader.GetInt32(0) + reader.GetInt32(1) + reader.GetInt32(2);
+    }
+
+    /// <summary>Runs the same provider contracts on one independently owned native diagnostic database.</summary>
+    /// <param name="connectionString">The explicit connection to a disposable, initially empty database.</param>
+    /// <returns>Fresh classification and independent parameterized physical metadata observations.</returns>
+    internal static async Task<(bool Matching, SafeMigrationObservedState? Drift, int Columns, int Stamps)>
+        ObserveContinuationContractsAsync(string connectionString)
+    {
+        const string schema = "schema\\\nline";
+        const string table = "table\\\r\nline";
+        const string first = "constant\\\nfirst";
+        const string second = "constant\\\r\nsecond";
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureSchemaExists(schema);
+        builder.Operations.Add(new SafeMigrationOperation(new EnsureTableIntent(new ExpectedTableDefinition(table,
+        [
+            new ExpectedColumnDefinition("Id", typeof(int), false, "int"),
+            new ExpectedColumnDefinition("Value", typeof(int), true, "int",
+                defaultValue: SafeMigrationDefaultValue.Sql("1")),
+            new ExpectedColumnDefinition(first, typeof(int), false, "int", computedColumnSql: "1", isStored: false),
+            new ExpectedColumnDefinition(second, typeof(int), false, "int", computedColumnSql: "2", isStored: false),
+        ], schema), SafeMigrationTableMode.StrictDefinition), SafeMigrationPolicy.ThrowIfDifferent));
+        builder.AddCheckConstraintIfNotExists("check\\\nfirst", table, "[Id] >= 0", schema: schema);
+        builder.AddCheckConstraintIfNotExists("check\\\r\nsecond", table, "[Id] <= 100", schema: schema);
+        builder.CreateIndexIfNotExists("index\\\nfirst", table, ["Id"], schema: schema, filter: "[Id] >= 0");
+        builder.CreateIndexIfNotExists("index\\\r\nsecond", table, [first], schema: schema, filter: "[Id] >= 0");
+        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations);
+        var analyzer = context.GetService<ISafeMigrationProviderAnalyzer>();
+        var matching = await analyzer.AnalyzeAsync(context,
+            builder.Operations.OfType<SafeMigrationOperation>().ToArray());
+        var drift = await analyzer.AnalyzeAsync(context,
+        [
+            new SafeMigrationOperation(new EnsureColumnIntent(table,
+                new ExpectedColumnDefinition("Value", typeof(int), true, "int",
+                    defaultValue: SafeMigrationDefaultValue.Sql("2")), schema), SafeMigrationPolicy.ThrowIfDifferent),
+        ]);
+        await using var connection = new SqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandTimeout = SafeMigrationDbContext.CommandTimeoutSeconds;
+        command.CommandText = "SELECT (SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(@table) "
+            + "AND name IN (@first,@second)), (SELECT COUNT(*) FROM sys.extended_properties ep "
+            + "WHERE ep.name=N'Doka:SafeMigrations:Contract' AND (ep.major_id=OBJECT_ID(@table) "
+            + "OR ep.major_id IN (SELECT object_id FROM sys.objects WHERE parent_object_id=OBJECT_ID(@table))));";
+        command.Parameters.Add("@table", SqlDbType.NVarChar, 512).Value =
+            context.GetService<ISqlGenerationHelper>().DelimitIdentifier(table, schema);
+        command.Parameters.Add("@first", SqlDbType.NVarChar, 128).Value = first;
+        command.Parameters.Add("@second", SqlDbType.NVarChar, 128).Value = second;
+        await using var reader = await command.ExecuteReaderAsync();
+        await reader.ReadAsync();
+
+        return (matching.All(static result => result.ObservedState == SafeMigrationObservedState.Matching),
+            drift[0].ObservedState, reader.GetInt32(0), reader.GetInt32(1));
+    }
+
     /// <summary>Real scripts preserve long multiline defaults across migrations and idempotent replay.</summary>
     /// <param name="idempotent">Whether to qualify script replay as well as initial application.</param>
     /// <param name="noTransactions">Whether the client requests the supported transaction-free script form.</param>

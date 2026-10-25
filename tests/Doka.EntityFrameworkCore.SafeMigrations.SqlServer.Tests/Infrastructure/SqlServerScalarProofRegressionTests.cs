@@ -8,6 +8,42 @@ public sealed class SqlServerScalarProofRegressionTests
 
     private static readonly int[] s_proofValues = [1, 0, 1];
 
+    /// <summary>The encoded continuation payload is charged before a delayed classifier is admitted.</summary>
+    [Fact]
+    public void ContinuationExpansion_RejectsAnOversizedFinalPayload()
+    {
+        // Arrange
+        var state = "N'matching' /*" + string.Concat(Enumerable.Repeat("\\\n", 300_000)) + "*/";
+        var rawBytes = Encoding.UTF8.GetByteCount(state);
+        var plan = Plan() with { StateExpression = state };
+
+        // Act
+        var failure = Record.Exception(() =>
+            SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogSelection(7, plan));
+
+        // Assert
+        Assert.True(rawBytes < SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes);
+        Assert.Contains("exceeds a bounded query limit", Assert.IsType<InvalidOperationException>(failure).Message,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>A fitting encoded classifier retains its exact declared payload and original wire ordinal.</summary>
+    [Fact]
+    public void ContinuationExpansion_AdmitsAFittingFinalPayload()
+    {
+        // Arrange
+        var state = "N'matching' /*" + string.Concat(Enumerable.Repeat("\\\n", 32)) + "*/";
+        var plan = Plan() with { StateExpression = state };
+
+        // Act
+        var selection = SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogSelection(7, plan);
+
+        // Assert
+        Assert.True(Encoding.UTF8.GetByteCount(selection) < SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes);
+        Assert.Contains("NCHAR(10)", selection, StringComparison.Ordinal);
+        Assert.Contains("@doka_ordinal = 7", selection, StringComparison.Ordinal);
+    }
+
     /// <summary>Every proof writes a fresh local output before its original support or prerequisite gate.</summary>
     [Fact]
     public void ScalarProofs_DeclareFreshOutputsInOriginalGateOrder()

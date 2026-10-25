@@ -154,11 +154,19 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 // collation, which can differ from the user's database collation.
                 var chooseOperand = "SELECT @name=CASE WHEN @target COLLATE CATALOG_DEFAULT="
                     + "N'__doka_operand' THEN N'__doka_operand_other' ELSE N'__doka_operand' END;";
+                var targetArgument = SqlServerSqlStringLiteral.ProcedureArgument(
+                    column.Name, RenderStringLiteral(column.Name),
+                    SqlServerSqlStringLiteral.RequiresExpression(column.Name.AsSpan())
+                        ? ComputedVariable(column, "target_sql") : string.Empty,
+                    out var targetDeclaration);
 
-                probe.Append("DECLARE @auxiliary sysname; EXEC tempdb.sys.sp_executesql ")
+                // WHY: Even named procedure inputs accept only constants or
+                // variables, not the continuation-safe string expression.
+                probe.Append(targetDeclaration)
+                    .Append("DECLARE @auxiliary sysname; EXEC tempdb.sys.sp_executesql ")
                     .Append(RenderStringLiteral(chooseOperand))
                     .Append(",N'@target sysname,@name sysname OUTPUT',@target=")
-                    .Append(RenderStringLiteral(column.Name)).Append(",@name=@auxiliary OUTPUT; ")
+                    .Append(targetArgument).Append(",@name=@auxiliary OUTPUT; ")
                     .Append("DECLARE @compiled nvarchar(max)=N'CREATE TABLE ").Append(Delimited(temporary))
                     .Append(" ('+QUOTENAME(@auxiliary)+N' int NULL); '; ");
             }
@@ -190,7 +198,14 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             // WHY: COLUMNPROPERTY resolves object ids in its current database.
             // The compiler-owned table lives in tempdb, so read those properties
             // through a tempdb child scope while the owner scope is still alive.
-            generated.Append(" EXEC tempdb.sys.sp_executesql ").Append(RenderStringLiteral(indexProperties))
+            var indexArgument = SqlServerSqlStringLiteral.ProcedureArgument(
+                indexProperties, RenderStringLiteral(indexProperties),
+                SqlServerSqlStringLiteral.RequiresExpression(indexProperties.AsSpan())
+                    ? ComputedVariable(column, "index_sql") : string.Empty,
+                out var indexDeclaration);
+
+            generated.Append(' ').Append(indexDeclaration)
+                .Append("EXEC tempdb.sys.sp_executesql ").Append(indexArgument)
                 .Append(",N'@indexable int OUTPUT,@includeable int OUTPUT',")
                 .Append("@indexable=@indexable OUTPUT,@includeable=@includeable OUTPUT;");
 
@@ -205,7 +220,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 .Append("@definition=@definition OUTPUT,@nullable=@nullable OUTPUT,@support=@support OUTPUT,")
                 .Append("@indexable=@indexable OUTPUT,@includeable=@includeable OUTPUT,@collation=@collation OUTPUT;");
 
-            result.Append("BEGIN TRY EXEC sys.sp_executesql ").Append(Literal(probe.ToString()))
+            var probeSql = probe.ToString();
+            var probeArgument = SqlServerSqlStringLiteral.ProcedureArgument(
+                probeSql, Literal(probeSql), SqlServerSqlStringLiteral.RequiresExpression(probeSql.AsSpan())
+                    ? ComputedVariable(column, "probe_sql") : string.Empty, out var probeDeclaration);
+
+            result.Append(probeDeclaration)
+                .Append("BEGIN TRY EXEC sys.sp_executesql ").Append(probeArgument)
                 .Append(", N'@definition nvarchar(max) OUTPUT, @nullable bit OUTPUT, ")
                 .Append("@support int OUTPUT, @indexable int OUTPUT, @includeable int OUTPUT, ")
                 .Append("@collation nvarchar(128) OUTPUT")
@@ -265,7 +286,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             + ComputedIndexSessionPredicate + ") THEN 5 ELSE 3 END ELSE 0 END, "
             + ComputedVariable(definition, "bindings") + ";";
 
-        return "EXEC sys.sp_executesql " + Literal(preamble + select) + ";";
+        var body = preamble + select;
+        var argument = SqlServerSqlStringLiteral.ProcedureArgument(
+            body, Literal(body), SqlServerSqlStringLiteral.RequiresExpression(body.AsSpan())
+                ? ComputedVariable(definition, "key_sql") + "_" + ordinal.ToString(CultureInfo.InvariantCulture)
+                : string.Empty, out var declaration);
+
+        return declaration + "EXEC sys.sp_executesql " + argument + ";";
     }
 
     private string ComputedProbeTypePredicate(ExpectedColumnDefinition definition)

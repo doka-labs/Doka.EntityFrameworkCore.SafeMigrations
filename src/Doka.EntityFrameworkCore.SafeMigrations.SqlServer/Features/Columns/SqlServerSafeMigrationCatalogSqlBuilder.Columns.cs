@@ -554,20 +554,33 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             DefaultExpression(definition));
 
         var variable = "@doka_default_" + fingerprint;
+        // WHY: Preserve parameter registration order while binding only values
+        // whose lossless renderer needs an expression, forbidden in EXEC args.
+        var tableId = TableId(table, schema);
+        var columnName = Literal(definition.Name);
+        var contractValue = Literal(fingerprint);
+        var schemaName = EffectiveSchema(schema);
+        var schemaArgument = SqlServerSqlStringLiteral.ProcedureArgument(
+            schemaName, Literal(schemaName), SqlServerSqlStringLiteral.RequiresExpression(schemaName.AsSpan())
+                ? variable + "_schema" : string.Empty, out var schemaDeclaration);
+        var tableArgument = SqlServerSqlStringLiteral.ProcedureArgument(
+            table, Literal(table), SqlServerSqlStringLiteral.RequiresExpression(table.AsSpan())
+                ? variable + "_table" : string.Empty, out var tableDeclaration);
 
         return $"DECLARE {variable} sysname = (SELECT dc.name FROM sys.default_constraints dc "
             + "JOIN sys.columns c ON c.object_id = dc.parent_object_id "
             + "AND c.column_id = dc.parent_column_id "
-            + $"WHERE dc.parent_object_id = {TableId(table, schema)} "
-            + $"AND c.name = {Literal(definition.Name)}); "
+            + $"WHERE dc.parent_object_id = {tableId} "
+            + $"AND c.name = {columnName}); "
             + $"IF {variable} IS NULL THROW 51004, N'SafeMigrations default contract was not created', 1; "
+            + schemaDeclaration + tableDeclaration
             + "EXEC sys.sp_addextendedproperty "
             + "@name = N'Doka:SafeMigrations:Contract', "
-            + $"@value = {Literal(fingerprint)}, "
+            + $"@value = {contractValue}, "
             + "@level0type = N'SCHEMA', "
-            + $"@level0name = {Literal(EffectiveSchema(schema))}, "
+            + $"@level0name = {schemaArgument}, "
             + "@level1type = N'TABLE', "
-            + $"@level1name = {Literal(table)}, "
+            + $"@level1name = {tableArgument}, "
             + "@level2type = N'CONSTRAINT', "
             + $"@level2name = {variable}";
     }

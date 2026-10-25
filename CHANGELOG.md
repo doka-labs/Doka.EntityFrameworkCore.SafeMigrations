@@ -136,6 +136,13 @@ Timing evidence is informational.
 
 ### Fixed
 
+- Preserve SQL Server Unicode literal contents through native line-continuation
+  parsing, including catalog identities and nested dynamic statements. Retain
+  exact object names and reject real default drift instead of matching a
+  continuation-collapsed alias. Bind expression-valued procedure arguments
+  through private variables. Preserve valid schema and rename baselines for
+  line-bearing names without changing ordinary literal fast paths or
+  schema-transfer semantics.
 - Preserve SQL Server guarded payloads through EF's line normalization,
   continuations, GO handling and idempotent indentation. Cover exact authored
   long CRLF defaults, quoted identities, managed-data mutation and replay while

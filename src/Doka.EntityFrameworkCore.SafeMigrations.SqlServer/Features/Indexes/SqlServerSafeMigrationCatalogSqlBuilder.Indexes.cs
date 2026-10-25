@@ -216,17 +216,37 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     private string BuildIndexStampSql(ExpectedIndexDefinition definition)
     {
         var index = IndependentIndexExists(definition.Name, definition.Table, definition.Schema);
+        var fingerprint = IndexFilterFingerprint(definition);
+        var contractValue = Literal(fingerprint);
+        var schemaName = EffectiveSchema(definition.Schema);
+        var variable = SqlServerSqlStringLiteral.RequiresExpression(schemaName.AsSpan())
+            || SqlServerSqlStringLiteral.RequiresExpression(definition.Table.AsSpan())
+            || SqlServerSqlStringLiteral.RequiresExpression(definition.Name.AsSpan())
+                ? "@doka_index_stamp_" + fingerprint : string.Empty;
+
+        var schemaArgument = SqlServerSqlStringLiteral.ProcedureArgument(
+            schemaName, Literal(schemaName), variable.Length == 0 ? string.Empty : variable + "_schema",
+            out var schemaDeclaration);
+        var tableArgument = SqlServerSqlStringLiteral.ProcedureArgument(
+            definition.Table, Literal(definition.Table), variable.Length == 0 ? string.Empty : variable + "_table",
+            out var tableDeclaration);
+        var nameArgument = SqlServerSqlStringLiteral.ProcedureArgument(
+            definition.Name, Literal(definition.Name), variable.Length == 0 ? string.Empty : variable + "_name",
+            out var nameDeclaration);
 
         return $"IF NOT {index} THROW 51004, N'SafeMigrations index contract was not created', 1; "
+            // WHY: Bind expression-rendered names before EXEC, without
+            // changing ordinary literal arguments or their parameter order.
+            + schemaDeclaration + tableDeclaration + nameDeclaration
             + "EXEC sys.sp_addextendedproperty "
             + "@name = N'Doka:SafeMigrations:Contract', "
-            + $"@value = {Literal(IndexFilterFingerprint(definition))}, "
+            + $"@value = {contractValue}, "
             + "@level0type = N'SCHEMA', "
-            + $"@level0name = {Literal(EffectiveSchema(definition.Schema))}, "
+            + $"@level0name = {schemaArgument}, "
             + "@level1type = N'TABLE', "
-            + $"@level1name = {Literal(definition.Table)}, "
+            + $"@level1name = {tableArgument}, "
             + "@level2type = N'INDEX', "
-            + $"@level2name = {Literal(definition.Name)}";
+            + $"@level2name = {nameArgument}";
     }
 
     private string IndexExists(

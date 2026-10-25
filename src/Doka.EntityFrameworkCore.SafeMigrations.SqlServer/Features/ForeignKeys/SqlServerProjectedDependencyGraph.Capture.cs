@@ -663,5 +663,5 @@ internal sealed partial class SqlServerProjectedDependencyGraph
         string? value
     ) => value is null
         ? "CONVERT(nvarchar(128), NULL)"
-        : "N'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
+        : SqlServerSqlStringLiteral.Render(value);
 }

@@ -355,10 +355,15 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             {
                 var rowProbe = "SELECT @count = COUNT(*) FROM "
                     + $"(SELECT TOP (2) 1 AS value FROM {qualified}) [doka_rows];";
+                var rowArgument = SqlServerSqlStringLiteral.ProcedureArgument(
+                    rowProbe, KeyLiteral(rowProbe), SqlServerSqlStringLiteral.RequiresExpression(rowProbe.AsSpan())
+                        ? "@doka_key_row_sql" + ordinal.ToString(CultureInfo.InvariantCulture) : string.Empty,
+                    out var rowDeclaration);
 
                 // WHY: Memory-optimized and other unsupported physical tables
                 // can reject ordinary transactional reads before classification.
                 sql
+                    .Append(rowDeclaration)
                     .Append("SET @doka_key_rows = CASE WHEN ")
                     .Append(tableId)
                     .Append(" IS NULL THEN 0 ELSE -1 END; IF (")
@@ -366,7 +371,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     .Append(") = 1 AND ")
                     .Append(tableId)
                     .Append(" IS NOT NULL EXEC sys.sp_executesql ")
-                    .Append(KeyLiteral(rowProbe))
+                    .Append(rowArgument)
                     .Append(", N'@count int OUTPUT', @count = @doka_key_rows OUTPUT;\n");
             }
             else
@@ -434,5 +439,5 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
     private static string KeyLiteral(
         string value
-    ) => "N'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
+    ) => SqlServerSqlStringLiteral.Render(value);
 }

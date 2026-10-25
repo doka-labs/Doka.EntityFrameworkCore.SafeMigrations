@@ -334,19 +334,25 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             await using var command = connection.CreateCommand();
             command.Transaction = transaction;
             ApplyCommandTimeout(command, commandTimeout);
-            command.CommandText = string.Join(" ", chunk.Select(key =>
+            command.CommandText = string.Join(" ", chunk.Select((key, ordinal) =>
             {
                 var qualified = _sqlGenerationHelper.DelimitIdentifier(key.Table, key.Schema);
                 var prefix = "SELECT " + KeyLiteral(key.Schema) + "," + KeyLiteral(key.Table) + ",";
                 var select = prefix + "CONVERT(bit,CASE WHEN EXISTS(SELECT TOP(1)1 FROM "
                     + qualified + ") THEN 1 ELSE 0 END);";
+                var argument = SqlServerSqlStringLiteral.ProcedureArgument(
+                    select, KeyLiteral(select), SqlServerSqlStringLiteral.RequiresExpression(select.AsSpan())
+                        ? "@doka_layout_row_sql" + ordinal.ToString(CultureInfo.InvariantCulture) : string.Empty,
+                    out var declaration);
 
                 // WHY: VIEW DEFINITION does not grant SELECT. Keep unauthorized
                 // table binding inside the guarded dynamic branch and retain
                 // unknown row presence for a structured fail-closed decision.
 
                 return "IF HAS_PERMS_BY_NAME(" + KeyLiteral(qualified) + ",N'OBJECT',N'SELECT')=1 "
-                    + "EXEC sys.sp_executesql " + KeyLiteral(select) + "; ELSE "
+                    + (declaration.Length == 0 ? string.Empty : "BEGIN " + declaration)
+                    + "EXEC sys.sp_executesql " + argument + "; "
+                    + (declaration.Length == 0 ? string.Empty : "END ") + "ELSE "
                     + prefix + "CONVERT(bit,NULL);";
             }));
 

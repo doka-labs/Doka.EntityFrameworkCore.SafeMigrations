@@ -140,17 +140,36 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             definition.Name, CheckExpression(definition));
 
         var check = CheckExists(definition.Table, definition.Schema, definition.Name);
+        var contractValue = Literal(fingerprint);
+        var schemaName = EffectiveSchema(definition.Schema);
+        var variable = SqlServerSqlStringLiteral.RequiresExpression(schemaName.AsSpan())
+            || SqlServerSqlStringLiteral.RequiresExpression(definition.Table.AsSpan())
+            || SqlServerSqlStringLiteral.RequiresExpression(definition.Name.AsSpan())
+                ? "@doka_check_stamp_" + fingerprint : string.Empty;
+
+        var schemaArgument = SqlServerSqlStringLiteral.ProcedureArgument(
+            schemaName, Literal(schemaName), variable.Length == 0 ? string.Empty : variable + "_schema",
+            out var schemaDeclaration);
+        var tableArgument = SqlServerSqlStringLiteral.ProcedureArgument(
+            definition.Table, Literal(definition.Table), variable.Length == 0 ? string.Empty : variable + "_table",
+            out var tableDeclaration);
+        var nameArgument = SqlServerSqlStringLiteral.ProcedureArgument(
+            definition.Name, Literal(definition.Name), variable.Length == 0 ? string.Empty : variable + "_name",
+            out var nameDeclaration);
 
         return $"IF NOT {check} THROW 51004, N'SafeMigrations check contract was not created', 1; "
+            // WHY: Procedure arguments cannot contain the lossless string
+            // expression. Fingerprinted locals remain unique in table stamps.
+            + schemaDeclaration + tableDeclaration + nameDeclaration
             + "EXEC sys.sp_addextendedproperty "
             + "@name = N'Doka:SafeMigrations:Contract', "
-            + $"@value = {Literal(fingerprint)}, "
+            + $"@value = {contractValue}, "
             + "@level0type = N'SCHEMA', "
-            + $"@level0name = {Literal(EffectiveSchema(definition.Schema))}, "
+            + $"@level0name = {schemaArgument}, "
             + "@level1type = N'TABLE', "
-            + $"@level1name = {Literal(definition.Table)}, "
+            + $"@level1name = {tableArgument}, "
             + "@level2type = N'CONSTRAINT', "
-            + $"@level2name = {Literal(definition.Name)}";
+            + $"@level2name = {nameArgument}";
     }
 
     private string CheckExpression(

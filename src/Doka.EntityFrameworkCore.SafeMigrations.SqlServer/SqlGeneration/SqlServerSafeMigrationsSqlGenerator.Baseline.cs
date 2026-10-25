@@ -15,6 +15,27 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator
             return [];
         }
 
+        if (operation.Intent is EnsureSchemaIntent schema
+            && schema.Name.AsSpan().IndexOfAny('\r', '\n') >= 0)
+        {
+            // WHY: EF places its newline-aware CONCAT literal directly in
+            // EXEC(...), where SQL Server rejects function expressions. The
+            // existing safe guard already owns existence and late binding;
+            // retain exact quoted DDL without the invalid baseline wrapper.
+            var schemaSql = "CREATE SCHEMA " + _sqlGenerationHelper.DelimitIdentifier(schema.Name) + ";";
+
+            return _baselineGenerator.Generate(
+                [new SqlOperation { Sql = ProtectCommandSql(schemaSql, MigrationsSqlGenerationOptions.Default) }],
+                model, options);
+        }
+
+        if (TryRenderLineSensitiveRename(operation.Intent, out var renameSql))
+        {
+            return _baselineGenerator.Generate(
+                [new SqlOperation { Sql = ProtectCommandSql(renameSql, MigrationsSqlGenerationOptions.Default) }],
+                model, options);
+        }
+
         if (operation.Intent is ModelManagedDataIntent data)
         {
             return _baselineGenerator.Generate(
@@ -94,6 +115,75 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator
 
         return _baselineGenerator.Generate([baselineOperation], generationModel, options);
     }
+
+    /// <summary>Preserves rename semantics when EF's newline expression cannot be passed to sp_rename.</summary>
+    private bool TryRenderLineSensitiveRename(
+        SafeMigrationIntent intent,
+        out string sql
+    )
+    {
+        string source;
+        string target;
+        string kind;
+        var transfer = string.Empty;
+        switch (intent)
+        {
+            case RenameColumnIntent column when HasLine(column.Name) || HasLine(column.Table)
+                || HasLine(column.Schema) || HasLine(column.NewName):
+                source = _sqlGenerationHelper.DelimitIdentifier(column.Table, column.Schema ?? "dbo") + "."
+                    + _sqlGenerationHelper.DelimitIdentifier(column.Name);
+                target = column.NewName;
+                kind = "COLUMN";
+
+                break;
+            case RenameIndexIntent index when HasLine(index.Name) || HasLine(index.Table)
+                || HasLine(index.Schema) || HasLine(index.NewName):
+                source = _sqlGenerationHelper.DelimitIdentifier(index.Table, index.Schema ?? "dbo") + "."
+                    + _sqlGenerationHelper.DelimitIdentifier(index.Name);
+                target = index.NewName;
+                kind = "INDEX";
+
+                break;
+            case RenameTableIntent table when HasLine(table.Name) || HasLine(table.Schema)
+                || HasLine(table.NewName) || HasLine(table.NewSchema):
+                var schema = table.Schema ?? "dbo";
+                var targetSchema = table.NewSchema ?? schema;
+                source = _sqlGenerationHelper.DelimitIdentifier(table.Name, schema);
+                target = table.NewName ?? table.Name;
+                kind = "OBJECT";
+                if (!StringComparer.Ordinal.Equals(schema, targetSchema))
+                {
+                    transfer = "ALTER SCHEMA " + _sqlGenerationHelper.DelimitIdentifier(targetSchema) + " TRANSFER "
+                        + _sqlGenerationHelper.DelimitIdentifier(target, schema) + ";";
+                }
+
+                if (StringComparer.Ordinal.Equals(table.Name, target))
+                {
+                    sql = transfer;
+
+                    return transfer.Length > 0;
+                }
+
+                break;
+            default:
+                sql = string.Empty;
+
+                return false;
+        }
+
+        // WHY: sp_rename accepts constants or variables, not EF's CONCAT
+        // newline literal. These locals stay in the existing nested DDL scope;
+        // the surrounding guard still proves ownership, occupancy and outcome.
+        sql = "DECLARE @doka_rename_source nvarchar(max) = " + SqlServerSqlStringLiteral.Render(source)
+            + ", @doka_rename_target nvarchar(max) = " + SqlServerSqlStringLiteral.Render(target) + "; "
+            + "EXEC sys.sp_rename @objname=@doka_rename_source, @newname=@doka_rename_target, @objtype=N'"
+            + kind + "'; " + transfer;
+
+        return true;
+    }
+
+    /// <summary>Detects identifiers for which EF emits a procedure-incompatible newline expression.</summary>
+    private static bool HasLine(string? value) => value.AsSpan().IndexOfAny('\r', '\n') >= 0;
 
     /// <summary>Identifies the exact safe rename whose guarded contract needs no physical DDL.</summary>
     private static bool IsUnchangedTableRename(

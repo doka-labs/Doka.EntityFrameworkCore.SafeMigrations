@@ -603,6 +603,18 @@ roundtrip; ordinary non-vulnerable commands retain their original SQL reference.
 This applies to guarded operations, identifier guards and the provider-owned
 managed-data mutation stage, not unrelated consumer-authored raw EF scripts.
 
+Native Unicode literals also need lossless transport: a backslash followed by
+CR, LF or CRLF can be interpreted as line continuation inside `N'...'`. Catalog values
+and nested dynamic statements must preserve the original characters before
+SQL Server parses them, not only before EF formats the outer command.
+Affected values use MAX-first `NCHAR` expressions; stored-procedure arguments
+use private variables where expressions are not accepted. This prevents a
+different physical identifier from being mistaken for the authored name.
+Line-bearing schema creation and rename baselines avoid invalid function-valued
+procedure arguments while retaining the existing guarded scope and transfer rules.
+It does not rename objects already created by older SQL or rewrite migration
+history; genuine differences continue to require a reviewed transition.
+
 [cc]: https://learn.microsoft.com/en-us/sql/relational-databases/system-catalog-views/sys-computed-columns-transact-sql
 [ic]: https://learn.microsoft.com/sql/relational-databases/indexes/create-indexes-with-included-columns
 

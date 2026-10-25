@@ -298,7 +298,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // WHY: Invalid installed collations and overflowed typed constants must
         // become an unproven proof, not escape as a raw binding/conversion error.
         // The hash only deduplicates exact authored rows; SQL still proves keys.
-        var sql = $"IF {guard} BEGIN TRY EXEC sys.sp_executesql {Literal(body)}; "
+        var argument = SqlServerSqlStringLiteral.ProcedureArgument(
+            body, Literal(body), "@doka_projected_key_sql", out var declaration);
+        var sql = declaration + $"IF {guard} BEGIN TRY EXEC sys.sp_executesql {argument}; "
             + "END TRY BEGIN CATCH IF ERROR_NUMBER() IN (241, 242, 245, 248, 529, 8114, 8115) "
             + "SELECT -1; ELSE THROW; END CATCH ELSE SELECT -1;";
 

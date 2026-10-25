@@ -139,12 +139,18 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     {
         var definitions = BuildDelayedParameterDefinitions(plan);
         var template = BuildDelayedCatalogTemplate(plan, definitions);
+        var variable = SqlServerSqlStringLiteral.RequiresExpression(template.AsSpan())
+            ? "@doka_selection_sql" + (dispatchSlot ?? ordinal).ToString(CultureInfo.InvariantCulture)
+            : string.Empty;
+        var statement = SqlServerSqlStringLiteral.StatementArgument(template, variable,
+            out var declaration);
         var selection = BuildDelayedCatalogInvocation(
             ordinal,
             plan,
             dispatchSlot,
-            "N'" + template.Replace("'", "''", StringComparison.Ordinal) + "'",
+            statement,
             definitions);
+        selection = declaration + selection;
 
         var bytes = Encoding.UTF8.GetByteCount(selection);
         if (bytes > SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes)
@@ -212,7 +218,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         var inner = (plan.CatalogPreambleSql is null ? string.Empty : plan.CatalogPreambleSql + "\n")
             + BuildCatalogSelection("@doka_ordinal", plan, includePhysicalTableSupport: false);
 
-        var escaped = inner.Replace("'", "''", StringComparison.Ordinal);
+        var innerArgument = SqlServerSqlStringLiteral.StatementArgument(
+            inner, "@doka_inner_sql", out var innerDeclaration);
         var parameterArguments = plan.AnalysisParameters.Count == 0
             ? string.Empty
             : ", " + string.Join(", ", plan.AnalysisParameters.Select(static value => value.Name + " = " + value.Name));
@@ -307,6 +314,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             + (plan.PrerequisiteFailureCodeExpression ?? "CONVERT(nvarchar(128), NULL)")
             + ", CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(max), NULL), "
             + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(128), NULL);";
+        var fallbackArgument = SqlServerSqlStringLiteral.StatementArgument(
+            fallback, "@doka_fallback_sql", out var fallbackDeclaration);
 
         var selection = physicalGate
             + layoutSetup
@@ -315,16 +324,18 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             + defaultGate
             + indexFilterGate
             + BuildDelayedScalarProof(prerequisite, "@doka_prerequisite", "int", definitions, parameterArguments)
+            + innerDeclaration
+            + fallbackDeclaration
             + "IF @doka_prerequisite = 1 "
             // WHY: Returning the nested SELECT directly avoids INSERT EXEC and a statement-sized
             // table variable. Transport validates one result set per classifier before accepting evidence.
-            + $"EXEC sys.sp_executesql N'{escaped}', "
+            + "EXEC sys.sp_executesql " + innerArgument + ", "
             + $"N'{definitions}', @doka_ordinal = @doka_ordinal"
             + parameterArguments
             + " "
-            + "ELSE EXEC sys.sp_executesql N'"
-            + fallback.Replace("'", "''", StringComparison.Ordinal)
-            + $"', N'{definitions}', @doka_ordinal = @doka_ordinal"
+            + "ELSE EXEC sys.sp_executesql "
+            + fallbackArgument
+            + $", N'{definitions}', @doka_ordinal = @doka_ordinal"
             + parameterArguments
             + ";";
 

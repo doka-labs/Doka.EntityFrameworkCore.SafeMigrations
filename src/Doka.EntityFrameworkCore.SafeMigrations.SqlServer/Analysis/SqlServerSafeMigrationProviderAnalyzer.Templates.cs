@@ -19,8 +19,12 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
             // WHY: Template sharing must not admit an individually oversized classifier. Measure the
             // equivalent escaped literal invocation without allocating a second heavyweight SQL buffer.
-            var literalBytes = checked(Encoding.UTF8.GetByteCount(template) + 3);
-            foreach (var character in template)
+            var encoded = SqlServerSqlStringLiteral.RequiresExpression(template.AsSpan())
+                ? SqlServerSqlStringLiteral.Render(template) : null;
+            var literalBytes = encoded is not null
+                ? Encoding.UTF8.GetByteCount(encoded)
+                : checked(Encoding.UTF8.GetByteCount(template) + 3);
+            foreach (var character in encoded is null ? template : string.Empty)
             {
                 if (character == '\'')
                 {
@@ -32,8 +36,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 - Encoding.UTF8.GetByteCount(variable));
 
             var declaration = shared ? null
-                : "DECLARE " + variable + " nvarchar(max) = N'"
-                    + template.Replace("'", "''", StringComparison.Ordinal) + "';\n";
+                : "DECLARE " + variable + " nvarchar(max) = "
+                    + (encoded ?? SqlServerSqlStringLiteral.Render(template)) + ";\n";
 
             return new DelayedCatalogSelection(template, definitions, variable, invocation, declaration,
                 standaloneBytes);

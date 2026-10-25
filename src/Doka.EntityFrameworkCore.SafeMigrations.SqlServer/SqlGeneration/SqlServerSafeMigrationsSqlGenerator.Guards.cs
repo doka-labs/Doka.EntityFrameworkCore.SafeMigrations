@@ -522,6 +522,22 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator
             ArgumentNullException.ThrowIfNull(expression);
         }
 
+        if (SqlServerSqlStringLiteral.RequiresExpression(expression.AsSpan())
+            || SqlServerSqlStringLiteral.RequiresExpression(preambleSql.AsSpan()))
+        {
+            var statement = (preambleSql ?? string.Empty) + "\nSET @doka_value = ("
+                + (coalesce ? "COALESCE((" : string.Empty) + expression
+                + (coalesce ? "), 0)" : string.Empty) + ");";
+            var argument = SqlServerSqlStringLiteral.StatementArgument(
+                statement, targetVariable + "_sql", out var declaration);
+            builder.Append(indentation).Append(declaration)
+                .Append("EXEC sys.sp_executesql ").Append(argument)
+                .Append(", N'@doka_value ").Append(type)
+                .Append(" OUTPUT', @doka_value = ").Append(targetVariable).Append(" OUTPUT;\n");
+
+            return;
+        }
+
         builder
             .Append(indentation)
             .Append(GuardScopePrefix);
@@ -588,6 +604,14 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator
         // returning absent SQL must not silently produce an empty nested command.
         ArgumentNullException.ThrowIfNull(sql);
 
+        // WHY: The outer guard's transport cannot undo SQL Server's parsing
+        // of this nested N'...' argument. Reconstruct vulnerable DDL before
+        // quoting the nested batch, while retaining the ordinary fast path.
+        if (SqlServerSqlStringLiteral.RequiresExpression(sql.AsSpan()))
+        {
+            sql = ProtectCommandSql(sql, MigrationsSqlGenerationOptions.Default);
+        }
+
         builder
             .Append(indentation)
             .Append(GuardScopePrefix);
@@ -604,22 +628,7 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator
         ReadOnlySpan<char> sql
     )
     {
-        ArgumentNullException.ThrowIfNull(builder);
-
-        // WHY: Delayed classifiers repeat large catalog expressions inside
-        // nested SQL literals. Append unchanged spans and doubled apostrophes
-        // directly; every other UTF-16 code unit and null-preamble behavior
-        // remain identical to the former ordinal string replacement.
-        int apostropheOffset;
-        while ((apostropheOffset = sql.IndexOf('\'')) >= 0)
-        {
-            builder
-                .Append(sql.Slice(0, apostropheOffset))
-                .Append("''");
-            sql = sql.Slice(apostropheOffset + 1);
-        }
-
-        builder.Append(sql);
+        SqlServerSqlStringLiteral.AppendEscaped(builder, sql);
     }
 
     /// <summary>Appends policy decisions without an intermediate action-case buffer or string.</summary>

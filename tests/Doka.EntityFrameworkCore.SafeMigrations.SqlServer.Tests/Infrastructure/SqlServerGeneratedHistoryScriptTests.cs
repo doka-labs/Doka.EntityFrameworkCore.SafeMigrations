@@ -79,17 +79,7 @@ public sealed class SqlServerGeneratedHistoryScriptTests
 
         // Act
         var commands = context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations);
-        var pending = new Queue<string>(commands.Select(static command => command.CommandText));
-        var payloads = new List<string>();
-        while (pending.TryDequeue(out var sql))
-        {
-            payloads.AddRange(DecodeIdempotentPayloads(sql));
-            foreach (System.Text.RegularExpressions.Match scope in System.Text.RegularExpressions.Regex.Matches(
-                         sql, "EXEC sys\\.sp_executesql N'((?:''|[^'])*)';"))
-            {
-                pending.Enqueue(scope.Groups[1].Value.Replace("''", "'", StringComparison.Ordinal));
-            }
-        }
+        var payloads = commands.SelectMany(static command => DecodeNestedPayloads(command.CommandText)).ToArray();
 
         // Assert
         Assert.Contains(payloads, static payload => payload.Contains("[" + table + "]", StringComparison.Ordinal));
@@ -147,7 +137,7 @@ public sealed class SqlServerGeneratedHistoryScriptTests
         var script = context.GetService<IMigrator>().GenerateScript(
             Migration.InitialDatabase, SqlServerMultilineUpgradeMigration.MigrationIdentifier, options);
 
-        var payloads = DecodeIdempotentPayloads(script);
+        var payloads = DecodeNestedPayloads(script);
 
         // Assert
         Assert.Contains(payloads, static payload => payload.Contains(
@@ -155,6 +145,32 @@ public sealed class SqlServerGeneratedHistoryScriptTests
         Assert.Contains(payloads, static payload => payload.Contains(
             SqlServerMultilineUpgradeMigration.ColumnName, StringComparison.Ordinal));
         Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
+    }
+
+    /// <summary>Observes reconstructed payloads through every generated private literal scope.</summary>
+    /// <param name="sql">The complete public script or command.</param>
+    /// <returns>Every reconstructed native command, without assuming a fixed nesting depth.</returns>
+    internal static string[] DecodeNestedPayloads(string sql)
+    {
+        var pending = new Queue<string>([sql]);
+        var payloads = new List<string>();
+        while (pending.TryDequeue(out var current))
+        {
+            var reconstructed = DecodeIdempotentPayloads(current);
+            payloads.AddRange(reconstructed);
+            foreach (var payload in reconstructed)
+            {
+                pending.Enqueue(payload);
+            }
+
+            foreach (System.Text.RegularExpressions.Match scope in System.Text.RegularExpressions.Regex.Matches(
+                         current, "EXEC sys\\.sp_executesql N'((?:''|[^'])*)';"))
+            {
+                pending.Enqueue(scope.Groups[1].Value.Replace("''", "'", StringComparison.Ordinal));
+            }
+        }
+
+        return payloads.ToArray();
     }
 
     /// <summary>Decodes the emitted literal and newline expression independently of product writer helpers.</summary>

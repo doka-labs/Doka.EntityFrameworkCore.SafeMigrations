@@ -397,7 +397,7 @@ internal static class SqlServerIdentifierContract
     }
 
     private static string Literal(string value)
-        => "N'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
+        => SqlServerSqlStringLiteral.Render(value);
 
     private static void AddTableDefinition(
         HashSet<SqlServerIdentifierReference> names,

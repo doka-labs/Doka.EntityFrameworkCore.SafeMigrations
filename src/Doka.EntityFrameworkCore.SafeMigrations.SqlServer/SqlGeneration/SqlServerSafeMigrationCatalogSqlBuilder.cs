@@ -688,7 +688,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     private string RenderStringLiteral(
         string value
     )
-        => "N'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
+        => SqlServerSqlStringLiteral.Render(value);
 
     private string RenderValueLiteral(
         object? value,
