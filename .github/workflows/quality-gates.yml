@@ -214,12 +214,12 @@ jobs:
     timeout-minutes: 45
     env:
       SAFE_MIGRATIONS_MYSQL_ENGINE: mariadb
-      SAFE_MIGRATIONS_MYSQL_VERSION: 11.8.8
-      SAFE_MIGRATIONS_MYSQL_IMAGE: mariadb:11.8.8@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17481111890c4
+      SAFE_MIGRATIONS_MYSQL_VERSION: 12.3.3
+      SAFE_MIGRATIONS_MYSQL_IMAGE: mariadb:12.3.3@sha256:99c125f103f5d081ebbc9ffe064e63daf7f688ac33a5f7f29af2d7260a96debf
       SAFE_MIGRATIONS_POSTGRES_VERSION: 18.6
-      SAFE_MIGRATIONS_POSTGRES_IMAGE: postgres:18.6@sha256:06cad38a5d9f5d24b4d83d86def30795d5e4b757fedbf5281172b576dedcd941
+      SAFE_MIGRATIONS_POSTGRES_IMAGE: postgres:18.6@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6
       SAFE_MIGRATIONS_SQLSERVER_VERSION: '2022'
-      SAFE_MIGRATIONS_SQLSERVER_IMAGE: mcr.microsoft.com/mssql/server:2022-latest@sha256:4402d880dd4c34bfa7d8705e56a86cd6c88da80a1f6bbbe741f999e76264a090
+      SAFE_MIGRATIONS_SQLSERVER_IMAGE: mcr.microsoft.com/mssql/server:2022-latest@sha256:cf8f0ab2ebe61feec2eed2629061a07d247f791c2a8ddda74a4ac9f06a291718
     steps:
       - name: Require supported x86-64 host
         run: test "$(uname -m)" = x86_64
@@ -317,23 +317,23 @@ jobs:
       matrix:
         include:
           - engine: mysql
-            version: 8.4.11
-            image: mysql:8.4.11@sha256:b3b90af2a6552ae30c266fdb7d5dd55f3afb72404bb78d37fe8a23eb857fd3fb
+            version: 8.4.13
+            image: mysql:8.4.13@sha256:76f0358884cb92d9a086d24e5671c38048d3fef40f2588703d73eb55392d6b69
           - engine: mysql
-            version: 9.7.2
-            image: mysql:9.7.2@sha256:257388edf9c84dbc04c763625446d5f3fa6ed60d1b0873bc552c614ba0a7ab4e
+            version: 9.7.4
+            image: mysql:9.7.4@sha256:8fb11c38b3551e22d50adbb688f027f8ff4ea2d2445aa277c1cc97b4af85ec54
           - engine: mariadb
-            version: 10.11.18
-            image: mariadb:10.11.18@sha256:de61fed4a40d3842f3ee09944ba52792156cfd9adf489b2cc670fc6ded28df8d
+            version: 10.11.19
+            image: mariadb:10.11.19@sha256:0d0945c57f75b3a3b9ebe71aedaaad005fa5305054e8fca3d2e42a8c92b43b5e
           - engine: mariadb
-            version: 11.4.12
-            image: mariadb:11.4.12@sha256:a794d9eb009e20de605858a11f32f63b4075cbd197c650436f0e3b457e4caed7
+            version: 11.4.13
+            image: mariadb:11.4.13@sha256:250e1609e93c0e6aecf64bfbab2d84d5e89d2481540fe77447ff6c855c3b1873
           - engine: mariadb
-            version: 11.8.8
-            image: mariadb:11.8.8@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17481111890c4
+            version: 11.8.9
+            image: mariadb:11.8.9@sha256:f16d7a344413e519dff518f27bdb221388f84b0d274c97c4fb5f2cb0dc1b34fa
           - engine: mariadb
-            version: 12.3.2
-            image: mariadb:12.3.2@sha256:759869cb6f003234a95c6384cdee245b4bce7de26913fe607a8110362c0c007d
+            version: 12.3.3
+            image: mariadb:12.3.3@sha256:99c125f103f5d081ebbc9ffe064e63daf7f688ac33a5f7f29af2d7260a96debf
     env:
       SAFE_MIGRATIONS_MYSQL_ENGINE: ${{ matrix.engine }}
       SAFE_MIGRATIONS_MYSQL_VERSION: ${{ matrix.version }}
@@ -400,15 +400,15 @@ jobs:
       matrix:
         include:
           - version: 14.24
-            image: postgres:14.24@sha256:2fdfb9b432d4a73bd3eea3d989752c1e669b68d502347e0bfd2cc6d709f3d6b4
+            image: postgres:14.24@sha256:8ab94f61668dc73bbab4dc13273ff2fc37e635536af62aef5306a49a9682a446
           - version: 15.19
-            image: postgres:15.19@sha256:5f72c7b5bd616308ccfd2e74d6be16fb06364e5eecbb815fe9dc6ab9761d2111
+            image: postgres:15.19@sha256:baa22e6286bf832cb147b8bb5aa9d8bc999846d69c21d11bf63f58fbeed1fa48
           - version: 16.15
-            image: postgres:16.15@sha256:e17e86066e5ef83e0952a9347f5c792b7ece00972e2aa787a6986f471b3dd3d5
+            image: postgres:16.15@sha256:9e2cf6287f25c3151f4c9421ccce2b17f3e60061c111a29165e0d2cdd9ff0a97
           - version: 17.11
-            image: postgres:17.11@sha256:e38411452a464af89e5adadb8d223bf53b898d47d6ef918b2d58c08707350449
+            image: postgres:17.11@sha256:b8faeff7712663c2773a190181e1246e37e364b887611c04658c28b44e2408fe
           - version: 18.6
-            image: postgres:18.6@sha256:06cad38a5d9f5d24b4d83d86def30795d5e4b757fedbf5281172b576dedcd941
+            image: postgres:18.6@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6
     env:
       SAFE_MIGRATIONS_POSTGRES_IMAGE: ${{ matrix.image }}
       SAFE_MIGRATIONS_POSTGRES_VERSION: ${{ matrix.version }}
@@ -526,11 +526,11 @@ jobs:
       matrix:
         include:
           - version: '2019'
-            image: mcr.microsoft.com/mssql/server:2019-latest@sha256:ef0b8db33970ecd01bed49c3a84a1d083c435a9891718df619298b67b352e74a
+            image: mcr.microsoft.com/mssql/server:2019-latest@sha256:07d7dedecdbfcf6776035dc5eefb5bfd9aa1804b2f6b99f7dedb397d8a599069
           - version: '2022'
-            image: mcr.microsoft.com/mssql/server:2022-latest@sha256:4402d880dd4c34bfa7d8705e56a86cd6c88da80a1f6bbbe741f999e76264a090
+            image: mcr.microsoft.com/mssql/server:2022-latest@sha256:cf8f0ab2ebe61feec2eed2629061a07d247f791c2a8ddda74a4ac9f06a291718
           - version: '2025'
-            image: mcr.microsoft.com/mssql/server:2025-latest@sha256:2b5b581621126574f3d1f75e78d3eebe8d05aedb59ad0cfdf9aa42cb0634d726
+            image: mcr.microsoft.com/mssql/server:2025-latest@sha256:245f6b1c8903edae52cb20fa31419cefcde1a49938bb8c3447099011fc871ca3
     env:
       SAFE_MIGRATIONS_SQLSERVER_IMAGE: ${{ matrix.image }}
       SAFE_MIGRATIONS_SQLSERVER_VERSION: ${{ matrix.version }}

@@ -57,7 +57,7 @@ with roll-forward disabled. SafeMigrations supports EF Core 10 only.
 | Package | Runtime dependency contract |
 | --- | --- |
 | Core | `Microsoft.EntityFrameworkCore.Relational` `[10.0.13,10.1.0)` |
-| MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` `[10.6.1,10.7.0)` |
+| MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` `[10.6.2,10.7.0)` |
 | PostgreSQL | `Npgsql.EntityFrameworkCore.PostgreSQL` `[10.0.3,11.0.0)` |
 | SQLite | EF Core SQLite Core `[10.0.13,10.1.0)`; application-owned native bundle |
 | SQL Server (available since 10.4.6) | `Microsoft.EntityFrameworkCore.SqlServer` `[10.0.13,10.1.0)`; `System.Security.Cryptography.Pkcs` minimum `9.0.21` |
@@ -87,19 +87,24 @@ The minimum is not an exact version lock or a claim that every higher major
 version is patched. Consumers selecting PKCS 10.x must use 10.0.13 or later
 for these advisories; NuGet audit remains enabled for the actual resolved graph.
 
-The current MySQL/MariaDB package requires Doka 10.6.1 or a compatible later 10.6 patch
+The current MySQL/MariaDB package requires Doka 10.6.2 or a compatible later 10.6 patch
 release and rejects the next minor line. This boundary avoids an exact
 transitive pin without claiming compatibility across an unqualified behavioral
 SPI revision. CI does not build Doka and never uses a cross-repository
 ProjectReference. The MySQL/MariaDB package lockfile resolves the public
-Doka 10.6.1 package. Its verified signed release tag identifies source commit
-`53c8fbd7ae8987b5c376250fe4d6296d729669cf`. The complete package, engine,
+Doka 10.6.2 package. Its verified signed release tag identifies source commit
+`6e2618140d821bd6befdf46181fcb82dca323c4f`. The complete package, engine,
 tooling, coverage, and performance matrix remains the SafeMigrations release
 gate; a local Doka ProjectReference or locally packed candidate is not release
 evidence.
 
-The 10.6.1 minimum preserves explicit GUID SQL defaults in Doka's model and
+Doka 10.6.1 introduced preservation of explicit GUID SQL defaults in its model and
 migration metadata; an implicit client GUID strategy no longer overrides them.
+The current 10.6.2 minimum additionally resolves SQL, computed and literal
+defaults through actual property mappings, including GUID properties that
+exist only in secondary Entity Splitting tables and shared secondary columns.
+It retains the public migration SPI, dependency ranges and GUID storage defaults;
+these metadata fixes do not require a schema migration.
 Explicit application generation choices and historical snapshot annotations
 remain authoritative. Review new scaffolded differences without rewriting
 deployed history; see the [GUID SQL-default upgrade boundary](efcore-provider-upgrade-risk.md#guid-sql-defaults).
@@ -195,21 +200,45 @@ images:
 
 | Engine | Image |
 | --- | --- |
-| MySQL 8.4 | `mysql:8.4.11@sha256:b3b90af2a6552ae30c266fdb7d5dd55f3afb72404bb78d37fe8a23eb857fd3fb` |
-| MySQL 9.7 | `mysql:9.7.2@sha256:257388edf9c84dbc04c763625446d5f3fa6ed60d1b0873bc552c614ba0a7ab4e` |
-| MariaDB 10.11 | `mariadb:10.11.18@sha256:de61fed4a40d3842f3ee09944ba52792156cfd9adf489b2cc670fc6ded28df8d` |
-| MariaDB 11.4 | `mariadb:11.4.12@sha256:a794d9eb009e20de605858a11f32f63b4075cbd197c650436f0e3b457e4caed7` |
-| MariaDB 11.8 | `mariadb:11.8.8@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17481111890c4` |
-| MariaDB 12.3 | `mariadb:12.3.2@sha256:759869cb6f003234a95c6384cdee245b4bce7de26913fe607a8110362c0c007d` |
-| PostgreSQL 14 | `postgres:14.24@sha256:2fdfb9b432d4a73bd3eea3d989752c1e669b68d502347e0bfd2cc6d709f3d6b4` |
-| PostgreSQL 15 | `postgres:15.19@sha256:5f72c7b5bd616308ccfd2e74d6be16fb06364e5eecbb815fe9dc6ab9761d2111` |
-| PostgreSQL 16 | `postgres:16.15@sha256:e17e86066e5ef83e0952a9347f5c792b7ece00972e2aa787a6986f471b3dd3d5` |
-| PostgreSQL 17 | `postgres:17.11@sha256:e38411452a464af89e5adadb8d223bf53b898d47d6ef918b2d58c08707350449` |
-| PostgreSQL 18 | `postgres:18.6@sha256:06cad38a5d9f5d24b4d83d86def30795d5e4b757fedbf5281172b576dedcd941` |
+| MySQL 8.4 | `mysql:8.4.13@sha256:76f0358884cb92d9a086d24e5671c38048d3fef40f2588703d73eb55392d6b69` |
+| MySQL 9.7 | `mysql:9.7.4@sha256:8fb11c38b3551e22d50adbb688f027f8ff4ea2d2445aa277c1cc97b4af85ec54` |
+| MariaDB 10.11 | `mariadb:10.11.19@sha256:0d0945c57f75b3a3b9ebe71aedaaad005fa5305054e8fca3d2e42a8c92b43b5e` |
+| MariaDB 11.4 | `mariadb:11.4.13@sha256:250e1609e93c0e6aecf64bfbab2d84d5e89d2481540fe77447ff6c855c3b1873` |
+| MariaDB 11.8 | `mariadb:11.8.9@sha256:f16d7a344413e519dff518f27bdb221388f84b0d274c97c4fb5f2cb0dc1b34fa` |
+| MariaDB 12.3 | `mariadb:12.3.3@sha256:99c125f103f5d081ebbc9ffe064e63daf7f688ac33a5f7f29af2d7260a96debf` |
+| PostgreSQL 14 | `postgres:14.24@sha256:8ab94f61668dc73bbab4dc13273ff2fc37e635536af62aef5306a49a9682a446` |
+| PostgreSQL 15 | `postgres:15.19@sha256:baa22e6286bf832cb147b8bb5aa9d8bc999846d69c21d11bf63f58fbeed1fa48` |
+| PostgreSQL 16 | `postgres:16.15@sha256:9e2cf6287f25c3151f4c9421ccce2b17f3e60061c111a29165e0d2cdd9ff0a97` |
+| PostgreSQL 17 | `postgres:17.11@sha256:b8faeff7712663c2773a190181e1246e37e364b887611c04658c28b44e2408fe` |
+| PostgreSQL 18 | `postgres:18.6@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6` |
 | SQLite | 3.46.1 or later; application-owned native bundle |
-| SQL Server 2019 | `mcr.microsoft.com/mssql/server:2019-latest@sha256:ef0b8db33970ecd01bed49c3a84a1d083c435a9891718df619298b67b352e74a` |
-| SQL Server 2022 | `mcr.microsoft.com/mssql/server:2022-latest@sha256:4402d880dd4c34bfa7d8705e56a86cd6c88da80a1f6bbbe741f999e76264a090` |
-| SQL Server 2025 | `mcr.microsoft.com/mssql/server:2025-latest@sha256:2b5b581621126574f3d1f75e78d3eebe8d05aedb59ad0cfdf9aa42cb0634d726` |
+| SQL Server 2019 | `mcr.microsoft.com/mssql/server:2019-latest@sha256:07d7dedecdbfcf6776035dc5eefb5bfd9aa1804b2f6b99f7dedb397d8a599069` |
+| SQL Server 2022 | `mcr.microsoft.com/mssql/server:2022-latest@sha256:cf8f0ab2ebe61feec2eed2629061a07d247f791c2a8ddda74a4ac9f06a291718` |
+| SQL Server 2025 | `mcr.microsoft.com/mssql/server:2025-latest@sha256:245f6b1c8903edae52cb20fa31419cefcde1a49938bb8c3447099011fc871ca3` |
+
+The image patches and manifest digests above were refreshed against the official
+[MySQL](https://hub.docker.com/_/mysql),
+[MariaDB](https://hub.docker.com/_/mariadb),
+[PostgreSQL](https://hub.docker.com/_/postgres) and
+[Microsoft Container Registry](https://mcr.microsoft.com/v2/mssql/server/tags/list)
+registries on 2026-10-25. PostgreSQL keeps the same server patch versions with
+rebuilt image manifests. These declarations identify the configured matrix, not
+completed qualification of every image; the required hosted matrix must pass.
+
+A primary-source inventory on that date verified every current direct NuGet
+dependency, SDK/tool and Action against its official stable releases. Updates
+are [FsCheck.Xunit 3.6.0](https://www.nuget.org/packages/FsCheck.Xunit/3.6.0) and
+[CodeQL Action 4.39.1](https://github.com/github/codeql-action/releases/tag/v4.39.1),
+pinned to commit `9b3254085494b55a0f7c4c2b3d2d52cc712ce370`. SDK 10.0.402,
+dotnet-ef 10.0.13, SBOM Tool 4.1.5 and Ryuk 0.14.0 remain
+unchanged. The patched PKCS 9.0.21 minimum remains on its existing 9.x line;
+this review does not impose a new transitive dependency major on consumers.
+
+Local MySQL/MariaDB integration tests, design-time fallback contexts and the
+shared CI coverage/tooling defaults use MariaDB 12.3.3. Explicit engine,
+version and image inputs remain supported; every other declared server line
+still has its independent matrix cell. This repository default does not change
+the provider version selected by a consuming application.
 
 MySQL/MariaDB support follows Doka's canonical feature profiles. PostgreSQL
 support spans major versions 14 through 18; every supported major is an
@@ -221,9 +250,9 @@ databases from the centrally declared dependency graph. A new endpoint or
 removed upstream version requires a reviewed support-contract change and fresh
 evidence.
 
-At the 2026-08-27 source review, PostgreSQL 14 through 18 are the upstream
-supported majors and the pinned versions above are their current minor
-releases. PostgreSQL 14 reaches upstream end of life on 2026-11-12. Release
+The 2026-08-27 source review established the declared PostgreSQL 14 through 18
+support matrix; the current patch/digest refresh is dated above. PostgreSQL 14
+reaches upstream end of life on 2026-11-12. Release
 qualification performed after that boundary must re-evaluate the declared
 matrix instead of inheriting this dated support conclusion.
 
@@ -766,6 +795,11 @@ and release-asset verification.
   [package catalog provenance](https://api.nuget.org/v3/catalog0/data/2026.10.22.06.05.55/doka.entityframeworkcore.mysql.10.6.1.json),
   and [GUID SQL-default contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/53c8fbd7ae8987b5c376250fe4d6296d729669cf/docs/operations/migrations.md#guid-sql-defaults),
   retrieved 2026-10-22.
+- [Doka 10.6.2 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.6.2),
+  [verified signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.6.2),
+  [package catalog provenance](https://api.nuget.org/v3/catalog0/data/2026.10.25.00.38.58/doka.entityframeworkcore.mysql.10.6.2.json),
+  and [GUID SQL-default contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/6e2618140d821bd6befdf46181fcb82dca323c4f/docs/operations/migrations.md#guid-sql-defaults),
+  retrieved 2026-10-25.
 - [MySQL 8.4 InnoDB limits](https://dev.mysql.com/doc/refman/8.4/en/innodb-limits.html),
   [MySQL 8.4 CREATE INDEX](https://dev.mysql.com/doc/refman/8.4/en/create-index.html),
   [MySQL 8.4 invisible indexes](https://dev.mysql.com/doc/refman/8.4/en/invisible-indexes.html),

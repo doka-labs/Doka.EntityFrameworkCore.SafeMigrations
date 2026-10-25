@@ -23,7 +23,7 @@ public sealed class SplitPackageDbContextDesignFactory
 
         optionsBuilder.UseMySql(
             "Server=127.0.0.1;User ID=package;Password=package;Database=package",
-            MySqlServerVersion.MariaDb(new Version(11, 8, 0)));
+            MySqlServerVersion.MariaDb(new Version(12, 3, 3)));
         optionsBuilder.UseMySqlSafeMigrations(options => options
             .UseScaffoldingMode(SafeMigrationScaffoldingMode.LegacyConvergence)
             .UseLegacyConvergencePolicy(SafeMigrationPolicy.RepairIfSafe));

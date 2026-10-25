@@ -15,6 +15,18 @@ the shared release identity described in [Release process](docs/release-process.
 
 ### Changed
 
+- Raise the MySQL/MariaDB provider's published Doka dependency to
+  `[10.6.2,10.7.0)` and restore the official 10.6.2 package. Retain the public
+  migration SPI and dependency isolation while taking its GUID-default metadata
+  fixes for secondary Entity Splitting tables and shared defaults. No historical
+  migration rewrite, GUID storage conversion or schema migration is implied.
+- Update FsCheck.Xunit to 3.6.0 and the pinned CodeQL Action to 4.39.1. Refresh
+  qualification image patches/digests within every existing MySQL/MariaDB,
+  PostgreSQL and SQL Server series, and synchronize local defaults and tooling.
+  Preserve .NET 10 and the qualified runner contract.
+- Use MariaDB 12.3.3 for local integration and design-time defaults and the shared
+  CI coverage/tooling engine. Retain explicit overrides and every existing
+  supported engine matrix cell without changing consumer configuration.
 - Organize provider and Core responsibilities into same-type partials with
   repository-owned IDE nesting. Separate independent test contracts while
   retaining shared container lifetimes, isolated database ownership and

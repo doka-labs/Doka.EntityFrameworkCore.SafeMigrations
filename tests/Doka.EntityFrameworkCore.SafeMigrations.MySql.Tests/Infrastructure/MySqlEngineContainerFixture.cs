@@ -30,7 +30,7 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
         }
 
         _engine = ReadEnvironment("SAFE_MIGRATIONS_MYSQL_ENGINE", "mariadb");
-        _version = ReadEnvironment("SAFE_MIGRATIONS_MYSQL_VERSION", "11.8.8");
+        _version = ReadEnvironment("SAFE_MIGRATIONS_MYSQL_VERSION", "12.3.3");
 
         var configuredImage = Environment
             .GetEnvironmentVariable("SAFE_MIGRATIONS_MYSQL_IMAGE")

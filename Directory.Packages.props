@@ -3,7 +3,7 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
     <EfCorePackageVersion Condition="'$(EfCorePackageVersion)' == ''">[10.0.13,10.1.0)</EfCorePackageVersion>
-    <DokaMySqlPackageVersion Condition="'$(DokaMySqlPackageVersion)' == ''">[10.6.1,10.7.0)</DokaMySqlPackageVersion>
+    <DokaMySqlPackageVersion Condition="'$(DokaMySqlPackageVersion)' == ''">[10.6.2,10.7.0)</DokaMySqlPackageVersion>
     <NpgsqlPackageVersion Condition="'$(NpgsqlPackageVersion)' == ''">[10.0.3,11.0.0)</NpgsqlPackageVersion>
     <DependencyInjectionPackageVersion Condition="'$(DependencyInjectionPackageVersion)' == ''">[10.0.13,10.1.0)</DependencyInjectionPackageVersion>
     <TestcontainersPackageVersion Condition="'$(TestcontainersPackageVersion)' == ''">[4.16.0]</TestcontainersPackageVersion>
@@ -51,7 +51,7 @@
   </ItemGroup>
 
   <ItemGroup Label="Tests">
-    <PackageVersion Include="FsCheck.Xunit" Version="3.5.0" />
+    <PackageVersion Include="FsCheck.Xunit" Version="3.6.0" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
     <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />

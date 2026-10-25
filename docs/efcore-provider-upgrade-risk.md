@@ -83,7 +83,7 @@ or permission to bypass the migration lock. See the
 
 ### GUID SQL defaults
 
-The minimum Doka 10.6.1 corrects implicit client GUID generation for properties
+Doka 10.6.1 corrects implicit client GUID generation for properties
 with an explicit store SQL default or computed expression, including shared
 table mappings. It retains the provider's effective generation/readback
 contract and restores explicit migration metadata in model differences.
@@ -91,11 +91,17 @@ Explicit client-generation choices and historical snapshot annotations remain
 authoritative; this update does not rewrite them. Review unpublished model and
 scaffolding differences rather than editing deployed migration history.
 
+The current 10.6.2 minimum retains that correction and fixes metadata lookup
+when a GUID property belongs only to a secondary Entity Splitting table. Shared
+SQL, computed and literal defaults are resolved through actual property mappings;
+explicit generation choices remain authoritative. This is a model-metadata
+correction, not a schema migration or a change to GUID storage defaults.
+
 MariaDB supports readback of unknown server-generated GUID keys. MySQL rejects
 unsupported unknown generated-key inserts before execution. Separately, native
 MySQL can reject nondeterministic `ALTER ADD ... DEFAULT (UUID())` under its
 binary-logging rules; the metadata correction does not bypass that restriction.
-See Doka's [versioned GUID SQL-default contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/53c8fbd7ae8987b5c376250fe4d6296d729669cf/docs/operations/migrations.md#guid-sql-defaults).
+See Doka's [versioned GUID SQL-default contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/6e2618140d821bd6befdf46181fcb82dca323c4f/docs/operations/migrations.md#guid-sql-defaults).
 
 ### Typed migration metadata
 

@@ -738,7 +738,7 @@ Ensure repair. A captured replacement reports
 `projected_foreign_key_set_null_unrepresentable` instead of borrowing stale
 nullable metadata or promoting a previous matching/missing result.
 
-The Doka contract, established in 10.4.2 and retained by the locked 10.6.1,
+The Doka contract, established in 10.4.2 and retained by the locked 10.6.2,
 removes synthetic defaults and marks additions
 or nullable-to-required alterations requiring explicit backfill. Its provider
 generator rejects required additions without an explicit default, computed
@@ -1447,7 +1447,7 @@ contract.
 
 ### GUID storage and native UUID
 
-The Doka dependency range is `[10.6.1,10.7.0)`. `Binary16` remains the default;
+The Doka dependency range is `[10.6.2,10.7.0)`. `Binary16` remains the default;
 `Char36` is unchanged. Native `uuid` is an explicit Doka model choice through
 `DefaultGuidFormat(MySqlGuidFormat.Uuid)` or a property's
 `HasMySqlGuidFormat(MySqlGuidFormat.Uuid)`. It requires MariaDB 10.7 or later;

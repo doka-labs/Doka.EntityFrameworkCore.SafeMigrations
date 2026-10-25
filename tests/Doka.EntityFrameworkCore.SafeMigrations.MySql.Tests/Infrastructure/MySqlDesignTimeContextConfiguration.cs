@@ -22,7 +22,7 @@ internal static class MySqlDesignTimeContextConfiguration
         var versionText = Environment
                 .GetEnvironmentVariable("SAFE_MIGRATIONS_MYSQL_VERSION")
                 ?.Trim()
-            ?? "11.8.2";
+            ?? "12.3.3";
 
         if (!Version.TryParse(versionText, out var version))
         {

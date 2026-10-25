@@ -72,20 +72,20 @@ add hardware-dependent duration gates. Local elapsed times are informational;
 test discovery, overlap, database isolation and cleanup are verified contracts.
 Native SQL Server qualification still requires the declared x86-64 engine cells.
 
-The default local engines are MariaDB 11.8.8 and PostgreSQL
+The default local engines are MariaDB 12.3.3 and PostgreSQL
 18.6. Select another qualified image with:
 
 ```bash
 SAFE_MIGRATIONS_MYSQL_ENGINE=mysql \
-SAFE_MIGRATIONS_MYSQL_VERSION=8.4.11 \
-SAFE_MIGRATIONS_MYSQL_IMAGE='mysql:8.4.11@sha256:b3b90af2a6552ae30c266fdb7d5dd55f3afb72404bb78d37fe8a23eb857fd3fb' \
+SAFE_MIGRATIONS_MYSQL_VERSION=8.4.13 \
+SAFE_MIGRATIONS_MYSQL_IMAGE='mysql:8.4.13@sha256:76f0358884cb92d9a086d24e5671c38048d3fef40f2588703d73eb55392d6b69' \
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests.csproj --configuration Release
 ```
 
 or:
 
 ```bash
-SAFE_MIGRATIONS_POSTGRES_IMAGE='postgres:14.24@sha256:2fdfb9b432d4a73bd3eea3d989752c1e669b68d502347e0bfd2cc6d709f3d6b4' \
+SAFE_MIGRATIONS_POSTGRES_IMAGE='postgres:14.24@sha256:8ab94f61668dc73bbab4dc13273ff2fc37e635536af62aef5306a49a9682a446' \
 SAFE_MIGRATIONS_POSTGRES_VERSION=14.24 \
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.csproj --configuration Release
 ```

@@ -120,7 +120,7 @@ Successfully parsed EF computed/CHECK definitions can change approved contract
 fingerprints; see the [upgrade notes](support-and-qualification.md#upgrade-to-1060).
 Historical migration source is not regenerated or rewritten.
 
-The 10.6.0 MySQL/MariaDB adapter requires Doka `[10.6.1,10.7.0)`; EF Core and
+The current MySQL/MariaDB adapter requires Doka `[10.6.2,10.7.0)`; EF Core and
 dependency-injection minimums are 10.0.13. Review implicit indexed-length model
 changes and renewed approval requirements in
 [support and qualification](support-and-qualification.md).
