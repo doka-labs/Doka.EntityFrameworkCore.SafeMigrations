@@ -1,7 +1,7 @@
 name: dependency-review
 
-# A read-only PR event requests the default-branch receiver, including for forks
-# and Dependabot. It supplies no code or dependency graph to the write workflow.
+# Contributor restore hooks run only in this unprivileged PR context, including
+# forks and Dependabot. The receiver consumes exact immutable data artifacts.
 on:
   pull_request:
     # WHY: Registered inactive lines need preparation PR checks before activation.
@@ -10,9 +10,29 @@ on:
 permissions: {}
 
 jobs:
+  prepare-base:
+    permissions:
+      contents: read
+    cache-mode: none
+    uses: ./.github/workflows/dependency-snapshot.yml
+    with:
+      sha: ${{ github.event.pull_request.base.sha }}
+      revision: base
+
+  prepare-head:
+    permissions:
+      contents: read
+    cache-mode: none
+    uses: ./.github/workflows/dependency-snapshot.yml
+    with:
+      sha: ${{ github.event.pull_request.head.sha }}
+      revision: head
+
   request-dependency-review:
+    needs: [prepare-base, prepare-head]
     runs-on: ubuntu-26.04
+    cache-mode: none
     timeout-minutes: 1
     steps:
       - name: Request independent dependency resolution
-        run: echo 'The trusted receiver will resolve and review both exact revisions.'
+        run: echo 'Both exact dependency revisions are ready for independent data-only review.'

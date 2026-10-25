@@ -6,6 +6,7 @@ import os
 import re
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote
 
@@ -20,7 +21,8 @@ RECEIVER_WORKFLOW_PATH = ".github/workflows/dependency-review-results.yml"
 CI_WORKFLOW_PATH = ".github/workflows/ci.yml"
 CHECK_NAME = "dependency-review"
 MAX_JSON_BYTES = 16 * 1024 * 1024
-REQUIRED_RESULTS = {"context", "prepare-base", "prepare-head", "submit-nuget"}
+REQUIRED_RESULTS = {"context", "submit-nuget"}
+SOURCE_PRODUCERS = {"prepare-base / restore", "prepare-head / restore", "request-dependency-review"}
 
 
 class PolicyNotFound(ValueError):
@@ -226,6 +228,82 @@ def dispatch_source(api, environment: dict, event: dict, prefix: str,
     return pr_number, normalized
 
 
+def source_inventory(api, route: str, field: str) -> list[dict]:
+    """Require the entire bounded authenticated inventory, never a truncated first page."""
+    response = api.request(route)
+    records = response.get(field) if isinstance(response, dict) else None
+    count = response.get("total_count") if isinstance(response, dict) else None
+    if (type(count) is not int or not 0 < count < 100 or not isinstance(records, list)
+            or len(records) != count or any(not isinstance(item, dict) for item in records)
+            or len({number(item.get("id")) for item in records}) != count):
+        raise ValueError("source inventory is missing, duplicated or incomplete")
+
+    return records
+
+
+def source_artifacts(api, prefix: str, run: dict, repository_id: int) -> dict:
+    """Bind complete successful PR producers to exact immutable data-only artifacts.
+
+    WHY: Restore executes contributor MSBuild hooks. Only the pull_request run
+    may own that execution; a default-branch receiver never inherits it. Remote
+    artifact names discover IDs once, while context reuse pins the IDs/digests.
+    """
+    run_id, attempt = number(run.get("id")), number(run.get("run_attempt"))
+    jobs = source_inventory(api, f"{prefix}/actions/runs/{run_id}/jobs?filter=all&per_page=100", "jobs")
+    producers, identities = {}, set()
+    for job in jobs:
+        name, producing_attempt = job.get("name"), number(job.get("run_attempt"))
+        if (not isinstance(name, str) or name not in SOURCE_PRODUCERS
+                or number(job.get("run_id")) != run_id or producing_attempt > attempt
+                or job.get("head_sha") != run["head_sha"] or (name, producing_attempt) in identities):
+            raise ValueError("source producer identity or attempt is contradictory")
+
+        identities.add((name, producing_attempt))
+        if name not in producers or producing_attempt > number(producers[name]["run_attempt"]):
+            producers[name] = job
+
+    if (set(producers) != SOURCE_PRODUCERS
+            or max(number(job["run_attempt"]) for job in producers.values()) != attempt
+            or any(job.get("status") != "completed" or job.get("conclusion") != "success"
+                   for job in producers.values())):
+        raise ValueError("latest source producers did not all succeed")
+
+    records = source_inventory(api, f"{prefix}/actions/runs/{run_id}/artifacts?per_page=100", "artifacts")
+    result = {}
+    for revision in ("base", "head"):
+        producer = producers[f"prepare-{revision} / restore"]
+        producing_attempt = number(producer["run_attempt"])
+        # WHY: Re-run failed jobs retains successful earlier producers. Their
+        # original immutable artifacts, not the receiver attempt, bind recovery.
+        expected_name = f"dependency-inputs-{revision}-{run_id}-{producing_attempt}"
+        matches = [item for item in records if item.get("name") == expected_name]
+        if len(matches) != 1:
+            raise ValueError("expected one immutable artifact for each exact source revision")
+
+        artifact = matches[0]
+        origin = artifact.get("workflow_run")
+        expires = artifact.get("expires_at")
+        digest = artifact.get("digest")
+        if (not isinstance(origin, dict) or number(origin.get("id")) != run_id
+                or number(origin.get("repository_id")) != repository_id
+                or number(origin.get("head_repository_id")) != run["head_repository"]["id"]
+                or origin.get("head_sha") != run["head_sha"] or origin.get("head_branch") != run["head_branch"]
+                or artifact.get("expired") is not False
+                or type(artifact.get("size_in_bytes")) is not int or not 0 < artifact["size_in_bytes"] <= 1024**3
+                or not isinstance(digest, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", digest)
+                or not isinstance(expires, str)):
+            raise ValueError("source artifact identity, size, expiry or digest is unproven")
+
+        expiration = datetime.fromisoformat(expires.replace("Z", "+00:00"))
+        if expiration.tzinfo is None or expiration <= datetime.now(timezone.utc):
+            raise ValueError("source artifact has expired")
+
+        result[revision] = {"id": number(artifact["id"]), "digest": digest,
+                            "producer_id": number(producer["id"]), "producer_attempt": producing_attempt}
+
+    return result
+
+
 def resolve(api, environment: dict, event: dict) -> dict:
     """Validate automatic and startup requests through the same source/PR trust boundary."""
     name, repository_id = repository(environment)
@@ -317,6 +395,18 @@ def resolve(api, environment: dict, event: dict) -> dict:
 
         require_manual_revision(environment, head_sha, head_repository_id, head_branch)
 
+    ready = run.get("conclusion") == "success"
+    artifacts, admission = {}, "source_not_successful"
+    if ready:
+        try:
+            artifacts = source_artifacts(api, prefix, run, repository_id)
+            admission = "source_artifacts_verified"
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, subprocess.SubprocessError):
+            # WHY: PR/source identity is already authenticated. An unavailable
+            # or contradictory artifact must replace any old same-head green
+            # check with an owned failure, not abort before creating a verdict.
+            ready, admission = False, "source_artifact_admission_failed"
+
     return {
         "schema_version": 1, "repository": name, "repository_id": repository_id,
         "source_run_id": run_id, "source_attempt": attempt, "source_workflow_id": workflow_id,
@@ -326,7 +416,9 @@ def resolve(api, environment: dict, event: dict) -> dict:
         "receiver_run_id": number(environment.get("GITHUB_RUN_ID")),
         "receiver_attempt": number(environment.get("GITHUB_RUN_ATTEMPT")),
         "receiver_event": receiver_event, "receiver_workflow_path": receiver_path,
-        "ready": run.get("conclusion") == "success",
+        "ready": ready, "source_admission": admission, "source_artifacts": artifacts,
+        "base_artifact_id": artifacts.get("base", {}).get("id", ""),
+        "head_artifact_id": artifacts.get("head", {}).get("id", ""),
     }
 
 
@@ -355,6 +447,13 @@ def begin(api, environment: dict, event: dict) -> dict:
         "output": {"title": "Dependency review in progress",
                    "summary": "Validating exact base/head NuGet snapshots and dependency policy."},
     }
+    if not context["ready"]:
+        payload.update({
+            "status": "completed", "conclusion": "failure",
+            "output": {"title": "Dependency review did not pass",
+                       "summary": "The current source run or its exact dependency artifacts were not admitted."},
+        })
+
     result = api.request(f"repos/{context['repository']}/check-runs", "POST", payload)
     context["check_id"] = number(result.get("id"))
 
@@ -456,7 +555,8 @@ def main() -> int:
                 json.dump(context, output, sort_keys=True)
 
             with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="ascii") as output:
-                for key in ("base_sha", "head_sha", "base_ref", "head_ref", "pr", "check_id", "ready"):
+                for key in ("base_sha", "head_sha", "base_ref", "head_ref", "pr", "check_id", "ready",
+                            "source_run_id", "base_artifact_id", "head_artifact_id"):
                     value = str(context[key]).lower() if type(context[key]) is bool else str(context[key])
                     output.write(f"{key}={value}\n")
 

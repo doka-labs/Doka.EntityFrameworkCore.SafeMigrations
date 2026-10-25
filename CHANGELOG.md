@@ -176,13 +176,17 @@ Timing evidence is informational.
   case-sensitive test fixtures only after their database-collation command
   completes.
 - Resolve exact PR base/head dependency graphs before review, including
-  Dependabot and forks, in independent read-only jobs under a trusted receiver.
-  Keep the PR workflow signal-only and validate immutable artifact-ID handoff
-  before metadata-only submission and a PR-head-bound verdict. Approve the
+  Dependabot and forks, in independent read-only, cache-denied PR jobs.
+  Keep the trusted automatic/manual receiver data-only and independently
+  validate source-run/attempt, successful producers and immutable artifact-ID
+  handoff before metadata-only submission and a PR-head-bound verdict. Approve the
   existing PostgreSQL SPDX identifier without adding a Doka waiver or weakening
   complete-snapshot, vulnerability or exact native-license-version checks.
   Allow first deployment through an explicit existing-CI dispatch from the
   reviewed current PR head, using the same pipeline and all required checks.
+- Align repository workflow tests with protected policy-selected release-line
+  admission instead of requiring the obsolete main-only PR event filter.
+  Keep target-base authorization and the complete qualification checks blocking.
 - Isolate generated-column test service providers from EF's process-wide
   provider cache and declare UTF-8 only in tests whose literals require it.
   Preserve native fixture defaults, distinct server/canonical profiles,

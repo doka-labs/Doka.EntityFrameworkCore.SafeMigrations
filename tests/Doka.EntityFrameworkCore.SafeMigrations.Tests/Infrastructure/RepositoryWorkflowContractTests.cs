@@ -55,7 +55,9 @@ public sealed class RepositoryWorkflowContractTests
 
         // Assert
         Assert.Contains("pull_request:", capture, StringComparison.Ordinal);
-        Assert.Contains("branches:\n      - main", capture, StringComparison.Ordinal);
+        // WHY: Registered release-line admission belongs to the trusted receiver, not a main-only trigger.
+        Assert.DoesNotContain("branches:", capture, StringComparison.Ordinal);
+        Assert.DoesNotContain("branches-ignore:", capture, StringComparison.Ordinal);
         Assert.DoesNotContain("contents: write", capture + restore + review, StringComparison.Ordinal);
         Assert.DoesNotContain("checks: write", capture + restore + submit, StringComparison.Ordinal);
         Assert.DoesNotContain("pull_request_target:", capture + receiver, StringComparison.Ordinal);
@@ -70,7 +72,12 @@ public sealed class RepositoryWorkflowContractTests
         Assert.DoesNotContain("dotnet restore", submit, StringComparison.Ordinal);
         Assert.Contains("artifact-ids: ${{ matrix.artifact_id }}", submit, StringComparison.Ordinal);
         Assert.Contains("prepare-dependency-snapshot-inputs.py receive", submit, StringComparison.Ordinal);
-        Assert.Contains("uses: ./.github/workflows/dependency-snapshot.yml", receiver, StringComparison.Ordinal);
+        Assert.Contains("uses: ./.github/workflows/dependency-snapshot.yml", capture, StringComparison.Ordinal);
+        Assert.DoesNotContain("uses: ./.github/workflows/dependency-snapshot.yml", receiver,
+            StringComparison.Ordinal);
+
+        Assert.Contains("cache-mode: none", capture, StringComparison.Ordinal);
+        Assert.Contains("cache-mode: none", restore, StringComparison.Ordinal);
         Assert.Contains("ref: ${{ inputs.sha }}", restore, StringComparison.Ordinal);
         Assert.Contains("--locked-mode --disable-build-servers", restore, StringComparison.Ordinal);
         Assert.Contains("detectorsFilter: MSBuildBinaryLog", submit, StringComparison.Ordinal);

@@ -1,7 +1,7 @@
 name: Resolve dependency inputs
 
-# Both revisions use this exact trusted workflow. Separate caller jobs retain
-# separate immutable artifact IDs; a matrix's last output cannot replace them.
+# Both revisions execute only in the PR workflow. Their staging helper and
+# MSBuild hooks are untrusted; only data enters the independent trusted receiver.
 on:
   workflow_call:
     inputs:
@@ -20,12 +20,15 @@ permissions:
 
 jobs:
   restore:
+    # WHY: A reusable caller must never move contributor hooks into a privileged trigger.
+    if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-26.04
+    cache-mode: none
     timeout-minutes: 15
     outputs:
       artifact-id: ${{ steps.upload.outputs.artifact-id }}
     steps:
-      - name: Checkout trusted staging helper
+      - name: Checkout PR staging helper
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.workflow_sha }}
@@ -44,8 +47,8 @@ jobs:
         with:
           global-json-file: snapshot-source/global.json
 
-      # Restore can execute MSBuild hooks, so this isolated job has no write
-      # token. Its data is validated again by fresh code in the publisher.
+      # Restore can execute MSBuild hooks. This PR-only job has no write token
+      # or cache authority; fresh receiver code independently validates its data.
       - name: Restore complete dependency graph
         working-directory: snapshot-source
         run: dotnet restore Doka.EntityFrameworkCore.SafeMigrations.slnx --locked-mode --disable-build-servers

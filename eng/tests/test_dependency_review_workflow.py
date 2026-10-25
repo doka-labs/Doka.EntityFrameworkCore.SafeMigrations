@@ -117,15 +117,14 @@ class DependencyReviewWorkflowTests(unittest.TestCase):
         command = step_command(job_blocks()["review"], "Require both completed snapshot submissions")
 
         # Act
-        result = execute(command, ROOT, CONTEXT_RESULT="success", BASE_RESULT="success",
-                         HEAD_RESULT="success", SNAPSHOT_RESULT="success")
+        result = execute(command, ROOT, CONTEXT_RESULT="success", SNAPSHOT_RESULT="success")
 
         # Assert
         self.assertEqual(0, result.returncode, result.stderr)
 
     def test_failed_cancelled_skipped_missing_or_injected_results_block_review(self):
         command = step_command(job_blocks()["review"], "Require both completed snapshot submissions")
-        fields = ("CONTEXT_RESULT", "BASE_RESULT", "HEAD_RESULT", "SNAPSHOT_RESULT")
+        fields = ("CONTEXT_RESULT", "SNAPSHOT_RESULT")
         for field in fields:
             for value in ("failure", "cancelled", "skipped", "", "success\nfailure"):
                 with self.subTest(field=field, value=value):
@@ -139,7 +138,8 @@ class DependencyReviewWorkflowTests(unittest.TestCase):
                     # Assert
                     self.assertNotEqual(0, result.returncode)
 
-    def test_forks_and_bots_request_review_without_code_or_manual_paths(self):
+    def test_forks_and_bots_restore_only_in_the_unprivileged_pr_workflow(self):
+        """The privileged receiver never executes code from either contributor revision."""
         # Arrange
         capture = CAPTURE.read_text(encoding="ascii")
         receiver = RECEIVER.read_text(encoding="ascii")
@@ -149,12 +149,14 @@ class DependencyReviewWorkflowTests(unittest.TestCase):
         receiver_jobs = job_blocks()
 
         # Assert
-        self.assertEqual({"request-dependency-review"}, set(capture_jobs))
-        self.assertEqual({"context", "prepare-base", "prepare-head", "submit-nuget", "review"},
-                         set(receiver_jobs))
+        self.assertEqual({"request-dependency-review", "prepare-base", "prepare-head"}, set(capture_jobs))
+        self.assertEqual({"context", "submit-nuget", "review"}, set(receiver_jobs))
         self.assertIn("permissions: {}", capture)
         self.assertIn("pull_request:", capture)
         self.assertIn("workflow_run:", receiver)
+        self.assertIn("needs: [prepare-base, prepare-head]", capture_jobs["request-dependency-review"])
+        self.assertNotIn("uses: ./.github/workflows/dependency-snapshot.yml", receiver)
+        self.assertNotIn("dotnet restore", receiver)
         for forbidden in ("actions/checkout@", "dotnet restore", "upload-artifact@", "GH_TOKEN"):
             self.assertNotIn(forbidden, capture)
 
@@ -163,7 +165,7 @@ class DependencyReviewWorkflowTests(unittest.TestCase):
 
     def test_both_exact_revisions_use_separate_readonly_restore_calls(self):
         # Arrange
-        jobs = job_blocks()
+        jobs = job_blocks(CAPTURE)
         resolver = RESOLVER.read_text(encoding="ascii")
 
         # Act
@@ -173,12 +175,14 @@ class DependencyReviewWorkflowTests(unittest.TestCase):
         for revision, call in restore_calls.items():
             self.assertIn("permissions:\n      contents: read", call)
             self.assertIn("uses: ./.github/workflows/dependency-snapshot.yml", call)
-            self.assertIn("needs.context.outputs.ready == 'true'", call)
-            self.assertIn(f"sha: ${{{{ needs.context.outputs.{revision}_sha }}}}", call)
+            self.assertIn("cache-mode: none", call)
+            self.assertIn(f"sha: ${{{{ github.event.pull_request.{revision}.sha }}}}", call)
             self.assertIn(f"revision: {revision}", call)
             self.assertNotIn("write", call)
 
         self.assertIn("permissions:\n  contents: read", resolver)
+        self.assertIn("if: ${{ github.event_name == 'pull_request' }}", resolver)
+        self.assertIn("cache-mode: none", job_blocks(RESOLVER)["restore"])
         self.assertIn("ref: ${{ inputs.sha }}", resolver)
         self.assertIn("global-json-file: snapshot-source/global.json", resolver)
         self.assertIn("dotnet restore Doka.EntityFrameworkCore.SafeMigrations.slnx --locked-mode", resolver)
@@ -200,9 +204,12 @@ class DependencyReviewWorkflowTests(unittest.TestCase):
         for revision in ("base", "head"):
             item = matrix.split(f"- revision: {revision}\n", 1)[1].split("- revision:", 1)[0]
             self.assertIn(f"sha: ${{{{ needs.context.outputs.{revision}_sha }}}}", item)
-            self.assertIn(f"artifact_id: ${{{{ needs.prepare-{revision}.outputs.artifact-id }}}}", item)
+            self.assertIn(f"artifact_id: ${{{{ needs.context.outputs.{revision}_artifact_id }}}}", item)
 
         self.assertIn("artifact-ids: ${{ matrix.artifact_id }}", submit)
+        self.assertIn("run-id: ${{ needs.context.outputs.source_run_id }}", submit)
+        self.assertIn("github-token: ${{ github.token }}", submit)
+        self.assertIn("actions: read", submit)
         self.assertNotIn("name: dependency-inputs-", submit)
         self.assertIn("path: ${{ runner.temp }}/dependency-inputs", submit)
         self.assertIn("merge-multiple: true", submit)
@@ -266,7 +273,7 @@ class DependencyReviewWorkflowTests(unittest.TestCase):
         for step in ("admission", "review", "guards"):
             self.assertIn(f"steps.{step}.outcome == 'success'", finalizer)
 
-        for job in ("context", "prepare-base", "prepare-head", "submit-nuget"):
+        for job in ("context", "submit-nuget"):
             self.assertIn(f'"{job}":"${{{{ needs.{job}.result }}}}"', finalizer)
 
         self.assertIn("dependency-review-handoff.py finish", finalizer)

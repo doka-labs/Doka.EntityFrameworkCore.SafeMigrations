@@ -30,6 +30,202 @@ def load_helper():
 class HandoffTests(unittest.TestCase):
     """Pin automatic bot/fork handling and fail-closed authoritative identities."""
 
+    def test_source_artifacts_bind_separate_exact_pr_revisions(self):
+        """The privileged receiver consumes immutable PR-run data, never restores contributor code."""
+        # Arrange
+        helper = load_helper()
+        environment, event, api = fixture()
+        add_source_input_evidence(api)
+
+        # Act
+        context = helper.begin(api, environment, event)
+
+        # Assert
+        self.assertEqual(801, context["source_artifacts"]["base"]["id"])
+        self.assertEqual(802, context["source_artifacts"]["head"]["id"])
+        self.assertEqual("sha256:" + "e" * 64, context["source_artifacts"]["head"]["digest"])
+
+    def test_invalid_new_source_artifacts_replace_stale_same_head_success_with_failure(self):
+        """Authenticated identity plus failed artifact admission creates a current explicit red check."""
+        for mutation in ("missing", "expired", "duplicate"):
+            with self.subTest(mutation=mutation):
+                # Arrange
+                helper = load_helper()
+                environment, event, api = fixture()
+                api.responses["repos/owner/repository/check-runs/699"] = {
+                    "name": "dependency-review", "head_sha": "b" * 40,
+                    "external_id": "dependency-review:400:1:899:1", "conclusion": "success"}
+                inventory = api.responses[source_artifacts_route()]
+                if mutation == "missing":
+                    inventory["artifacts"].pop()
+                    inventory["total_count"] -= 1
+                elif mutation == "expired":
+                    inventory["artifacts"][1]["expired"] = True
+                else:
+                    duplicate = copy.deepcopy(inventory["artifacts"][1])
+                    duplicate["id"] = 803
+                    inventory["artifacts"].append(duplicate)
+                    inventory["total_count"] += 1
+
+                # Act
+                context = helper.begin(api, environment, event)
+
+                # Assert
+                self.assertFalse(context["ready"])
+                self.assertEqual("POST", api.writes[0][0])
+                self.assertEqual("b" * 40, api.writes[0][2]["head_sha"])
+                self.assertEqual("dependency-review:400:2:900:1", api.writes[0][2]["external_id"])
+                self.assertEqual("completed", api.writes[0][2]["status"])
+                self.assertEqual("failure", api.writes[0][2]["conclusion"])
+                self.assertEqual("success", api.responses["repos/owner/repository/check-runs/699"]["conclusion"])
+
+    def test_missing_duplicate_expired_and_rebound_source_artifacts_are_rejected(self):
+        """Authenticated source success cannot stand in for complete immutable artifact identities."""
+        for mutation in ("missing", "duplicate", "expired", "past-expiry", "wrong-run", "wrong-sha",
+                         "wrong-repository", "wrong-head-repository", "wrong-branch", "wrong-attempt",
+                         "invalid-digest", "zero-size", "incomplete", "unbounded"):
+            with self.subTest(mutation=mutation):
+                # Arrange
+                helper = load_helper()
+                environment, event, api = fixture()
+                add_source_input_evidence(api)
+                inventory = api.responses[source_artifacts_route()]
+                artifact = inventory["artifacts"][1]
+                if mutation == "missing":
+                    inventory["artifacts"].pop()
+                    inventory["total_count"] -= 1
+                elif mutation == "duplicate":
+                    duplicate = copy.deepcopy(artifact)
+                    duplicate["id"] = 803
+                    inventory["artifacts"].append(duplicate)
+                    inventory["total_count"] += 1
+                elif mutation == "expired":
+                    artifact["expired"] = True
+                elif mutation == "past-expiry":
+                    artifact["expires_at"] = "2020-01-01T00:00:00Z"
+                elif mutation == "wrong-attempt":
+                    artifact["name"] = "dependency-inputs-head-400-1"
+                elif mutation == "invalid-digest":
+                    artifact["digest"] = "sha256:unverified"
+                elif mutation == "zero-size":
+                    artifact["size_in_bytes"] = 0
+                elif mutation == "incomplete":
+                    inventory["total_count"] += 1
+                elif mutation == "unbounded":
+                    inventory["total_count"] = 100
+                else:
+                    field = {"wrong-run": "id", "wrong-sha": "head_sha",
+                             "wrong-repository": "repository_id", "wrong-branch": "head_branch",
+                             "wrong-head-repository": "head_repository_id"}[mutation]
+                    artifact["workflow_run"][field] = 999 if field.endswith("id") else "changed"
+
+                # Act
+                context = helper.begin(api, environment, event)
+
+                # Assert
+                self.assertFalse(context["ready"])
+                self.assertEqual("source_artifact_admission_failed", context["source_admission"])
+                self.assertEqual("failure", api.writes[0][2]["conclusion"])
+
+    def test_missing_skipped_or_rebound_source_producer_jobs_are_rejected(self):
+        """Source artifacts need the complete successful producer set from this exact attempt."""
+        for mutation in ("missing", "skipped", "failed", "pending", "duplicate", "unexpected",
+                         "wrong-run", "wrong-attempt", "future-attempt", "wrong-sha", "incomplete"):
+            with self.subTest(mutation=mutation):
+                # Arrange
+                helper = load_helper()
+                environment, event, api = fixture()
+                add_source_input_evidence(api)
+                inventory = api.responses[source_jobs_route()]
+                job = inventory["jobs"][0]
+                if mutation == "missing":
+                    inventory["jobs"].pop()
+                    inventory["total_count"] -= 1
+                elif mutation in ("skipped", "failed"):
+                    job["conclusion"] = "skipped" if mutation == "skipped" else "failure"
+                elif mutation == "pending":
+                    job["status"] = "in_progress"
+                elif mutation == "duplicate":
+                    other = copy.deepcopy(job)
+                    other["id"] = 999
+                    inventory["jobs"].append(other)
+                    inventory["total_count"] += 1
+                elif mutation == "unexpected":
+                    job["name"] = "another producer"
+                elif mutation == "incomplete":
+                    inventory["total_count"] += 1
+                elif mutation == "future-attempt":
+                    job["run_attempt"] = 3
+                else:
+                    job[{"wrong-run": "run_id", "wrong-attempt": "run_attempt",
+                         "wrong-sha": "head_sha"}[mutation]] = "changed"
+
+                # Act
+                context = helper.begin(api, environment, event)
+
+                # Assert
+                self.assertFalse(context["ready"])
+                self.assertEqual("source_artifact_admission_failed", context["source_admission"])
+                self.assertEqual("failure", api.writes[0][2]["conclusion"])
+
+    def test_failed_job_retry_reuses_each_successful_original_producer(self):
+        """A retained base or both retained graphs keep their original artifact IDs and attempts."""
+        for retained in (("base",), ("base", "head")):
+            with self.subTest(retained=retained):
+                # Arrange
+                helper = load_helper()
+                environment, event, api = fixture()
+                for index, revision in enumerate(("base", "head")):
+                    if revision in retained:
+                        api.responses[source_jobs_route()]["jobs"][index]["run_attempt"] = 1
+                        api.responses[source_artifacts_route()]["artifacts"][index]["name"] = (
+                            f"dependency-inputs-{revision}-400-1")
+
+                # Act
+                context = helper.begin(api, environment, event)
+
+                # Assert
+                self.assertTrue(context["ready"])
+                self.assertEqual(2, context["source_attempt"])
+                for index, revision in enumerate(("base", "head")):
+                    self.assertEqual(801 + index, context["source_artifacts"][revision]["id"])
+                    self.assertEqual(1 if revision in retained else 2,
+                                     context["source_artifacts"][revision]["producer_attempt"])
+
+    def test_newer_failed_producer_cannot_borrow_an_older_successful_artifact(self):
+        """Selecting all producer histories never permits success-filtered resurrection."""
+        # Arrange
+        helper = load_helper()
+        environment, event, api = fixture()
+        inventory = api.responses[source_jobs_route()]
+        older = copy.deepcopy(inventory["jobs"][1])
+        older.update({"id": 999, "run_attempt": 1})
+        inventory["jobs"].append(older)
+        inventory["total_count"] += 1
+        inventory["jobs"][1]["conclusion"] = "failure"
+
+        # Act
+        context = helper.begin(api, environment, event)
+
+        # Assert
+        self.assertFalse(context["ready"])
+        self.assertEqual("failure", api.writes[0][2]["conclusion"])
+
+    def test_replaced_source_artifact_cannot_complete_an_admitted_context(self):
+        """A later immutable-ID or digest substitution invalidates the trusted handoff."""
+        for field, replacement in (("id", 999), ("digest", "sha256:" + "f" * 64)):
+            with self.subTest(field=field):
+                # Arrange
+                helper, environment, event, api, context = started_fixture()
+                api.responses[source_artifacts_route()]["artifacts"][1][field] = replacement
+
+                # Act
+                successful = helper.finish(api, environment, event, context, success_results(), "success")
+
+                # Assert
+                self.assertFalse(successful)
+                self.assertEqual("failure", api.writes[-1][2]["conclusion"])
+
     def test_registered_inactive_maintenance_base_accepts_fork_preparation(self):
         """A preparation PR needs Required Checks before its line is activated."""
         # Arrange
@@ -588,7 +784,8 @@ class HandoffTests(unittest.TestCase):
 
         # Assert
         self.assertFalse(context["ready"])
-        self.assertEqual("in_progress", api.writes[0][2]["status"])
+        self.assertEqual("completed", api.writes[0][2]["status"])
+        self.assertEqual("failure", api.writes[0][2]["conclusion"])
 
     def test_missing_run_repository_identity_is_rejected(self):
         """Absent source repository metadata is not replaced by artifact assertions."""
@@ -644,15 +841,14 @@ class HandoffTests(unittest.TestCase):
         self.assertFalse(success)
         self.assertEqual("failure", api.writes[-1][2]["conclusion"])
 
-    def test_failed_head_preparation_cannot_publish_success(self):
+    def test_failed_head_source_producer_cannot_publish_success(self):
         """A successful base cannot conceal failure to restore the complete head graph."""
         # Arrange
         helper, environment, event, api, context = started_fixture()
-        results = success_results()
-        results["prepare-head"] = "failure"
+        api.responses[source_jobs_route()]["jobs"][1]["conclusion"] = "failure"
 
         # Act
-        success = helper.finish(api, environment, event, context, results, "success")
+        success = helper.finish(api, environment, event, context, success_results(), "success")
 
         # Assert
         self.assertFalse(success)
@@ -672,15 +868,14 @@ class HandoffTests(unittest.TestCase):
         self.assertFalse(success)
         self.assertEqual("failure", api.writes[-1][2]["conclusion"])
 
-    def test_skipped_preparation_cannot_publish_success(self):
+    def test_skipped_source_producer_cannot_publish_success(self):
         """Skipped upstream jobs are failures for this required review contract."""
         # Arrange
         helper, environment, event, api, context = started_fixture()
-        results = success_results()
-        results["prepare-head"] = "skipped"
+        api.responses[source_jobs_route()]["jobs"][1]["conclusion"] = "skipped"
 
         # Act
-        success = helper.finish(api, environment, event, context, results, "success")
+        success = helper.finish(api, environment, event, context, success_results(), "success")
 
         # Assert
         self.assertFalse(success)
@@ -906,7 +1101,8 @@ class HandoffTests(unittest.TestCase):
             self.assertEqual({
                 "base_sha=" + "a" * 40, "head_sha=" + "b" * 40,
                 "base_ref=refs/heads/main", "head_ref=refs/pull/59/head",
-                "pr=59", "check_id=700", "ready=true",
+            "pr=59", "check_id=700", "ready=true", "source_run_id=400",
+            "base_artifact_id=801", "head_artifact_id=802",
             }, set(output_path.read_text().splitlines()))
 
     def test_invalid_event_cli_has_no_output_or_check_mutation(self):
@@ -1419,7 +1615,38 @@ def fixture():
         "sha": hashlib.sha1(b"blob " + str(len(raw)).encode("ascii") + b"\0" + raw).hexdigest(),
     }
 
-    return environment, event, FakeApi(responses)
+    api = FakeApi(responses)
+    add_source_input_evidence(api)
+
+    return environment, event, api
+
+
+def source_artifacts_route():
+    """Read every source-run artifact before selecting either immutable producer ID."""
+    return "repos/owner/repository/actions/runs/400/artifacts?per_page=100"
+
+
+def source_jobs_route():
+    """Read complete source history so retained successful producers survive partial reruns."""
+    return "repos/owner/repository/actions/runs/400/jobs?filter=all&per_page=100"
+
+
+def add_source_input_evidence(api):
+    """Build actual API-shaped independent producer and immutable-artifact evidence."""
+    source = api.responses["repos/owner/repository/actions/runs/400"]
+    names = ("prepare-base / restore", "prepare-head / restore", "request-dependency-review")
+    jobs = [{"id": 810 + index, "name": name, "run_id": 400, "run_attempt": 2,
+             "head_sha": source["head_sha"], "status": "completed", "conclusion": "success"}
+            for index, name in enumerate(names)]
+    artifacts = [{"id": 801 + index, "name": f"dependency-inputs-{revision}-400-2",
+                  "expired": False, "expires_at": "2099-01-01T00:00:00Z", "size_in_bytes": 1024,
+                  "digest": "sha256:" + "e" * 64,
+                  "workflow_run": {"id": 400, "repository_id": 100,
+                                   "head_repository_id": source["head_repository"]["id"],
+                                   "head_branch": source["head_branch"], "head_sha": source["head_sha"]}}
+                 for index, revision in enumerate(("base", "head"))]
+    api.responses[source_jobs_route()] = {"total_count": len(jobs), "jobs": jobs}
+    api.responses[source_artifacts_route()] = {"total_count": len(artifacts), "artifacts": artifacts}
 
 
 def set_base(api, branch):
@@ -1467,6 +1694,7 @@ def manual_fixture():
         "head_repository": copy.deepcopy(repository), "head_sha": "b" * 40,
         "head_branch": "feature/dependencies", "status": "in_progress",
     }
+    add_source_input_evidence(api)
 
     return environment, event, api
 
@@ -1503,7 +1731,7 @@ def workflow_runs_route():
 
 def success_results():
     """Return all mandatory upstream job results, never a permissive subset."""
-    return {"context": "success", "prepare-base": "success", "prepare-head": "success", "submit-nuget": "success"}
+    return {"context": "success", "submit-nuget": "success"}
 
 
 def set_conclusion(event, api, conclusion):

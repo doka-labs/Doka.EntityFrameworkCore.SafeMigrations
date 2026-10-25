@@ -41,20 +41,24 @@ The five committed package-project lockfiles define the exact graph used to
 compile and qualify package artifacts. Engineering projects resolve the central
 declarations during CI. Dependabot proposes declaration and package-lockfile
 updates through ordinary pull requests, where the complete quality workflow
-tests every resolved graph. Dependency Review separates the PR request from
-trusted resolution and publication:
+tests every resolved graph. Dependency Review separates PR-owned resolution
+from trusted data validation and publication:
 
-- The unprivileged PR workflow is a request signal only: no checkout, restore,
-  contributor code or graph artifact. Fork and Dependabot PRs use the same path.
+- The unprivileged PR workflow resolves the exact base/head revisions in separate
+  read-only jobs using each revision's SDK, then emits its completion signal.
+  Fork and Dependabot PRs use the same path. Native `cache-mode: none` denies
+  cache reads/writes independently of the read-only repository token; MSBuild
+  hooks never execute in the privileged receiver or manual dispatch context.
 - The default-branch `workflow_run` receiver validates the source run, attempt,
-  workflow, repository and current PR. A trusted reusable workflow restores both
-  exact revisions in separate read-only jobs, using each revision's SDK. The
-  five committed product locks remain enforced; engineering graphs resolve the
-  central declarations. Neither side comes from a PR-supplied workflow artifact.
+  workflow, repository, current PR, completed source producer jobs and the two
+  unique, nonexpired artifact identities. The five committed product locks remain
+  enforced; engineering graphs resolve the central declarations. Artifacts from
+  contributor execution are untrusted data, never executable receiver code.
 
-Each restore job returns its immutable artifact ID through the trusted workflow
-output. Submission jobs download by that ID, never by a name another job could
-replace. Fresh trusted code revalidates bounded, data-only metadata before the
+The receiver obtains immutable IDs from the authenticated source-run inventory,
+not contributor-provided job outputs. Submission jobs download by exact run and
+artifact ID, never by a mutable name another job could replace. Fresh trusted
+code revalidates bounded, data-only metadata before the
 SHA-pinned official action runs; no restore or contributor code runs with write
 access. Received data stays outside the trusted checkout and the Action's cwd.
 Its explicit `MSBuildBinaryLog` filter reads the sanitized PackageReference
@@ -68,6 +72,11 @@ receiver publishes the required `dependency-review` check on the validated PR
 head, not on its own default-branch SHA. Failed, cancelled, stale, ambiguous or
 incomplete capture/submission cannot produce a successful review.
 
+Failed-job retries retain each successful producer's original attempt-bound
+artifact; a later failed or skipped producer cannot borrow an earlier success.
+The current source run/attempt and PR identities are still rechecked, and an
+invalid new producer/artifact set must leave an explicit failed PR-head check.
+
 The receiver rechecks head, base and run attempt before publishing success.
 The repository's strict up-to-date required-check policy covers later changes
 to `main`; keep that policy enabled or use an equivalent merge-queue contract.
@@ -80,7 +89,9 @@ same-repository PR head branch:
 gh workflow run ci.yml --ref <reviewed-pr-branch> -f dependency-review-pr=<pr-number>
 ```
 
-This calls the same receiver, not a reduced review or replacement status. Its
+This calls the same data-only receiver, not a reduced review or replacement status.
+It consumes the already completed matching PR run's exact artifacts and never
+repeats contributor restore hooks under manual-dispatch cache authority. Its
 helper requires the selected branch, executing commit and workflow commit to
 match the current open PR head. The original dispatch input and authoritative
 source/receiver run identities must agree; stale or mismatched runs cannot
@@ -198,6 +209,12 @@ Snapshot and handoff sources, verified 2026-10-21:
 - [Executing commit, ref and workflow-commit variables](https://docs.github.com/en/actions/reference/workflows-and-actions/variables).
 - [GitHub Actions secure-use guidance](https://docs.github.com/en/actions/reference/security/secure-use).
 - [Pinned review action's license resolution](https://github.com/actions/dependency-review-action/blob/a1d282b36b6f3519aa1f3fc636f609c47dddb294/src/licenses.ts).
+
+Cache authority and source-artifact isolation, verified 2026-10-25:
+
+- [Native job cache access and scoped-token enforcement](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idcache-mode).
+- [Cache access for low-trust triggers and explicit denial](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching#controlling-cache-access-with-cache-mode).
+- [Artifact identities, expiry and workflow-run metadata](https://docs.github.com/en/rest/actions/artifacts).
 
 ## Dynamic and coverage evidence
 

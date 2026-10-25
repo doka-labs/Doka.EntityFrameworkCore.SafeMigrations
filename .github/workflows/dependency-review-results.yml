@@ -2,7 +2,7 @@ name: Dependency review results
 
 # Automatic triggering requires this receiver on main. Existing CI may call
 # the same pipeline manually from the reviewed PR head for its first startup.
-# Never execute contributor restore hooks with a write token.
+# Never execute contributor restore hooks or consume their caches in this receiver.
 on:
   workflow_run:
     workflows: [dependency-review]
@@ -34,6 +34,9 @@ jobs:
       head_ref: ${{ steps.context.outputs.head_ref }}
       ready: ${{ steps.context.outputs.ready }}
       artifact_id: ${{ steps.upload.outputs.artifact-id }}
+      source_run_id: ${{ steps.context.outputs.source_run_id }}
+      base_artifact_id: ${{ steps.context.outputs.base_artifact_id }}
+      head_artifact_id: ${{ steps.context.outputs.head_artifact_id }}
     steps:
       - name: Checkout trusted receiver
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -58,31 +61,13 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  prepare-base:
-    needs: context
-    if: ${{ needs.context.outputs.ready == 'true' }}
-    permissions:
-      contents: read
-    uses: ./.github/workflows/dependency-snapshot.yml
-    with:
-      sha: ${{ needs.context.outputs.base_sha }}
-      revision: base
-
-  prepare-head:
-    needs: context
-    if: ${{ needs.context.outputs.ready == 'true' }}
-    permissions:
-      contents: read
-    uses: ./.github/workflows/dependency-snapshot.yml
-    with:
-      sha: ${{ needs.context.outputs.head_sha }}
-      revision: head
-
   submit-nuget:
     name: Submit NuGet (${{ matrix.revision }})
-    needs: [context, prepare-base, prepare-head]
+    needs: context
+    if: ${{ needs.context.outputs.ready == 'true' }}
     permissions:
       contents: write
+      actions: read
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     strategy:
@@ -92,11 +77,11 @@ jobs:
           - revision: base
             sha: ${{ needs.context.outputs.base_sha }}
             ref: ${{ needs.context.outputs.base_ref }}
-            artifact_id: ${{ needs.prepare-base.outputs.artifact-id }}
+            artifact_id: ${{ needs.context.outputs.base_artifact_id }}
           - revision: head
             sha: ${{ needs.context.outputs.head_sha }}
             ref: ${{ needs.context.outputs.head_ref }}
-            artifact_id: ${{ needs.prepare-head.outputs.artifact-id }}
+            artifact_id: ${{ needs.context.outputs.head_artifact_id }}
     steps:
       - name: Checkout trusted data validator only
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -111,6 +96,8 @@ jobs:
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           artifact-ids: ${{ matrix.artifact_id }}
+          github-token: ${{ github.token }}
+          run-id: ${{ needs.context.outputs.source_run_id }}
           path: ${{ runner.temp }}/dependency-inputs
           merge-multiple: true
 
@@ -140,7 +127,7 @@ jobs:
           snapshot-ref: ${{ matrix.ref }}
 
   review:
-    needs: [context, prepare-base, prepare-head, submit-nuget]
+    needs: [context, submit-nuget]
     # A failed/cancelled capture still reaches the explicit PR-head finalizer.
     if: ${{ always() && needs.context.result == 'success' }}
     permissions:
@@ -170,13 +157,9 @@ jobs:
         id: admission
         env:
           CONTEXT_RESULT: ${{ needs.context.result }}
-          BASE_RESULT: ${{ needs.prepare-base.result }}
-          HEAD_RESULT: ${{ needs.prepare-head.result }}
           SNAPSHOT_RESULT: ${{ needs.submit-nuget.result }}
         run: |
           test "$CONTEXT_RESULT" = success
-          test "$BASE_RESULT" = success
-          test "$HEAD_RESULT" = success
           test "$SNAPSHOT_RESULT" = success
 
       - name: Review dependency changes
@@ -240,7 +223,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           DEPENDENCY_REVIEW_PR: ${{ inputs.dependency-review-pr }}
           RESULTS_JSON: >-
-            {"context":"${{ needs.context.result }}","prepare-base":"${{ needs.prepare-base.result }}","prepare-head":"${{ needs.prepare-head.result }}","submit-nuget":"${{ needs.submit-nuget.result }}"}
+            {"context":"${{ needs.context.result }}","submit-nuget":"${{ needs.submit-nuget.result }}"}
           REVIEW_OUTCOME: ${{ steps.admission.outcome == 'success' && steps.review.outcome == 'success' && steps.guards.outcome == 'success' && 'success' || 'failure' }}
         run: |
           python3 engineering/eng/dependency-review-handoff.py finish \

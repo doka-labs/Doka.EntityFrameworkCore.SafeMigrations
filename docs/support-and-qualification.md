@@ -315,8 +315,10 @@ requests. Every accepted update therefore runs the same complete CI workflow as
 product code, including all provider cells, package consumers, coverage,
 performance, and SBOM validation. Dependency Review compares explicitly submitted
 base/head snapshots bound to the current pull-request commit. Contributor code
-runs only in separate read-only jobs; the trusted receiver validates immutable
-evidence before submitting snapshots and publishing the required check. Forks
+runs only in separate read-only, cache-denied PR jobs; the trusted receiver
+validates their exact source-run/attempt and immutable data artifacts before
+submitting snapshots and publishing the required check. Neither its automatic
+nor manual entry executes contributor restore hooks. Forks
 and Dependabot use the same validation path. Missing, stale, or incomplete
 evidence fails closed; automatic GitHub submissions are not the authority for
 this check. The canonical [secure-development guide](security/secure-development.md)
@@ -669,11 +671,11 @@ reports rather than redefining an overrun as a passed measurement.
 Changes to a baseline or ceiling require captured before/after evidence on the
 same pinned `ubuntu-26.04` runner label and a review of asymptotic behavior; a
 budget must not be raised merely to make CI green.
-
-The generation and analyzer-plan capture does not open a server connection,
 Earlier host measurements keep their actual OS and architecture attribution;
 do not relabel an Ubuntu 24.04 result as a 26.04 baseline or compare the hosts
 as though they were the same environment.
+
+The generation and analyzer-plan capture does not open a server connection,
 so it can also run locally on ARM64 for diagnostic evidence. That output
 records its architecture and is not x64 Linux qualification evidence. Run:
 
