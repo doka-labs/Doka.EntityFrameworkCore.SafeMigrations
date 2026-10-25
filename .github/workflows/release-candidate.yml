@@ -24,7 +24,7 @@ concurrency:
 jobs:
   preflight:
     name: Validate untagged candidate
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     outputs:
       package-version: ${{ steps.version.outputs.package-version }}
@@ -116,7 +116,7 @@ jobs:
     needs:
       - preflight
       - quality-gates
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     outputs:
       provenance_artifact_name: ${{ steps.provenance.outputs.provenance_artifact_name }}
@@ -206,7 +206,7 @@ jobs:
       - preflight
       - quality-gates
       - attest
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
     concurrency:
       group: safe-migrations-publication

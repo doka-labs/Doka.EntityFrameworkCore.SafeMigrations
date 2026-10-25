@@ -25,7 +25,7 @@ jobs:
       actions: read
       pull-requests: read
       checks: write
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     outputs:
       base_sha: ${{ steps.context.outputs.base_sha }}
@@ -83,7 +83,7 @@ jobs:
     needs: [context, prepare-base, prepare-head]
     permissions:
       contents: write
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     strategy:
       fail-fast: false
@@ -148,7 +148,7 @@ jobs:
       actions: read
       pull-requests: read
       checks: write
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - name: Checkout trusted review policy

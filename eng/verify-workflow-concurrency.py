@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate GitHub's queue contract before adapting actionlint's older schema."""
+"""Validate native workflow policy before adapting actionlint's older schema."""
 
 import argparse
 import json
@@ -13,6 +13,18 @@ from pathlib import Path
 # Remove only this compatibility path once upstream parseConcurrency supports it.
 QUEUE_DIAGNOSTIC = ('unexpected key "queue" for "concurrency" section. '
                     'expected one of "cancel-in-progress", "group"')
+# WHY: The same released linter predates GitHub's Ubuntu26 label and scoped cache policy.
+# Only exact independently validated job fields qualify; all other diagnostics remain errors.
+CACHE_DIAGNOSTIC = ('unexpected key "cache-mode" for "job" section. expected one of "concurrency", "container", '
+                    '"continue-on-error", "defaults", "env", "environment", "if", "name", "needs", "outputs", '
+                    '"permissions", "runs-on", "secrets", "services", "snapshot", "steps", "strategy", '
+                    '"timeout-minutes", "uses", "with"')
+RUNNER_DIAGNOSTIC_PREFIX = 'label "ubuntu-26.04" is unknown. available labels are '
+RUNNER_DIAGNOSTIC_SUFFIX = ('. if it is a custom label for self-hosted runner, '
+                            'set list of labels in actionlint.yaml config file')
+RUNNER_DIAGNOSTIC = re.compile(re.escape(RUNNER_DIAGNOSTIC_PREFIX)
+                               + r'"[A-Za-z0-9_.-]+"(?:, "[A-Za-z0-9_.-]+")*'
+                               + re.escape(RUNNER_DIAGNOSTIC_SUFFIX))
 
 
 def queue_positions(source: str) -> set[int]:
@@ -55,11 +67,75 @@ def queue_positions(source: str) -> set[int]:
     return positions
 
 
+def native_job_positions(source: str) -> tuple[set[int], set[int]]:
+    """Prove canonical x64 runner and denied cache fields at their actual owning job.
+
+    This is a bounded repository policy, not a replacement YAML parser. The
+    linter still receives the original source and every unrelated diagnostic.
+    """
+    runner_positions, cache_positions = set(), set()
+    jobs_section, owner = False, None
+    seen = set()
+    for index, row in enumerate(source.splitlines()):
+        if not row.strip() or row.lstrip().startswith("#"):
+            continue
+
+        if not row.startswith((" ", "\t")):
+            jobs_section, owner = re.fullmatch(r"jobs:\s*(?:#.*)?", row) is not None, None
+
+        job = re.fullmatch(r"  ([A-Za-z_][A-Za-z0-9_-]*):\s*(?:#.*)?", row)
+        if jobs_section and job is not None:
+            owner = job[1]
+
+        field = re.fullmatch(r"(\s*)(runs-on|cache-mode):\s*(.*?)\s*(?:#.*)?", row)
+        if field is None:
+            continue
+
+        if not jobs_section or owner is None or field[1] != "    ":
+            raise ValueError("Runner and cache policy require an explicit owning job field.")
+
+        identity = (owner, field[2])
+        if identity in seen:
+            raise ValueError("Duplicate native job policy field.")
+
+        seen.add(identity)
+        expected = "ubuntu-26.04" if field[2] == "runs-on" else "none"
+        if field[3] != expected:
+            raise ValueError(f"{field[2]} must be literal {expected}.")
+
+        positions = runner_positions if field[2] == "runs-on" else cache_positions
+        positions.add(index + 1)
+
+    return runner_positions, cache_positions
+
+
+def compatible_diagnostic(diagnostic: dict, positions: tuple[set[int], set[int], set[int]]) -> bool:
+    """Recognize only independently proven native fields missing from the old schema."""
+    queues, runners, caches = positions
+    line, kind, message = diagnostic["line"], diagnostic["kind"], diagnostic["message"]
+    if kind == "syntax-check":
+        return ((message == QUEUE_DIAGNOSTIC and line in queues)
+                or (message == CACHE_DIAGNOSTIC and line in caches))
+
+    # WHY: Only upstream's varying known-label list is variable. The actual
+    # field, native label, message family and source position remain exact.
+    return kind == "runner-label" and line in runners and RUNNER_DIAGNOSTIC.fullmatch(message) is not None
+
+
 def verify(paths: list[Path], actionlint: str | None = None) -> int:
     """Keep all real lint errors; adapt only a separately proven unsupported field."""
-    positions = {str(path): queue_positions(path.read_text(encoding="ascii")) for path in paths}
+    positions = {}
+    for path in paths:
+        source = path.read_text(encoding="ascii")
+        runners, caches = native_job_positions(source)
+        identity = str(path.resolve())
+        if identity in positions:
+            raise ValueError("Duplicate workflow source identity.")
+
+        positions[identity] = queue_positions(source), runners, caches
+
     if actionlint is None:
-        print("GitHub concurrency queue contracts passed.")
+        print("GitHub queue, runner and cache contracts passed.")
 
         return 0
 
@@ -69,7 +145,7 @@ def verify(paths: list[Path], actionlint: str | None = None) -> int:
         if result.returncode != 0 or result.stderr.strip():
             raise ValueError("actionlint failed without complete structured diagnostics.")
 
-        print("actionlint and GitHub concurrency queue contracts passed.")
+        print("actionlint and GitHub queue, runner and cache contracts passed.")
 
         return 0
 
@@ -79,13 +155,17 @@ def verify(paths: list[Path], actionlint: str | None = None) -> int:
 
     adapted, failures = set(), []
     for diagnostic in diagnostics:
-        if not isinstance(diagnostic, dict):
-            raise ValueError("actionlint diagnostic must be an object.")
+        if (not isinstance(diagnostic, dict) or not isinstance(diagnostic.get("filepath"), str)
+                or type(diagnostic.get("line")) is not int or diagnostic["line"] < 1
+                or not isinstance(diagnostic.get("kind"), str)
+                or not isinstance(diagnostic.get("message"), str)):
+            raise ValueError("actionlint diagnostic must have complete typed source identity.")
 
-        position = (diagnostic.get("filepath"), diagnostic.get("line"))
-        if (diagnostic.get("kind") == "syntax-check"
-                and diagnostic.get("message") == QUEUE_DIAGNOSTIC
-                and position[1] in positions.get(position[0], set())
+        # WHY: actionlint reports paths relative to its working directory even
+        # when given absolute paths. Canonical identity must still bind the
+        # diagnostic to the exact independently validated input file.
+        position = (str(Path(diagnostic["filepath"]).resolve()), diagnostic["line"])
+        if (compatible_diagnostic(diagnostic, positions.get(position[0], (set(), set(), set())))
                 and position not in adapted):
             adapted.add(position)
         else:
@@ -97,8 +177,8 @@ def verify(paths: list[Path], actionlint: str | None = None) -> int:
 
         return 1
 
-    print("GitHub queue contracts passed; actionlint passed all other checks "
-          f"({len(adapted)} explicitly validated queue-schema compatibility diagnostic(s)).")
+    print("GitHub queue, runner and cache contracts passed; remaining actionlint diagnostics passed "
+          f"({len(adapted)} explicitly validated native-schema compatibility diagnostic(s)).")
 
     return 0
 

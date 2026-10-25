@@ -46,6 +46,12 @@ Timing evidence is informational.
 
 ### Changed
 
+- Pin every repository-defined GitHub-hosted Linux job to the x64 `ubuntu-26.04` image,
+  including qualification, publication, dependency review and maintenance.
+  Keep the .NET 10 SDK selection, engine images, timeouts and performance
+  budgets unchanged. Retain actual historical measurement attribution and
+  require complete hosted qualification rather than treating local ARM checks
+  or the label change as new native evidence.
 - Support explicitly authorized release lines through the existing five-package
   pipeline, with branch-owned qualification, qualification-only execution,
   current protected-main publication authority and exact same-run recovery.

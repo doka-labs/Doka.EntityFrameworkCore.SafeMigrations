@@ -205,12 +205,17 @@ for catalog-copy ownership and fallback.
 
 ## Engine matrix
 
-Every GitHub-hosted Linux job is pinned to `ubuntu-24.04`. This also fixes the
-benchmark jobs to that runner label instead of inheriting the moving
-`ubuntu-latest` label. Ubuntu 26.04 requires a dedicated upgrade with the
-complete qualification workflow and reviewed performance evidence before the
-repository switches as one unit. The repository intentionally does not
-maintain a permanent second Ubuntu matrix.
+Every repository-defined GitHub-hosted Linux job is pinned to the explicit x64 `ubuntu-26.04`
+label, including qualification, benchmarks, publication, dependency review,
+maintenance and Scorecard. GitHub lists this image as generally available;
+the moving `ubuntu-latest` label is not used. The complete hosted qualification
+workflow must establish this candidate's actual engine, tooling, package and
+SBOM evidence on the new image; changing a YAML label or running local ARM
+tests does not establish that result. Existing SDK selection through
+`global.json`, engine image digests, timeouts and performance budgets remain
+unchanged. The repository maintains no permanent second Ubuntu matrix.
+GitHub-managed default-setup CodeQL and automatic dependency-submission runs
+are separate platform workflows; these repository labels do not configure them.
 
 The reusable workflow `.github/workflows/quality-gates.yml` is invoked by CI,
 release candidates, and stable releases. It declares these exact qualification
@@ -662,10 +667,13 @@ are not deterministic; their three-times-baseline comparisons are regression
 evidence, not throughput claims. Budget evaluation remains unchanged in the
 reports rather than redefining an overrun as a passed measurement.
 Changes to a baseline or ceiling require captured before/after evidence on the
-same pinned `ubuntu-24.04` runner label and a review of asymptotic behavior; a
+same pinned `ubuntu-26.04` runner label and a review of asymptotic behavior; a
 budget must not be raised merely to make CI green.
 
 The generation and analyzer-plan capture does not open a server connection,
+Earlier host measurements keep their actual OS and architecture attribution;
+do not relabel an Ubuntu 24.04 result as a 26.04 baseline or compare the hosts
+as though they were the same environment.
 so it can also run locally on ARM64 for diagnostic evidence. That output
 records its architecture and is not x64 Linux qualification evidence. Run:
 
@@ -680,7 +688,7 @@ runner identity first. The ordinary invocation without `--capture-baseline`
 remains fail-closed while any declared budget is absent.
 
 These initial budgets retain their macOS ARM64 developer-measurement
-provenance. They do not establish a measured `ubuntu-24.04` x64 baseline or a
+provenance. They do not establish a measured `ubuntu-26.04` x64 baseline or a
 same-hardware hosted comparison; those remain separate performance evidence.
 
 For capture on the pinned x64 Linux runner, dispatch the existing CI workflow
@@ -772,7 +780,11 @@ and release-asset verification.
 ## Primary references
 
 - [GitHub-hosted runner Ubuntu 26.04 migration announcement](https://github.com/actions/runner-images/issues/14748),
-  retrieved 2026-09-21.
+  retrieved 2026-09-21 and rechecked 2026-10-25.
+- [GitHub-hosted runner labels and x64 resources](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
+  and [Ubuntu 26.04 image software](https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2604-Readme.md),
+  retrieved 2026-10-25. The image's preinstalled SDK is not the repository's
+  SDK selection; `setup-dotnet` continues to install the exact `global.json` version.
 - [.NET 10 release metadata](https://dotnetcli.blob.core.windows.net/dotnet/release-metadata/10.0/releases.json),
   retrieved 2026-10-20; SDK 10.0.402 carries runtime 10.0.13.
 - [EF Core Relational 10.0.13 package](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.Relational/10.0.13),

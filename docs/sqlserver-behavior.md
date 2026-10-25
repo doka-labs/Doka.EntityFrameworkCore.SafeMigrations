@@ -44,7 +44,9 @@ part of the declared support contract.
 [Microsoft supports SQL Server Linux containers only on x86-64 hosts](https://learn.microsoft.com/en-us/sql/linux/install-upgrade/quickstart-install-docker?view=sql-server-ver17).
 The Apple Silicon development host can run source and static tests, but an
 emulated local container is not release evidence. The GitHub-hosted
-`ubuntu-24.04` matrix is the intended live qualification environment.
+`ubuntu-26.04` x64 matrix is the intended live qualification environment.
+The hosted image changes, not the digest-pinned SQL Server container images;
+successful native runs on that host remain required for release qualification.
 
 ## Catalog and safety boundary
 

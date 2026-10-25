@@ -186,7 +186,7 @@ class NativeMatrixTests(unittest.TestCase):
         """Dictionary construction must not overwrite or regex-filter job declarations."""
         source = WORKFLOW.read_text(encoding="ascii")
         variants = {"duplicate": source + "\n" + job_source(source, "mysql-engine"),
-                    "unrecognized": source + "\n  unexpected_job:\n    name: Extra\n    runs-on: ubuntu-24.04\n"}
+                    "unrecognized": source + "\n  unexpected_job:\n    name: Extra\n    runs-on: ubuntu-26.04\n"}
         for name, changed in variants.items():
             with self.subTest(variant=name):
                 # Arrange
@@ -201,11 +201,12 @@ class NativeMatrixTests(unittest.TestCase):
         # Arrange
         source = WORKFLOW.read_text(encoding="ascii")
         original = job_source(source, "package-and-core")
-        modified = original.replace("    runs-on: ubuntu-24.04\n", "    runs-on: ubuntu-24.04\n"
+        modified = original.replace("    runs-on: ubuntu-26.04\n", "    runs-on: ubuntu-26.04\n"
                                     "    strategy:\n      matrix:\n        include:\n          - version: 10\n", 1)
         changed = source.replace(original, modified, 1)
 
         # Act / Assert
+        self.assertNotEqual(original, modified)
         with self.assertRaises(maintenance.MaintenanceError):
             maintenance.qualification_producers(changed)
 

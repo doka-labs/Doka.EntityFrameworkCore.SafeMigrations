@@ -36,7 +36,7 @@ concurrency:
 jobs:
   coordinate:
     if: ${{ !inputs.maintenance }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 245
     permissions:
       contents: read
@@ -70,7 +70,7 @@ jobs:
   schedule-identity:
     name: schedule-identity
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.maintenance }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       - name: Checkout exact native source
@@ -89,7 +89,7 @@ jobs:
   dependency-vulnerability-audit:
     name: dependency-vulnerability-audit
     needs: schedule-identity
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 45
     steps:
       - name: Checkout branch-native dependency graph
