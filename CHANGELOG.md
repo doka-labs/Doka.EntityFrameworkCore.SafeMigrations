@@ -143,6 +143,9 @@ Timing evidence is informational.
   through private variables. Preserve valid schema and rename baselines for
   line-bearing names without changing ordinary literal fast paths or
   schema-transfer semantics.
+- Reuse already compiled migrations for every shared provider bundle build.
+  Avoid a non-RID locked restore after an earlier RID publish changes copied
+  lockfiles, without disabling CI lock validation or changing source locks.
 - Preserve SQL Server guarded payloads through EF's line normalization,
   continuations, GO handling and idempotent indentation. Cover exact authored
   long CRLF defaults, quoted identities, managed-data mutation and replay while

@@ -373,7 +373,9 @@ qualify_generated_context() {
     dotnet "${script_command[@]}"
   done
 
-  dotnet ef migrations bundle --project "${project}" --context "${context}" --configuration Release \
+  # WHY: All migrations are already compiled. A preceding bundle RID publish
+  # changes copied locks; an implicit non-RID build would fail CI's locked restore.
+  dotnet ef migrations bundle --project "${project}" --context "${context}" --configuration Release --no-build \
     --output "${artifacts_dir}/generated-${mode}-efbundle" --force --verbose
   reset_owned_database "${database}"
   "${artifacts_dir}/generated-${mode}-efbundle" --connection "${connection}"
@@ -1189,7 +1191,7 @@ dotnet ef migrations script --project "${project}" --context SafeMigrationDbCont
   --output "${artifacts_dir}/migration-idempotent-no-transactions.sql"
 dotnet ef migrations bundle \
   --project "${project}" --context SafeMigrationDbContext \
-  --configuration Release --output "${artifacts_dir}/efbundle" --force --verbose
+  --configuration Release --no-build --output "${artifacts_dir}/efbundle" --force --verbose
 "${artifacts_dir}/efbundle" --connection "${bundle_connection}"
 "${artifacts_dir}/efbundle" --connection "${bundle_connection}"
 

@@ -486,6 +486,13 @@ instead of rewriting SQL. PostgreSQL uses `psql -X` with `ON_ERROR_STOP=1`;
 MySQL/MariaDB use explicit UTF-8 batch input without `--force`. Clients retain
 the script's own transaction boundaries.
 
+All generated migration source is compiled before bundle publication. Bundle
+commands use `--no-build`: an earlier RID publish can change copied lockfiles,
+which cannot validate a later automatic non-RID restore in CI. Initial locked
+restore/build gates and original source-lock hashes remain enforced. Local
+tooling parity checks must also exercise the CI restore policy, for example
+with `GITHUB_ACTIONS=true` scoped to the harness command.
+
 SQL Server qualifies Strict/LegacyConvergence CLI, bundle, normal-script and
 idempotent-script targets with exact native schema/history and generated-value
 readback. ODBC callers explicitly enable quoted identifiers and use finite

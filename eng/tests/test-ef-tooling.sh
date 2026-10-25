@@ -88,6 +88,39 @@ unowned_reset_case() {
 
 expect_status 2 unowned_reset_case
 
+bundle_build_case() {
+    local remove_no_build="$1"
+    local project=compiled.csproj
+    local context=CompiledContext
+    local mode=strict
+    local artifacts_dir="$fixture_root"
+    local bundle_commands
+    export project context mode artifacts_dir
+    # WHY: A prior RID publish changes copied locks. Execute both actual bundle
+    # invocations and reject an implicit non-RID build before that publish.
+    bundle_commands="$(awk '
+        /^[[:space:]]*dotnet ef migrations bundle([[:space:]]|$)/ {
+            command = $0
+            while (command ~ /\\$/ && getline > 0) {
+                sub(/\\$/, "", command)
+                command = command $0
+            }
+            print command
+            count++
+        }
+        END { if (count != 2) exit 1 }
+    ' "$shared_script")"
+    if [[ "$remove_no_build" == true ]]; then
+        bundle_commands="${bundle_commands// --no-build/}"
+    fi
+
+    dotnet() { [[ " $* " == *" --no-build "* ]] || return 74; }
+    eval "$bundle_commands"
+}
+
+expect_status 0 bundle_build_case false
+expect_status 74 bundle_build_case true
+
 index_identity_case() {
     local expected="$1"
     local actual
